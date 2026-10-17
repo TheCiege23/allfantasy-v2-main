@@ -123,15 +123,40 @@ export type Dash34Brief = {
      */
     atIso?: string | null
     tone?: 'bad' | 'warn' | 'plain' | null
+    /** What `text` was built from, so the home can say it in Spanish (lib/core-app/homeBandsCopy.ts). */
+    parts?: Dash34BriefLineParts | null
   }>
+  /** What `headline` was built from — same reason. */
+  headlineParts?: { kind: 'urgent' | 'drafting' | 'flagged'; count: number } | { kind: 'quiet' } | null
   /** The real next kickoff, when one is scheduled. `initial` is the server paint. */
   countdown?: { initial: string; to: string; label: string } | null
   /** What the brief did not read. Always present — a confident card must say. */
   caveat: string
+  /** What `caveat` was built from — same reason. */
+  caveatParts?: { everSynced: boolean; totalActive: number } | null
   askLabel: string
   moreHref: string
   moreLabel: string
 }
+
+/**
+ * The values a brief line's English `text` was built from (2026-10-04). The English stays exactly as
+ * the loader writes it; these let the /core home rebuild the sentence in Spanish at render. A line
+ * without parts renders its English whole.
+ */
+export type Dash34BriefLineParts =
+  | {
+      kind: 'concentration'
+      name: string
+      position: string | null
+      status: string
+      exposureCount: number
+      totalActive: number
+      startingIn: number
+    }
+  | { kind: 'kickoff'; name: string }
+  | { kind: 'empty-slots'; totalEmpty: number; leagueCount: number; names: string[]; more: number }
+  | { kind: 'flagged'; count: number }
 
 export type Dash34Data = {
   firstLock?: {
@@ -155,6 +180,19 @@ export type Dash34Data = {
     slots: Array<{ key?: string | null; label: string; tone?: 'bad' | 'warn' | null }>
     openHref: string
     openLabel: string
+    /**
+     * What `kickoffLabel`, `headline` and `openLabel` were built from, so the /core home can say them
+     * in Spanish (lib/core-app/homeBandsCopy.ts). The English fields are unchanged.
+     */
+    parts?: {
+      sport: string | null
+      slate: 'pre' | 'post' | null
+      week: number | null
+      away: string | null
+      home: string | null
+      /** The league `openLabel` names ("Check <league>"); null for "Open Player Finder". */
+      leagueName: string | null
+    } | null
   } | null
   today?: { wins: number; losses: number; health?: { score: number; label: string } | null } | null
   /** `time` is an ISO timestamp; `Dash34Time` localises it after hydration. */
@@ -232,7 +270,14 @@ export type Dash34Data = {
    * "Sync has never run" is one fact about the connection, not N facts about N
    * leagues, so it is said once and carries the action the rows carried.
    */
-  notice?: { title: string; body: string; href?: string | null; label?: string | null } | null
+  notice?: {
+    title: string
+    body: string
+    href?: string | null
+    label?: string | null
+    /** What `body` was built from (the /core home's Spanish, lib/core-app/homeBandsCopy.ts). */
+    parts?: { totalActive: number } | null
+  } | null
   /**
    * What this screen is NOT watching.
    *
@@ -241,7 +286,12 @@ export type Dash34Data = {
    * checked — and most of this is not. Naming the gaps is what stops a quiet
    * screen from being a lie.
    */
-  coverage?: Array<{ label: string; reason: string }> | null
+  coverage?: Array<{
+    label: string
+    reason: string
+    /** The one label built from values (the ambiguous injury names) — the rest are fixed text. */
+    parts?: { kind: 'ambiguous-injury'; names: string[]; more: number } | null
+  }> | null
   /**
    * AF Legacy board rows kept out of the list — historical season snapshots from
    * the career import, not leagues you play. Stated, never silently dropped.

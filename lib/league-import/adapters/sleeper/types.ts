@@ -58,6 +58,8 @@ export interface SleeperRosterRaw {
     ties?: number
     fpts?: number
     fpts_decimal?: number
+    fpts_against?: number
+    fpts_against_decimal?: number
     waiver_budget_used?: number
     waiver_position?: number
     /** 1-based division, when the league has divisions. */

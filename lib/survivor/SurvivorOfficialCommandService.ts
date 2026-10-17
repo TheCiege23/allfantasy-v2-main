@@ -7,7 +7,7 @@ import { getCouncil } from './SurvivorTribalCouncilService'
 import { parseSurvivorCommand, looksLikeOfficialCommand } from './SurvivorCommandParser'
 import { applyIdolPower, getActiveIdolsForRoster } from './SurvivorIdolRegistry'
 import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
-import { submitVote as submitCouncilVote } from './survivorVoteService'
+import { submitPrivateVoteCommand } from './survivorPrivateVoteCommand'
 import { submitChallengeAnswer, getCurrentOpenChallengesForWeek, getChallengeById } from './SurvivorChallengeEngine'
 import { getFinaleState, submitJuryVote } from './SurvivorFinaleEngine'
 import { getTribeForRoster } from './SurvivorTribeService'
@@ -417,29 +417,17 @@ export async function processSurvivorOfficialCommand(
     }
   }
 
-  if (parsed.intent === 'vote') {
-    // The same ballot service as the Tribal Council panel's "Submit vote" (survivorVoteService). It
-    // records the voter and target user ids and the target's name (what the panel's "You voted" line
-    // reads), enforces the league's vote-change policy and late-vote rules, and writes the private
-    // audit entry. It votes in the league's active council.
-    const rosterContext = await buildRosterDisplayContext(leagueId)
-    const targetRosterId = resolveRosterIdFromDisplayName(parsed.targetDisplayName, rosterContext)
-    const targetUserId = targetRosterId ? rosterContext.rosterUserIds[targetRosterId] : undefined
-    if (!targetRosterId || !targetUserId) {
-      return {
-        handled: true,
-        ok: false,
-        status: 400,
-        error: `Could not find manager: ${parsed.targetDisplayName ?? 'Unknown manager'}`,
-      }
-    }
+  if (parsed.intent === 'vote' && source !== 'private_chimmy') {
+    return { handled: true, ok: false, status: 422, error: 'Votes are private. Open your Survivor @Chimmy room and send @Chimmy vote @manager.' }
+  }
 
-    const result = await submitCouncilVote(leagueId, userId, targetUserId)
+  if (parsed.intent === 'vote') {
+    const result = await submitPrivateVoteCommand(leagueId, userId, rawCommand)
     if (!result.ok) {
       return { handled: true, ok: false, status: result.status, error: result.error }
     }
 
-    const targetName = result.targetName ?? rosterContext.rosterDisplayNames[targetRosterId] ?? targetRosterId
+    const targetName = result.targetName ?? 'the selected manager'
     return {
       handled: true,
       ok: true,

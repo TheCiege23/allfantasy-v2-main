@@ -140,7 +140,7 @@ export async function resolveLiveDraftContextByDraftId(
 
   const orderMode = await getDraftOrderModeAndLotteryConfig(resolvedLeague.id).catch(() => null)
   const variant = String(resolvedLeague.leagueVariant ?? '').toUpperCase()
-  const formatType = variant === 'IDP' || variant === 'DYNASTY_IDP' ? 'IDP' : undefined
+  const formatType = variant === 'IDP' || variant === 'DYNASTY_IDP' ? 'IDP' : variant === 'SURVIVOR' ? 'SURVIVOR' : undefined
   const routeType: DraftRouteType =
     session.draftType === 'auction'
       ? 'auction'

@@ -5,28 +5,12 @@ import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { LeagueClipOverlayHost } from '@/components/league/LeagueClipOverlayHost'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
-import { SURVIVOR_ISLAND_TAGLINE } from '@/lib/survivor/survivorIslandContent'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { TribeCard } from '@/app/survivor/components/TribeCard'
 import { SurvivorStatusBadge } from '@/app/survivor/components/SurvivorStatusBadge'
 import type { SurvivorSeasonPlayer } from '@/lib/survivor/survivorUiTypes'
 import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
-
-function phaseBadgeClass(phase: string) {
-  if (phase === 'merge') return 'bg-gradient-to-r from-cyan-500/25 to-orange-500/25 text-orange-100'
-  if (phase === 'jury' || phase === 'finale') return 'bg-amber-500/20 text-amber-100'
-  if (phase === 'pre_merge' || phase === 'drafting') return 'bg-amber-900/30 text-amber-100'
-  return 'bg-white/10 text-white/80'
-}
-
-function phaseLabel(phase: string) {
-  const p = phase || 'pre_draft'
-  if (p === 'pre_merge') return 'PRE-MERGE'
-  if (p === 'merge') return 'MERGED'
-  if (p === 'jury') return 'JURY PHASE'
-  if (p === 'finale') return 'FINALE'
-  return p.replace(/_/g, ' ').toUpperCase()
-}
+import { SurvivorIslandHero } from '@/components/survivor/SurvivorIslandHero'
 
 function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return 'Soon'
@@ -80,43 +64,56 @@ export default function SurvivorIslandHomePage() {
 
   const voteEnd = parseDeadlineMs(council?.voteDeadlineAt ?? council?.votingDeadline ?? null)
   const challengeEnd = parseDeadlineMs(ch?.locksAt ?? ch?.lockAt ?? null)
+  const scoresByUser = new Map((ctx.season?.weeklyScores ?? []).map(score => [score.userId, score]))
+  const tribeTotals = new Map<string, number>()
+  for (const score of ctx.season?.weeklyScores ?? []) {
+    if (score.tribeId && score.countedTowardTribeTotal) tribeTotals.set(score.tribeId, (tribeTotals.get(score.tribeId) ?? 0) + score.finalScore)
+  }
 
   const { heroTitle, heroSubtext } = useMemo(() => {
     if (council?.status === 'voting_open' && voteEnd) {
       return {
-        heroTitle: `⏱ TRIBAL IN ${formatDurationMs(voteEnd - now)}`,
+        heroTitle: `Council vote closes in ${formatDurationMs(voteEnd - now)}`,
         heroSubtext: 'Votes are private until the host reads them. Cast yours with @Chimmy.',
       }
     }
     if (council?.status === 'voting_open') {
       return {
-        heroTitle: '⏱ TRIBAL COUNCIL IS LIVE',
+        heroTitle: 'The elimination vote is open',
         heroSubtext: 'The tribe is on the beach. Seal your vote before the deadline.',
       }
     }
     if (ch?.status === 'open' && challengeEnd) {
       return {
-        heroTitle: `🏆 CHALLENGE CLOSES IN ${formatDurationMs(challengeEnd - now)}`,
+        heroTitle: `Challenge closes in ${formatDurationMs(challengeEnd - now)}`,
         heroSubtext: ch.description || ch.instructions || 'Submit where your commissioner instructed — tribe chat or @Chimmy.',
       }
     }
     if (ch?.status === 'open') {
       return {
-        heroTitle: '🏆 CHALLENGE OPEN',
+        heroTitle: 'This week’s challenge is open',
         heroSubtext: 'Points and immunity are on the line this week.',
       }
     }
     if (phase === 'merge') {
       return {
-        heroTitle: '🌊 MERGE WEEK',
+        heroTitle: 'Merge week',
         heroSubtext: 'Buffs drop. From here on, immunity is earned as an individual.',
       }
     }
     return {
-      heroTitle: '🏝 THIS WEEK ON THE ISLAND',
+      heroTitle: 'This week on the island',
       heroSubtext: 'Watch the league feed for swaps, exile twists, and ceremony beats from the host.',
     }
   }, [council?.status, ch?.description, ch?.instructions, ch?.status, challengeEnd, now, phase, voteEnd])
+
+  const primaryAction = phase === 'pre_draft' || phase === 'drafting'
+    ? { href: `/league/${leagueId}/draft`, label: 'Open draft board' }
+    : council?.status === 'voting_open'
+      ? { href: `${base}/tribal`, label: ctx.canVote ? 'Cast your vote' : 'View council' }
+      : ch?.status === 'open'
+        ? { href: `${base}/challenges`, label: 'Open challenge' }
+        : { href: `${base}/tribe`, label: 'View tribe standings' }
 
   const headerBadgeVariant =
     ctx.playerState === 'immune'
@@ -144,78 +141,23 @@ export default function SurvivorIslandHomePage() {
       />
       {leagueId ? <LeagueClipOverlayHost leagueId={leagueId} variant="survivor" enabled /> : null}
       <div className={`min-h-screen px-3 py-4 md:px-6 md:py-6 ${theme.backgroundClass}`}>
-      {/* Header */}
-      <div
-        className="survivor-panel relative overflow-hidden rounded-2xl p-4 md:p-6"
-        style={{
-          background: `linear-gradient(135deg, var(--survivor-bg) 0%, rgba(34,211,238,0.06) 100%)`,
-        }}
-      >
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
-              {ctx.leagueName}
-            </h1>
-            <p className="mt-1 text-[12px] text-[var(--survivor-text-medium)]">Season · Week {ctx.currentWeek}</p>
-          </div>
-          <div
-            className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-widest ${phaseBadgeClass(phase)}`}
-          >
-            {phaseLabel(phase)}
-          </div>
-          <div className="flex items-center gap-2">
-            {us ? <SurvivorStatusBadge variant={headerBadgeVariant} /> : null}
-            {ctx.isCommissioner ? (
-              <Link
-                href={`/league/${leagueId}`}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-lg text-white/60"
-                aria-label="Commissioner settings"
-              >
-                ⚙️
-              </Link>
-            ) : null}
-          </div>
-        </div>
+      <SurvivorIslandHero
+        leagueId={leagueId}
+        leagueName={ctx.leagueName}
+        sport={ctx.leagueSport}
+        week={ctx.currentWeek}
+        phase={phase}
+        visualThemeId={ctx.season?.visualThemeId}
+        headline={heroTitle}
+        description={heroSubtext}
+        primaryAction={primaryAction}
+        secondaryAction={{ href: `/league/${leagueId}`, label: 'League dashboard' }}
+      />
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/35 px-4 py-3 text-sm text-white/75">
+        {us ? <SurvivorStatusBadge variant={headerBadgeVariant} /> : null}
+        <span>{us?.displayName ?? 'Your island'}{us?.hasImmunityThisWeek ? ' · Immune this week' : ''}{ctx.hasActiveIdol ? ' · Private advantage held' : ''}</span>
+        {ctx.isCommissioner ? <Link href={`${base}/commissioner`} className="ml-auto font-semibold text-amber-200 hover:underline">Commissioner hub</Link> : null}
       </div>
-
-      {/* Hero */}
-      <section className="survivor-panel relative mt-4 overflow-hidden rounded-2xl p-4 md:grid md:grid-cols-5 md:gap-6 md:p-6">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 30h60M30 0v60' stroke='%23fff' stroke-width='0.5'/%3E%3C/svg%3E")`,
-          }}
-        />
-        <div className="relative md:col-span-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--survivor-torch)]">
-            This week on the island
-          </p>
-          <p className="mt-3 font-mono text-xl font-semibold leading-snug tabular-nums text-white md:text-2xl">
-            {heroTitle}
-          </p>
-          <p className="mt-2 text-[13px] leading-relaxed text-[var(--survivor-text-medium)]">{heroSubtext}</p>
-          <p className="mt-3 text-[11px] leading-relaxed text-white/45">{SURVIVOR_ISLAND_TAGLINE}</p>
-        </div>
-        <div className="relative mt-4 rounded-xl border border-white/[0.08] bg-black/30 p-4 md:col-span-2 md:mt-0">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Your status</p>
-          <div className="mt-3 flex items-center gap-3">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-lg font-bold ring-2 ring-cyan-500/30"
-            >
-              {(us?.displayName ?? 'You').slice(0, 1)}
-            </div>
-            <div>
-              <p className="font-semibold text-white">{us?.displayName ?? 'Player'}</p>
-              {us?.hasImmunityThisWeek ? (
-                <p className="mt-1 text-[12px] text-cyan-300">🛡 Immune this week</p>
-              ) : null}
-              {ctx.hasActiveIdol ? (
-                <p className="mt-1 text-[12px] text-violet-300">🔮 You hold a power</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Tribes or individual */}
       {!postMerge ? (
@@ -223,7 +165,13 @@ export default function SurvivorIslandHomePage() {
           <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
             Tribe standings
           </h2>
-          <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible lg:grid-cols-4">
+          {tribes.length === 0 ? (
+            <div className="rounded-2xl border border-amber-300/20 bg-black/30 p-5 text-sm text-white/75">
+              <p className="font-semibold text-white">Tribes form after the draft</p>
+              <p className="mt-1">The tribe board will show members and weekly scores once rosters are finalized.</p>
+              <Link href={`/league/${leagueId}/draft`} className="mt-3 inline-block font-semibold text-amber-200 hover:underline">Open draft board</Link>
+            </div>
+          ) : <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible lg:grid-cols-4">
             {tribes.map((t) => {
               const n = playersByTribe.get(t.id)?.length ?? t.members?.length ?? 0
               const attending = council?.attendingTribeId === t.id && council?.status === 'voting_open'
@@ -232,12 +180,12 @@ export default function SurvivorIslandHomePage() {
                   key={t.id}
                   tribe={t}
                   memberCount={n}
-                  weeklyScore={undefined}
+                  weeklyScore={tribeTotals.get(t.id)}
                   status={attending ? 'tribal' : 'neutral'}
                 />
               )
             })}
-          </div>
+          </div>}
         </section>
       ) : (
         <section className="mt-6">
@@ -259,7 +207,7 @@ export default function SurvivorIslandHomePage() {
                   <tr key={p.userId} className="border-b border-white/[0.04]">
                     <td className="px-3 py-2 font-mono tabular-nums text-white/60">{i + 1}</td>
                     <td className="px-3 py-2 text-white">{p.displayName}</td>
-                    <td className="px-3 py-2 font-mono text-sky-200">—</td>
+                    <td className="px-3 py-2 font-mono text-sky-200">{scoresByUser.has(p.userId) ? scoresByUser.get(p.userId)!.finalScore.toFixed(1) : 'No score yet'}</td>
                     <td className="px-3 py-2">
                       {p.hasImmunityThisWeek ? (
                         <span className="text-[11px] text-cyan-300">Immune</span>

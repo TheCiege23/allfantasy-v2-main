@@ -41,7 +41,7 @@ describe('league Core navigation', () => {
     )
 
     for (const label of [
-      'Overview', 'My team', 'Matchup', 'Trades', 'Waivers', 'Players', 'War Room',
+      'Overview', 'My Team', 'Matchup', 'Trades', 'Waivers', 'Players', 'War Room',
       'Draft HQ', 'Your week', 'Live', 'Standings', 'Outlook',
     ]) {
       const link = screen.getByRole('link', { name: label })

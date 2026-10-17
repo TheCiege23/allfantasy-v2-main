@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Infection night</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.zb-t{font-family:'Creepster',cursive;letter-spacing:.04em;color:#c8f08a}
+.zb-lg{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.07)}
+.zb-dot{width:10px;height:10px;border-radius:99px;flex:none}
+.zb-st{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:99px;font:700 10.5px 'Archivo';letter-spacing:.04em;text-transform:uppercase}
+.zb-m{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+@keyframes zbTurn{0%{filter:none}50%{filter:hue-rotate(90deg) saturate(2) brightness(1.2)}100%{filter:hue-rotate(60deg) saturate(.6) brightness(.85)}}
+.zb-turned .sp-av{animation:zbTurn .9s ease-out both}
+.zb-big{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;padding:26px;border-radius:16px;border:1px solid rgba(139,224,58,.4);text-align:center}
+</style>
+</helmet>
+<div class="sp" style="--acc: #8be03a; --acc2: #c8f08a; --accInk: #0a1a04; --disp: Creepster; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="ZombieHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Infection night · week 6</h1><span class="sp-t2">Gamma 2 · results are final · stat corrections closed</span></div>
+  
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px 32px; align-items: flex-start">
+  <section class="zb-big" style="flex: 1 1 520px; background: radial-gradient(ellipse at 50% 30%, {{glow}}, transparent 65%), #0b0d14">
+    <span class="sp-lbl" style="color: #c8f08a">Your result</span>
+    <div style="display: flex; align-items: center; gap: 18px"><span class="sp-num" style="font-size: 30px; font-weight: 700">108.4</span><span class="sp-t3">to</span><span class="sp-num" style="font-size: 30px; font-weight: 700; color: #c8f08a">112.9</span></div>
+    <span class="sp-av" style="width: 110px; height: 110px; font-size: 30px; background: #22314f; box-shadow: 0 0 0 4px #07080d, 0 0 0 8px {{ring}}; filter: {{f}}; transition: filter .8s">TC</span>
+    <span class="zb-t" style="font-size: 44px; line-height: 1; color: {{hc}}">{{head}}</span>
+    <span class="sp-t2" style="font-size: 14px; max-width: 420px">{{sub}}</span>
+    <div style="display: flex; gap: 10px; margin-top: 4px">
+      <sc-if value="{{bitten}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{cure}}" style="min-height: 48px; padding: 0 20px"><img src="specialty/zombie/icon-serum.svg" alt="" style="width: 24px">Use my serum</button><button class="sp-btn" onClick="{{turn}}" style="min-height: 48px">Keep it, turn</button></sc-if>
+      <sc-if value="{{decided}}" hint-placeholder-val="{{ false }}"><button class="sp-btn" onClick="{{reset}}">Replay</button></sc-if>
+    </div>
+  </section>
+  <section class="sp-card" style="flex: 1 1 520px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 10px"><img src="specialty/zombie/icon-infect.svg" alt="" style="width: 28px"><span class="sp-lbl" style="flex: 1">Gamma 2 · week 6 infections</span><span class="sp-num" style="color: #c8f08a; font-size: 12px">{{count}}</span></div>
+    <sc-for list="{{ms}}" as="m" hint-placeholder-count="6">
+      <div class="zb-m {{m.cls}}" style="border-color: {{m.line}}">
+        <span class="sp-av" style="background: {{m.c1}}">{{m.i1}}</span><span style="flex: 1; font-weight: 600">{{m.n1}}</span>
+        <span class="zb-st" style="background: {{m.sb}}; color: {{m.sc}}">{{m.st}}</span>
+        <span class="sp-num" style="font-size: 12px; color: #a3a9c2; width: 110px; text-align: right">{{m.score}}</span>
+        <span class="sp-t3" style="font-size: 12px; width: 120px">{{m.by}}</span>
+      </div>
+    </sc-for>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":720}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { d: '' }; }
+  renderVals() {
+    const d = this.state.d; const cured = d === 'cure', turned = d === 'turn';
+    const M = [['TheCiege26','TC','#22314f','108.4 – 112.9','by Open Team 9'],['Open Team 6','O6','#2c2a4a','97.1 – 121.4','by the Whisperer'],['Open Team 2','O2','#4a1f2c','114.0 – 118.2','by Open Team 11'],['Open Team 5','O5','#12352a','131.0 – 104.7','held off Open Team 7'],['Open Team 12','O12','#3a1f30','99.8 – 92.3','held off Open Team 3']];
+    const ms = M.map(([n1, i1, c1, score, by], i) => { const held = by.startsWith('held');
+      const st = i === 0 ? (cured ? 'Revived' : turned ? 'Zombie' : 'Bitten') : held ? 'Survivor' : 'Zombie';
+      const sty = { Revived: ['rgba(242,201,76,.16)', '#f2c94c'], Zombie: ['rgba(139,224,58,.16)', '#c8f08a'], Bitten: ['rgba(255,138,106,.16)', '#ff9a8a'], Survivor: ['rgba(127,183,232,.14)', '#9fd0ff'] }[st];
+      return { n1: i === 0 ? 'You' : n1, i1, c1, score, by, st, sb: sty[0], sc: sty[1], cls: st === 'Zombie' ? 'zb-turned' : '', line: i === 0 ? 'rgba(127,183,232,.45)' : 'rgba(255,255,255,.06)' }; });
+    return { ms, count: (turned ? 3 : 2) + ' turned · ' + (turned ? 10 : 9) + ' Zombies total', bitten: !d, decided: !!d,
+      cure: () => this.setState({ d: 'cure' }), turn: () => this.setState({ d: 'turn' }), reset: () => this.setState({ d: '' }),
+      head: cured ? 'Still human' : turned ? 'You turned' : 'You’ve been bitten', hc: cured ? '#f2c94c' : '#c8f08a',
+      sub: cured ? 'Your serum cured the bite. You stay a Survivor, and you’re out of serums.' : turned ? 'You’re a Zombie now. Beat Survivors to infect them. A serum later can bring you back.' : 'Open Team 9 beat you by 4.5. You have one serum. Use it now or turn and save it.',
+      ring: turned ? '#8be03a' : cured ? '#f2c94c' : '#ff8a6a', f: turned ? 'hue-rotate(60deg) saturate(.6) brightness(.85)' : 'none',
+      glow: turned ? 'rgba(139,224,58,.22)' : cured ? 'rgba(242,201,76,.18)' : 'rgba(255,138,106,.16)' };
+  }
+}
+</script>
+</body>
+</html>

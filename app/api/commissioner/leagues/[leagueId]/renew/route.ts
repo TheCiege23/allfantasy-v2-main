@@ -17,6 +17,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { checkAndTriggerRatingIfOffseason } from '@/lib/commissioner/CommissionerRatingTrigger'
 import {
   isSeasonOverForRenewal,
@@ -174,7 +176,7 @@ export async function POST(
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
-      userId: true, season: true, settings: true, leagueVariant: true,
+      userId: true, season: true, settings: true, leagueVariant: true, platform: true,
       isDynasty: true, sport: true, name: true, scoring: true,
       waiverBudget: true,
       teams: {
@@ -188,6 +190,22 @@ export async function POST(
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  /*
+   * 🛑 AN IMPORTED LEAGUE IS RENEWED ON ITS PLATFORM. Writing `season + 1` here left the row pointing at
+   * last season's provider league, and every sync then refused it for a season mismatch. A Sleeper
+   * renewal is followed automatically (lib/league-import/sleeper/followRenewedLeagues.ts).
+   */
+  if (isImportedPlatform(league.platform)) {
+    return NextResponse.json(
+      {
+        error: 'imported_league',
+        message: followsRenewalAutomatically(league.platform)
+          ? 'This league is hosted on Sleeper. Renew it there — AllFantasy picks up the new season on its own within a few hours.'
+          : 'This league is hosted on its own platform. Renew it there, then re-import it so AllFantasy follows the new season.',
+      },
+      { status: 409 },
+    )
+  }
 
   const body = await req.json().catch(() => ({}))
   const newLeagueType = typeof body.leagueType === 'string' ? body.leagueType : null

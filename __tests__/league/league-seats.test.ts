@@ -114,6 +114,17 @@ describe('countSeatsHeldByPeople', () => {
 })
 
 describe('assignLeagueSeat', () => {
+  it('updates the reserved Survivor draft slot when a manager joins or leaves before the draft', async () => {
+    const db = nativeLeague()
+    db.league.rows[0].survivorMode = true
+    db.draftSession = table([{ id: 'draft', leagueId: 'L', status: 'pre_draft',
+      slotOrder: [{ slot: 2, rosterId: 'r2', displayName: 'Open Team 2', open: true }] }])
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Amy', open: false })
+    expect((await releaseLeagueSeat(db, { leagueId: 'L', rosterId: 'r2' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Open Team 2', open: true })
+  })
+
   it('refuses an ownership change committed after the initial read', async () => {
     const db = nativeLeague()
     const original = db.roster.updateMany

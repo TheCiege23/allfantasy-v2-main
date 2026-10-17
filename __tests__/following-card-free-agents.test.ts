@@ -31,7 +31,7 @@ vi.mock('@/lib/follows/playerFollows', () => ({ listPlayerFollows: h.listFollows
 vi.mock('@/lib/injuries/injuryReadPort', () => ({ resolveInjuryFacts: h.resolveInjuryFacts }))
 vi.mock('@/lib/core-app/leagueHome', () => ({ leagueDisplayName: (n: string | null) => n ?? 'League' }))
 
-import { MAX_FREE_AGENT_LEAGUES, freeAgentLeaguesFor, getFollowingCard } from '@/lib/core-app/followingCard'
+import { MAX_FREE_AGENT_LEAGUES, freeAgentLeaguesFor, getFollowingCard, scanFreeAgentLeagues } from '@/lib/core-app/followingCard'
 
 const NOW = new Date('2026-09-16T12:00:00Z')
 const GIBBS = '9221'
@@ -126,6 +126,27 @@ describe('freeAgentLeaguesFor', () => {
     h.rosterFind.mockRejectedValue(new Error('db down'))
     const out = await freeAgentLeaguesFor('u1', [ICE], [GIBBS])
     expect(out.size).toBe(0)
+  })
+})
+
+/*
+ * The "he's free in your league" alert (lib/follows/followFreeAgentCheck.ts) needs the leagues the
+ * scan could READ, so a league that merely became readable is never mistaken for a drop.
+ */
+describe('scanFreeAgentLeagues — checked', () => {
+  it('lists the leagues read in full, and leaves out a partial import and a league that is not yours', async () => {
+    const PART: League = { id: 'lg-part', name: 'Partial', platform: 'sleeper', sport: 'NFL' }
+    setup([{ league: ICE, extra: [GIBBS] }, { league: PART, teams: 3, rosters: 2 }, { league: DYN, yours: false }])
+    const out = await scanFreeAgentLeagues('u1', [ICE, PART, DYN], [GIBBS])
+    expect(out.checked).toEqual(['lg-ice'])
+    expect(out.free.get(GIBBS)).toBeUndefined()
+  })
+
+  it('a league read where he is on no roster is both checked and free', async () => {
+    setup([{ league: ICE }])
+    const out = await scanFreeAgentLeagues('u1', [ICE], [GIBBS])
+    expect(out.checked).toEqual(['lg-ice'])
+    expect(out.free.get(GIBBS)?.map((l) => l.leagueId)).toEqual(['lg-ice'])
   })
 })
 

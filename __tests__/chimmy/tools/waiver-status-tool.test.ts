@@ -36,6 +36,9 @@ vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: h.membership })
 vi.mock('@/lib/ai-payload/resolveAiTeamContext', () => ({ resolveNames: h.names }))
 vi.mock('@/lib/waiver-wire/settings-service', () => ({ getEffectiveLeagueWaiverSettings: h.settings }))
 vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ getLeagueWaiverState: h.state }))
+/* A Sleeper league's schedule, per test (lib/waivers/sleeperWaiverSchedule.ts is covered on its own). */
+const sched = vi.hoisted(() => ({ map: new Map<string, unknown>() }))
+vi.mock('@/lib/waivers/sleeperWaiverSchedule', () => ({ loadSleeperWaiverSchedules: async () => sched.map }))
 
 import { buildWaiverStatusContext } from '@/lib/chimmy/tools/waiverStatusTool'
 
@@ -118,6 +121,21 @@ describe('get_waiver_status — imported league', () => {
     /* Never a claim read, never a provider call. */
     expect(h.claims).not.toHaveBeenCalled()
     expect(h.settings).not.toHaveBeenCalled()
+  })
+
+  it("never reads Sleeper's waiver_day_of_week as a weekday — its base is unresolved (S-05)", async () => {
+    sched.map = new Map()
+    const out = await buildWaiverStatusContext({ leagueId: 'L1', userId: 'u1', now: NOW })
+    /* The fixture holds waiver_day_of_week: 3, which the old Sunday = 0 reading printed as Wednesday. */
+    expect(out).not.toMatch(/Wednesday/)
+    expect(out).toMatch(/Processing schedule: not known yet/)
+  })
+
+  it("states the Sleeper schedule the screens show, and what it rests on", async () => {
+    sched.map = new Map([['L1', { source: 'sleeper_setting', schedule: { dayOfWeek: null, time: '09:00', timeZone: 'America/Los_Angeles' } }]])
+    expect(await buildWaiverStatusContext({ leagueId: 'L1', userId: 'u1', now: NOW })).toMatch(/Waivers run: Daily 09:00 Pacific \(this league's Sleeper setting\)/)
+    sched.map = new Map([['L1', { source: 'observed', schedule: { dayOfWeek: null, time: '00:05', timeZone: 'America/Los_Angeles' }, agreeingRuns: 8 }]])
+    expect(await buildWaiverStatusContext({ leagueId: 'L1', userId: 'u1', now: NOW })).toMatch(/Waivers run: Daily 00:05 Pacific \(seen over this league's last 8 runs\)/)
   })
 
   it('does not dress schema defaults up as facts when the import sent nothing', async () => {

@@ -1,17 +1,655 @@
-.af-cwr-mobile-name{display:none}@media(max-width:720px){.af-cwr-mobile-name{display:block;min-width:0;overflow:hidden;color:var(--text,#fff);font-size:12px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}}
-.af-cwr{margin:0 0 18px;padding:22px;border:1px solid rgba(34,211,238,.32);border-radius:20px;background:radial-gradient(circle at 8% 0,rgba(34,211,238,.13),transparent 35%),radial-gradient(circle at 92% 100%,rgba(139,92,246,.14),transparent 38%),var(--surface,#101525);box-shadow:0 18px 50px rgba(0,0,0,.16)}
-.af-cwr-head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px}.af-cwr-head h1{margin:5px 0 7px;font-size:clamp(22px,3vw,34px);line-height:1}.af-cwr-head p{max-width:680px;margin:0;color:var(--muted,#91a0ba);font-size:13px;line-height:1.55}.af-cwr-head-actions{display:grid;gap:8px;min-width:210px}
-.af-cwr-cta,.af-cwr-add{display:flex;align-items:center;justify-content:center;min-height:44px;padding:10px 14px;border:1px solid rgba(34,211,238,.55);border-radius:12px;background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(139,92,246,.2));color:var(--text,#fff);font-size:12px;font-weight:800;text-align:center}.af-cwr-add{border-color:var(--line,#263147);background:rgba(4,8,20,.38);color:var(--accent,#22d3ee)}.af-cwr-cta:hover,.af-cwr-add:hover{border-color:var(--accent,#22d3ee);transform:translateY(-1px)}
-.af-cwr-scoreboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:20px 0}.af-cwr-scoreboard div{padding:14px;border:1px solid var(--line,#263147);border-radius:12px;background:rgba(4,8,20,.38)}.af-cwr-scoreboard strong{display:block;color:var(--accent,#22d3ee);font-size:22px}.af-cwr-scoreboard span{display:block;margin-top:3px;color:var(--muted,#91a0ba);font-size:11px}.af-cwr-error,.af-cwr-warning{padding:9px 11px;border:1px solid rgba(251,191,36,.35);border-radius:9px;background:rgba(251,191,36,.08);color:#fcd34d;font-size:11px}
-.af-cwr-pipeline{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px}.af-cwr-lane-wrap{position:relative;display:flex;align-items:center;min-width:0}.af-cwr-lane{display:flex;width:100%;height:100%;min-height:300px;flex-direction:column;padding:17px;border:1px solid var(--line,#263147);border-radius:15px;background:rgba(4,8,20,.52)}.af-cwr-lane[data-current=true]{border-color:var(--accent,#22d3ee);box-shadow:inset 0 0 0 1px rgba(34,211,238,.12),0 10px 30px rgba(0,0,0,.12)}.af-cwr-lane-top{display:flex;align-items:center;justify-content:space-between;gap:10px}.af-cwr-role{font-size:11px;letter-spacing:.14em;color:#a78bfa}.af-cwr-current{padding:3px 7px;border-radius:999px;background:rgba(34,211,238,.13);color:var(--accent,#22d3ee);font-size:11px;font-weight:900;letter-spacing:.1em}.af-cwr-lane h2{margin:8px 0 3px;font-size:18px}.af-cwr-platform{margin:0;color:var(--muted,#91a0ba);font-size:11px;letter-spacing:.08em}
-.af-cwr-identity{display:flex;align-items:center;gap:10px;margin-top:10px}.af-cwr-identity h2{margin:0 0 3px}.af-cwr-crest{display:grid;place-items:center;width:42px;height:42px;flex:0 0 42px;overflow:hidden;border:1px solid rgba(34,211,238,.3);border-radius:12px;background:linear-gradient(135deg,rgba(34,211,238,.16),rgba(139,92,246,.2));color:#fff;font-size:13px;font-weight:900}.af-cwr-crest img{width:100%;height:100%;object-fit:cover}
-.af-cwr-team{display:grid;gap:5px;margin:14px 0 10px}.af-cwr-team>span,.af-cwr-pulse span{color:var(--muted,#91a0ba);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.af-cwr-team strong{font-size:13px}.af-cwr-team select{width:100%;min-height:38px;padding:0 10px;border:1px solid var(--line,#263147);border-radius:9px;background:#090e1d;color:var(--text,#fff);font:inherit;font-size:12px}
-.af-cwr-pulse{display:grid;gap:6px;margin-bottom:14px}.af-cwr-pulse>div{display:grid;grid-template-columns:58px 1fr;gap:4px 9px;padding:8px 9px;border:1px solid rgba(148,163,184,.13);border-radius:9px;background:rgba(9,14,29,.5)}.af-cwr-pulse strong{font-size:11px}.af-cwr-pulse small{grid-column:2;color:var(--muted,#91a0ba);font-size:11px;line-height:1.35}.af-cwr-warning{margin:0 0 12px}
-.af-cwr-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}.af-cwr-links a{padding:6px 9px;border:1px solid var(--line,#263147);border-radius:999px;color:var(--accent,#22d3ee);font-size:11px;font-weight:800}.af-cwr-links a:hover{border-color:var(--accent,#22d3ee);background:rgba(34,211,238,.08)}.af-cwr-connector{display:none}
-.af-cwr-positions{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}.af-cwr-positions span{padding:7px 10px;border:1px solid var(--line,#263147);border-radius:999px;color:var(--muted,#91a0ba);font-size:11px}.af-cwr-positions strong{color:var(--text,#fff)}
-.af-cwr button:focus-visible,.af-cwr a:focus-visible,.af-cwr select:focus-visible{outline:2px solid var(--accent,#22d3ee);outline-offset:3px}
-.af-cwr-settings{display:grid;gap:8px;margin:14px 0;padding:14px;border:1px solid rgba(139,92,246,.3);border-radius:13px;background:rgba(139,92,246,.07)}.af-cwr-settings p{margin:0;color:var(--muted,#91a0ba);font-size:11px}.af-cwr-rename{display:grid;grid-template-columns:auto minmax(160px,1fr) auto;align-items:center;gap:9px}.af-cwr-rename label{font-size:11px;font-weight:800}.af-cwr-rename input{min-height:38px;padding:0 10px;border:1px solid var(--line,#263147);border-radius:9px;background:#090e1d;color:var(--text,#fff)}.af-cwr-rename button,.af-cwr-manage-row button{min-height:34px;padding:0 10px;border:1px solid var(--line,#263147);border-radius:8px;background:rgba(9,14,29,.8);color:var(--text,#fff);font-size:11px;font-weight:800}.af-cwr-rename button:disabled,.af-cwr-manage-row button:disabled{opacity:.5}.af-cwr-notice{padding:9px 11px;border:1px solid rgba(52,211,153,.35);border-radius:9px;background:rgba(52,211,153,.08);color:#6ee7b7;font-size:11px}
-.af-cwr-tools{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:18px 0;padding:16px;border:1px solid rgba(34,211,238,.22);border-radius:14px;background:linear-gradient(120deg,rgba(34,211,238,.07),rgba(139,92,246,.07))}.af-cwr-tools h2{margin:5px 0 2px;font-size:17px}.af-cwr-tools p{margin:0;color:var(--muted,#91a0ba);font-size:11px}.af-cwr-tools nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}.af-cwr-tools a,.af-cwr-tools button{padding:7px 10px;border:1px solid var(--line,#263147);border-radius:999px;background:rgba(4,8,20,.55);color:var(--accent,#22d3ee);font:inherit;font-size:11px;font-weight:800;cursor:pointer}
-.af-cwr-mobile-switcher,.af-cwr-expand{display:none}.af-cwr-lane-body{display:contents}.af-cwr-sync{display:grid;grid-template-columns:1fr auto;gap:3px 10px;margin:0 0 13px;padding:10px;border:1px solid rgba(52,211,153,.22);border-radius:10px;background:rgba(52,211,153,.05)}.af-cwr-sync[data-stale=true]{border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06)}.af-cwr-sync strong,.af-cwr-sync span{display:block}.af-cwr-sync strong{font-size:11px}.af-cwr-sync span,.af-cwr-sync small{color:var(--muted,#91a0ba);font-size:11px;line-height:1.4}.af-cwr-sync small{grid-column:1/-1}.af-cwr-sync a{align-self:center;padding:5px 8px;border:1px solid currentColor;border-radius:999px;color:var(--accent,#22d3ee);font-size:11px;font-weight:900}.af-cwr-manage-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line,#263147)}.af-cwr-manage-row .af-cwr-remove{color:#fda4af;border-color:rgba(251,113,133,.3)}
-@media(max-width:820px){.af-cwr-scoreboard{grid-template-columns:repeat(2,minmax(0,1fr))}.af-cwr-tools{align-items:flex-start;flex-direction:column}.af-cwr-tools nav{justify-content:flex-start}}
-@media(max-width:720px){.af-cwr{padding:16px}.af-cwr-head{display:grid}.af-cwr-head-actions{width:100%}.af-cwr-head-actions>*{flex:1}.af-cwr-scoreboard{grid-template-columns:repeat(2,minmax(0,1fr))}.af-cwr-settings{padding:12px}.af-cwr-rename{grid-template-columns:1fr}.af-cwr-mobile-switcher{position:sticky;top:0;z-index:3;display:flex;gap:6px;margin:14px -8px;padding:8px;overflow-x:auto;border:1px solid var(--line,#263147);border-radius:12px;background:rgba(7,11,20,.94);backdrop-filter:blur(14px)}.af-cwr-mobile-switcher button{flex:0 0 auto;padding:7px 10px;border:1px solid var(--line,#263147);border-radius:999px;background:#090e1d;color:var(--muted,#91a0ba);font:inherit;font-size:11px;font-weight:800}.af-cwr-mobile-switcher button[data-current=true]{border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}.af-cwr-tools{margin:12px 0}.af-cwr-tools nav{display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}.af-cwr-tools a,.af-cwr-tools button{text-align:center}.af-cwr-pipeline{grid-template-columns:1fr}.af-cwr-lane{min-height:0;padding:14px}.af-cwr-expand{display:grid;margin-left:auto;width:32px;height:32px;place-items:center;border:1px solid var(--line,#263147);border-radius:9px;background:#090e1d;color:var(--text,#fff)}.af-cwr-lane-body{display:none}.af-cwr-lane[data-expanded=true] .af-cwr-lane-body{display:block}.af-cwr-lane[data-expanded=true] .af-cwr-expand{transform:rotate(180deg)}}
+/*
+ * Connected franchise — the command center above Scout when a league belongs to a franchise hub.
+ *
+ * 🛑 EVERY COLOUR IS A THEME TOKEN, AND EVERY RULE IS SCOPED UNDER `.af-core`. This file used to
+ * hard-code a dark palette (#090e1d inputs, rgba(4,8,20,.5) lanes, #fcd34d / #6ee7b7 / #fda4af text,
+ * a cyan border) with no scope. Under `html[data-mode='light']` the inputs kept their near-black
+ * fill while `--text` turned near-black too — typed text was effectively invisible — and the cyan
+ * edge ignored the violet AF theme. The shell (af-core.css) defines every token used below for all
+ * three themes, so this block now follows whichever is active.
+ *
+ * ⚠ TAP TARGETS ARE 44PX, iOS's FLOOR. Links, tool pills, switcher buttons and the manage buttons
+ * were 27–38px.
+ *
+ * ⚠ THE MEDIA QUERIES ARE AT THE END AND NOT NESTED — see CLAUDE.md on a query inserted inside
+ * another silently moving rules into a narrower band.
+ */
+
+.af-core .af-cwr {
+  margin: 0 0 18px;
+  padding: 22px;
+  border: 1px solid var(--accent-line);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 8% 0, var(--accent-soft), transparent 35%),
+    var(--surface);
+  box-shadow: var(--shadow, none);
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-core .af-cwr-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.af-core .af-cwr-head :is(h1, h2) {
+  margin: 5px 0 7px;
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.1;
+}
+
+.af-core .af-cwr-head p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* Grows to its content rather than claiming 210px of a tablet header the title needs. */
+.af-core .af-cwr-head-actions {
+  display: grid;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.af-core .af-cwr-cta,
+.af-core .af-cwr-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.af-core .af-cwr-add {
+  border-color: var(--line);
+  background: var(--chip);
+  color: var(--accent);
+}
+
+.af-core .af-cwr-cta:hover,
+.af-core .af-cwr-add:hover {
+  border-color: var(--accent);
+}
+
+/* ── Scoreboard ──────────────────────────────────────────────────────── */
+
+.af-core .af-cwr-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 20px 0;
+}
+
+.af-core .af-cwr-scoreboard div {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+
+.af-core .af-cwr-scoreboard strong {
+  display: block;
+  color: var(--accent);
+  font-size: 22px;
+}
+
+.af-core .af-cwr-scoreboard span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ── Notices ─────────────────────────────────────────────────────────── */
+
+.af-core .af-cwr-error,
+.af-core .af-cwr-warning {
+  padding: 9px 11px;
+  border: 1px solid var(--warn);
+  border-radius: 9px;
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.af-core .af-cwr-warning {
+  margin: 0 0 12px;
+}
+
+.af-core .af-cwr-notice {
+  padding: 9px 11px;
+  border: 1px solid var(--good);
+  border-radius: 9px;
+  background: var(--good-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* ── League lanes ────────────────────────────────────────────────────── */
+
+.af-core .af-cwr-pipeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+  gap: 12px;
+}
+
+.af-core .af-cwr-lane-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.af-core .af-cwr-lane {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  flex-direction: column;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface2);
+}
+
+.af-core .af-cwr-lane[data-current='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.af-core .af-cwr-lane-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-core .af-cwr-role {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+
+.af-core .af-cwr-current {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.af-core .af-cwr-lane h2 {
+  margin: 8px 0 3px;
+  font-size: 18px;
+}
+
+.af-core .af-cwr-platform {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.af-core .af-cwr-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.af-core .af-cwr-identity h2 {
+  margin: 0 0 3px;
+}
+
+.af-core .af-cwr-crest {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  overflow: hidden;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.af-core .af-cwr-crest img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.af-core .af-cwr-team {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0 10px;
+}
+
+.af-core .af-cwr-team > span,
+.af-core .af-cwr-pulse span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.af-core .af-cwr-team strong {
+  font-size: 13px;
+}
+
+/* 16px, not 12: iOS zooms the page into any focused field under 16px. */
+.af-core .af-cwr-team select,
+.af-core .af-cwr-rename input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.af-core .af-cwr-pulse {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.af-core .af-cwr-pulse > div {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 4px 9px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--chip);
+}
+
+.af-core .af-cwr-pulse strong {
+  font-size: 12px;
+}
+
+.af-core .af-cwr-pulse small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.af-core .af-cwr-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.af-core .af-cwr-links a,
+.af-core .af-cwr-tools a,
+.af-core .af-cwr-tools button,
+.af-core .af-cwr-sync a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.af-core .af-cwr-links a:hover,
+.af-core .af-cwr-tools a:hover,
+.af-core .af-cwr-tools button:hover,
+.af-core .af-cwr-sync a:hover {
+  border-color: var(--accent);
+}
+
+.af-core .af-cwr-connector {
+  display: none;
+}
+
+.af-core .af-cwr-positions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.af-core .af-cwr-positions span {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.af-core .af-cwr-positions strong {
+  color: var(--text);
+}
+
+.af-core .af-cwr button:focus-visible,
+.af-core .af-cwr a:focus-visible,
+.af-core .af-cwr select:focus-visible,
+.af-core .af-cwr input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ── Settings ────────────────────────────────────────────────────────── */
+
+.af-core .af-cwr-settings {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 13px;
+  background: var(--accent-soft);
+}
+
+.af-core .af-cwr-settings p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Wraps instead of overflowing: label, then the field, then Save, as width runs out. */
+.af-core .af-cwr-rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+
+.af-core .af-cwr-rename label {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.af-core .af-cwr-rename input {
+  flex: 1 1 200px;
+  width: auto;
+}
+
+.af-core .af-cwr-rename button,
+.af-core .af-cwr-manage-row button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.af-core .af-cwr-rename button:disabled,
+.af-core .af-cwr-manage-row button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.af-core .af-cwr-manage-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.af-core .af-cwr-manage-row .af-cwr-remove {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+/* ── Tools ───────────────────────────────────────────────────────────── */
+
+.af-core .af-cwr-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--accent-soft);
+}
+
+.af-core .af-cwr-tools h2 {
+  margin: 5px 0 2px;
+  font-size: 17px;
+}
+
+.af-core .af-cwr-tools p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.af-core .af-cwr-tools nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ── Sync box ────────────────────────────────────────────────────────── */
+
+.af-core .af-cwr-mobile-switcher,
+.af-core .af-cwr-expand,
+.af-core .af-cwr-mobile-name {
+  display: none;
+}
+
+.af-core .af-cwr-lane-body {
+  display: contents;
+}
+
+.af-core .af-cwr-sync {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  margin: 0 0 13px;
+  padding: 10px;
+  border: 1px solid var(--good);
+  border-radius: 10px;
+  background: var(--good-soft);
+}
+
+.af-core .af-cwr-sync[data-stale='true'] {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.af-core .af-cwr-sync strong,
+.af-core .af-cwr-sync span {
+  display: block;
+}
+
+.af-core .af-cwr-sync strong {
+  font-size: 12px;
+}
+
+.af-core .af-cwr-sync span,
+.af-core .af-cwr-sync small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.af-core .af-cwr-sync small {
+  grid-column: 1 / -1;
+}
+
+.af-core .af-cwr-sync a {
+  align-self: center;
+}
+
+/* ── Tablet ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 820px) {
+  .af-core .af-cwr-scoreboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .af-core .af-cwr-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .af-core .af-cwr-tools nav {
+    justify-content: flex-start;
+  }
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .af-core .af-cwr {
+    padding: 16px;
+  }
+
+  .af-core .af-cwr-head {
+    display: grid;
+  }
+
+  .af-core .af-cwr-head-actions {
+    width: 100%;
+  }
+
+  .af-core .af-cwr-settings {
+    padding: 12px;
+  }
+
+  .af-core .af-cwr-mobile-name {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /*
+   * 🛑 BELOW THE NOTCH, NOT UNDER IT. `top: 0` stuck the switcher behind the shell's fixed
+   * safe-area layer (af-core-shell.css, z-index 70) on a notched iPhone. The Commissioner hub's
+   * sticky nav uses the same inset.
+   */
+  .af-core .af-cwr-mobile-switcher {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 3;
+    display: flex;
+    gap: 6px;
+    margin: 14px -8px;
+    padding: 8px;
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .af-core .af-cwr-mobile-switcher button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--chip);
+    color: var(--muted);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  /* The state is the border AND aria-pressed (ConnectedFranchiseWarRoom.tsx), never colour alone. */
+  .af-core .af-cwr-mobile-switcher button[data-current='true'] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .af-core .af-cwr-tools {
+    margin: 12px 0;
+  }
+
+  .af-core .af-cwr-tools nav {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .af-core .af-cwr-tools a,
+  .af-core .af-cwr-tools button {
+    text-align: center;
+  }
+
+  .af-core .af-cwr-pipeline {
+    grid-template-columns: 1fr;
+  }
+
+  .af-core .af-cwr-lane {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .af-core .af-cwr-expand {
+    display: grid;
+    margin-left: auto;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--chip);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .af-core .af-cwr-lane-body {
+    display: none;
+  }
+
+  .af-core .af-cwr-lane[data-expanded='true'] .af-cwr-lane-body {
+    display: block;
+  }
+
+  .af-core .af-cwr-lane[data-expanded='true'] .af-cwr-expand {
+    transform: rotate(180deg);
+  }
+}

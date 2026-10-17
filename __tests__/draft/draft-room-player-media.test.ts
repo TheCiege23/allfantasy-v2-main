@@ -15,7 +15,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { buildHeadshotUrl } from '@/lib/player-media-urls'
+import { buildHeadshotUrl, sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { resolveHeadshotUrl } from '@/lib/draft-sports-models/player-asset-resolver'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { normalizeDraftPlayer } from '@/lib/draft-sports-models/normalize-draft-player'
@@ -38,6 +38,17 @@ describe('headshots are built from an id only where the id is a Sleeper id', () 
       expect(getPlayerImage({ id: '4984', name: 'X', imageUrl: null }, sport)).toBeNull()
     }
     expect(getPlayerImage({ id: '4984', name: 'X', imageUrl: null }, 'NFL')).toContain('/nfl/players/thumb/')
+  })
+
+  /*
+   * `sleeperHeadshotUrl` is for an id the CALLER knows is Sleeper's, in any sport Sleeper serves — the
+   * legacy trade analyzer's NBA mode passes real Sleeper NBA ids straight from Sleeper's API. Callers
+   * holding another namespace (a native NHL roster's Rolling Insights ids) must not reach it; see
+   * chimmy-player-cards.test.ts.
+   */
+  it('sleeperHeadshotUrl still builds the Sleeper NBA URL for a Sleeper NBA id', () => {
+    expect(sleeperHeadshotUrl('4984', 'nfl')).toBe('https://sleepercdn.com/content/nfl/players/thumb/4984.jpg')
+    expect(sleeperHeadshotUrl('1308', 'nba')).toBe('https://sleepercdn.com/content/nba/players/1308.jpg')
   })
 
   it('an NBA pool row with a numeric id and no photo shows the placeholder, not a Sleeper face', () => {

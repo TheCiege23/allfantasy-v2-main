@@ -148,7 +148,7 @@ export async function getManagerPresence(
   const league = await prisma.league
     .findUnique({
       where: { id: leagueId },
-      select: { id: true, name: true, platform: true, platformLeagueId: true, season: true, settings: true, timezone: true },
+      select: { id: true, name: true, platform: true, sport: true, platformLeagueId: true, season: true, settings: true, timezone: true },
     })
     .catch(() => null)
   if (!league) return { available: false, reason: 'league not found' }
@@ -200,7 +200,7 @@ export async function getManagerPresence(
    * BEFORE the vocabulary guard and every Sleeper-id read below; an id with no
    * link stays as it is and counts against the guard. See rosterIdSpace.ts.
    */
-  const { rosters } = await translateRostersToSleeperIds(platform, rawRosters)
+  const { rosters } = await translateRostersToSleeperIds(platform, rawRosters, league.sport)
 
   /*
    * The same id-vocabulary guard the ownership card uses: an ESPN roster full of

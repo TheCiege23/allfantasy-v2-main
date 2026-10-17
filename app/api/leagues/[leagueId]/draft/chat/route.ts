@@ -34,6 +34,11 @@ import {
 import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoad'
 import { BlockListUnavailableError } from '@/lib/moderation/BlockUserService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { keepOwnUploadAttachments } from '@/lib/chat-core/clientMessageInput'
+import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
+import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
+import { parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
+import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
 
 export const dynamic = 'force-dynamic'
 
@@ -200,7 +205,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
    * GIFs, photos and composer polls, in the metadata shape league chat stores — so a row
    * posted here renders the same in the league's chat, and the other way round.
    */
-  const richMeta = sanitizeDraftChatRichMeta(body?.metadata)
+  // Attachments only from our own uploader — never a host the sender picked (see keepOwnUploadAttachments).
+  const richMeta = keepOwnUploadAttachments(sanitizeDraftChatRichMeta(body?.metadata))
   const hasRich = Object.keys(richMeta).length > 0
   /* A reply, on the same column league chat uses for one. */
   const parentMessageId =
@@ -225,6 +231,34 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     (hasRich && richMeta.attachments ? '📎 Media' : '')
   if (!text) return NextResponse.json({ error: 'Message required' }, { status: 400 })
   if (text.length > 1000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
+  if (!hasRich && /^@chimmy\b/i.test(text)) {
+    const source = syncOn ? null : 'draft'
+    const prompt = await createLeagueChatMessage(leagueId, userId, text, {
+      type: 'text', source, isPrivate: true, visibleToUserId: userId,
+      messageSubtype: 'chimmy_private', parentMessageId,
+    })
+    if (!prompt) return NextResponse.json({ error: 'Failed to send privately' }, { status: 500 })
+    const voteAttempt = parseSurvivorCommand(text).intent === 'vote' || /^@chimmy\s+vote(?:\s|$)/i.test(text)
+    const voteResult = voteAttempt && await isSurvivorLeague(leagueId)
+      ? await processSurvivorOfficialCommand({ leagueId, userId, command: text, source: 'private_chimmy' })
+      : null
+    const replyText = voteResult?.handled
+      ? voteResult.ok
+        ? voteResult.message ?? 'Your vote was recorded privately.'
+        : `${voteResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`
+      : await generateChimmyPrivateReply(text, { leagueId, userId }).catch(() => 'Chimmy is unavailable right now. Please try again.')
+    const reply = await createLeagueChatMessage(leagueId, userId, replyText, {
+      type: 'system', source, isPrivate: true, visibleToUserId: userId,
+      messageSubtype: 'chimmy_private_response', parentMessageId: prompt.id,
+      metadata: { chimmyResponse: true, discordAuthorName: 'Chimmy' },
+    })
+    return NextResponse.json({
+      message: toDraftMessage(prompt, syncOn, leagueId, userId),
+      extraMessages: reply ? [toDraftMessage(reply, syncOn, leagueId, userId)] : [],
+      syncActive: syncOn,
+      ...(voteResult?.handled ? { commandResult: { ok: voteResult.ok, intent: 'vote', message: voteResult.ok ? voteResult.message : voteResult.error } } : {}),
+    })
+  }
   const imageUrl =
     typeof body?.imageUrl === 'string' && body.imageUrl.trim() ? body.imageUrl.trim() : null
 

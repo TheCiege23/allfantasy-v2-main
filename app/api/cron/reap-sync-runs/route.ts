@@ -1,3 +1,4 @@
+import {maintainDraftResults} from '@/lib/draft-archive/ingestion/maintenance'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
@@ -9,6 +10,7 @@ import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/
 import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/trade/tradeAgentPass'
 import { runComprehensiveBackgroundAnalysis, type TradeLearningPassResult } from '@/lib/comprehensive-trade-learning'
 import { runTradeCalibrationPass, type TradeCalibrationPassResult } from '@/lib/trade-engine/calibrationPass'
+import { runAnnualRenewalReminderPass, type RenewalReminderPassResult } from '@/lib/billing/annualRenewalReminders'
 import {
   runRelationshipRefreshPass,
   type RelationshipRefreshPassResult,
@@ -125,11 +127,31 @@ export async function GET(request: NextRequest) {
   // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
   // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
   // nothing: if the model is unreachable, this insert would fail anyway.
+  //
+  // ⚠ `rowsWritten` AND `rowsUpdated`, on this row and the two passes below. SyncJobRun has a
+  // `rows_written` column and no `rows_updated` one; `rowsUpdated` is carried in metadata only
+  // (syncJobRunTelemetry.ts header). Every health reader — productionHealthCore's `lastRows.written`,
+  // the cron-freshness probes — reads the COLUMN, so a pass that reported its work only as
+  // `rowsUpdated` showed `rows_written 0` on every run. Measured on the first two
+  // cron-trade-learning rows in production, 2026-09-30: rows_written 0, metadata.rowsUpdated 500.
   await recordSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    { rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge, privateRelay } },
+    { rowsWritten: reaped, rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge, privateRelay } },
     Date.now() - startedAt,
   )
+
+  /*
+   * Annual-renewal reminders ride here too (2026-10), for the same ceiling reason: the notice
+   * several states require 15–45 days before an annual plan auto-renews, promised in Terms 8.3.
+   * Hourly is fine — one reminder per billing period, deduplicated in Stripe's own metadata
+   * (lib/billing/annualRenewalReminders). AFTER the heartbeat, so it can never fail the reap,
+   * and ahead of the budgeted passes below, because it is small and must not be starved.
+   */
+  const renewalReminders: RenewalReminderPassResult | { ran: false; reason: string } =
+    await runAnnualRenewalReminderPass().catch((error) => ({
+      ran: false as const,
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+    }))
 
   /*
    * The nightly trade agent rides here (design step 9, 2026-09-27) because `cron-schedule.json` is at
@@ -162,6 +184,8 @@ export async function GET(request: NextRequest) {
       await recordSyncJobRun(
         { jobName: 'cron-trade-learning', trigger: 'cron' },
         {
+          // Every examined trade is written back (valued, or marked analyzed without values).
+          rowsWritten: tradeLearning.valued + tradeLearning.refused,
           rowsUpdated: tradeLearning.valued + tradeLearning.refused,
           warnings: tradeLearning.error ? [tradeLearning.error] : [],
           metadata: { ...tradeLearning },
@@ -196,6 +220,8 @@ export async function GET(request: NextRequest) {
       await recordSyncJobRun(
         { jobName: 'cron-trade-calibration', trigger: 'cron' },
         {
+          // The outcome backfill inserts one TradeOutcomeEvent per newly valued trade.
+          rowsWritten: tradeCalibration.outcomesLogged ?? 0,
           rowsUpdated: tradeCalibration.outcomesLogged ?? 0,
           warnings: tradeCalibration.errors,
           metadata: { ...tradeCalibration },
@@ -223,15 +249,37 @@ export async function GET(request: NextRequest) {
           reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
         }))
 
+  // Draft archive refresh rides the existing hourly pass after all earlier work.
+  // Reserve response/telemetry time and do not start a source with insufficient headroom.
+  const draftStartedAt = Date.now()
+  const draftBudgetMs = ROUTE_BUDGET_MS - (draftStartedAt - startedAt)
+  const draftMaintenance = draftBudgetMs < 140_000
+    ? { ran: false as const, reason: 'insufficient remaining maintenance budget' }
+    : await maintainDraftResults(Math.min(180_000, draftBudgetMs - 30_000)).catch(() => ({
+        ran: false as const, reason: 'draft maintenance failed',
+      }))
+  try {
+    await recordSyncJobRun({jobName:'draft-analysis-maintenance',sport:'NFL',provider:'sleeper',trigger:'cron'}, {
+      rowsRead:'inventory' in draftMaintenance ? draftMaintenance.inventory : 0,
+      rowsWritten:'ready' in draftMaintenance ? draftMaintenance.ready + draftMaintenance.partial : 0,
+      warnings:'failed' in draftMaintenance && draftMaintenance.failed ? ['Some draft sources need evidence or retry'] : 'ran' in draftMaintenance && !draftMaintenance.ran ? [draftMaintenance.reason] : [],
+      metadata:{...draftMaintenance},
+    },Date.now()-draftStartedAt)
+  } catch {
+    // Draft telemetry cannot fail the completed reap.
+  }
+
   return NextResponse.json({
     ok: true,
     reaped,
     cutoff,
     cachePurge,
     privateRelay,
+    renewalReminders,
     tradeAgent,
     tradeLearning,
     tradeCalibration,
     relationshipRefresh,
+    draftMaintenance,
   })
 }

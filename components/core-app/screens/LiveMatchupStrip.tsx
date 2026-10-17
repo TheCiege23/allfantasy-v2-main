@@ -1,8 +1,10 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { describeRemaining, nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
+import type { RailStanding } from '@/lib/core-app/railMatchups'
 
 /**
  * You vs your opponent for the league held on the live screen, refreshed on the slate's cadence.
@@ -14,14 +16,26 @@ export function LiveMatchupStrip({
   strip: initial,
   leagueId,
   pollMs,
+  standing = null,
+  eliminated = false,
 }: {
   strip: MatchupStrip | null
   leagueId: string
   pollMs: number
+  /**
+   * Where you sit in a league with no opponent this week — the shell rail's own read, refreshed with
+   * the route. Without it an elimination league drew only "there is no single opponent" and stopped,
+   * which told a guillotine manager nothing about the one thing they open the page for: the cut.
+   */
+  standing?: RailStanding | null
+  /** Your team is out of this elimination league. */
+  eliminated?: boolean
 }) {
   const [{ strip, stale }, setState] = useState(() => nextStripState(null, initial))
   const seqRef = useRef(0)
-  const done = strip?.kind === 'scored' && strip.isFinal
+  /* An unavailable strip never becomes a scored one mid-week, so polling it only repeats the reason. */
+  const showsStanding = strip?.kind === 'unavailable' && (standing != null || eliminated)
+  const done = (strip?.kind === 'scored' && strip.isFinal) || showsStanding
 
   useEffect(() => {
     setState(nextStripState(null, initial))
@@ -63,6 +77,16 @@ export function LiveMatchupStrip({
       </section>
     )
   }
+  if (strip.kind === 'unavailable' && eliminated) {
+    return (
+      <section className="af-live-matchup" aria-label="Your standing" data-state="out">
+        <p className="af-live-matchup-note">You were chopped from this league — these scores no longer count for you.</p>
+      </section>
+    )
+  }
+  if (strip.kind === 'unavailable' && standing) {
+    return <StandingStrip standing={standing} leagueId={leagueId} />
+  }
   if (strip.kind === 'unavailable') {
     return (
       <section className="af-live-matchup" aria-label="Your matchup" data-state="unavailable">
@@ -85,22 +109,77 @@ export function LiveMatchupStrip({
     <section className="af-live-matchup" aria-label="Your matchup" data-state="scored" data-lead={lead}>
       <div className="af-live-matchup-row">
         <span className="af-live-matchup-team">{strip.you.name}</span>
-        <span className="af-live-matchup-score af-num">{strip.you.points.toFixed(1)}</span>
+        {/* `data-side`, not position: the CSS used `:nth-of-type`, which counts every span in the row. */}
+        <span className="af-live-matchup-score af-num" data-side="you">{strip.you.points.toFixed(1)}</span>
         <span className="af-live-matchup-vs" aria-hidden>
           –
         </span>
-        <span className="af-live-matchup-score af-num">{strip.opponent.points.toFixed(1)}</span>
+        <span className="af-live-matchup-score af-num" data-side="them">{strip.opponent.points.toFixed(1)}</span>
         <span className="af-live-matchup-team">{strip.opponent.name}</span>
       </div>
       <p className="af-live-matchup-meta">
         {strip.isFinal ? 'Final' : lead === 'tied' ? 'Tied' : `You ${lead} by ${Math.abs(strip.margin).toFixed(1)}`}
         {strip.pWin != null && !strip.isFinal ? ` · ${Math.round(strip.pWin * 100)}% to win` : ''}
+        {strip.pWin != null && !strip.isFinal ? (
+          <>
+            {' '}
+            <TopicTip topic="matchupWinProbability" />
+          </>
+        ) : null}
         {strip.remaining && !strip.isFinal
           ? ` · You: ${describeRemaining(strip.remaining.you)} · ${strip.opponent.name}: ${describeRemaining(strip.remaining.opponent)}`
           : ''}
         {' · '}
         <Link href={href}>Open matchup</Link>
         {stale ? ' · could not refresh, showing the last reading' : ''}
+      </p>
+    </section>
+  )
+}
+
+function ordinal(n: number): string {
+  const teens = n % 100
+  if (teens >= 11 && teens <= 13) return `${n}th`
+  const unit = n % 10
+  return `${n}${unit === 1 ? 'st' : unit === 2 ? 'nd' : unit === 3 ? 'rd' : 'th'}`
+}
+
+/**
+ * Your place against the whole field, for a league with no head-to-head this week.
+ *
+ * Same wording rules as the rail's `RailStanding`: say what the rank is measured from (before most of
+ * the field has played it is the projection, not points), and say "on the block" in words rather than
+ * printing a zero margin.
+ */
+function StandingStrip({ standing: s, leagueId }: { standing: RailStanding; leagueId: string }) {
+  const atCut = s.overCut == null || (s.elimination && s.placesAboveCut === 0)
+  const lead = atCut ? 'trail' : s.elimination && s.placesAboveCut <= 2 ? 'tied' : 'lead'
+  const cutWord = s.elimination ? 'the cut' : 'last place'
+  return (
+    <section className="af-live-matchup" aria-label="Your standing" data-state="standing" data-lead={lead}>
+      <div className="af-live-matchup-row">
+        <span className="af-live-matchup-score af-num" data-side="you">
+          {ordinal(s.rank)}
+        </span>
+        <span className="af-live-matchup-team">of {s.outOf}</span>
+        <span className="af-live-matchup-team af-live-matchup-cut af-num">
+          {s.overCut == null
+            ? s.elimination
+              ? 'On the block'
+              : 'Last place'
+            : `+${s.overCut.toFixed(1)} over ${cutWord}`}
+        </span>
+      </div>
+      <p className="af-live-matchup-meta">
+        {s.placesAboveCut === 0
+          ? s.elimination
+            ? 'You are in the cut position'
+            : 'Bottom of the league this week'
+          : `${s.placesAboveCut} ${s.placesAboveCut === 1 ? 'place' : 'places'} clear of ${cutWord}`}
+        {` · cut line ${s.cutLine.toFixed(1)}`}
+        {s.basis === 'projected' ? ' · ranked on projection until most of the field has played' : ' · ranked on points'}
+        {' · '}
+        <Link href={`/core/standings?league=${encodeURIComponent(leagueId)}`}>See the field</Link>
       </p>
     </section>
   )

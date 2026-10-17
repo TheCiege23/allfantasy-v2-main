@@ -1,3 +1,4 @@
+vi.mock('@/lib/tournament/seasonDraftBoard', () => ({ seasonDraftSessionError: () => null }))
 /**
  * Service-level coverage for PickSubmissionService.submitPick with mocked Prisma $transaction.
  * Verifies timer reset, consecutive picks, stale overall, duplicate slot/player, completion, traded ownership.
@@ -18,6 +19,7 @@ import {
 const completeDraftSessionMock = vi.fn(async () => true)
 const postDraftPickChatEventMock = vi.fn(async () => {})
 const recordTrendSignalMock = vi.fn(async () => {})
+const resolveTrendPlayerIdsMock = vi.fn(async (lookups: unknown[]) => lookups.map(() => null as string | null))
 const leagueLifecycleTransitionMock = vi.fn(async () => {})
 
 const ctx = vi.hoisted(() => {
@@ -73,6 +75,9 @@ const ctx = vi.hoisted(() => {
       c2cConfig: null,
       version: 5,
     },
+    season: false,
+    transactionVersionOverride: null as number | null,
+    rejectVersionClaim: false,
     pickIdSeq: 0,
   }
 
@@ -81,13 +86,25 @@ const ctx = vi.hoisted(() => {
     return `pick-id-${store.pickIdSeq}`
   }
 
+  async function txSessionUpdate(data: any) {
+    if (data.timerEndAt !== undefined) store.session.timerEndAt = data.timerEndAt
+    if (data.status !== undefined) store.session.status = data.status
+    if (data.version?.increment) store.session.version += data.version.increment
+  }
   function buildTx() {
     return {
+      $queryRaw: vi.fn(async () => []),
+      leagueAuditLog: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'archive-event', ...data })),
+      },
       draftSession: {
+        updateMany: vi.fn(async (args: any) => { if (store.rejectVersionClaim || args.where.version !== store.session.version || args.where.status !== store.session.status) return { count: 0 }; await txSessionUpdate(args.data); return { count: 1 } }),
         // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
         findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
         findUnique: vi.fn(async () => ({
           ...store.session,
+          version: store.transactionVersionOverride ?? store.session.version,
           picks: (store.transactionLockedPicksOverride ?? store.picks).map((p) => ({ ...p })),
         })),
         update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -108,6 +125,12 @@ const ctx = vi.hoisted(() => {
         }),
       },
       draftPick: {
+        update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = store.picks.find(p => p.id === where.id)
+          if (!row) throw new Error('Pick missing')
+          Object.assign(row, data)
+          return row
+        }),
         delete: vi.fn(async ({ where }: { where: { id: string } }) => {
           store.picks = store.picks.filter((p) => p.id !== where.id)
         }),
@@ -146,11 +169,13 @@ const ctx = vi.hoisted(() => {
       findFirst: vi.fn(async () => null),
     },
     $transaction: vi.fn(async (fn: (tx: ReturnType<typeof buildTx>) => Promise<unknown>) => {
-      return fn(buildTx())
+      const snapshot = structuredClone({ picks: store.picks, session: store.session })
+      try { return await fn(buildTx()) } catch (e) { store.picks = snapshot.picks; store.session = snapshot.session; throw e }
     }),
   }
 
   function resetStore() {
+    store.season = false; store.transactionVersionOverride = null; store.rejectVersionClaim = false
     store.picks = []
     store.transactionLockedPicksOverride = null
     store.pickIdSeq = 0
@@ -168,6 +193,8 @@ const ctx = vi.hoisted(() => {
   return { store, prisma, resetStore }
 })
 
+vi.mock('@/lib/tournament/seasonDraftRuntime', () => ({ loadSeasonDraftContext: async () => ctx.store.season ? {} : null, validateSeasonDraftPlayer: async () => null }))
+vi.mock('@/lib/tournament/seasonDraftRefresh', () => ({ prepareSeasonDraftPool: async () => null }))
 vi.mock('@/lib/prisma', () => ({
   prisma: ctx.prisma,
 }))
@@ -193,6 +220,8 @@ vi.mock('@/lib/live-draft-engine/DraftSessionService', async (importOriginal) =>
 
 vi.mock('@/lib/player-trend/signal-integration', () => ({
   recordTrendSignalByPlayerId: (...args: unknown[]) => recordTrendSignalMock(...args),
+  // The name fallback (no playerId) binds through this; mirrors the old player.findFirst -> null.
+  resolveTrendPlayerIds: (...args: unknown[]) => resolveTrendPlayerIdsMock(...args),
 }))
 
 vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({
@@ -255,6 +284,32 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
    * the id — an NFL Sleeper URL for every sport. A real URL is kept; the pool's "AF" data: URI
    * placeholder is not a photo and is not stored.
    */
+  /*
+   * 🛑 With no playerId the trend signal used to bind by `player.findFirst` on the NAME — whichever
+   * Justin Jefferson Postgres returned. It now binds through resolveTrendPlayerIds WITH the pick's
+   * position and team, and records only the player that comes back.
+   */
+  it('a name-only pick binds its trend signal by name + position + team', async () => {
+    resolveTrendPlayerIdsMock.mockResolvedValueOnce(['nfl-justin-jefferson-28fd81ce'])
+    await submitPick({
+      leagueId: 'league-1',
+      playerName: 'Justin Jefferson',
+      position: 'WR',
+      team: 'MIN',
+      playerId: null,
+      rosterId: 'roster-a',
+      source: 'user',
+      expectedOverall: 1,
+    })
+    expect(resolveTrendPlayerIdsMock).toHaveBeenCalledWith(
+      [{ name: 'Justin Jefferson', position: 'WR', team: 'MIN' }],
+      expect.anything(),
+    )
+    expect(recordTrendSignalMock).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'nfl-justin-jefferson-28fd81ce', signalType: 'draft_pick' }),
+    )
+  })
+
   it('stores the photo the picked card showed, but never a data: placeholder', async () => {
     await submitPick({
       leagueId: 'league-1',
@@ -467,5 +522,27 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
       originalRosterId: 'roster-a',
       newOwnerName: 'Team B',
     })
+  })
+})
+
+
+describe('tournament pick versus control version fencing', () => {
+  beforeEach(() => { ctx.resetStore(); vi.clearAllMocks(); ctx.store.season = true })
+  const input = { leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'p1', rosterId: 'roster-a', expectedOverall: 1 }
+  it('rejects a changed session version before inserting a pick', async () => {
+    ctx.store.transactionVersionOverride = 6
+    expect(await submitPick(input)).toMatchObject({ success: false, code: DRAFT_PICK_RACE_RETRY })
+    expect(ctx.store.picks).toHaveLength(0)
+  })
+  it('rolls back pick insertion if a control wins the session version claim', async () => {
+    ctx.store.rejectVersionClaim = true
+    expect(await submitPick(input)).toMatchObject({ success: false, code: DRAFT_PICK_RACE_RETRY })
+    expect(ctx.store.picks).toHaveLength(0)
+    expect(ctx.store.session.version).toBe(5)
+  })
+  it('commits a valid tournament pick with one version increment', async () => {
+    expect((await submitPick(input)).success).toBe(true)
+    expect(ctx.store.picks).toHaveLength(1)
+    expect(ctx.store.session.version).toBe(6)
   })
 })

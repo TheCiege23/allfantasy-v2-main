@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client'
+import { sleeperDraftArchiveMetadata } from './draftArchiveMetadata'
 import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { runWithConcurrency } from '@/lib/async-utils'
 import { prisma } from '@/lib/prisma'
@@ -32,7 +34,7 @@ interface PendingSleeperDraftFact {
    * is what keeping him cost that season. Written only when true (2026-09-28): the sync fetched the
    * flag for years and discarded it, which left every keeper league with no keeper cost on file.
    */
-  metadata?: { ownerSleeperId?: string; coOwnerSleeperIds?: string[]; isKeeper?: true }
+  metadata?: Prisma.InputJsonObject
 }
 
 export interface SleeperHistoricalDraftSyncSummary {
@@ -233,7 +235,8 @@ async function collectSleeperDraftFacts(args: {
      */
     const rostersUnreadable = !seasonRosters || seasonRosters.length === 0
 
-    const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId)
+    const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId, { strict: true })
+    if (!Array.isArray(drafts)) throw new Error('Sleeper draft history returned an invalid payload')
     const sourceDraftIds = Array.from(
       new Set(
         (drafts ?? [])
@@ -247,21 +250,25 @@ async function collectSleeperDraftFacts(args: {
       sourceDraftIds,
       SLEEPER_DRAFT_FETCH_CONCURRENCY,
       async (sourceDraftId) => {
-        const picks = await withSleeperHistoricalRequestLimit(() => getDraftPicks(sourceDraftId))
-        const tradedPickCount = Array.isArray(picks) && picks.length > 0
+        const picks = await withSleeperHistoricalRequestLimit(() => getDraftPicks(sourceDraftId, { strict: true }))
+        const sourceDraft = drafts.find((draft) => draft?.draft_id === sourceDraftId)
+        if (!Array.isArray(picks) || (sourceDraft?.status === 'complete' && picks.length === 0)) {
+          throw new Error('Sleeper selections unavailable for draft ' + sourceDraftId)
+        }
+        const tradedPicks = Array.isArray(picks) && picks.length > 0
           ? await withSleeperHistoricalRequestLimit(() =>
               fetch(`https://api.sleeper.app/v1/draft/${sourceDraftId}/traded_picks`, {
                 signal: AbortSignal.timeout(12_000),
               })
                 .then(async (response) => {
-                  if (!response.ok) return 0
-                  const tradedPicks = (await response.json()) as unknown
-                  return Array.isArray(tradedPicks) ? tradedPicks.length : 0
+                  if (!response.ok) return null
+                  const payload = (await response.json()) as unknown
+                  return Array.isArray(payload) ? payload : null
                 })
-                .catch(() => 0),
+                .catch(() => null),
             )
-          : 0
-        return { sourceDraftId, picks, tradedPickCount }
+          : null
+        return { sourceDraftId, picks, tradedPicks }
       },
     )
 
@@ -270,21 +277,12 @@ async function collectSleeperDraftFacts(args: {
       continue
     }
 
-    for (const { sourceDraftId, picks, tradedPickCount } of loadedDrafts) {
+    for (const { sourceDraftId, picks, tradedPicks } of loadedDrafts) {
       if (!Array.isArray(picks) || picks.length === 0) {
         continue
       }
 
-      // Best-effort: fetch traded picks for this draft. Sleeper exposes
-      // /v1/draft/{draft_id}/traded_picks. 404 and network errors are
-      // swallowed so draft-pick ingestion keeps going. DraftFact schema has
-      // no metadata column today, so results are logged for future use.
-      if (tradedPickCount > 0) {
-        console.info(
-          `[SleeperHistoricalDraftSync] draft ${sourceDraftId} traded_picks count=${tradedPickCount}`,
-        )
-      }
-
+      const sourceDraft = (drafts ?? []).find((draft) => draft?.draft_id === sourceDraftId)
       let draftProducedRows = false
       for (const [index, pick] of picks.entries()) {
         const playerId = typeof pick?.player_id === 'string' ? pick.player_id.trim() : ''
@@ -302,6 +300,10 @@ async function collectSleeperDraftFacts(args: {
         const coOwnerSleeperIds = pick?.roster_id != null ? coOwnersByRosterId.get(String(pick.roster_id)) : undefined
         const isKeeper = pick?.is_keeper === true
         const metadata = {
+          ...sleeperDraftArchiveMetadata({ sourceDraftId,
+            sourceLeagueId: seasonLeague.externalLeagueId, season: seasonLeague.season,
+            draft: sourceDraft, league: seasonLeague.league, pick, tradedPicks, rosters: seasonRosters,
+            includeDraftSnapshot: !draftProducedRows }),
           ...(ownerSleeperId ? { ownerSleeperId } : {}),
           ...(ownerSleeperId && coOwnerSleeperIds ? { coOwnerSleeperIds } : {}),
           ...(isKeeper ? { isKeeper: true as const } : {}),

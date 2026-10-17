@@ -1,10 +1,8 @@
 /**
  * Guillotine is offered only where a season can run.
  *
- * A guillotine league IS its weekly chop. NCAAF and MLB cannot finalize a week (they are outside
- * `SEASON_CAPABLE_SPORTS`), so a guillotine league created there would draft and then never
- * eliminate anyone. Removed 2026-09-28 by product decision. One list is both the wizard's tiles and
- * the server's create gate (`createLeagueHandler` -> `getAllowedSportsFromCatalog`); these pin it.
+ * The wizard, server create gate, and rules catalog must agree on the enabled sports.
+ * MLB runs the daily-sport finalizer with its complete RI slate; NCAAF guillotine remains gated.
  */
 import { describe, expect, it } from 'vitest'
 
@@ -15,18 +13,18 @@ import { getConceptById } from '@/lib/league-rules/conceptCatalog'
 import { canRunSeasonForSport } from '@/lib/sport-scope'
 
 describe('guillotine sports', () => {
-  it('the server create gate refuses NCAAF and MLB guillotine', () => {
+  it('the server create gate enables MLB guillotine and keeps NCAAF gated', () => {
     const allowed = getAllowedSportsFromCatalog(LEAGUE_CREATE_OPTIONS_CATALOG_V1, 'guillotine')
-    expect([...allowed].sort()).toEqual(['NBA', 'NFL', 'NHL'])
+    expect([...allowed].sort()).toEqual(['MLB', 'NBA', 'NFL', 'NHL'])
     expect(allowed).not.toContain('NCAAF')
-    expect(allowed).not.toContain('MLB')
+    expect(allowed).toContain('MLB')
   })
 
-  it('the wizard offers no guillotine tile in NCAAF or MLB', () => {
+  it('the wizard offers MLB guillotine and keeps NCAAF gated', () => {
     expect(isSportAllowedForType('NCAAF', 'guillotine')).toBe(false)
-    expect(isSportAllowedForType('MLB', 'guillotine')).toBe(false)
+    expect(isSportAllowedForType('MLB', 'guillotine')).toBe(true)
     expect(isSportAllowedForType('NFL', 'guillotine')).toBe(true)
-    expect([...getAllowedSportsForType('guillotine')].sort()).toEqual(['NBA', 'NFL', 'NHL'])
+    expect([...getAllowedSportsForType('guillotine')].sort()).toEqual(['MLB', 'NBA', 'NFL', 'NHL'])
   })
 
   it('🛑 every sport guillotine is offered in can run a season — so it can never regress silently', () => {

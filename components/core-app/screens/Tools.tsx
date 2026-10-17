@@ -5,6 +5,7 @@ import type { ToolCard, ToolsHubData } from '@/lib/core-app/toolsHub'
 import '@/components/core-app/af-tools.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * 25a — Tools, grouped by the job you came here to do.
@@ -51,16 +52,18 @@ function Card({ tool }: { tool: ToolCard }) {
           <span className="af-tl-card-title">
             {copy(tool.title)}
             {tool.leavesShell ? (
-              <span className="af-tl-out" aria-label={copy('opens the full page')} title={copy('Opens the full page')}>
+              <span className="af-tl-out" aria-label={copy('opens the full page')}>
                 ↗
               </span>
             ) : null}
           </span>
           <span className="af-tl-card-badges">
-            {/* Price before the click. Never revealed after. */}
+            {/* Price before the click. Never revealed after. Explained once, by the "?" at the page heading. */}
             {tool.tokenCost != null ? (
-              <span className="af-tl-cost af-num" title={copy('Tokens per run')}>
+              <span className="af-tl-cost af-num">
                 {tool.tokenCost}
+                {/* The title= that named this number is gone (phones never showed it); a screen reader still needs it. */}
+                <span className="sr-only"> {copy('Tokens per run')}</span>
               </span>
             ) : null}
             <TierBadge tier={tool.tier} />
@@ -100,10 +103,20 @@ function Card({ tool }: { tool: ToolCard }) {
 export function Tools({ data }: ToolsProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const hasCardMarks = data.groups.some((g) => g.tools.some((t) => t.tokenCost != null || t.leavesShell))
   return (
     <div className="af-tl">
       <header className="af-tl-head">
-        <h1 className="af-tl-title">{copy('Tools')}</h1>
+        <h1 className="af-tl-title">
+          {copy('Tools')}
+          {/* Replaces two per-card `title=`s ("Tokens per run", "Opens the full page") a phone never showed — the cards are links, so the key lives here. */}
+          {hasCardMarks ? (
+            <>
+              {' '}
+              <TopicTip topic="tokenCost" />
+            </>
+          ) : null}
+        </h1>
         <p className="af-tl-sub">
           {copy('Grouped by what you came to do. Anything with a deadline shows it here, before you open it.')}
         </p>

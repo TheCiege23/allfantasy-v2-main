@@ -167,7 +167,11 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
       'September callups expand available player pool',
     ],
     flexPositions: {
-      UTIL: ['C', '1B', '2B', '3B', 'SS', 'OF'],
+        UTIL: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'],
+      P: ['SP', 'RP', 'P'],
+      OF: ['OF', 'LF', 'CF', 'RF'],
+      CI: ['1B', '3B'],
+      MI: ['2B', 'SS'],
     },
   },
   nhl: {

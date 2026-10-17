@@ -11,6 +11,7 @@
 # Usage:
 #   ./probe.sh teams  <SPORT>
 #   ./probe.sh roster <SPORT> <espn_team_id>
+#   ./probe.sh fantasy-league MLB <league_id> <season>
 #
 # Examples:
 #   ./probe.sh teams  NCAAB
@@ -28,13 +29,18 @@ set -euo pipefail
 BASE_URL="https://site.web.api.espn.com/apis/site/v2/sports"
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 
-ENDPOINT="${1:?usage: probe.sh <teams|roster> <SPORT> [espn_team_id]}"
+ENDPOINT="${1:?usage: probe.sh <teams|roster|fantasy-league> <SPORT> [id] [season]}"
 SPORT_RAW="${2:?missing SPORT}"
 TEAM_ID="${3:-}"
+SEASON="${4:-}"
 
 SPORT="$(echo "$SPORT_RAW" | tr '[:lower:]' '[:upper:]')"
 case "$SPORT" in
   NCAAB) SPORT_PATH="basketball/mens-college-basketball" ;;
+  MLB)
+    if [[ "$ENDPOINT" != "fantasy-league" ]]; then echo "MLB currently supports only fantasy-league capture" >&2; exit 2; fi
+    SPORT_PATH="baseball/mlb"
+    ;;
   *)
     echo "ERROR: sport '${SPORT}' is not in this contract yet (NCAAB only)." >&2
     echo "       Adding one is a contract change: probe it, commit the fixture, and add it" >&2
@@ -44,6 +50,15 @@ case "$SPORT" in
 esac
 
 case "$ENDPOINT" in
+  fantasy-league)
+    if [[ "$SPORT" != "MLB" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]+$ && "$SEASON" =~ ^[0-9]{4}$ ]]; then
+      echo "usage: probe.sh fantasy-league MLB <public_league_id> <season>" >&2; exit 2
+    fi
+    BASE_URL="https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb"
+    PATH_SEG="/seasons/${SEASON}/segments/0/leagues/${TEAM_ID}"
+    QS="view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mDraftDetail"
+    NAME="fantasy-league.MLB.${SEASON}"
+    ;;
   teams)
     # `limit` is required in practice: the default page is short. The value is recorded
     # in ENDPOINTS.yaml with the count it actually returned.
@@ -62,7 +77,7 @@ case "$ENDPOINT" in
     NAME="roster.${SPORT}.team${TEAM_ID}"
     ;;
   *)
-    echo "ERROR: unknown endpoint '${ENDPOINT}'. Known: teams, roster. See ENDPOINTS.yaml." >&2
+    echo "ERROR: unknown endpoint '${ENDPOINT}'. Known: teams, roster, fantasy-league. See ENDPOINTS.yaml." >&2
     exit 1
     ;;
 esac

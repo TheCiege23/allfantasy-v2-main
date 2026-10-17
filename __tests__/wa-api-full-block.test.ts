@@ -43,7 +43,7 @@ import { middleware } from "@/middleware"
 const mockedGetToken = vi.mocked(getToken)
 const mockedIpApi = vi.mocked(fetchIpApi)
 
-const OWNER_ID = "3a7ffd10-b1a5-4a40-8d07-232364596735"
+const OWNER_ID = "9791bae0-e47f-418a-ae40-285f6a2e7887" // TheCiege26 — the owner account in MIDDLEWARE_ADMIN_USER_IDS
 const CRON = "test-cron-secret-not-a-real-credential-000000000001"
 const WORKER = "test-import-worker-secret-not-real-000000000002"
 
@@ -155,7 +155,15 @@ describe("machine surfaces exempt by prefix — their handlers enforce their own
   })
 
   it("the paths that were already exempt stay exempt", async () => {
-    for (const p of ["/api/health", "/api/auth/session", "/api/geo/check", "/api/cron/import-players", "/api/stripe/webhook"]) {
+    for (const p of [
+      "/api/health",
+      "/api/auth/session",
+      "/api/geo/check",
+      "/api/cron/import-players",
+      "/api/stripe/webhook",
+      // Apple's purchase notifications: a refund or renewal refused at the gate is silently lost.
+      "/api/monetization/apple/notifications",
+    ]) {
       expect(refused((await middleware(fromWA(p))).status)).toBe(false)
     }
   })

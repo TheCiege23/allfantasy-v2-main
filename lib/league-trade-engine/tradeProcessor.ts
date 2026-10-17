@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 /**
  * Applies AF league trade items to `Roster.playerData` / `faabRemaining` in a transaction.
  */
@@ -70,6 +71,8 @@ export async function applyTradeAssetsInTransaction(
     tradeId?: string | null
   },
 ): Promise<SalarySettlementEvidence | undefined> {
+  const tournamentLeague = await tx.league.findUnique({ where: { id: input.leagueId }, select: { settings: true } })
+  if (seasonSetupBlocked(tournamentLeague?.settings)) throw new Error('Tournament player moves remain locked until season activation.')
   const participantIds = [...new Set([
     input.proposerRosterId,
     input.receiverRosterId,

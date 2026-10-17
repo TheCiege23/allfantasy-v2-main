@@ -55,6 +55,7 @@ import { detectUserState } from "@/lib/geo/detectUserState"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { buildMetaEventPayload } from "@/lib/meta-events"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
+import { recordLegalAcceptances } from "@/lib/legal/recordLegalAcceptance"
 
 export const runtime = "nodejs"
 
@@ -706,6 +707,10 @@ export async function POST(req: Request) {
         console.warn("[register] avatar upload persistence failed (non-blocking):", avatarErr)
       }
     }
+
+    // The Terms and Disclaimer boxes were required above (validateAgreementAcceptance); record
+    // WHAT was agreed and at which version. Best-effort — never blocks the account (see the module).
+    await recordLegalAcceptances(user.id, ["terms", "disclaimer"], "signup")
 
     // PostHog server-side: capture registration event. Best-effort — never throws.
     try {

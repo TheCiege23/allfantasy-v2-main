@@ -1,3 +1,7 @@
+import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
+import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
@@ -6,8 +10,9 @@ import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { z } from 'zod'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
+import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
-import { getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import {
   isDraftTypeAllowedForFormat,
@@ -20,6 +25,12 @@ import {
 import { isAllowedIdpDraftType, normalizeToSupportedSport, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
+import {
+  isSurvivorCreationSportAvailable,
+  SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
+  SURVIVOR_PAID_CREATION_ENABLED,
+  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/survivor/survivorCreationAvailability'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import type { ValidationIssue } from '@/lib/league-creation/canonical/types'
 import {
@@ -27,6 +38,7 @@ import {
   normalizeBestBallSettings,
 } from '@/lib/bestball/rules'
 import { isSupportedDevyCreateDraftType } from '@/lib/league-concepts/devyDefaults'
+import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
 
 /** Maps execution modes (offline/auto/team) to a core draft id for format-engine checks. */
 export function normalizeDraftTypeForEngine(draftType: string): string {
@@ -185,6 +197,15 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
   }
 
   const formatId = normalized.formatId
+  if (formatId === 'survivor' && !isSurvivorCreationSportAvailable(sport)) {
+    return { ok: false, error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE, status: 400,
+      errors: [{ path: 'sport', message: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }] }
+  }
+  if (formatId === 'survivor' && !SURVIVOR_PAID_CREATION_ENABLED &&
+      (data.conceptSetup?.survivor_entry_fee_mode === 'paid' || data.conceptSetup?.survivorEntryFeeMode === 'paid')) {
+    return { ok: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE, status: 400,
+      errors: [{ path: 'conceptSetup.survivor_entry_fee_mode', message: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }] }
+  }
   if (formatId === 'dynasty') {
     const choices = dynastyCreationChoicesSchema.safeParse(data.conceptSetup ?? {})
     if (!choices.success) {
@@ -224,6 +245,18 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
       error: 'IDP leagues are available only for NFL and NCAAF',
       status: 400,
       errors: [{ path: 'sport', message: `IDP is not supported for ${sport}` }],
+    }
+  }
+
+  // A football scoring preset (it carries points per reception) on a non-football league is the
+  // "NBA league scored as Half PPR" shape. The catalog check in the handler is skipped for a concept
+  // the catalog does not list, so the invariant is enforced here, for every concept.
+  if (receptionPointsForScoringPresetId(data.scoringPreset) != null && sport !== 'NFL' && sport !== 'NCAAF') {
+    return {
+      ok: false,
+      error: 'Selected scoring preset is not available for this sport',
+      status: 400,
+      errors: [{ path: 'scoringPreset', message: `Scoring preset ${data.scoringPreset} is a football preset and is not valid for ${sport}` }],
     }
   }
 
@@ -294,6 +327,29 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  const tePremiumPoints = data.conceptSetup?.tePremiumPoints
+  if (tePremiumPoints !== undefined && tePremiumPoints !== null) {
+    if (sport !== 'NFL' || !isValidTePremiumPoints(tePremiumPoints)) {
+      const message = sport !== 'NFL'
+        ? 'TE premium is available for NFL leagues'
+        : `Choose a TE premium of ${TE_PREMIUM_POINT_OPTIONS.join(', ')} points per catch`
+      return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.tePremiumPoints', message }] }
+    }
+  }
+
+  if (formatId === 'survivor') {
+    const tribeCount = data.conceptSetup?.survivorTribeCount
+    if (tribeCount !== undefined && (typeof tribeCount !== 'number' || !getSurvivorTribeOptions(data.teamCount).includes(tribeCount))) {
+      return { ok: false, status: 400, error: 'Choose a valid number of Survivor tribes for this cast size',
+        errors: [{ path: 'conceptSetup.survivorTribeCount', message: 'Choose a valid number of Survivor tribes for this cast size' }] }
+    }
+    const role = data.conceptSetup?.commissionerParticipationMode
+    if (role !== undefined && role !== 'participating_player' && role !== 'non_participating_host') {
+      return { ok: false, status: 400, error: 'Choose whether the commissioner plays or hosts',
+        errors: [{ path: 'conceptSetup.commissionerParticipationMode', message: 'Choose whether the commissioner plays or hosts' }] }
+    }
+  }
+
   if (stripped.strippedKeys.length > 0) {
     // non-fatal — caller may log
   }
@@ -348,5 +404,23 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  if (formatId === 'survivor' && schedule.survivorTribeSlots !== undefined) {
+    const count = Number(schedule.survivorTribeCount ?? 4)
+    const message = validateTribeSlots(schedule.survivorTribeSlots, data.teamCount, count)
+    if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.survivorTribeSlots', message }] }
+  }
+  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+    try {
+      if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')
+      const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
+      if (draftAt && draftAt.getTime() <= Date.now()) throw new Error('Choose a future Survivor draft date and time.')
+      const exileSettings = normalizeSurvivorFoundationSettings(schedule)
+      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
+        endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid Survivor season calendar'
+      return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.survivorSeasonEndWeek', message }] }
+    }
+  }
   return { ok: true, data: { ...data, sport } }
 }

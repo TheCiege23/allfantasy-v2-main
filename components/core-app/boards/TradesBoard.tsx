@@ -281,16 +281,15 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             Who came out ahead, and by how much — the half of the verdict a letter alone
             cannot carry. `sharePct` was already on `BoardTrade` and rendered nowhere.
 
-            🛑 A SHARE, NOT TWO TOTALS, AND THE REASON IS ARITHMETIC THE READER CAN DO.
-            The per-asset numbers above are the raw `PlayerValueSnapshot.value` for each
-            man; the grade is computed in RANK space, by pushing each asset's rank through
-            `DEFAULT_RANK_CURVE`. Those two agree closely but not exactly — the curve is a
-            nine-point interpolation of the same market, so it is near the raw value and
-            never equal to it. Print side totals and they will not sum to the rows anyone
-            can see, and the discrepancy is the reader's to explain rather than ours. A
-            share is scale-free, so it states the result without inviting an addition that
-            does not balance — which is `tradeGrading.ts`'s own argument for banding the
-            letter on share rather than on an absolute points gap.
+            A SHARE, NOT TWO TOTALS. The letter is THE grade — this league's values, and for
+            a completed trade the FROZEN original taken the first time AllFantasy graded it
+            (`gradeArchivedTrade` with `original`, in `lib/core-app/tradesBoard.ts`). Rank
+            space on share bands was retired on 2026-09-25; this note used to argue from it.
+            `sharePct` is that grade's own totals (getValue against getValue + giveValue), and
+            the per-asset numbers above are its own line values (`valuesOnTheGrade`). They are
+            NOT guaranteed to add up to it: when the grade's lines do not pair one-for-one with
+            the card's assets, `valuesOnTheGrade` keeps the book's display values instead. A
+            scale-free share states the result without inviting that addition.
 
             ⚠ `sharePct` IS THE SHARE RECEIVED BY `fromName`, because the loader passes
             their incoming side as side A. Naming the two managers in that order is what
@@ -503,9 +502,10 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
       ) : null}
 
       <p className="af-bd-note af-bd-note--plain">
-        Grades price both sides against current market rank. A trade whose assets could not all
-        be priced is shown with its reason instead of a letter — a &ldquo;C&rdquo; from no data
-        would read as &ldquo;an average trade&rdquo;.
+        Grades price both sides on this league&rsquo;s own values. A completed trade keeps the
+        grade it got the first time AllFantasy graded it, so it does not change as values move.
+        A trade whose assets could not all be priced is shown with its reason instead of a
+        letter — a &ldquo;C&rdquo; from no data would read as &ldquo;an average trade&rdquo;.
       </p>
 
       <FooterSummary

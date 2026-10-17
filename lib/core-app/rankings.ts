@@ -1461,7 +1461,7 @@ export async function getPlayerPickData(sp: Params): Promise<PlayerPickData> {
       ? (await searchPlayers(q, 24).catch(() => []))
           .filter((p) => positionMatches(p, position))
           .slice(0, 12)
-          .map((p) => ({ ...p, ref: playerRef(p.sport, p.externalId) }))
+          .map((p) => ({ ...p, ref: playerRef(p.sport, p.externalId, p.source) }))
       : []
   const [matchesA, matchesB] = await Promise.all([search(qa), search(qb)])
   return {

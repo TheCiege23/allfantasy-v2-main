@@ -15,6 +15,8 @@ import {
   type ScopeOption,
 } from '@/lib/core-app/homeScope'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { scopeLabelText } from '@/lib/core-app/shellCopy'
 import '@/components/core-app/af-scope-switcher.css'
 
 /**
@@ -76,6 +78,18 @@ type Props = {
    * then does picking a league keep you on it; a cross-league screen sends you to the league's home.
    */
   leagueScreen: boolean
+  /**
+   * Leagues the account hid from its lists (lib/core-app/leaguePreferences.ts). Left out of the
+   * league list below — but NOT out of the filter counts, which describe what each filter shows on
+   * Home, where a hidden league still counts. Searching still finds one, and the open league always
+   * shows.
+   */
+  hiddenIds?: string[]
+  /**
+   * Archived leagues (lib/core-app/archivedLeagues.ts): out of the list AND out of search, unlike
+   * `hiddenIds`. The open league always shows.
+   */
+  archivedIds?: string[]
 }
 
 function writeCookie(name: string, value: string | null, maxAgeSeconds: number | null) {
@@ -92,9 +106,16 @@ function writeCookie(name: string, value: string | null, maxAgeSeconds: number |
   }
 }
 
-export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, favoriteIds, leagueScreen }: Props) {
+export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, favoriteIds, leagueScreen, hiddenIds = [], archivedIds = [] }: Props) {
   const router = useRouter()
   const pathname = usePathname() ?? '/core'
+  /*
+   * The switcher's words in the reader's language (2026-10-03) — it sits in the top bar of every /core
+   * screen, and a live Spanish check found all of it in English. A league's OWN name is never
+   * translated: `label` is only passed through `scopeLabelText` when no league is selected.
+   */
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(() => new Set(favoriteIds))
@@ -132,18 +153,24 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
   const labels = useMemo(() => distinctLeagueLabels(leagues), [leagues])
   const labelOf = (l: ScopeSwitcherLeague) => labels.get(l.id) ?? l.name
   const q = query.trim().toLowerCase()
+  const hiddenKey = hiddenIds.join('.')
+  const archivedKey = archivedIds.join('.')
   const shownLeagues = useMemo(() => {
+    const hidden = new Set(hiddenKey ? hiddenKey.split('.') : [])
+    const archived = new Set(archivedKey ? archivedKey.split('.') : [])
+    // An archived league is never offered here, typed for or not — only the open one stays.
+    const offered = leagues.filter((l) => !archived.has(l.id) || l.id === selectedLeagueId)
     const matched = q
-      ? leagues.filter(
+      ? offered.filter(
           (l) =>
             (labels.get(l.id) ?? l.name).toLowerCase().includes(q) ||
             l.sport.toLowerCase() === q ||
             platformLabel(l.platform).toLowerCase().includes(q),
         )
-      : leagues
+      : offered.filter((l) => !hidden.has(l.id) || l.id === selectedLeagueId)
     // Starred first, then the order the rail uses (by name) — stable within each group.
     return [...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)))
-  }, [leagues, labels, favorites, q])
+  }, [leagues, labels, favorites, q, hiddenKey, archivedKey, selectedLeagueId])
 
   const filterHref = (value: string | null) =>
     value == null ? `/core?${HOME_SCOPE_PARAM}=all` : `/core?${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
@@ -164,14 +191,24 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
     else next.add(id)
     setFavorites(next)
     writeCookie(FAVORITES_COOKIE, next.size ? serializeFavoriteIds(next) : null, 60 * 60 * 24 * 365)
+    /*
+     * And to the account, so a star follows the manager to another device (2026-10-02). The cookie
+     * stays as this device's fallback until a first save exists; the server list wins after that.
+     * Fire-and-forget: a failed save leaves the cookie, which is exactly the old behaviour.
+     */
+    void fetch('/api/core/league-preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'favorites', leagueIds: [...next] }),
+    }).catch(() => undefined)
     // The favorites view is the only one whose contents a star changes.
     if (scopeValue === 'fav' && !selectedLeagueId) router.refresh()
   }
 
   const groups: Array<{ key: ScopeOption['group']; title: string | null }> = [
     { key: 'all', title: null },
-    { key: 'sport', title: 'Sport' },
-    { key: 'platform', title: 'Platform' },
+    { key: 'sport', title: es ? 'Deporte' : 'Sport' },
+    { key: 'platform', title: es ? 'Plataforma' : 'Platform' },
   ]
 
   const isCurrent = (option: ScopeOption) => !selectedLeagueId && option.value === scopeValue
@@ -188,11 +225,11 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
         onClick={() => setOpen((v) => !v)}
       >
         <span className="af-scope-kicker" aria-hidden="true">
-          {selectedLeagueId ? 'League' : 'Viewing'}
+          {selectedLeagueId ? (es ? 'Liga' : 'League') : es ? 'Viendo' : 'Viewing'}
         </span>
         <span className="af-scope-label">
-          <span className="af-sr-only">Viewing: </span>
-          {label}
+          <span className="af-sr-only">{es ? 'Viendo: ' : 'Viewing: '}</span>
+          {selectedLeagueId ? label : scopeLabelText(label, language)}
         </span>
         <span className="af-scope-caret" aria-hidden="true">
           ▾
@@ -206,13 +243,13 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
             type="button"
             tabIndex={-1}
             className="af-scope-scrim"
-            aria-label="Close league picker"
+            aria-label={es ? 'Cerrar el selector de ligas' : 'Close league picker'}
             onClick={() => setOpen(false)}
           />
-          <div ref={panelRef} id={panelId} className="af-scope-panel" role="dialog" aria-modal="true" aria-label="Choose which leagues to view">
+          <div ref={panelRef} id={panelId} className="af-scope-panel" role="dialog" aria-modal="true" aria-label={es ? 'Elige qué ligas ver' : 'Choose which leagues to view'}>
             <div className="af-scope-head">
-              <strong>Which leagues?</strong>
-              <button type="button" className="af-scope-close" aria-label="Close league picker" onClick={() => setOpen(false)}>
+              <strong>{es ? '¿Qué ligas?' : 'Which leagues?'}</strong>
+              <button type="button" className="af-scope-close" aria-label={es ? 'Cerrar el selector de ligas' : 'Close league picker'} onClick={() => setOpen(false)}>
                 ×
               </button>
             </div>
@@ -224,15 +261,20 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                 )
                 if (inGroup.length === 0) return null
                 return (
-                  <div className="af-scope-group" key={group.key} role="group" aria-label={group.title ?? 'Scope'}>
+                  <div className="af-scope-group" key={group.key} role="group" aria-label={group.title ?? (es ? 'Alcance' : 'Scope')}>
                     {group.title ? <span className="af-scope-group-title">{group.title}</span> : null}
                     <div className="af-scope-chips">
                       {inGroup.map((option) => {
                         const disabled = option.group === 'favorites' && option.count === 0
                         const key = option.value ?? 'all'
                         return disabled ? (
-                          <span key={key} className="af-scope-chip" aria-disabled="true" title="Star a league below to use this">
-                            ★ Favorites <b>0</b>
+                          <span
+                            key={key}
+                            className="af-scope-chip"
+                            aria-disabled="true"
+                            title={es ? 'Marca una liga con la estrella para usar esto' : 'Star a league below to use this'}
+                          >
+                            ★ {es ? 'Favoritas' : 'Favorites'} <b>0</b>
                           </span>
                         ) : (
                           <Link
@@ -243,7 +285,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                             onClick={() => chooseFilter(option)}
                           >
                             {option.group === 'favorites' ? '★ ' : ''}
-                            {option.label} <b>{option.count}</b>
+                            {scopeLabelText(option.label, language)} <b>{option.count}</b>
                           </Link>
                         )
                       })}
@@ -254,20 +296,22 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
             </div>
 
             <label className="af-scope-search">
-              <span className="af-sr-only">Find a league</span>
+              <span className="af-sr-only">{es ? 'Busca una liga' : 'Find a league'}</span>
               <input
                 ref={inputRef}
                 type="search"
                 value={query}
-                placeholder="Find a league, sport or platform"
+                placeholder={es ? 'Busca una liga, deporte o plataforma' : 'Find a league, sport or platform'}
                 onChange={(event) => setQuery(event.target.value)}
                 autoComplete="off"
               />
             </label>
 
-            <ul className="af-scope-list" aria-label="Leagues">
+            <ul className="af-scope-list" aria-label={es ? 'Ligas' : 'Leagues'}>
               {shownLeagues.length === 0 ? (
-                <li className="af-scope-empty">No league matches &ldquo;{query}&rdquo;.</li>
+                <li className="af-scope-empty">
+                  {es ? 'Ninguna liga coincide con' : 'No league matches'} &ldquo;{query}&rdquo;.
+                </li>
               ) : (
                 shownLeagues.map((league) => {
                   const starred = favorites.has(league.id)
@@ -277,7 +321,11 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         type="button"
                         className="af-scope-star"
                         aria-pressed={starred}
-                        aria-label={`${starred ? 'Remove' : 'Add'} ${labelOf(league)} ${starred ? 'from' : 'to'} favorites`}
+                        aria-label={
+                          es
+                            ? `${starred ? 'Quitar' : 'Añadir'} ${labelOf(league)} ${starred ? 'de' : 'a'} favoritas`
+                            : `${starred ? 'Remove' : 'Add'} ${labelOf(league)} ${starred ? 'from' : 'to'} favorites`
+                        }
                         onClick={() => toggleFavorite(league.id)}
                       >
                         {starred ? '★' : '☆'}
@@ -301,7 +349,9 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                 })
               )}
             </ul>
-            <p className="af-scope-note">Favorites are saved on this device.</p>
+            <p className="af-scope-note">
+              {es ? 'Las favoritas se guardan en este dispositivo.' : 'Favorites are saved on this device.'}
+            </p>
           </div>
         </>
       ) : null}

@@ -421,7 +421,7 @@ export function Heatmap({
               if (cell.unknown) {
                 return (
                   <td key={col.id}>
-                    <span className="af-pfc-cell" data-unknown="true" title={cell.unknown}>
+                    <span className="af-pfc-cell" data-unknown="true">
                       –
                     </span>
                   </td>

@@ -20,6 +20,8 @@
  * is ever auto-sent anywhere.
  */
 import { useCallback, useEffect, useState } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
 
 interface CopyReadyContent {
   channel: string
@@ -58,6 +60,20 @@ const DOMAIN_LABEL: Record<string, string> = {
   trades: 'Trades',
   integrity: 'Integrity',
 }
+const DOMAIN_LABEL_ES: Record<string, string> = {
+  health: 'Salud de la liga',
+  engagement: 'Participación',
+  rankings: 'Rankings',
+  storylines: 'Historias',
+  rivalries: 'Rivalidades',
+  draft: 'Draft',
+  trades: 'Intercambios',
+  integrity: 'Integridad',
+}
+
+function domainLabel(domain: string, language: string): string | undefined {
+  return (language === 'es' ? DOMAIN_LABEL_ES : DOMAIN_LABEL)[domain]
+}
 
 /**
  * The area a recommendation belongs to, from its `type`.
@@ -79,10 +95,10 @@ const TYPE_AREA: ReadonlyArray<[prefix: string, area: string]> = [
   ['integrity_', 'integrity'],
 ]
 
-export function recommendationAreaLabel(rec: { type: string }): string {
+export function recommendationAreaLabel(rec: { type: string }, language = 'en'): string {
   const area = TYPE_AREA.find(([prefix]) => rec.type.startsWith(prefix))?.[1]
   // An unknown type gets a neutral label, never a raw internal value.
-  return (area && DOMAIN_LABEL[area]) || 'Commissioner action'
+  return (area && domainLabel(area, language)) || (language === 'es' ? 'Acción del comisionado' : 'Commissioner action')
 }
 
 const CHANNEL_LABEL: Record<string, string> = {
@@ -92,6 +108,27 @@ const CHANNEL_LABEL: Record<string, string> = {
   newsletter: 'Newsletter',
   social_caption: 'Social caption',
   in_app_only: 'In-app only',
+}
+const CHANNEL_LABEL_ES: Record<string, string> = {
+  league_chat: 'Chat de la liga',
+  discord: 'Discord',
+  email: 'Correo',
+  newsletter: 'Boletín',
+  social_caption: 'Texto para redes',
+  in_app_only: 'Solo en la app',
+}
+
+function channelLabel(channel: string, language: string): string {
+  return (language === 'es' ? CHANNEL_LABEL_ES : CHANNEL_LABEL)[channel] ?? channel
+}
+
+/** The status behind a domain chip's tooltip, which printed the raw enum in either language. */
+const DOMAIN_STATUS_ES: Record<string, string> = {
+  ok: 'disponible',
+  unavailable: 'no disponible',
+  unsupported: 'no compatible',
+  stale_blocked: 'datos desactualizados',
+  engine_error: 'error del motor',
 }
 
 /**
@@ -107,8 +144,11 @@ function resolveCommissionerTabId(sport: string | undefined | null): string {
 }
 
 const UNVERIFIED = 'unverified'
+const FAILED = 'failed'
 
 export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: string; sport?: string | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   const [data, setData] = useState<CommissionerRecommendationsApiResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -143,7 +183,8 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
       })
       .catch((e: unknown) => {
         if (!active) return
-        setError(e instanceof Error && e.message === UNVERIFIED ? UNVERIFIED : 'Could not load Commissioner OS for this league')
+        // A code, not a sentence: the sentence is chosen at render, in the reader's language.
+        setError(e instanceof Error && e.message === UNVERIFIED ? UNVERIFIED : FAILED)
       })
       .finally(() => {
         if (!active) return
@@ -172,13 +213,13 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
             onClick={load}
             className="af-ch-os-textbtn"
           >
-            Refresh
+            {es ? 'Actualizar' : 'Refresh'}
           </button>
           <a
             href={`/league/${canonicalLeagueId}?tab=${resolveCommissionerTabId(sport)}`}
             className="af-ch-os-link"
           >
-            View all
+            {es ? 'Ver todo' : 'View all'}
           </a>
         </div>
       </div>
@@ -187,12 +228,21 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
         <div className="af-ch-os-skeleton" aria-busy="true" />
       ) : error === UNVERIFIED ? (
         <p className="af-ch-os-note" data-testid="commissioner-os-unverified">
-          Recommendations appear once you are verified as this league&apos;s commissioner on its provider.
+          {es
+            ? 'Las recomendaciones aparecen cuando se verifica en su plataforma que eres el comisionado de esta liga.'
+            : "Recommendations appear once you are verified as this league's commissioner on its provider."}
         </p>
       ) : error ? (
-        <p className="af-ch-os-note" data-tone="bad" role="alert">{error}</p>
+        <p className="af-ch-os-note" data-tone="bad" role="alert">
+          {es ? 'No se pudo cargar el Commissioner OS de esta liga' : 'Could not load Commissioner OS for this league'}
+        </p>
       ) : (
-        <CommissionerOsBody data={data} dismissedIds={dismissedIds} onDismiss={(id) => setDismissedIds((prev) => new Set(prev).add(id))} />
+        <CommissionerOsBody
+          data={data}
+          language={language}
+          dismissedIds={dismissedIds}
+          onDismiss={(id) => setDismissedIds((prev) => new Set(prev).add(id))}
+        />
       )}
     </section>
   )
@@ -200,13 +250,16 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
 
 function CommissionerOsBody({
   data,
+  language,
   dismissedIds,
   onDismiss,
 }: {
   data: CommissionerRecommendationsApiResponse | null
+  language: string
   dismissedIds: Set<string>
   onDismiss: (id: string) => void
 }) {
+  const es = language === 'es'
   if (!data) return null
 
   const recs = [...data.bundle.commissioner]
@@ -225,33 +278,36 @@ function CommissionerOsBody({
           <div className="af-ch-os-card-head">
             <div className="af-ch-os-card-domain">
               <span className="af-ch-os-dot" data-priority={top.priority} aria-hidden />
-              <span className="af-label">{recommendationAreaLabel(top)}</span>
+              <span className="af-label">{recommendationAreaLabel(top, language)}</span>
             </div>
             <button
               type="button"
               onClick={() => onDismiss(top.id)}
               className="af-ch-os-textbtn"
             >
-              Dismiss
+              {es ? 'Descartar' : 'Dismiss'}
             </button>
           </div>
-          <p className="af-ch-os-card-title">{top.title}</p>
+          {/* The server writes these in English; translated here, where the language is known. */}
+          <p className="af-ch-os-card-title">{commissionerOsText(top.title, language)}</p>
           {/* A summary that only repeats the title says nothing; it read "Recommended review" twice. */}
-          {top.summary && top.summary.trim() !== top.title.trim() ? <p className="af-ch-os-card-summary">{top.summary}</p> : null}
+          {top.summary && top.summary.trim() !== top.title.trim() ? (
+            <p className="af-ch-os-card-summary">{commissionerOsText(top.summary, language)}</p>
+          ) : null}
         </div>
       ) : (
-        <p className="af-ch-os-note">No commissioner action needed right now.</p>
+        <p className="af-ch-os-note">{es ? 'Por ahora no hace falta ninguna acción del comisionado.' : 'No commissioner action needed right now.'}</p>
       )}
 
       <div className="af-ch-os-chips">
         {urgentCount > 0 ? (
           <span className="af-ch-os-chip" data-tone="bad">
-            {urgentCount} urgent
+            {es ? `${urgentCount} ${urgentCount === 1 ? 'urgente' : 'urgentes'}` : `${urgentCount} urgent`}
           </span>
         ) : null}
         {reviewCount > 0 ? (
           <span className="af-ch-os-chip" data-tone="warn">
-            {reviewCount} review recommended
+            {es ? `${reviewCount} con revisión recomendada` : `${reviewCount} review recommended`}
           </span>
         ) : null}
         {domainEntries.map(([domain, status]) => (
@@ -259,46 +315,58 @@ function CommissionerOsBody({
             key={domain}
             className="af-ch-os-chip"
             data-tone={status === 'ok' ? 'neutral' : 'off'}
-            title={status}
+            title={es ? DOMAIN_STATUS_ES[status] ?? status : status}
           >
-            {DOMAIN_LABEL[domain] ?? domain}
+            {domainLabel(domain, language) ?? domain}
           </span>
         ))}
       </div>
 
-      {copyReady.length > 0 ? <CopyReadyPanel recommendations={copyReady} onDismiss={onDismiss} /> : null}
+      {copyReady.length > 0 ? <CopyReadyPanel recommendations={copyReady} language={language} onDismiss={onDismiss} /> : null}
 
-      <p className="af-ch-os-stamp">Updated {new Date(data.generatedAt).toLocaleTimeString()}</p>
+      <p className="af-ch-os-stamp">
+        {es ? 'Actualizado' : 'Updated'} {new Date(data.generatedAt).toLocaleTimeString(es ? 'es' : undefined)}
+      </p>
     </div>
   )
 }
 
 function CopyReadyPanel({
   recommendations,
+  language,
   onDismiss,
 }: {
   recommendations: RecommendationSummary[]
+  language: string
   onDismiss: (id: string) => void
 }) {
   return (
     <div className="af-ch-os-copy">
-      <h3 className="af-label">Copy-ready content</h3>
+      <h3 className="af-label">{language === 'es' ? 'Contenido listo para copiar' : 'Copy-ready content'}</h3>
       <div className="af-ch-os-copy-list">
         {recommendations.map((rec) => (
-          <CopyReadyCard key={rec.id} recommendation={rec} onDismiss={onDismiss} />
+          <CopyReadyCard key={rec.id} recommendation={rec} language={language} onDismiss={onDismiss} />
         ))}
       </div>
     </div>
   )
 }
 
+/**
+ * 🛑 The draft in the textarea is NOT translated. It is the text the commissioner posts to their
+ * league, whose readers have their own languages — the reader of this card is not its audience.
+ * The card's own words around it follow the reader's language.
+ */
 function CopyReadyCard({
   recommendation,
+  language,
   onDismiss,
 }: {
   recommendation: RecommendationSummary
+  language: string
   onDismiss: (id: string) => void
 }) {
+  const es = language === 'es'
   const available = (recommendation.copyReadyContent ?? []).filter((c) => c.available)
   const [channelIndex, setChannelIndex] = useState(0)
   const active = available[channelIndex] ?? available[0]
@@ -317,13 +385,13 @@ function CopyReadyCard({
   return (
     <div className="af-ch-os-card">
       <div className="af-ch-os-card-head">
-        <p className="af-ch-os-copy-title">{recommendation.title}</p>
+        <p className="af-ch-os-copy-title">{commissionerOsText(recommendation.title, language)}</p>
         <button
           type="button"
           onClick={() => onDismiss(recommendation.id)}
           className="af-ch-os-textbtn"
         >
-          Dismiss
+          {es ? 'Descartar' : 'Dismiss'}
         </button>
       </div>
 
@@ -338,13 +406,13 @@ function CopyReadyCard({
               data-tone={i === channelIndex ? 'active' : 'neutral'}
               aria-pressed={i === channelIndex}
             >
-              {CHANNEL_LABEL[c.channel] ?? c.channel}
+              {channelLabel(c.channel, language)}
             </button>
           ))}
         </div>
       ) : (
         <p className="af-label af-ch-os-channel">
-          {CHANNEL_LABEL[active.channel] ?? active.channel}
+          {channelLabel(active.channel, language)}
         </p>
       )}
 
@@ -364,7 +432,7 @@ function CopyReadyCard({
           {active.characterLimit !== null ? ` / ${active.characterLimit}` : ''}
         </span>
         <div className="af-ch-os-head-actions">
-          {copied ? <span className="af-ch-os-copied">Copied</span> : null}
+          {copied ? <span className="af-ch-os-copied">{es ? 'Copiado' : 'Copied'}</span> : null}
           <button
             type="button"
             onClick={() => {
@@ -373,7 +441,7 @@ function CopyReadyCard({
             disabled={overLimit}
             className="af-btn af-ch-os-copy-btn"
           >
-            Copy
+            {es ? 'Copiar' : 'Copy'}
           </button>
         </div>
       </div>

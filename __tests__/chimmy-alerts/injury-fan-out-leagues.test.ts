@@ -20,7 +20,7 @@ vi.mock('@/lib/prisma', () => ({
       ]),
     },
     leagueTeam: { findMany: vi.fn(async () => [{ leagueId: 'L1', externalId: '3' }, { leagueId: 'Y1', externalId: '7' }]) },
-    sportsPlayer: { findFirst: vi.fn(async () => ({ team: 'HOU' })) },
+    sportsPlayer: { findMany: vi.fn(async () => [{ source: 'sleeper', name: 'Tank Dell', position: 'WR', team: 'HOU' }]) },
     // No games on file: nobody is locked.
     sportsGame: { findMany: vi.fn(async () => []) },
   },

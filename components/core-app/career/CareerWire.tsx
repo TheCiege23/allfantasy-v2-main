@@ -7,6 +7,7 @@ import { buildCareerFeed, type CareerFeedItem } from '@/lib/core-app/careerFeed'
 import { readAgo, type CareerWireData, type PlatformHealth, type WireLeague, type WireStatus } from '@/lib/core-app/careerWireModel'
 import { askChimmyAboutCareer } from './CareerAskChimmy'
 import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Career Wire — what moved since your last Career visit and what to do about it, every platform at
@@ -98,7 +99,9 @@ export function CareerWire({
         const problem = firstProblem(p.platform)
         const body = (
           <>
-            <span className="af-crw-dot" data-status={p.status} aria-hidden />
+            {/* The status word used to live on the row's `title`, which no phone shows; the dot now
+                names it for a screen reader, and the "?" on the Career Wire heading explains the states. */}
+            <span className="af-crw-dot" data-status={p.status} role="img" aria-label={STATUS_TEXT[p.status]} />
             <span className="af-crw-plat">{p.label}</span>
             <span className="af-crw-platline">{platformLine(p, now)}</span>
             {p.needsAttention > 0 ? (
@@ -111,7 +114,7 @@ export function CareerWire({
           </>
         )
         return (
-          <li key={p.platform} className="af-crw-platrow" title={`${p.label}: ${STATUS_TEXT[p.status]}`}>
+          <li key={p.platform} className="af-crw-platrow">
             {problem ? (
               <Link className="af-crw-platlink" href={syncHref(problem.leagueId)}>
                 {body}
@@ -176,7 +179,7 @@ export function CareerWire({
     <section className="af-crw" aria-label="Career Wire" data-compact={compact ? 'true' : undefined}>
       <header className="af-crw-top">
         <p className="af-crl-head">
-          Career Wire
+          Career Wire <TopicTip topic="careerWireSync" />
           <span className="af-crl-sp" />
           <span className="af-crw-sub">across every platform</span>
         </p>

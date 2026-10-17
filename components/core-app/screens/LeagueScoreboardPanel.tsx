@@ -1,5 +1,6 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import type { LeagueScoreboard, ScoreboardTeam } from '@/lib/core-app/leagueScoreboard'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -117,7 +118,8 @@ export function LeagueScoreboardPanel({
     <div className="af-sb">
       <div className="af-sb-head">
         <span className="af-label">
-          {copy('Week')} {board.week} · {board.games.length} {copy(board.games.length === 1 ? 'game' : 'games')}
+          {copy('Week')} {board.week} · {board.games.length} {copy(board.games.length === 1 ? 'game' : 'games')}{' '}
+          <TopicTip topic="scoreboardWinChance" />
         </span>
         {/*
           ⚠ "UNDER YOUR LEAGUE'S SCORING" IS A CLAIM, and it was printed over totals that were

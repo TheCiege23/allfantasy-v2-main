@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { listPlayerFollows } from '@/lib/follows/playerFollows'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
@@ -48,6 +49,12 @@ export type FollowingRow = {
   /** "vs KC · Sun" / "@ BUF · Mon", or null when no fixture is on file in the window. */
   next: string | null
   /**
+   * What `next` was built from (2026-10-04), so the card can say it in the reader's language: `next`
+   * stays the English as written and lib/core-app/dashboard3aCopy.ts rebuilds the Spanish from this.
+   * `weekday` is the pinned en-US short weekday ("Sun"). Absent whenever `next` is null.
+   */
+  nextParts?: { home: boolean; opponent: string; weekday: string; preseason: boolean }
+  /**
    * Your leagues where he is on NO roster (the waiver nudge, 2026-09-14). Empty when he is
    * rostered everywhere, or wherever that cannot be established — see `freeAgentLeaguesFor`.
    */
@@ -92,10 +99,26 @@ export async function freeAgentLeaguesFor(
   leagues: readonly FollowingLeague[],
   sleeperIds: readonly string[],
 ): Promise<Map<string, FollowingFreeAgentLeague[]>> {
+  return (await scanFreeAgentLeagues(userId, leagues, sleeperIds)).free
+}
+
+/**
+ * `freeAgentLeaguesFor`, plus the leagues it could actually READ (`checked`). The "he's free in
+ * your league" alert (lib/follows/followFreeAgentCheck.ts) needs both: a league that drops out of
+ * `free` because it became unreadable is not a league where he was picked up, and one that comes
+ * back is not a league where he was dropped. Only a league read on both sides can say either.
+ */
+export async function scanFreeAgentLeagues(
+  userId: string,
+  leagues: readonly FollowingLeague[],
+  sleeperIds: readonly string[],
+): Promise<{ free: Map<string, FollowingFreeAgentLeague[]>; checked: string[] }> {
   const out = new Map<string, FollowingFreeAgentLeague[]>()
+  const checked: string[] = []
+  const done = () => ({ free: out, checked })
   const ids = [...new Set(sleeperIds.filter(Boolean))]
   const nfl = leagues.filter((l) => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')
-  if (ids.length === 0 || nfl.length === 0) return out
+  if (ids.length === 0 || nfl.length === 0) return done()
 
   const teams = await prisma.leagueTeam
     .findMany({
@@ -103,7 +126,7 @@ export async function freeAgentLeaguesFor(
       select: { leagueId: true, claimedByUserId: true },
     })
     .catch(() => null)
-  if (!teams) return out
+  if (!teams) return done()
   const teamCount = new Map<string, number>()
   const yours = new Set<string>()
   for (const t of teams) {
@@ -111,14 +134,14 @@ export async function freeAgentLeaguesFor(
     if (t.claimedByUserId === userId) yours.add(t.leagueId)
   }
   const scoped = nfl.filter((l) => yours.has(l.id)).slice(0, MAX_FREE_AGENT_LEAGUES)
-  if (scoped.length === 0) return out
+  if (scoped.length === 0) return done()
 
   const raw = await prisma.roster
     .findMany({ where: { leagueId: { in: scoped.map((l) => l.id) } }, select: { leagueId: true, playerData: true } })
     .catch(() => null)
-  if (!raw) return out
+  if (!raw) return done()
   const rosters = await translateRostersByLeague(raw, new Map(scoped.map((l) => [l.id, l.platform]))).catch(() => null)
-  if (!rosters) return out
+  if (!rosters) return done()
 
   const byLeague = new Map<string, unknown[]>()
   for (const r of rosters) {
@@ -135,7 +158,7 @@ export async function freeAgentLeaguesFor(
           .findMany({ where: { sleeperId: { in: union } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
           .catch(() => null)
       : []
-  if (!known) return out
+  if (!known) return done()
   const knownIds = new Set(known.map((k) => k.sleeperId).filter((x): x is string => Boolean(x)))
 
   for (const l of scoped) {
@@ -143,6 +166,7 @@ export async function freeAgentLeaguesFor(
     const teamsInLeague = teamCount.get(l.id) ?? 0
     if (pds.length === 0 || pds.length < teamsInLeague) continue
     if (!rosterIdCoverage(samples.get(l.id) ?? [], knownIds).usable) continue
+    checked.push(l.id)
     const held = new Set(collectRosterIds(pds))
     for (const id of ids) {
       if (held.has(id)) continue
@@ -155,6 +179,40 @@ export async function freeAgentLeaguesFor(
       out.set(id, list)
     }
   }
+  return done()
+}
+
+/**
+ * The club each followed NFL player is on NOW, keyed by lowercased Sleeper id.
+ *
+ * 🛑 `player_follows.team` IS A SNAPSHOT TAKEN AT FOLLOW TIME and only refreshed by a re-follow, yet
+ * it drove the team shown, the "vs X" next game and the injury name+team match. A player traded or
+ * cut after you starred him kept his old club on all three. The Sleeper row is the authority for a
+ * Sleeper id (`authoritativePlayerRow.ts`), and its `team` is never supplemented — so a null there
+ * means free agent, and the entry is `null` rather than absent: the caller must NOT fall back to
+ * the stale snapshot for him.
+ *
+ * ⚠ ONLY A `source='sleeper'` ROW SPEAKS. Without one, `selectAuthoritativePlayerRow` picks the
+ * best vendor row, whose Sleeper id came from a NAME match (Byron Murphy DT Seattle on the Vikings
+ * CB's id) — overlaying that team could swap one wrong club for another's. Those ids are left out
+ * and keep the snapshot. Any failed read leaves the whole map empty: the snapshot, as before.
+ */
+async function currentTeamsBySleeperId(sleeperIds: readonly string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  const ids = [...new Set(sleeperIds.filter(Boolean))]
+  if (ids.length === 0) return out
+  let rows: Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null; source: string; fetchedAt: Date | null }>
+  try {
+    rows = await prisma.sportsPlayer.findMany({
+      where: { sport: 'NFL', sleeperId: { in: ids } },
+      select: { sleeperId: true, name: true, position: true, team: true, source: true, fetchedAt: true },
+    })
+  } catch {
+    return out
+  }
+  for (const [id, row] of authoritativeRowsBySleeperId(rows ?? [])) {
+    if (row.source === 'sleeper') out.set(id, row.team?.trim() || null)
+  }
   return out
 }
 
@@ -166,7 +224,15 @@ export async function getFollowingCard(
   const follows = await listPlayerFollows(userId)
   if (follows === null) return null
 
-  const shown = follows.slice(0, FOLLOWING_SHOWN)
+  const snapshot = follows.slice(0, FOLLOWING_SHOWN)
+  const currentTeams = await currentTeamsBySleeperId(
+    snapshot.filter((f) => f.sport === 'NFL').map((f) => f.sleeperId ?? ''),
+  )
+  // Every read below — team shown, next game, injury match — takes the CURRENT club.
+  const shown = snapshot.map((f) => {
+    const key = f.sport === 'NFL' ? f.sleeperId?.trim().toLowerCase() : undefined
+    return key && currentTeams.has(key) ? { ...f, team: currentTeams.get(key) ?? null } : f
+  })
   const nfl = shown.filter((f) => f.sport === 'NFL')
   const followedSleeperIds = nfl.map((f) => f.sleeperId).filter((id): id is string => Boolean(id))
 
@@ -198,6 +264,7 @@ export async function getFollowingCard(
   const rows: FollowingRow[] = shown.map((f) => {
     let status: string | null = null
     let next: string | null = null
+    let nextParts: FollowingRow['nextParts'] | null = null
     if (f.sport === 'NFL') {
       if (statusReadable && injuries) {
         const fact = injuries.byPlayer.get(normalizeMatchName(f.name))
@@ -206,7 +273,9 @@ export async function getFollowingCard(
       const club = normalizeTeamAbbrev(f.team)
       const game = club ? nextByClub.get(club) : undefined
       if (game) {
-        next = `${game.home ? 'vs' : '@'} ${game.opponent} · ${weekday.format(game.at)}${game.preseason ? ' (pre)' : ''}`
+        const day = weekday.format(game.at)
+        next = `${game.home ? 'vs' : '@'} ${game.opponent} · ${day}${game.preseason ? ' (pre)' : ''}`
+        nextParts = { home: game.home, opponent: game.opponent, weekday: day, preseason: Boolean(game.preseason) }
       }
     }
     return {
@@ -219,6 +288,7 @@ export async function getFollowingCard(
       team: f.team,
       status,
       next,
+      ...(nextParts ? { nextParts } : {}),
       freeAgentIn: f.sport === 'NFL' && f.sleeperId ? (freeAgents.get(f.sleeperId) ?? []) : [],
     }
   })

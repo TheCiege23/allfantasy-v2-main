@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * PATCH: Set C2C draft config (enabled, collegeRounds). Commissioner only. Pre-draft only.
  */
@@ -34,6 +35,8 @@ export async function PATCH(
   if (draft.status !== 'pre_draft') {
     return NextResponse.json({ error: 'C2C config cannot be changed after draft has started' }, { status: 400 })
   }
+
+  if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
   const enabled = Boolean(body.enabled)

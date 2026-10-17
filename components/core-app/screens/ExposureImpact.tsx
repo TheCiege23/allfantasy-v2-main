@@ -4,6 +4,8 @@ import { useId, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type { ExposureRow } from '@/lib/core-app/dash3aPanels'
 import type { ImpactSlot, LeagueImpactRow, PlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { impactReasonText, impactSlotText, placeholderNameText } from '@/lib/core-app/dashboard3aCopy'
 
 /**
  * One row of the home "Portfolio & exposure" card, with its "if he sits" breakdown.
@@ -28,17 +30,31 @@ export const SLOT_LABEL: Record<ImpactSlot, string> = { starter: 'starting', ben
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
 
-export function impactText(row: LeagueImpactRow): { text: string; title?: string; drop?: number } {
+/**
+ * A league's line in the breakdown. `language` (2026-10-04): 'es' says it in Spanish — the reason in
+ * the title through dashboard3aCopy's `impactReasonText`; without it the English is byte-identical
+ * (PortfolioBoard calls it that way).
+ */
+export function impactText(row: LeagueImpactRow, language = 'en'): { text: string; title?: string; drop?: number } {
+  const es = language === 'es'
   const i = row.impact
   if (i.kind === 'priced') {
     const drop = Math.round((i.now - i.without) * 100)
     return { text: `${pct(i.now)} → ${pct(i.without)}${drop > 0 ? ` (−${drop})` : ''}`, drop }
   }
-  if (i.kind === 'not_starting') return { text: 'not in this week’s lineup — no effect' }
-  return { text: 'can’t price this matchup', title: i.reason }
+  if (i.kind === 'not_starting') {
+    return { text: es ? 'no está en la alineación de esta semana: no influye' : 'not in this week’s lineup — no effect' }
+  }
+  return {
+    text: es ? 'no se puede calcular este enfrentamiento' : 'can’t price this matchup',
+    title: impactReasonText(i.reason, language),
+  }
 }
 
 export function ExposureRowItem({ row }: { row: ExposureRow }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const name = placeholderNameText(row.name, language)
   const [open, setOpen] = useState(false)
   const [load, setLoad] = useState<Load>({ state: 'idle' })
   const panelId = useId()
@@ -67,9 +83,9 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
   return (
     <div className="af3a-exp-item" data-open={open}>
       <div className="af3a-exp">
-        <MiniPlayerImg sleeperId={row.playerId} name={row.name} size={24} className="af3a-exp-img" />
+        <MiniPlayerImg sleeperId={row.playerId} name={name} size={24} className="af3a-exp-img" />
         <span className="af3a-exp-name">
-          {row.name}
+          {name}
           {row.position ? <em> {row.position}</em> : null}
         </span>
         <span className="af3a-exp-bar">
@@ -79,7 +95,7 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
           />
         </span>
         <span className="af3a-exp-count af3a-mono">
-          {row.count} of {row.of}
+          {row.count} {es ? 'de' : 'of'} {row.of}
         </span>
         {canExpand ? (
           <button
@@ -89,26 +105,38 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
             aria-controls={panelId}
             onClick={toggle}
           >
-            {open ? 'Hide' : 'If he sits'}
+            {es ? (open ? 'Ocultar' : 'Si no juega') : open ? 'Hide' : 'If he sits'}
           </button>
         ) : null}
       </div>
 
       {open ? (
         <div id={panelId} className="af3a-exp-impact" aria-live="polite">
-          {load.state === 'loading' || load.state === 'idle' ? <p className="af3a-impact-note">Pricing your matchups…</p> : null}
+          {load.state === 'loading' || load.state === 'idle' ? <p className="af3a-impact-note">{es ? 'Calculando tus enfrentamientos…' : 'Pricing your matchups…'}</p> : null}
           {load.state === 'error' ? (
-            <p className="af3a-impact-note">Couldn’t load his leagues right now. Try again in a moment.</p>
+            <p className="af3a-impact-note">
+              {es
+                ? 'No pudimos cargar sus ligas ahora. Inténtalo de nuevo en un momento.'
+                : 'Couldn’t load his leagues right now. Try again in a moment.'}
+            </p>
           ) : null}
           {load.state === 'ready' ? (
             load.data.rows.length === 0 ? (
-              <p className="af3a-impact-note">None of your rosters we could read hold him this week.</p>
+              <p className="af3a-impact-note">
+                {es
+                  ? 'Ninguna de las plantillas que pudimos leer lo tiene esta semana.'
+                  : 'None of your rosters we could read hold him this week.'}
+              </p>
             ) : (
               <>
-                <p className="af3a-impact-note">Your win chance this week — now → if he scores 0 from here.</p>
+                <p className="af3a-impact-note">
+                  {es
+                    ? 'Tu probabilidad de ganar esta semana: ahora → si no suma ni un punto más.'
+                    : 'Your win chance this week — now → if he scores 0 from here.'}
+                </p>
                 <ul className="af3a-impact-list">
                   {load.data.rows.map((r) => {
-                    const { text, title, drop } = impactText(r)
+                    const { text, title, drop } = impactText(r, language)
                     return (
                       <li
                         key={r.leagueId}
@@ -117,7 +145,7 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
                         data-drop={drop != null && drop >= 15 ? 'big' : undefined}
                       >
                         <span className="af3a-impact-league">{r.leagueName}</span>
-                        <span className="af3a-impact-slot">{SLOT_LABEL[r.slot]}</span>
+                        <span className="af3a-impact-slot">{impactSlotText(r.slot, SLOT_LABEL[r.slot], language)}</span>
                         <span className="af3a-impact-value" title={title}>
                           {text}
                         </span>
@@ -125,7 +153,13 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
                     )
                   })}
                 </ul>
-                {load.data.notPriced > 0 ? (
+                {load.data.notPriced > 0 && es ? (
+                  <p className="af3a-impact-note">
+                    {load.data.notPriced === 1
+                      ? '1 liga más sin calcular aquí: ábrela en la pantalla de Enfrentamiento.'
+                      : `${load.data.notPriced} ligas más sin calcular aquí: ábrelas en la pantalla de Enfrentamiento.`}
+                  </p>
+                ) : load.data.notPriced > 0 ? (
                   <p className="af3a-impact-note">
                     {load.data.notPriced} more league{load.data.notPriced === 1 ? '' : 's'} not priced here — open the
                     Matchup screen for those.

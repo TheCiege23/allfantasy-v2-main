@@ -124,6 +124,31 @@ export function teamAbbrevFromDefPlayerId(playerId: string | null | undefined): 
   return match ? match[1].trim().toUpperCase() : null
 }
 
+/**
+ * The ONE key a team defence's box score is stored under — `nfl:def:<ABBR>` — for either id form a
+ * roster can hold, or null when the row is not a team defence.
+ *
+ * 🛑 TWO ID FORMS, ONE DEFENCE. Sleeper's id for a defence is the bare club code (`KC` — every
+ * Sleeper-league DEF slot on production); AllFantasy's synthetic one is `nfl:def:KC`. Every box-score
+ * writer keys on the synthetic form — the team-defence ingest (`buildTeamDefensePlayerId`), the live
+ * provider's defence lines, and all 8 `player_game_log_cache` defence rows on production (0 under a
+ * bare code, 2026-10-13) — so a reader asking for `KC` found nothing and scored points-allowed alone.
+ * The synthetic form is canonical because it is what the stored data and its writers already use;
+ * a bare code is accepted only on a row whose position says team defence, since a two-letter id is
+ * not otherwise self-describing.
+ */
+export function canonicalTeamDefenseId(
+  playerId: string | null | undefined,
+  position: string | null | undefined,
+): string | null {
+  const fromId = teamAbbrevFromDefPlayerId(playerId)
+  if (fromId) return `nfl:def:${fromId}`
+  const pos = String(position ?? '').trim().toUpperCase()
+  if (pos !== 'DEF' && pos !== 'DST' && pos !== 'D/ST') return null
+  const code = String(playerId ?? '').trim().toUpperCase()
+  return /^[A-Z]{2,3}$/.test(code) ? `nfl:def:${code}` : null
+}
+
 export function pointsAllowedFromGame(
   game: { homeTeam: string | null; awayTeam: string | null; homeScore: number | null; awayScore: number | null },
   team: string,

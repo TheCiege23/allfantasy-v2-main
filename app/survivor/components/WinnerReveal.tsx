@@ -70,7 +70,7 @@ export function WinnerReveal({ finalists, winnerId, totalJurors, onComplete }: W
         {/* Buildup */}
         {phase === 'buildup' && (
           <div className="animate-pulse space-y-3">
-            <div className="text-xs uppercase tracking-[0.4em] text-amber-300/50">Final Tribal Council</div>
+            <div className="text-xs uppercase tracking-[0.4em] text-amber-300/50">Final Elimination Council</div>
             <div className="text-2xl font-bold text-white">The jury has voted.</div>
             <div className="text-sm text-white/40">Once the votes are read, the decision is final.</div>
           </div>

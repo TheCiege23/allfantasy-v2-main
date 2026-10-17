@@ -116,7 +116,8 @@ describe("sendApns — what reaches Apple", () => {
     expect(decodeProtectedHeader(jwt)).toMatchObject({ alg: "ES256", kid: "KEYID12345" })
     await expect(jwtVerify(jwt, await importSPKI(PUB, "ES256"), { issuer: "TEAMID1234" })).resolves.toBeTruthy()
     expect(JSON.parse(body)).toEqual({
-      aps: { alert: { title: "Injury: Josh Allen", body: "Out for Sunday" }, sound: "default" },
+      // thread-id groups one tag's notifications into a stack on the lock screen.
+      aps: { alert: { title: "Injury: Josh Allen", body: "Out for Sunday" }, sound: "default", "thread-id": "injury-1" },
       href: "/core/players?id=1",
       type: "notification",
       leagueId: "L1",
@@ -173,6 +174,41 @@ describe("sendPushToUser — iPhones and browsers are separate", () => {
     await sendPushToUser("u1", { title: "t" })
     expect(webpushSend).toHaveBeenCalledTimes(1)
     expect(apple.sent).toHaveLength(0)
+  })
+
+  it("a DM sender's face is the browser's icon and the iPhone's attachment", async () => {
+    process.env.VAPID_PUBLIC_KEY = "pub"
+    process.env.VAPID_PRIVATE_KEY = "priv"
+    db.rows = [
+      { id: "ios-1", endpoint: `apns:${TOKEN_A}`, p256dh: "", auth: "" },
+      { id: "web-1", endpoint: "https://fcm.googleapis.com/x", p256dh: "p", auth: "a" },
+    ]
+    await sendPushToUser("u1", { title: "Matt Jones", body: "Sup!", iconUrl: "https://blob.test/matt.png" })
+    const web = JSON.parse(String((webpushSend.mock.calls[0] as unknown[])[1]))
+    expect(web.icon).toBe("https://blob.test/matt.png")
+    // An avatar is not a banner: the large `image` slot stays empty on the web.
+    expect(web.image).toBeUndefined()
+    const ios = JSON.parse((apple.sent[0] as Sent).body)
+    expect(ios.imageUrl).toBe("https://blob.test/matt.png")
+    expect(ios.aps["mutable-content"]).toBe(1)
+  })
+
+  it("a real picture still wins the iPhone's one attachment over the face", async () => {
+    db.rows = [{ id: "ios-1", endpoint: `apns:${TOKEN_A}`, p256dh: "", auth: "" }]
+    await sendPushToUser("u1", { title: "t", imageUrl: "https://cdn.test/card.png", iconUrl: "https://blob.test/matt.png" })
+    expect(JSON.parse((apple.sent[0] as Sent).body).imageUrl).toBe("https://cdn.test/card.png")
+  })
+
+  it("an icon a phone cannot fetch is dropped, not forwarded", async () => {
+    process.env.VAPID_PUBLIC_KEY = "pub"
+    process.env.VAPID_PRIVATE_KEY = "priv"
+    db.rows = [
+      { id: "ios-1", endpoint: `apns:${TOKEN_A}`, p256dh: "", auth: "" },
+      { id: "web-1", endpoint: "https://fcm.googleapis.com/x", p256dh: "p", auth: "a" },
+    ]
+    await sendPushToUser("u1", { title: "t", iconUrl: "data:image/png;base64,AAAA" })
+    expect(JSON.parse(String((webpushSend.mock.calls[0] as unknown[])[1])).icon).toBeUndefined()
+    expect(JSON.parse((apple.sent[0] as Sent).body)).not.toHaveProperty("imageUrl")
   })
 
   it("deletes an iPhone Apple says is gone, and keeps one that only failed transiently", async () => {

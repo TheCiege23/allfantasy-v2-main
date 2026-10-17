@@ -29,7 +29,7 @@ import { middleware } from "@/middleware"
 const mockedGetToken = vi.mocked(getToken)
 
 /** The owner account hardcoded in MIDDLEWARE_ADMIN_USER_IDS. */
-const OWNER_ID = "3a7ffd10-b1a5-4a40-8d07-232364596735"
+const OWNER_ID = "9791bae0-e47f-418a-ae40-285f6a2e7887" // TheCiege26 — the owner account in MIDDLEWARE_ADMIN_USER_IDS
 
 function fromState(path: string, region: string | null, country = "US", method = "POST") {
   const headers: Record<string, string> = { "cf-ipcountry": country, "cf-connecting-ip": "198.51.100.40" }
@@ -59,7 +59,8 @@ describe("paid API routes refuse paid-block states", () => {
       expect(res.status).toBe(451)
       const body = await res.json()
       expect(body.error).toBe("PAID_GEO_BLOCKED")
-      expect(body.redirectTo).toBe("/paid-restricted")
+      // With the state, so the block page names it (it defaults to Hawaii without one).
+      expect(body.redirectTo).toBe("/paid-restricted?state=NV")
     })
   }
 
@@ -129,3 +130,67 @@ describe("pages keep the behaviour they already had", () => {
     expect(res.headers.get("location")).toMatch(/\/paid-restricted\?state=NV/)
   })
 })
+
+/*
+ * "Manage billing" is a plain LINK to /api/subscription/billing-portal, so from a paid-block state
+ * the 451 JSON above was printed raw on screen. A browser page load (Sec-Fetch-Mode: navigate) of a
+ * refused API URL is now sent to the block page the body names; fetch() keeps the JSON.
+ */
+describe("a refused API URL opened as a page", () => {
+  function navigate(path: string, region: string, extra: Record<string, string> = {}) {
+    return new NextRequest(new URL(`https://www.allfantasy.ai${path}`), {
+      method: "GET",
+      headers: { "cf-ipcountry": "US", "cf-connecting-ip": "198.51.100.40", "cf-region-code": region, ...extra },
+    })
+  }
+
+  it("redirects a navigation to the block page for that state", async () => {
+    const res = await middleware(navigate("/api/subscription/billing-portal", "NV", { "sec-fetch-mode": "navigate" }))
+    expect(res.status).toBeGreaterThanOrEqual(300)
+    expect(res.status).toBeLessThan(400)
+    expect(new URL(res.headers.get("location")!).pathname + new URL(res.headers.get("location")!).search).toBe(
+      "/paid-restricted?state=NV",
+    )
+  })
+
+  it("treats an Accept: text/html page load the same in browsers without Fetch Metadata", async () => {
+    const res = await middleware(navigate("/api/subscription/billing-portal", "NV", { accept: "text/html,application/xhtml+xml" }))
+    expect(res.headers.get("location")).toMatch(/\/paid-restricted\?state=NV/)
+  })
+
+  it("keeps the 451 JSON for a fetch() of the same URL", async () => {
+    const res = await middleware(navigate("/api/subscription/billing-portal", "NV", { "sec-fetch-mode": "cors" }))
+    expect(res.status).toBe(451)
+    expect(res.headers.get("location")).toBeNull()
+    expect((await res.json()).error).toBe("PAID_GEO_BLOCKED")
+  })
+})
+
+describe("the /paid-restricted cancel button's API", () => {
+  it("is NOT a paid route — a paid-block state can still cancel", async () => {
+    const res = await middleware(fromState("/api/account/cancel-subscription", "NV"))
+    expect([451, 403]).not.toContain(res.status)
+  })
+
+  // Owner's call, 2026-10-02: a FULLY blocked state can cancel too (from /geo-blocked).
+  it("is reachable from a fully blocked state", async () => {
+    const res = await middleware(fromState("/api/account/cancel-subscription", "WA"))
+    expect([451, 403]).not.toContain(res.status)
+  })
+
+  it("control: every other API is still refused there", async () => {
+    for (const path of ["/api/leagues", "/api/subscription/billing-portal", "/api/user/profile"]) {
+      expect((await middleware(fromState(path, "WA"))).status, path).toBe(403)
+    }
+  })
+
+  it("sends a fully blocked page load of the billing portal to /geo-blocked, where the button is", async () => {
+    const req = new NextRequest(new URL("https://www.allfantasy.ai/api/subscription/billing-portal"), {
+      method: "GET",
+      headers: { "cf-ipcountry": "US", "cf-connecting-ip": "198.51.100.40", "cf-region-code": "WA", "sec-fetch-mode": "navigate" },
+    })
+    const loc = new URL((await middleware(req)).headers.get("location")!)
+    expect(loc.pathname + loc.search).toBe("/geo-blocked?state=WA")
+  })
+})
+

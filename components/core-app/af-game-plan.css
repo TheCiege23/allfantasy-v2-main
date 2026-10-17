@@ -4,17 +4,25 @@
  * ⚠ SCOPED UNDER `.af-core` like the rest of the suite; the shell supplies the
  * token set and an unscoped rule leaks into pages that do not carry it.
  *
- * ⚠ ONE `@media` BLOCK, LAST IN THE FILE, ON PURPOSE. CLAUDE.md records a live
- * bug where a narrow query inserted mid-file closed the outer one early and
- * silently moved four rules into a narrower band — brace balance stayed 0 and no
- * lint could see it. Keeping the only query last means an appended rule cannot
- * land inside one by accident.
+ * ⚠ THE QUERIES (@container gp, @media pointer) SIT TOGETHER NEAR THE END, NEVER
+ * NESTED, ON PURPOSE. CLAUDE.md records a live bug where a narrow query inserted
+ * mid-file closed the outer one early and silently moved four rules into a
+ * narrower band — brace balance stayed 0 and no lint could see it. Add a new rule
+ * at the top level, and check which block it landed in by its effect.
  */
 
 .af-core .af-gp {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* The width Matchup and Trades cap at; at 1920 a row's name and lock sat ~1300px apart. */
+  max-width: 1020px;
+  /*
+   * ⚠ THE ROW LAYOUT FOLLOWS THIS BOX, NOT THE VIEWPORT. With the shell's rail open, an 820px iPad
+   * leaves Game Plan ~480px — a viewport query kept the four-column desktop row there, and the
+   * nowrap "NO GAME ON THE SCHEDULE" chip ran over the lock time. See the @container block below.
+   */
+  container: gp / inline-size;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -43,6 +51,80 @@
   border: 1px solid var(--line);
   background: var(--chip, transparent);
   font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ── Summary strip ───────────────────────────────────────────────────── */
+
+.af-core .af-gp-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-core .af-gp-stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.af-core .af-gp-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface, transparent);
+}
+
+.af-core .af-gp-stats > div[data-tone='warn'] {
+  border-color: var(--warn);
+}
+
+.af-core .af-gp-stats > div[data-tone='bad'] {
+  border-color: var(--bad);
+}
+
+.af-core .af-gp-stats dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-gp-stats dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The first-lock tile holds a sentence ("locks in 2h 10m"), not a number. */
+.af-core .af-gp-stats dd .af-gp-lock {
+  font-size: 13px;
+}
+
+/*
+ * ⚠ AND A SENTENCE WRAPS. The tile inherited the numbers' nowrap + ellipsis, and on the live page at an
+ * ~800px desktop pane it read "locks Sun 9:30a…" — the one fact the tile exists to give, cut off.
+ */
+.af-core .af-gp-stats dd.af-gp-stat-text,
+.af-core .af-gp-stats dd.af-gp-stat-text .af-gp-lock {
+  white-space: normal;
+  overflow: visible;
+}
+
+.af-core .af-gp-summary-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--muted);
 }
 
@@ -85,9 +167,17 @@
 /*
  * A locked row is history, not a decision. Dimmed rather than removed: knowing
  * you missed one is worth more than a tidy list.
+ *
+ * ⚠ BY SURFACE AND TEXT COLOUR, NOT OPACITY. `opacity: .55` multiplied every colour in the row,
+ * so the already-faint meta and note text fell below 4.5:1.
  */
 .af-core .af-gp-row[data-locked] {
-  opacity: 0.55;
+  background: var(--surface2);
+  border-left-color: var(--line);
+}
+
+.af-core .af-gp-row[data-locked] .af-gp-name {
+  color: var(--muted);
 }
 
 .af-core .af-gp-face {
@@ -122,6 +212,35 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* A link to his card; underlined on hover so it reads as one without shouting in a list. */
+.af-core a.af-gp-name:hover,
+.af-core a.af-gp-name:focus-visible {
+  text-decoration: underline;
+}
+
+.af-core .af-gp-swap {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px dashed var(--accent-line, var(--line));
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-core .af-gp-swap:hover {
+  border-style: solid;
+}
+
+/* Inside the Summary strip: a little air between the tiles and the refresh control. */
+.af-core .af-gp-summary .af-pf-refresh {
+  margin-top: 2px;
 }
 
 .af-core .af-gp-meta {
@@ -262,20 +381,34 @@
 }
 
 .af-core .af-gp-cta {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--accent);
   text-decoration: none;
 }
 
 .af-core .af-gp-cta:hover {
-  text-decoration: underline;
+  border-color: var(--accent);
 }
 
-/* ── Narrow ──────────────────────────────────────────────────────────── */
-/* The file's ONLY media query, kept last — see the header note. */
+/* ── Narrow (by Game Plan's own width) ───────────────────────────────── */
+/*
+ * The file's queries are all here, last — see the header note. The row stacks when GAME PLAN is
+ * narrow, whatever the viewport: a phone, or a tablet with the rail open.
+ */
 
-@media (max-width: 620px) {
+@container gp (max-width: 640px) {
+  /* A long status chip wraps inside its column rather than running over the lock time. */
+  .af-core .af-gp-chip {
+    white-space: normal;
+  }
+
   .af-core .af-gp-row {
     grid-template-columns: 34px minmax(0, 1fr);
     grid-template-areas:
@@ -292,6 +425,24 @@
 
   .af-core .af-gp-title {
     font-size: 18px;
+  }
+
+  /* Four tiles in a row are 80px each on a phone; two by two keeps the numbers legible. */
+  .af-core .af-gp-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * A finger, not a cursor: the league chips are the row's only action, and at 3px padding they were
+ * ~21px tall. 44px on touch screens (iOS's floor); a mouse keeps the compact chip.
+ */
+@media (pointer: coarse) {
+  .af-core .af-gp-league,
+  .af-core .af-gp-swap {
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 12px;
   }
 }
 
@@ -328,6 +479,18 @@
  */
 .af-core .af-gp[data-embedded='true'] .af-gp-list {
   max-height: 60vh;
+  /* dvh where supported: on a phone `vh` is the LARGEST viewport, so 60vh overshot the visible screen. */
+  max-height: 60dvh;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /*
+   * ⚠ `auto`, NOT `contain`. `contain` stopped a swipe at the end of the list from carrying on to the
+   * page — on a phone the list filled the screen and the picker below was unreachable by scrolling
+   * through it, which is a scroll trap. The cap stays; the trap goes.
+   */
+  overscroll-behavior: auto;
+}
+
+/* Stale leagues named under the stamp — each links to its Sync page, where a re-sync starts. */
+.af-core .af-gp-stale a {
+  color: var(--accent);
 }

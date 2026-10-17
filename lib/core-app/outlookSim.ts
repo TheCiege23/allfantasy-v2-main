@@ -28,12 +28,24 @@ export type SimTeam = {
   rosterId: string
   wins: number
   losses: number
+  /** Final tied games, counted as half a win for modeled qualification. */
+  ties?: number
   pointsFor: number
   /** Null when the team has too few completed weeks to model. */
   profile: SimProfile | null
 }
 
-export type SimGame = { week: number; a: string; b: string }
+/**
+ * A game already under way: the points each side has on the board, and the share of each side's
+ * week still to play (0 = every starter finished, 1 = nobody has played).
+ *
+ * 🛑 WITHOUT THIS A LIVE GAME WAS A FRESH PRE-GAME DRAW. A week is only "played" once final, so on
+ * Monday night a 5.6-point lead with every starter done was simulated as the 29% game it looked like
+ * before kickoff (HailShiva, week 4 of 2026): the card read 51.9% while the settled result gave 65.1%.
+ */
+export type SimLiveScore = { a: number; b: number; restA: number; restB: number }
+
+export type SimGame = { week: number; a: string; b: string; live?: SimLiveScore }
 
 export type SimInput = {
   teams: SimTeam[]
@@ -118,6 +130,11 @@ export function createRng(seed: number): () => number {
   }
 }
 
+/** A share of the week still to play; anything unreadable is a whole week, never a frozen score. */
+function clampShare(v: number | undefined): number {
+  return v == null || !Number.isFinite(v) ? 1 : Math.min(1, Math.max(0, v))
+}
+
 /** Box–Muller, one value per call. */
 function gaussian(rng: () => number, mu: number, sigma: number): number {
   const u = Math.max(rng(), 1e-12)
@@ -163,11 +180,17 @@ type Prepared = {
   n: Float64Array
   has: Uint8Array
   baseWins: Float64Array
+  baseTies: Float64Array
   basePoints: Float64Array
   ga: Int32Array
   gb: Int32Array
   adjA: Float64Array
   adjB: Float64Array
+  /** Points already on the board per slot, and the share of the week left to draw (1 = unplayed). */
+  liveA: Float64Array
+  liveB: Float64Array
+  restA: Float64Array
+  restB: Float64Array
   forcedWinner: Int32Array
   /** `${week}|${a}|${b}` (both orders) → slot, for the real pairings only. */
   slotOf: Map<string, number>
@@ -187,9 +210,11 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   const n = new Float64Array(size + 1)
   const has = new Uint8Array(size + 1)
   const baseWins = new Float64Array(size)
+  const baseTies = new Float64Array(size)
   const basePoints = new Float64Array(size)
   teams.forEach((t, i) => {
     baseWins[i] = t.wins
+    baseTies[i] = t.ties ?? 0
     basePoints[i] = t.pointsFor
     if (t.profile) {
       mu[i] = t.profile.mu
@@ -228,17 +253,19 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
    * production copy, then fixed: each of your games becomes (you vs average) and (them vs average),
    * so the only thing that changes is who YOU play.
    */
-  type Slot = { week: number; a: number; b: number; ida: string | null; idb: string | null; forceable: boolean }
+  type Slot = { week: number; a: number; b: number; ida: string | null; idb: string | null; forceable: boolean; liveA?: number; liveB?: number; restA?: number; restB?: number }
   const slots: Slot[] = []
   for (const g of real) {
     const a = index.get(g.a)!
     const b = index.get(g.b)!
     if (neutral >= 0 && (a === neutral || b === neutral)) {
       const other = a === neutral ? b : a
-      slots.push({ week: g.week, a: neutral, b: PHANTOM, ida: ids[neutral], idb: null, forceable: false })
-      slots.push({ week: g.week, a: other, b: PHANTOM, ida: ids[other], idb: null, forceable: false })
+      // Each real side keeps its own board; the league-average phantom always plays a whole week.
+      const side = (i: number) => (!g.live ? {} : i === a ? { liveA: g.live.a, restA: g.live.restA } : { liveA: g.live.b, restA: g.live.restB })
+      slots.push({ week: g.week, a: neutral, b: PHANTOM, ida: ids[neutral], idb: null, forceable: false, ...side(neutral) })
+      slots.push({ week: g.week, a: other, b: PHANTOM, ida: ids[other], idb: null, forceable: false, ...side(other) })
     } else {
-      slots.push({ week: g.week, a, b, ida: g.a, idb: g.b, forceable: true })
+      slots.push({ week: g.week, a, b, ida: g.a, idb: g.b, forceable: true, ...(g.live ? { liveA: g.live.a, liveB: g.live.b, restA: g.live.restA, restB: g.live.restB } : {}) })
     }
   }
 
@@ -247,6 +274,10 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   const gb = new Int32Array(count)
   const adjA = new Float64Array(count)
   const adjB = new Float64Array(count)
+  const liveA = new Float64Array(count)
+  const liveB = new Float64Array(count)
+  const restA = new Float64Array(count).fill(1)
+  const restB = new Float64Array(count).fill(1)
   const forcedWinner = new Int32Array(count).fill(-1)
   const slotOf = new Map<string, number>()
   const lastWeek = real.reduce((m, g) => Math.max(m, g.week), 0)
@@ -258,6 +289,10 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   slots.forEach((g, k) => {
     ga[k] = g.a
     gb[k] = g.b
+    liveA[k] = g.liveA ?? 0
+    liveB[k] = g.liveB ?? 0
+    restA[k] = clampShare(g.restA)
+    restB[k] = clampShare(g.restB)
     if (g.a >= 0) gamesLeft[g.a] += 1
     if (g.b >= 0) gamesLeft[g.b] += 1
     for (const adj of opts.adjustments ?? []) {
@@ -291,7 +326,7 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   for (let i = 0; i < size; i += 1) maxWins = Math.max(maxWins, baseWins[i] + gamesLeft[i])
 
   return {
-    ids, index, mu, sigma, n, has, baseWins, basePoints, ga, gb, adjA, adjB, forcedWinner, slotOf, playoffAdj,
+    ids, index, mu, sigma, n, has, baseWins, baseTies, basePoints, ga, gb, adjA, adjB, liveA, liveB, restA, restB, forcedWinner, slotOf, playoffAdj,
     playoffTeams, byeTeams, maxWins,
   }
 }
@@ -385,8 +420,15 @@ function runSeasons(
       const b = rawB < 0 ? phantom : rawB
       if (slotWinner) slotWinner[k] = -1
       if (!p.has[a] || !p.has[b]) continue
-      const sa = gaussian(rng, mu[a] + p.adjA[k], p.sigma[a])
-      const sb = gaussian(rng, mu[b] + p.adjB[k], p.sigma[b])
+      /*
+       * Points on the board, plus a draw for the share of the week still to play: that share of the
+       * weekly mean, and the spread of a partial week (independent increments, so √share). An
+       * unplayed game is board 0 and share 1 — exactly the old draw, from the same random numbers.
+       */
+      const ra = p.restA[k]
+      const rb = p.restB[k]
+      const sa = p.liveA[k] + gaussian(rng, ra * (mu[a] + p.adjA[k]), Math.sqrt(ra) * p.sigma[a])
+      const sb = p.liveB[k] + gaussian(rng, rb * (mu[b] + p.adjB[k]), Math.sqrt(rb) * p.sigma[b])
       if (a !== phantom) points[a] += sa
       if (b !== phantom) points[b] += sb
       const forced = p.forcedWinner[k]
@@ -396,7 +438,7 @@ function runSeasons(
     }
 
     for (let i = 0; i < size; i += 1) order[i] = i
-    order.sort((x, y) => wins[y] - wins[x] || points[y] - points[x])
+    order.sort((x, y) => (wins[y] + p.baseTies[y] / 2) - (wins[x] + p.baseTies[x] / 2) || points[y] - points[x])
 
     const field = order.slice(0, p.playoffTeams)
     for (const i of field) sink.playoff[i] += 1
@@ -594,11 +636,12 @@ export function mathStatus(input: SimInput, rosterId: string): 'clinched' | 'eli
   const me = input.teams.find((t) => t.rosterId === rosterId)
   if (!me) return null
   const left = (id: string) => input.remaining.filter((g) => g.a === id || g.b === id).length
-  const myMax = me.wins + left(rosterId)
+  const recordPoints = (t: SimTeam) => t.wins + (t.ties ?? 0) / 2
+  const myMax = recordPoints(me) + left(rosterId)
   const others = input.teams.filter((t) => t.rosterId !== rosterId)
-  const surelyAbove = others.filter((t) => t.wins > myMax).length
+  const surelyAbove = others.filter((t) => recordPoints(t) > myMax).length
   if (surelyAbove >= input.playoffTeams) return 'eliminated'
-  const canReach = others.filter((t) => t.wins + left(t.rosterId) >= me.wins).length
+  const canReach = others.filter((t) => recordPoints(t) + left(t.rosterId) >= recordPoints(me)).length
   if (canReach < input.playoffTeams) return 'clinched'
   return null
 }
@@ -729,7 +772,7 @@ export function readMilestones(
   }
 
   return {
-    totalGames: me.wins + me.losses + left,
+    totalGames: me.wins + me.losses + (me.ties ?? 0) + left,
     winsForLikely: firstAt(50),
     winsForSafe: firstAt(90),
     cutWinsMedian: histQuantile(tally.cut.winsHist, 0.5),

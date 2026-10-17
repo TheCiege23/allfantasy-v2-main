@@ -5,7 +5,7 @@ import type { TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeServ
 import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { assetValues, gradeReasons, type importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
-import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { gradeMoment, type GradeMomentInput } from '@/lib/decision-os/trade/gradeMoment'
 
 type Proposal = { id: string; title: string; status: string; involvesYou: boolean; assets: string[]; grade: string | null; explanation: string }
 type History = { supported: boolean; grades?: TradeGradesPayload; ledger?: ImportedTradeLedgerPayload; viewerSleeperUserId?: string | null; sync?: { incomplete: boolean } }
@@ -25,7 +25,7 @@ type TradeCenter = {
 function gradeFact(
   aName: string,
   bName: string,
-  g: { letter: string; partnerLetter: string; getValue: number; giveValue: number; frozenAt?: string | null } | null,
+  g: ({ letter: string; partnerLetter: string; getValue: number; giveValue: number } & GradeMomentInput) | null,
 ): string {
   if (!g) return ''
   // A completed trade's letter is its frozen original — tell Chimmy WHEN, so it does not call it today's.
@@ -197,7 +197,7 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
         </article>)}
         {!!tradeCenter?.historyTrades?.length && <>
           <h3>Recent league trade decisions</h3>
-          <p>Includes approved, processed and other recorded decisions available from the Trade Center, graded on this league&rsquo;s values today.</p>
+          <p>Includes approved, processed and other recorded decisions available from the Trade Center. Each card says when its grade was taken &mdash; a completed Sleeper trade keeps the grade it got the first time AllFantasy graded it on this league&rsquo;s values, the same grade as the Trade Center.</p>
           {tradeCenter.historyTrades.slice(0, visible).map(trade => <TradeCenterCard key={trade.id} trade={trade} active={false} onAsk={onAsk} />)}
         </>}
         <h3>Completed trade results</h3>

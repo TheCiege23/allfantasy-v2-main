@@ -11,11 +11,15 @@
  *
  * The client loops while `remaining > 0` (a league takes ~2s; sixty-five do not fit one request),
  * then reloads the page. Rate limited per user: a loop is a handful of posts, a stuck button is not.
+ *
+ * Also run automatically by the /core shell (components/core-app/useLineupAutoSync.ts) on opening the
+ * app, returning to it, and opening a league.
  */
 import { NextResponse } from 'next/server'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { buildRateLimit429, consumeRateLimit } from '@/lib/rate-limit'
 import { refreshLineupsNow } from '@/lib/import-os/collector/lineupRefresh'
+import { invalidateHomePortfolio } from '@/lib/core-app/homePortfolioSummary'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -41,6 +45,12 @@ export async function POST(request: Request) {
 
   const result = await refreshLineupsNow({ userId: auth.userId, leagueId: await readLeagueId(request) })
   const count = (s: string) => result.attempted.filter((a) => a.status === s).length
+  /*
+   * The home's portfolio summary is cached per user for minutes, and its fingerprint cannot see a
+   * lineup move made on the platform. A refreshed roster is exactly that write, so drop the record
+   * and let the reload that follows rebuild from the new rows. Never throws.
+   */
+  if (count('refreshed') > 0) await invalidateHomePortfolio(auth.userId)
   return NextResponse.json({
     total: result.total,
     remaining: result.remaining,

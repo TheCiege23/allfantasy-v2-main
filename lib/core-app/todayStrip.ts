@@ -1,4 +1,6 @@
 import { normalizeTeamAbbrev, getTeamInfo } from '@/lib/team-abbrev'
+import { isTop25Sport, pollIsKnown, showCollegeGame } from '@/lib/live/collegeTop25'
+import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -51,12 +53,28 @@ export type HealthReading = {
 
 /* ── Next 24 hours ───────────────────────────────────────────────────────── */
 
+/**
+ * What a game row's `odds` line was built from (2026-10-04) — the /core home's game-day band says it in
+ * Spanish at render (lib/core-app/homeBandsCopy.ts). The English `odds` is unchanged.
+ */
+export type Next24OddsParts = {
+  /** The favoured side's code, with `spread` its margin; both null without a line. */
+  favorite: string | null
+  spread: number | null
+  pickem: boolean
+  total: number | null
+  /** "1:05 PM ET" — set only when the line is over an hour old. */
+  staleClock: string | null
+}
+
 export type Next24Row = {
-  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsAt: string | null }
+  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsParts?: Next24OddsParts; oddsAt: string | null }
   kind: 'game' | 'waiver'
   text: string
   /** League name for a waiver run; sport and week for a game. */
   sub: string | null
+  /** What a GAME row's `sub` was built from, for the home's Spanish. Absent on a waiver row. */
+  parts?: { sport: string; week: number | null }
   /** ISO instant. Localised on the client — never formatted here. */
   time: string
   tone: 'accent' | 'warn' | null
@@ -360,6 +378,7 @@ function oddsClock(at: Date): string {
 async function resolveNext24(
   leagues: TodayStripLeague[],
   now: Date,
+  userId: string | null = null,
 ): Promise<Next24Row[]> {
   if (leagues.length === 0) return []
 
@@ -369,7 +388,7 @@ async function resolveNext24(
   // The LeagueWaiverSettings read is gone with the waiver rows — see the header.
   // Querying a column we have proven we cannot trust would just invite someone to
   // render it again.
-  const games = await prisma.sportsGame
+  const slate = await prisma.sportsGame
     .findMany({
       where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
       orderBy: { startTime: 'asc' },
@@ -377,6 +396,29 @@ async function resolveNext24(
       select: { sport: true, externalId: true, source: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
     })
     .catch(() => [])
+
+  /*
+   * College fixtures: the current Top 25 plus the teams you follow (founder, 2026-10-08) — the same
+   * rule as /core/live, read from the same rank book (lib/live/collegeTop25.ts). A Saturday is 50+
+   * NCAAF games and eight slots; unranked strangers should not take them. Fails open with no poll.
+   */
+  const top25 = new Map(
+    await Promise.all(
+      sports.filter((s) => isTop25Sport(s)).map(async (s) => {
+        const [book, follows] = await Promise.all([
+          readRankBook(s).catch(() => null),
+          readFollowedTeams(userId, s).catch(() => []),
+        ])
+        return [s, { book, follows, known: pollIsKnown(book, []) }] as const
+      }),
+    ),
+  )
+  const games = slate.filter((g) => {
+    const t = top25.get(g.sport.toUpperCase())
+    if (!t) return true
+    const side = (team: string | null) => ({ abbrev: team, name: team, rank: null })
+    return showCollegeGame({ home: side(g.homeTeam), away: side(g.awayTeam) }, t.book, t.follows, t.known)
+  })
 
   const rows: Next24Row[] = []
   /*
@@ -477,6 +519,7 @@ async function resolveNext24(
       kind: 'game',
       text: `${g.awayTeam} at ${g.homeTeam}`,
       sub: [g.sport, g.week != null ? `Week ${g.week}` : null].filter(Boolean).join(' · ') || null,
+      parts: { sport: g.sport, week: g.week ?? null },
       time: g.startTime.toISOString(),
       tone: 'accent',
       game: (() => {
@@ -484,16 +527,22 @@ async function resolveNext24(
         const market = odds.find(o => fixture.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
         const spread = market?.spreadHome
         const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
+        const stale = (favorite || market?.totalPoints != null) && market && now.getTime() - market.fetchedAt.getTime() > ODDS_FRESH_MS
         return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
           homeLogo: logoFor(g.homeTeam, g.sport, teamKey(g.homeTeam)), awayLogo: logoFor(g.awayTeam, g.sport, teamKey(g.awayTeam)),
           href: `/core/live?sport=${encodeURIComponent(g.sport)}${espnCopy ? `&game=${encodeURIComponent(espnCopy.externalId)}` : ''}`,
           odds: [
             favorite,
             market?.totalPoints != null ? `O/U ${market.totalPoints}` : null,
-            (favorite || market?.totalPoints != null) && market && now.getTime() - market.fetchedAt.getTime() > ODDS_FRESH_MS
-              ? `line as of ${oddsClock(market.fetchedAt)}`
-              : null,
+            stale && market ? `line as of ${oddsClock(market.fetchedAt)}` : null,
           ].filter(Boolean).join(' · ') || 'Odds unavailable',
+          oddsParts: {
+            favorite: spread == null || spread === 0 ? null : spread < 0 ? g.homeTeam : g.awayTeam,
+            spread: spread == null || spread === 0 ? null : Math.abs(spread),
+            pickem: spread === 0,
+            total: market?.totalPoints ?? null,
+            staleClock: stale && market ? oddsClock(market.fetchedAt) : null,
+          },
           oddsAt: market?.fetchedAt.toISOString() ?? null }
       })(),
     })
@@ -521,7 +570,7 @@ export async function getTodayStrip(
         reason: 'league health could not be read',
       }),
     ),
-    resolveNext24(leagues, now).catch(() => [] as Next24Row[]),
+    resolveNext24(leagues, now, userId).catch(() => [] as Next24Row[]),
   ])
 
   return { record, health, next24 }

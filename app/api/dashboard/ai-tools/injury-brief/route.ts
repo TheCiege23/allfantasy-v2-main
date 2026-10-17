@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         take: 15,
       }),
       Promise.all(
-        portSports.map((s) => listInjuryFacts({ sport: s, limit: 25 }).catch(() => null))
+        portSports.map((s) => listInjuryFacts({ sport: s, limit: 25, designationsOnly: true }).catch(() => null))
       ),
       prisma.sportsDataCache.findMany({
         where: {

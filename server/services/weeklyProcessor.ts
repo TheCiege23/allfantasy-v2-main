@@ -99,6 +99,14 @@ export async function processLeagueWeek(params: {
     throw new Error('League not found')
   }
 
+  const previousResults = await prisma.teamWeekResult.findMany({ where: { leagueId, season, week, status: 'final' } })
+  const priorFinalIds = new Set(previousResults.map(r => r.rosterId))
+  const historicalRows = priorFinalIds.size ? await prisma.weeklyScore.findMany({ where: { leagueId, season, week, rosterId: { in: [...priorFinalIds] } }, select: { rosterId: true, playerId: true, isStarter: true } }) : []
+  const frozen = new Map<string, typeof historicalRows>()
+  for (const row of historicalRows) frozen.set(row.rosterId, [...(frozen.get(row.rosterId) ?? []), row])
+  const teamFinal = new Map<string, boolean>()
+  const processedTotals = new Map<string, number>()
+  const teamTotalsChanged = (previous: number, rosterId: string) => processedTotals.has(rosterId) && processedTotals.get(rosterId) !== previous
   const rules = await resolveScoringRulesForLeague(leagueId, league.sport as LeagueSport)
   const snap = parseSettingsSnapshot(league.settings)
   const scoringSettings = (snap?.scoringSettings ?? null) as Record<string, unknown> | null
@@ -114,6 +122,17 @@ export async function processLeagueWeek(params: {
     ? buildRoundRobinPairsForWeek(rosterIds, week)
     : new Map<string, string | null>()
 
+  if (writesMatchups) {
+    const nativeRosters = await prisma.roster.findMany({where:{leagueId},select:{id:true,redraftRosterId:true}})
+    const nativeToGeneric = new Map(nativeRosters.filter(r=>r.redraftRosterId).map(r=>[r.redraftRosterId!,r.id]))
+    const schedule = await prisma.redraftMatchup.findMany({where:{leagueId,week,season:{season}},select:{homeRosterId:true,awayRosterId:true}})
+    if (schedule.length || isCategoryMode) pairMap.clear()
+    for(const m of schedule) {
+      const a=nativeToGeneric.get(m.homeRosterId), b=m.awayRosterId ? nativeToGeneric.get(m.awayRosterId) : null
+      if(a) pairMap.set(a,b??null)
+      if(a && b) pairMap.set(b,a)
+    }
+  }
   await prisma.$transaction(async (tx) => {
     await tx.weeklyScore.deleteMany({ where: { leagueId, season, week } })
     // Runs for BOTH kinds, and means two different things. Native: the usual
@@ -141,10 +160,13 @@ export async function processLeagueWeek(params: {
     const teamStatTotals = new Map<string, TeamStatTotals>()
 
     for (const roster of league.rosters) {
-      const chopped = await isRosterChopped(leagueId, roster.id)
-      const survivorOut = await isRosterCurrentlyEliminated(leagueId, roster.id).catch(() => false)
-      const starterIds = new Set(getStarterPlayerIdsForScoring(roster.playerData))
-      const allIds = getRosterPlayerIds(roster.playerData)
+      const history = frozen.get(roster.id)
+      const playerData = history?.length ? history.map(r => ({ id: r.playerId, slot: r.isStarter ? 'STARTER' : 'BN' })) : roster.playerData
+      const chopped = !history?.length && await isRosterChopped(leagueId, roster.id)
+      const survivorOut = !history?.length && await isRosterCurrentlyEliminated(leagueId, roster.id).catch(() => false)
+      const starterIds = new Set(getStarterPlayerIdsForScoring(playerData))
+      const allIds = getRosterPlayerIds(playerData)
+      let complete = league.bestBallMode ? allIds.length > 0 : starterIds.size > 0
       const scoredPlayers: Array<{
         playerId: string
         points: number
@@ -160,7 +182,7 @@ export async function processLeagueWeek(params: {
 
       if (chopped || survivorOut) {
         for (const playerId of allIds) {
-          const isStarter = starterIds.size === 0 ? true : starterIds.has(playerId)
+          const isStarter = starterIds.has(playerId)
           weeklyRows.push({
             leagueId,
             season,
@@ -173,12 +195,13 @@ export async function processLeagueWeek(params: {
           })
         }
         teamTotals.set(roster.id, 0)
+        teamFinal.set(roster.id, false)
         continue
       }
 
       const seenPlayer = new Set<string>()
       for (const playerId of allIds) {
-        const isStarter = starterIds.size === 0 ? true : starterIds.has(playerId)
+        const isStarter = starterIds.has(playerId)
 
         if (seenPlayer.has(playerId)) {
           duplicateRows.push({
@@ -206,6 +229,7 @@ export async function processLeagueWeek(params: {
           },
         })
 
+        if ((isStarter || league.bestBallMode) && pws?.isFinalized !== true) complete = false
         const rawStats = (pws?.stats && typeof pws.stats === 'object' && !Array.isArray(pws.stats)
           ? (pws.stats as Record<string, unknown>)
           : {}) as Record<string, unknown>
@@ -273,7 +297,7 @@ export async function processLeagueWeek(params: {
         teamSum = optimized.totalPoints
       } else {
         for (const player of scoredPlayers) {
-          const isStarter = starterIds.size === 0 ? true : starterIds.has(player.playerId)
+          const isStarter = starterIds.has(player.playerId)
           weeklyRows.push({
             leagueId,
             season,
@@ -307,6 +331,8 @@ export async function processLeagueWeek(params: {
       })
 
       teamTotals.set(roster.id, teamSum)
+      processedTotals.set(roster.id, teamSum)
+      teamFinal.set(roster.id, complete)
     }
 
     if (weeklyRows.length > 0) {
@@ -330,7 +356,7 @@ export async function processLeagueWeek(params: {
 
     for (const roster of league.rosters) {
       const total = teamTotals.get(roster.id) ?? 0
-      const opp = isBestBallCumulative ? null : (pairMap.get(roster.id) ?? null)
+      const opp = isBestBallCumulative || scoringMode === 'roto' ? null : (pairMap.get(roster.id) ?? null)
       // Category mode: seed the categoryBreakdown column with this team's raw
       // stat totals. matchupEngine.resolveMatchupOutcomesForWeek reads this
       // column from both sides, resolves per-category winners, and rewrites
@@ -346,7 +372,7 @@ export async function processLeagueWeek(params: {
           rosterId: roster.id,
           totalPoints: total,
           opponentRosterId: opp,
-          status: 'final',
+          status: teamFinal.get(roster.id) === true ? 'final' : 'active',
           categoryBreakdown: initialBreakdown ?? undefined,
         },
       })
@@ -372,7 +398,7 @@ export async function processLeagueWeek(params: {
   try {
     const { resolveSpecialtyConceptKey, isSpecialtyConcept } = await import('@/lib/specialty-automation/types')
     const { dispatchSpecialtyAutomationTrigger } = await import('@/lib/specialty-automation/triggerDispatcher')
-    if (isSpecialtyConcept(resolveSpecialtyConceptKey(league))) {
+    if (writesMatchups && [...teamFinal.values()].every(Boolean) && teamFinal.size > 0 && isSpecialtyConcept(resolveSpecialtyConceptKey(league))) {
       await dispatchSpecialtyAutomationTrigger({
         trigger: 'onWeekFinalized',
         leagueId,
@@ -383,6 +409,11 @@ export async function processLeagueWeek(params: {
     }
   } catch (e) {
     console.warn('[weeklyProcessor] specialty automation', leagueId, e)
+  }
+
+  if (writesMatchups && (league.leagueVariant === 'big_brother' || league.leagueType === 'big_brother') && previousResults.some(row => teamFinal.get(row.rosterId) && teamTotalsChanged(row.totalPoints, row.rosterId))) {
+    const { handleBbStatCorrectionSignal } = await import('@/lib/big-brother/automation/statCorrection')
+    await handleBbStatCorrectionSignal({ leagueId, week, previousScores: Object.fromEntries(previousResults.map(r => [r.rosterId, r.totalPoints])) })
   }
 
   const count = await prisma.weeklyScore.count({

@@ -18,6 +18,7 @@ import { normalizeNflRedraftProviderGameContext } from '@/lib/player-data/nflRed
 import { normalizeNflRedraftProviderLiveScoringContext } from '@/lib/player-data/nflRedraftLiveScoringContext'
 import { normalizeNflRedraftProviderPlayerIntelligence } from '@/lib/player-data/nflRedraftPlayerIntelligence'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { headshotContradicts, pickHeadshotCandidate } from '@/lib/player-assets/headshotCandidateMatch'
 
 export const NFL_REDRAFT_PRODUCTION_PROVIDER_WIRING_MODEL_VERSION =
   'nfl-redraft-production-provider-wiring-v1' as const
@@ -27,6 +28,8 @@ export type NflRedraftProductionProviderRequest = {
   season?: number | string | null
   week?: number | string | null
   playerName?: string | null
+  /** The player's position, when known. Headshot matching refuses a namesake at another position. */
+  position?: string | null
   allFantasyPlayerId?: string | null
   teamAbbr?: string | null
   opponentTeamAbbr?: string | null
@@ -376,25 +379,103 @@ async function readSportsPlayerIdentity(request: NflRedraftProductionProviderReq
   return canonical as unknown as Record<string, unknown>
 }
 
-function findMatchingRow<T extends Record<string, unknown>>(
+/**
+ * Choose which `searchplayers.php` result is the NFL player asked for — or refuse.
+ *
+ * 🛑 THIS USED TO BE "WHATEVER `players[0]` IS". `extractTheSportsDbPlayerImages` flattens the
+ * payload by copying the first array row, and the name search spans EVERY sport TheSportsDB
+ * covers, so the adapter preferred for NFL `headshots` handed back the first search hit's photo
+ * with no check of sport, name, team or position. Measured in production 2026-10-11: 72
+ * TheSportsDB URLs were the primary headshot of two or more different players — NFL Cam Jackson
+ * (DL, CAR) wearing NCAAB Cameron Jackson's, NFL Ben Jones wearing NHL Ben Jones's.
+ *
+ * Now: American-football rows only, minus any row whose team or position contradicts the request,
+ * then the shared `pickHeadshotCandidate` (exact name, team breaks ties, ambiguity refuses).
+ */
+export function pickNflTheSportsDbHeadshotRow(
+  payload: unknown,
+  request: Pick<NflRedraftProductionProviderRequest, 'playerName' | 'teamAbbr' | 'position'>,
+): Record<string, unknown> | null {
+  const search = request.playerName?.trim()
+  if (!search || !payload || typeof payload !== 'object') return null
+  const root = payload as Record<string, unknown>
+  // The search answers under `player`; tolerate `players` (the lookup shape) as well.
+  const listed = Array.isArray(root.player) ? root.player : Array.isArray(root.players) ? root.players : []
+  const team = request.teamAbbr?.trim() || null
+  const lookup = { sport: 'NFL', team, position: request.position ?? null }
+  const rows = listed
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object' && !Array.isArray(row))
+    .filter((row) => String(row.strSport ?? '').trim().toLowerCase() === 'american football')
+    .filter((row) => !headshotContradicts(lookup, {
+      team: String(row.strTeamShort ?? row.strTeam ?? '') || null,
+      position: String(row.strPosition ?? '') || null,
+    }))
+  return pickHeadshotCandidate(rows, {
+    search,
+    nameOf: (row) => String(row.strPlayer ?? ''),
+    teamCodeOf: (row) => normalizeTeamAbbrev(String(row.strTeamShort ?? row.strTeam ?? '')),
+    teamCode: normalizeTeamAbbrev(team),
+  })
+}
+
+/**
+ * Pick the provider row this request is about, or refuse.
+ *
+ * 🛑 IT ENDED `?? rows[0]`, so a request matching NOTHING got the first row anyway: the first
+ * search result for `player_identity`, the first game of the season for `schedule`, the first
+ * game on the scoreboard for `live_stats` — each then normalised and returned as if it were the
+ * answer. It also could not tell a game row from a player row: a player-scoped schedule request
+ * compared the player's name against a game that has no name, failed every row, and fell through
+ * to `rows[0]` by construction.
+ *
+ * Now a row is chosen only on positive evidence — a `gameId` match, or a name / team that the row
+ * actually states and that agrees — and a field the row does not carry is neither evidence for
+ * nor against it. Player rows that match by name but disagree with each other on team are two
+ * people, so that refuses too.
+ */
+export function findMatchingRow<T extends Record<string, unknown>>(
   rows: T[],
   request: NflRedraftProductionProviderRequest,
 ): T | null {
   if (rows.length === 0) return null
   const team = requestTeam(request)
-  const player = request.playerName?.trim().toLowerCase()
-  const gameId = request.gameId?.trim()
-  return rows.find((row) => {
-    if (gameId && String(row.gameId ?? row.id ?? row.externalId ?? '') === gameId) return true
-    const rowName = String(row.name ?? row.playerName ?? row.player ?? '').trim().toLowerCase()
-    const rowTeam = normalizeTeamAbbrev(String(row.teamAbbrev ?? row.team ?? row.homeTeam ?? row.awayTeam ?? ''))
-    const nameOk = !player || rowName === player
-    const teamOk = !team
-      || rowTeam === team
-      || normalizeTeamAbbrev(String(row.homeTeam ?? '')) === team
-      || normalizeTeamAbbrev(String(row.awayTeam ?? '')) === team
-    return nameOk && teamOk
-  }) ?? rows[0] ?? null
+  const player = request.playerName?.trim().toLowerCase() || null
+  const gameId = request.gameId?.trim() || null
+
+  if (gameId) {
+    const byId = rows.find((row) => String(row.gameId ?? row.id ?? row.externalId ?? '') === gameId)
+    if (byId) return byId
+  }
+  if (!player && !team) return null
+
+  const rowName = (row: T): string => String(row.name ?? row.playerName ?? row.player ?? '').trim().toLowerCase()
+  const rowTeams = (row: T): string[] =>
+    [row.teamAbbrev, row.team, row.homeTeam, row.awayTeam]
+      .map((value) => normalizeTeamAbbrev(value == null ? '' : String(value)))
+      .filter((value): value is string => Boolean(value))
+
+  const matches = rows.filter((row) => {
+    let evidence = false
+    const name = rowName(row)
+    if (player && name) {
+      if (name !== player) return false
+      evidence = true
+    }
+    const teams = rowTeams(row)
+    if (team && teams.length > 0) {
+      if (!teams.includes(team)) return false
+      evidence = true
+    }
+    return evidence
+  })
+  if (matches.length === 0) return null
+
+  if (player) {
+    const named = matches.filter((row) => rowName(row))
+    const distinctTeams = new Set(named.map((row) => rowTeams(row)[0] ?? ''))
+    if (named.length > 1 && distinctTeams.size > 1) return null
+  }
+  return matches[0] ?? null
 }
 
 function canonicalCacheKey(request: NflRedraftProductionProviderRequest): string {
@@ -526,7 +607,9 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
         const res = await fetch(url, { cache: 'no-store' })
         if (!res.ok) return null
         const payload = await res.json()
-        const images = extractTheSportsDbPlayerImages(payload)
+        const matched = pickNflTheSportsDbHeadshotRow(payload, request)
+        if (!matched) return null
+        const images = extractTheSportsDbPlayerImages(matched)
         if (!images.primary) return null
         return makeResult({
           providerId: 'thesportsdb',

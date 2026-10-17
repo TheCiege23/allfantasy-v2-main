@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor notifications</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./kit/kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.nt-item{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:#e8eaf2;font:inherit;text-align:left;cursor:pointer;min-height:56px}
+.nt-item img{width:30px;height:30px}
+.nt-mail{width:600px;max-width:100%;border-radius:12px;overflow:hidden;background:#0d0f17;border:1px solid rgba(255,255,255,.1);box-shadow:0 24px 50px rgba(0,0,0,.5)}
+@keyframes ntIn{from{transform:translateY(-12px);opacity:0}to{transform:none;opacity:1}}
+.nt-new{animation:ntIn .45s ease-out both}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="SurvivorSettings.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Survivor notifications</h1>
+      <span class="ex-t2">Push alerts and emails for every Survivor moment. Pick one to preview.</span>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 26px; padding: 24px 28px 32px; align-items: flex-start">
+    <aside style="flex: 0 1 330px; display: flex; flex-direction: column; gap: 8px">
+      <span class="ex-lbl">Notification</span>
+      <sc-for list="{{items}}" as="n" hint-placeholder-count="8">
+        <button class="nt-item" onClick="{{n.pick}}" aria-pressed="{{n.on}}" style="border-color: {{n.line}}; background: {{n.bg}}">
+          <img src="{{n.icon}}" alt="">
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">{{n.label}}</span><span class="ex-t3" style="font-size: 11.5px">{{n.when}}</span></span>
+          <span class="k-pill" style="height: 20px; font-size: 10px">{{n.ch}}</span>
+        </button>
+      </sc-for>
+    </aside>
+
+    <section style="flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px">
+      <span class="ex-lbl">Push · lock screen</span>
+      <div class="k-phone" style="width: 330px; height: 640px; position: relative; background: radial-gradient(ellipse at 50% 20%, #2a2140, #0b0d14 70%)">
+        <img src="survivor/bg/dusk-football.svg" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .45">
+        <div style="position: relative; display: flex; flex-direction: column; align-items: center; padding-top: 40px; gap: 2px; color: #fff">
+          <span style="font: 500 15px 'Archivo'">Tuesday, October 13</span>
+          <span style="font: 700 72px/1 'Archivo'; letter-spacing: -.03em">{{clock}}</span>
+        </div>
+        <div style="position: relative; display: flex; flex-direction: column; gap: 8px; padding: 26px 12px 0">
+          <sc-for list="{{stack}}" as="p" hint-placeholder-count="3">
+            <div class="k-push {{p.cls}}" key="{{p.k}}">
+              <i>AF</i>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0"><div class="k-row" style="gap: 6px"><b style="flex: 1">{{p.title}}</b><em>{{p.time}}</em></div><span>{{p.body}}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <section style="flex: 1 1 520px; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+      <span class="ex-lbl">Email</span>
+      <div class="nt-mail">
+        <div style="padding: 12px 18px; display: flex; flex-direction: column; gap: 2px; background: #151926; border-bottom: 1px solid rgba(255,255,255,.08)">
+          <span style="font-size: 12px; color: #8d93ad">From: AllFantasy &lt;league@allfantasy.ai&gt;</span>
+          <span style="font-weight: 700; color: #e8eaf2">{{mail.subject}}</span>
+          <span style="font-size: 12px; color: #6f7590">{{mail.pre}}</span>
+        </div>
+        <div style="position: relative; height: 200px; overflow: hidden; display: grid; place-items: center">
+          <img src="{{mail.bg}}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover">
+          <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,8,13,.1), rgba(13,15,23,1))"></div>
+          <img src="{{mail.hero}}" alt="" style="position: relative; height: 150px; filter: drop-shadow(0 14px 20px rgba(0,0,0,.6))">
+        </div>
+        <div style="padding: 8px 32px 30px; display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center">
+          <span style="font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: {{mail.c}}">{{mail.kick}}</span>
+          <span style="font: 700 30px/1.15 'Cinzel', serif; color: #f1d58a">{{mail.head}}</span>
+          <span style="font-size: 15px; line-height: 1.5; color: #c9cee0; max-width: 460px">{{mail.body}}</span>
+          <a class="ex-btn ex-btn-gold" href="#" style="min-height: 46px; padding: 0 28px">{{mail.cta}}</a>
+          <span style="font-size: 11.5px; color: #6f7590; margin-top: 10px">Blah Survivor · You're getting this because you're in this league. <u>Notification settings</u></span>
+        </div>
+      </div>
+      <div class="ex-card2" style="padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 18px; font-size: 12.5px">
+        <span><span class="ex-t3">Trigger </span><span class="ex-t2">{{mail.trigger}}</span></span>
+        <span><span class="ex-t3">Channels </span><span class="ex-t2">{{mail.ch}}</span></span>
+        <span><span class="ex-t3">Never includes </span><span class="ex-t2">who voted for whom, other managers' idols</span></span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { id: 'close', k: 0 }; }
+  renderVals() {
+    const st = this.state;
+    const N = [
+      { id: 'close', label: 'Votes close soon', when: '2 hours before the deadline', ch: 'Push + email', icon: 'weekly/urn.svg', title: 'Votes close in 2 hours', body: "You haven't voted yet at Tribal Council in Tribe Vela.", time: '6:00 PM', clock: '6:00',
+        mail: { subject: 'Votes close in 2 hours', pre: "Tribe Vela is going to Tribal Council and you haven't voted.", bg: 'survivor/bg/night-football.svg', hero: 'weekly/urn.svg', kick: 'Tribal Council · Week 6', head: 'Your vote is still empty', body: 'Tribe Vela goes to Tribal Council tonight. Votes close at 8:00 PM ET. If you don’t vote, your vote doesn’t count.', cta: 'Cast my vote', c: '#f2c94c', trigger: '2 hours before voteDeadlineAt, only if not voted', ch: 'Push, email' } },
+      { id: 'imm', label: 'You won immunity', when: 'When scores go final', ch: 'Push + email', icon: 'weekly/immunity-necklace-icon.svg', title: 'You won immunity', body: '142.6 points, top of Tribe Vela. You’re safe this week.', time: '11:42 PM', clock: '11:42',
+        mail: { subject: 'You won immunity', pre: 'Top score in Tribe Vela with 142.6.', bg: 'survivor/bg/dusk-football.svg', hero: 'weekly/immunity-necklace.svg', kick: 'Immunity · Week 6', head: 'You’re safe this week', body: 'You put up 142.6 points, the top score in Tribe Vela. Nobody can vote for you at this Tribal Council.', cta: 'Share it', c: '#f2c94c', trigger: 'Immunity winner set for the week', ch: 'Push, email, league chat' } },
+      { id: 'idol', label: 'You found an idol', when: 'Right after the draft ends', ch: 'Push + DM', icon: 'survivor/idols/immunity-icon.svg', title: 'Private: you hold an idol', body: 'Open your DMs from AF Host. Don’t tell anyone.', time: '9:16 PM', clock: '9:16',
+        mail: { subject: 'Something was hidden in your draft', pre: 'Open the app to see it. Keep it to yourself.', bg: 'survivor/bg/night-football.svg', hero: 'survivor/idols/immunity.svg', kick: 'Private · Draft complete', head: 'You hold a hidden idol', body: 'One of your picks was carrying an idol. Open your DMs from AF Host to see which one and how to play it. The email never names the idol.', cta: 'Open my DMs', c: '#7fe0c0', trigger: 'Draft completes and the manager holds ≥1 idol', ch: 'Push, email, in-app DM' } },
+      { id: 'out', label: 'Your torch is out', when: 'After the scroll reveal', ch: 'Push + email', icon: 'weekly/torch-out-icon.svg', title: 'Your torch is out', body: 'You were voted out of Tribe Vela. Exile Island is open.', time: '8:31 PM', clock: '8:31',
+        mail: { subject: 'Your torch is out', pre: 'You were voted out at Tribal Council. You can still earn your way back.', bg: 'survivor/bg/night-football.svg', hero: 'weekly/torch-out.svg', kick: 'Voted out · Week 6', head: 'You’re headed to Exile Island', body: 'The tribe voted 2–1. Your season isn’t over: win weeks on Exile Island to earn tokens, and 3 tokens bring you back.', cta: 'Go to Exile Island', c: '#ff9a3c', trigger: 'Manager voted out and the scroll has been revealed', ch: 'Push, email' } },
+      { id: 'swap', label: 'Tribe swap tonight', when: '24 hours before the swap', ch: 'Push', icon: 'late/buff-vela.svg', title: 'Tribe swap tomorrow', body: 'New tribes drop at 8:00 PM. Your idols stay with you.', time: '8:00 PM', clock: '8:00',
+        mail: { subject: 'Tribe swap tomorrow night', pre: 'Buffs drop at 8:00 PM ET.', bg: 'survivor/bg/dusk-football.svg', hero: 'late/buff-vela.svg', kick: 'Week 5 · Tribe swap', head: 'Drop your buffs tomorrow', body: 'The tribes get reshuffled at 8:00 PM ET. Your idols travel with you, and your tribe chat switches at the next lock.', cta: 'See what changes', c: '#b8a8ff', trigger: '24h before swapAt', ch: 'Push, email' } },
+      { id: 'exile', label: 'Back from Exile', when: 'When you reach the token goal', ch: 'Push + email', icon: 'exile/token-icon.svg', title: 'You’re back in the game', body: '3 tokens earned. You rejoin Tribe Vela in week 7.', time: '11:58 PM', clock: '11:58',
+        mail: { subject: 'You’re back in the game', pre: 'Three tokens earned on Exile Island.', bg: 'survivor/bg/exile-football.svg', hero: 'exile/token-coin-earned.svg', kick: 'Exile Island · Week 6', head: 'You earned your way back', body: 'You collected 3 tokens on Exile Island. You rejoin Tribe Vela in week 7 with your roster restored.', cta: 'See my tribe', c: '#f2c94c', trigger: 'Exile tokens ≥ returnTokens', ch: 'Push, email, league chat' } },
+      { id: 'jury', label: 'Jury vote is open', when: 'Final week, jurors only', ch: 'Push + email', icon: 'late/jury-icon.svg', title: 'You’re on the jury', body: 'Pick the champion from 3 finalists. Votes close Tuesday.', time: '9:00 AM', clock: '9:00',
+        mail: { subject: 'Your jury vote is open', pre: 'Three finalists. One champion. Your vote.', bg: 'survivor/bg/day-football.svg', hero: 'late/jury-bench.svg', kick: 'Final Tribal Council', head: 'Pick the champion', body: 'Read each finalist’s season record, then cast your sealed vote. Nobody sees it until the reveal.', cta: 'Cast my jury vote', c: '#d9b45a', trigger: 'Final week starts; recipient isJuror', ch: 'Push, email' } },
+      { id: 'champ', label: 'Season champion', when: 'After the final reveal', ch: 'Everyone', icon: 'late/champion-icon.svg', title: 'TheCiege26 wins Blah Survivor', body: 'Won the jury vote 3–1–1. See the full season.', time: '8:45 PM', clock: '8:45',
+        mail: { subject: 'We have a champion', pre: 'TheCiege26 is the last one standing.', bg: 'survivor/bg/day-football.svg', hero: 'late/champion-trophy.svg', kick: 'Season champion · 2026', head: 'TheCiege26 is the last one standing', body: 'Won the jury vote 3–1–1 after 13 weeks. Relive the season, or start next season with the same league.', cta: 'See the season', c: '#f2c94c', trigger: 'Final jury reveal complete', ch: 'Push, email, league chat (all members)' } }
+    ];
+    const i = N.findIndex(n => n.id === st.id); const cur = N[i];
+    const stack = [cur, N[(i + N.length - 1) % N.length], N[(i + N.length - 2) % N.length]].map((n, j) => ({ ...n, k: n.id + st.k, cls: j === 0 ? 'nt-new' : '', time: j === 0 ? 'now' : n.time }));
+    return { items: N.map(n => ({ ...n, on: n.id === st.id ? 'true' : 'false', line: n.id === st.id ? '#d9b45a' : 'rgba(255,255,255,.07)', bg: n.id === st.id ? '#151926' : '#0b0d14', pick: () => this.setState({ id: n.id, k: st.k + 1 }) })),
+      stack, clock: cur.clock, mail: cur.mail };
+  }
+}
+</script>
+</body>
+</html>

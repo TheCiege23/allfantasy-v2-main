@@ -27,7 +27,7 @@ import {
   fetchRedraftFreeAgentPool,
   rosteredPlayerKeys,
 } from '@/lib/redraft-war-room/redraftFreeAgentPool'
-import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
+import { currentInjuryDesignation, fetchRedraftInjuryNews } from '@/lib/redraft-war-room/redraftInjuryNews'
 import type {
   DataState,
   KeeperCostSystem,
@@ -363,7 +363,8 @@ export async function buildKeeperWarRoomContext(
       slotType: p.slotType,
       isStarterSlot: isStarterSlotType(p.slotType),
       isKept: p.isKept === true,
-      injuryStatus: p.injuryStatus ?? injuryNews.injuryByName.get(injuryNameKey(p.playerName))?.status ?? null,
+      // The live feed's current designation only — never the stored `p.injuryStatus` snapshot.
+      injuryStatus: currentInjuryDesignation(injuryNews.injuryByName, p.playerName),
       adp,
       adpRound,
       isEligible: elig ? elig.isEligible : null,
@@ -417,7 +418,7 @@ export async function buildKeeperWarRoomContext(
     slotType: 'free_agent',
     isStarterSlot: false,
     isKept: false,
-    injuryStatus: injuryNews.injuryByName.get(injuryNameKey(fa.playerName))?.status ?? null,
+    injuryStatus: currentInjuryDesignation(injuryNews.injuryByName, fa.playerName),
     adp: fa.adp,
     adpRound: adpImpliedRound(fa.adp, teamCount),
     isEligible: null,

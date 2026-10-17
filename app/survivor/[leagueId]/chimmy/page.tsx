@@ -48,7 +48,15 @@ export default function SurvivorChimmyPage() {
 
       <div className="mt-6 space-y-4">
         {council?.status === 'voting_open' && ctx.canVote ? (
-          <VoteSubmissionCard targets={voteTargets} />
+          <VoteSubmissionCard targets={voteTargets} onConfirm={async (targetUserId) => {
+            const res = await fetch('/api/survivor/chimmy', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ leagueId, message: `@Chimmy vote <@${targetUserId}>` }),
+            })
+            const result = await res.json()
+            if (!res.ok || !result.vote?.ok || result.vote.doesNotCount) throw new Error(result.error ?? result.reply ?? 'Vote was not recorded.')
+            ctx.refetch()
+          }} />
         ) : council?.status === 'voting_open' ? (
           <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4 text-[13px] text-amber-100">
             Tribal is open, but this viewer cannot cast a vote for this council.

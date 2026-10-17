@@ -1,0 +1,292 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+/*
+ * A guillotine league's rail week and cut line (2026-10-03).
+ *
+ * The rail took the earliest week with a 0–0 row as "this week". A chopped team keeps a 0–0 row in
+ * every week after its chop, so every guillotine league sat on week 2 forever, and the standing
+ * ranked a field that still held the chopped teams — whose 0 became the cut line.
+ *
+ * The fixture is the measured shape: 18 rosters; the lowest scorer of weeks 1, 2 and 3 chopped after
+ * each (rosters 2, 7, 15), each 0–0 from the following week; week 4 in progress; provider
+ * `current_week` 4. A head-to-head league rides alongside as the control.
+ */
+
+type Row = { leagueId: string; seasonYear: number; week: number; rosterId: string; matchupId: number; pointsFor: number; pointsAgainst: number; updatedAt: Date }
+
+const AT = new Date('2026-10-03T02:00:00Z')
+const rosters = Array.from({ length: 18 }, (_, i) => String(i + 1))
+const chopAfter: Record<string, number> = { '2': 1, '7': 2, '15': 3 }
+const lowestIn: Record<number, string> = { 1: '2', 2: '7', 3: '15' }
+
+function guillotineRows(): Row[] {
+  const out: Row[] = []
+  for (let week = 1; week <= 5; week++) {
+    for (const r of rosters) {
+      const chopped = chopAfter[r] != null && week > chopAfter[r]!
+      let points = 0
+      if (!chopped && week <= 3) points = lowestIn[week] === r ? 40 : 80 + Number(r)
+      // Week 4 in progress: some live teams have points, the rest have not played yet.
+      if (!chopped && week === 4) points = Number(r) % 2 === 0 ? 20 + Number(r) : 0
+      if (r === '1' && week === 4) points = 95 // you
+      out.push({ leagueId: 'G', seasonYear: 2026, week, rosterId: r, matchupId: Number(r), pointsFor: points, pointsAgainst: 0, updatedAt: AT })
+    }
+  }
+  return out
+}
+
+function h2hRows(): Row[] {
+  return [
+    { leagueId: 'H', seasonYear: 2026, week: 3, rosterId: '1', matchupId: 1, pointsFor: 100, pointsAgainst: 90, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 3, rosterId: '2', matchupId: 1, pointsFor: 90, pointsAgainst: 100, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 4, rosterId: '1', matchupId: 1, pointsFor: 0, pointsAgainst: 0, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 4, rosterId: '2', matchupId: 1, pointsFor: 0, pointsAgainst: 0, updatedAt: AT },
+  ]
+}
+
+const db = vi.hoisted(() => ({ rows: [] as unknown[], stated: [] as unknown[], queryRaw: vi.fn(), mine: '1' }))
+
+vi.mock('@/lib/prisma', async () => {
+  /* Applies each read's `where` — see the helper for why a fixed answer no longer tests anything. */
+  const { fakeWeeklyMatchup } = await import('./helpers/fakeWeeklyMatchup')
+  return {
+  prisma: {
+    weeklyMatchup: fakeWeeklyMatchup(() => db.rows as Record<string, unknown>[]),
+    leagueTeam: {
+      findMany: async () => [
+        ...rosters.map((r) => ({ externalId: r, teamName: `G${r}`, ownerName: null, avatarUrl: null, claimedByUserId: r === db.mine ? 'user' : null, platformUserId: `g-${r}`, league: { id: 'AF-G', platform: 'sleeper', platformLeagueId: 'G' } })),
+        { externalId: '1', teamName: 'Mine', ownerName: null, avatarUrl: null, claimedByUserId: 'user', platformUserId: 'h-1', league: { id: 'AF-H', platform: 'sleeper', platformLeagueId: 'H' } },
+        { externalId: '2', teamName: 'Theirs', ownerName: null, avatarUrl: null, claimedByUserId: null, platformUserId: 'h-2', league: { id: 'AF-H', platform: 'sleeper', platformLeagueId: 'H' } },
+      ],
+    },
+    matchupFact: { findMany: async () => [] },
+    $queryRaw: db.queryRaw,
+    $queryRawUnsafe: async () => [],
+  },
+  }
+})
+
+import { BUBBLE_SIZE, choppedBefore, getRailMatchups, mostHavePlayed, standingIn } from '@/lib/core-app/railMatchups'
+
+beforeEach(() => {
+  db.rows = [...guillotineRows(), ...h2hRows()]
+  db.queryRaw.mockReset()
+  db.queryRaw.mockResolvedValue([{ id: 'AF-G', platformLeagueId: 'G', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '4' } }])
+})
+
+const call = () =>
+  getRailMatchups('user', [
+    { id: 'AF-G', platformLeagueId: 'G', elimination: true },
+    { id: 'AF-H', platformLeagueId: 'H' },
+  ])
+
+describe('choppedBefore', () => {
+  it('finds the three chopped teams from the score rows alone', () => {
+    expect([...choppedBefore(guillotineRows(), 4)].sort()).toEqual(['15', '2', '7'])
+  })
+  it('never counts the week in progress, where live teams sit at 0 before they play', () => {
+    expect([...choppedBefore(guillotineRows(), 4)]).not.toContain('3')
+  })
+  it('chops nobody on a tie at the bottom, rather than guess the provider’s tiebreak', () => {
+    const rows = [
+      { week: 1, rosterId: 'a', pointsFor: 50 },
+      { week: 1, rosterId: 'b', pointsFor: 50 },
+      { week: 1, rosterId: 'c', pointsFor: 90 },
+    ]
+    expect(choppedBefore(rows, 2).size).toBe(0)
+  })
+})
+
+describe('the rail in a guillotine league', () => {
+  it('is on the provider’s week 4, not stuck on week 2', async () => {
+    const result = await call()
+    expect(result.byLeague['AF-G']?.week).toBe(4)
+  })
+
+  it('ranks you in the LIVE field of 15, against a live team’s score — not a chopped team’s 0', async () => {
+    const standing = (await call()).byLeague['AF-G']?.standing
+    expect(standing?.outOf).toBe(15)
+    // Every live team at 0 this week has simply not played yet; the cut line is still 0, but no
+    // chopped team is in the field to make it so.
+    expect(standing?.rank).toBe(1)
+    // 9 of the 15 have points on the board — most have played, so this is the points reading.
+    expect(standing?.basis).toBe('points')
+  })
+
+  it('falls back to the row rule when the provider states no week (the old behaviour, unchanged)', async () => {
+    db.queryRaw.mockResolvedValue([])
+    expect((await call()).byLeague['AF-G']?.week).toBe(2)
+  })
+
+  it('marks YOUR team as chopped when it is, with no standing — you are not in the live field', async () => {
+    db.mine = '2' // the week-1 casualty
+    try {
+      const m = (await call()).byLeague['AF-G']
+      expect(m?.eliminated).toBe(true)
+      expect(m?.standing).toBeNull()
+    } finally {
+      db.mine = '1'
+    }
+  })
+
+  it('a live team is not marked chopped (the control)', async () => {
+    expect((await call()).byLeague['AF-G']?.eliminated).toBe(false)
+  })
+})
+
+/*
+ * 🛑 HEAD-TO-HEAD, MID-WEEK (the follow-up, measured the next morning). #1915 left head-to-head on the
+ * row rule as "right for them". It is not: once every matchup in a week has any points, no 0–0 row is
+ * left and the rule jumps to NEXT week's empty fixture while this week is still being played. Four
+ * small leagues were on "week 5" on Saturday of week 4; by Sunday afternoon nearly every league is.
+ */
+describe('the rail in a head-to-head league, mid-week', () => {
+  const midWeekRows = (): Row[] => [
+    // Week 4 under way: every row already has points from Thursday's game.
+    { leagueId: 'H', seasonYear: 2026, week: 4, rosterId: '1', matchupId: 1, pointsFor: 30, pointsAgainst: 12, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 4, rosterId: '2', matchupId: 1, pointsFor: 12, pointsAgainst: 30, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 5, rosterId: '1', matchupId: 1, pointsFor: 0, pointsAgainst: 0, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 5, rosterId: '2', matchupId: 1, pointsFor: 0, pointsAgainst: 0, updatedAt: AT },
+  ]
+  const hOnly = () => getRailMatchups('user', [{ id: 'AF-H', platformLeagueId: 'H' }])
+
+  it('stays on the provider’s week 4 while it is being played, instead of jumping to week 5', async () => {
+    db.rows = [...h2hRows().filter((r) => r.week === 3), ...midWeekRows()]
+    db.queryRaw.mockResolvedValue([{ id: 'AF-H', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '4' } }])
+    const m = (await hOnly()).byLeague['AF-H']
+    expect(m?.week).toBe(4)
+    expect(m?.yourScore).toBe(30)
+    expect(m?.opponentTeam).toBe('Theirs')
+  })
+
+  it('keeps the row rule where the provider states no week (the old behaviour, unchanged)', async () => {
+    db.rows = [...h2hRows().filter((r) => r.week === 3), ...midWeekRows()]
+    db.queryRaw.mockResolvedValue([])
+    expect((await hOnly()).byLeague['AF-H']?.week).toBe(5)
+  })
+
+  it('ignores a stated week the rows do not carry', async () => {
+    db.rows = [...h2hRows()]
+    db.queryRaw.mockResolvedValue([{ id: 'AF-H', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '9' } }])
+    expect((await hOnly()).byLeague['AF-H']?.week).toBe(4)
+  })
+
+  it('takes the furthest-along statement when one league has several rows, one of them stale', async () => {
+    db.rows = [...h2hRows().filter((r) => r.week === 3), ...midWeekRows()]
+    db.queryRaw.mockResolvedValue([
+      { id: 'AF-H', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '4' } },
+      { id: 'AF-H-old', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '2' } },
+    ])
+    expect((await hOnly()).byLeague['AF-H']?.week).toBe(4)
+  })
+})
+
+/*
+ * 🛑 PROJECTIONS UNTIL MOST TEAMS HAVE PLAYED (user's ruling, 2026-10-03). A live team that has not
+ * kicked off sits at 0, so ranking on points all Sunday morning put every such team — and you, if
+ * yours had not played — "at the cut". Measured live the same day: several guillotine leagues read
+ * "#3 of 15 · at the cut" on a Saturday.
+ */
+describe('standingIn: the basis follows how much of the field has played', () => {
+  const side = (v: number | null) => ({ projected: v, afProjected: v, pricedFrom: 9, starterCount: 9 })
+  /** Five live teams; you are 'a'. Projections: a 130 (best), b 120, c 110, d 100, e 90. */
+  const proj = new Map([['a', side(130)], ['b', side(120)], ['c', side(110)], ['d', side(100)], ['e', side(90)]])
+  const field = (points: Record<string, number>) => ['a', 'b', 'c', 'd', 'e'].map((id) => ({ rosterId: id, pointsFor: points[id] ?? 0 }))
+
+  it('a Saturday — two of five have played, you have not — ranks you on projection, clear of the cut', () => {
+    const s = standingIn({ field: field({ d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('projected')
+    expect(s?.rank).toBe(1)
+    expect(s?.overCut).toBe(40) // 130 over the lowest projection, 90 — not "at the cut" on a 0
+  })
+
+  it('switches to points once MOST of the field has played (three of five)', () => {
+    const s = standingIn({ field: field({ c: 80, d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('points')
+    expect(s?.overCut).toBeNull() // you are at 0 with most of the field in — that IS the cut now
+  })
+
+  it('exactly half is not most: two of four stays on projection', () => {
+    expect(mostHavePlayed(2, 4)).toBe(false)
+    expect(mostHavePlayed(3, 4)).toBe(true)
+    expect(mostHavePlayed(8, 15)).toBe(true)
+    expect(mostHavePlayed(7, 15)).toBe(false)
+  })
+
+  it('never ranks a half-priced field on projection: falls back to points, labelled points', () => {
+    const partial = new Map(proj)
+    partial.set('e', side(null))
+    const s = standingIn({ field: field({ a: 50, d: 40 }), yourRosterId: 'a', sides: partial, elimination: true })
+    expect(s?.basis).toBe('points')
+    expect(s?.rank).toBe(1)
+  })
+
+  it('before any snap with an unpriced side, says nothing rather than rank 0s', () => {
+    const partial = new Map(proj)
+    partial.delete('c')
+    expect(standingIn({ field: field({}), yourRosterId: 'a', sides: partial, elimination: true })).toBeNull()
+  })
+
+  it('before any snap with the field priced, ranks on projection (unchanged)', () => {
+    const s = standingIn({ field: field({}), yourRosterId: 'e', sides: proj, elimination: true })
+    expect(s?.basis).toBe('projected')
+    expect(s?.overCut).toBeNull()
+    expect(s?.rank).toBe(5)
+  })
+})
+
+/*
+ * 🛑 THE RAIL NO LONGER READS A HEAD-TO-HEAD LEAGUE'S WHOLE SEASON (2026-10-03). It read every row of
+ * the season for every league on every /core page — ~510–580 ms on a 65-league account — to keep one
+ * week. Only an elimination league's season is read whole, because `choppedBefore` replays it.
+ */
+describe('getRailMatchups — what it reads', () => {
+  it('🛑 reads the week summary, then only the resolved week — except an elimination league, read whole', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const findMany = vi.spyOn(prisma.weeklyMatchup, 'findMany')
+    findMany.mockClear()
+    await call()
+    const clauses = findMany.mock.calls.flatMap(([args]) => ((args as { where?: { OR?: Array<Record<string, unknown>> } })?.where?.OR ?? []))
+    /* Every row read names its league; only the elimination league is read without a week. */
+    expect(clauses.every((c) => typeof c.leagueId === 'string')).toBe(true)
+    const wholeSeason = clauses.filter((c) => c.week === undefined).map((c) => c.leagueId)
+    expect(wholeSeason).toEqual(['G'])
+    expect(clauses).toContainEqual({ leagueId: 'H', seasonYear: 2026, week: 4 })
+    /* The head-to-head league's week-3 rows are never fetched. */
+    const fetched = (await Promise.all(findMany.mock.results.map((r) => r.value))) as Array<Array<{ leagueId: string; week: number }>>
+    expect(fetched.flat().some((r) => r.leagueId === 'H' && r.week === 3)).toBe(false)
+    findMany.mockRestore()
+  })
+})
+
+/*
+ * The week's bubble (2026-10-03): an elimination league has no playoffs, so Scout's cards now say Safe /
+ * On the bubble / Eliminated by THIS week's ordering. The bubble is the bottom BUBBLE_SIZE of the same
+ * order the rank comes from, widened to ties.
+ */
+describe('standingIn: the bubble', () => {
+  const side = (v: number) => ({ projected: v, afProjected: v, pricedFrom: 9, starterCount: 9 })
+  const field = (ids: string[], points: Record<string, number> = {}) => ids.map((id) => ({ rosterId: id, pointsFor: points[id] ?? 0 }))
+
+  it('is the bottom three of the week, on the rank’s own basis', () => {
+    expect(BUBBLE_SIZE).toBe(3)
+    const proj = new Map([['a', side(130)], ['b', side(120)], ['c', side(110)], ['d', side(100)], ['e', side(90)]])
+    const s = standingIn({ field: field(['a', 'b', 'c', 'd', 'e']), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('projected')
+    expect([...(s?.bubble ?? [])].sort()).toEqual(['c', 'd', 'e'])
+  })
+
+  it('follows points once most have played — the order the cut is decided on', () => {
+    const proj = new Map([['a', side(130)], ['b', side(120)], ['c', side(110)], ['d', side(100)], ['e', side(90)]])
+    // Three of five have played; a (projected best) has 5 points, e (projected worst) has 60.
+    const s = standingIn({ field: field(['a', 'b', 'c', 'd', 'e'], { a: 5, c: 50, e: 60 }), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('points')
+    expect([...(s?.bubble ?? [])].sort()).toEqual(['a', 'b', 'd'])
+  })
+
+  it('takes in a tie at its edge rather than pick one side of it', () => {
+    const proj = new Map([['a', side(130)], ['b', side(100)], ['c', side(100)], ['d', side(90)], ['e', side(80)]])
+    const s = standingIn({ field: field(['a', 'b', 'c', 'd', 'e']), yourRosterId: 'a', sides: proj, elimination: true })
+    expect([...(s?.bubble ?? [])].sort()).toEqual(['b', 'c', 'd', 'e'])
+  })
+})

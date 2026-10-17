@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { PlayerDetail, RecommendedMove } from '@/lib/core-app/playerFinder'
@@ -192,6 +192,27 @@ describe('Player Finder — core view', () => {
     expect(link.getAttribute('href')).toBe('/core/players?q=Isaiah%20Likely&player=NFL%3Ari-9')
   })
 
+  it('shows "Most added this week" in the rail, each row opening that player', () => {
+    renderCore({
+      trendingAdds: {
+        rows: [{ sleeperId: '1339', name: 'Zach Ertz', position: 'TE', team: 'PHI', imageUrl: null, ref: 'NFL:E1339', leagues: 66 }],
+        activeLeagues: 189,
+        through: '2026-09-28T14:59:00.000Z',
+      },
+    })
+    const region = screen.getByRole('region', { name: 'Most added this week' })
+    expect(within(region).getByRole('link', { name: /Zach Ertz/ }).getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL%3AE1339')
+    expect(within(region).getByLabelText('added in 66 leagues')).toHaveTextContent('+66')
+    // English is pinned byte for byte; Spanish is core-finder-page-spanish's job.
+    expect(within(region).getByRole('heading').textContent).toBe('Most added this week')
+    expect(region.querySelector('.af-pf-trend-sub')?.textContent).toBe('of 189 leagues adding · through Sep 28')
+  })
+
+  it('no trending list, no empty card', () => {
+    renderCore({ trendingAdds: null })
+    expect(screen.queryByRole('region', { name: 'Most added this week' })).toBeNull()
+  })
+
   it('shows the league strip — one chip per league, FA where nobody has him, "?" where we cannot read', () => {
     renderCore({
       signedIn: true,
@@ -322,8 +343,9 @@ describe('Player Finder — core view', () => {
     renderCore({
       detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },
     })
-    expect(screen.getByText(/Not checked: Office Pool/)).toBeInTheDocument()
-    expect(screen.getByText(/ESPN player ids/)).toBeInTheDocument()
+    // Twice in the DOM: under the phone's league cards and under the desktop table — CSS shows one per width.
+    expect(screen.getAllByText(/Not checked: Office Pool/)).toHaveLength(2)
+    expect(screen.getAllByText(/ESPN player ids/)).toHaveLength(2)
   })
 
   it('says where he is across your leagues, and that someone else has him elsewhere', () => {
@@ -331,6 +353,8 @@ describe('Player Finder — core view', () => {
     expect(screen.getByText(/on 3 of your 6 leagues, across Yahoo, Sleeper and ESPN/)).toBeInTheDocument()
     expect(screen.getByText(/rostered by others in 1/)).toBeInTheDocument()
     expect(screen.getByText('Ready · Ankle')).toBeInTheDocument()
+    // 3 of the 6 leagues the finder reads: half your fantasy life (playerFun.exposureOf, 2026-10-08).
+    expect(screen.getByText('50% exposure · Core piece')).toBeInTheDocument()
   })
 
   it('renders every league as a row, with the manager who has him named', () => {
@@ -342,6 +366,34 @@ describe('Player Finder — core view', () => {
     expect(gang).toHaveAttribute('data-tone', 'other')
     expect(within(gang).getByText('rostered by @tashaR')).toBeInTheDocument()
     expect(within(gang).getByRole('link', { name: /Trade for Kincaid/ })).toHaveAttribute('href', '/core/trades?league=L-gang')
+  })
+
+  /*
+   * Guap, 2026-10-08: a 65-league manager read 4 rows of his and 52 of other people's. Past
+   * OTHERS_FOLD_AFTER, other managers' rows fold behind one toggle; yours never do.
+   */
+  it('folds other managers’ rows behind one toggle once there are more than a few, and never folds yours', () => {
+    const gang = DETAIL.leagues.available ? DETAIL.leagues.data[3]! : null
+    const others = Array.from({ length: 6 }, (_, i) => ({ ...gang!, leagueId: `L-o${i}`, leagueName: `Other ${i}` }))
+    const leagues = DETAIL.leagues.available ? [...DETAIL.leagues.data, ...others] : []
+    renderCore({ detail: { ...DETAIL, leagues: { available: true, data: leagues } }, leagueCount: 12 })
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(3)
+    // One toggle under the phone's cards, one under the desktop table — one state, CSS shows one per width.
+    const [phoneToggle, tableToggle] = screen.getAllByRole('button', { name: 'Show the 7 leagues where someone else has him' })
+    expect(phoneToggle!.closest('.af-pf-cards')).not.toBeNull()
+    fireEvent.click(tableToggle!)
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(10)
+    for (const b of screen.getAllByRole('button', { name: 'Show only your leagues' })) expect(b).toHaveAttribute('aria-expanded', 'true')
+    // The header still counts them — folding hides rows, not facts.
+    expect(screen.getByText(/rostered by others in 7/)).toBeInTheDocument()
+  })
+
+  it('offers "Alert me" on the open card when follows are available, and nothing when they are not', () => {
+    const { unmount } = renderCore({ followingPlayer: false })
+    expect(screen.getByRole('button', { name: /Alert me about Dalton Kincaid/ })).toHaveAttribute('aria-pressed', 'false')
+    unmount()
+    renderCore()
+    expect(screen.queryByRole('button', { name: /Alert me/ })).toBeNull()
   })
 
   it('a benched player who beats a starter is a red row that links to the platform lineup', () => {
@@ -595,9 +647,10 @@ describe('Player Finder — game day', () => {
     expect(buttons[0]).toHaveAttribute('target', '_blank')
     // The fixture's Yahoo slot carries no team id, so the verified lineup format cannot build; the league page is offered and labelled as such.
     expect(buttons[0].textContent).toMatch(/^Open (lineup in Yahoo|in Yahoo · League)/)
-    // The banner sits above the tiles, at the top of the card.
+    // The banner sits above the tiles, at the top of the card — with the phone's league cards right under it (2026-10-08).
     const card = banner.closest('.af-pf-detail') as HTMLElement
-    expect(card.querySelector('.af-pf-gameday + .af-pf-compare-entry')).not.toBeNull()
+    expect(card.querySelector('.af-pf-gameday + .af-pf-cards')).not.toBeNull()
+    expect(card.querySelector('.af-pf-cards ~ .af-pf-compare-entry')).not.toBeNull()
   })
 
   it('offers no Open-lineup button for a best-ball league — the platform sets that lineup itself', () => {

@@ -303,7 +303,7 @@ describe('My Team — the reported problems', () => {
     expect(t).toContain('118.4')
     expect(t).toContain('131.7')
     expect(t).toContain('127.3')
-    expect(t).toContain('Projected · API · your league')
+    expect(t).toContain('Projected · Sleeper · your league')
     expect(t).toContain('Projected · AF · your league')
   })
 
@@ -402,7 +402,23 @@ describe('My Team — the reported problems', () => {
     )
     expect(t).toContain('TAXI')
     expect(t).toContain('Taxi squad')
-    expect(t).toContain('1 of 2 year left')
+    /* The noun agrees with the count beside it — this read "1 of 2 year left" until 2026-10-03. */
+    expect(t).toContain('1 year left of 2')
+    expect(t).not.toContain('of 2 year left')
+  })
+
+  it('pluralises taxi years on the count it sits beside', () => {
+    const t = text(
+      <MyTeam
+        data={data({
+          taxi: {
+            available: true,
+            data: [{ ...player({ sleeperId: 't1' }), tenure: { yearsUsed: 1, yearsAllowed: 3, yearsRemaining: 2 } }],
+          } as never,
+        })}
+      />,
+    )
+    expect(t).toContain('2 years left of 3')
   })
 
   it('refuses to guess taxi years when the history is missing', () => {
@@ -498,20 +514,20 @@ describe('My Team — the reported problems', () => {
     expect(bench.textContent).toMatch(/\d+%/)
   })
 
-  it('⚠ labels the columns API and AF, with an explainer naming both sources', () => {
-    const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('API')
-    expect(t).toContain('AF')
-    const explainer = render(<MyTeam data={data()} />).container
-      .querySelector('.af-mt-info')?.getAttribute('aria-label') ?? ''
-    expect(explainer).toContain('provider')
+  it('⚠ labels the columns Sleeper and AF, with an explainer naming both sources', () => {
+    /* "Sleeper", not "API" (2026-10-03): the column is named for who made the projection. */
+    const c0 = render(<MyTeam data={data()} />).container
+    expect(c0.querySelector('.af-mt-projhead--af')?.textContent).toContain('Sleeper')
+    expect(c0.querySelector('.af-mt-projhead--engine')?.textContent).toBe('AF')
+    /* The "?" is a button now (2026-10-03); the explainer is the popover it opens, not its label. */
+    const c = render(<MyTeam data={data()} />).container
+    const info = c.querySelector('.af-mt-projhead button.af-info-tip')
+    expect(info).toBeTruthy()
+    const explainer = c.querySelector(`[id="${info?.getAttribute('popovertarget')}"]`)?.textContent ?? ''
+    expect(explainer).toContain('Sleeper’s own projection')
     expect(explainer).toContain('AllFantasy')
     // Two numbers side by side with no explanation read as a bug, not a feature.
-    const c = render(<MyTeam data={data()} />).container
-    expect(c.querySelector('.af-mt-info')).toBeTruthy()
-    expect(c.querySelector('.af-mt-info')?.getAttribute('aria-label')?.toLowerCase()).toContain(
-      'your league',
-    )
+    expect(explainer.toLowerCase()).toContain('your league')
   })
 
   it('prints an em dash when the sample is too small to publish a rate', () => {
@@ -662,6 +678,8 @@ describe('My Team — the reported problems', () => {
       ['Injured Reserve', 'IR'],
       ['Did Not Practice', 'DNP'],
       ['Active', 'H'],
+      // "Inactive" contains "active" and used to render as a green H.
+      ['Inactive', 'INA'],
     ]
     for (const [full, short] of cases) {
       const c = render(
@@ -684,6 +702,62 @@ describe('My Team — the reported problems', () => {
       ).container
       expect(c.querySelector('.af-mt-status')?.textContent).toBe(short)
     }
+  })
+
+  /*
+   * On a phone the game line never fits on one line, and it wrapped mid-phrase —
+   * "WAS vs IND · Sun / 9:30a ET". The matchup and the kickoff are now separate
+   * whole pieces, so af-my-team.css can put the break between them.
+   */
+  it('splits the game line into matchup and kickoff, keeping the full text', () => {
+    const c = render(<MyTeam data={data()} />).container
+    const meta = c.querySelector('.af-mt-player-meta')!
+    expect(meta.querySelector('.af-mt-opp')?.textContent).toBe('DEN vs MIA')
+    expect(meta.querySelector('.af-mt-sep')?.textContent).toBe(' · ')
+    expect(meta.querySelector('.af-mt-when')?.textContent).toBe('Sun 9:05p')
+    expect(meta.textContent).toContain('DEN vs MIA · Sun 9:05p')
+  })
+
+  it('keeps a game line with no kickoff, and the no-game note, as plain text', () => {
+    const one = (gameContext: string | null) =>
+      render(
+        <MyTeam
+          data={data({
+            starters: { available: true, data: [{ slotLabel: 'QB', player: player({ gameContext }), empty: false, unresolvedId: null }] },
+            bench: { available: false, reason: 'none' },
+          })}
+        />,
+      ).container.querySelector('.af-mt-player-meta')!
+    const bare = one('DEN vs MIA')
+    expect(bare.querySelector('.af-mt-opp')).toBeNull()
+    expect(bare.textContent).toContain('DEN vs MIA')
+    expect(one(null).textContent).toContain('no game found for this week')
+  })
+
+  /*
+   * In an IDP league the standard tile reads "—" and explains why, but the footnote still
+   * said "Standard total built from 7 of 16 starters … so it reads low" (live, 2026-10-02).
+   */
+  it('drops the standard-coverage footnote in an IDP league, where no standard total is shown', () => {
+    const idp = (standardComparable: boolean) =>
+      render(
+        <MyTeam
+          data={data({
+            projections: {
+              available: true,
+              data: {
+                total: 80, projected: 7, unprojected: 9, season: '2026', week: 4,
+                afTotal: 165.7, afEngineTotal: 138.6, afProjected: 15, standardComparable,
+              },
+            },
+          })}
+        />,
+      ).container.textContent ?? ''
+    const withheld = idp(false)
+    expect(withheld).toContain('Standard scoring does not price defenders')
+    expect(withheld).not.toContain('Standard total built from')
+    // Control: the same coverage in a league with a standard total keeps its footnote.
+    expect(idp(true)).toContain('Standard total built from 7 of 16 starters')
   })
 
   it('shows an unfamiliar designation as-is rather than inventing a letter', () => {
@@ -799,4 +873,32 @@ it('shows automatic lineup guidance for a confirmed Best Ball league',()=>{
  expect(view.container.textContent).not.toContain('first kickoff')
  expect(view.container.textContent).toContain('manual start/sit swaps are not needed')
  view.unmount()
+})
+
+describe('lineup decision card', () => {
+  const card = (value: MyTeamData) => render(<MyTeam data={value} />).container.querySelector('.af-mt-decision')?.textContent ?? ''
+  const swap = { verdict: 'swap' as const, starterName: 'Bo Nix', starterProjected: 19.8, benchName: 'Bench QB', benchProjected: 25 }
+  it('shows provider lock review for an out starter after kickoff', () => {
+    const t = card(data({ starters: { available: true, data: [{ slotLabel: 'QB', empty: false, unresolvedId: null, benchCheck: null, player: player({ ruledOut: true, kickoff: new Date(NOW.getTime() - 1) }) }] } }))
+    expect(t).toContain("Review Bo Nix's lock")
+    expect(t).toContain('does not establish that a lineup change is allowed')
+    expect(t).not.toContain('Replace Bo Nix')
+  })
+  it('says when league scoring disagrees with the standard bench check', () => {
+    const t = card(data({
+      starters: { available: true, data: [{ slotLabel: 'QB', empty: false, unresolvedId: null, benchCheck: swap, player: player() }] },
+      bench: { available: true, data: [player({ sleeperId: 'b1', name: 'Bench QB', afProjectedPoints: 18 })] },
+    }))
+    expect(t).toContain("This league's scoring does not favor the bench option")
+    expect(t).not.toContain('difference is unavailable')
+  })
+  it('includes unpriced starters in league projection coverage', () => {
+    const d = data()
+    if (!d.projections.available) throw new Error('fixture')
+    const t = card(data({ projections: { available: true, data: { ...d.projections.data, projected: 5, unprojected: 3, afProjected: 4 } } }))
+    expect(t).toContain('4 of 8 starters priced for this league')
+  })
+  it('does not show manual decisions for Best Ball', () => {
+    expect(card(data({ bestBall: true }))).toBe('')
+  })
 })

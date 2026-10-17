@@ -6,7 +6,7 @@
 import { prisma } from '@/lib/prisma'
 import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
 import { getFinalNomineeRosterIds } from './BigBrotherNominationEngine'
-import { getSeasonPointsFromRosterPerformance } from '@/lib/survivor/SurvivorVoteEngine'
+import { getBigBrotherSeasonPoints as getSeasonPointsFromRosterPerformance } from './BigBrotherScores'
 import type { BigBrotherVoteTally } from './types'
 import { syncBigBrotherVoteProgressChat } from './BigBrotherVoteProgressChat'
 
@@ -24,13 +24,14 @@ const defaultSeasonPoints: SeasonPointsSource = {
 export async function getEligibleVoterRosterIds(
   leagueId: string,
   cycleId: string,
-  hohVotesOnlyInTie: boolean
+  hohVotesOnlyInTie: boolean,
+  includeHohTieBallot = false
 ): Promise<string[]> {
   const cycle = await prisma.bigBrotherCycle.findUnique({
     where: { id: cycleId },
     select: { leagueId: true, hohRosterId: true },
   })
-  if (!cycle) return []
+  if (!cycle || cycle.leagueId !== leagueId) return []
 
   const evicted = await prisma.bigBrotherCycle.findMany({
     where: { leagueId, evictedRosterId: { not: null } },
@@ -45,7 +46,8 @@ export async function getEligibleVoterRosterIds(
     select: { id: true },
   })
   let ids = rosters.map((r) => r.id).filter((id) => !nomSet.has(id))
-  if (hohVotesOnlyInTie && cycle.hohRosterId) {
+  // At final three the HOH is the sole eligible evictor; excluding them leaves no ballot.
+  if (hohVotesOnlyInTie && cycle.hohRosterId && rosters.length > 3 && !includeHohTieBallot) {
     ids = ids.filter((id) => id !== cycle.hohRosterId)
   }
   return ids
@@ -61,31 +63,36 @@ export async function submitEvictionVote(
 ): Promise<{ ok: boolean; error?: string }> {
   const cycle = await prisma.bigBrotherCycle.findUnique({
     where: { id: cycleId },
-    select: { leagueId: true, configId: true, phase: true, voteDeadlineAt: true, closedAt: true },
+    select: { leagueId: true, configId: true, phase: true, voteDeadlineAt: true, voteOpenedAt: true, closedAt: true },
   })
   if (!cycle) return { ok: false, error: 'Cycle not found' }
   if (cycle.closedAt) return { ok: false, error: 'Voting closed' }
   const phase = (cycle.phase as string) ?? ''
-  if (phase !== 'VOTING_OPEN' && phase !== 'VOTING_LOCKED') {
+  if (phase !== 'VOTING_OPEN') {
     return { ok: false, error: 'Voting is not open for this cycle' }
   }
-  if (cycle.voteDeadlineAt && new Date() > cycle.voteDeadlineAt) return { ok: false, error: 'Vote deadline passed' }
+  if (cycle.voteOpenedAt && new Date() < cycle.voteOpenedAt) return { ok: false, error: 'Voting window has not started' }
+  if (cycle.voteDeadlineAt && new Date() >= cycle.voteDeadlineAt) return { ok: false, error: 'Vote deadline passed' }
 
   const config = await getBigBrotherConfig(cycle.leagueId)
   if (!config) return { ok: false, error: 'Not a Big Brother league' }
 
-  const eligible = await getEligibleVoterRosterIds(cycle.leagueId, cycleId, config.hohVotesOnlyInTie)
+  const eligible = await getEligibleVoterRosterIds(cycle.leagueId, cycleId, config.hohVotesOnlyInTie, config.evictionTieBreakMode === 'hoh_vote')
   if (!eligible.includes(voterRosterId)) return { ok: false, error: 'Not eligible to vote' }
 
   const finalNoms = await getFinalNomineeRosterIds(cycleId)
   if (!finalNoms.includes(targetRosterId)) return { ok: false, error: 'Target must be on the block' }
 
-  await prisma.bigBrotherEvictionVote.upsert({
-    where: { cycleId_voterRosterId: { cycleId, voterRosterId } },
-    create: { cycleId, voterRosterId, targetRosterId },
-    update: { targetRosterId },
+  const written = await prisma.$transaction(async tx => {
+    const now = new Date()
+    const gate = await tx.bigBrotherCycle.updateMany({ where: { id: cycleId, phase: 'VOTING_OPEN', closedAt: null,
+      AND: [{ OR: [{ voteDeadlineAt: null }, { voteDeadlineAt: { gt: now } }] }, { OR: [{ voteOpenedAt: null }, { voteOpenedAt: { lte: now } }] }] }, data: { updatedAt: now } })
+    if (gate.count !== 1) return false
+    await tx.bigBrotherEvictionVote.upsert({ where: { cycleId_voterRosterId: { cycleId, voterRosterId } }, create: { cycleId, voterRosterId, targetRosterId }, update: { targetRosterId } })
+    return true
   })
-  void syncBigBrotherVoteProgressChat(cycle.leagueId, cycleId)
+  if (!written) return { ok: false, error: 'Voting closed or cycle changed' }
+  void syncBigBrotherVoteProgressChat(cycle.leagueId, cycleId).catch(() => {})
   return { ok: true }
 }
 
@@ -104,8 +111,13 @@ export async function tallyEvictionVotes(
     return { cycleId, votesByTarget: {}, tied: false, evictedRosterId: null, tieBreakSeasonPoints: null }
   }
 
+  const config = await getBigBrotherConfig(cycle.leagueId)
+  const finalNoms = await getFinalNomineeRosterIds(cycleId)
+  if (finalNoms.length !== 2) return { cycleId, votesByTarget: {}, tied: false, evictedRosterId: null, tieBreakSeasonPoints: null }
+  const eligible = new Set(await getEligibleVoterRosterIds(cycle.leagueId, cycleId, config?.hohVotesOnlyInTie ?? true))
   const votesByTarget: Record<string, number> = {}
   for (const v of cycle.votes) {
+    if (!eligible.has(v.voterRosterId) || !finalNoms.includes(v.targetRosterId)) continue
     votesByTarget[v.targetRosterId] = (votesByTarget[v.targetRosterId] ?? 0) + 1
   }
   const targets = Object.keys(votesByTarget)
@@ -118,7 +130,6 @@ export async function tallyEvictionVotes(
   let evictedRosterId: string | null = null
   let tieBreakSeasonPoints: Record<string, number> | null = null
 
-  const config = await getBigBrotherConfig(cycle.leagueId)
   const tieBreakMode = config?.evictionTieBreakMode ?? 'season_points'
 
   if (tiedTargets.length === 1) {
@@ -135,6 +146,9 @@ export async function tallyEvictionVotes(
       let h = 0
       for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0
       evictedRosterId = tiedTargets[Math.abs(h) % tiedTargets.length]
+    }
+    if (!evictedRosterId && (tieBreakMode === 'commissioner' || tieBreakMode === 'hoh_vote')) {
+      return { cycleId, votesByTarget, tied: true, evictedRosterId: null, tieBreakSeasonPoints: null }
     }
     if (!evictedRosterId) {
       const points: Record<string, number> = {}

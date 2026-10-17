@@ -3,6 +3,7 @@ import { resolvePlatformUser } from "@/lib/platform/current-user"
 import { createPlatformThread } from "@/lib/platform/chat-service"
 import { prisma } from "@/lib/prisma"
 import { hasBlockBetween } from "@/lib/moderation"
+import { chatRateLimitResponse } from "@/lib/chat-core/chatRateLimits"
 
 /**
  * POST /api/shared/chat/dm/start
@@ -12,6 +13,9 @@ import { hasBlockBetween } from "@/lib/moderation"
 export async function POST(req: NextRequest) {
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const limited = chatRateLimitResponse(user.appUserId, "dm_start")
+  if (limited) return limited
 
   const body = await req.json().catch(() => ({}))
   const username = String(body?.username ?? "").trim()

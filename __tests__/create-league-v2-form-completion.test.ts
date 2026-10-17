@@ -10,7 +10,7 @@ import {
 import { normalizeLegacyManualCreateBody, finalizeCanonicalCreatePayload } from '@/lib/league-creation/normalizeCreateLeaguePayload'
 import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
-import { SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
+import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 
 function baseValidRedraft() {
   return {
@@ -138,7 +138,8 @@ describe('payload normalization unchanged after form layer', () => {
       setClientLeagueCreateOptionsCatalog(withCatalog ? LEAGUE_CREATE_OPTIONS_CATALOG_V1 : null)
       const label = withCatalog ? 'catalog loaded' : 'pre-fetch fallback'
 
-      for (const teamCount of SURVIVOR_CAST_SIZE_OPTIONS) {
+      // New leagues are offered 16 or 20 (2026-10-12); 17-19 stay valid for existing leagues only.
+      for (const teamCount of SURVIVOR_CREATE_CAST_SIZES) {
         const issues = analyzeCreateLeagueCompletion({
           ...baseValidRedraft(),
           leagueType: 'survivor' as const,

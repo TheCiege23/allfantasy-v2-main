@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto'
 
 import { prisma } from '@/lib/prisma'
 import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer'
+import { newsClub, type NewsIdentityCandidate } from '@/lib/notifications/newsPlayerBinding'
+import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 
 /**
  * Follow a player across every league — retention item 3 (user decisions, 2026-09-14).
@@ -153,26 +155,78 @@ export async function followPlayer(userId: string, input: FollowPlayerInput): Pr
 }
 
 /**
- * Everyone following a player, for a sender that only knows his NAME (player news rows
- * carry no id). Matched case-insensitively on the stored snapshot name within the sport;
- * the snapshot is refreshed on every follow, and a name that matches two different players
- * in one sport notifies both followers — the same trade-off the roster path already makes
- * with its `contains` match, and narrower than it.
+ * Everyone following ONE player, for the news sender — keyed on his Sleeper id, never on his name.
  *
- * `null` when follows are unavailable, so a sender skips rather than treating it as "nobody".
+ * 🛑 THIS WAS `lower(name) = lower(<news name>)` (until 2026-10-11), and a name is not a player:
+ * a follow of QB Josh Allen (BUF) matched every story about DL Josh Allen (JAX), and the reverse —
+ * and QB Josh Allen is a live follow in production. Now:
+ *   - a follow carrying a `sleeper_id` is his only when that id IS his; any other id is some other
+ *     player, whatever the snapshot name says;
+ *   - a follow with only a name (no Sleeper id — other sports) is resolved against the same registry
+ *     candidates the story was bound with, using its own position and team snapshot, and counts only
+ *     if verified matching lands on THIS identity. An ambiguous follow is refused.
+ *
+ * The caller binds the story first (lib/notifications/newsPlayerBinding) and must not call this for
+ * a story it could not bind. `null` when follows are unavailable, so a sender skips rather than
+ * treating it as "nobody".
  */
-export async function listFollowerIdsForPlayer(
+export async function listFollowerIdsForPlayerIdentity(
   sport: string,
-  playerName: string,
+  player: {
+    identity: NewsIdentityCandidate
+    /** Every registry identity sharing the name, `identity` included. */
+    candidates: readonly NewsIdentityCandidate[]
+    /** The name as the story spelled it, so a follow stored under that spelling is still seen. */
+    newsName?: string | null
+  },
   limit = 5000,
 ): Promise<string[] | null> {
-  const name = String(playerName ?? '').trim()
-  if (!name) return []
+  const S = normalizeFollowSport(sport)
+  const sleeperId = player.identity.sleeperId?.trim() || null
+  const canonical = String(player.identity.name ?? '').trim()
+  const spelled = String(player.newsName ?? '').trim() || canonical
+  if (!S || !canonical) return []
+  type Row = { user_id: string; sleeper_id: string | null; name: string; position: string | null; team: string | null }
+  let rows: Row[]
+  try {
+    rows = await prisma.$queryRaw<Row[]>`
+      SELECT "user_id", "sleeper_id", "name", "position", "team" FROM "player_follows"
+      WHERE "sport" = ${S}
+        AND ("sleeper_id" = ${sleeperId ?? ''} OR lower("name") = lower(${canonical}) OR lower("name") = lower(${spelled}))
+      LIMIT ${limit}
+    `
+  } catch (err) {
+    if (isMissingDatabaseObjectError(err)) return null
+    throw err
+  }
+  const index = buildNameIndex([...player.candidates])
+  const out = new Set<string>()
+  for (const r of rows) {
+    const followed = r.sleeper_id?.trim() || null
+    if (followed) {
+      if (sleeperId && followed === sleeperId) out.add(r.user_id)
+      continue
+    }
+    const m = resolveVerifiedMatch(index, { name: r.name, position: r.position, team: newsClub(r.team, S) })
+    if (m.match?.id === player.identity.id) out.add(r.user_id)
+  }
+  return [...out]
+}
+
+/**
+ * Everyone following at least one player of this sport who carries a Sleeper id — the audience of
+ * the "he's free in your league" alert (lib/follows/followFreeAgentCheck.ts), whose roster join is
+ * Sleeper-keyed. Most recently active followers first, so a capped run reaches people still using
+ * the feature. `null` when follows are unavailable.
+ */
+export async function listFollowingUserIds(sport: string, limit = 500): Promise<string[] | null> {
   try {
     const rows = await prisma.$queryRaw<Array<{ user_id: string }>>`
-      SELECT DISTINCT "user_id" FROM "player_follows"
-      WHERE "sport" = ${normalizeFollowSport(sport)} AND lower("name") = lower(${name})
-      LIMIT ${limit}
+      SELECT "user_id" FROM "player_follows"
+      WHERE "sport" = ${normalizeFollowSport(sport)} AND "sleeper_id" IS NOT NULL
+      GROUP BY "user_id"
+      ORDER BY max("created_at") DESC
+      LIMIT ${Math.max(1, limit)}
     `
     return rows.map((r) => r.user_id)
   } catch (err) {

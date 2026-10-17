@@ -13,8 +13,9 @@
  * commissioner says it scores. What these give is a defensible baseline so a projection can exist
  * at all; `rescoreForLeague` remains the path for a league's own settings.
  *
- * SOCCER is the only supported sport with no rules here, and that is not squeamishness: the vendor
- * serves no player season stats for it at all, so there is nothing to score. NCAAB shares NBA's
+ * SOCCER had no rules here until 2026-10-09, because the vendor serves no player season stats for it.
+ * Its season lines are now built from the per-match rows (`./soccerSeasonLines.ts`), already in the
+ * engine's keys, and scored on the soccer panel's AF default — see SOCCER_RULES. NCAAB shares NBA's
  * rules because it shares NBA's measured stat vocabulary — see RULES_BY_SPORT.
  *
  * WHY DRAFTKINGS CONVENTIONS. Not arbitrary preference — this codebase already treats DK as the
@@ -24,14 +25,16 @@
  * checkable reference rather than a number somebody made up here.
  */
 
+import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
+
 import type { SeasonAggregate } from './types'
 
 /** Sports this module can score. Anything else must keep refusing rather than be defaulted. */
-export type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+export type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 export function isCategoryScoredSport(sport: string | null | undefined): sport is CategorySport {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'MLB' || s === 'NBA' || s === 'NHL' || s === 'NCAAB'
+  return s === 'MLB' || s === 'NBA' || s === 'NHL' || s === 'NCAAB' || s === 'SOCCER'
 }
 
 /**
@@ -113,10 +116,27 @@ const NHL_RULES: Record<string, number> = {
   shutouts: 4,
 }
 
+/**
+ * Soccer, on what an UNSAVED soccer league actually scores: the scoring panel's AF default, read through
+ * the same bridge the league scorer uses (`lib/redraft/uiScoringStoreBridge.ts`), already in the engine's
+ * keys — the ones `soccerSeasonLines` emits.
+ *
+ * 🛑 NOT THE ENGINE CONFIG'S `defaultPoints` (lib/sportConfig/configs/soccer.ts). Those leave minutes,
+ * shots and a keeper's goals against at 0; the panel default scores 0.02 a minute (1.8 for a full match),
+ * 0.5 a shot on target, 0.2 a shot and -1 a goal conceded, and the bridge's own comment says that is what
+ * an unsaved league scores. This read the config for one commit (#2194) and so projected a different
+ * scoring from the one every soccer league and the soccer trade grade use. Zero weights are left out;
+ * `own_goal` never matches because the vendor sends no own-goal field.
+ */
+const SOCCER_RULES: Record<string, number> = Object.fromEntries(
+  Object.entries(bridgeSportUiScoringStore('SOCCER', null) ?? {}).filter(([, weight]) => weight !== 0),
+)
+
 const RULES_BY_SPORT: Record<CategorySport, Record<string, number>> = {
   MLB: MLB_RULES,
   NBA: NBA_RULES,
   NHL: NHL_RULES,
+  SOCCER: SOCCER_RULES,
   /*
    * College basketball scores the same categories as the NBA, on the SAME MEASURED VOCABULARY —
    * not an assumption from the sports being alike. Checked against production: `points`,

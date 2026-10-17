@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * Commissioner pick editor (Slice 1): paused draft only, audit log, session version bump.
  * Player presentation (playerId / playerImageUrl) uses resolveDraftPickPresentation like submitPick.
@@ -210,6 +211,7 @@ async function runSpecialtyAndPoolValidation(params: {
  * Apply a commissioner pick edit while the draft is paused. Increments session version, writes audit row, invalidates draft caches.
  */
 export async function commissionerPickEdit(params: CommissionerPickEditParams): Promise<CommissionerPickEditResult> {
+  if (await isSeasonTournamentDraft(params.leagueId)) return { ok: false, status: 409, code: 'TOURNAMENT_RULES_FROZEN', error: SEASON_DRAFT_MUTATION_BLOCKED }
   const { isLeagueRosterDraftReady } = await import('@/lib/league/league-roster-draft-gate')
   if (!(await isLeagueRosterDraftReady(params.leagueId))) {
     return {

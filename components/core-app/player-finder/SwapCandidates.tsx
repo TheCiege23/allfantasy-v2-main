@@ -1,5 +1,12 @@
+'use client'
+
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import { playerLock, type Kickoffs } from '@/lib/core-app/swapLegality'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+
+/** Where a candidate sits now (playerImpact.ts `from`), in Spanish. */
+const FROM_ES: Record<string, string> = { BENCH: 'BANCA', IR: 'IR', TAXI: 'TAXI' }
 
 /**
  * "Swap candidates on your bench" — the handoff's right-column panel.
@@ -26,6 +33,9 @@ import { playerLock, type Kickoffs } from '@/lib/core-app/swapLegality'
  * sorted last: sending someone to the platform for a swap it will refuse is
  * worse than saying so here. Read from the week's kickoffs; a club not in the
  * map is not claimed locked.
+ *
+ * Spanish (2026-10-04): the locked read is swapLegality.ts's English "kicked off Sun 1:00p ET", translated
+ * by `coreUiCopy` (its weekday through `kickoffText`); the rest is inline es/en.
  */
 
 type Row = {
@@ -41,6 +51,9 @@ type Row = {
 }
 
 export function SwapCandidates({ impact, kickoffs = {}, nowIso = null }: { impact: LeagueImpact[]; kickoffs?: Kickoffs; nowIso?: string | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const copy = (english: string) => coreUiCopy(english, language)
   const rows: Row[] = []
   for (const league of impact) {
     if (!league.replacements.available) continue
@@ -76,16 +89,23 @@ export function SwapCandidates({ impact, kickoffs = {}, nowIso = null }: { impac
   const lockedCount = rows.filter((r) => r.locked).length
 
   return (
-    <section className="af-card af-pf-swaps" aria-label="Swap candidates on your bench">
-      <h3 className="af-label af-pf-swaps-title">Swap candidates on your bench</h3>
+    <section className="af-card af-pf-swaps" aria-label={es ? 'Candidatos para el cambio en tu banca' : 'Swap candidates on your bench'}>
+      <h3 className="af-label af-pf-swaps-title">{es ? 'Candidatos para el cambio en tu banca' : 'Swap candidates on your bench'}</h3>
       <ul className="af-pf-swap-list">
         {rows.slice(0, 8).map((row) => (
           <li key={row.key} className="af-pf-swap-row" data-locked={row.locked ? 'true' : undefined}>
             <span className="af-pf-swap-text">
               <span className="af-pf-swap-name">{row.name}</span>
               <span className="af-pf-swap-meta af-num">
-                {[row.leagueName, row.from, row.injuryStatus].filter(Boolean).join(' · ')}
-                {row.locked ? <span className="af-pf-swap-lock"> · locked · {row.locked}</span> : null}
+                {[row.leagueName, es ? (FROM_ES[row.from] ?? row.from) : row.from, row.injuryStatus ? copy(row.injuryStatus) : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+                {row.locked ? (
+                  <span className="af-pf-swap-lock">
+                    {' '}
+                    · {es ? 'bloqueado' : 'locked'} · {copy(row.locked)}
+                  </span>
+                ) : null}
               </span>
             </span>
             <span
@@ -99,11 +119,21 @@ export function SwapCandidates({ impact, kickoffs = {}, nowIso = null }: { impac
           </li>
         ))}
       </ul>
-      <p className="af-pf-swaps-foot">
-        Points are under each league&apos;s own scoring, so the same player can be
-        worth more in one than another. Green beats the player you searched.
-        {lockedCount > 0 ? ` ${lockedCount} ${lockedCount === 1 ? 'is' : 'are'} locked — their games have kicked off, so they cannot come in now.` : ''}
-      </p>
+      {es ? (
+        <p className="af-pf-swaps-foot">
+          Los puntos usan la puntuación de cada liga, así que el mismo jugador puede valer más en una que en otra. En verde, quien
+          supera al jugador que buscaste.
+          {lockedCount > 0
+            ? ` ${lockedCount} ${lockedCount === 1 ? 'está bloqueado: su partido ya empezó, así que no puede entrar ahora.' : 'están bloqueados: sus partidos ya empezaron, así que no pueden entrar ahora.'}`
+            : ''}
+        </p>
+      ) : (
+        <p className="af-pf-swaps-foot">
+          Points are under each league&apos;s own scoring, so the same player can be
+          worth more in one than another. Green beats the player you searched.
+          {lockedCount > 0 ? ` ${lockedCount} ${lockedCount === 1 ? 'is' : 'are'} locked — their games have kicked off, so they cannot come in now.` : ''}
+        </p>
+      )}
     </section>
   )
 }

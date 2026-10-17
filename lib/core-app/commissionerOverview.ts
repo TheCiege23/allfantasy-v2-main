@@ -58,6 +58,7 @@ export type OverviewTone = 'good' | 'warn' | 'bad' | 'muted'
 
 export type OverviewLeagueCard = {
   leagueId: string
+  variant: string | null
   name: string
   platform: string
   sub: string
@@ -315,6 +316,7 @@ export async function getCommissionerOverview(input: {
         : null
     return {
       leagueId: b.row.id,
+      variant: b.row.leagueVariant,
       name: b.name,
       platform: String(b.row.platform ?? '').toLowerCase(),
       sub,

@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { translations } from '@/lib/i18n/translations'
+
 const root = process.cwd()
 
 function read(path: string): string {
@@ -44,14 +46,23 @@ describe('G32 NFL redraft league home contracts', () => {
     const modalPanel = read('app/league/[leagueId]/components/settings/AiLeagueSettingsPanel.tsx')
     const compactTab = read('components/league-settings/tabs/AISettingsTab.tsx')
 
-    expect(settingsHub).toContain("label: 'Commissioner Intelligence'")
-    expect(settingsHub).toContain("label: 'League Helper'")
+    // Since 2026-10-05 the hub's tab labels and the compact tab's intro are dictionary keys (the
+    // created-league settings read Spanish too), so the customer-safe names are pinned where they
+    // now live — and the "Decision OS" negative covers the dictionary values in BOTH languages.
+    expect(settingsHub).toContain('labelKey: `lsHub.tab.${id}`')
+    expect(translations.en['lsHub.tab.commissioner']).toBe('Commissioner Intelligence')
+    expect(translations.en['lsHub.tab.ai']).toBe('League Helper')
     expect(settingsNav).toContain("label: 'Commissioner Intelligence'")
     expect(settingsNav).toContain("label: '🤖 League Guide'")
     expect(modalPanel).toContain('title="Commissioner Intelligence"')
-    expect(compactTab).toContain('Control League Helper settings')
+    expect(compactTab).toContain("t('lsHub.ai.intro')")
+    expect(translations.en['lsHub.ai.intro']).toContain('Control League Helper settings')
 
-    const visibleCopySources = [settingsHub, settingsNav, modalPanel, compactTab].join('\n')
+    const hubCopy = (['en', 'es'] as const).flatMap((lng) =>
+      Object.entries(translations[lng]).filter(([k]) => k.startsWith('lsHub.')).map(([, v]) => v),
+    )
+    expect(hubCopy.length).toBeGreaterThan(150) // both languages' hub keys, or the negative below asserts nothing
+    const visibleCopySources = [settingsHub, settingsNav, modalPanel, compactTab, ...hubCopy].join('\n')
     expect(visibleCopySources).not.toMatch(/Decision OS/)
   })
 

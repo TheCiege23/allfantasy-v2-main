@@ -98,12 +98,18 @@ export function resolveMemberActivity(
   input: ImportedActivityInput | NativeActivityInput,
   now: Date,
   windowDays: number,
+  /** The reader's language for the reasons, details and basis written here; default English. */
+  language = 'en',
 ): LeagueMemberActivity {
+  const es = language === 'es'
+  const daysEs = (n: number) => plural(n, 'día', 'días')
   if (input.kind === 'imported') {
     if (!input.lastActivityAt || input.eventCount === 0) {
       return {
         available: false,
-        reason: 'No moves have been imported for this league yet, so nobody can be called active or inactive.',
+        reason: es
+          ? 'Aún no se ha importado ningún movimiento de esta liga, así que nadie puede considerarse activo ni inactivo.'
+          : 'No moves have been imported for this league yet, so nobody can be called active or inactive.',
       }
     }
     const ageDays = Math.floor((now.getTime() - input.lastActivityAt.getTime()) / DAY_MS)
@@ -114,13 +120,17 @@ export function resolveMemberActivity(
        */
       return {
         available: false,
-        reason: `The newest imported move is ${plural(ageDays, 'day')} old, so every manager would look idle. Re-sync the league to check who is really active.`,
+        reason: es
+          ? `El movimiento importado más reciente tiene ${daysEs(ageDays)}, así que todos los mánagers parecerían inactivos. Vuelve a sincronizar la liga para ver quién está realmente activo.`
+          : `The newest imported move is ${plural(ageDays, 'day')} old, so every manager would look idle. Re-sync the league to check who is really active.`,
       }
     }
     if (input.managers.length === 0) {
       return {
         available: false,
-        reason: 'This league’s moves couldn’t be matched to its managers, so activity isn’t judged here.',
+        reason: es
+          ? 'Los movimientos de esta liga no se pudieron asociar a sus mánagers, así que aquí no se juzga la actividad.'
+          : 'This league’s moves couldn’t be matched to its managers, so activity isn’t judged here.',
       }
     }
     const listed = new Set(input.managers.map((m) => m.managerName))
@@ -132,17 +142,25 @@ export function resolveMemberActivity(
         name: m.managerName,
         status: m.currentCount > 0 ? 'active' : 'inactive',
         lastActionAt: m.lastActionAt?.toISOString() ?? null,
-        detail:
-          m.lastActionAt
-            ? `last move ${plural(Math.max(0, Math.floor((now.getTime() - m.lastActionAt.getTime()) / DAY_MS)), 'day')} ago`
+        detail: m.lastActionAt
+          ? es
+            ? `último movimiento hace ${daysEs(Math.max(0, Math.floor((now.getTime() - m.lastActionAt.getTime()) / DAY_MS)))}`
+            : `last move ${plural(Math.max(0, Math.floor((now.getTime() - m.lastActionAt.getTime()) / DAY_MS)), 'day')} ago`
+          : es
+            ? 'ningún movimiento válido registrado'
             : 'no qualifying move on file',
       })),
-      `trades, waiver claims and roster moves in the last ${windowDays} days`,
+      es
+        ? `los intercambios, reclamos y cambios de plantilla de los últimos ${windowDays} días`
+        : `trades, waiver claims and roster moves in the last ${windowDays} days`,
     )
   }
 
   if (!input.rows) {
-    return { available: false, reason: 'Manager activity couldn’t be read just now.' }
+    return {
+      available: false,
+      reason: es ? 'No se pudo leer la actividad de los mánagers en este momento.' : 'Manager activity couldn’t be read just now.',
+    }
   }
   /*
    * A roster row with no team behind it is not a team. Counting it would name an
@@ -150,7 +168,10 @@ export function resolveMemberActivity(
    */
   const matched = input.rows.filter((r) => r.teamName || r.managerName)
   if (matched.length === 0) {
-    return { available: false, reason: 'No rosters have been set up for this league yet.' }
+    return {
+      available: false,
+      reason: es ? 'Aún no se ha configurado ninguna plantilla en esta liga.' : 'No rosters have been set up for this league yet.',
+    }
   }
   return finish(
     matched.map((r) => {
@@ -159,11 +180,24 @@ export function resolveMemberActivity(
         name: (r.teamName || r.managerName) as string,
         status: r.status,
         lastActionAt: r.lastActionAt,
-        detail:
-          days == null ? 'no activity on file' : days <= 0 ? 'active today' : days === 1 ? 'last move yesterday' : `last move ${plural(days, 'day')} ago`,
+        detail: es
+          ? days == null
+            ? 'sin actividad registrada'
+            : days <= 0
+              ? 'activo hoy'
+              : days === 1
+                ? 'último movimiento ayer'
+                : `último movimiento hace ${daysEs(days)}`
+          : days == null
+            ? 'no activity on file'
+            : days <= 0
+              ? 'active today'
+              : days === 1
+                ? 'last move yesterday'
+                : `last move ${plural(days, 'day')} ago`,
       }
     }),
-    'the last lineup or roster change',
+    es ? 'el último cambio de alineación o de plantilla' : 'the last lineup or roster change',
   )
 }
 
@@ -190,10 +224,14 @@ export function memberActivityFromReads(
   teams: TeamIdentityRow[],
   now: Date,
   windowDays: number,
+  language = 'en',
 ): LeagueMemberActivity {
-  if (reads.native) return resolveMemberActivity({ kind: 'native', rows: reads.rows }, now, windowDays)
+  if (reads.native) return resolveMemberActivity({ kind: 'native', rows: reads.rows }, now, windowDays, language)
   if (!reads.managers || !reads.window) {
-    return { available: false, reason: 'League activity couldn’t be read just now.' }
+    return {
+      available: false,
+      reason: language === 'es' ? 'No se pudo leer la actividad de la liga en este momento.' : 'League activity couldn’t be read just now.',
+    }
   }
   return resolveMemberActivity(
     {
@@ -205,6 +243,7 @@ export function memberActivityFromReads(
     },
     now,
     windowDays,
+    language,
   )
 }
 
@@ -218,12 +257,20 @@ export const ACTIVITY_STALE_AFTER_MS = 2 * DAY_MS
  * unsynced: "12 teams with nobody running them". A league never synced (`lastSyncedAt` null) is
  * not called stale here; the hub reports that state on its own.
  */
-export function staleActivityReason(input: { native: boolean; lastSyncedAt: Date | null; now: Date }): string | null {
+export function staleActivityReason(input: {
+  native: boolean
+  lastSyncedAt: Date | null
+  now: Date
+  /** The reader's language; default English. */
+  language?: string
+}): string | null {
   if (input.native || !input.lastSyncedAt) return null
   const ageMs = input.now.getTime() - input.lastSyncedAt.getTime()
   if (ageMs <= ACTIVITY_STALE_AFTER_MS) return null
   const days = Math.floor(ageMs / DAY_MS)
-  return `AllFantasy last read this league ${days} days ago, so every manager would look idle. Re-sync it to see who is really active.`
+  return input.language === 'es'
+    ? `AllFantasy leyó esta liga por última vez hace ${days} días, así que todos los mánagers parecerían inactivos. Vuelve a sincronizarla para ver quién está realmente activo.`
+    : `AllFantasy last read this league ${days} days ago, so every manager would look idle. Re-sync it to see who is really active.`
 }
 
 // ── Team identity helpers ────────────────────────────────────────────────────
@@ -234,15 +281,42 @@ export type TeamIdentityRow = {
   platformUserId?: string | null
   claimedByUserId?: string | null
   isOrphan?: boolean | null
+  /** The platform's roster id. On Sleeper it is the roster slot, 1..N. */
+  externalId?: string | null
 }
 
-/** The name a team is shown by. Importers write the literal "Unknown" for a missing name; that is no name. */
-export function teamDisplayName(t: TeamIdentityRow): string {
+/** The last-resort name, exported so a list of names can count these instead of repeating them. */
+export function unnamedTeamLabel(language = 'en'): string {
+  return language === 'es' ? 'Equipo sin nombre' : 'Unnamed team'
+}
+
+/**
+ * The name a team is shown by. Importers write the literal "Unknown" for a missing name; that is no name.
+ *
+ * ⚠ ON PRODUCTION EVERY "Unknown" TEAM IS AN OPEN SLOT, AND ITS OWNER NAME IS "Unknown" TOO
+ * (measured 2026-10-06: 379 rows in 49 leagues, all orphaned, none with a platform user). So the
+ * owner fallback never rescues them, and a league with four open slots used to list one name four
+ * times. Each still has its roster slot, so it is named by that — "Team 3", the same words the
+ * schedule check already uses for a team it cannot find. Only a short number is a slot; a long
+ * platform id (Yahoo's "414.l.123.t.4") would read as noise, so that falls through to the label.
+ */
+export function teamDisplayName(t: TeamIdentityRow, language = 'en'): string {
+  const slot = t.externalId?.trim()
+  const bySlot = slot && /^\d{1,3}$/.test(slot) ? (language === 'es' ? `Equipo ${slot}` : `Team ${slot}`) : null
+  return realTeamName(t) ?? bySlot ?? unnamedTeamLabel(language)
+}
+
+/**
+ * The team's own name, or its owner's — null when it has neither, which is what an importer's
+ * "Unknown" means. For a caller that must tell a real name from a stand-in (the drama engine
+ * renames an old headline only once both sides have one).
+ */
+export function realTeamName(t: Pick<TeamIdentityRow, 'teamName' | 'ownerName'>): string | null {
   const clean = (v: string | null | undefined) => {
     const s = v?.trim()
     return s && s.toLowerCase() !== 'unknown' ? s : null
   }
-  return clean(t.teamName) ?? clean(t.ownerName) ?? 'Unnamed team'
+  return clean(t.teamName) ?? clean(t.ownerName)
 }
 
 /**
@@ -258,8 +332,9 @@ export function isUnownedTeam(t: TeamIdentityRow): boolean {
 }
 
 /** One entry per unowned team — two teams both named "Unknown" are two teams. */
-export function unownedTeamNames(teams: TeamIdentityRow[]): string[] {
-  return teams.filter(isUnownedTeam).map(teamDisplayName)
+export function unownedTeamNames(teams: TeamIdentityRow[], language = 'en'): string[] {
+  // A lambda, not `.map(teamDisplayName)`: map's index would land in the language parameter.
+  return teams.filter(isUnownedTeam).map((t) => teamDisplayName(t, language))
 }
 
 /**

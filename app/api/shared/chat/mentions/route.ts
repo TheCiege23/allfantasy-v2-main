@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from '@/lib/chat-core'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { resolveMentionedMemberIds } from '@/lib/chat-core/resolveMentionTargets'
+import { buildMessagePreview } from '@/lib/chat-notifications/messagePreview'
 
 export async function GET() {
   return NextResponse.json({ status: 'ok', mentions: [] })
@@ -52,17 +53,27 @@ export async function POST(req: NextRequest) {
   let memberIds: string[] = []
   /** The league chat route already announced @all for this message (as a league announcement). */
   let allAlreadyAnnounced = false
+  /** Members who muted this conversation (DMs and huddles; league chat has no per-member mute). */
+  let mutedIds = new Set<string>()
+  /** What the message said, for the notification's preview line. */
+  let preview: { messageType?: string | null; body?: string | null; metadata?: Record<string, unknown> | null } = {}
 
   if (isLeague) {
     if (!leagueId) return NextResponse.json({ error: 'Invalid league room' }, { status: 400 })
     const leagueMessage = await (prisma as any).leagueChatMessage.findFirst({
       where: { id: messageId, leagueId, userId: user.appUserId },
-      select: { id: true, messageSubtype: true },
+      select: { id: true, messageSubtype: true, isPrivate: true, message: true, type: true, metadata: true },
     })
     if (!leagueMessage) {
       return NextResponse.json({ error: 'Message not found or not owned by user' }, { status: 403 })
     }
+    /*
+     * 🛑 A PRIVATE @chimmy QUESTION IS SEEN BY ITS AUTHOR ONLY. "@chimmy should I trade @bob" used to
+     * notify Bob — about a message he cannot open — and "@chimmy … @all" notified the league.
+     */
+    if (leagueMessage.isPrivate) return NextResponse.json({ status: 'ok', notified: 0 })
     allAlreadyAnnounced = leagueMessage.messageSubtype === 'at_all'
+    preview = { messageType: leagueMessage.type, body: leagueMessage.message, metadata: leagueMessage.metadata }
     const bracketMember = await (prisma as any).bracketLeagueMember.findUnique({
       where: { leagueId_userId: { leagueId, userId: user.appUserId } },
       select: { id: true },
@@ -84,24 +95,30 @@ export async function POST(req: NextRequest) {
     if (!member) return NextResponse.json({ error: 'Not a member' }, { status: 403 })
     const ownMessage = await (prisma as any).platformChatMessage.findFirst({
       where: { id: messageId, threadId, senderUserId: user.appUserId },
-      select: { id: true },
+      select: { id: true, body: true, messageType: true, metadata: true },
     })
     if (!ownMessage) {
       return NextResponse.json({ error: 'Message not found or not owned by user' }, { status: 403 })
     }
+    preview = { messageType: ownMessage.messageType, body: ownMessage.body, metadata: ownMessage.metadata }
     const rows = await (prisma as any).platformChatThreadMember.findMany({
       where: { threadId, isBlocked: false },
-      select: { userId: true },
+      select: { userId: true, isMuted: true },
     })
-    memberIds = (rows as Array<{ userId: string }>).map((r) => r.userId)
+    const members = rows as Array<{ userId: string; isMuted?: boolean | null }>
+    memberIds = members.map((r) => r.userId)
+    // A muted conversation stays muted for mentions too — the DM notifier already honours it.
+    mutedIds = new Set(members.filter((r) => r.isMuted).map((r) => r.userId))
   }
 
   const sender = await (prisma as any).appUser.findUnique({
     where: { id: user.appUserId },
-    select: { displayName: true, username: true },
+    select: { displayName: true, username: true, avatarUrl: true },
   })
   // Never the sender's email: this text goes into other people's bell, push and inbox.
   const senderName = sender?.displayName || sender?.username || 'Someone'
+  const avatar = typeof sender?.avatarUrl === 'string' ? sender.avatarUrl.trim() : ''
+  const senderAvatarUrl = avatar.startsWith('https://') || (avatar.startsWith('/') && !avatar.startsWith('//')) ? avatar : null
 
   const named = await resolveMentionedMemberIds({
     tokens: userMentionTokens,
@@ -123,6 +140,23 @@ export async function POST(req: NextRequest) {
   }
 
   /*
+   * Someone who blocked the sender, or muted this conversation, is not told about it — the DM
+   * notifier has always skipped both, and a mention was the way around it.
+   */
+  for (const id of mutedIds) userIds.delete(id)
+  if (userIds.size > 0) {
+    try {
+      const blockers = await (prisma as any).platformBlockedUser.findMany({
+        where: { blockedUserId: user.appUserId, blockerUserId: { in: Array.from(userIds) } },
+        select: { blockerUserId: true },
+      })
+      for (const b of blockers as Array<{ blockerUserId: string }>) userIds.delete(b.blockerUserId)
+    } catch {
+      /* the room-membership rule above still holds */
+    }
+  }
+
+  /*
    * Record who the message named, so the launcher's "@" badge can count it: getChatUnread counts
    * DM/huddle mentions from `mentionedUserIds`, which nothing ever wrote — so the "@" never lit.
    * League messages are stored with ids by the league chat route itself.
@@ -138,15 +172,20 @@ export async function POST(req: NextRequest) {
     const actionHref = isLeague && leagueId
       ? `/league/${encodeURIComponent(leagueId)}`
       : `/messages?thread=${encodeURIComponent(threadId)}&message=${encodeURIComponent(messageId)}`
-    const bodyText = isLeague
-      ? `${senderName} mentioned you in a league chat.`
-      : `${senderName} mentioned you in a chat.`
+    /*
+     * Who, where, and what they said — the same shape as a DM alert. "You were mentioned" with no
+     * name, no face and no words was the only league-chat push most people ever got (league chat
+     * itself is opt-in), and it gave them no reason to open it.
+     */
+    const roomName = isLeague && leagueId ? await leagueNameOf(leagueId) : null
+    const said = buildMessagePreview(preview)
+    const bodyText = said || (isLeague ? `${senderName} mentioned you in a league chat.` : `${senderName} mentioned you in a chat.`)
     await dispatchNotification({
       userIds: targetIds,
       category: 'chat_mentions',
       productType: 'app',
       type: 'mention',
-      title: 'You were mentioned',
+      title: roomName ? `${senderName} mentioned you · ${roomName}` : `${senderName} mentioned you`,
       body: bodyText,
       // The sender's display name is user-written; it stays in-app, not in the text.
       smsBody: isLeague
@@ -155,11 +194,32 @@ export async function POST(req: NextRequest) {
       severity: 'low',
       actionHref,
       actionLabel: isLeague ? 'Open league chat' : 'Open mention',
-      meta: { threadId, messageId, chatThreadId: threadId, leagueId: leagueId ?? undefined },
+      meta: {
+        threadId,
+        messageId,
+        chatThreadId: threadId,
+        leagueId: leagueId ?? undefined,
+        ...(senderAvatarUrl ? { iconUrl: senderAvatarUrl } : {}),
+        /*
+         * In a DM or huddle the message also raised a `dm-<thread>` alert; sharing the tag makes the
+         * mention REPLACE it on the device instead of buzzing twice for one message.
+         */
+        pushTag: isLeague ? `mention-${threadId}` : `dm-${threadId}`,
+      },
       // A retried request must not stack a second bell row per person.
       dedupePrefix: `mention:${messageId}`,
     })
   }
 
   return NextResponse.json({ status: 'ok', notified: targetIds.length })
+}
+
+async function leagueNameOf(leagueId: string): Promise<string | null> {
+  try {
+    const row = await (prisma as any).league.findUnique({ where: { id: leagueId }, select: { name: true } })
+    const name = typeof row?.name === 'string' ? row.name.replace(/\s+/g, ' ').trim().slice(0, 48) : ''
+    return name || null
+  } catch {
+    return null
+  }
 }

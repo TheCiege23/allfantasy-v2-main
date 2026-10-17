@@ -396,6 +396,13 @@ function weekData(over: Partial<WeekBoardData> = {}): WeekBoardData {
 }
 
 describe('WeekBoard', () => {
+  it('does not render a negative zero when a small deficit rounds to zero', () => {
+    const m=weekMatchup({leagueId:'tiny',leagueName:'Tiny deficit',projection:{you:100,them:100.01,margin:-.01,winProbability:.49}})
+    const {container}=render(<WeekBoard board={weekData({coinFlips:[m]})} outlook={null} rivalriesHref="/core/week?view=rivalries" allHref="/core/week?view=all" totalLeagues={1}/>)
+    expect(container.textContent).toContain('Tiny deficit')
+    expect(container.textContent).not.toContain('−0.0')
+    expect(container.querySelector('.af-bd-val')?.getAttribute('aria-label')).not.toContain('−0.0')
+  })
   /*
    * Production 2026-09-28, Monday of week 3: Cream Bowl read "+29.6 · 78% to win" off prior-week
    * means while /core/matchup had its week-3 score at +68.0. Once a week has points, rank on them.
@@ -465,12 +472,8 @@ describe('WeekBoard', () => {
     expect(text).not.toMatch(/not enough history to call/i)
   })
 
-  /*
-   * The trailing column's whole purpose. Being 20 points down in a league you
-   * cannot reach the playoffs in is not something to spend a Sunday on, and a
-   * board that lists it anyway is back to being the 47-tile grid this replaced.
-   */
-  it('drops a trailing league with no realistic playoff path, and says how many', () => {
+  // A long shot remains playable; an estimate cannot remove a user's league.
+  it('keeps a trailing league with low playoff odds and labels the long shot', () => {
     const behind = weekMatchup({
       leagueId: 'dead',
       leagueName: 'World Football Draft',
@@ -487,15 +490,16 @@ describe('WeekBoard', () => {
       />,
     )
     const text = container.textContent ?? ''
-    expect(text).not.toContain('World Football Draft')
-    expect(text).toMatch(/1 league is behind with no realistic\s+playoff path/i)
+    expect(text).toContain('World Football Draft')
+    expect(text).toContain('long shot')
+    expect(text).not.toMatch(/no realistic\s+playoff path/i)
   })
 
   /*
    * ⚠ WITHOUT AN OUTLOOK THE FILTER CANNOT RUN, AND EXCLUDING EVERYTHING WOULD BE
    * WORSE THAN SHOWING AN UNFILTERED COLUMN. The board says which it did.
    */
-  it('shows an unfiltered trailing column when the simulation is unavailable, and says so', () => {
+  it('keeps trailing leagues when the simulation is unavailable without invented odds', () => {
     const behind = weekMatchup({
       leagueId: 'x',
       leagueName: 'Cream Bowl',
@@ -512,7 +516,7 @@ describe('WeekBoard', () => {
     )
     const text = container.textContent ?? ''
     expect(text).toContain('Cream Bowl')
-    expect(text).toMatch(/playoff filter did not run/i)
+    expect(text).not.toMatch(/\d+% playoff odds/i)
   })
 
   /*
@@ -771,7 +775,7 @@ function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
       },
     ],
     considered: 40,
-    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0 },
+    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0, noUpgrade: 0 },
     marketLeagues: 120,
     at: { season: '2026', week: 3 },
     ...over,
@@ -834,7 +838,7 @@ describe('WaiversBoard', () => {
     const text = container.textContent ?? ''
     expect(text).toMatch(/10 leagues are not on this board/i)
     expect(text).toMatch(/6 store player ids the projection feed does not use/i)
-    expect(text).toMatch(/3 have never published their scoring settings/i)
+    expect(text).toMatch(/3 have never published their scoring or lineup settings/i)
     expect(text).toMatch(/1 has no roster of yours imported/i)
   })
 

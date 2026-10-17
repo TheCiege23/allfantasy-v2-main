@@ -47,7 +47,10 @@
 import { prisma } from '@/lib/prisma'
 import {
   PLAYER_IMAGE_TYPE_HEADSHOT,
+  findDetectablyWrongPlayerImages,
+  playerImageEntriesToJudge,
   readPrimaryPlayerImage,
+  servedPlayerImageUrl,
   type StoredPlayerImage,
 } from '@/lib/player-assets/playerImageStore'
 import { readPrimaryTeamImage, type StoredTeamImage } from '@/lib/sport-teams/teamImageStore'
@@ -444,14 +447,17 @@ export async function getCanonicalPlayersBySleeperIds(
           imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
           isPrimary: true,
         },
-        select: { playerId: true, url: true },
+        // provider + rawPayload say whether a pre-fix resolver wrote it; see servedPlayerImageUrl.
+        select: { playerId: true, url: true, provider: true, rawPayload: true },
       }),
     ])
 
     const byId = new Map(players.map((p) => [p.id, p]))
     const imageById = new Map(
-      images.filter((i) => i.playerId).map((i) => [i.playerId as string, i.url]),
+      images.filter((i) => i.playerId).map((i) => [i.playerId as string, i]),
     )
+    // Untrusted primaries, and the bare Player.imageUrl of players with no primary row.
+    const wrongImage = await findDetectablyWrongPlayerImages(playerImageEntriesToJudge(players, imageById))
 
     for (const identity of identities) {
       if (!identity.playerId) continue
@@ -466,7 +472,7 @@ export async function getCanonicalPlayersBySleeperIds(
         team: player.team,
         active: player.active,
         injuryStatus: player.injuryStatus ?? null,
-        imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
+        imageUrl: servedPlayerImageUrl(imageById.get(player.id), player.imageUrl, wrongImage.has(player.id)),
       })
 
       if (opts.maxAgeMs !== undefined) {
@@ -503,7 +509,8 @@ export async function getCanonicalPlayersBySleeperIds(
  *     index, so migrating a site is a data-source swap rather than a rewrite.
  *   - `includeImages` is **off by default**. Joining `PlayerImage` across an entire sport is a
  *     third read over every row to populate a field enumeration callers rarely use; the
- *     denormalized `Player.imageUrl` is still returned either way.
+ *     denormalized `Player.imageUrl` is still returned either way, judged by the same
+ *     detectably-wrong check (one cached snapshot read plus the flagged candidates).
  *
  * Players without a Sleeper identity are absent by construction. That matches the old path —
  * `getAllPlayers()` only ever returned Sleeper's universe — but it does mean this is an
@@ -548,7 +555,9 @@ export async function getCanonicalPlayerMapForSport(
 
   const byId = new Map(players.map((p) => [p.id, p]))
 
-  let imageById = new Map<string, string>()
+  type PrimaryImageRow = { url: string; provider: string | null; rawPayload: unknown }
+  let imageById = new Map<string, PrimaryImageRow>()
+  let wrongImage = new Set<string>()
   if (opts.includeImages) {
     const images = await prisma.playerImage.findMany({
       where: {
@@ -556,10 +565,18 @@ export async function getCanonicalPlayerMapForSport(
         imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
         isPrimary: true,
       },
-      select: { playerId: true, url: true },
+      // provider + rawPayload say whether a pre-fix resolver wrote it; see servedPlayerImageUrl.
+      select: { playerId: true, url: true, provider: true, rawPayload: true },
     })
-    imageById = new Map(images.filter((i) => i.playerId).map((i) => [i.playerId as string, i.url]))
+    imageById = new Map(images.filter((i) => i.playerId).map((i) => [i.playerId as string, i]))
   }
+  /*
+   * Judged with or without `includeImages`. Without it this reader served `Player.imageUrl` raw
+   * across a whole sport — the column the image cron copied every pre-fix resolution into. The
+   * shared-URL snapshot already carries every primary row's trust, so a bare `Player.imageUrl`
+   * vouched for by its own stamped row is not suppressed (see `findDetectablyWrongHeadshots`).
+   */
+  wrongImage = await findDetectablyWrongPlayerImages(playerImageEntriesToJudge(players, imageById))
 
   const now = Date.now()
   const staleIds = new Set<string>()
@@ -577,7 +594,7 @@ export async function getCanonicalPlayerMapForSport(
       team: player.team,
       active: player.active,
       injuryStatus: player.injuryStatus ?? null,
-      imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
+      imageUrl: servedPlayerImageUrl(imageById.get(player.id), player.imageUrl, wrongImage.has(player.id)),
     })
 
     if (opts.maxAgeMs !== undefined) {

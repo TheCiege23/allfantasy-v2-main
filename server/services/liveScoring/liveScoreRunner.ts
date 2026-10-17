@@ -21,6 +21,7 @@ import { runLiveScoringTick, type LiveBroadcastEvent, type LiveTickResult } from
 import { gamesToSnapshots, liveProviderServesSport, liveProviderSports, type LiveSeasonType, type LiveStatsProvider } from '@/lib/live-scoring/provider'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
 import { NflLiveStatsProvider } from '@/lib/live-scoring/nflLiveStatsProvider'
+import { canonicalTeamDefenseId } from '@/lib/scoring-runtime/nflStatNormalization'
 import type { RescoreRosterInput, RescoreMatchupInput } from '@/lib/live-scoring/rescorePlan'
 
 export type ActiveSeasonForTick = {
@@ -267,7 +268,7 @@ export async function runLiveScoringTickForSeason(
       // Only rostered starters are worth fetching (matchup-affecting players).
       const starters = await prisma.redraftRosterPlayer.findMany({
         where: { droppedAt: null, roster: { seasonId: season.id } },
-        select: { playerId: true, slotType: true },
+        select: { playerId: true, slotType: true, position: true },
       })
       const offensiveIds: string[] = []
       /*
@@ -281,11 +282,24 @@ export async function runLiveScoringTickForSeason(
        */
       const bestBall = await isBestBall()
       const defenseTeams = new Set<string>()
+      /*
+       * 🛑 A SLEEPER DEFENCE IS `KC`, NOT `nfl:def:KC`, AND ONLY THE LATTER WAS RECOGNISED. A bare club
+       * code went into the OFFENSIVE fetch and through the offensive normalizer, which reads a defence's
+       * `sack` as `idp_sack` — so it scored as a defender, not a team defence. Recognised by its position
+       * now (`canonicalTeamDefenseId`, D/ST included); the provider's line, keyed on the canonical id, is
+       * handed back under every roster id that holds that defence, so `KC` and `nfl:def:KC` read the
+       * same stats and each roster counts its own one slot once.
+       */
+      const rosterIdsByDefenceKey = new Map<string, string[]>()
       for (const s of starters) {
         if (!countsTowardScore(s.slotType, bestBall)) continue
-        const abbr = /^nfl:def:(.+)$/i.exec(String(s.playerId))?.[1]
-        if (abbr) defenseTeams.add(abbr.trim().toUpperCase())
-        else offensiveIds.push(s.playerId)
+        const defenceKey = canonicalTeamDefenseId(s.playerId, s.position)
+        if (defenceKey) {
+          defenseTeams.add(defenceKey.slice('nfl:def:'.length))
+          const ids = rosterIdsByDefenceKey.get(defenceKey) ?? []
+          if (!ids.includes(s.playerId)) ids.push(s.playerId)
+          rosterIdsByDefenceKey.set(defenceKey, ids)
+        } else offensiveIds.push(s.playerId)
       }
       const [playerStats, defStats] = await Promise.all([
         provider.fetchPlayerStatsForGames({ ...query, games, playerIds: offensiveIds }),
@@ -296,7 +310,10 @@ export async function runLiveScoringTickForSeason(
       ])
       const merged = new Map<string, Record<string, number>>()
       for (const [id, st] of playerStats) merged.set(id, st)
-      for (const [id, st] of defStats) merged.set(id, st)
+      for (const [id, st] of defStats) {
+        const key = canonicalTeamDefenseId(id, 'DEF')
+        for (const rosterId of (key ? rosterIdsByDefenceKey.get(key) : undefined) ?? [id]) merged.set(rosterId, st)
+      }
       return merged
     },
     loadPreviousStats: async () => {

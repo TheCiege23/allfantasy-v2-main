@@ -16,9 +16,13 @@
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 import { formatLaunchDay, type LaunchLang } from '@/components/launch/launchTime'
 
-/** What AF Pro takes over on launch day — the three depths the /core paywall gates. */
-const PRO_DEPTH_EN = 'player deep dives, the full trade breakdown and Competitive Edge'
-const PRO_DEPTH_ES = 'los análisis a fondo de jugadores, el desglose completo de cambios y Competitive Edge'
+/**
+ * What AF Pro takes over on launch day — the three depths the /core paywall gates. Exported for the
+ * founding-offer email (lib/monetization/foundingOfferEmail.ts), so the email and the site name the
+ * same list.
+ */
+export const PRO_DEPTH_EN = 'player deep dives, the full trade breakdown and Competitive Edge'
+export const PRO_DEPTH_ES = 'los análisis a fondo de jugadores, el desglose completo de cambios y Competitive Edge'
 
 /*
  * 🛑 NOT "EVERYTHING'S FREE". That was the headline, and it was false: custom scoring tables

@@ -2,9 +2,40 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import { GET as legacyGet } from '@/server/api-route-modules/legacy/waiver/leagues/route'
 
+/*
+ * ⚠ THE ROUTE GAINED AN IDENTITY GATE AND THIS FILE DID NOT FOLLOW (fc00bff3a4, 2026-10-06).
+ * `?sleeper_username=<anyone>` used to return that person's whole league list; the route now
+ * resolves the caller through requireLegacySleeperIdentity and only cross-checks the parameter.
+ * Unmocked, the gate reached next-auth's getServerSession outside a request and every test here
+ * failed with "`headers` was called outside a request scope" — red on main for five days.
+ *
+ * Mocked at the BOUNDARY (the session, the linked-account row, the guest cookie), not the gate
+ * itself, so the gate's own rules — 401 signed out, 403 for someone else's username, lookup by
+ * the server-resolved name — are what these tests exercise.
+ */
+const identity = vi.hoisted(() => ({ signedIn: true, linked: 'testuser' as string | null }))
+
+vi.mock('@/lib/auth-guard', () => ({
+  requireAuth: vi.fn(async () =>
+    identity.signedIn
+      ? { ok: true, userId: 'app-user-1', session: { user: { id: 'app-user-1' } } }
+      : { ok: false, response: new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }) },
+  ),
+}))
+
+vi.mock('@/lib/guest-mode/guestSessionToken', () => ({
+  GUEST_SESSION_COOKIE_NAME: 'af_guest',
+  verifyGuestSessionToken: vi.fn(async () => null),
+}))
+
 // Mock dependencies
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    appUser: {
+      findUnique: vi.fn(async () => ({
+        legacyUser: identity.linked ? { sleeperUsername: identity.linked } : null,
+      })),
+    },
     legacyUser: {
       findUnique: vi.fn(async (query) => {
         if (query.where.sleeperUsername === 'testuser') {
@@ -56,6 +87,8 @@ vi.mock('@/lib/telemetry/usage', () => ({
 describe('waiver/leagues API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    identity.signedIn = true
+    identity.linked = 'testuser'
   })
 
   describe('GET /api/legacy/waiver/leagues', () => {
@@ -159,7 +192,8 @@ describe('waiver/leagues API', () => {
     })
 
     it('returns 404 when user not found', async () => {
-      // Arrange
+      // Arrange - the signed-in account is linked to a Sleeper user we hold no row for
+      identity.linked = 'nonexistentuser'
       const url = new URL('http://localhost:3000/api/legacy/waiver/leagues')
       url.searchParams.set('sleeper_username', 'nonexistentuser')
 
@@ -179,24 +213,37 @@ describe('waiver/leagues API', () => {
       expect(data.error).toContain('User not found')
     })
 
-    it('requires sleeper_username parameter', async () => {
-      // Arrange - missing sleeper_username
+    it("without sleeper_username, serves the signed-in account's own linked leagues", async () => {
+      // The parameter is only a cross-check now; identity comes from the session.
       const url = new URL('http://localhost:3000/api/legacy/waiver/leagues')
-
-      const request = new NextRequest(url, {
-        method: 'GET',
-        headers: {
-          'X-API-Key': 'test-key',
-        },
-      })
-
-      // Act
-      const response = await legacyGet(request)
+      const response = await legacyGet(new NextRequest(url, { method: 'GET' }))
       const data = await response.json()
 
-      // Assert
-      expect(response.status).toBe(400)
-      expect(data.error).toContain('sleeper_username')
+      expect(response.status).toBe(200)
+      expect(data.count).toBe(2)
+    })
+
+    it("🛑 someone else's sleeper_username is refused, not served (the leak the gate closed)", async () => {
+      const { prisma } = await import('@/lib/prisma')
+      const url = new URL('http://localhost:3000/api/legacy/waiver/leagues')
+      url.searchParams.set('sleeper_username', 'someoneelse')
+      const response = await legacyGet(new NextRequest(url, { method: 'GET' }))
+      const data = await response.json()
+
+      expect(response.status).toBe(403)
+      expect(data.code).toBe('SLEEPER_USERNAME_MISMATCH')
+      expect(prisma.legacyUser.findUnique).not.toHaveBeenCalled()
+    })
+
+    it('signed out with no guest import: 401, and no lookup', async () => {
+      identity.signedIn = false
+      const { prisma } = await import('@/lib/prisma')
+      const url = new URL('http://localhost:3000/api/legacy/waiver/leagues')
+      url.searchParams.set('sleeper_username', 'testuser')
+      const response = await legacyGet(new NextRequest(url, { method: 'GET' }))
+
+      expect(response.status).toBe(401)
+      expect(prisma.legacyUser.findUnique).not.toHaveBeenCalled()
     })
 
     it('normalizes username to lowercase', async () => {
@@ -223,6 +270,7 @@ describe('waiver/leagues API', () => {
 
     it('handles empty league list gracefully', async () => {
       // Arrange - mock user with no leagues
+      identity.linked = 'newuser'
       const { prisma } = await import('@/lib/prisma')
       vi.mocked(prisma.legacyUser.findUnique).mockResolvedValueOnce({
         id: 'user-2',

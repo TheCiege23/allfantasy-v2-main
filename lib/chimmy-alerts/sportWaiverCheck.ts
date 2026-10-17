@@ -16,7 +16,7 @@ import {
  * `runSportWaiverCheck.ts`, the rules are `waiverAlertRules.ts`).
  *
  * Same idea as the NFL's Tuesday message (`waiverCheck.ts`): the best player nobody in the league
- * rosters, against the weakest bench player we can price, only when the swap is worth a claim —
+ * rosters who adds the most to your starting lineup (`waiverSwap.ts`), only when the swap is worth a claim —
  * from the /core Waivers board's own sport sections, so every figure is one that screen shows.
  *
  * ── 🛑 PER GAME, NEVER "THIS WEEK" ─────────────────────────────────────────────────────────────
@@ -319,7 +319,7 @@ export function renderSportWaiverCheck(
     eyebrow: `Chimmy · ${joinAnd(sports.map(waiverSportLabel))} waiver check`,
     title: picks.length === 1 ? 'One pickup worth a claim' : `${picks.length} pickups worth a claim`,
     sub:
-      "The best player nobody rosters in each league, against your weakest bench player we can price. Every figure is points per game from AllFantasy's season projection — a season rate, which doesn't know how many games each team has coming up. Rosters as of the last sync, and unrostered isn't always claimable: if he's gone, ask me for the next one.",
+      "The player nobody rosters in each league who would add the most to your starting lineup, with the bench player to cut for him. Every figure is points per game from AllFantasy's season projection — a season rate, which doesn't know how many games each team has coming up. Rosters as of the last sync, and unrostered isn't always claimable: if he's gone, ask me for the next one.",
     bodyHtml: blocks + pushSetupEmailLine(escapeHtml(base)),
     cta: { href: `${base}${sportWaiverCheckHref(top, 'waiver_check_email')}`, label: 'Ask Chimmy' },
     baseUrl: opts.baseUrl ?? null,

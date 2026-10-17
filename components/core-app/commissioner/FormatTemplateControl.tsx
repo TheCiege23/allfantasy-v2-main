@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CommissionerFormatTemplate } from '@/lib/core-app/commissionerHub'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
 
 /**
  * The owner's "this league is run as …" switch, in the hub's Format operations.
@@ -17,6 +19,8 @@ import type { CommissionerFormatTemplate } from '@/lib/core-app/commissionerHub'
  */
 export function FormatTemplateControl({ leagueId, template }: { leagueId: string; template: CommissionerFormatTemplate }) {
   const router = useRouter()
+  const { language } = useOptionalLanguage()
+  const t = (english: string | null | undefined) => hubCopy(english, language)
   const [confirming, setConfirming] = useState<string | 'remove' | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,22 +57,22 @@ export function FormatTemplateControl({ leagueId, template }: { leagueId: string
       {template.applied ? (
         <>
           <p className="af-ch-muted">
-            Run on AllFantasy as <strong>{template.applied.label}</strong>
-            {template.applied.resolved ? '' : ' — that version is no longer published'}.
+            {t('Run on AllFantasy as')} <strong>{template.applied.label}</strong>
+            {template.applied.resolved ? '' : t(' — that version is no longer published')}.
           </p>
           {confirming === 'remove' ? (
             <div className="af-ch-template-actions">
-              <span className="af-ch-muted">Turn off this format&apos;s mechanics for the league?</span>
+              <span className="af-ch-muted">{t('Turn off this format’s mechanics for the league?')}</span>
               <button type="button" className="af-btn" disabled={busy} onClick={() => save(null)}>
-                {busy ? 'Removing…' : 'Yes, remove'}
+                {busy ? t('Removing…') : t('Yes, remove')}
               </button>
               <button type="button" className="af-btn" disabled={busy} onClick={() => setConfirming(null)}>
-                Cancel
+                {t('Cancel')}
               </button>
             </div>
           ) : (
             <button type="button" className="af-btn" onClick={() => setConfirming('remove')}>
-              Remove format
+              {t('Remove format')}
             </button>
           )}
         </>
@@ -76,21 +80,21 @@ export function FormatTemplateControl({ leagueId, template }: { leagueId: string
         template.offers.map((offer) => (
           <div key={offer.id} className="af-ch-template-offer">
             <p>
-              <strong>Does this league run as {offer.label}?</strong> {offer.description}
+              <strong>{t(`Does this league run as ${offer.label}?`)}</strong> {t(offer.description)}
             </p>
             {confirming === offer.id ? (
               <div className="af-ch-template-actions">
-                <span className="af-ch-muted">Apply it to this league? You can remove it later.</span>
+                <span className="af-ch-muted">{t('Apply it to this league? You can remove it later.')}</span>
                 <button type="button" className="af-btn" disabled={busy} onClick={() => save(offer.id)}>
-                  {busy ? 'Applying…' : 'Yes, apply'}
+                  {busy ? t('Applying…') : t('Yes, apply')}
                 </button>
                 <button type="button" className="af-btn" disabled={busy} onClick={() => setConfirming(null)}>
-                  Cancel
+                  {t('Cancel')}
                 </button>
               </div>
             ) : (
               <button type="button" className="af-btn" onClick={() => setConfirming(offer.id)}>
-                Use {offer.label}
+                {t('Use')} {offer.label}
               </button>
             )}
           </div>
@@ -98,7 +102,7 @@ export function FormatTemplateControl({ leagueId, template }: { leagueId: string
       )}
       {error ? (
         <p className="af-ch-muted" role="alert">
-          {error}
+          {t(error)}
         </p>
       ) : null}
     </div>

@@ -215,10 +215,10 @@ export async function sendTemplatedEmail(params: {
   to: string
   subject: string
   html: string
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; providerId?: string }> {
   try {
-    await sendEmail({ to: params.to, subject: params.subject, html: params.html })
-    return { ok: true }
+    const result = await sendEmail({ to: params.to, subject: params.subject, html: params.html })
+    return { ok: true, providerId: result.data?.id }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Unknown error" }
   }
@@ -234,7 +234,7 @@ export async function sendNotificationEmail(params: {
   bodyHtml: string
   actionHref?: string
   actionLabel?: string
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; providerId?: string }> {
   const baseUrl = getBaseUrl()
   const actionUrl = params.actionHref
     ? (params.actionHref.startsWith("http") ? params.actionHref : `${baseUrl}${params.actionHref}`)
@@ -280,12 +280,12 @@ export async function sendNotificationEmail(params: {
 </html>`
 
   try {
-    await sendEmail({
+    const result = await sendEmail({
       to: params.to,
       subject: params.subject,
       html,
     })
-    return { ok: true }
+    return { ok: true, providerId: result.data?.id }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error"
     return { ok: false, error: message }

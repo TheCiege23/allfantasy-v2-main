@@ -7,6 +7,7 @@ import { computeAdaptiveRankings, type RankingView } from '@/lib/rankings-engine
 import { computeLeagueDemandIndex } from '@/lib/rankings-engine/league-demand-index'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { computeEnhancedRankings, type EnhancedView } from '@/lib/rankings-engine/enhanced-rankings'
+import { resolveByeWeekMap } from '@/lib/core-app/byeWeekMap'
 import type { LeagueRosterConfig } from '@/lib/vorp-engine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getStrategyMetaReports } from '@/lib/strategy-meta'
@@ -123,15 +124,24 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/enhanced", to
 
     const baseView: RankingView = view === 'this_year' ? 'win_now' : view === 'dynasty_horizon' ? 'rebuild' : 'league'
 
-    const [fcPlayers, ldi, strategyMetaContext] = await Promise.all([
+    /*
+     * This season's byes, read from the schedule we hold. The team-fit score used a hard-coded 2025
+     * table; the league's own season decides which slate applies, and an unreadable one is "no bye
+     * opinion" rather than last year's.
+     */
+    const season = Number(league.season)
+    const [fcPlayers, ldi, strategyMetaContext, byeWeeks] = await Promise.all([
       getFantasyCalcValuesDbFirst(fcSettings),
       computeLeagueDemandIndex(leagueId),
       getStrategyMetaReports({ sport: normalizedSport, timeframe: '30d' }).then((rows) => rows.slice(0, 3)).catch(() => []),
+      normalizedSport === 'NFL' && Number.isFinite(season)
+        ? resolveByeWeekMap(season, 'NFL').catch(() => ({} as Record<string, number>))
+        : Promise.resolve({} as Record<string, number>),
     ])
 
     const adaptiveOutput = computeAdaptiveRankings(fcPlayers, userPlayerIds, config, ldi, baseView, 300)
 
-    const enhanced = computeEnhancedRankings(adaptiveOutput, goal, view, numTeams)
+    const enhanced = computeEnhancedRankings(adaptiveOutput, goal, view, numTeams, null, byeWeeks)
 
     let aiPlan: { timeframe: string; action: string; type: string }[] = []
     if (includePlan && isDynasty) {

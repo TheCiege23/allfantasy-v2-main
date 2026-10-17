@@ -54,6 +54,7 @@ import { WizardStepNav } from './WizardStepNav'
 import { SportSelector } from './SportSelector'
 import { SoccerPipelineSelector } from './SoccerPipelineSelector'
 import { LeagueTypeSelector } from './LeagueTypeSelector'
+import { SURVIVOR_PAID_CREATION_ENABLED, SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE } from '@/lib/survivor/survivorCreationAvailability'
 import { DraftTypeSelector } from './DraftTypeSelector'
 import { TeamCountSelector, TeamSizeSelector } from './TeamSizeSelector'
 import { AiAutomationSettingsPanel } from './AiAutomationSettingsPanel'
@@ -444,6 +445,7 @@ export function LeagueCreationWizard({
         return 'Select a league timezone.'
       }
       if (state.leagueType === 'survivor' && state.formatOptions.survivorEntryFeeMode === 'paid') {
+        if (!SURVIVOR_PAID_CREATION_ENABLED) return SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE
         const amt = Number(state.formatOptions.survivorEntryFeeUsd)
         if (!Number.isFinite(amt) || amt <= 0) {
           return 'Enter a buy-in amount greater than zero for a paid Survivor league.'
@@ -1313,6 +1315,7 @@ export function LeagueCreationWizard({
           {state.step === 'sport' && (
             <>
               <LeagueTypeSelector
+                sport={state.sport}
                 value={state.leagueType}
                 onChange={handleLeagueTypeChange}
               />

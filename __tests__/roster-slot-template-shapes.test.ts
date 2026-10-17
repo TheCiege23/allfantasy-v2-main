@@ -22,7 +22,7 @@ describe('startingSlotTemplate', () => {
   it('applies the slot aliases', () => {
     expect(startingSlotTemplate({ roster_positions: ['SUPER_FLEX', 'WRRB_FLEX', 'DST'] })).toEqual([
       'SFLEX',
-      'FLEX',
+      'W/R',
       'DEF',
     ])
   })

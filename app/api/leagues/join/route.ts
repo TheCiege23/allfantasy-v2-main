@@ -24,6 +24,13 @@ import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/jo
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import {
+  CLAIM_REFUSAL_MESSAGE,
+  listClaimableSleeperTeams,
+  startSleeperTeamClaim,
+  verifySleeperTeamClaim,
+} from '@/lib/league-join/sleeperOwnershipClaim'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +72,48 @@ export async function POST(req: NextRequest) {
     const requested = await requestClassException({ leagueId, userId })
     if (!requested.ok) return NextResponse.json({ error: requested.error }, { status: requested.status })
     return NextResponse.json({ success: true, leagueId, requestStatus: requested.status })
+  }
+
+  /*
+   * Claim YOUR Sleeper team by proving the account (lib/league-join/sleeperOwnershipClaim.ts): list the
+   * unclaimed teams, get a code to put in your Sleeper team name, verify it. On this path rather than
+   * its own route because of the route ceiling noted on GET below. Members only — the helper checks.
+   */
+  if (body.action === 'sleeper_claim_teams' || body.action === 'sleeper_claim_start' || body.action === 'sleeper_claim_verify') {
+    const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
+    const teamExternalId = typeof body.teamExternalId === 'string' ? body.teamExternalId.trim() : ''
+    if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    if (body.action === 'sleeper_claim_teams') {
+      const member =
+        (await prisma.redraftLeagueMember.findUnique({ where: { leagueId_userId: { leagueId, userId } }, select: { id: true } })) ??
+        (await prisma.league.findFirst({ where: { id: leagueId, userId }, select: { id: true } }))
+      if (!member) return NextResponse.json({ error: CLAIM_REFUSAL_MESSAGE.not_member }, { status: 403 })
+      return NextResponse.json({ teams: await listClaimableSleeperTeams(leagueId) })
+    }
+    if (!teamExternalId) return NextResponse.json({ error: 'Missing teamExternalId' }, { status: 400 })
+    const result =
+      body.action === 'sleeper_claim_start'
+        ? await startSleeperTeamClaim({ userId, leagueId, teamExternalId })
+        : await verifySleeperTeamClaim({ userId, leagueId, teamExternalId })
+    if (result.ok) return NextResponse.json(result)
+    const status =
+      result.reason === 'not_member' || result.reason === 'linked_elsewhere' || result.reason === 'other_account'
+        ? 403
+        : result.reason === 'payment_required'
+          ? 402
+          : result.reason === 'sleeper_unavailable'
+            ? 503
+            : result.reason === 'team_not_found'
+              ? 404
+              : 409
+    return NextResponse.json(
+      {
+        error: CLAIM_REFUSAL_MESSAGE[result.reason],
+        code: result.reason,
+        ...('seenTeamName' in result && result.seenTeamName !== undefined ? { seenTeamName: result.seenTeamName } : {}),
+      },
+      { status },
+    )
   }
 
   if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
@@ -183,6 +232,43 @@ export async function POST(req: NextRequest) {
       return { success: false as const, status: 404, error: 'League not found' }
     }
 
+    /*
+     * 🛑 AN IMPORTED LEAGUE IS JOINED AS A MEMBER — NEVER BY TAKING, OR MAKING, A TEAM.
+     *
+     * Its teams are the provider's managers. This route used to hand one over by DISPLAY-NAME match
+     * (`claimPlaceholderRoster`): pick a display name equal to another manager's and their roster was
+     * yours, with no proof. Owning a Sleeper account cannot be proven here yet (a Sleeper link is a
+     * typed username — see `sleeper-identity-has-no-ownership-proof`), so no join by link may claim
+     * an imported team. And when nothing matched it created a fresh EMPTY roster: a thirteenth team
+     * in a twelve-team Sleeper league. Even a correct name match could not mark the team as yours,
+     * because an import's `LeagueTeam.externalId` is the provider's roster number, never `Roster.id`
+     * (production 2026-10-12: 0 of 6,967 imported teams line up).
+     *
+     * What a leaguemate arriving from a shared recap wants is the league's chat and recaps, and a
+     * `RedraftLeagueMember` row is what `resolveLeagueMembership` admits for that. Their team is
+     * claimed through the identity-checked invite flow (`/join/<token>`), which refuses a team linked
+     * to another manager's account.
+     */
+    if (isImportedPlatform(league.platform)) {
+      const alreadyMember = await tx.redraftLeagueMember.findUnique({
+        where: { leagueId_userId: { leagueId: result.leagueId, userId } },
+        select: { id: true },
+      })
+      if (!alreadyMember) {
+        await tx.redraftLeagueMember.create({
+          data: { leagueId: result.leagueId, userId, role: 'MEMBER', teamNumber: null },
+        })
+      }
+      return {
+        success: true as const,
+        leagueId: result.leagueId,
+        alreadyMember: Boolean(alreadyMember),
+        memberOnly: true as const,
+        // A Sleeper league's team can be claimed by proving the account — the page offers it.
+        sleeperClaim: String(league.platform).toLowerCase() === 'sleeper',
+      }
+    }
+
     const realRosterUsers = await tx.appUser.findMany({
       where: { id: { in: leagueRosters.map((r: { platformUserId: string }) => r.platformUserId) } },
       select: { id: true },
@@ -193,7 +279,8 @@ export async function POST(req: NextRequest) {
       return { success: false as const, status: 409, error: 'League is full' }
     }
 
-    if (league.leagueVariant === 'survivor' && draftSession?.status && draftSession.status !== 'pre_draft') {
+    if ((league.leagueVariant === 'survivor' || league.leagueVariant === 'survivor_guillotine') &&
+        draftSession?.status && draftSession.status !== 'pre_draft') {
       return {
         success: false as const,
         status: 409,

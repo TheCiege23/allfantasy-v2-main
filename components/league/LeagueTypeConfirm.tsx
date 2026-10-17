@@ -11,6 +11,7 @@ import {
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
 import { cn } from '@/lib/utils'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   LEAGUE_TYPE_DECIDES_GRADES,
   LEAGUE_TYPE_GRADES_EXPLAINER,
@@ -69,23 +70,11 @@ type State = {
  * league from a list with no follow-up would send it without the base the API
  * requires. One list, one follow-up, in both pickers.
  */
-const HINTS: Partial<Record<LeagueConceptType, string>> = {
-  redraft: 'Fresh draft each year',
-  dynasty: 'Rosters carry over',
-  keeper: 'Keep a few players each year',
-  best_ball: 'Lineups set themselves',
-  guillotine: 'Lowest score eliminated weekly',
-  survivor: 'Last manager standing',
-  survivor_guillotine: 'Tribes, weekly chops, no trades',
-  tournament: 'Many leagues, one bracket',
-  devy: 'Dynasty with college players',
-  c2c: 'College and pro rosters both score',
-  efl: 'Priced as a dynasty league',
-  zombie: 'Teams beaten by the horde join it',
-  pirate: 'Winners steal from losers',
-  salary_cap: 'Contracts and a cap',
-  big_brother: 'Weekly evictions and votes',
-}
+/** One-line hints per type, as dictionary keys (`lsRules.lt.hint.<type>`), resolved at render. */
+const HINT_TYPES = new Set<LeagueConceptType>([
+  'redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine', 'survivor', 'survivor_guillotine', 'tournament',
+  'devy', 'c2c', 'efl', 'zombie', 'pirate', 'salary_cap', 'big_brother',
+])
 
 export function LeagueTypeConfirm({
   leagueId,
@@ -97,6 +86,7 @@ export function LeagueTypeConfirm({
   /** Skip the "not worth asking" self-hide — for a settings page the commissioner chose to open. */
   alwaysShow?: boolean
 }) {
+  const { t } = useOptionalLanguage()
   const [state, setState] = useState<State | null>(null)
   const [choice, setChoice] = useState<string | null>(null)
   /** Only meaningful when `choice` is Pirate — the save waits for it. */
@@ -153,12 +143,12 @@ export function LeagueTypeConfirm({
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(typeof data?.error === 'string' ? data.error : 'Could not save')
+        setError(typeof data?.error === 'string' ? data.error : t('lsRules.lt.saveFailed'))
         return
       }
       setState(data)
     } catch {
-      setError('Could not save. Try again.')
+      setError(t('lsRules.lt.saveRetry'))
     } finally {
       setSaving(false)
     }
@@ -187,7 +177,7 @@ export function LeagueTypeConfirm({
     >
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-black uppercase tracking-[0.16em] text-[#9fb4c7]">
-          {confirmed ? 'League type' : 'What kind of league is this?'}
+          {confirmed ? t('lsRules.lt.title') : t('lsRules.lt.ask')}
         </h3>
         <span
           className={cn(
@@ -197,19 +187,19 @@ export function LeagueTypeConfirm({
               : 'border-[#3fd0e8]/40 text-[#3fd0e8]',
           )}
         >
-          {confirmed ? 'Confirmed' : 'Decides your trade grades'}
+          {confirmed ? t('lsRules.lt.confirmed') : t('lsRules.lt.decides')}
         </span>
       </header>
 
       {confirmed ? (
         <p className="mt-3 text-sm text-[#a3b2c2]">
-          Set to{' '}
+          {t('lsRules.lt.setTo')}{' '}
           <strong className="text-[#e6edf3]">
             {leagueConceptLabel(state.confirmation?.type)}
             {confirmedBaseLabel ? ` · ${confirmedBaseLabel}` : ''}
           </strong>
-          {state.confirmation?.buyIn != null ? ` · $${state.confirmation.buyIn} buy-in` : ''}. Every
-          trade here is graded as this type. Change it below if that&rsquo;s wrong.
+          {state.confirmation?.buyIn != null ? t('lsRules.lt.buyIn').replace('{{amount}}', String(state.confirmation.buyIn)) : ''}
+          {t('lsRules.lt.setToTail')}
         </p>
       ) : (
         <>
@@ -221,12 +211,12 @@ export function LeagueTypeConfirm({
           <p className="mt-3 text-sm font-bold text-[#e6edf3]">{LEAGUE_TYPE_DECIDES_GRADES}</p>
           <p className="mt-1 text-sm text-[#a3b2c2]">{LEAGUE_TYPE_GRADES_EXPLAINER}</p>
           <p className="mt-2 text-sm text-[#a3b2c2]">
-            {state.leagueName ? `“${state.leagueName}” ` : 'This league '}is graded as{' '}
+            {state.leagueName ? `“${state.leagueName}” ` : t('lsRules.lt.thisLeague')}{t('lsRules.lt.gradedAs')}{' '}
             <strong className="text-[#e6edf3]">
               {state.gradedAs ? state.gradedAs.label : (state.storedType ?? 'redraft')}
             </strong>
-            {state.gradedAs ? ` — ${leagueTypeSourceText(state.gradedAs)}` : ''}. Sleeper can&rsquo;t
-            describe formats like zombie or tournament leagues, so confirm it here.
+            {state.gradedAs ? ` — ${leagueTypeSourceText(state.gradedAs)}` : ''}
+            {t('lsRules.lt.gradedTail')}
           </p>
           <ul className="mt-2 space-y-1 text-xs text-[#74869a]">
             {state.suggestion.reasons.map((r) => (
@@ -241,26 +231,26 @@ export function LeagueTypeConfirm({
           <div
             className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"
             role="radiogroup"
-            aria-label="League format"
+            aria-label={t('lsRules.lt.formatAria')}
           >
-            {LEAGUE_CONCEPT_OPTIONS.map((t) => (
+            {LEAGUE_CONCEPT_OPTIONS.map((o) => (
               <button
-                key={t.id}
+                key={o.id}
                 type="button"
                 role="radio"
-                aria-checked={choice === t.id}
-                onClick={() => setChoice(t.id)}
+                aria-checked={choice === o.id}
+                onClick={() => setChoice(o.id)}
                 className={cn(
                   'rounded-xl border p-2 text-left transition-colors',
                   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3fd0e8]',
-                  choice === t.id
+                  choice === o.id
                     ? 'border-[#3fd0e8] bg-[#3fd0e8]/10'
                     : 'border-[#2a3746] hover:border-[#3d5064]',
                 )}
               >
-                <span className="block text-sm font-bold text-[#e6edf3]">{t.label}</span>
-                {HINTS[t.id] ? (
-                  <span className="block text-[11px] text-[#74869a]">{HINTS[t.id]}</span>
+                <span className="block text-sm font-bold text-[#e6edf3]">{o.label}</span>
+                {HINT_TYPES.has(o.id) ? (
+                  <span className="block text-[11px] text-[#74869a]">{t(`lsRules.lt.hint.${o.id}`)}</span>
                 ) : null}
               </button>
             ))}
@@ -270,9 +260,9 @@ export function LeagueTypeConfirm({
             <div
               className="mt-3 flex flex-wrap items-center gap-2"
               role="radiogroup"
-              aria-label="Do rosters carry over?"
+              aria-label={t('lsRules.lt.carryOverAria')}
             >
-              <span className="text-xs text-[#a3b2c2]">Rosters carry over?</span>
+              <span className="text-xs text-[#a3b2c2]">{t('lsRules.lt.carryOver')}</span>
               {PIRATE_BASE_FORMAT_OPTIONS.map((b) => (
                 <button
                   key={b.id}
@@ -295,7 +285,7 @@ export function LeagueTypeConfirm({
           ) : null}
 
           <label className="mt-3 flex items-center gap-2 text-xs text-[#a3b2c2]">
-            <span>Buy-in (optional)</span>
+            <span>{t('lsRules.lt.buyInOptional')}</span>
             <input
               type="number"
               min="0"
@@ -315,12 +305,12 @@ export function LeagueTypeConfirm({
             disabled={saving || !choice || needsPirateBase}
             className="mt-3 rounded-xl bg-[#3fd0e8] px-4 py-2 text-sm font-black text-[#0c121b] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3fd0e8]"
           >
-            {saving ? 'Saving…' : confirmed ? 'Update format' : 'Confirm format'}
+            {saving ? t('lsRules.lt.saving') : confirmed ? t('lsRules.lt.update') : t('lsRules.lt.confirm')}
           </button>
         </>
       ) : (
         // Showing buttons that will 403 is worse than explaining who can act.
-        <p className="mt-3 text-xs text-[#74869a]">Your commissioner can confirm this.</p>
+        <p className="mt-3 text-xs text-[#74869a]">{t('lsRules.lt.commishCan')}</p>
       )}
     </section>
   )

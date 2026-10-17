@@ -17,6 +17,7 @@ import { buildSeoMeta } from '@/lib/seo';
 import { resolveEffectiveDataMode } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import { IOS_APP_HTML_FLAG_SCRIPT, IOS_APP_UA_TEST_JS } from '@/lib/platform/iosApp';
+import { AD_OPT_OUT_TEST_JS } from '@/lib/privacy/adMeasurementOptOut';
 import './globals.css';
 
 export const viewport = {
@@ -265,7 +266,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             dangerouslySetInnerHTML={{
               __html: `
                 (function(f,b,e,v,pixelId,n,t,s) {
-                  if (!pixelId || ${IOS_APP_UA_TEST_JS}) return;
+                  if (!pixelId || ${IOS_APP_UA_TEST_JS} || ${AD_OPT_OUT_TEST_JS}) return;
                   if (typeof f.fbq !== 'function') {
                     n=f.fbq=function(){n.callMethod?
                     n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -317,7 +318,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
         {metaPixelId ? (
           <Script id="meta-pixel-base" strategy="afterInteractive">
-            {`if (!${IOS_APP_UA_TEST_JS}) {
+            {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) {
               !function(f,b,e,v,n,t,s)
               {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
               n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -372,24 +373,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </Script>
         ) : null}
 
-        {metaPixelId ? (
-          <noscript>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt=""
-              height="1"
-              width="1"
-              style={{ display: 'none' }}
-              src={`https://www.facebook.com/tr?id=${encodeURIComponent(metaPixelId)}&ev=PageView&noscript=1`}
-            />
-          </noscript>
-        ) : null}
+        {/*
+          No <noscript> pixel: an image request cannot read Global Privacy Control or the
+          opt-out cookie, so it would fire for exactly the visitors who said no
+          (lib/privacy/adMeasurementOptOut). It only ever served JS-disabled clients.
+        */}
 
         {gaMeasurementId && (
           <>
             {/* Injected here rather than as <Script src> so the iOS app can skip it (lib/platform/iosApp). */}
             <Script id="google-gtag" strategy="afterInteractive">
-              {`if (!${IOS_APP_UA_TEST_JS}) {
+              {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) {
                 var gtagJs = document.createElement('script');
                 gtagJs.async = true;
                 gtagJs.src = 'https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}';
@@ -450,7 +444,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {`window.dataLayer = window.dataLayer || [];`}
             </Script>
             <Script id="gtm-loader" strategy="afterInteractive">
-              {`if (!${IOS_APP_UA_TEST_JS}) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+              {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);

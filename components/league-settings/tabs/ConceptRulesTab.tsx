@@ -5,10 +5,12 @@ import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSett
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/BestBallSettingsCommissionerPanel'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 /** Specialty / concept-specific rules — merges JSON under `settings` via `settingsMerge`. */
 export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+  const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'conceptRules', {
     enabled: canEdit,
@@ -37,17 +39,15 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
       <LeagueTypeConfirm leagueId={leagueId} alwaysShow />
 
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4">
-        <h4 className="text-[12px] font-bold uppercase tracking-wide text-cyan-200/80">Concept snapshot</h4>
+        <h4 className="text-[12px] font-bold uppercase tracking-wide text-cyan-200/80">{t('lsHub.cr.snapshot')}</h4>
         <ul className="mt-3 space-y-1.5 text-[12px] text-white/70">
-          <li>Guillotine: {flags.guillotine ? 'On' : 'Off'}</li>
-          <li>Survivor: {flags.survivor ? 'On' : 'Off'}</li>
-          <li>Best ball: {flags.bestBall ? 'On' : 'Off'}</li>
-          <li>Variant: {flags.variant ?? '—'}</li>
+          <li>{t('lsHub.cr.guillotine').replace('{{state}}', flags.guillotine ? t('lsHub.on') : t('lsHub.off'))}</li>
+          <li>{t('lsHub.cr.survivor').replace('{{state}}', flags.survivor ? t('lsHub.on') : t('lsHub.off'))}</li>
+          <li>{t('lsHub.cr.bestBall').replace('{{state}}', flags.bestBall ? t('lsHub.on') : t('lsHub.off'))}</li>
+          <li>{t('lsHub.cr.variant').replace('{{variant}}', flags.variant ?? '—')}</li>
         </ul>
         <p className="mt-3 text-[11px] leading-relaxed text-white/45">
-          Deep specialty rules (survivor merge, guillotine elimination cadence, tournament brackets) use dedicated
-          engines. Use the notes below to attach commissioner metadata to the league JSON blob — saved
-          automatically.
+          {t('lsHub.cr.note')}
         </p>
       </div>
 
@@ -60,7 +60,7 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
       {flags.bestBall ? (
         <div className="space-y-3">
-          <h4 className="text-[12px] font-bold uppercase tracking-wide text-white/55">Best Ball Settings</h4>
+          <h4 className="text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.cr.bestBallSettings')}</h4>
           <BestBallSettingsCommissionerPanel
             leagueId={ctx.league.id}
             sport={String(ctx.league.sport ?? 'NFL')}
@@ -72,7 +72,7 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
       <div>
         <label className="block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            Commissioner concept notes (JSON merge)
+            {t('lsHub.cr.notes')}
           </span>
           <textarea
             defaultValue={JSON.stringify(
@@ -97,7 +97,7 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
             className="w-full rounded-xl border border-white/[0.10] bg-black/30 px-3 py-2 font-mono text-[11px] text-white/90 outline-none focus:border-cyan-400/35 disabled:opacity-50"
           />
         </label>
-        {saving ? <p className="mt-1 text-[11px] text-cyan-300/80">Saving…</p> : null}
+        {saving ? <p className="mt-1 text-[11px] text-cyan-300/80">{t('lsHub.saving')}</p> : null}
       </div>
     </div>
   )

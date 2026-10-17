@@ -23,6 +23,28 @@ import { runSyncRounds, MAX_ROUNDS, type SyncPostResult } from '@/lib/core-app/s
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 
 describe('selected league refresh', () => {
+  it.each([-1, NaN, '1'])('rejects an invalid attempted count %s without continuing', async (attempted) => {
+    const post = vi.fn(async () => round({ attempted: attempted as number, totalCandidates: 2, synced: 1, remaining: ['sleeper:b'] }))
+    const out = await runSyncRounds({ post, maxRounds: 3 })
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(out.status).toBe('failed')
+    expect(out.synced).toBe(0)
+  })
+
+  it('rejects continuation keys outside the previously confirmed scope', async () => {
+    const post = vi.fn(async () => round({ totalCandidates: 2, synced: 1, remaining: ['sleeper:other'] }))
+    const out = await runSyncRounds({ post, initialOnly: ['sleeper:mine'], maxRounds: 3 })
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(out.status).toBe('failed')
+  })
+
+  it('preserves verified progress when later counts exceed the original total', async () => {
+    const post = vi.fn().mockResolvedValueOnce(round({ totalCandidates: 2, synced: 1, remaining: ['sleeper:b'] })).mockResolvedValueOnce(round({ totalCandidates: 1, synced: 3 }))
+    const out = await runSyncRounds({ post })
+    expect(out.status).toBe('failed')
+    expect(out.synced).toBe(1)
+    expect(out.total).toBe(2)
+  })
   it('sends only that league and reports the filtered candidate count', async () => {
     const post = vi.fn(async (): Promise<SyncPostResult> => round({ totalCandidates: 1, attempted: 1, synced: 1 }))
     const out = await runSyncRounds({ post, initialOnly: ['sleeper:123'] })
@@ -292,5 +314,36 @@ describe('positive control — these tests can fail', () => {
        row would make the assertion below pass and this test fail — which is
        exactly the alarm we want. */
     expect(() => expect(selectResyncCandidates([snapshot])).toHaveLength(1)).toThrow()
+  })
+})
+
+describe('sync completion evidence', () => {
+  it('does not claim completion when the remaining list is absent and counts fall short', async () => {
+    const out = await runSyncRounds({ post: async () => ({ httpOk: true, round: { ok: true, totalCandidates: 3, synced: 1 } }) })
+    expect(out.status).toBe('incomplete')
+    expect(out.tone).toBe('attention')
+    expect(out.message).toContain('completion could not be verified')
+  })
+  it('does not claim a clean finish for inconsistent terminal counts', async () => {
+    const out = await runSyncRounds({ post: async () => round({ totalCandidates: 3, synced: 2 }) })
+    expect(out.status).toBe('incomplete')
+    expect(out.synced).toBe(2)
+  })
+  it('rejects malformed counts without adding unverified progress', async () => {
+    const out = await runSyncRounds({ post: async () => round({ synced: -1 }) })
+    expect(out.status).toBe('failed')
+    expect(out.synced).toBe(0)
+  })
+  it('rejects duplicate continuation keys instead of repeating provider requests', async () => {
+    const post = vi.fn(async () => round({ remaining: ['sleeper:a', 'sleeper:a'] }))
+    expect((await runSyncRounds({ post })).status).toBe('failed')
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+  it('preserves verified progress when the next round is malformed', async () => {
+    const post = scriptedPost([round({ totalCandidates: 2, remaining: ['sleeper:b'] }), round({ synced: NaN })])
+    const out = await runSyncRounds({ post })
+    expect(out.status).toBe('failed')
+    expect(out.synced).toBe(1)
+    expect(out.total).toBe(2)
   })
 })

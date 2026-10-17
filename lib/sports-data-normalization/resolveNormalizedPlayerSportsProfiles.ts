@@ -300,7 +300,7 @@ export async function resolveNormalizedPlayerSportsProfiles(args: {
     }
   }
 
-  let csIndex = { byName: new Map<string, Record<string, unknown>>(), byId: new Map<string, Record<string, unknown>>() }
+  let csIndex: ReturnType<typeof indexClearSportsProjections> = { byName: new Map() }
   const useCs = args.includeClearSportsProjections !== false
   if (useCs && names.length > 0) {
     try {
@@ -339,7 +339,9 @@ export async function resolveNormalizedPlayerSportsProfiles(args: {
 
     const csRow = pickProjectionRowForPlayer({
       name,
-      externalId: row?.externalId ?? riRow?.playerId ?? null,
+      team: row?.team ?? riRow?.team ?? null,
+      position: row?.position ?? riRow?.position ?? null,
+      sport,
       index: csIndex,
     })
     const weeklyFromCs = csRow ? extractProjectionPoints(csRow) : null

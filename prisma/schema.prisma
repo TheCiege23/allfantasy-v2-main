@@ -1872,6 +1872,24 @@ model PlayerFollow {
   @@map("player_follows")
 }
 
+/// Follow a real-world team (owner's call, 2026-10-03): news and injury alerts for the team and its
+/// players, not the whole league. Keyed on the canonical abbreviation from `sports_core_teams`; news
+/// strings are mapped onto it by lib/follows/teamResolver. Read and written by lib/follows/teamFollows.
+model TeamFollow {
+  id        String   @id
+  userId    String   @map("user_id")
+  sport     String   @db.VarChar(16)
+  /// Canonical abbreviation (sports_core_teams.abbreviation), e.g. "GB", "LSU".
+  teamAbbr  String   @map("team_abbr") @db.VarChar(16)
+  /// Display name at follow time, so a list renders without a join.
+  teamName  String   @map("team_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, sport, teamAbbr], map: "team_follows_user_id_sport_team_abbr_key")
+  @@index([sport, teamAbbr], map: "team_follows_sport_team_abbr_idx")
+  @@map("team_follows")
+}
+
 model AIUserFeedback {
   id            String   @id @default(uuid())
   userId        String
@@ -2177,7 +2195,7 @@ model YahooConnection {
   /// stores can ever be written in production; this one was demoted rather than made
   /// to hold a second copy of a token. Applied to production 2026-09-04 and recorded
   /// in `_prisma_migrations` at 16:22:59Z — SQL in
-  /// `prisma/migrations-pending/20260902020000_yahoo_connection_identity`.
+  /// `prisma/migrations/20260902020000_yahoo_connection_identity`.
   accessToken    String?
   refreshToken   String?
   tokenExpiresAt DateTime?
@@ -2460,6 +2478,18 @@ model TradeAnalysisSnapshot {
   @@index([sleeperUsername, createdAt])
   @@index([expiresAt])
   @@map("trade_analysis_snapshots")
+}
+
+model GenericTradeComparison {
+  id        String   @id @default(cuid())
+  userId    String
+  sourceId  String
+  snapshot  Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([userId, sourceId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("generic_trade_comparisons")
 }
 
 model ShareReward {
@@ -4013,6 +4043,8 @@ model AppUser {
   householdExceptionsAsA                   HouseholdException[]                   @relation("HouseholdExceptionUserA")
   householdExceptionsAsB                   HouseholdException[]                   @relation("HouseholdExceptionUserB")
   deletedLeagueTombstones                  DeletedLeagueTombstone[]
+  legalAcceptances                         LegalAcceptance[]
+  coreBracketPicks                         CoreBracketPick[]
 
   @@map("app_users")
 }
@@ -6288,6 +6320,14 @@ model League {
   createdAt                             DateTime                               @default(now())
   updatedAt                             DateTime                               @updatedAt
   leagueVariant                         String?                                @db.VarChar(32)
+  survivorGuillotineLeague               SurvivorGuillotineLeague?
+  survivorGuillotinePowers               SurvivorGuillotinePower[]
+  survivorGuillotineChops                SurvivorGuillotineChop[]
+  survivorGuillotineCaptainVotes         SurvivorGuillotineCaptainVote[]
+  survivorGuillotineChoiceVotes          SurvivorGuillotineChoiceVote[]
+  survivorGuillotineTribeChoices         SurvivorGuillotineTribeChoice[]
+  survivorGuillotineDailyLineups         SurvivorGuillotineDailyLineup[]
+  survivorGuillotineAuctionBids          SurvivorGuillotineAuctionBid[]
   importBatchId                         String?                                @db.VarChar(64)
   importedAt                            DateTime?
   /// League logo (AllFantasy commissioner upload; separate from imported avatarUrl when set).
@@ -11978,7 +12018,7 @@ model StatIngestionJob {
 /// Player Trend Detection Engine: platform-wide trend metrics per player/sport
 model PlayerMetaTrend {
   id                 String   @id @default(cuid())
-  playerId           String   @db.VarChar(32)
+  playerId           String   @db.VarChar(128)
   sport              String   @db.VarChar(12)
   trendScore         Float    @default(0)
   addRate            Float    @default(0)
@@ -12002,7 +12042,7 @@ model PlayerMetaTrend {
 /// Raw trend signal events (waiver add/drop, trade, draft, lineup start)
 model TrendSignalEvent {
   id         String   @id @default(cuid())
-  playerId   String   @db.VarChar(32)
+  playerId   String   @db.VarChar(128)
   sport      String   @db.VarChar(12)
   signalType String   @db.VarChar(24)
   value      Float    @default(1)
@@ -13928,7 +13968,7 @@ model DraftFact {
   ///
   /// ⚠ DECLARED HERE BECAUSE THE COLUMN IS ALREADY LIVE, NOT TO CREATE IT. Applied by
   /// hand to production and recorded in `_prisma_migrations` on 2026-09-05 01:41:00Z;
-  /// the SQL is `prisma/migrations-pending/20260902000000_draft_fact_metadata`. Until
+  /// the SQL is `prisma/migrations/20260902000000_draft_fact_metadata`. Until
   /// this line existed, `schema.prisma` and production disagreed — harmless for
   /// `migrate deploy`, which does not drift-check, but `prisma migrate dev` or
   /// `db push` reads that disagreement as drift and offers to DROP the column.
@@ -15547,6 +15587,153 @@ model GuillotineSeason {
 
   @@index([leagueId])
   @@map("guillotine_seasons")
+}
+
+/// Native Survivor Guillotine season. Public competition state is separate from sealed powers.
+model SurvivorGuillotineLeague {
+  id             String   @id @default(cuid())
+  leagueId       String   @unique
+  config         Json
+  tribes         Json     @default("[]")
+  tribeDraftState Json    @default("{}")
+  periodState    Json     @default("{}")
+  scoreHistory   Json     @default("{}")
+  periodHistory  Json     @default("{}")
+  rewardPeriods  Json     @default("[]")
+  periodCalendar Json     @default("{}")
+  captainElectionDeadlineAt DateTime?
+  currentPeriod  Int      @default(0)
+  status         String   @default("setup")
+  revision       Int      @default(1)
+  lastCorrectionCheckAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  league         League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@map("survivor_guillotine_leagues")
+}
+
+/// Sealed owner and type never travel through the public season endpoint.
+model SurvivorGuillotinePower {
+  id                 String    @id @default(cuid())
+  leagueId           String
+  kind               String
+  binding            String
+  playerId           String?
+  ownerUserId        String?
+  awardPeriod        Int?
+  activationPeriod   Int?
+  expiresAfterPeriod Int
+  status             String    @default("held")
+  source             String    @default("draft")
+  targetRosterId     String?
+  revealedAt         DateTime?
+  activatedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  league             League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, ownerUserId, status])
+  @@index([leagueId, playerId, status])
+  @@unique([leagueId, awardPeriod])
+  @@map("survivor_guillotine_powers")
+}
+
+model SurvivorGuillotineCaptainVote {
+  id                String   @id @default(cuid())
+  leagueId          String
+  period            Int
+  tribeId           String
+  voterRosterId     String
+  candidateRosterId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  league            League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, voterRosterId])
+  @@index([leagueId, period, tribeId])
+  @@map("survivor_guillotine_captain_votes")
+}
+
+model SurvivorGuillotineChoiceVote {
+  id            String   @id @default(cuid())
+  leagueId      String
+  period        Int
+  slotKey       String
+  tribeId       String
+  voterRosterId String
+  choice        Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, slotKey, voterRosterId])
+  @@index([leagueId, period, slotKey])
+  @@map("survivor_guillotine_choice_votes")
+}
+
+model SurvivorGuillotineTribeChoice {
+  id        String   @id @default(cuid())
+  leagueId  String
+  rosterId  String
+  tribeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, rosterId])
+  @@index([leagueId, tribeId])
+  @@map("survivor_guillotine_tribe_choices")
+}
+
+model SurvivorGuillotineDailyLineup {
+  id        String   @id @default(cuid())
+  leagueId  String
+  period    Int
+  rosterId  String
+  gameDay   DateTime @db.Date
+  playerIds Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, rosterId, gameDay])
+  @@index([leagueId, period, gameDay])
+  @@map("survivor_guillotine_daily_lineups")
+}
+
+model SurvivorGuillotineAuctionBid {
+  id        String   @id @default(cuid())
+  leagueId  String
+  period    Int
+  rosterId  String
+  amount    Int
+  status    String   @default("sealed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, period, rosterId])
+  @@index([leagueId, period, status])
+  @@map("survivor_guillotine_auction_bids")
+}
+
+/// Durable chop attempts; reversed rows remain for audit, while active rows drive eligibility.
+model SurvivorGuillotineChop {
+  id          String   @id @default(cuid())
+  leagueId    String
+  period      Int
+  rosterId    String
+  score       Float
+  tribeId     String?
+  releaseSnapshot Json?
+  reversedAt  DateTime?
+  reversalReason String?
+  createdAt   DateTime @default(now())
+  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, period, rosterId])
+  @@index([leagueId, period])
+  @@map("survivor_guillotine_chops")
 }
 
 model GuillotineElimination {
@@ -19082,4 +19269,45 @@ model ManagerRatingEvent {
   @@index([subjectKey, sport, modelVersion, season, week])
   @@index([leagueId, season, week])
   @@map("manager_rating_events")
+}
+
+/// One row per document a user agreed to, at the version they saw (lib/legal/legalVersions).
+/// Append-only: re-accepting a revised document adds a row, it never rewrites the old one —
+/// the history of what was agreed, when, is the point. Written by lib/legal/recordLegalAcceptance.
+model LegalAcceptance {
+  id              String   @id @default(uuid())
+  userId          String
+  /// "terms" | "disclaimer" | "privacy"
+  document        String   @db.VarChar(32)
+  /// The page's last-updated stamp at the moment of acceptance, e.g. "September 2026".
+  documentVersion String   @db.VarChar(64)
+  /// Where it was accepted: "signup" | "age_prompt"
+  source          String   @db.VarChar(32)
+  acceptedAt      DateTime @default(now())
+  user            AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, document])
+  @@map("legal_acceptances")
+}
+
+/// /core Bracket Challenge picks (components/core-app/screens/BracketChallenge.tsx): one row per
+/// account per sport per season — the champion and the final's series length. Written and read only
+/// by /api/core/bracket-picks (lib/core-app/bracketPicksStore). NOT a pool entry: pool picks live in
+/// PlayoffBracketEntry / PlayoffBracketPick, keyed by entry + series, with no series-length column.
+model CoreBracketPick {
+  id             String   @id @default(uuid())
+  userId         String
+  /// A SportKey from lib/brackets/sportShell, e.g. "mlb".
+  sport          String   @db.VarChar(16)
+  seasonYear     Int
+  /// SportsTeam.id of the picked champion; null while only a series length is picked.
+  championTeamId String?
+  /// Games in the final series (one of the shell's finalLength options); null when not picked.
+  finalLength    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sport, seasonYear])
+  @@map("core_bracket_picks")
 }

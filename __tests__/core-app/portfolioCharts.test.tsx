@@ -72,7 +72,8 @@ describe('Heatmap', () => {
     expect(cells[0].getAttribute('data-level')).toBe('2')
     fireEvent.click(cells[0])
     expect(picked).toEqual(['0:injury'])
-    expect(container.querySelector('[data-unknown="true"]')?.getAttribute('title')).toBe('draft not finished')
+    /* The reason moved to the riskLevels "?" — a title= a phone never shows is gone. */
+    expect(container.querySelector('[data-unknown="true"]')?.getAttribute('title')).toBeNull()
   })
 })
 

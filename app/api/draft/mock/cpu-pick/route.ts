@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { parseSessionKey } from '@/lib/draft/session-key'
 import { slotIndexForOverallPick } from '@/lib/draft/snake'
 import { executeDraftPick } from '@/lib/draft/execute-pick'
+import { loadSleeperAdpBoard, MAX_BOARD_SIZE, pickFromBoard } from '@/lib/draft/sleeperDraftBoard'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,28 +17,21 @@ async function pickNextCpuPlayer(roomId: string | null, leagueId: string | null)
   })
   const takenIds = new Set(taken.map((t) => t.playerId).filter(Boolean) as string[])
 
-  const pool = await prisma.sportsPlayer.findMany({
-    where: { sport: 'NFL' },
-    select: {
-      externalId: true,
-      name: true,
-      position: true,
-      team: true,
-    },
-    take: 500,
-    orderBy: { name: 'asc' },
-  })
-
-  for (const p of pool) {
-    if (takenIds.has(p.externalId)) continue
-    return {
-      playerId: p.externalId,
-      playerName: p.name,
-      position: p.position ?? 'UNK',
-      team: p.team ?? null,
-    }
+  /*
+   * 🛑 BEST AVAILABLE BY CONSENSUS ADP, IN SLEEPER IDS (2026-10-11). This used to take the first 500
+   * `SportsPlayer` rows by NAME A→Z, with no `source` filter — so every CPU team drafted the
+   * alphabet, under whichever provider's id the row happened to carry. The board is the same one
+   * the human drafts from (`/api/draft/players`), so `takenIds` and the board share one id space.
+   */
+  const board = (await loadSleeperAdpBoard({ sport: 'NFL', take: MAX_BOARD_SIZE }).catch(() => null)) ?? []
+  const p = pickFromBoard(board, takenIds)
+  if (!p) return null
+  return {
+    playerId: p.id,
+    playerName: p.name,
+    position: p.position || 'UNK',
+    team: p.team || null,
   }
-  return null
 }
 
 export async function POST(req: Request) {

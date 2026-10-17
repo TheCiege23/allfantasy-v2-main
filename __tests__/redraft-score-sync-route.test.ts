@@ -29,7 +29,7 @@ vi.mock("@/lib/survivor/gameStateMachine", () => ({
 }))
 
 vi.mock("@/lib/zombie/matchupCompletion", () => ({
-  checkAllMatchupsComplete: vi.fn(),
+  getZombieWeekReadiness: vi.fn(),
 }))
 
 vi.mock("@/lib/zombie/weeklyResolutionEngine", () => ({

@@ -23,6 +23,18 @@ vi.mock('@/lib/adp/recomputeAllFantasyAdp', () => ({
   recomputeAllFantasyAdp: (...args: unknown[]) => mockRecompute(...args),
 }))
 
+const referenceMocks = vi.hoisted(() => ({ market: vi.fn(), cached: vi.fn(), provider: vi.fn() }))
+vi.mock('@/lib/draft-archive/ingestion/referenceWriter', () => ({
+  syncMarketReferences: referenceMocks.market,
+  captureCachedReferences: referenceMocks.cached,
+  captureProviderAdp: referenceMocks.provider,
+}))
+beforeEach(() => {
+  referenceMocks.market.mockReset().mockResolvedValue({ stored: 4, entries: 100, failed: 0, unavailable: 0 })
+  referenceMocks.cached.mockReset().mockResolvedValue({ boards: 0, entries: 0, auctionPicks: 0 })
+  referenceMocks.provider.mockReset().mockResolvedValue({ boards: 8, entries: 100, unavailable: false })
+})
+
 import { GET, POST } from '@/app/api/cron/recompute-allfantasy-adp/route'
 
 const root = resolve(__dirname, '..', '..')
@@ -74,6 +86,9 @@ describe('D.5-scheduler — cron route auth', () => {
     const body = await res.json()
     expect(body).toEqual({ error: 'Unauthorized' })
     expect(mockRecompute).not.toHaveBeenCalled()
+    expect(referenceMocks.market).not.toHaveBeenCalled()
+    expect(referenceMocks.provider).not.toHaveBeenCalled()
+    expect(referenceMocks.cached).not.toHaveBeenCalled()
   })
 
   it('rejects with 401 when the bearer token is wrong', async () => {
@@ -84,6 +99,9 @@ describe('D.5-scheduler — cron route auth', () => {
     )
     expect(res.status).toBe(401)
     expect(mockRecompute).not.toHaveBeenCalled()
+    expect(referenceMocks.market).not.toHaveBeenCalled()
+    expect(referenceMocks.provider).not.toHaveBeenCalled()
+    expect(referenceMocks.cached).not.toHaveBeenCalled()
   })
 
   it('rejects POST with 401 when no secret is provided', async () => {
@@ -92,6 +110,9 @@ describe('D.5-scheduler — cron route auth', () => {
     )
     expect(res.status).toBe(401)
     expect(mockRecompute).not.toHaveBeenCalled()
+    expect(referenceMocks.market).not.toHaveBeenCalled()
+    expect(referenceMocks.provider).not.toHaveBeenCalled()
+    expect(referenceMocks.cached).not.toHaveBeenCalled()
   })
 
   it('accepts the correct secret via Authorization: Bearer', async () => {
@@ -292,5 +313,36 @@ describe('D.5-scheduler — imported-draft opt-out', () => {
     expect(mockRecompute).toHaveBeenCalledWith(
       expect.objectContaining({ includeImportedDrafts: true }),
     )
+  })
+})
+
+
+describe('scheduled draft reference refresh', () => {
+  beforeEach(() => {
+    mockRecompute.mockReset().mockResolvedValue({ ...SAMPLE_REPORT })
+    process.env.CRON_SECRET = 'unit-test-secret'
+  })
+  afterEach(() => { delete process.env.CRON_SECRET })
+  it.each(['includeReferences=false', 'dryRun=true', 'includeTest=true', 'sport=NHL'])(
+    'skips provider reads when %s', async query => {
+      const response = await GET(makeReq('http://localhost/api/cron/recompute-allfantasy-adp?' + query, { headers: { Authorization: 'Bearer unit-test-secret' } }))
+      expect(response.status).toBe(200)
+      expect(referenceMocks.market).not.toHaveBeenCalled()
+      expect(referenceMocks.provider).not.toHaveBeenCalled()
+      expect(referenceMocks.cached).not.toHaveBeenCalled()
+      expect(mockRecompute).toHaveBeenCalledTimes(1)
+    },
+  )
+  it('reports a failed market source without discarding successful ADP recompute', async () => {
+    referenceMocks.market.mockResolvedValue({ stored: 3, entries: 100, failed: 1, unavailable: 0 })
+    const response = await GET(makeReq('http://localhost/api/cron/recompute-allfantasy-adp', { headers: { Authorization: 'Bearer unit-test-secret' } }))
+    expect(response.status).toBe(207)
+    expect(await response.json()).toMatchObject({ ok: false, referenceErrors: true, report: { snapshotsWritten: 23256 }, references: { market: { failed: 1 } } })
+  })
+  it('reports unavailable provider ADP as a partial refresh', async () => {
+    referenceMocks.provider.mockResolvedValue({ boards: 0, entries: 0, unavailable: true })
+    const response = await GET(makeReq('http://localhost/api/cron/recompute-allfantasy-adp', { headers: { Authorization: 'Bearer unit-test-secret' } }))
+    expect(response.status).toBe(207)
+    expect(await response.json()).toMatchObject({ ok: false, referenceErrors: true, report: { snapshotsWritten: 23256 } })
   })
 })

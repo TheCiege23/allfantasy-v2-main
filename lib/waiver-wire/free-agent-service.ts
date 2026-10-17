@@ -1,3 +1,4 @@
+import { assertStealThreeWaiverHoldCleared } from '@/lib/survivor/survivorStealThreeWaivers'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertWaiverClaimEligibility } from './transaction-eligibility'
@@ -52,6 +53,8 @@ export async function executeImmediateAddDrop(
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const roster = await tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, playerData: true } })
     if (!roster) throw new Error('Roster not found or does not belong to this league.')
+
+    await assertStealThreeWaiverHoldCleared(tx, leagueId, addPlayerId)
 
     // Re-check inside the transaction to avoid a race that double-adds or drops a missing player.
     const currentIds = getRosterPlayerIds(roster.playerData)

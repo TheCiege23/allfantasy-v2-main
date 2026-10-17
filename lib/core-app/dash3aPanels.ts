@@ -74,6 +74,12 @@ export type ExposureData = {
   rostersRead: number
   /** Plain-language concentration callout, or null when nothing is concentrated. */
   note: string | null
+  /**
+   * What `note` was built from (2026-10-04), so the card can say it in the reader's language: `note`
+   * stays the English as written and lib/core-app/dashboard3aCopy.ts rebuilds the Spanish from this.
+   * Absent whenever `note` is null.
+   */
+  noteParts?: { kind: 'every' | 'some'; name: string; count: number; of: number }
 }
 
 export type RivalRow = {
@@ -81,10 +87,21 @@ export type RivalRow = {
   name: string
   wins: number
   losses: number
+  /** Meetings that finished level. Counted apart so a tie never reads as a loss. */
+  ties: number
+  /** wins + losses + ties. */
   meetings: number
   sharedLeagues: number
-  /** Their most recent margin against you, when the last meeting was a loss. */
+  /**
+   * The most recent meeting: "you won by N", "beat you by N", or "a tie" (the
+   * coreUiCopy key Rivalry Radar uses, so the bilingual League Home can translate it).
+   */
   lastResult: string | null
+  /**
+   * What `lastResult` was built from (2026-10-04): the home's rivalry card rebuilds it in the
+   * reader's language from this (lib/core-app/dashboard3aCopy.ts). `lastResult` stays the English.
+   */
+  lastParts?: { kind: 'won' | 'lost' | 'tie'; margin: number } | null
 }
 
 export type RivalsData = { rows: RivalRow[]; leaguesRead: number }
@@ -163,10 +180,11 @@ export async function getCrossLeagueExposure(
             platformUserId: { in: rosterCandidates(t, userId) },
           })),
         },
-        select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
+        select: { leagueId: true, playerData: true, league: { select: { platform: true, sport: true } } },
       })
       .catch(fellBack),
     (r) => r.league?.platform,
+    (r) => r.league?.sport,
   )
 
   if (rosters.length === 0) {
@@ -187,7 +205,7 @@ export async function getCrossLeagueExposure(
     if (seen.has(r.leagueId)) continue
     seen.add(r.leagueId)
     rostersRead += 1
-    if (isForeignIdSpace(r.league?.platform)) foreignRead += 1
+    if (isForeignIdSpace(r.league?.platform, r.league?.sport)) foreignRead += 1
 
     // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id; such a roster
     // still counts toward the denominator (so "every roster" stays honest) but names nobody.
@@ -253,14 +271,16 @@ export async function getCrossLeagueExposure(
   })
 
   const top = rows[0]
+  const noteKind: 'every' | 'some' | null = top && top.count > 1 ? (top.count === rostersRead ? 'every' : 'some') : null
   const note =
-    top && top.count > 1 && top.count === rostersRead
-      ? `${top.name} is on every roster you own — one hamstring and your whole Sunday moves.`
-      : top && top.count > 1
-        ? `${top.name} is on ${top.count} of your ${rostersRead} rosters.`
+    noteKind === 'every'
+      ? `${top!.name} is on every roster you own — one hamstring and your whole Sunday moves.`
+      : noteKind === 'some'
+        ? `${top!.name} is on ${top!.count} of your ${rostersRead} rosters.`
         : null
+  const noteParts = noteKind ? { noteParts: { kind: noteKind, name: top!.name, count: top!.count, of: rostersRead } } : {}
 
-  return { available: true, data: { rows, rostersRead, note } }
+  return { available: true, data: { rows, rostersRead, note, ...noteParts } }
 }
 
 /**
@@ -308,7 +328,18 @@ export async function getRivalRecords(
     })
     .catch(fellBack)
 
-  const agg = new Map<string, { name: string; wins: number; losses: number; leagues: Set<string>; last: string | null }>()
+  const agg = new Map<
+    string,
+    {
+      name: string
+      wins: number
+      losses: number
+      ties: number
+      leagues: Set<string>
+      last: string | null
+      lastParts: RivalRow['lastParts']
+    }
+  >()
   let leaguesRead = 0
 
   /*
@@ -426,14 +457,37 @@ export async function getRivalRecords(
        * silently fragments every real rival.
        */
       const key = name.trim().toLowerCase()
-      const prev = agg.get(key) ?? { name, wins: 0, losses: 0, leagues: new Set<string>(), last: null }
-      const iWon = mineRow.pointsFor > opp.pointsFor
-      prev.wins += iWon ? 1 : 0
-      prev.losses += iWon ? 0 : 1
+      const prev = agg.get(key) ?? {
+        name,
+        wins: 0,
+        losses: 0,
+        ties: 0,
+        leagues: new Set<string>(),
+        last: null,
+        lastParts: null,
+      }
+      const margin = mineRow.pointsFor - opp.pointsFor
+      /*
+       * ⚠ A LEVEL MEETING IS A TIE, NOT A LOSS. Counting "not won" as lost added
+       * every dead heat to `losses`, read it as "beat you by 0.0", and — since the
+       * list ranks by losses — promoted a manager you had only ever tied to the top
+       * of "who actually beats you". Same rule as weekBoard.ts's Rivalry Radar.
+       */
+      if (margin > 0) prev.wins += 1
+      else if (margin < 0) prev.losses += 1
+      else prev.ties += 1
       prev.leagues.add(league.id)
-      prev.last = iWon
-        ? `you won by ${(mineRow.pointsFor - opp.pointsFor).toFixed(1)}`
-        : `beat you by ${(opp.pointsFor - mineRow.pointsFor).toFixed(1)}`
+      prev.last =
+        margin > 0
+          ? `you won by ${margin.toFixed(1)}`
+          : margin < 0
+            ? `beat you by ${(-margin).toFixed(1)}`
+            : 'a tie'
+      prev.lastParts = {
+        kind: margin > 0 ? 'won' : margin < 0 ? 'lost' : 'tie',
+        // Unrounded, so the Spanish formats it with the same `toFixed(1)` as the English above.
+        margin: Math.abs(margin),
+      }
       agg.set(key, prev)
     }
   }
@@ -453,8 +507,12 @@ export async function getRivalRecords(
 
   /*
    * Ranked by how much they have actually beaten you — a rival is someone with a
-   * losing record against you, not merely someone you have played often. Ties on
+   * losing record against you, not merely someone you have played often. Equal
    * losses fall back to total meetings.
+   *
+   * A tied MEETING is not a loss, so it never lifts anyone up the losses key; it
+   * does count as a meeting, so between two managers who have beaten you equally
+   * often, the one with more games on file (ties included) ranks first.
    */
   const rows: RivalRow[] = [...agg.entries()]
     .map(([key, v]) => ({
@@ -462,9 +520,11 @@ export async function getRivalRecords(
       name: v.name,
       wins: v.wins,
       losses: v.losses,
-      meetings: v.wins + v.losses,
+      ties: v.ties,
+      meetings: v.wins + v.losses + v.ties,
       sharedLeagues: v.leagues.size,
       lastResult: v.last,
+      lastParts: v.lastParts,
     }))
     .sort((a, b) => b.losses - a.losses || b.meetings - a.meetings)
     .slice(0, limit)

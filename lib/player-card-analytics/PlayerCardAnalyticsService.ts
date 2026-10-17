@@ -10,6 +10,11 @@ import { getPlayerAnalytics } from '@/lib/player-analytics'
 import { normalizeSportForMeta } from '@/lib/global-meta-engine/SportMetaResolver'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getTrendFeedItemForPlayer } from '@/lib/player-trend/TrendDetectionService'
+import {
+  crosswalkToRollingInsightsIds,
+  type RiCrosswalkDb,
+} from '@/lib/player-identity/rollingInsightsCrosswalk'
+import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import type {
   PlayerCardAnalyticsPayload,
   PlayerCardMetaTrend,
@@ -102,6 +107,103 @@ async function resolvePlayerId(args: {
   return row?.id ?? null
 }
 
+const SEASON_STATS_SELECT = {
+  playerId: true,
+  playerName: true,
+  position: true,
+  season: true,
+  gamesPlayed: true,
+  fantasyPoints: true,
+  fantasyPointsPerGame: true,
+  team: true,
+  stats: true,
+} as const
+
+/**
+ * The `player_season_stats` rows that belong to THIS player — or none.
+ *
+ * 🛑 THE CALLER'S ID IS NOT THE TABLE'S ID (2026-10-12). NFL rows are `source = 'rolling_insights'`
+ * keyed on RI's own player number; the draft room and roster cards send a SLEEPER id. Both are bare
+ * numbers for different people, so `{ playerId, sport }` answered with a stranger: Sleeper 9509 (Bijan
+ * Robinson) read Malachi Fields' 7.72 PPG, Sleeper 6794 (Justin Jefferson) read DaRon Bland — 1,826 NFL
+ * Sleeper ids hit another player's row and 0 hit their own. With no `source` filter the 168
+ * `api_sports` rows (also bare numbers) were in play too. So for NFL the id crosses
+ * `PlayerIdentityMap` (`crosswalkToRollingInsightsIds`, refusing a non-one-to-one mapping) and only
+ * `rolling_insights` rows are read. Other sports' rows are `tsdb_…` ids, a namespace no league id
+ * collides with, so their id lookup is unchanged.
+ *
+ * The NAME fallback refuses namesakes: one candidate per distinct player id, bound only through
+ * `resolveVerifiedMatch` with position/team, and a lone candidate that contradicts them is refused
+ * (`refuseContradictedSingle` — the table is a partial list, so "unique here" is not "unique").
+ */
+async function loadSeasonStatsRows(args: {
+  incomingId: string | null
+  name: string
+  position: string | null
+  team: string | null
+  sport: string
+}) {
+  const sport = args.sport.toUpperCase()
+  const nfl = sport === 'NFL'
+  const sourceFilter = nfl ? { source: 'rolling_insights' } : {}
+
+  let statsId: string | null = null
+  if (args.incomingId) {
+    if (nfl) {
+      const crosswalk = await crosswalkToRollingInsightsIds(prisma as unknown as RiCrosswalkDb, {
+        sport,
+        lookups: [{ column: 'sleeperId', ids: [args.incomingId] }],
+      }).catch(() => null)
+      // The identity map says this id is not one person — a name cannot settle that either.
+      if (crosswalk?.ambiguous.includes(args.incomingId)) return []
+      statsId = crosswalk?.byId.get(args.incomingId)?.rollingInsightsId ?? null
+    } else {
+      statsId = args.incomingId
+    }
+  }
+
+  if (statsId) {
+    const rows = await prisma.playerSeasonStats
+      .findMany({
+        where: { sport, playerId: statsId, ...sourceFilter },
+        orderBy: { season: 'desc' },
+        take: 6,
+        select: SEASON_STATS_SELECT,
+      })
+      .catch(() => [])
+    // A mapped NFL identity with no rows has no stats; a name would only find the same RI id.
+    if (rows.length > 0 || nfl) return rows
+  }
+
+  if (!args.name) return []
+  const named = await prisma.playerSeasonStats
+    .findMany({
+      where: { sport, ...sourceFilter, playerName: { equals: args.name, mode: 'insensitive' as const } },
+      orderBy: { season: 'desc' },
+      select: SEASON_STATS_SELECT,
+    })
+    .catch(() => [])
+  // One candidate per distinct player, described by his newest row (rows are season-desc).
+  const newestByPlayer = new Map<string, (typeof named)[number]>()
+  for (const row of named) if (!newestByPlayer.has(row.playerId)) newestByPlayer.set(row.playerId, row)
+  const index = buildNameIndex(
+    [...newestByPlayer.values()].map((row) => ({
+      playerId: row.playerId,
+      name: row.playerName,
+      position: row.position,
+      team: row.team,
+    })),
+  )
+  const verdict = resolveVerifiedMatch(
+    index,
+    { name: args.name, position: args.position, team: args.team },
+    { refuseContradictedSingle: true },
+  )
+  if (!verdict.match) return []
+  const chosen = verdict.match.playerId
+  return named.filter((row) => row.playerId === chosen).slice(0, 6)
+}
+
 function normalizeMetaTrendRow(raw: {
   playerId: string
   trendScore: number
@@ -152,29 +254,13 @@ export async function getPlayerCardAnalytics(
 
   // Fetch historical season stats from DB (multi-sport, DB-first).
   // Used for: non-NFL analytics fallback, season history display in player card.
-  const rawSeasonStats = await (async () => {
-    const where = playerId
-      ? { playerId, sport: sport.toUpperCase() }
-      : name
-        ? { playerName: { equals: name, mode: 'insensitive' as const }, sport: sport.toUpperCase() }
-        : null
-    if (!where) return []
-    return prisma.playerSeasonStats
-      .findMany({
-        where,
-        orderBy: { season: 'desc' },
-        take: 6,
-        select: {
-          season: true,
-          gamesPlayed: true,
-          fantasyPoints: true,
-          fantasyPointsPerGame: true,
-          team: true,
-          stats: true,
-        },
-      })
-      .catch(() => [])
-  })()
+  const rawSeasonStats = await loadSeasonStatsRows({
+    incomingId: input.playerId?.trim() || null,
+    name,
+    position: input.position ?? null,
+    team: input.team ?? null,
+    sport,
+  })
 
   const seasonHistory: PlayerCardSeasonStat[] = rawSeasonStats.map((r) => ({
     season: r.season,

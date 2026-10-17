@@ -71,7 +71,7 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
       ? (
           await Promise.all(
             sportsInLeagues.map(async (sport) => {
-              const factList = await listInjuryFacts({ sport, maxAgeHours: 7 * 24, limit: 40 }).catch(() => null)
+              const factList = await listInjuryFacts({ sport, maxAgeHours: 7 * 24, limit: 40, designationsOnly: true }).catch(() => null)
               return (factList?.facts ?? [])
                 .filter((f) => typeof f.status === 'string' && f.status.trim())
                 .map((f) => ({

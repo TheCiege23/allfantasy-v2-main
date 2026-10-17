@@ -2,6 +2,9 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, waitFor } from '@testing-library/react'
 
+// This suite pins player-card writes; X feed reads are covered independently.
+vi.mock('@/components/core-app/highlights/PlayerRecentClips', () => ({ default: () => null }))
+
 import PlayerCardSheet from '@/components/core-app/player-card/PlayerCardSheet'
 import type { PlayerCardData } from '@/lib/core-app/playerCard'
 
@@ -90,7 +93,11 @@ let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
-  vi.stubGlobal('fetch', fetchMock)
+  // History is a separate read; these assertions pin the star's write endpoint.
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) =>
+    String(url).startsWith('/api/core/player-value-history?')
+      ? Promise.resolve({ ok: true, json: async () => ({ points: [], description: 'Recorded values', note: '', scope: 'league' }) })
+      : fetchMock(url, init))
 })
 afterEach(() => {
   vi.unstubAllGlobals()

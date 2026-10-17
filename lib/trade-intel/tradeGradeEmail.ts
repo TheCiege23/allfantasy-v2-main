@@ -5,9 +5,10 @@ import type {
   TradeSideGrade,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 // Type-only: the grade is computed by the caller, never here. This module renders.
-import type { TradeGradeLine, TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { TradeGradeLine, TradeGradeView, TradeRosterSpot } from '@/lib/decision-os/trade/tradeGrade'
 import { assetValues, type DisplayedAsset } from '@/lib/decision-os/trade/gradeLineValues'
 import { giveawaySide } from '@/lib/trade-intel/tradeGiveaway'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import {
   LEAGUE_TYPE_DECIDES_GRADES,
   LEAGUE_TYPE_GRADES_EXPLAINER,
@@ -163,6 +164,22 @@ function faabName(amount: number): string {
 type Line = { name: string; detail: string | null; value: number | null }
 
 /**
+ * The roster-spot credit as a table row, appended to the side whose total already includes it
+ * (`lib/trade-value/rosterSpotCharge.ts`), so the rows add up to the printed total. `table` is that side's
+ * column: 'received' for a completed trade (the side receiving fewer players gains the spot), 'viewer' for
+ * an offer's "you get" / "you give" columns.
+ */
+function withRosterSpot(lines: Line[], spot: TradeRosterSpot | null | undefined, side: 'give' | 'get', table: 'received' | 'viewer'): Line[] {
+  if (!spot || spot.side !== side) return lines
+  const name = spot.spots === 1 ? 'Open roster spot' : `${spot.spots} open roster spots`
+  const detail =
+    table === 'received' || side === 'get'
+      ? 'Fewer players received, so there is room to add one'
+      : 'More players received, so a full roster drops one'
+  return [...lines, { name, detail, value: spot.value }]
+}
+
+/**
  * The value THE grade priced each displayed asset at, matched by name, then pick year + round, then
  * place (`assetValues`) — and only when the counts agree; a mismatch prints names without values.
  *
@@ -254,7 +271,7 @@ function sideViews(trade: GradedTrade, grade: TradeGradeView | null, viewerOwner
     side,
     letter: completedSideLetter(trade, grade, i),
     pct: g ? (i === 0 ? g.percentDiff : -g.percentDiff) : null,
-    lines: receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give'),
+    lines: withRosterSpot(receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give'), g?.rosterSpot, i === 0 ? 'get' : 'give', 'received'),
     total: g ? (i === 0 ? g.getValue : g.giveValue) : null,
     isViewer: Boolean(viewerOwnerId) && side.ownerId != null && String(side.ownerId) === String(viewerOwnerId),
   }))
@@ -368,9 +385,10 @@ function rosterFitCard(grade: TradeGradeView | null): string {
   const fit = grade.rosterFit
   const moves = fit.moves.map(move =>
     `${move.name}: ${fmtValue(move.base)} base → ${fmtValue(move.leagueValue)} personal utility. ${move.reasons.join('; ')}.`)
-  return card(eyebrow('Your roster fit · separate from the trade-value grade') +
+  const yourTeam = grade.letterBasis === 'your_team'
+  return card(eyebrow(yourTeam ? 'Your roster fit · what your grade is taken on' : 'Your roster fit') +
     `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">` +
-    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received. This estimate does not change the headline letter or predict your chances of winning.`) +
+    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received.${yourTeam ? ' Your letter above is taken on these.' : ''} This is a roster-fit estimate, not a prediction of your chances of winning.`) +
     moves.map(move => `<div style="margin-top:6px">${escapeHtml(move)}</div>`).join('') + '</div>')
 }
 
@@ -561,7 +579,7 @@ export function buildTradeGradeEmail(params: {
 
   const hasPicks = trade.sides.some((s) => s.picksIn.length > 0)
   const how = graded
-    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values at email time. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
+    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values ${gradeMoment(graded)}. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
       (hasPicks ? ' Unresolved future picks use the chart’s season-and-round value; a specific early, mid or late tier is used only when supplied to the evaluator.' : '')
     : steal || (grade && !grade.graded && giveawaySide(trade))
       // A giveaway has no "part of the deal" a letter could be drawn from — the reason says it all.
@@ -640,7 +658,7 @@ export function buildPendingTradeOfferEmail(params: {
       detail: a.isPick ? 'Draft pick' : a.faabAmount != null ? 'FAAB' : [a.position, a.team].filter((v) => v && v !== '—').join(' · ') || null,
       value: null as number | null,
     }))
-    return withGradeValues(lines, assets.map((a) => ({ label: a.playerName })), g ? g.lines : null, side)
+    return withRosterSpot(withGradeValues(lines, assets.map((a) => ({ label: a.playerName })), g ? g.lines : null, side), g?.rosterSpot, side, 'viewer')
   }
   const cell = (label: string, accent: string, lines: Line[], total: number | null, divider: boolean) =>
     `<td width="50%" valign="top" style="padding:16px;${divider ? `border-right:1px solid ${BORDER};` : ''}">${eyebrow(label, accent)}${assetTable(lines, total)}</td>`
@@ -653,8 +671,12 @@ export function buildPendingTradeOfferEmail(params: {
   const verdict = g
     ? `<tr><td style="padding:16px;background:${CARD};border:1px solid ${BORDER};border-radius:16px">` +
       `<table role="presentation" cellspacing="0" cellpadding="0"><tr><td valign="middle">${chip(g.letter, 48)}</td>` +
-      `<td valign="middle" style="padding-left:14px">${eyebrow('Our read, from your side')}` +
+      `<td valign="middle" style="padding-left:14px">${eyebrow(g.letterBasis === 'your_team' ? 'Our read, for your team' : 'Our read, from your side')}` +
       `<div style="font-size:17px;font-weight:800;color:${GRADE_COLORS[g.letter].fg};margin-top:3px">${escapeHtml(g.label)} · ${escapeHtml(gapText(g.percentDiff))}</div></td></tr></table>` +
+      // A your-team letter is shown with the deal's league-value letter, which is what the other manager sees.
+      (g.letterBasis === 'your_team' && g.market
+        ? `<div style="font-size:12px;line-height:1.5;color:${MUTED};margin-top:8px">${escapeHtml(`Market: ${g.market.letter} (${gapText(g.market.percentDiff)}) — the same deal on league value alone, which is what the other manager sees.`)}</div>`
+        : '') +
       `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:12px">${escapeHtml(g.recommendation)}</div>` +
       `<div style="font-size:11px;line-height:1.5;color:${FAINT};margin-top:6px">${escapeHtml(`On ${g.basis ? `${g.basis} ` : 'this league’s '}values as of today${g.needApplied ? ', counting how it fits your roster' : ''}; values at email time. The site uses the same evaluator with the latest data. Realized fantasy points after a completed trade are a separate result.`)}</div>` +
       `</td></tr><tr><td style="height:12px"></td></tr>`

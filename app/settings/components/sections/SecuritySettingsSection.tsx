@@ -27,6 +27,23 @@ import {
 import type { SettingsProfile } from "./settings-types"
 import { SmsConsentCheckbox } from "@/components/legal/SmsConsentCheckbox"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
+import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
+import { useConfirm } from "./ConfirmDialog"
+
+/**
+ * A rejected fetch (offline, a dropped phone connection) becomes an ordinary failed result.
+ * The services below only handle HTTP errors, and none of these handlers had a catch — so a
+ * network failure left its button spinning on "Saving…" forever with no message.
+ * `error` is the caller's translated `settings.networkFailure`.
+ */
+function networkFailure<F extends (...args: never[]) => Promise<{ ok: boolean; error?: string }>>(
+  error: string,
+): Awaited<ReturnType<F>> {
+  return {
+    ok: false,
+    error,
+  } as Awaited<ReturnType<F>>
+}
 
 export function SecuritySettingsSection({
   profile,
@@ -72,6 +89,11 @@ export function SecuritySettingsSection({
   const [passwordSuccess, setPasswordSuccess] = useState(false)
   const [idleSaving, setIdleSaving] = useState(false)
   const [idleError, setIdleError] = useState<string | null>(null)
+  const [signOutAllBusy, setSignOutAllBusy] = useState(false)
+  const [signOutAllError, setSignOutAllError] = useState<string | null>(null)
+  const [phoneRemoving, setPhoneRemoving] = useState(false)
+  const [phoneRemoveError, setPhoneRemoveError] = useState<string | null>(null)
+  const [askConfirm, confirmDialog] = useConfirm()
 
   useEffect(() => {
     if (!emailEdit) {
@@ -115,7 +137,7 @@ export function SecuritySettingsSection({
       email: nextEmail,
       currentPassword: status.hasPassword ? emailCurrentPassword : undefined,
       returnTo: "/settings?tab=security",
-    })
+    }).catch(() => networkFailure<typeof updateContactEmail>(t("settings.networkFailure")))
     setEmailSaving(false)
 
     if (result.ok) {
@@ -137,7 +159,9 @@ export function SecuritySettingsSection({
     setEmailSending(true)
     setEmailResult(null)
     setEmailSaveResult(null)
-    const result = await sendVerificationEmail("/settings?tab=security")
+    const result = await sendVerificationEmail("/settings?tab=security").catch(() =>
+      networkFailure<typeof sendVerificationEmail>(t("settings.networkFailure")),
+    )
     setEmailSending(false)
     if (result.ok && result.alreadyVerified) setEmailResult("already")
     else if (result.ok) setEmailResult("sent")
@@ -171,7 +195,7 @@ export function SecuritySettingsSection({
     const result = await startPhoneVerification(normalizePhoneE164(trimmed), {
       smsConsent: true,
       consentSource: "settings-security",
-    })
+    }).catch(() => networkFailure<typeof startPhoneVerification>(t("settings.networkFailure")))
     setPhoneSending(false)
     if (result.ok) setPhoneCodeSent(true)
     else if (result.rateLimited) setPhoneResult("rate_limited")
@@ -188,7 +212,9 @@ export function SecuritySettingsSection({
     setPhoneVerifying(true)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
-    const result = await checkPhoneCode(phone, phoneCode)
+    const result = await checkPhoneCode(phone, phoneCode).catch(() =>
+      networkFailure<typeof checkPhoneCode>(t("settings.networkFailure")),
+    )
     setPhoneVerifying(false)
     if (result.ok) {
       setPhoneResult("verified")
@@ -217,7 +243,9 @@ export function SecuritySettingsSection({
       return
     }
     setPasswordChanging(true)
-    const result = await changePassword(currentPassword, newPassword)
+    const result = await changePassword(currentPassword, newPassword).catch(() =>
+      networkFailure<typeof changePassword>(t("settings.networkFailure")),
+    )
     setPasswordChanging(false)
     if (result.ok) {
       setPasswordSuccess(true)
@@ -243,6 +271,64 @@ export function SecuritySettingsSection({
     setPhoneErrorMessage(null)
   }
 
+  /*
+   * Sign out everywhere (app/api/user/sessions/revoke-all). Revocation is user-wide, so it ends THIS
+   * session too — the dialog says so, and on success this device signs out straight away rather than
+   * waiting for its next request to be refused. On failure nothing is signed out, and the reason
+   * (the other devices are still signed in) is shown.
+   */
+  const handleSignOutEverywhere = async () => {
+    if (signOutAllBusy) return
+    const ok = await askConfirm({
+      title: t("settings.security.signOutEverywhereConfirmTitle"),
+      body: t("settings.security.signOutEverywhereConfirmBody"),
+      confirmLabel: t("settings.security.signOutEverywhere"),
+      cancelLabel: t("settings.actions.cancel"),
+    })
+    if (!ok) return
+    setSignOutAllBusy(true)
+    setSignOutAllError(null)
+    try {
+      const res = await fetch("/api/user/sessions/revoke-all", { method: "POST" })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: unknown }
+        setSignOutAllError(typeof data.message === "string" && data.message ? data.message : t("settings.security.signOutEverywhereFailed"))
+        setSignOutAllBusy(false)
+        return
+      }
+      await signOutAndPurge({ callbackUrl: "/login" })
+    } catch {
+      setSignOutAllError(t("settings.security.signOutEverywhereFailed"))
+      setSignOutAllBusy(false)
+    }
+  }
+
+  const handleRemovePhone = async () => {
+    if (phoneRemoving) return
+    const ok = await askConfirm({
+      title: t("settings.security.removePhoneConfirmTitle"),
+      body: t("settings.security.removePhoneConfirmBody"),
+      confirmLabel: t("settings.security.removePhone"),
+      cancelLabel: t("settings.actions.cancel"),
+    })
+    if (!ok) return
+    setPhoneRemoving(true)
+    setPhoneRemoveError(null)
+    try {
+      const res = await fetch("/api/user/phone", { method: "DELETE" })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: unknown }
+        setPhoneRemoveError(typeof data.message === "string" && data.message ? data.message : t("settings.security.removePhoneFailed"))
+        return
+      }
+      onRefetch()
+    } catch {
+      setPhoneRemoveError(t("settings.security.removePhoneFailed"))
+    } finally {
+      setPhoneRemoving(false)
+    }
+  }
+
   async function saveSessionIdle(value: string) {
     setIdleSaving(true)
     setIdleError(null)
@@ -262,14 +348,26 @@ export function SecuritySettingsSection({
         return
       }
       if (typeof window !== "undefined") {
-        if (minutes == null || minutes === 0) {
-          localStorage.removeItem("af_session_idle_minutes")
-        } else {
-          localStorage.setItem("af_session_idle_minutes", String(minutes))
+        /*
+         * Its own try: the server has ALREADY saved. Storage can throw (Safari private mode, blocked
+         * site data), and inside the outer try that reported "save failed" over a successful save and
+         * skipped onRefetch. The local copy is a convenience the idle monitor re-syncs from the
+         * profile anyway.
+         */
+        try {
+          if (minutes == null || minutes === 0) {
+            localStorage.removeItem("af_session_idle_minutes")
+          } else {
+            localStorage.setItem("af_session_idle_minutes", String(minutes))
+          }
+        } catch {
+          /* storage unavailable — the profile value is the source of truth */
         }
         window.dispatchEvent(new Event("af-session-idle-updated"))
       }
       onRefetch()
+    } catch {
+      setIdleError(t("settings.security.idleSaveFailed"))
     } finally {
       setIdleSaving(false)
     }
@@ -290,6 +388,22 @@ export function SecuritySettingsSection({
       <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
         <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{t("settings.security.sessionsTitle")}</p>
         <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.security.sessionsBody")}</p>
+        <button
+          type="button"
+          onClick={() => void handleSignOutEverywhere()}
+          disabled={signOutAllBusy}
+          aria-busy={signOutAllBusy}
+          className="rounded-lg border px-3 py-2 text-sm font-medium disabled:cursor-wait disabled:opacity-60"
+          style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          data-testid="settings-sign-out-everywhere"
+        >
+          {signOutAllBusy ? t("settings.security.signingOutEverywhere") : t("settings.security.signOutEverywhere")}
+        </button>
+        {signOutAllError ? (
+          <p role="alert" className="text-xs" style={{ color: "var(--accent-red-strong)" }} data-testid="settings-sign-out-everywhere-error">
+            {signOutAllError}
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
@@ -432,13 +546,13 @@ export function SecuritySettingsSection({
                     value={emailCurrentPassword}
                     onChange={(e) => setEmailCurrentPassword(e.target.value)}
                     autoComplete="current-password"
-                    className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                    className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                     style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowEmailCurrentPassword((s) => !s)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md"
                     aria-label={showEmailCurrentPassword ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}
                     style={{ color: "var(--muted)" }}
                   >
@@ -498,7 +612,7 @@ export function SecuritySettingsSection({
             </p>
           </div>
           {!phoneEdit ? (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setPhoneEdit(true)}
@@ -514,6 +628,19 @@ export function SecuritySettingsSection({
               >
                 {t("settings.security.verifyAddLink")}
               </Link>
+              {profile?.phone ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRemovePhone()}
+                  disabled={phoneRemoving}
+                  aria-busy={phoneRemoving}
+                  className="rounded-lg border px-3 py-2 text-sm font-medium disabled:cursor-wait disabled:opacity-60"
+                  style={{ borderColor: "color-mix(in srgb, var(--accent-red) 55%, var(--border))", color: "var(--accent-red-strong)" }}
+                  data-testid="settings-remove-phone"
+                >
+                  {phoneRemoving ? t("settings.security.removingPhone") : t("settings.security.removePhone")}
+                </button>
+              ) : null}
             </div>
           ) : (
             <button type="button" onClick={cancelPhoneEdit} className="rounded-lg border px-3 py-2 text-sm font-medium" style={{ borderColor: "var(--border)", color: "var(--text)" }}>
@@ -521,6 +648,11 @@ export function SecuritySettingsSection({
             </button>
           )}
         </div>
+        {phoneRemoveError ? (
+          <p role="alert" className="text-xs" style={{ color: "var(--accent-red-strong)" }} data-testid="settings-remove-phone-error">
+            {phoneRemoveError}
+          </p>
+        ) : null}
         {phoneEdit && (
           <div className="pt-2 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
             <div>
@@ -580,14 +712,19 @@ export function SecuritySettingsSection({
                     {phoneSending ? <Loader2 className="h-4 w-4 animate-spin inline" /> : null} {t("settings.security.resendCode")}
                   </button>
                 </div>
-                {phoneResult === "verified" && <p className="text-xs text-emerald-600">{t("settings.security.phoneVerifiedUpdating")}</p>}
-                {phoneResult === "invalid" && <p className="text-xs text-red-600">{t("settings.security.invalidCode")}</p>}
-                {phoneResult === "rate_limited" && <p className="text-xs text-amber-600">{t("settings.security.rateLimitedMinutes")}</p>}
-                {phoneResult === "error" && <p className="text-xs text-red-600">{phoneErrorMessage ?? t("settings.security.phoneError.generic")}</p>}
               </>
             )}
           </div>
         )}
+        {/*
+          Outside both the edit panel and the code-sent branch on purpose. Inside them, a failed
+          FIRST send (code never sent) showed nothing, and a successful verify closed the panel
+          that held its own "verified" message.
+        */}
+        {phoneResult === "verified" && <p className="text-xs text-emerald-600">{t("settings.security.phoneVerifiedUpdating")}</p>}
+        {phoneResult === "invalid" && <p className="text-xs text-red-600">{t("settings.security.invalidCode")}</p>}
+        {phoneResult === "rate_limited" && <p className="text-xs text-amber-600">{t("settings.security.rateLimitedMinutes")}</p>}
+        {phoneResult === "error" && <p className="text-xs text-red-600">{phoneErrorMessage ?? t("settings.security.phoneError.generic")}</p>}
       </div>
 
       {/* Password */}
@@ -597,8 +734,23 @@ export function SecuritySettingsSection({
             <Lock className="h-4 w-4" />
             {t("settings.security.passwordHeading")}
           </p>
-          {!passwordFormOpen ? (
-            <div className="flex gap-2">
+          {/*
+            A Google / Apple / Discord sign-in has no password, and "Change password" asks for the
+            current one — the route answers NO_PASSWORD, so the form could only ever fail. The reset
+            flow sets a password on any account (api/auth/password/reset/confirm writes passwordHash),
+            so that is the way in for them.
+          */}
+          {!status.hasPassword ? (
+            <Link
+              href="/forgot-password"
+              className="rounded-lg border px-3 py-2 text-sm font-medium"
+              style={{ borderColor: "var(--border)", color: "var(--text)" }}
+              data-testid="settings-set-password-link"
+            >
+              {t("settings.security.setPassword")}
+            </Link>
+          ) : !passwordFormOpen ? (
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setPasswordFormOpen(true)}
@@ -621,7 +773,12 @@ export function SecuritySettingsSection({
             </button>
           )}
         </div>
-        {passwordFormOpen && (
+        {!status.hasPassword ? (
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            {t("settings.security.passwordlessHint")}
+          </p>
+        ) : null}
+        {passwordFormOpen && status.hasPassword && (
           <form onSubmit={handleChangePassword} className="pt-2 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted2)" }}>{t("settings.security.currentPassword")}</label>
@@ -630,11 +787,11 @@ export function SecuritySettingsSection({
                   type={showCurrent ? "text" : "password"}
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                  className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="current-password"
                 />
-                <button type="button" onClick={() => setShowCurrent((s) => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--muted)" }} aria-label={showCurrent ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowCurrent((s) => !s)} className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-xs" style={{ color: "var(--muted)" }} aria-label={showCurrent ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
@@ -646,11 +803,11 @@ export function SecuritySettingsSection({
                   type={showNew ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                  className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="new-password"
                 />
-                <button type="button" onClick={() => setShowNew((s) => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--muted)" }} aria-label={showNew ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowNew((s) => !s)} className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-xs" style={{ color: "var(--muted)" }} aria-label={showNew ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
@@ -662,11 +819,11 @@ export function SecuritySettingsSection({
                   type={showConfirm ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                  className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="new-password"
                 />
-                <button type="button" onClick={() => setShowConfirm((s) => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--muted)" }} aria-label={showConfirm ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowConfirm((s) => !s)} className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-xs" style={{ color: "var(--muted)" }} aria-label={showConfirm ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
@@ -684,6 +841,7 @@ export function SecuritySettingsSection({
           </form>
         )}
       </div>
+      {confirmDialog}
     </div>
   )
 }

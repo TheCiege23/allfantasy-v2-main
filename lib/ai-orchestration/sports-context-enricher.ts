@@ -306,7 +306,7 @@ export async function fetchSportsContextForEnvelope(
               // injury_report_records and only refreshes when that table is
               // EMPTY; it has not been empty since April, so this enricher fed
               // the model 108-day-old designations with no dates attached.
-              listInjuryFacts({ sport: sportTyped, limit: 25 }),
+              listInjuryFacts({ sport: sportTyped, limit: 25, designationsOnly: true }),
               Promise.all(playerIds.slice(0, 6).map((playerId) => getPlayerNews(playerId, 3))),
             ])
             // Stale rows are dropped rather than caveated here: this payload is

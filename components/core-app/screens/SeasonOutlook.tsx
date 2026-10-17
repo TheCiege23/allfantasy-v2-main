@@ -4,13 +4,16 @@ import Link from 'next/link'
 import type { SeasonOutlook as SeasonOutlookData } from '@/lib/core-app/seasonOutlook'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import { band, ordinal, pct, rangeLabel } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-season-outlook.css'
 import '@/components/core-app/af-outlook.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
 
 /**
  * 26b — Season Outlook. Playoff, bye and championship odds across every active league.
@@ -45,50 +48,8 @@ function Tile({ value, label, tone }: { value: string; label: string; tone?: 'go
   )
 }
 
-/** Loader explanations carry live counts, so exact dictionary entries cannot cover them. */
-export function seasonOutlookSentence(english: string, language: string): string {
-  if (language !== 'es') return english
-  const fixed: Record<string, string> = {
-    'No matchups have been synced for this league.': 'No se han sincronizado enfrentamientos de esta liga.',
-    'We cannot identify your team in this league, so nothing here is about you.': 'No podemos identificar tu equipo en esta liga, así que esta explicación no se refiere a ti.',
-    'Settled — you are in.': 'Decidido: estás dentro.',
-    'Eliminated — no remaining result gets you into the field.': 'Eliminado: ningún resultado pendiente te clasifica.',
-    'Settled — the regular season is over and you are out.': 'Decidido: la temporada regular terminó y estás fuera.',
-    'The regular season is over; the seeding is already what it is.': 'La temporada regular terminó; las posiciones ya están definidas.',
-    'Out in every simulated run.': 'Fuera en todas las simulaciones.',
-    'In the field in about 1 run in 100.': 'Clasificas en aproximadamente 1 de cada 100 simulaciones.',
-  }
-  if (fixed[english]) return fixed[english]
-  let m = english.match(/^([\d,–]+) simulations per league, played over each league's own remaining schedule/)
-  if (m) return `${m[1]} simulaciones por liga con su calendario restante, plazas de playoffs y descansos. La puntuación semanal se ajusta con las semanas completas de cada equipo según las reglas de su liga. El récord y la posición corresponden a esta temporada. Los rangos muestran la incertidumbre del pronóstico.${english.includes('Some leagues ran fewer than') ? ' Algunas ligas tuvieron menos simulaciones para acelerar la carga; se completarán en una visita posterior.' : ''}`
-  m = english.match(/^Only (\d+) of (\d+) teams have three or more completed weeks on file/)
-  if (m) return `Solo ${m[1]} de ${m[2]} equipos tienen tres o más semanas completas registradas; no basta para simular.`
-  m = english.match(/^The rest of the schedule is not on file — (.+) has sent only the weeks already played \(through week (\d+)\)/)
-  if (m) return `Falta el calendario restante: ${m[1]} solo proporcionó las semanas ya jugadas hasta la ${m[2]}. No podemos saber si la temporada terminó.`
-  m = english.match(/^On the bubble at (\d+)% with (\d+) to play/)
-  if (m) return `En la burbuja con ${m[1]}% y ${m[2]} partidos pendientes. Aquí una decisión de alineación puede importar más.`
-  m = english.match(/^(\d+)% to win it\. Playing for seeding now/)
-  if (m) return `${m[1]}% de ganar el campeonato. Ahora juegas por una mejor posición.`
-  m = english.match(/^(\d+)% to make the field\. Needs help/)
-  if (m) return `${m[1]}% de clasificar. Necesitas ayuda además de victorias.`
-  m = english.match(/^Clinched\. The last (\d+) are about seeding\.$/)
-  if (m) return `Clasificado. Los ${m[1]} partidos restantes definirán tu posición.`
-  m = english.match(/^In all but a rounding error\. The last (\d+) are about seeding\.$/)
-  if (m) return `Casi asegurado. Los ${m[1]} partidos restantes definirán tu posición.`
-  m = english.match(/^You already have (\d+) wins, which gets you in (nine times in ten|more often than not)\.$/)
-  if (m) return `Ya tienes ${m[1]} victorias; eso te clasifica ${m[2] === 'nine times in ten' ? 'en nueve de cada diez simulaciones' : 'más de la mitad de las veces'}.`
-  m = english.match(/^Get to (\d+) wins — (\d+) of your last (\d+) — and you are in (nine times in ten|more often than not)\.( You will likely need help too\.)?$/)
-  if (m) return `Llega a ${m[1]} victorias: necesitas ${m[2]} de los últimos ${m[3]} partidos. Así clasificas ${m[4] === 'nine times in ten' ? 'en nueve de cada diez simulaciones' : 'más de la mitad de las veces'}.${m[5] ? ' Probablemente también necesites ayuda.' : ''}`
-  m = english.match(/^No win total gets you in reliably — winning out still needs help from outside the top (\d+)\.$/)
-  if (m) return `Ningún total de victorias garantiza clasificar: incluso ganando todo, necesitas ayuda de equipos fuera de los ${m[1]} primeros.`
-  m = english.match(/^Win (this one|once in (\d+)) and you are almost certainly in\.$/)
-  if (m) return `${m[2] ? `Gana uno de los ${m[2]} restantes` : 'Gana este partido'} y casi seguro clasificarás.`
-  m = english.match(/^Win (\d+) of the last (\d+) and you are in more often than not\.$/)
-  if (m) return `Gana ${m[1]} de los últimos ${m[2]} partidos y clasificarás más de la mitad de las veces.`
-  m = english.match(/^You need (this one|most of the last (\d+)), and help — currently outside the top (\d+)\.$/)
-  if (m) return `Necesitas ${m[2] ? `ganar la mayoría de los últimos ${m[2]}` : 'ganar este partido'} y ayuda; ahora estás fuera de los ${m[3]} primeros.`
-  return coreUiCopy(english, language)
-}
+/** Moved to `lib/core-app/outlookSpanish.ts` so the league screen can share it without importing this one. */
+export { seasonOutlookSentence }
 
 export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
   const { language } = useOptionalLanguage()
@@ -97,7 +58,8 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
   const hasLeagues = data.leagues.length > 0
   const preseasonKickoffLabel =
     data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
-      ? kickoffDayLabel(data.firstKickoffAt)
+      ? /* Pinned en-US so it hydrates; translated at render — "Oct 4" → «4 oct». */
+        kickoffText(kickoffDayLabel(data.firstKickoffAt), language)
       : null
 
   /* The three results that swing your season most, across every league. */
@@ -113,6 +75,8 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
         <p className="af-so-eyebrow af-label">{copy('Across every league you play')}</p>
         <div className="af-olk-titlerow">
           <h1 className="af-display af-so-title">{copy('Season Outlook')}</h1>
+          {/* Beside the title, not in it: the tiles below have no heading of their own to carry it. */}
+          {hasLeagues ? <TopicTip topic="outlookTiles" /> : null}
           {freshness ? (
             <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
           ) : null}
@@ -159,7 +123,9 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
               )}
             </div>
             <div className="af-olk-drivebox">
-              <h2 className="af-label">{copy('The games that swing your season')}</h2>
+              <h2 className="af-label">
+                {copy('The games that swing your season')} <TopicTip topic="swingGame" />
+              </h2>
               {swings.length === 0 ? (
                 <p className="af-olk-empty">{copy('No single game left moves your odds in a contested league.')}</p>
               ) : (
@@ -200,10 +166,14 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
             <table className="af-so-table">
               <thead>
                 <tr>
-                  <th scope="col">{copy('League')}</th>
+                  <th scope="col">
+                    {copy('League')} <TopicTip topic="strengthOfSchedule" />
+                  </th>
                   <th scope="col" className="af-so-num">{copy('Record')}</th>
                   <th scope="col" className="af-so-num">{copy('Seed')}</th>
-                  <th scope="col" className="af-so-num">{copy('Playoffs')}</th>
+                  <th scope="col" className="af-so-num">
+                    {copy('Playoffs')} <TopicTip topic="outlookPlayoffOdds" />
+                  </th>
                   {anyByes ? <th scope="col" className="af-so-num">{copy('Bye')}</th> : null}
                   <th scope="col" className="af-so-num">{copy('Title')}</th>
                   <th scope="col">{copy('What decides it')}</th>
@@ -233,7 +203,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                       {l.you ? (
                         <>
                           <td className="af-so-num" data-label={copy('Record')}>
-                            {l.you.wins}–{l.you.losses}
+                            {l.you.wins}–{l.you.losses}{l.you.ties ? `–${l.you.ties}` : ''}
                           </td>
                           <td className="af-so-num" data-label={copy('Seed')}>
                             {l.you.seed}

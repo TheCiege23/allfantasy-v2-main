@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guillotine (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+
+</style>
+</helmet>
+<div class="sp" style="--acc: #e0402e; --acc2: #ff9a8a; --accInk: #fff; --disp: Bebas Neue; height: 844px; position: relative; overflow: hidden; display: flex; flex-direction: column">
+<img src="specialty/guillotine/banner.svg" alt="" style="position: absolute; inset: 0 0 auto 0; width: 100%; height: 300px; object-fit: cover">
+<div style="position: absolute; inset: 0 0 auto 0; height: 300px; background: linear-gradient(180deg, rgba(7,8,13,.25), #07080d)"></div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 24px; flex: 1; overflow-y: auto">
+  <div style="display: flex; align-items: center; gap: 10px"><img src="specialty/guillotine/emblem.svg" alt="" style="width: 44px"><div style="flex: 1; display: flex; flex-direction: column"><span style="font: 400 24px 'Bebas Neue'; letter-spacing: .03em">Guillotine League 26</span><span class="sp-t3" style="font-size: 11.5px">Week 5 · 9 alive · chop locks in 1d 06:40</span></div></div>
+  <div class="sp-card" style="padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 70px; background: rgba(11,13,20,.92); border-color: rgba(58,190,120,.4)">
+    <span class="sp-lbl" style="color: #7fe0a6">You’re safe right now</span>
+    <span style="font: 400 64px/1 'Bebas Neue'; color: #bff3d0">+35.9</span>
+    <span class="sp-t2" style="font-size: 12.5px">over the cut · 3rd of 9 · 91% to survive</span>
+    <div class="sp-bar" style="width: 100%; margin-top: 6px"><span style="width: 78%; background: linear-gradient(90deg,#1e5a3a,#3abe78)"></span></div>
+  </div>
+  <span class="sp-lbl">Chop zone and danger tier</span>
+  <sc-for list="{{rows}}" as="r" hint-placeholder-count="3"><div class="sp-row" style="border-color: {{r.line}}"><span class="sp-av" style="background: {{r.c}}">{{r.ini}}</span><span style="flex: 1; font-weight: 600">{{r.name}}</span><span class="sp-num" style="font-weight: 700">{{r.pts}}</span><span class="sp-tag" style="background: {{r.bg}}; color: {{r.tc}}">{{r.tag}}</span></div></sc-for>
+  <a class="sp-btn sp-btn-p" href="GuillotineChop.dc.html" style="min-height: 48px; margin-top: 4px">Watch the chop</a>
+  <a class="sp-btn" href="#" style="min-height: 46px">Set lineup</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return { rows: [['Open Team 11','O11','#2a3a1a','92.7','Chop zone','rgba(224,64,46,.2)','#ff9a8a','rgba(224,64,46,.45)'],['Open Team 4','O4','#1f2a4d','97.7','Danger','rgba(255,196,107,.14)','#ffc46b','rgba(255,255,255,.05)'],['Open Team 12','O12','#3a1f30','101.5','Danger','rgba(255,196,107,.14)','#ffc46b','rgba(255,255,255,.05)']]
+  .map(([name, ini, c, pts, tag, bg, tc, line]) => ({ name, ini, c, pts, tag, bg, tc, line })) }; } }
+</script>
+</body>
+</html>

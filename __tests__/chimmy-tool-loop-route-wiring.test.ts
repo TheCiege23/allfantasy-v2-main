@@ -27,6 +27,17 @@ const ROUTE = fs.readFileSync(
 const idx = (needle: string) => ROUTE.indexOf(needle)
 
 /*
+ * The prompt moved out of the route (2026-10-11) so `@chimmy` in league chat and DMs runs the SAME
+ * tool loop with the SAME instructions. Its shape is asserted where it now lives; the route is still
+ * asserted to hand it to the loop.
+ */
+const PROMPT_SRC = fs.readFileSync(
+  path.join(process.cwd(), 'lib', 'chimmy', 'tools', 'toolLoopSystemPrompt.ts'),
+  'utf8',
+)
+const promptIdx = (needle: string) => PROMPT_SRC.indexOf(needle)
+
+/*
  * The guard, not the import. `indexOf('runChimmyToolLoop')` finds the import at
  * the top of the file, which would make every "block between the loop and PECR"
  * assertion span the whole spend-error section instead.
@@ -289,10 +300,11 @@ describe('tool loop system prompt', () => {
    * only the fallback used to see, now reach the path that answers first.
    */
   it('speaks in the shared Chimmy voice and hands the loop the user\'s saved style', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
-    expect(ROUTE.slice(start, start + 80)).toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = \[\s*\n\s*CHIMMY_IDENTITY,/)
-    expect(ROUTE).toMatch(/\]\.join\(' '\) \+[\s\S]{0,900}?'\\n\\n' \+\s*\n\s*getChimmyPromptStyleBlock\(\)/)
+    const start = promptIdx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    expect(PROMPT_SRC.slice(start, start + 80)).toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = \[\s*\n\s*CHIMMY_IDENTITY,/)
+    expect(PROMPT_SRC).toMatch(/\]\.join\(' '\) \+[\s\S]{0,900}?'\\n\\n' \+\s*\n\s*getChimmyPromptStyleBlock\(\)/)
     expect(ROUTE).not.toContain('the calm, analytical fantasy sports assistant')
+    expect(PROMPT_SRC).not.toContain('the calm, analytical fantasy sports assistant')
     expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,[\s\S]{0,1200}?clockLine: userTemporalContext\.promptLine,[\s\S]{0,900}?styleLine: \[\s*\n\s*personalizationDirectives,/)
     expect(ROUTE).toContain('groundingLine: decisionOsGrounding && leagueSnapshot')
   })
@@ -366,9 +378,9 @@ describe('tool loop system prompt', () => {
    * context is there — so the do-not-invent rule has to travel with the tools.
    */
   it('carries the same refusal discipline as the push path', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    const start = promptIdx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
     expect(start).toBeGreaterThan(-1)
-    const prompt = ROUTE.slice(start, start + 1200)
+    const prompt = PROMPT_SRC.slice(start, start + 1200)
 
     expect(prompt).toMatch(/NEVER invent/i)
     expect(prompt).toMatch(/no data/i)
@@ -377,8 +389,8 @@ describe('tool loop system prompt', () => {
 
   /* An empty live feed is "no games polled", not a scoreline of zero. */
   it('spells out the empty-feed trap', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
-    const prompt = ROUTE.slice(start, start + 1200)
+    const start = promptIdx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    const prompt = PROMPT_SRC.slice(start, start + 1200)
     expect(prompt).toMatch(/NOT that nobody scored/i)
   })
 })

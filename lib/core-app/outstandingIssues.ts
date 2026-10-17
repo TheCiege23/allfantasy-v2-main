@@ -44,7 +44,34 @@ export type CoreIssue = {
   /** Absolute deadline, when one is known. Drives sort and the urgent styling. */
   deadline: Date | null
   action: { label: string; href: string; external: boolean } | null
+  /**
+   * What `title`, `meta` and the action label were built from (2026-10-04), so the decision queue can
+   * say them in the reader's language. Every producer runs on the SERVER, which does not know it, so
+   * the English fields stay exactly as they were and `lib/core-app/decisionQueueCopy.ts` rebuilds the
+   * Spanish at render. An issue without parts renders its English — never half a sentence.
+   */
+  parts?: CoreIssueParts
 }
+
+/** Platform names (`titleCasePlatform`) and league names are proper nouns and stay as they are. */
+export type CoreIssueParts =
+  | { kind: 'draft-upcoming'; today: boolean; leagueName: string; platform: string; at: string; actionPlatform: string | null }
+  | { kind: 'stale'; leagueName: string; platform: string; lastReadAgo: string | null; actionPlatform: string | null }
+  | { kind: 'stale-aggregate'; count: number; neverRead: boolean; platforms: string[] }
+  | { kind: 'empty-slot'; count: number; leagueName: string; platform: string; checkedAt: string | null }
+  | { kind: 'best-ball'; leagueName: string; missing: string[] }
+  | {
+      kind: 'starter-out'
+      leagueName: string
+      platform: string
+      flaggedCount: number
+      flagged: { name: string; slot: string; status: string } | null
+      week: number | null
+      /** The soonest flagged starter's kickoff, ISO — the clock is built at render with `kickoffClock`. */
+      kickoffAt: string | null
+      checkedAt: string | null
+    }
+  | { kind: 'drafting'; leagueName: string; platform: string }
 
 export type IssueDetector =
   | 'stale_sync'
@@ -78,7 +105,7 @@ export type OutstandingIssuesResult = {
  * The league-list rows carry `platformLeagueId` (see get-dashboard-league-list.ts);
  * `UserLeague` just does not declare it.
  */
-function platformHome(league: UserLeague): { label: string; href: string } | null {
+function platformHome(league: UserLeague): { label: string; href: string; platformLabel: string } | null {
   const row = league as UserLeague & { platformLeagueId?: string | null }
   const link = handoffFor(
     {
@@ -90,7 +117,7 @@ function platformHome(league: UserLeague): { label: string; href: string } | nul
     },
     'league',
   )
-  return link ? { label: link.label, href: link.href } : null
+  return link ? { label: link.label, href: link.href, platformLabel: link.platformLabel } : null
 }
 
 /**
@@ -189,7 +216,15 @@ export function deriveOutstandingIssues(input: {
           leagueName: league.name,
           platform,
           deadline: when,
-          action: action ? { ...action, external: true } : null,
+          action: action ? { label: action.label, href: action.href, external: true } : null,
+          parts: {
+            kind: 'draft-upcoming',
+            today: hoursOut <= 24,
+            leagueName: league.name,
+            platform: titleCasePlatform(platform),
+            at: when.toISOString(),
+            actionPlatform: action?.platformLabel ?? null,
+          },
         })
       }
     }
@@ -229,7 +264,14 @@ export function deriveOutstandingIssues(input: {
         leagueName: league.name,
         platform,
         deadline: null,
-        action: action ? { ...action, external: true } : null,
+        action: action ? { label: action.label, href: action.href, external: true } : null,
+        parts: {
+          kind: 'stale',
+          leagueName: league.name,
+          platform: titleCasePlatform(platform),
+          lastReadAgo: lastSync ? age.label : null,
+          actionPlatform: action?.platformLabel ?? null,
+        },
       })
     }
   }
@@ -272,6 +314,12 @@ export function deriveOutstandingIssues(input: {
       platform: platforms.length === 1 ? platforms[0] : null,
       deadline: null,
       action: null,
+      parts: {
+        kind: 'stale-aggregate',
+        count: staleIssues.length,
+        neverRead: neverRead === staleIssues.length,
+        platforms: platforms.map(titleCasePlatform),
+      },
     })
   } else {
     issues.push(...staleIssues)

@@ -18,6 +18,23 @@ import type { AnalyticsSummary } from '@/lib/commissioner-ui/analytics/decision-
 import type { ReportsSummary } from '@/lib/commissioner-ui/reports/decision-os-client'
 import type { NotificationsSummary } from '@/lib/commissioner-ui/notifications/decision-os-client'
 import { allClearCopy } from '@/lib/commissioner-ui/allClear'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { ageText } from '@/lib/core-app/shellCopy'
+import {
+  activityChartText,
+  allClearText,
+  calloutText,
+  commissionerSectionName,
+  deadlineLabelText,
+  healthDriverText,
+  highlightsThisWeekText,
+  missionControlText,
+  shellText,
+  summaryHeadlineText,
+  type HeadlineNames,
+} from '@/lib/commissioner-os/i18n/shellCopy'
+import { automationText, composedEventText } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { reportTemplateText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
 export interface MissionControlViewProps {
   leagueHealth: LeagueHealthSummary
@@ -58,16 +75,36 @@ export interface MissionControlViewProps {
  * implementation, chosen by Demo Mode) as props; this component's only
  * job is arranging it per the Mission Control Blueprint's layout and
  * Decision Hierarchy.
+ *
+ * Spanish (2026-10-06): every word is built here at render from the reader's language
+ * (lib/commissioner-os/i18n/shellCopy.ts). The loaders keep writing English; their sentences are
+ * translated whole, and names inside them are left as written.
  */
 export function MissionControlView({ leagueHealth, recommendations, managerHighlights, kpis, recentActivity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, activityTrend, dataMode, canInviteCoCommissioner = false, leagueHealthAvailable = true, recommendationsRead = true }: MissionControlViewProps) {
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => missionControlText(english, language)
+  const section = (english: string) => commissionerSectionName(english, language)
+  // Our automation and report-template names inside the module headlines, through the catalogs' own translators.
+  const names: HeadlineNames = { automation: (name) => automationText(name, language), report: (name) => reportTemplateText(name, language) }
+  const headline = (english: string) => summaryHeadlineText(english, language, names)
   const trendPoints = activityTrend?.points ?? []
-  const allClear = allClearCopy({
+  const lookbackDays = activityTrend?.lookbackDays ?? 90
+  const allClearEnglish = allClearCopy({
     emptyTitle: 'Nothing needs your attention right now.',
     healthyDescription: 'Your league is in good shape.',
     listName: 'recommendations',
     listRead: recommendationsRead,
     healthTier: leagueHealthAvailable ? leagueHealth.tier : null,
   })
+  const ownAllClear = {
+    'Nothing needs your attention right now.': t('Nothing needs your attention right now.'),
+    'Your league is in good shape.': t('Your league is in good shape.'),
+  }
+  const allClear = {
+    title: allClearText(allClearEnglish.title, language, ownAllClear),
+    description: allClearText(allClearEnglish.description, language, ownAllClear),
+  }
+  const chartNote = activityChartText.note(lookbackDays, language)
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
@@ -75,29 +112,33 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
       {/* Zone 1 — Vitals & Controls */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_2fr]">
         <SummaryCard
-          title="League Health"
+          title={section('League Health')}
           status={leagueHealthAvailable ? leagueHealth.tier : 'standard'}
-          summary={leagueHealthAvailable ? `${leagueHealth.score} — ${leagueHealth.driver}` : 'Not available yet — there is no reading for this league.'}
+          summary={
+            leagueHealthAvailable
+              ? `${leagueHealth.score} — ${healthDriverText(leagueHealth.driver, language)}`
+              : t('Not available yet — there is no reading for this league.')
+          }
           icon={HeartPulse}
         />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <KpiCard label="Open Recommendations" value={String(kpis.openRecommendations)} />
-          <KpiCard label="Active Risks" value={String(kpis.activeRisks)} severity={kpis.activeRisks > 0 ? 'elevated' : 'positive'} />
-          <KpiCard label="Engagement Score" value={String(kpis.engagementScore)} />
-          <KpiCard label="Next Deadline" value={kpis.nextDeadlineLabel} />
+          <KpiCard label={t('Open Recommendations')} value={String(kpis.openRecommendations)} />
+          <KpiCard label={t('Active Risks')} value={String(kpis.activeRisks)} severity={kpis.activeRisks > 0 ? 'elevated' : 'positive'} />
+          <KpiCard label={t('Engagement Score')} value={String(kpis.engagementScore)} />
+          <KpiCard label={t('Next Deadline')} value={deadlineLabelText(kpis.nextDeadlineLabel, language)} />
         </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Button size="sm" variant="secondary" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
-          <Send size={14} aria-hidden /> Send League Digest
+          <Send size={14} aria-hidden /> {t('Send League Digest')}
         </Button>
         <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
-          <ListChecks size={14} aria-hidden /> Review Pending Trades
+          <ListChecks size={14} aria-hidden /> {t('Review Pending Trades')}
         </Button>
         {canInviteCoCommissioner && (
           <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
-            <UserPlus size={14} aria-hidden /> Invite Co-Commissioner
+            <UserPlus size={14} aria-hidden /> {t('Invite Co-Commissioner')}
           </Button>
         )}
       </div>
@@ -111,8 +152,8 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
         <InfoCard
           title={
             activityTrend?.lookbackDays
-              ? `Activity over time — events in the trailing ${activityTrend.lookbackDays} days`
-              : 'Activity over time'
+              ? activityChartText.title(activityTrend.lookbackDays, language)
+              : t('Activity over time')
           }
         >
           {trendPoints.length < 2 ? (
@@ -122,18 +163,18 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
              */
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
               {trendPoints.length === 0
-                ? 'No activity history has been captured for this league yet. A capture runs daily; the first two give this chart a line.'
-                : 'Only one capture so far — one more gives this chart a line.'}
+                ? t('No activity history has been captured for this league yet. A capture runs daily; the first two give this chart a line.')
+                : t('Only one capture so far — one more gives this chart a line.')}
             </p>
           ) : (
             <>
               <TrendLineChart
                 height={220}
-                ariaLabel={`Events recorded in the trailing ${activityTrend?.lookbackDays ?? 90} days, across ${trendPoints.length} daily captures`}
+                ariaLabel={activityChartText.ariaLabel(lookbackDays, trendPoints.length, language)}
                 series={[
                   {
                     id: 'windowed-activity',
-                    name: `Events in the trailing ${activityTrend?.lookbackDays ?? 90} days`,
+                    name: activityChartText.seriesName(lookbackDays, language),
                     points: trendPoints.map((point) => ({ label: point.date, value: point.windowedEventCount })),
                   },
                 ]}
@@ -146,10 +187,14 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
                 * the same unqualified-window error as "0 of 9 managers active".
                 */}
               <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
-                Each point counts every event inside the trailing{' '}
-                {activityTrend?.lookbackDays ?? 90} days as of that day — not that day&apos;s activity.
-                A steady decline through the offseason is normal: older events leave the window faster
-                than new ones arrive.
+                {chartNote ?? (
+                  <>
+                    Each point counts every event inside the trailing{' '}
+                    {lookbackDays} days as of that day — not that day&apos;s activity.
+                    A steady decline through the offseason is normal: older events leave the window faster
+                    than new ones arrive.
+                  </>
+                )}
               </p>
             </>
           )}
@@ -161,7 +206,7 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
         <div className="space-y-4">
           <section aria-labelledby="todays-priorities-heading">
             <h2 id="todays-priorities-heading" className="mb-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              Today&rsquo;s Priorities
+              {t('Today’s Priorities')}
             </h2>
             {recommendations.length === 0 ? (
               <EmptyState icon={Lightbulb} title={allClear.title} description={allClear.description} />
@@ -170,6 +215,7 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
                 {recommendations.map((rec) => (
                   <RecommendationCard
                     key={rec.id}
+                    // English as the loader wrote it — the card translates its own fields (cosLoaderText).
                     title={rec.title}
                     rationale={rec.rationale}
                     severity={rec.severity}
@@ -182,11 +228,26 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
             )}
           </section>
 
-          <TimelineCard title="Recent Activity" entries={recentActivity} emptyText="No recent activity to show." />
+          <TimelineCard
+            title={t('Recent Activity')}
+            // The summary is the activity stream's own sentence, through the Activity page's own translator;
+            // the age is page.tsx's `formatRelativeTime`.
+            entries={recentActivity.map((entry) => ({
+              ...entry,
+              label: composedEventText(entry.label, language),
+              timestamp: ageText(entry.timestamp, language),
+            }))}
+            emptyText={t('No recent activity to show.')}
+          />
         </div>
 
         <div className="space-y-4">
-          <SummaryCard title="Manager Intelligence" status="standard" summary={`${managerHighlights.length} highlights this week`} icon={Users} />
+          <SummaryCard
+            title={section('Manager Intelligence')}
+            status="standard"
+            summary={highlightsThisWeekText(managerHighlights.length, language)}
+            icon={Users}
+          />
           {managerHighlights.length > 0 && (
             <ul className="space-y-2">
               {managerHighlights.map((highlight) => (
@@ -195,23 +256,28 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
                     {highlight.managerName}
                   </span>
                   {' — '}
-                  {highlight.callout}
+                  {calloutText(highlight.callout, language)}
                 </li>
               ))}
             </ul>
           )}
 
-          <SummaryCard title="Workspace" status="standard" summary="No open tasks in this preview." icon={Briefcase} />
-          <StatusCard label="Automation Status" statusText={automationSummary.headline} icon={Zap} />
-          <SummaryCard title="League Analytics" status="standard" summary={analyticsSummary.headline} icon={BarChart3} />
-          <SummaryCard title="Reports" status="standard" summary={reportsSummary.headline} icon={FileText} />
+          <SummaryCard title={section('Workspace')} status="standard" summary={t('No open tasks in this preview.')} icon={Briefcase} />
+          <StatusCard label={t('Automation Status')} statusText={headline(automationSummary.headline)} icon={Zap} />
           <SummaryCard
-            title="Notifications"
+            title={section('League Analytics')}
+            status="standard"
+            summary={headline(analyticsSummary.headline)}
+            icon={BarChart3}
+          />
+          <SummaryCard title={section('Reports')} status="standard" summary={headline(reportsSummary.headline)} icon={FileText} />
+          <SummaryCard
+            title={shellText('Notifications', language)}
             status={notificationsSummary.criticalCount > 0 ? 'critical' : 'standard'}
-            summary={notificationsSummary.headline}
+            summary={headline(notificationsSummary.headline)}
             icon={Bell}
           />
-          <StatusCard label="System Status" statusText="Preview mode — not connected to live data" />
+          <StatusCard label={t('System Status')} statusText={t('Preview mode — not connected to live data')} />
         </div>
       </div>
     </div>

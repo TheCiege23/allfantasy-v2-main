@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor league theme</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.st{--pg:#07080d;--cd:rgba(11,13,20,.86);--cd2:#10131c;--ln:rgba(255,255,255,.07);--t1:#e8eaf2;--t2:#a3a9c2;--t3:#6f7590;background:var(--pg);color:var(--t1);min-height:100vh;font:13px/1.45 'Archivo',system-ui,sans-serif;-webkit-font-smoothing:antialiased;transition:background .4s}
+.st-light{--pg:#f3eee3;--cd:rgba(255,252,245,.92);--cd2:#fffaf0;--ln:rgba(40,30,10,.10);--t1:#1d1a14;--t2:#5d5648;--t3:#8a816f}
+.st *{box-sizing:border-box}
+.st-hero{position:relative;height:420px;overflow:hidden}
+.st-hero img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:62% 60%;transition:opacity .5s}
+.st-hero .ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(7,8,13,.25) 0%,rgba(7,8,13,.1) 40%,var(--pg) 100%),linear-gradient(90deg,rgba(7,8,13,.72) 0%,rgba(7,8,13,.25) 45%,transparent 70%)}
+.st-light .st-hero .ov{background:linear-gradient(180deg,rgba(243,238,227,0) 0%,rgba(243,238,227,.05) 45%,var(--pg) 100%),linear-gradient(90deg,rgba(20,16,8,.55) 0%,rgba(20,16,8,.15) 45%,transparent 70%)}
+.st-card{background:var(--cd);border:1px solid var(--ln);border-radius:12px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.st-lbl{font:600 10.5px 'Archivo',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)}
+.st-seg{display:flex;gap:2px;padding:3px;border-radius:8px;background:rgba(7,8,13,.55);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px)}
+.st-sg{min-height:30px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#d3d7e6;font:600 12px 'Archivo',sans-serif;cursor:pointer}
+.st-sg-on{background:rgba(255,255,255,.16);color:#fff;box-shadow:inset 0 -2px 0 #d9b45a}
+.st-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--ln)}
+.st-row:first-of-type{border-top:0}
+.st-t2{color:var(--t2)}.st-t3{color:var(--t3)}
+.st-light .st-card [style*="#f2c94c"],.st-light .st-card [style*="#d9b45a"]{color:#946a0c!important}
+.st-num{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div class="st {{themeCls}}">
+  <section class="st-hero" aria-label="League header">
+    <img class="bg" src="{{bgSrc}}" alt="">
+    <div class="ov"></div>
+    <div style="position: relative; height: 100%; display: flex; flex-direction: column; padding: 18px 28px 84px">
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <a class="ex-btn" href="SurvivorDraft.dc.html" aria-label="Back" style="padding: 0 12px; background: rgba(7,8,13,.5); border-color: rgba(255,255,255,.16); color: #fff">‹</a>
+        <span class="ex-chip" style="background: rgba(7,8,13,.5); color: #f1d58a; border-color: rgba(217,180,90,.5)">Survivor · {{sportLabel}}</span>
+        <span style="flex: 1"></span>
+        <div class="st-seg" role="radiogroup" aria-label="Sport"><sc-for list="{{sports}}" as="s" hint-placeholder-count="5"><button role="radio" aria-checked="{{s.on}}" class="{{s.cls}}" onClick="{{s.pick}}">{{s.label}}</button></sc-for></div>
+        <div class="st-seg" role="radiogroup" aria-label="Mood"><sc-for list="{{moods}}" as="m" hint-placeholder-count="4"><button role="radio" aria-checked="{{m.on}}" class="{{m.cls}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for></div>
+        <div class="st-seg" role="radiogroup" aria-label="Theme"><sc-for list="{{themes}}" as="t" hint-placeholder-count="2"><button role="radio" aria-checked="{{t.on}}" class="{{t.cls}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div>
+      </div>
+      <span style="flex: 1"></span>
+      <div style="display: flex; flex-direction: column; gap: 8px; color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,.45)">
+        <span style="font: 700 12px 'Cinzel', serif; letter-spacing: .2em; color: #f1d58a">{{moodTag}}</span>
+        <h1 style="margin: 0; font: 700 46px/1 'Archivo', sans-serif; letter-spacing: -.03em">Blah Survivor</h1>
+        <span style="font-size: 15px; color: rgba(255,255,255,.86)">Week 6 · 12 of 16 still in the game · {{moodLine}}</span>
+        <div style="display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap">
+          <sc-for list="{{tribes}}" as="t" hint-placeholder-count="4">
+            <span style="display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px 0 4px; border-radius: 999px; background: rgba(7,8,13,.55); border: 1px solid {{t.line}}; backdrop-filter: blur(6px); font-weight: 600; font-size: 12.5px"><img src="{{t.mark}}" alt="" style="width: 24px; height: 24px; border-radius: 999px">{{t.name}}<span style="color: rgba(255,255,255,.6); font-weight: 500">{{t.left}}</span></span>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div style="position: relative; margin-top: -64px; padding: 0 28px 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px">
+    <div class="st-card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <span class="st-lbl">Tribal Council · Tribe Vela</span>
+      <img src="exile/scroll-sealed.svg" alt="" style="width: 78%; align-self: center">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><span style="font-weight: 600; font-size: 15px">Votes close in</span><span class="st-num" style="font-size: 20px; color: #d9b45a">1d 04:12</span></div>
+      <a class="ex-btn ex-btn-gold" href="TribalScroll.dc.html">Cast your vote</a>
+    </div>
+    <div class="st-card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; justify-content: space-between"><span class="st-lbl">Your idols</span><a href="IdolVault.dc.html" style="color: #d9b45a; font-weight: 600; font-size: 12px; text-decoration: none">Idol vault ›</a></div>
+      <div style="display: flex; gap: 14px; align-items: center">
+        <img src="survivor/idols/immunity.svg" alt="Immunity idol" style="height: 120px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font: 700 17px 'Cinzel', serif; color: #f2c94c">Immunity idol</span>
+          <span class="st-t2" style="font-size: 12.5px">Found with Ladd McConkey (2.06). Play it before votes close to cancel every vote against you.</span>
+          <span class="st-t3" style="font-size: 11.5px">Only you can see this.</span>
+        </div>
+      </div>
+    </div>
+    <div class="st-card" style="padding: 18px; display: flex; flex-direction: column">
+      <span class="st-lbl" style="margin-bottom: 6px">Tribes · week 6 points</span>
+      <sc-for list="{{tribeRows}}" as="r" hint-placeholder-count="4">
+        <div class="st-row"><img src="{{r.mark}}" alt="" style="width: 32px; height: 32px; border-radius: 999px"><span style="flex: 1; font-weight: 600">{{r.name}}</span><span class="st-t3" style="font-size: 12px">{{r.left}} left</span><span class="st-num" style="width: 64px; text-align: right">{{r.pts}}</span></div>
+      </sc-for>
+    </div>
+    <div class="st-card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px">
+      <span class="st-lbl">Exile Island</span>
+      <div style="display: flex; align-items: center; gap: 12px"><img src="exile/token-coin.svg" alt="" style="height: 64px"><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 600; font-size: 15px">3 managers on Exile</span><span class="st-t2" style="font-size: 12.5px">Open Team 11 is 1 token from returning.</span></div></div>
+      <a class="ex-btn" href="ExileTokens.dc.html" style="background: transparent; color: var(--t1); border-color: var(--ln)">Open Exile Island</a>
+    </div>
+  </div>
+  <p class="st-t3" style="margin: 0; padding: 0 28px 28px; font-size: 12px">The mood follows the league automatically. Day is for the draft and regular weeks. Golden hour is the vote-deadline day. Tribal night is while results are read. The Exile storm is on Exile Island screens. The scene only sits behind the header and fades into the page, so cards and stats stay on solid surfaces.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sport: 'football', mood: 'dusk', theme: 'dark' }; }
+  renderVals() {
+    const st = this.state;
+    const S = [['football', 'NFL'], ['basketball', 'NBA'], ['baseball', 'MLB'], ['hockey', 'NHL'], ['soccer', 'Soccer']];
+    const M = [['day', 'Day', 'Draft & regular week', 'Lineups lock Sunday 1:00 PM'], ['dusk', 'Golden hour', 'Vote deadline today', 'Votes close tonight at 8:00 PM'], ['night', 'Tribal night', 'Tribal Council', 'The votes are being read'], ['exile', 'Exile', 'Exile Island', 'Exile Island is open']];
+    const seg = (list, key) => list.map(([id, label]) => ({ label, on: st[key] === id ? 'true' : 'false', cls: 'st-sg' + (st[key] === id ? ' st-sg-on' : ''), pick: () => this.setState({ [key]: id }) }));
+    const mood = M.find(m => m[0] === st.mood);
+    const T = [['Koa', 'shark', '#4fb8a8', 3, '118.4'], ['Rumo', 'boar', '#d98a55', 3, '102.9'], ['Vela', 'manta', '#9b8ae0', 3, '131.2'], ['Tiki', 'tiki', '#d46f86', 3, '96.0']];
+    const tribes = T.map(([name, m, c, left]) => ({ name, mark: 'tribes/marks/' + m + '.svg', line: c, left: left + ' left' }));
+    const tribeRows = T.slice().sort((a, b) => parseFloat(b[4]) - parseFloat(a[4])).map(([name, m, c, left, pts]) => ({ name, mark: 'tribes/marks/' + m + '.svg', left, pts }));
+    return {
+      sports: seg(S, 'sport'), moods: seg(M, 'mood'), themes: seg([['dark', 'Dark'], ['light', 'Light']], 'theme'),
+      bgSrc: 'survivor/bg/' + st.mood + '-' + st.sport + '.svg', sportLabel: S.find(s => s[0] === st.sport)[1],
+      moodTag: mood[2], moodLine: mood[3], themeCls: st.theme === 'light' ? 'st-light' : '', tribes, tribeRows
+    };
+  }
+}
+</script>
+</body>
+</html>

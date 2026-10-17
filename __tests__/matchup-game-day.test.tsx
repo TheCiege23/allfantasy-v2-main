@@ -128,15 +128,27 @@ describe('left to play, under each live score', () => {
 describe('the page keeps itself current during games', () => {
   const live = (c: HTMLElement) => c.querySelector('.af-mu-week .af-mp-live')
 
-  it('polls at the live cadence while a starter is left to play', () => {
-    const { container } = render(<Matchup data={data('live', { you: { ...zero, upcoming: 1 }, opponent: zero })} />)
+  /*
+   * 🛑 LIVE MEANS A STARTER'S GAME IS IN PROGRESS, NOT A STARTER LEFT (2026-10-02). Counting starters
+   * still to kick off held this page on 20s from Thursday night to Monday; an unknown state held it
+   * there all season for every non-NFL league. Idle now means two minutes, and a refresh at kickoff.
+   */
+  it('polls at the live cadence while a starter is playing', () => {
+    const { container } = render(<Matchup data={data('live', { you: { ...zero, live: 1 }, opponent: zero })} />)
     expect(live(container)?.getAttribute('data-inplay')).toBe('true')
     expect(screen.getByRole('button', { name: 'Refresh this matchup' })).toBeTruthy()
   })
 
-  it('treats an unknown game state as still in play', () => {
+  it('🛑 idles while starters are only still to play — Friday after a Thursday game', () => {
+    const { container } = render(<Matchup data={data('live', { you: { ...zero, upcoming: 1, final: 1 }, opponent: { ...zero, upcoming: 2 } })} />)
+    expect(live(container)?.getAttribute('data-inplay')).toBe('false')
+    /* Still refreshable by hand, and still on the idle cadence. */
+    expect(screen.getByRole('button', { name: 'Refresh this matchup' })).toBeTruthy()
+  })
+
+  it('🛑 an unknown game state idles (refreshed every two minutes), it does not hold 20s', () => {
     const { container } = render(<Matchup data={data('live', { you: { ...zero, unknown: 1 }, opponent: { ...zero, final: 2 } })} />)
-    expect(live(container)?.getAttribute('data-inplay')).toBe('true')
+    expect(live(container)?.getAttribute('data-inplay')).toBe('false')
   })
 
   it('idles before kickoff, and offers no refresh at all once the week is final', () => {

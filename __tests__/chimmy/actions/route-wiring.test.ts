@@ -24,9 +24,13 @@ describe('confirm cards in the chat route', () => {
   })
 
   it('tells the model it can read league chat but never private messages, and never acts without a tap', () => {
-    expect(CODE).toMatch(/You can NEVER read direct messages, Huddles or any private conversation/)
-    expect(CODE).toMatch(/These change NOTHING: they put a confirm card under your answer, and the move happens only if the user taps Confirm/)
-    expect(CODE).toMatch(/NEVER say a lineup was set or a trade was sent/)
+    // The prompt lives in its own module (2026-10-11) so @chimmy in chat threads runs the same one;
+    // the route still hands it to the loop.
+    const PROMPT = fs.readFileSync(path.join(process.cwd(), 'lib', 'chimmy', 'tools', 'toolLoopSystemPrompt.ts'), 'utf8')
+    expect(CODE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,/)
+    expect(PROMPT).toMatch(/You can NEVER read direct messages, Huddles or any private conversation/)
+    expect(PROMPT).toMatch(/These change NOTHING: they put a confirm card under your answer, and the move happens only if the user taps Confirm/)
+    expect(PROMPT).toMatch(/NEVER say a lineup was set or a trade was sent/)
   })
 
   it('does not charge for the confirm tap: the confirm route never touches token spend', () => {

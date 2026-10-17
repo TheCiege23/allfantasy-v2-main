@@ -34,7 +34,7 @@ export type InjuryEmailAlert = {
    * link per league that has a verified destination. A league without one is named in the message
    * and gets no link — never a homepage dressed up as the lineup screen.
    */
-  fixLinks?: Array<{ leagueName: string; href: string }>
+  fixLinks?: Array<{ leagueName: string; href: string; /** The link's own words; default "Fix your lineup in <league>". */ label?: string }>
 }
 
 /** A relative in-app link made absolute for an email client; platform links pass through. */
@@ -67,7 +67,7 @@ export function renderInjuryEmail(params: {
     .map((a) => {
       const where = a.leagueName ? `<span style="color:#8b8fa3"> · ${esc(a.leagueName)}</span>` : ''
       const links = (a.fixLinks ?? [])
-        .map((l) => `<br><a href="${esc(absolute(l.href, params.baseUrl))}" style="color:#7dd3fc">Fix your lineup in ${esc(l.leagueName)} →</a>`)
+        .map((l) => `<br><a href="${esc(absolute(l.href, params.baseUrl))}" style="color:#7dd3fc">${esc(l.label ?? `Fix your lineup in ${l.leagueName}`)} →</a>`)
         .join('')
       return `<p style="margin:0 0 12px 0;font-size:15px;line-height:1.5">
   <strong style="color:#ffffff">${esc(a.title)}</strong>${where}<br>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 200" width="260" height="200" role="img" aria-label="Tribe buff">
+<defs>
+<linearGradient id="bfho-c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fb687"/><stop offset=".45" stop-color="#3f9e5f"/><stop offset="1" stop-color="#225634"/></linearGradient>
+<linearGradient id="bfho-sh" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".35"/><stop offset=".18" stop-color="#000" stop-opacity="0"/><stop offset=".82" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></linearGradient>
+<clipPath id="bfho-k"><path d="M20,78 C80,66 180,66 240,78 L240,146 C180,134 80,134 20,146 Z"/></clipPath>
+</defs>
+<ellipse cx="130" cy="186" rx="96" ry="8" fill="#000" opacity=".35"/>
+<path d="M196,124 C214,150 222,168 236,182 L214,186 C206,168 196,150 186,132 Z" fill="#225634" stroke="#1a0f06" stroke-width="3" stroke-linejoin="round"/>
+<path d="M200,126 C222,146 238,158 254,166 L240,182 C226,170 210,154 192,136 Z" fill="url(#bfho-c)" stroke="#1a0f06" stroke-width="3" stroke-linejoin="round"/>
+<path d="M246,168 l-6,10 M238,162 l-8,10" stroke="#d9b45a" stroke-width="2"/>
+<g clip-path="url(#bfho-k)">
+  <rect x="0" y="60" width="260" height="100" fill="url(#bfho-c)"/>
+  <path d="M20,98 L30,104 L40,92 L50,104 L60,92 L70,104 L80,92 L90,104 L100,92 L110,104 L120,92 L130,104 L140,92 L150,104 L160,92 L170,104 L180,92 L190,104 L200,92 L210,104 L220,92 L230,104" fill="none" stroke="#d9b45a" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M34,112 l7,-8 l7,8 l-7,8 Z" fill="#d9b45a" stroke="#225634" stroke-width="1.2"/><path d="M60,112 l7,-8 l7,8 l-7,8 Z" fill="#d9b45a" stroke="#225634" stroke-width="1.2"/><path d="M86,112 l7,-8 l7,8 l-7,8 Z" fill="#d9b45a" stroke="#225634" stroke-width="1.2"/><path d="M112,112 l7,-8 l7,8 l-7,8 Z" fill="#d9b45a" stroke="#225634" stroke-width="1.2"/><path d="M138,112 l7,-8 l7,8 l-7,8 Z" fill="#d9b45a" stroke="#225634" stroke-width="1.2"/><path d="M164,112 l7,-8 l7,8 l-7,8 Z" fill="#d9b45a" stroke="#225634" stroke-width="1.2"/><path d="M190,112 l7,-8 l7,8 l-7,8 Z" fill="#d9b45a" stroke="#225634" stroke-width="1.2"/><circle cx="40" cy="88" r="2.4" fill="#d9b45a"/><circle cx="40" cy="134" r="2.4" fill="#d9b45a"/><circle cx="66" cy="88" r="2.4" fill="#d9b45a"/><circle cx="66" cy="134" r="2.4" fill="#d9b45a"/><circle cx="92" cy="88" r="2.4" fill="#d9b45a"/><circle cx="92" cy="134" r="2.4" fill="#d9b45a"/><circle cx="118" cy="88" r="2.4" fill="#d9b45a"/><circle cx="118" cy="134" r="2.4" fill="#d9b45a"/><circle cx="144" cy="88" r="2.4" fill="#d9b45a"/><circle cx="144" cy="134" r="2.4" fill="#d9b45a"/><circle cx="170" cy="88" r="2.4" fill="#d9b45a"/><circle cx="170" cy="134" r="2.4" fill="#d9b45a"/><circle cx="196" cy="88" r="2.4" fill="#d9b45a"/><circle cx="196" cy="134" r="2.4" fill="#d9b45a"/>
+  <path d="M20,124 C80,114 180,114 240,124" stroke="#977d3e" stroke-width="1.5" fill="none" opacity=".7"/>
+  <path d="M30,84 C70,74 120,72 150,74" stroke="#fff" stroke-width="5" fill="none" opacity=".25" stroke-linecap="round"/>
+  <rect x="0" y="60" width="260" height="100" fill="url(#bfho-sh)"/>
+  <path d="M70,70 C74,100 72,120 66,140 M130,68 C134,100 132,120 128,134 M190,70 C194,100 190,120 186,140" stroke="#000" stroke-width="2" opacity=".14" fill="none"/>
+</g>
+<path d="M20,78 C80,66 180,66 240,78 L240,146 C180,134 80,134 20,146 Z" fill="none" stroke="#1a0f06" stroke-width="4" stroke-linejoin="round"/>
+<path d="M176,98 C188,88 206,88 212,104 C218,120 204,134 188,130 C176,126 170,110 176,98 Z" fill="url(#bfho-c)" stroke="#1a0f06" stroke-width="3.5"/>
+<path d="M184,104 C192,98 202,100 204,110" stroke="#d9b45a" stroke-width="2.5" fill="none"/>
+</svg>

@@ -4,9 +4,10 @@
  *
  * 1. The "?" help popover (`Help` in Dashboard3A.tsx, `[data-help]`) was hidden with
  *    `visibility`, so its 264px body was still laid out: on a 375px phone the weekly-routine badge
- *    put its right edge at 410px and the whole home page scrolled 36px sideways. It is
- *    `display: none` until opened now, opens on a TAP (`:focus` — a tap does not match
- *    `:focus-visible`), and on a phone opens as a full-width card above the fixed tab bar.
+ *    put its right edge at 410px and the whole home page scrolled 36px sideways. That control is
+ *    gone (2026-10-03): the home's "?" is the shared InfoTip, whose popover opens in the top
+ *    layer capped at `min(360px, 100vw - 32px)` — see __tests__/core-app/dashboard-help-tips.test.tsx.
+ *    What is pinned here now is that no rule for the retired markup is left behind.
  * 2. Game-day scoring plays were one nowrap line, so the play itself was what got cut on a phone.
  */
 import { readFileSync } from 'node:fs'
@@ -30,24 +31,21 @@ function rules(file: string, selector: string): { media: string; decls: Record<s
   return out
 }
 
-describe('the help popover', () => {
-  it('is not laid out at all while closed, so it cannot widen the page', () => {
-    const base = rules('af-dash-3a.css', '[data-help-body]').find((r) => r.media === '' && r.decls.position === 'absolute')
-    expect(base?.decls.display).toBe('none')
+describe('the retired help popover', () => {
+  it('leaves no [data-help] rule behind in the home stylesheet', () => {
+    const css = readFileSync(resolve(__dirname, '../components/core-app/af-dash-3a.css'), 'utf8')
+    const selectors: string[] = []
+    postcss.parse(css).walkRules((rule: Rule) => {
+      selectors.push(...rule.selectors)
+    })
+    expect(selectors.length).toBeGreaterThan(100)
+    expect(selectors.filter((s) => s.includes('data-help'))).toEqual([])
   })
 
-  it('opens on hover, on keyboard focus, and on a tap', () => {
-    for (const sel of ['[data-help]:hover [data-help-body]', '[data-help]:focus [data-help-body]', '[data-help]:focus-visible [data-help-body]']) {
-      expect(rules('af-dash-3a.css', sel).find((r) => r.media === '')?.decls.display).toBe('block')
-    }
-  })
-
-  it('on a phone, opens as a full-width card above the fixed tab bar', () => {
-    const phone = rules('af-dash-3a.css', '[data-help-body]').find((r) => r.media === '(max-width: 560px)')?.decls
-    expect(phone).toMatchObject({ position: 'fixed', left: '16px', right: '16px', width: 'auto' })
-    expect(phone?.bottom).toContain('--af-tabbar-height')
-    // Above the tab bar (40) and the league chat bar (39).
-    expect(Number(phone?.['z-index'])).toBeGreaterThan(40)
+  it('the shared InfoTip popover cannot run past a phone screen', () => {
+    const pop = rules('af-core.css', '.af-core .af-info-pop').find((r) => r.media === '')?.decls
+    expect(pop?.['max-width']).toBe('min(360px, calc(100vw - 32px))')
+    expect(pop?.['box-sizing']).toBe('border-box')
   })
 })
 

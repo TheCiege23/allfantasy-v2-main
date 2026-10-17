@@ -2,7 +2,11 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import { claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, resumeClientSync, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
+import { bindClientSyncAccount, claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, resumeClientSync, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
+import { useClientSyncAccount } from '@/components/providers/ClientSyncAccountProvider'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { syncMessageText } from '@/lib/core-app/syncMessageText'
+import { ageText } from '@/lib/core-app/shellCopy'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -46,29 +50,55 @@ export type SyncNowButtonProps = {
    * only failed to look. It stays enabled and the press reports the real error.
    */
   eligibleCount: number | null
+  /**
+   * The shell's last-sync age (`describeAge`), for the panel's "Updated 2h ago" line. Optional: the
+   * panel says nothing about age rather than inventing one when it is absent.
+   */
+  syncAge?: { label: string; stale: boolean } | null
+  /**
+   * Every league in the reader's list — the number the rail and the league pager count. The panel's
+   * title says THIS, not `eligibleCount`: titled with the syncable count it read "Your 57 leagues"
+   * over a pager reading "19 / 65" (2026-10-08), because native leagues and a paused connection are
+   * leagues you have but nothing to re-read. `eligibleCount` still decides what the button can do.
+   */
+  totalLeagues?: number | null
 }
 
-export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: SyncNowButtonProps) {
+export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAge = null, totalLeagues = null }: SyncNowButtonProps) {
   const router = useRouter()
+  const accountId = useClientSyncAccount()
   const { phase, message, completion } = useSyncExternalStore(subscribeClientSync, getClientSyncSnapshot, getServerSyncSnapshot)
-  useEffect(() => { void resumeClientSync()?.catch(() => undefined) }, [])
+  useEffect(() => {
+    bindClientSyncAccount(accountId)
+    if (accountId) void resumeClientSync()?.catch(() => undefined)
+  }, [accountId])
   useEffect(() => {
     if (claimClientSyncRefresh(completion)) router.refresh()
   }, [completion, router])
 
   /* Only a counted zero disables. See `eligibleCount` above for why null does not. */
   const nothingToSync = eligibleCount === 0
-  const disabled = phase === 'busy' || nothingToSync
+  const disabled = !accountId || phase === 'busy' || nothingToSync
 
   const run = useCallback(() => {
-    if (phase === 'busy' || nothingToSync) return
+    if (!accountId || phase === 'busy' || nothingToSync) return
     void startClientSync(onlyKey).catch(() => undefined)
-  }, [phase, nothingToSync, onlyKey])
+  }, [accountId, phase, nothingToSync, onlyKey])
 
-  const label = phase === 'busy' ? 'Syncing…' : onlyKey ? 'Sync this league' : 'Sync now'
+  /* In the reader's language — the chip is in the top bar of every /core screen (2026-10-03). */
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const label =
+    phase === 'busy'
+      ? es ? 'Sincronizando…' : 'Syncing…'
+      : onlyKey
+        ? es ? 'Sincronizar esta liga' : 'Sync this league'
+        : es ? 'Sincronizar' : 'Sync now'
   const hint = nothingToSync
-    ? 'Import a league first — there is nothing to sync yet'
-    : onlyKey ? 'Refresh rosters, scores and activity for this league' : 'Pick up new activity in your connected leagues'
+    ? es ? 'Importa una liga primero: aún no hay nada que sincronizar' : 'Import a league first — there is nothing to sync yet'
+    : onlyKey
+      ? es ? 'Actualiza plantillas, marcadores y actividad de esta liga' : 'Refresh rosters, scores and activity for this league'
+      : es ? 'Trae la actividad nueva de tus ligas conectadas' : 'Pick up new activity in your connected leagues'
 
   const button = (
     <button
@@ -92,7 +122,12 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
      is watching — it does not need to interrupt what they are reading. */
   const status = (
     <span className="af-syncnow-msg" role="status" aria-live="polite" data-phase={phase}>
-      {phase === 'busy' ? (message ?? 'Re-reading your leagues…') : (message ?? '')}
+      {/* The sync loop writes these in English; they are translated here, where the language is known. */}
+      {phase === 'busy'
+        ? message
+          ? syncMessageText(message, language)
+          : es ? 'Releyendo tus ligas…' : 'Re-reading your leagues…'
+        : syncMessageText(message, language)}
     </span>
   )
 
@@ -105,40 +140,70 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
     )
   }
 
+  /*
+   * ⚠ THE HOME PANEL IS A QUIET STATUS ROW, NOT A QUESTION (2026-10-08). It used to ask "Leagues
+   * out of date?" over a paragraph about read-only access — plumbing a manager never needs to read,
+   * founder-reported as feeling like behind-the-scenes info. Now it reads like a native app's pull-to-
+   * refresh line: what it is ("Your leagues"), how fresh it is ("Updated 2h ago"), and the button.
+   * While a sync runs, the progress message takes the age's place, so the row never grows.
+   */
+  const never = syncAge ? /^never/i.test(syncAge.label.trim()) : false
+  const ageLine = !syncAge
+    ? null
+    : never
+      ? es ? 'Aún no se ha sincronizado' : 'Not synced yet'
+      : es ? `Actualizado ${ageText(syncAge.label, 'es')}` : `Updated ${syncAge.label}`
+  const showStatus = phase === 'busy' || Boolean(message)
+  const titleCount = totalLeagues != null && totalLeagues > 0 ? totalLeagues : eligibleCount
   return (
-    <section className="af-syncnow-panel" aria-label="Sync your leagues">
+    <section
+      className="af-syncnow-panel"
+      aria-label={es ? 'Sincroniza tus ligas' : 'Sync your leagues'}
+      data-stale={syncAge?.stale && !nothingToSync ? 'true' : undefined}
+    >
+      <span className="af-syncnow-panel-dot" aria-hidden />
       <div className="af-syncnow-panel-text">
-        <span className="af-label af-syncnow-panel-title">Leagues out of date?</span>
-        <span className="af-syncnow-panel-sub">
-          {nothingToSync ? (
-            /*
-              ⚠ THE DISABLED STATE EXPLAINS ITSELF RATHER THAN JUST DIMMING.
-              A greyed control with no reason beside it reads as broken, and the
-              person's next move is to press it repeatedly.
-            */
-            <>
-              Nothing to sync yet — <a href="/import">import a league</a> and this turns on.
-            </>
-          ) : (
-            <>
-              {/*
-                ⚠ "PICK UP WHAT'S NEW", NOT "RE-IMPORT". The wording tracks what
-                the endpoint actually does: a connected league resumes from its
-                sync checkpoints rather than being rebuilt. Promising a full
-                re-read would be a promise the incremental path does not keep —
-                and would make the run look broken when it finishes quickly.
-              */}
-              Pick up new activity in {eligibleCount == null ? 'your' : eligibleCount} connected{' '}
-              {eligibleCount === 1 ? 'league' : 'leagues'}. We only read — nothing changes on
-              Sleeper, ESPN or Fantrax.
-            </>
-          )}
+        <span className="af-syncnow-panel-title">
+          {nothingToSync && !totalLeagues
+            ? es ? 'Aún no hay ligas' : 'No leagues yet'
+            : es
+              ? titleCount == null ? 'Tus ligas' : `Tus ${titleCount} liga${titleCount === 1 ? '' : 's'}`
+              : titleCount == null ? 'Your leagues' : `Your ${titleCount} league${titleCount === 1 ? '' : 's'}`}
         </span>
+        {nothingToSync ? (
+          /*
+            ⚠ THE DISABLED STATE EXPLAINS ITSELF RATHER THAN JUST DIMMING. A greyed control with no
+            reason beside it reads as broken, and the person's next move is to press it repeatedly.
+          */
+          <span className="af-syncnow-panel-sub">
+            {totalLeagues ? (
+              /*
+               * Leagues, but none to re-read — native leagues (AllFantasy is their record) or connections
+               * that are paused. Not "import a league": they have leagues. Neutral, because which of
+               * the two it is is not known here.
+               */
+              es ? (
+                'Nada que sincronizar por ahora.'
+              ) : (
+                'Nothing to sync right now.'
+              )
+            ) : es ? (
+              <>
+                <a href="/import">Importa una liga</a> para empezar.
+              </>
+            ) : (
+              <>
+                <a href="/import">Import a league</a> to get started.
+              </>
+            )}
+          </span>
+        ) : showStatus ? (
+          status
+        ) : ageLine ? (
+          <span className="af-syncnow-panel-sub af-num">{ageLine}</span>
+        ) : null}
       </div>
-      <div className="af-syncnow-panel-action">
-        {button}
-        {status}
-      </div>
+      {button}
     </section>
   )
 }

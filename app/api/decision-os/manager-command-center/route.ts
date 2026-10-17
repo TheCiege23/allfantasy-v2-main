@@ -29,6 +29,22 @@ const DRAFT_APPROACHING_WINDOW_DAYS = 14
 
 interface DashboardLeagueRow {
   id?: unknown
+  navigationLeagueId?: unknown
+}
+
+/**
+ * Dashboard-row id → the league id a `/league/[id]` link can open. The snapshot's items carry the
+ * ROW id, which for an imported or legacy row is not a navigable league; `navigationLeagueId` is the
+ * one Imported Leagues' "Open" already uses. Additive field, so Settings can link each item.
+ */
+function leagueLinkMap(rows: unknown[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const row of rows as DashboardLeagueRow[]) {
+    if (typeof row.id === 'string' && typeof row.navigationLeagueId === 'string' && row.navigationLeagueId) {
+      out[row.id] = row.navigationLeagueId
+    }
+  }
+  return out
 }
 
 async function resolveMemberLeagues(userId: string): Promise<{ ids: string[]; rows: unknown[] }> {
@@ -85,5 +101,10 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ ...snapshot, draftsApproachingCount, ...(sportsContext ? { sportsContext } : {}) })
+  return NextResponse.json({
+    ...snapshot,
+    draftsApproachingCount,
+    leagueLinks: leagueLinkMap(leagueRows),
+    ...(sportsContext ? { sportsContext } : {}),
+  })
 }

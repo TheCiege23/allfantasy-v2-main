@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jury and finale</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.jf-av{position:relative;flex:none;border-radius:999px;display:grid;place-items:center;font:700 13px 'Archivo',sans-serif;color:#fff}
+.jf-juror{display:flex;flex-direction:column;align-items:center;gap:4px;width:80px}
+.jf-juror .jf-av{filter:saturate(.35) brightness(.85)}
+.jf-fin{flex:1 1 260px;display:flex;flex-direction:column;gap:12px;padding:18px;border-radius:12px;background:#0b0d14;border:1px solid rgba(255,255,255,.07);transition:border-color .3s,background .3s}
+.jf-stat{display:flex;justify-content:space-between;font-size:12.5px;color:#a3a9c2}
+.jf-tally{display:flex;gap:6px;min-height:34px;align-items:center}
+.jf-mark{font:700 30px/1 'Caveat',cursive;color:#f1d58a;animation:exPop .4s ease-out both}
+@keyframes jfWin{0%{transform:scale(.7);opacity:0}60%{transform:scale(1.04);opacity:1}100%{transform:scale(1)}}
+.jf-win{animation:jfWin .8s cubic-bezier(.2,.8,.2,1) both}
+@keyframes jfGlow{0%,100%{filter:drop-shadow(0 0 12px rgba(255,200,80,.35))}50%{filter:drop-shadow(0 0 30px rgba(255,200,80,.7))}}
+.jf-trophy{animation:jfGlow 3s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.jf-mark,.jf-win,.jf-trophy{animation:none}}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="SurvivorTheme.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Final Tribal Council</h1>
+      <span class="ex-t2">Blah Survivor · Week 13 · The jury decides who wins the season</span>
+    </div>
+    <span class="ex-chip" style="color: #d9b45a; border-color: rgba(217,180,90,.4)">Jury votes close Tue 8:00 PM</span>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 22px; padding: 24px 28px 32px">
+    <section class="ex-card" style="padding: 22px 24px 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: radial-gradient(ellipse at 50% 100%, rgba(255,122,42,.12), transparent 60%), #0b0d14">
+      <div style="display: flex; justify-content: space-between; width: 100%; align-items: center"><span class="ex-lbl">The jury · {{jurorCount}} managers voted out after the merge</span><img src="late/jury-icon.svg" alt="" style="width: 30px"></div>
+      <div style="position: relative; width: 540px; max-width: 100%; height: 320px">
+        <img src="late/jury-bench.svg" alt="Jury bench" style="position: absolute; left: 0; bottom: 0; width: 540px; height: 295px">
+        <div style="position: absolute; left: 60px; right: 60px; top: 84px; display: flex; justify-content: space-between">
+          <sc-for list="{{jury}}" as="j" hint-placeholder-count="5">
+            <div class="jf-juror">
+              <span style="font-size: 12px; font-weight: 600; text-align: center; color: #c9cee0; white-space: nowrap">{{j.name}}</span>
+              <span class="ex-t3" style="font-size: 11px">{{j.sub}}</span>
+              <span class="jf-av" style="width: 52px; height: 52px; background: {{j.c}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 4px {{j.ring}}">{{j.ini}}<img src="{{j.icon}}" alt="" style="position: absolute; right: -8px; bottom: -8px; width: 24px; height: 24px; filter: none"></span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch">
+      <div style="flex: 1 1 820px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+          <span class="ex-lbl" style="flex: 1">The finalists</span>
+          <sc-if value="{{canRead}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{read}}" style="min-height: 44px; padding: 0 20px">Read the votes</button></sc-if>
+          <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><button class="ex-btn" onClick="{{reset}}" style="min-height: 44px">Replay</button></sc-if>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 14px">
+          <sc-for list="{{fins}}" as="f" hint-placeholder-count="3">
+            <section class="jf-fin" style="border-color: {{f.line}}; background: {{f.bg}}">
+              <div style="display: flex; align-items: center; gap: 12px">
+                <span class="jf-av" style="width: 50px; height: 50px; background: {{f.c}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 4px {{f.ring}}">{{f.ini}}</span>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 700; font-size: 15px">{{f.name}}</span><span class="ex-t3" style="font-size: 12px">{{f.sub}}</span></div>
+                <img src="weekly/torch-lit-icon.svg" alt="Still in" style="width: 30px">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,.06); border-bottom: 1px solid rgba(255,255,255,.06)">
+                <sc-for list="{{f.stats}}" as="s" hint-placeholder-count="4"><div class="jf-stat"><span>{{s.k}}</span><span class="ex-num" style="color: #e8eaf2">{{s.v}}</span></div></sc-for>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px">
+                <span class="ex-lbl" style="flex: 1">Jury votes</span>
+                <div class="jf-tally"><sc-for list="{{f.marks}}" as="m" hint-placeholder-count="0"><span class="jf-mark" key="{{m.k}}">I</span></sc-for></div>
+                <span class="ex-num" style="font-size: 20px; color: {{f.numC}}">{{f.votes}}</span>
+              </div>
+            </section>
+          </sc-for>
+        </div>
+      </div>
+
+      <aside style="flex: 1 1 340px; max-width: 420px; display: flex; flex-direction: column; gap: 10px">
+        <span class="ex-lbl">Votes read · {{readCount}} of 5</span>
+        <div class="sc-paper" style="padding: 22px 22px 26px; display: flex; flex-direction: column; gap: 10px; min-height: 360px; border-radius: 4px">
+          <span class="sc-sub">Final Tribal Council</span>
+          <sc-for list="{{slips}}" as="s" hint-placeholder-count="0">
+            <div class="sc-slip" key="{{s.k}}"><span class="sc-ord">{{s.ord}}</span><span class="sc-hand">{{s.name}}</span></div>
+          </sc-for>
+          <sc-if value="{{none}}" hint-placeholder-val="{{ true }}"><span style="font: 600 24px 'Caveat', cursive; color: #8a6330; text-align: center; margin-top: 90px">The votes are sealed until every juror has voted.</span></sc-if>
+        </div>
+      </aside>
+    </div>
+
+    <sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+      <section class="ex-card jf-win" style="padding: 28px; display: flex; flex-wrap: wrap; gap: 32px; align-items: center; justify-content: center; border-color: rgba(242,201,76,.4); background: radial-gradient(ellipse at 30% 50%, rgba(242,201,76,.18), transparent 60%), #0b0d14">
+        <img class="jf-trophy" src="late/champion-trophy.svg" alt="Champion trophy" style="width: 200px; flex: none">
+        <div style="flex: 0 1 520px; display: flex; flex-direction: column; gap: 12px">
+          <span class="ex-lbl ex-gold">Season champion · Blah Survivor 2026</span>
+          <span style="font: 700 36px/1.1 'Cinzel', serif; color: #f1d58a">TheCiege26 is the last one standing</span>
+          <span class="ex-t2" style="font-size: 15px">Won the jury vote 3–1–1. Outlasted 11 managers over 13 weeks.</span>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap">
+            <span class="ex-chip" style="color: #d9b45a; border-color: rgba(217,180,90,.4)"><img src="late/champion-icon.svg" alt="" style="width: 16px">Champion badge on profile</span>
+            <span class="ex-chip">Season added to league history</span>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { n: 0, k: 0 }; this.timers = []; }
+  renderVals() {
+    const st = this.state;
+    const order = ['Open Team 4', 'TheCiege26', 'Open Team 5', 'TheCiege26', 'TheCiege26'];
+    const read = order.slice(0, st.n);
+    const F = [['TheCiege26', 'TC', '#22314f', 'Exile return · week 7', [['Immunity wins', '3'], ['Idols played', '2'], ['Season points', '1,412.6'], ['Votes survived', '4']]],
+               ['Open Team 4', 'O4', '#1f2a4d', 'Original Vela', [['Immunity wins', '1'], ['Idols played', '1'], ['Season points', '1,388.0'], ['Votes survived', '2']]],
+               ['Open Team 5', 'O5', '#12352a', 'Original Vela', [['Immunity wins', '4'], ['Idols played', '0'], ['Season points', '1,451.9'], ['Votes survived', '0']]]];
+    const done = st.n >= 5;
+    const fins = F.map(([name, ini, c, sub, stats]) => {
+      const v = read.filter(x => x === name).length; const win = done && name === 'TheCiege26';
+      return { name, ini, c, sub, stats: stats.map(([k, vv]) => ({ k, v: vv })), votes: String(v), marks: Array.from({ length: v }, (_, i) => ({ k: name + i + st.k })),
+        ring: win ? '#f2c94c' : '#4a4f5c', line: win ? 'rgba(242,201,76,.55)' : 'rgba(255,255,255,.07)', bg: win ? '#151926' : '#0b0d14', numC: win ? '#f1d58a' : '#e8eaf2' };
+    });
+    const ords = ['First vote', 'Second vote', 'Third vote', 'Fourth vote', 'Fifth vote'];
+    const slips = read.map((name, i) => ({ k: 's' + i + st.k, ord: ords[i], name }));
+    const jury = [['Open Team 8', 'O8', '#3a2410', 'Out wk 8'], ['Open Team 2', 'O2', '#4a1f2c', 'Out wk 9'], ['Open Team 6', 'O6', '#2c2a4a', 'Out wk 10'], ['Open Team 7', 'O7', '#1d3a3a', 'Out wk 11'], ['Open Team 9', 'O9', '#3a3418', 'Out wk 12']]
+      .map(([name, ini, c, sub]) => ({ name, ini, c, sub, ring: '#4a4f5c', icon: 'late/jury-icon.svg' }));
+    const go = () => { this.timers.forEach(clearTimeout); this.timers = [1, 2, 3, 4, 5].map(i => setTimeout(() => this.setState({ n: i }), i * 900)); };
+    return { jury, jurorCount: jury.length, fins, slips, readCount: read.length, none: st.n === 0, done, canRead: st.n === 0,
+      read: go, reset: () => { this.timers.forEach(clearTimeout); this.setState({ n: 0, k: st.k + 1 }); } };
+  }
+}
+</script>
+</body>
+</html>

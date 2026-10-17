@@ -3,10 +3,13 @@
 import Link from 'next/link'
 import type { RivalryCard, RivalryRadar as RivalryRadarData } from '@/lib/core-app/weekBoard'
 import { rosterLabel } from '@/lib/core-app/managerName'
+import { formatSigned1, signOf1 } from '@/lib/core-app/weeklyPercent'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import '@/components/core-app/af-week.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * 24b — Rivalry Radar.
@@ -40,6 +43,17 @@ function opponentLabel(card: RivalryCard): string {
   return rosterLabel([card.opponent.name], card.opponent.rosterId)
 }
 
+/**
+ * W–L, or W–L–T once a meeting has finished level. Most series have no ties and
+ * read exactly as before; a tie is never folded into the losses column. Digits
+ * and dashes only, so it reads the same in English and Spanish.
+ */
+function seriesRecord(series: RivalryCard['series']): string {
+  return series.ties > 0
+    ? `${series.wins}–${series.losses}–${series.ties}`
+    : `${series.wins}–${series.losses}`
+}
+
 function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutral' }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
@@ -55,7 +69,7 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
           </p>
         </div>
         <div className="af-rr-record af-num" data-tone={tone}>
-          {series.wins}–{series.losses}
+          {seriesRecord(series)}
           <span className="af-rr-record-label">{copy('all-time')}</span>
         </div>
       </header>
@@ -70,9 +84,8 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
         <dl className="af-rr-stats">
           <div>
             <dt>{copy('Average margin')}</dt>
-            <dd className="af-num" data-sign={card.averageMargin >= 0 ? 'pos' : 'neg'}>
-              {card.averageMargin >= 0 ? '+' : ''}
-              {card.averageMargin.toFixed(1)}
+            <dd className="af-num" data-sign={signOf1(card.averageMargin)}>
+              {formatSigned1(card.averageMargin)}
             </dd>
           </div>
           <div>
@@ -85,8 +98,15 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
       {closest ? (
         <p className="af-rr-closest">
           <b>{copy('Closest ever')}</b> · {closest.season} {copy('week')} {closest.week} —{' '}
-          {copy(closest.won ? 'you won by' : 'you lost by')}{' '}
-          <span className="af-num">{Math.abs(closest.margin).toFixed(1)}</span>
+          {closest.tied ? (
+            // A dead heat has no winner and no margin to print — "you lost by 0.0" was the bug.
+            copy('a tie')
+          ) : (
+            <>
+              {copy(closest.won ? 'you won by' : 'you lost by')}{' '}
+              <span className="af-num">{Math.abs(closest.margin).toFixed(1)}</span>
+            </>
+          )}
         </p>
       ) : null}
 
@@ -94,6 +114,8 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
       <footer className="af-rr-today">
         {thisWeek == null ? (
           <span className="af-rr-today-none">{copy('Not on your schedule this week.')}</span>
+        ) : thisWeek.status === 'live' || thisWeek.status === 'final' ? (
+          <span className="af-rr-today-label">{es ? thisWeek.status === 'final' ? 'Esta semana · finalizado' : 'Esta semana · en juego' : thisWeek.status === 'final' ? 'This week · final' : 'This week · live'}</span>
         ) : thisWeek.winProbability == null ? (
           <span className="af-rr-today-none">
             {copy('Playing this week — not enough completed weeks on either side to project it.')}
@@ -109,7 +131,7 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
             </span>
             <span className="af-rr-today-gap af-num">
               {thisWeek.projectedMargin != null
-                ? `${thisWeek.projectedMargin >= 0 ? '+' : ''}${thisWeek.projectedMargin.toFixed(1)} ${es ? 'proyectados' : 'projected'}`
+                ? `${formatSigned1(thisWeek.projectedMargin)} ${es ? 'proyectados' : 'projected'}`
                 : ''}
             </span>
           </>
@@ -164,7 +186,8 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
    */
   const preseasonKickoffLabel =
     data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
-      ? kickoffDayLabel(data.firstKickoffAt)
+      ? /* Pinned en-US so it hydrates; translated at render — "Oct 4" → «4 oct». */
+        kickoffText(kickoffDayLabel(data.firstKickoffAt), language)
       : null
 
   return (
@@ -178,12 +201,14 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
           <p className="af-wk-sub">
             {anything ? (
               <>
-                {es ? 'Rivales de esta semana según nuestro historial: ' : "This week's opponents, read through every meeting we have on file — "}
+                {/* Every opponent with a completed meeting is listed, plus this week's — not only this week's. */}
+                {es ? 'Cada rival al que te has enfrentado o te enfrentas esta semana, según nuestro historial: ' : "Every opponent you have played or play this week, read through every meeting we have on file — "}
                 <span className="af-num">{data.totals.meetings}</span> {es ? data.totals.meetings === 1 ? 'enfrentamiento' : 'enfrentamientos' : data.totals.meetings === 1 ? 'completed matchup' : 'completed matchups'} {es ? 'en' : 'across'}{' '}
                 <span className="af-num">{data.totals.seasons}</span>{' '}
                 {es ? data.totals.seasons === 1 ? 'temporada' : 'temporadas' : data.totals.seasons === 1 ? 'season' : 'seasons'} {es ? 'y' : 'and'}{' '}
                 <span className="af-num">{data.totals.platforms}</span>{' '}
-                {es ? data.totals.platforms === 1 ? 'plataforma' : 'plataformas' : data.totals.platforms === 1 ? 'platform' : 'platforms'}.
+                {es ? data.totals.platforms === 1 ? 'plataforma' : 'plataformas' : data.totals.platforms === 1 ? 'platform' : 'platforms'}.{' '}
+                <TopicTip topic="rivalrySeries" />
               </>
             ) : (
               copy('No head-to-head history is on file yet.')
@@ -209,7 +234,7 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
             {opponentLabel(data.oneToWatch)} · {data.oneToWatch.leagueName}
           </h2>
           <p className="af-rr-watch-body">
-            {data.oneToWatch.series.wins}–{data.oneToWatch.series.losses} {es ? 'en el historial, con una diferencia media de' : 'all-time at an average margin of'} {Math.abs(data.oneToWatch.averageMargin).toFixed(1)}
+            {seriesRecord(data.oneToWatch.series)} {es ? 'en el historial, con una diferencia media de' : 'all-time at an average margin of'} {Math.abs(data.oneToWatch.averageMargin).toFixed(1)}
             {data.oneToWatch.thisWeek?.projectedMargin != null ? (
               <>
                 {es ? ', y una diferencia proyectada de ' : ', and projected within '}
@@ -251,7 +276,7 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
           <div className="af-wk-empty">
             <p className="af-wk-empty-t">{copy('The season has not started yet.')}</p>
             <p className="af-wk-empty-b">
-              {es ? `Las rivalidades se basan en semanas puntuadas. Los historiales se formarán al avanzar la temporada; el primer partido comienza ${preseasonKickoffLabel}.` : `Rivalries are read from scored weeks, and none have been played this season. Records build as weeks are scored — first kickoff ${preseasonKickoffLabel}.`}
+              {es ? `Las rivalidades se basan en semanas puntuadas. Los historiales se formarán al avanzar la temporada; el primer partido comienza el ${preseasonKickoffLabel}.` : `Rivalries are read from scored weeks, and none have been played this season. Records build as weeks are scored — first kickoff ${preseasonKickoffLabel}.`}
             </p>
           </div>
         ) : (

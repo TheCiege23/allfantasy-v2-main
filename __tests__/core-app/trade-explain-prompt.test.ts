@@ -26,6 +26,14 @@ const base = {
 }
 
 describe('tradeExplainPrompt', () => {
+  it('requests Spanish without breaking the grader’s canonical trade and pick-owner parsing', () => {
+    const text = tradeExplainPrompt({ ...base, language: 'es' })
+    expect(text).toContain('Responde en español')
+    expect(text).toContain('¿Qué riesgos o datos me faltan?')
+    const sides = splitSides(text)!
+    expect(sides.left).toBe('Braelon Allen')
+    expect(extractPickMentions(sides.right).picks).toEqual([expect.objectContaining({season:2028,round:2,owner:'JeffersonTD'})])
+  })
   it('writes the trade first, as "X for Y", with the received pick naming its owner', () => {
     const text = tradeExplainPrompt(base)
     expect(text).toBe(

@@ -16,6 +16,8 @@ import {
 import { rotateForFairness } from '@/lib/cron/runBudget'
 import { describeCfbdFailure } from '@/lib/cfbd-fetch'
 import { computeAllDevyIntelMetrics } from '@/lib/devy-intel'
+import { buildNameIndex, normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
 
 export type DraftStatus = 'college' | 'declared' | 'drafted' | 'nfl_active' | 'returning'
 
@@ -379,6 +381,150 @@ function positionsMatch(pos1: string, pos2: string): boolean {
   return false
 }
 
+export interface SleeperNflCandidate {
+  id: string
+  name: string
+  team: string
+  position: string
+  status: string
+  /** null when Sleeper omits it — "unknown", never "rookie". */
+  yearsExp: number | null
+  college: string | null
+}
+
+/**
+ * Every Sleeper NFL player, indexed by `normalizeMatchName`. Namesakes are KEPT
+ * (one bucket per name), never overwritten — see `resolveSleeperGraduation`.
+ */
+export function buildSleeperNflIndex(nflPlayers: Record<string, any>): Map<string, SleeperNflCandidate[]> {
+  const rows: SleeperNflCandidate[] = []
+  for (const [id, p] of Object.entries(nflPlayers ?? {})) {
+    if (!p) continue
+    const name = `${p.first_name || ''} ${p.last_name || ''}`
+    if (normalizeMatchName(name).length < 3) continue
+    rows.push({
+      id,
+      name,
+      team: p.team || '',
+      position: p.position || '',
+      status: p.status || '',
+      yearsExp: typeof p.years_exp === 'number' && Number.isFinite(p.years_exp) ? p.years_exp : null,
+      college: typeof p.college === 'string' && p.college.trim() ? p.college : null,
+    })
+  }
+  return buildNameIndex(rows)
+}
+
+export type SleeperGraduationVerdict =
+  | { match: SleeperNflCandidate; reason: 'college_verified' | 'years_exp_verified'; candidateCount: number }
+  | { match: null; reason: 'not_found' | 'identity_mismatch' | 'ambiguous'; candidateCount: number }
+
+/**
+ * May this Sleeper NFL player graduate this college prospect?
+ *
+ * 🛑 A NAME + POSITION HIT IS NOT AN IDENTITY. This used to be a last-wins
+ * `Map<name, player>` over all ~12k Sleeper players, and a hit graduated the
+ * prospect outright. Measured on production 2026-10-12, statusSource='sleeper':
+ *
+ *   Michael Johnson Jr.  WR Baylor, class 3       -> Sleeper 2754, Delaware, years_exp 10
+ *   Devin Carter         WR Florida State, class 1 -> Sleeper 12019, West Virginia
+ *   Marquez Stevenson    WR Tulane                 -> Sleeper 7556, Houston
+ *
+ * Each vanished from devy boards and ADP as `nfl_active`, `devyEligible=false`,
+ * carrying a stranger's sleeperId.
+ *
+ * So a candidate must also agree on WHO it is: Sleeper's `college` equals the
+ * prospect's school, or — only when Sleeper has no college — its `years_exp`
+ * puts NFL entry within a year of the prospect's draft/eligible year. A stated
+ * college that disagrees is a refusal, not a fall-through to years_exp. More
+ * than one survivor is refused too: two verified namesakes is a coin flip.
+ */
+export function resolveSleeperGraduation(
+  index: Map<string, SleeperNflCandidate[]>,
+  prospect: {
+    name: string
+    position: string
+    school: string | null
+    classYear: number | null
+    draftYear: number | null
+    draftEligibleYear: number | null
+    /** On this season's CFBD roster for their school — the classifier's own index. */
+    onCurrentCollegeRoster?: boolean
+  },
+  currentYear: number,
+): SleeperGraduationVerdict {
+  const key = normalizeMatchName(prospect.name)
+  const named = (key ? index.get(key) : undefined) ?? []
+  const sameSpot = named.filter(c => positionsMatch(c.position, prospect.position))
+  if (sameSpot.length === 0) return { match: null, reason: 'not_found', candidateCount: named.length }
+  /*
+   * ⚠ A PLAYER ON THIS SEASON'S COLLEGE ROSTER IS NOT IN THE NFL, whatever Sleeper
+   * holds. The other three statusSource='sleeper' rows on 2026-10-12 (Smothers,
+   * Moss, Fletcher) pass the years_exp rule — Sleeper has them at years_exp 0,
+   * no team, no college, created 2026-04-26 — and all three carry
+   * lastRosterYear=2026 from CFBD's 2026 roster. Sleeper holds 74 skill-position
+   * rows of that shape, "Player Invalid" placeholders among them.
+   */
+  if (prospect.onCurrentCollegeRoster) return { match: null, reason: 'identity_mismatch', candidateCount: sameSpot.length }
+
+  const school = cfbdScheduleTeamKeys(prospect.school).exact
+  const expectedEntry =
+    prospect.draftYear ?? prospect.draftEligibleYear ?? calculateDraftEligibleYear(prospect.classYear)
+
+  const verified: Array<{ c: SleeperNflCandidate; reason: 'college_verified' | 'years_exp_verified' }> = []
+  for (const c of sameSpot) {
+    if (c.college) {
+      if (school && cfbdScheduleTeamKeys(c.college).exact === school) verified.push({ c, reason: 'college_verified' })
+      continue
+    }
+    if (c.yearsExp == null || c.yearsExp < 0) continue
+    if (Math.abs(currentYear - c.yearsExp - expectedEntry) <= 1) verified.push({ c, reason: 'years_exp_verified' })
+  }
+
+  if (verified.length === 1) {
+    return { match: verified[0]!.c, reason: verified[0]!.reason, candidateCount: sameSpot.length }
+  }
+  return {
+    match: null,
+    reason: verified.length === 0 ? 'identity_mismatch' : 'ambiguous',
+    candidateCount: sameSpot.length,
+  }
+}
+
+/**
+ * Which same-name CFBD draft pick, if any, is this prospect?
+ *
+ * 🛑 A SAME-NAME PICK FROM ANOTHER SCHOOL IS SOMEBODY ELSE. The old fallback took
+ * the only same-name pick whatever its school AND position. All three
+ * statusSource='cfbd_draft' rows on production 2026-10-12 came through it, and
+ * all three are on CFBD's 2026 college roster:
+ *
+ *   Kaleb Johnson      TE Notre Dame, class 1  -> 2025 R3 #83 Pittsburgh (Iowa RB)
+ *   Marcus Harris      WR UCLA, class 1        -> 2025 R6 #183 Tennessee (California DB)
+ *   Chris Johnson Jr.  RB Clemson              -> 2026 R1 #27 Miami (San Diego State DB)
+ *
+ * (the picks' schools and positions are Sleeper's record of the drafted player).
+ * A pick that names a school must match it (`cfbdScheduleTeamKeys`). Only a pick
+ * with NO school may fall back to "the only same-name pick", and only when it
+ * is the only candidate and the position agrees. Two matches are refused.
+ */
+export function resolveDraftPickGraduation(
+  candidates: readonly CFBDraftPick[],
+  prospect: { position: string; school: string | null },
+): CFBDraftPick | null {
+  const posOk = (dp: CFBDraftPick) => !dp.position || positionsMatch(dp.position, prospect.position)
+  const school = cfbdScheduleTeamKeys(prospect.school).exact
+  const sameSchool = candidates.filter(
+    dp => posOk(dp) && school !== '' && cfbdScheduleTeamKeys(dp.collegeTeam).exact === school,
+  )
+  if (sameSchool.length > 0) return sameSchool.length === 1 ? sameSchool[0]! : null
+  if (candidates.length === 1) {
+    const only = candidates[0]!
+    if (!cfbdScheduleTeamKeys(only.collegeTeam).exact && posOk(only)) return only
+  }
+  return null
+}
+
 export async function classifyDraftStatus(rosterYear: number): Promise<ClassificationResult> {
   const currentYear = new Date().getFullYear()
   const now = new Date()
@@ -387,24 +533,16 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
   }
 
   console.log('[ClassifyStatus] Building NFL player index from Sleeper...')
-  let nflNameMap = new Map<string, { id: string; team: string; position: string; status: string; yearsExp: number }>()
+  let nflIndex = new Map<string, SleeperNflCandidate[]>()
+  let sleeperIndexLoaded = false
+  let sleeperRefused = 0
   try {
     const sleeperRes = await fetch('https://api.sleeper.app/v1/players/nfl') // db-first-exception: devy backfill utility path pending DB mirror
     if (sleeperRes.ok) {
       const nflPlayers: Record<string, any> = await sleeperRes.json()
-      for (const [id, p] of Object.entries(nflPlayers)) {
-        if (!p) continue
-        const name = normalizeName(`${p.first_name || ''} ${p.last_name || ''}`)
-        if (name.length < 3) continue
-        nflNameMap.set(name, {
-          id,
-          team: p.team || '',
-          position: p.position || '',
-          status: p.status || '',
-          yearsExp: p.years_exp || 0,
-        })
-      }
-      console.log(`[ClassifyStatus] Sleeper index: ${nflNameMap.size} NFL players`)
+      nflIndex = buildSleeperNflIndex(nflPlayers)
+      sleeperIndexLoaded = true
+      console.log(`[ClassifyStatus] Sleeper index: ${nflIndex.size} NFL names`)
     } else {
       result.errors.push('Failed to fetch Sleeper NFL players')
     }
@@ -416,6 +554,7 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
   const draftPicksByName = new Map<string, CFBDraftPick[]>()
   const draftYearsToCheck = [currentYear, currentYear - 1]
   let draftYearsLoaded = 0
+  const loadedDraftYears = new Set<number>()
   for (const draftYear of draftYearsToCheck) {
     const res = await getCFBDraftPicksResult(draftYear)
     if (!res.ok) {
@@ -423,6 +562,7 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
       continue
     }
     draftYearsLoaded++
+    loadedDraftYears.add(draftYear)
     for (const pick of res.data) {
       if (!pick.playerName) continue
       const normalizedPickName = normalizeName(pick.playerName)
@@ -503,8 +643,26 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
     let graduatedToNFL = player.graduatedToNFL
     let league = player.league
 
-    const nflMatch = nflNameMap.get(normalizedName)
-    if (nflMatch && positionsMatch(nflMatch.position, player.position)) {
+    const rosterKey = `${normalizedName}|${player.position}|${player.school}`
+    const onCurrentRoster = currentRosterSet.has(rosterKey)
+    const sleeperVerdict = resolveSleeperGraduation(
+      nflIndex,
+      { ...player, onCurrentCollegeRoster: onCurrentRoster },
+      currentYear,
+    )
+    const nflMatch = sleeperVerdict.match
+    if (!nflMatch && sleeperVerdict.candidateCount > 0) sleeperRefused++
+    /*
+     * A refused match must also undo what an earlier, unverified run stamped:
+     * the branches below reset graduatedToNFL/devyEligible/league themselves, but
+     * would carry the namesake's sleeperId and nflTeam forward forever. Only when
+     * Sleeper actually loaded — an outage is not evidence the stamp was wrong.
+     */
+    if (!nflMatch && sleeperIndexLoaded && player.statusSource === 'sleeper') {
+      sleeperId = null
+      nflTeam = null
+    }
+    if (nflMatch) {
       newStatus = 'nfl_active'
       statusSource = 'sleeper'
       confidence = 95
@@ -515,12 +673,15 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
       league = 'NFL'
       result.nflActive++
     } else {
-      const draftPickCandidates = draftPicksByName.get(normalizedName) || []
-      const draftPick = draftPickCandidates.find(dp => {
-        const schoolMatch = normalizeName(dp.collegeTeam) === normalizeName(player.school)
-        const posMatch = !dp.position || positionsMatch(dp.position, player.position)
-        return schoolMatch && posMatch
-      }) || (draftPickCandidates.length === 1 ? draftPickCandidates[0] : null)
+      const draftPick = resolveDraftPickGraduation(draftPicksByName.get(normalizedName) || [], player)
+
+      /* Same self-repair as the Sleeper stamp above, for a draft stamp whose year was re-read and refused. */
+      if (!draftPick && player.statusSource === 'cfbd_draft' && player.draftYear != null && loadedDraftYears.has(player.draftYear)) {
+        draftYear = null
+        nflDraftRound = null
+        nflDraftPick = null
+        nflTeam = null
+      }
 
       if (draftPick) {
         newStatus = 'drafted'
@@ -535,9 +696,6 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
         league = 'NFL'
         result.drafted++
       } else {
-        const rosterKey = `${normalizedName}|${player.position}|${player.school}`
-        const onCurrentRoster = currentRosterSet.has(rosterKey)
-
         if (onCurrentRoster) {
           const eligYear = player.draftEligibleYear || calculateDraftEligibleYear(player.classYear)
           const classYr = player.classYear || 0
@@ -627,6 +785,7 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
     }
   }
 
+  if (sleeperRefused > 0) console.log(`[ClassifyStatus] Sleeper: refused ${sleeperRefused} name+position hit(s) whose college/years_exp did not identify the prospect`)
   console.log(`[ClassifyStatus] Complete: college=${result.college}, declared=${result.declared}, drafted=${result.drafted}, nfl_active=${result.nflActive}, returning=${result.returning}`)
   return result
 }

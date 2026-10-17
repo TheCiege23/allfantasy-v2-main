@@ -11,10 +11,12 @@ import {
   assertClaimWithinLimits,
   assertClaimWithinPerRunLimit,
   assertWaiverSubmissionWindow,
+  assertDailyScheduleAllowsClaim,
   conceptOverridesBlockWaivers,
 } from "./waiver-validation"
 import { getLeagueWaiverState } from "./waiver-state-service"
 import { assertWaiverClaimEligibility } from "./transaction-eligibility"
+import { loadDailyTransactionPolicy } from "./daily-schedule-gate"
 
 /**
  * Create a waiver claim. Validates that roster exists and belongs to the league (data consistency).
@@ -84,6 +86,12 @@ export async function createClaim(
   })
   if (!windowCheck.ok) {
     throw new Error(windowCheck.message)
+  }
+  // Commissioner's per-day schedule: a Locked day refuses claims (null = no schedule, unchanged).
+  const daily = await loadDailyTransactionPolicy(leagueId).catch(() => null)
+  const dailyCheck = assertDailyScheduleAllowsClaim(daily?.policy)
+  if (!dailyCheck.ok) {
+    throw new Error(dailyCheck.message)
   }
 
   await assertWaiverClaimEligibility({

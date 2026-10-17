@@ -90,6 +90,100 @@ describe('getLeagueActivity', () => {
     expect(out!.items).toHaveLength(1)
   })
 
+  describe('⚠ counts are EVENTS, not rows — the franchise war room sums them', () => {
+    /*
+     * The feed was deduped but the counts were taken BEFORE the dedupe, so a trade written as two
+     * rows read as "2 trades" on the connected-franchise command center while its own feed showed
+     * one. Every row id below is different on purpose: duplicates arrive from sibling importers
+     * and re-keyed writers under their own ids, so a key that leaned on the row id would miss them.
+     */
+    const AT = T('2026-09-20T15:30:00.123Z')
+    const trade = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      activityType: 'trade',
+      occurredAt: AT,
+      rosterId: null,
+      providerEventId: 'tx-1',
+      payload: { adds: { p1: 2, p2: 1 }, drops: { p1: 1, p2: 2 } },
+      normalized: { managerKeys: ['sleeper:manager:sleeperU1', 'sleeper:manager:sleeperU2'] },
+      ...extra,
+    })
+
+    it('counts one trade once when it arrives as two rows with different row ids', async () => {
+      activityFindMany.mockResolvedValue([
+        trade('row-from-importer-a'),
+        // Same Sleeper transaction, written under its own row id with one side's manager key.
+        trade('row-from-importer-b', { normalized: { managerKeys: ['sleeper:manager:sleeperU2'] } }),
+      ])
+      const out = await getLeagueActivity(ARGS)
+      expect(out!.items).toHaveLength(1)
+      expect(out!.counts).toEqual({ trade: 1, waiver: 0, rosterMove: 0 })
+    })
+
+    it('still collapses a duplicate whose row carries no provider event id', async () => {
+      activityFindMany.mockResolvedValue([trade('a'), trade('b', { providerEventId: null })])
+      const out = await getLeagueActivity(ARGS)
+      expect(out!.counts.trade).toBe(1)
+    })
+
+    it('never merges two different trades made at the same instant', async () => {
+      activityFindMany.mockResolvedValue([
+        trade('a'),
+        trade('b', { providerEventId: 'tx-2', payload: { adds: { p3: 2 }, drops: { p3: 1 } } }),
+      ])
+      const out = await getLeagueActivity(ARGS)
+      expect(out!.counts.trade).toBe(2)
+      expect(out!.items).toHaveLength(2)
+    })
+
+    it('never merges two pick-only trades at the same instant that moved different picks', async () => {
+      // No players on either side, so a key of kind + time + player ids alone reads them as one.
+      const picksOnly = (season: number, round: number) => ({
+        adds: null, drops: null, draftPicks: [{ season, round, roster_id: 1, owner_id: 2 }],
+      })
+      activityFindMany.mockResolvedValue([
+        trade('a', { providerEventId: null, payload: picksOnly(2027, 1) }),
+        trade('b', { providerEventId: null, payload: picksOnly(2028, 2) }),
+      ])
+      const out = await getLeagueActivity(ARGS)
+      expect(out!.counts.trade).toBe(2)
+      expect(out!.items).toHaveLength(2)
+    })
+
+    it('never merges two trades the provider says are different, even when they read the same', async () => {
+      // Two separate swaps of a "2027 1st", processed together. The pick labels cannot tell the
+      // original owners apart; the provider's transaction ids can.
+      const swap = { adds: null, drops: null, draftPicks: [{ season: 2027, round: 1 }] }
+      activityFindMany.mockResolvedValue([
+        trade('a', { providerEventId: 'tx-10', payload: swap }),
+        trade('b', { providerEventId: 'tx-11', payload: swap }),
+      ])
+      const out = await getLeagueActivity(ARGS)
+      expect(out!.counts.trade).toBe(2)
+      expect(out!.items).toHaveLength(2)
+    })
+
+    it('says how far back the counts reach, and whether the read stopped at its cap', async () => {
+      const rows = Array.from({ length: 60 }, (_, i) => ({
+        id: `w${i}`,
+        activityType: 'waiver',
+        occurredAt: new Date(Date.parse('2026-09-30T00:00:00Z') - i * 3_600_000),
+        rosterId: null,
+        providerEventId: `w-${i}`,
+        payload: { adds: [`p${i}`], drops: [] },
+      }))
+      activityFindMany.mockResolvedValue(rows)
+      const capped = await getLeagueActivity({ ...ARGS, limit: 1 })
+      expect(activityFindMany.mock.calls[0][0].take).toBe(60)
+      expect(capped!.counts.waiver).toBe(60)
+      expect(capped!.countWindow).toEqual({ capped: true, oldest: rows[59].occurredAt })
+
+      activityFindMany.mockResolvedValue(rows.slice(0, 5))
+      const whole = await getLeagueActivity({ ...ARGS, limit: 1 })
+      expect(whole!.countWindow).toEqual({ capped: false, oldest: rows[4].occurredAt })
+    })
+  })
+
   it('names the manager the move belongs to', async () => {
     // Real rows carry no rosterId — the writer hardcodes it to null — so the
     // fixture reflects that and supplies the key the writer actually stores.

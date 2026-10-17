@@ -8,9 +8,12 @@
  * - League scoring settings
  */
 
+import { matchInjuryRowsToPlayers } from '@/lib/injuries/matchInjuryRows';
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch';
 import { prisma } from '@/lib/prisma';
+import { loadRiSeasonRowsForName } from './riSeasonRowsByName';
 import { findLiveAdp } from '@/lib/adp/liveAdpFallback';
-import { findMultiADP } from '@/lib/multi-platform-adp';
+import { findMultiADP, findUniqueMultiADP } from '@/lib/multi-platform-adp';
 import { normalizePlayerName } from '@/lib/team-abbrev';
 import { type FantasyCalcSettings } from '@/lib/fantasycalc';
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db';
@@ -135,6 +138,9 @@ export async function resolvePlayerStats(
     sport?: string | null;
     scoringFormat?: ScoringFormat;
     leagueScoringSettings?: LeagueScoringSettings | null;
+    /** Verifying context when the caller knows which player it means (binds a shared name). */
+    position?: string | null;
+    team?: string | null;
   }
 ): Promise<ResolvedPlayerStats | null> {
   const name = playerName.trim();
@@ -146,14 +152,28 @@ export async function resolvePlayerStats(
     options?.leagueScoringSettings
   );
 
-  const historicalResolved = await resolveHistorical(name, sport);
+  /*
+   * The FantasyCalc entry is read FIRST because it is also evidence of WHO the name means: it
+   * carries only fantasy-relevant players, so for "Lamar Jackson" it names the Ravens QB, not the
+   * Falcons CB who shares Rolling Insights' name index. See `resolveHistorical`.
+   */
+  const fcLookup = await lookupFantasyCalc(name, settings);
+  const callerHint =
+    options?.position || options?.team
+      ? { position: options?.position ?? null, team: options?.team ?? null }
+      : null;
+  const fcHint =
+    sport === 'NFL' && fcLookup && (fcLookup.position || fcLookup.team)
+      ? { position: fcLookup.position ?? null, team: fcLookup.team ?? null }
+      : null;
+  const historicalResolved = await resolveHistorical(name, sport, callerHint ?? fcHint ?? {});
   const [projection, internalAdp, marketAdp, internalProjectionPoints, injury, sleeperSignal, scheduleDifficultyScore] =
     await Promise.all([
-      resolveProjection(name, settings, historicalResolved.rows, sport),
+      Promise.resolve(buildProjection(fcLookup, name, historicalResolved.rows, sport)),
       resolveInternalAdp(name, sport, options?.scoringFormat),
       resolveMarketAdp(name, sport),
-      resolveInternalProjectionPoints(name, sport, historicalResolved.rollingInsightsPlayerId),
-      resolveInjurySignal(name, sport),
+      resolveInternalProjectionPoints(sport, historicalResolved.rollingInsightsPlayerId),
+      resolveInjurySignal(name, sport, { team: historicalResolved.team, position: historicalResolved.position }),
       resolveSleeperSignal(name, sport, historicalResolved.team),
       resolveScheduleDifficultyScore(
         sport,
@@ -236,9 +256,21 @@ export async function resolvePlayerStats(
   };
 }
 
+/**
+ * 🛑 BOUND TO ONE ROLLING INSIGHTS ID, NOT TO A NAME (2026-10-11). This used to read every RI row
+ * answering to the name and let `rows[0]` supply team, position and the RI id that
+ * `resolveInternalProjectionPoints` then priced — 38 NFL names map to 79 RI ids, and Byron Young
+ * LB (LAR) / DT (PHI) came back as one interleaved career. See `riSeasonRowsByName.ts`.
+ *
+ * The verifying hint is the caller's position/team when it has them, else FantasyCalc's entry for
+ * the name, else the NFL ADP board's entry when the board holds exactly ONE player by that name —
+ * the fantasy-relevant player a comparison is about. With none, a shared name yields NO history
+ * rather than a guess.
+ */
 async function resolveHistorical(
   playerName: string,
-  sport: string
+  sport: string,
+  hint: { position?: string | null; team?: string | null } = {}
 ): Promise<HistoricalResolved> {
   const normalized = playerName.trim();
   if (!normalized) {
@@ -250,28 +282,25 @@ async function resolveHistorical(
     };
   }
 
-  const rows = await prisma.playerSeasonStats.findMany({
-    where: {
-      sport,
-      playerName: { equals: normalized, mode: 'insensitive' },
-      source: 'rolling_insights',
-    },
-    orderBy: { season: 'desc' },
-    take: HISTORICAL_SEASONS_LIMIT,
-    select: {
-      playerId: true,
-      season: true,
-      gamesPlayed: true,
-      fantasyPoints: true,
-      fantasyPointsPerGame: true,
-      position: true,
-      team: true,
-      stats: true,
-    },
+  let position = hint.position ?? null;
+  let team = hint.team ?? null;
+  if (!position && !team && normalizeToSupportedSport(sport) === 'NFL') {
+    // `findMultiADP(name)` falls back to its FIRST namesake — a guess. Only a unique entry is evidence.
+    const adp = findUniqueMultiADP(normalized);
+    position = adp?.position ?? null;
+    team = adp?.team ?? null;
+  }
+
+  const resolved = await loadRiSeasonRowsForName({
+    name: normalized,
+    sport,
+    position,
+    team,
+    limit: HISTORICAL_SEASONS_LIMIT,
   });
 
   return {
-    rows: rows.map((row) => {
+    rows: resolved.rows.map((row) => {
       const stats = (row.stats as Record<string, number | null>) ?? {};
       return {
         season: row.season,
@@ -288,25 +317,35 @@ async function resolveHistorical(
         receptions: stats.receptions ?? null,
       };
     }),
-    rollingInsightsPlayerId: rows[0]?.playerId ?? null,
-    team: rows[0]?.team ?? null,
-    position: rows[0]?.position ?? null,
+    rollingInsightsPlayerId: resolved.rollingInsightsPlayerId,
+    team: resolved.team,
+    position: resolved.position,
   };
 }
 
-async function resolveProjection(
+type FantasyCalcLookup = NonNullable<
+  ReturnType<Awaited<ReturnType<typeof getPlayerValuesForNamesDbFirst>>['get']>
+>;
+
+async function lookupFantasyCalc(
   playerName: string,
-  settings: FantasyCalcSettings,
-  historical: HistoricalSeasonRow[],
-  sport: string
-): Promise<ProjectionRow | null> {
+  settings: FantasyCalcSettings
+): Promise<FantasyCalcLookup | null> {
   const normalized = playerName.trim();
   if (!normalized) return null;
-
   const map = await getPlayerValuesForNamesDbFirst([normalized], settings);
   const key = normalized.toLowerCase();
-  const lookup = map.get(key) ?? map.get(playerName) ?? null;
-  if (!lookup) return null;
+  return map.get(key) ?? map.get(playerName) ?? null;
+}
+
+function buildProjection(
+  lookup: FantasyCalcLookup | null,
+  playerName: string,
+  historical: HistoricalSeasonRow[],
+  sport: string
+): ProjectionRow | null {
+  const normalized = playerName.trim();
+  if (!lookup || !normalized) return null;
 
   const trendFallback = inferTrendFromHistorical(historical);
   const normalizedSport = normalizeToSupportedSport(sport);
@@ -327,24 +366,17 @@ async function resolveProjection(
   };
 }
 
+/*
+ * ⚠ NO NAME FALLBACK. This used to re-query `player_season_stats` by name when no RI id was
+ * resolved — the same rows `resolveHistorical` had just read, so the only case it ever changed
+ * was the one where that resolver REFUSED a shared name, and there it put a namesake's career
+ * projection back. No id, no projection.
+ */
 async function resolveInternalProjectionPoints(
-  playerName: string,
   sport: string,
   rollingInsightsPlayerId: string | null
 ): Promise<number | null> {
-  let playerId = rollingInsightsPlayerId;
-  if (!playerId) {
-    const latest = await prisma.playerSeasonStats.findFirst({
-      where: {
-        sport,
-        source: 'rolling_insights',
-        playerName: { equals: playerName, mode: 'insensitive' },
-      },
-      orderBy: { season: 'desc' },
-      select: { playerId: true },
-    });
-    playerId = latest?.playerId ?? null;
-  }
+  const playerId = rollingInsightsPlayerId;
   if (!playerId) return null;
 
   const projection = await prisma.playerCareerProjection.findFirst({
@@ -419,29 +451,39 @@ async function resolveInternalAdp(
 
 async function resolveInjurySignal(
   playerName: string,
-  sport: string
+  sport: string,
+  identity: { team?: string | null; position?: string | null } = {}
 ): Promise<InjurySignal> {
   const injuries = await prisma.sportsInjury.findMany({
     where: {
       sport,
       source: 'espn',
       playerName: { contains: playerName, mode: 'insensitive' },
+      // A healed player drops off ESPN's report; his last row is not today's word.
+      expiresAt: { gt: new Date() },
     },
     orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
     take: 12,
     select: {
       playerName: true,
+      team: true,
+      position: true,
       status: true,
       description: true,
       type: true,
+      date: true,
+      fetchedAt: true,
     },
   });
 
-  const normalized = normalizePlayerName(playerName);
+  /*
+   * 🛑 NO MORE `?? injuries[0]`. The query is a substring match, so its first row could be anyone
+   * whose name CONTAINS this one — and a name shared by two athletes (WR vs LB Justin Jefferson)
+   * returned whichever was reported last. Bind by name verified with team and position, or not at all.
+   */
   const match =
-    injuries.find((item) => normalizePlayerName(item.playerName) === normalized) ??
-    injuries[0] ??
-    null;
+    matchInjuryRowsToPlayers(injuries, [{ name: playerName, ...identity }], sport)
+      .byPlayer.get(normalizeMatchName(playerName))?.[0] ?? null;
 
   if (!match) {
     return { status: null, source: 'none', riskScore: null, note: null };

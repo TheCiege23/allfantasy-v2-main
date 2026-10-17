@@ -125,5 +125,22 @@ export async function GET(request: Request) {
       metadata: { seasonsProcessed: r.results.length },
     }),
   )
-  return NextResponse.json({ ...out, tradeExpiry })
+
+  // The native Exile pool has its own roster snapshots. Reuse the waiver heartbeat, with
+  // independent telemetry and failure isolation; a late stat feed must not delay roster release.
+  let exileRollover: unknown
+  try {
+    const { runExileRosterRollover } = await import('@/lib/survivor/survivorExileRollover')
+    exileRollover = await withSyncJobRun(
+      { jobName: 'cron-survivor-exile-rosters', trigger: 'cron' },
+      () => runExileRosterRollover(),
+      r => ({ rowsRead: r.processed, rowsWritten: r.released + r.scored,
+        status: r.errors.length ? 'partial' : 'success', metadata: { pending: r.pending },
+        errors: r.errors.map(e => `${e.leagueId}: ${e.error}`) }),
+    )
+  } catch (error) {
+    exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
+  }
+
+  return NextResponse.json({ ...out, tradeExpiry, exileRollover })
 }

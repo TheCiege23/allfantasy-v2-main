@@ -73,9 +73,23 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
     // double. The wizard hides the box for guillotine; this drops a choice made before switching.
     medianGame: state.medianGame === true && lt !== 'guillotine',
-    draftDate: state.draftDate,
-    draftTime: state.draftTime,
+    // TE premium: NFL only, and only once the commissioner has chosen the per-catch amount.
+    ...(state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints === 'number'
+      ? { tePremiumPoints: state.tePremiumPoints }
+      : {}),
     draftTimezone: state.timezone,
+  }
+  /*
+   * 🛑 OMIT, NEVER SEND EMPTY STRINGS. The NBA/NHL Survivor branch of
+   * createCanonicalLeagueInTransaction builds its season calendar from the draft time whenever
+   * both fields are *strings* — `''` included — and `toUtc('', '', zone)` is an Invalid Date.
+   * Absent fields are the server's "no date yet" (draftDateUtc stays null).
+   */
+  const draftDate = state.draftDate.trim()
+  const draftTime = state.draftTime.trim()
+  if (state.draftScheduleLater !== true && draftDate && draftTime) {
+    conceptSetup.draftDate = draftDate
+    conceptSetup.draftTime = draftTime
   }
 
   const enabledPremiumAdvancedSettings = getEnabledPremiumAdvancedSettings(state.advancedSetup)
@@ -86,6 +100,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
+    conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
   }
   if (isFootballLike(state.sport) && state.thirdRoundReversal && isThirdRoundReversalAvailable(state.draftType)) {
     conceptSetup.thirdRoundReversal = true
@@ -343,7 +358,7 @@ function summarizeSubmittedPayload(payload: unknown): Record<string, unknown> {
 
 // ── Main submit ─────────────────────────────────────────────────────
 
-export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLeagueId?: string): Promise<CreateLeagueV2Result> {
+export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLeagueId?: string, acceptWeeklyLineups = false): Promise<CreateLeagueV2Result> {
   if (!getEffectiveLeagueType(state)) {
     return { ok: false, error: 'Choose a league concept to continue.' }
   }
@@ -360,7 +375,8 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLea
   if (endpoint === '/api/tournament/create') {
     payload = buildTournamentPayload(state)
   } else {
-    payload = { ...buildCanonicalPayload(state), ...(sourceLeagueId ? { sourceLeagueId } : {}) }
+    const canonical = buildCanonicalPayload(state)
+    payload = { ...canonical, ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), acceptWeeklyLineups } } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {

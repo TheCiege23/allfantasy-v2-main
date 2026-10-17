@@ -87,6 +87,12 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  // Reviewed college/NFL biographies in verifiedNcaafReserves.ts are attribution
+  // links returned with season-readiness evidence, never live provider reads.
+  // The NEVER_FETCHED assertion below must continue to fail if a caller fetches them.
+  { name: 'share-link', why: 'official athlete biography/season evidence links, never fetched at runtime', test: /^(broncosports\.com|byucougars\.com|gseagles\.com|hawaiiathletics\.com|hokiesports\.com|miamiredhawks\.com|msuspartans\.com|southernmiss\.com|txst\.com|utahstateaggies\.com|www\.bengals\.com|www\.chiefs\.com|www\.raiders\.com|www\.vikings\.com)$/i },
+  { name: 'namespace', why: 'OOXML chart, drawing and relationship identifiers in locally generated Excel files; never fetched', test: /^schemas\.openxmlformats\.org$/i },
+  { name: 'share-link', why: 'Stats Guy public attribution website; the separate API host is monitored', test: /^statsguyfantasy\.com$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)allfantasy\.(ai|app|com|io|local)$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)clawship\.ai$/i },
   /*
@@ -100,6 +106,8 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * api.cloudinary.com is the ONLY cloudinary host in the tree, so this alternation had
    * no other work to do.
    */
+  { name: 'cdn-media', why: 'YouTube thumbnails loaded by the browser, not data-API reads', test: /^i\.ytimg\.com$/i },
+  { name: 'share-link', why: 'Google Privacy Policy attribution link, never fetched', test: /^policies\.google\.com$/i },
   { name: 'cdn-media', why: 'image/asset host consumed as a src, not a data read', test: /(^|\.)(sleepercdn|espncdn|flagcdn|mlbstatic|nhle)\.com$/i },
   { name: 'cdn-media', why: 'image/asset host', test: /^(cdn\.nba\.com|cdn\.discordapp\.com|media\.api-sports\.io|img\.mlbstatic\.com|assets\.nhle\.com)$/i },
   /*
@@ -114,11 +122,22 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * — a runtime font load, deliberately not next/font/google (see the comment at that <link> and
    * af-core.css: this repo's builds have failed for unrelated network/heap reasons before, and a
    * font fetch must not become a new way for the build to break). The browser fetches this CSS and
-   * then the actual font files from fonts.gstatic.com directly; neither is a data read, and the
-   * gstatic host never appears as a literal in this codebase for the census to find.
+   * then the actual font files from fonts.gstatic.com directly; neither is a data read. The
+   * gstatic host now appears as a literal only in lib/security/cspReportOnly.ts's font-src
+   * allowlist, which is why it is matched here too.
    */
-  { name: 'cdn-media', why: 'Google Fonts stylesheet consumed as a <link> href, not a data read', test: /^fonts\.googleapis\.com$/i },
+  { name: 'cdn-media', why: 'Google Fonts stylesheet and font files loaded by the browser, not a data read', test: /^fonts\.(googleapis|gstatic)\.com$/i },
+  /*
+   * Origins named only so lib/security/cspReportOnly.ts can ALLOW them: the Spotify player
+   * SDK and embed, the YouTube highlight iframe, Stripe.js's API calls from the buy button,
+   * and the Google Analytics beacon. The visitor's browser talks to them; our server code
+   * reads nothing from them. Registered in NEVER_FETCHED below, so if code in lib/, app/,
+   * server/ or scripts/ ever starts fetching one, this classification fails rather than
+   * quietly exempting a data read.
+   */
+  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
+  { name: 'share-link', why: 'the social newsroom opens these composers / upload pages in the admin\'s browser, never fetched — app/admin/social-newsroom/NewsroomBoard.tsx', test: /^(www\.threads\.net|www\.instagram\.com|www\.tiktok\.com)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
    * /leagues/<id>/settings and "Open in Sleeper" buttons. It sat in the
@@ -127,6 +146,8 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * feed and is now monitored by the guard.
    */
   { name: 'share-link', why: 'Sleeper deep links handed to the user', test: /^sleeper\.com$/i },
+  { name: 'share-link', why: "Apple's subscription-management page, a redirect handed to an App Store subscriber, never fetched", test: /^apps\.apple\.com$/i },
+  { name: 'share-link', why: 'webmail inboxes the import verify step links to ("Open Gmail"), never fetched — lib/core-app/importVerifyGate.ts', test: /^(mail\.google\.com|mail\.yahoo\.com|outlook\.live\.com|www\.icloud\.com)$/i },
   /*
    * FOUR MORE OF THE SAME SHAPE, moved out of DATA_API_UNMONITORED on 2026-08-28 by
    * re-deriving that ledger. Every one is an href or a URL returned for the client to
@@ -146,6 +167,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   },
   { name: 'oauth', why: 'authentication endpoint, not a data feed', test: /^(accounts\.spotify\.com|api\.login\.yahoo\.com|oauth2\.googleapis\.com|oauth\.reddit\.com|connect\.facebook\.net|js\.stripe\.com|appleid\.apple\.com)$/i },
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
+  { name: 'platform-infra', why: 'Twilio messaging transport status reads; not a fantasy data feed', test: /^api\.twilio\.com$/i },
   { name: 'platform-infra', why: 'email, push delivery, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|api\.push\.apple\.com|api\.sandbox\.push\.apple\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
    * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded
@@ -159,7 +181,9 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * these; they are not reads that Postgres could have served, which is what the
    * DB-first rule is about. api.twitter.com is /2/tweets from the X publish providers,
    * and graph.facebook.com is the Facebook/Instagram publishers plus Meta CAPI pixel
-   * events and the OAuth /me lookup.
+   * events and the OAuth /me lookup. api.x.com now also serves recent-post reads
+   * for the X highlights catalog, so it is monitored by the DB-first guard instead
+   * of remaining in this publishing category.
    */
   { name: 'platform-infra', why: 'social publishing, analytics and OAuth — we write to these, not read feeds', test: /^(api\.twitter\.com|graph\.facebook\.com)$/i },
   /*
@@ -386,6 +410,18 @@ describe('DB-first boundary — outbound host census', () => {
     expect(monitoredPatterns().length).toBeGreaterThan(5)
   })
 
+  it('monitors the draft market API separately from its public attribution link', () => {
+    expect(classify('api.statsguyfantasy.com', monitoredPatterns())).toBe('monitored')
+    expect(classify('statsguyfantasy.com', monitoredPatterns())).toBe('share-link')
+  })
+
+  it('monitors X catalog reads separately from browser-only embed hosts', () => {
+    const monitored = monitoredPatterns()
+    expect(classify('api.x.com', monitored)).toBe('monitored')
+    expect(classify('platform.twitter.com', monitored)).toBe('browser-only')
+    expect(classify('syndication.twitter.com', monitored)).toBe('browser-only')
+  })
+
   it('every outbound host is classified', () => {
     const monitored = monitoredPatterns()
     const unclassified = [...findHosts().values()]
@@ -415,7 +451,7 @@ describe('DB-first boundary — outbound host census', () => {
      * host in the WRONG category reads as settled, so nobody looks again. This asserts
      * the claim instead of restating it.
      */
-    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture'])
+    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only'])
     const monitored = monitoredPatterns()
     const violations: string[] = []
 

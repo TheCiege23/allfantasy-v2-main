@@ -9,6 +9,8 @@ import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
+import { SmsOptInCard } from '@/components/notifications/SmsOptInCard'
+import { TeamFollowPrompt } from '@/components/follows/TeamFollowPrompt'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -16,6 +18,10 @@ import { AfCrest } from '@/components/core-app/AfCrest'
 import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
+import LeagueSwipe from '@/components/core-app/LeagueSwipe'
+import PullToRefresh from '@/components/core-app/PullToRefresh'
+import { useLineupAutoSync } from '@/components/core-app/useLineupAutoSync'
+import { LEAGUE_SWIPE_SCREENS } from '@/lib/core-app/leagueSwipe'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -28,6 +34,7 @@ import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
+import { withoutHidden } from '@/lib/core-app/leaguePreferences'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
 import { speculationGate } from '@/components/core-app/speculationGate'
@@ -37,6 +44,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { ageText, badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
+import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import {
@@ -184,6 +193,7 @@ export type CoreNavKey =
   | 'live-scores'
   | 'my-leagues'
   | 'settings'
+  | 'plans'
   /*
    * 38a. `live` is the league-dashboard entry to the cross-league live slate
    * that /live already serves — same data layer, inside the shell. `standings`
@@ -257,6 +267,7 @@ function urgencyBadge(count: number | null | undefined): NavItem['badge'] {
 type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
 export type AfCoreShellProps = {
+  nativeLeague?: boolean
   active: CoreNavKey
   /**
    * League-first phone shell (lib/core-app/leagueFirst.ts): the bottom bar becomes
@@ -268,6 +279,17 @@ export type AfCoreShellProps = {
   /** League-first: the newest line of the selected league's chat, for the pull-up chat bar. */
   leagueChatPreview?: LeagueChatPreview | null
   leagues: RailLeague[]
+  /**
+   * Leagues the account hid from its lists (lib/core-app/leaguePreferences.ts). Dropped from the
+   * rail's ROWS only — `leagues` itself stays whole, so the top search still finds a hidden league
+   * and the selected one still resolves. The open league is never dropped.
+   */
+  hiddenLeagueIds?: string[]
+  /**
+   * Archived leagues (lib/core-app/archivedLeagues.ts). Unlike `hiddenLeagueIds`, these stay out of
+   * the league SEARCHES too (the top bar and the scope switcher) — except the open league.
+   */
+  archivedLeagueIds?: string[]
   /**
    * This week's matchup per league id, for the expanded rail.
    *
@@ -325,6 +347,8 @@ export type AfCoreShellProps = {
     label: string
     favoriteIds: string[]
     leagues: ScopeSwitcherLeague[]
+    /** Leagues hidden from lists (lib/core-app/leaguePreferences.ts). Optional for older callers. */
+    hiddenIds?: string[]
   } | null
   /**
    * Does the selected league score IDP? Gates the Defense Hub nav entry.
@@ -412,6 +436,12 @@ export type AfCoreShellProps = {
    * previously a hardcoded 'G' for every account.
    */
   profile?: { name: string | null; imageUrl: string | null } | null
+  /** No live SMS consent for the current number: show the "Get alerts by text" nudge on home. */
+  smsOptInEligible?: boolean
+  /** Show the one-time "follow your teams" prompt on home (decided server-side). */
+  teamFollowPromptEligible?: boolean
+  /** The sport the follow prompt opens on (lib/follows/teamFollowPromptSport). Default NFL. */
+  teamFollowPromptSport?: string
   /**
    * Games in progress right now, for the Live scores badge. Same rule as every
    * other badge here: only rendered when something is actually live, never a
@@ -452,7 +482,7 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
   },
   {
     label: 'You',
-    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings'],
+    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings', 'plans'],
   },
 ]
 
@@ -795,6 +825,16 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     // unreachable from Core: the nav skipped straight past it, and the redesign
     // read as "Settings did not change". Preferences is one card away.
     { key: 'settings', label: 'Settings', glyph: '◧', href: '/settings' },
+    /*
+     * Plans and token packs. Until 2026-10-03 the only way to buy was More → Tools → scroll to
+     * the bottom → Account → Plans, and the owner could not find it; neither, App Review warned,
+     * would a reviewer. Points at /pricing, which also lists the token packs.
+     *
+     * ⚠ KEEP IT A PLAIN /pricing HREF. In an iOS build that cannot sell (no AFIAP marker),
+     * globals.css hides every `a[href^='/pricing']` and middleware redirects the page — App
+     * Store 3.1.1. A tracking param or an absolute URL here would slip past that rule.
+     */
+    { key: 'plans', label: 'Plans & tokens', glyph: '✦', href: '/pricing' },
     /* Admins only — see the CoreNavKey note. Another full page outside /core. */
     ...(props.isAdmin
       ? [{ key: 'admin' as const, label: 'Admin', glyph: '⬢', href: '/admin' }]
@@ -829,7 +869,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
      * used to sit beside is retired — see the rail note above — so this is now
      * the only sync entry, and it answers a per-league question only.
      */
-    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'tools', 'admin'],
+    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
   },
 ]
 
@@ -905,6 +945,9 @@ type TopSearchHit = PlayerSearchHit | LeagueSearchHit
  */
 function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   const router = useRouter()
+  // The search box sits on every /core screen; its words follow the language switch (2026-10-03).
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   const [q, setQ] = useState('')
   const [playerHits, setPlayerHits] = useState<PlayerSearchHit[]>([])
   const [open, setOpen] = useState(false)
@@ -996,8 +1039,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
           className="af-search-input"
           name="q"
           type="search"
-          placeholder="Find a player or jump to a league"
-          aria-label="Search any player or league"
+          placeholder={es ? 'Busca un jugador o ve a una liga' : 'Find a player or jump to a league'}
+          aria-label={es ? 'Busca cualquier jugador o liga' : 'Search any player or league'}
           autoComplete="off"
           role="combobox"
           aria-expanded={showList}
@@ -1017,10 +1060,17 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
       </form>
 
       {showList ? (
-        <ul className="af-search-ac" id={listId} role="listbox" aria-label="Player and league results">
+        <ul
+          className="af-search-ac"
+          id={listId}
+          role="listbox"
+          aria-label={es ? 'Resultados de jugadores y ligas' : 'Player and league results'}
+        >
           {hits.length === 0 ? (
             <li className="af-search-ac-empty" role="presentation">
-              {loading ? 'Searching…' : 'No players or leagues match that.'}
+              {loading
+                ? es ? 'Buscando…' : 'Searching…'
+                : es ? 'Ningún jugador ni liga coincide.' : 'No players or leagues match that.'}
             </li>
           ) : (
             hits.map((hit, i) => (
@@ -1042,8 +1092,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
                     <span className="af-search-ac-name">{hit.name}</span>
                     <span className="af-search-ac-meta">
                       {hit.kind === 'league'
-                        ? `League · ${hit.platform}`
-                        : [hit.position, hit.team].filter(Boolean).join(' · ') || 'Player'}
+                        ? `${es ? 'Liga' : 'League'} · ${hit.platform}`
+                        : [hit.position, hit.team].filter(Boolean).join(' · ') || (es ? 'Jugador' : 'Player')}
                     </span>
                   </span>
                 </button>
@@ -1103,6 +1153,7 @@ function RailSide({
   projection: RailSideProjectionSummary | null
   them?: boolean
 }) {
+  const { language } = useOptionalLanguage()
   const initial = (Array.from(name.trim() || '•')[0] ?? '•').toUpperCase()
   /*
    * ⚠ `pricedFrom > 0` MATTERS: a side where NOTHING priced already draws a dash,
@@ -1125,11 +1176,17 @@ function RailSide({
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
       title={projection
-        ? `Weekly baseline projection — API: provider (Sleeper) from ${projection.pricedFrom} of ${projection.starterCount} starters${
-            projection.afProjected == null
-              ? ', generic PPR because this league’s scoring could not be re-scored'
-              : ', re-scored with this league’s settings'
-          } · AF: AllFantasy engine from ${projection.afEngineFrom ?? 0} of ${projection.starterCount} starters · live score is shown separately`
+        ? language === 'es'
+          ? `Proyección base semanal — ${PROJECTION_PROVIDER_LABEL} (SLPR): proyección de ${PROJECTION_PROVIDER_LABEL} con ${projection.pricedFrom} de ${projection.starterCount} titulares${
+              projection.afProjected == null
+                ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
+                : ', recalculada con la configuración de esta liga'
+            } · AF: motor de AllFantasy con ${projection.afEngineFrom ?? 0} de ${projection.starterCount} titulares · el marcador en vivo se muestra aparte`
+          : `Weekly baseline projection — ${PROJECTION_PROVIDER_LABEL} (SLPR): ${PROJECTION_PROVIDER_LABEL}’s projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
+              projection.afProjected == null
+                ? ', generic PPR because this league’s scoring could not be re-scored'
+                : ', re-scored with this league’s settings'
+            } · AF: AllFantasy engine from ${projection.afEngineFrom ?? 0} of ${projection.starterCount} starters · live score is shown separately`
         : undefined}
     >
       <span className="af-rail-row-av" aria-hidden>
@@ -1163,10 +1220,13 @@ function ordinal(n: number): string {
  * saying so would present a projected ordering as a played one.
  */
 function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
+  const es = useOptionalLanguage().language === 'es'
   if (!standing) {
     return (
       <span className="af-rail-row-side" data-side="them">
-        <span className="af-rail-row-team">no head-to-head — rank not yet measurable</span>
+        <span className="af-rail-row-team">
+          {es ? 'sin enfrentamiento directo: posición aún no medible' : 'no head-to-head — rank not yet measurable'}
+        </span>
       </span>
     )
   }
@@ -1177,23 +1237,31 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
   return (
     <span className="af-rail-row-rank" data-tone={tone}>
       <span className="af-rail-row-rank-pos">
-        {standing.tied ? 'T-' : ''}{ordinal(standing.rank)}
-        <span className="af-rail-row-rank-of"> of {standing.outOf}</span>
+        {standing.tied ? (es ? 'E-' : 'T-') : ''}{es ? `#${standing.rank}` : ordinal(standing.rank)}
+        <span className="af-rail-row-rank-of">{es ? ' de ' : ' of '}{standing.outOf}</span>
       </span>
       <span className="af-rail-row-rank-cut">
-        {standing.overCut == null
-          ? standing.tied ? 'tied lowest' : standing.elimination
-            ? 'on the block'
-            : 'bottom of the league'
-          : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
+        {es
+          ? standing.overCut == null
+            ? standing.tied ? 'empatado en el último lugar' : standing.elimination
+              ? 'en la línea de corte'
+              : 'último de la liga'
+            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'sobre el corte' : 'sobre el último'}`
+          : standing.overCut == null
+            ? standing.tied ? 'tied lowest' : standing.elimination
+              ? 'on the block'
+              : 'bottom of the league'
+            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
       </span>
       <span className="af-rail-row-rank-space">
         {standing.placesAboveCut === 0
-          ? 'cut position'
-          : `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'place' : 'places'} clear`}
+          ? es ? 'posición de corte' : 'cut position'
+          : es
+            ? `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'puesto' : 'puestos'} de margen`
+            : `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'place' : 'places'} clear`}
       </span>
       <span className="af-rail-row-rank-basis">
-        {standing.basis === 'points' ? 'on points' : 'on projection'}
+        {standing.basis === 'points' ? (es ? 'por puntos' : 'on points') : es ? 'por proyección' : 'on projection'}
       </span>
     </span>
   )
@@ -1225,10 +1293,12 @@ function HelpDot({ title, body }: { title: string; body: string }) {
 
 /**
  * The top bar's sync chip. `describeAge` says "never synced" when nothing has synced, so prefixing
- * "synced" to it read "synced never synced".
+ * "synced" to it read "synced never synced". In Spanish the age itself is translated too ("hace 4 min").
  */
-export function syncChipText(ageLabel: string): string {
-  return /^never\b/i.test(ageLabel.trim()) ? 'Never synced' : `synced ${ageLabel}`
+export function syncChipText(ageLabel: string, language = 'en'): string {
+  const never = /^never\b/i.test(ageLabel.trim())
+  if (language === 'es') return never ? 'Nunca sincronizado' : `sincronizado ${ageText(ageLabel, 'es')}`
+  return never ? 'Never synced' : `synced ${ageLabel}`
 }
 
 export function AfCoreShell(incoming: AfCoreShellProps) {
@@ -1243,6 +1313,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const [publishedSignals, setPublishedSignals] = useState<ShellSignals | null>(null)
   const props = useMemo(() => withPublishedSignals(incoming, publishedSignals), [incoming, publishedSignals])
   const router = useRouter()
+  // A lineup set on the platform reaches these screens without a button press — on opening the
+  // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
+  useLineupAutoSync(props.selectedLeagueId)
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
@@ -1426,20 +1499,34 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     const clock = window.setInterval(() => setRailClock(Date.now()), 15_000)
     // Per SCREEN: a screen with no live value keeps the idle cadence on game days too.
     const refreshMs = shellRouteRefreshMs(active, Boolean(props.gameDayActive), props.liveGameCount ?? 0)
-    const refresh = window.setInterval(() => {
+    let lastRefreshAt=Date.now()
+    const refreshRoute=()=>{
       if (document.visibilityState !== 'visible') return
-      if (shellRefreshPendingRef.current) return
+      if (Date.now()-lastRefreshAt<1000 || shellRefreshPendingRef.current) return
       // A tab click is already fetching a fresh render; a refresh landing first would clear its
       // skeleton and flash the screen being left.
       if (navPendingRef.current) return
       // The matchup board polls the same route on a better-informed cadence; two
       // timers on one route paid for two full renders every period.
       if (routeRefreshClaimed()) return
+      lastRefreshAt=Date.now()
       startShellRefresh(() => router.refresh())
-    }, refreshMs)
+    }
+    const refresh = window.setInterval(refreshRoute, refreshMs)
+    // Resume/reconnect must read a fresh roster and schedule, even between timer ticks.
+    const resume=(event:Event)=>{
+      if(event.type==='pageshow'&&!(event as PageTransitionEvent).persisted)return
+      setRailClock(Date.now());refreshRoute()
+    }
+    window.addEventListener('pageshow',resume)
+    window.addEventListener('online',resume)
+    document.addEventListener('visibilitychange',resume)
     return () => {
       window.clearInterval(clock)
       window.clearInterval(refresh)
+      window.removeEventListener('pageshow',resume)
+      window.removeEventListener('online',resume)
+      document.removeEventListener('visibilitychange',resume)
     }
   }, [active, props.gameDayActive, props.liveGameCount, router])
 
@@ -1603,7 +1690,18 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * Computed ONCE over exactly the rows the rail draws by name — a hub card draws its own
    * members — and the header reads the same label, so the two never disagree.
    */
-  const railRows = useMemo(() => groupLeagueHubs(leagues), [leagues])
+  const hiddenLeagueKey = (props.hiddenLeagueIds ?? []).join('.')
+  const railLeagues = useMemo(
+    () => withoutHidden(leagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
+    [leagues, hiddenLeagueKey, props.selectedLeagueId],
+  )
+  const hiddenRailCount = leagues.length - railLeagues.length
+  const archivedLeagueKey = (props.archivedLeagueIds ?? []).join('.')
+  const searchLeagues = useMemo(
+    () => withoutHidden(leagues, archivedLeagueKey ? archivedLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
+    [leagues, archivedLeagueKey, props.selectedLeagueId],
+  )
+  const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
   const selectedLeagueName = selectedLeague ? (railLabels.get(selectedLeague.id) ?? selectedLeague.name) : null
@@ -1669,7 +1767,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         visually: it is off-screen until focused.
       */}
       <a href="#af-content" className="af-skip">
-        Skip to content
+        {language === 'es' ? 'Saltar al contenido' : 'Skip to content'}
       </a>
 
       {/*
@@ -1711,7 +1809,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           The crest, above the leagues, drawn rather than loaded — see
           AfCrest's header for why /af-crest.png cannot sit on a dark rail.
         */}
-        <Link href="/core" className="af-rail-logo" aria-label="AllFantasy home">
+        <Link href="/core" className="af-rail-logo" aria-label={language === 'es' ? 'Inicio de AllFantasy' : 'AllFantasy home'}>
           <AfCrest size={34} />
         </Link>
 
@@ -1729,16 +1827,26 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           aria-expanded={railOpen}
           aria-controls="af-rail-scroll"
           onClick={toggleRail}
-          title={railOpen ? 'Collapse the league rail' : 'Expand the league rail'}
+          title={
+            railOpen
+              ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
+              : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
+          }
         >
           <span className="af-rail-toggle-icon" aria-hidden>
             {railOpen ? '«' : '»'}
           </span>
           <span className="af-rail-toggle-text">
-            {leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}
-            {railWeekLabel ? ` · ${railWeekLabel}` : ''}
+            {leagues.length}{' '}
+            {language === 'es' ? (leagues.length === 1 ? 'liga' : 'ligas') : leagues.length === 1 ? 'league' : 'leagues'}
+            {/* The rail draws fewer rows than the count when some are hidden; say so. */}
+            {hiddenRailCount > 0 ? (language === 'es' ? ` · ${hiddenRailCount} ocultas` : ` · ${hiddenRailCount} hidden`) : ''}
+            {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
-              <span className="af-rail-live-state">LIVE{railFreshLabel ? ` · ${railFreshLabel}` : ''}</span>
+              <span className="af-rail-live-state">
+                {badgeText('LIVE', language)}
+                {railFreshLabel ? ` · ${railFreshLabel}` : ''}
+              </span>
             ) : null}
           </span>
         </button>
@@ -1782,7 +1890,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               : null
             const railName = railLabels.get(l.id) ?? l.name
             // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
-            const careerLine = railCareer?.[railLeagueKey(l.name)] ?? null
+            const careerRaw = railCareer?.[railLeagueKey(l.name)] ?? null
+            const careerLine = careerRaw ? careerLineText(careerRaw, language) : null
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
             const leagueHref = props.leagueFirst && m && !m.unpaired
@@ -1823,8 +1932,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 data-active={l.id === props.selectedLeagueId}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
-                title={`${railName} · ${l.platform}${careerLine ? ` · your career here ${careerLine}` : ''}`}
-                aria-label={`${railName} on ${l.platform}${careerLine ? `, your career here ${careerLine}` : ''}`}
+                title={
+                  language === 'es'
+                    ? `${railName} · ${l.platform}${careerLine ? ` · tu historial aquí ${careerLine}` : ''}`
+                    : `${railName} · ${l.platform}${careerLine ? ` · your career here ${careerLine}` : ''}`
+                }
+                aria-label={
+                  language === 'es'
+                    ? `${railName} en ${l.platform}${careerLine ? `, tu historial aquí ${careerLine}` : ''}`
+                    : `${railName} on ${l.platform}${careerLine ? `, your career here ${careerLine}` : ''}`
+                }
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1872,10 +1989,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     {m ? (
                       <span className="af-rail-row-fresh" data-stale={m.source === 'history_fallback' || (mFreshMinutes != null && mFreshMinutes > 10) ? 'true' : undefined}>
                         {m.source === 'history_fallback'
-                          ? 'last import'
+                          ? language === 'es' ? 'última importación' : 'last import'
                           : mFreshMinutes == null
-                            ? 'sync age unknown'
-                            : mFreshMinutes < 1 ? 'now' : `${mFreshMinutes}m`}
+                            ? language === 'es' ? 'antigüedad desconocida' : 'sync age unknown'
+                            : mFreshMinutes < 1 ? (language === 'es' ? 'ahora' : 'now') : `${mFreshMinutes}m`}
                       </span>
                     ) : null}
                   </span>
@@ -1883,19 +2000,25 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   {careerLine ? <span className="af-rail-row-career">{careerLine}</span> : null}
                   {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
                     <span className="af-rail-score-status" data-delayed={!l.syncPaused && delayed || undefined}>
-                      {l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
+                      {language === 'es'
+                        ? l.syncPaused ? 'Sincronización de la cuenta en pausa' : delayed ? 'Actualización de marcadores con retraso' : live ? `Marcadores S${live.week} actualizados ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Actualizando marcadores...'
+                        : l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
                     </span>
                   ) : null}
                   {m ? (
                     <span className="af-rail-row-line">
                       <span className="af-rail-row-labels" aria-hidden>
                         <span />
-                        <span>{m.source === 'history_fallback' ? 'LAST' : 'SCORE'}</span>
-                        <span title="Provider (Sleeper) projection">API</span>
-                        <span title="AllFantasy engine projection">AF</span>
+                        <span>{m.source === 'history_fallback' ? (language === 'es' ? 'ÚLT' : 'LAST') : language === 'es' ? 'PTS' : 'SCORE'}</span>
+                        {/*
+                          "SLPR", not "API" (2026-10-03) and not "SLEEPER": the column is 38px of
+                          11px monospace, where the full word measures ~52px. The tooltip spells it.
+                        */}
+                        <span title={language === 'es' ? `Proyección de ${PROJECTION_PROVIDER_LABEL}` : `${PROJECTION_PROVIDER_LABEL} projection`}>SLPR</span>
+                        <span title={language === 'es' ? 'Proyección del motor de AllFantasy' : 'AllFantasy engine projection'}>AF</span>
                       </span>
                       <RailSide
-                        name={m.yourTeam ?? 'Your team'}
+                        name={m.yourTeam ?? (language === 'es' ? 'Tu equipo' : 'Your team')}
                         avatarUrl={m.yourAvatarUrl}
                         /*
                           ⚠ A DASH, NOT 0.00, ON AN UNPLAYED FIXTURE. A scheduled
@@ -1920,7 +2043,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                         <>
                           <RailSide
                             them
-                            name={m.opponentTeam ?? 'opponent not named'}
+                            name={m.opponentTeam ?? (language === 'es' ? 'rival sin nombre' : 'opponent not named')}
                             avatarUrl={m.opponentAvatarUrl}
                             score={m.scored ? m.opponentScore : null}
                             projection={m.opponentProjection ?? null}
@@ -1932,8 +2055,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     <span className="af-rail-row-line">
                       <span className="af-rail-row-team">
                         {String(l.platform).toLowerCase() === 'espn'
-                          ? 'ESPN did not return a matchup schedule for this league'
-                          : 'no head-to-head on file this week'}
+                          ? language === 'es'
+                            ? 'ESPN no devolvió un calendario de enfrentamientos para esta liga'
+                            : 'ESPN did not return a matchup schedule for this league'
+                          : language === 'es'
+                            ? 'sin enfrentamiento directo registrado esta semana'
+                            : 'no head-to-head on file this week'}
                       </span>
                     </span>
                   )}
@@ -1958,7 +2085,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <span className="af-rail-foot-copy"><strong>{copy('Import a league')}</strong><small>{copy('Connect a platform')}</small></span>
         </Link>
 
-        <Link href="/settings" className="af-rail-tile af-rail-profile" title="Profile, settings and modes">
+        <Link
+          href="/settings"
+          className="af-rail-tile af-rail-profile"
+          title={language === 'es' ? 'Perfil, ajustes y modos' : 'Profile, settings and modes'}
+        >
           {/*
            * ⚠ THIS WAS A HARDCODED 'G' — every account saw the same letter
            * regardless of who was signed in. Now: the account's own image when
@@ -1972,13 +2103,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             src={props.profile?.imageUrl}
             letter={(Array.from(props.profile?.name?.trim() || '•')[0] ?? '•').toUpperCase()}
           />
-          <span className="af-rail-foot-copy"><strong>{props.profile?.name?.trim() || 'Your account'}</strong><small>Profile &amp; settings</small></span>
+          <span className="af-rail-foot-copy">
+            <strong>{props.profile?.name?.trim() || (language === 'es' ? 'Tu cuenta' : 'Your account')}</strong>
+            <small>{language === 'es' ? 'Perfil y ajustes' : 'Profile & settings'}</small>
+          </span>
         </Link>
         </div>
       </nav>
 
       {/* ── Primary nav ─────────────────────────────────────────────── */}
-      <aside className="af-nav" id="af-nav" aria-label="Sections">
+      <aside className="af-nav" id="af-nav" aria-label={language === 'es' ? 'Secciones' : 'Sections'}>
         {/*
           The section list scrolls; the CTA and support button below it do not.
           Same split as the rail, for the same reason — with a long nav the two
@@ -2016,7 +2150,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     <span className="af-nav-label">{copy(item.label)}</span>
                     {item.badge ? (
                       <span className="af-nav-badge" data-tone={item.badge.tone}>
-                        {item.badge.text}
+                        {badgeText(item.badge.text, language)}
                       </span>
                     ) : null}
                   </Link>
@@ -2039,7 +2173,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         <div className="af-nav-foot">
         <div className="af-import-cta">
           <div className="af-import-title">{copy('Import a league')}</div>
-          <p className="af-import-body">{availableImportPlatformsPhrase()}. Read-only, takes about a minute.</p>
+          <p className="af-import-body">
+            {platformsPhraseText(availableImportPlatformsPhrase(), language)}.{' '}
+            {language === 'es' ? 'Solo lectura, tarda cerca de un minuto.' : 'Read-only, takes about a minute.'}
+          </p>
           <Link href="/import" className="af-btn af-import-btn">
             {copy('Connect a platform')}
           </Link>
@@ -2079,7 +2216,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             horizontal scroller — a logo inside one scrolls away, which is the
             opposite of what a wordmark is for.
           */}
-          <Link href="/core" className="af-topbar-crest" aria-label="AllFantasy home">
+          <Link href="/core" className="af-topbar-crest" aria-label={language === 'es' ? 'Inicio de AllFantasy' : 'AllFantasy home'}>
             <AfCrest size={26} />
           </Link>
           {/*
@@ -2095,7 +2232,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-controls="af-rail"
               onClick={toggleRail}
             >
-              <span className="af-lf-switch-name">{selectedLeagueName ?? 'Your leagues'}</span>
+              <span className="af-lf-switch-name">{selectedLeagueName ?? (language === 'es' ? 'Tus ligas' : 'Your leagues')}</span>
               <span aria-hidden>▾</span>
             </button>
           ) : null}
@@ -2111,13 +2248,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               selectedLeagueId={props.selectedLeagueId ?? null}
               favoriteIds={props.scope.favoriteIds}
               leagueScreen={isLeagueScreen(active)}
+              hiddenIds={props.scope.hiddenIds}
+              archivedIds={props.archivedLeagueIds}
             />
           ) : null}
           {props.leagueFirst ? (
             <button
               type="button"
               className="af-lf-search-btn"
-              aria-label={lfSearchOpen ? 'Close search' : 'Search players and leagues'}
+              aria-label={
+                language === 'es'
+                  ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
+                  : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+              }
               aria-expanded={lfSearchOpen}
               onClick={() => setLfSearchOpen((open) => !open)}
             >
@@ -2149,20 +2292,24 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ) : null}
             </Link>
           ) : null}
-          <TopSearch leagues={leagues} />
+          <TopSearch leagues={searchLeagues} />
 
           <div className="af-topbar-right">
             {props.isAdmin ? (
-              <Link className="af-admin-shortcut" href="/admin" aria-label="Open AllFantasy administration">
+              <Link
+                className="af-admin-shortcut"
+                href="/admin"
+                aria-label={language === 'es' ? 'Abrir la administración de AllFantasy' : 'Open AllFantasy administration'}
+              >
                 <span aria-hidden>⬢</span>
-                Admin
+                {copy('Admin')}
               </Link>
             ) : null}
             <span className="af-readonly">
-              Read-only
+              {props.nativeLeague ? (language === 'es' ? 'Liga nativa' : 'Native league') : (language === 'es' ? 'Solo lectura' : 'Provider read-only')}
               <HelpDot
-                title="Read-only by design"
-                body={`AllFantasy never changes anything on ${availableImportPlatformsPhrase()}. We read your leagues and point you to the exact league and screen where you make the change.`}
+                title={props.nativeLeague ? 'AllFantasy is the league record' : 'Provider read-only'}
+                body={props.nativeLeague ? 'Validated roster changes are saved to this native AllFantasy league. Roster rules and game locks apply.' : 'AllFantasy reads imported leagues and points you to the provider where you make lineup changes. Provider writes are not supported.'}
               />
             </span>
 
@@ -2172,9 +2319,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               `describeAge` says "never synced" for an account with no sync at all; prefixing
               "synced" to that read "⚠ synced never synced".
             */}
-            <span className="af-sync af-num" data-stale={syncAge.stale} title="Last sync">
+            <span
+              className="af-sync af-num"
+              data-stale={syncAge.stale}
+              title={language === 'es' ? 'Última sincronización' : 'Last sync'}
+            >
               {syncAge.stale ? '⚠ ' : ''}
-              {syncChipText(syncAge.label)}
+              {syncChipText(syncAge.label, language)}
             </span>
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
@@ -2194,12 +2345,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {plan.tokensLeft != null ? (
                   <>
                     <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString()}</span>
-                    <span className="af-label">tokens left</span>
+                    <span className="af-label">{language === 'es' ? 'tokens restantes' : 'tokens left'}</span>
                   </>
                 ) : null}
                 <HelpDot
-                  title="Plan tokens"
-                  body="Your plan includes a monthly allowance of Chimmy requests — grades, projections and recommendations. Resets on your billing date."
+                  title={language === 'es' ? 'Tokens del plan' : 'Plan tokens'}
+                  body={
+                    language === 'es'
+                      ? 'Tu plan incluye una cantidad mensual de solicitudes a Chimmy: calificaciones, proyecciones y recomendaciones. Se renueva en tu fecha de facturación.'
+                      : 'Your plan includes a monthly allowance of Chimmy requests — grades, projections and recommendations. Resets on your billing date.'
+                  }
                 />
               </span>
             ) : null}
@@ -2225,6 +2380,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
           {active === 'home' ? <GameDayAlertsBanner /> : null}
+          {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
+          {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
           {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
@@ -2234,7 +2391,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             where they land, not where they have to go looking.
           */}
           {active === 'home' ? (
-            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} />
+            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} syncAge={syncAge} totalLeagues={leagues.length} />
           ) : null}
           {/*
             The player card pop-up (design handoff 2026-09-07, STATE 6/7), mounted
@@ -2250,6 +2407,22 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             its own league through `PlayerCardLeagueScope`, which is why this
             mount takes no `leagueId` — the shell does not know one.
           */}
+          {/*
+            Swipe between leagues on a phone (2026-10-08): the pager row plus the gesture on this
+            content area. Phone layout only, only with a league selected and somewhere to go, and
+            only on league-scoped screens (LEAGUE_SWIPE_SCREENS) — never a draft room or the desk.
+          */}
+          {/*
+            Pull to refresh on a phone (2026-10-08): reloads this screen's data in place, and starts
+            the league sync too when the shell's own sync age says the leagues are stale.
+          */}
+          {phoneLayout ? <PullToRefresh syncStale={syncAge.stale && syncEligibleCount !== 0} /> : null}
+          {phoneLayout && props.selectedLeagueId && leagues.length > 1 && LEAGUE_SWIPE_SCREENS.has(active) ? (
+            <LeagueSwipe
+              leagues={leagues.map((l) => ({ id: l.id, name: l.name, imageUrl: l.imageUrl ?? null, mark: l.mark }))}
+              selectedLeagueId={props.selectedLeagueId}
+            />
+          ) : null}
           <ShellSignalsContext.Provider value={setPublishedSignals}>
             <CoreNavPendingContext.Provider value={navPending != null}>
               <PlayerCardProvider>{children}</PlayerCardProvider>
@@ -2276,7 +2449,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       ) : null}
       {/* ── Phone bottom bar ────────────────────────────────────────── */}
       {props.leagueFirst ? (
-        <nav className="af-tabbar" aria-label="Main">
+        <nav className="af-tabbar" aria-label={language === 'es' ? 'Principal' : 'Main'}>
           <Link
             href="/core"
             className="af-tabbar-item"
@@ -2341,7 +2514,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           </button>
         </nav>
       ) : (
-        <nav className="af-tabbar" aria-label="Main">
+        <nav className="af-tabbar" aria-label={language === 'es' ? 'Principal' : 'Main'}>
           {mobileItems.map((item) => (
             <Link
               key={item.key}
@@ -2381,7 +2554,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             type="button"
             ref={mobileMoreScrimRef}
             className="af-mobile-more-scrim"
-            aria-label="Close more menu"
+            aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'}
             onClick={() => setMobileMoreOpen(false)}
           />
           {/*
@@ -2401,9 +2574,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <header className="af-mobile-more-head">
               <span>
                 <span className="af-label">{copy(props.leagueFirst ? (mobileSheet === 'play' ? 'Play' : 'Me') : 'More')}</span>
-                <strong>{selectedLeagueName ?? props.scope?.label ?? copy('All leagues')}</strong>
+                <strong>
+                  {selectedLeagueName ?? (props.scope?.label ? scopeLabelText(props.scope.label, language) : copy('All leagues'))}
+                </strong>
               </span>
-              <button type="button" aria-label="Close more menu" onClick={() => setMobileMoreOpen(false)}>×</button>
+              <button type="button" aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'} onClick={() => setMobileMoreOpen(false)}>
+                ×
+              </button>
             </header>
             {props.leagueFirst && mobileSheet === 'play' ? (
               <div className="af-mobile-more-list">
@@ -2440,7 +2617,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                         <CoreNavIcon navKey={item.key} />
                       </span>
                       <span>{copy(item.label)}</span>
-                      {item.badge ? <b>{item.badge.text}</b> : null}
+                      {item.badge ? <b>{badgeText(item.badge.text, language)}</b> : null}
                     </Link>
                   ))}
                 </div>

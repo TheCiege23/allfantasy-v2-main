@@ -1,3 +1,4 @@
+import { runAutomation } from './BigBrotherAutomationService'
 /**
  * [NEW] lib/big-brother/BigBrotherAdminService.ts
  * Commissioner/admin tools: force-advance, reopen phases, extend vote, rerun tally,
@@ -10,9 +11,8 @@ import { prisma } from '@/lib/prisma'
 import { getBigBrotherConfig, upsertBigBrotherConfig } from './BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague, transitionPhase, createFirstCycleIfNeeded } from './BigBrotherPhaseStateMachine'
 import { runAutoNomination } from './BigBrotherNominationEnforcement'
-import { runAutoReplacementNominee } from './BigBrotherNominationEnforcement'
-import { tallyEvictionVotes } from './BigBrotherVoteEngine'
 import { closeEviction } from './BigBrotherEvictionService'
+import { tallyEvictionVotes } from './BigBrotherVoteEngine'
 import { releaseEvictedRoster } from './BigBrotherRosterReleaseEngine'
 import { getExcludedRosterIds } from './bigBrotherGuard'
 import { appendBigBrotherAudit } from './BigBrotherAuditLog'
@@ -25,6 +25,7 @@ export type BigBrotherAdminAction =
   | 'reopen_veto'
   | 'extend_vote_window'
   | 'rerun_vote_tally'
+  | 'resolve_eviction_tie'
   | 'force_waiver_release'
   | 'resolve_veto_state'
   | 'replace_inactive_hoh'
@@ -52,10 +53,6 @@ export async function runBigBrotherAdminAction(input: BigBrotherAdminInput): Pro
   const { leagueId, action, params = {} } = input
   const config = await getBigBrotherConfig(leagueId)
   if (!config) return { ok: false, error: 'Not a Big Brother league' }
-
-  if (config.weekProgressionPaused && action !== 'force_advance_week' && action !== 'resume_week' && action !== 'update_config' && action !== 'pause_week') {
-    // Allow config and pause/resume/force_advance even when paused
-  }
 
   const current = await getCurrentCycleForLeague(leagueId)
   if (!current && !['update_config', 'pause_week', 'resume_week', 'force_waiver_release', 'start_week_one'].includes(action)) {
@@ -100,10 +97,9 @@ export async function runBigBrotherAdminAction(input: BigBrotherAdminInput): Pro
       }
       await prisma.bigBrotherCycle.update({
         where: { id: current.id },
-        data: { nominee1RosterId: null, nominee2RosterId: null, vetoWinnerRosterId: null, vetoParticipantRosterIds: Prisma.JsonNull, vetoUsed: false, vetoSavedRosterId: null, replacementNomineeRosterId: null },
+        data: { phase: 'NOMINATION_OPEN', nominee1RosterId: null, nominee2RosterId: null, vetoWinnerRosterId: null, vetoParticipantRosterIds: Prisma.JsonNull, vetoUsed: false, vetoSavedRosterId: null, replacementNomineeRosterId: null },
       })
       await prisma.bigBrotherEvictionVote.deleteMany({ where: { cycleId: current.id } })
-      await transitionPhase(current.id, 'NOMINATION_OPEN')
       await appendBigBrotherAudit(leagueId, config.configId, 'phase_transition', { adminAction: 'reopen_nominations', cycleId: current.id })
       return { ok: true, message: 'Nominations reopened' }
     }
@@ -116,7 +112,7 @@ export async function runBigBrotherAdminAction(input: BigBrotherAdminInput): Pro
       }
       await prisma.bigBrotherCycle.update({
         where: { id: current.id },
-        data: { vetoWinnerRosterId: null, vetoUsed: false, vetoSavedRosterId: null, replacementNomineeRosterId: null, phase: 'VETO_DECISION_OPEN' },
+        data: { vetoUsed: false, vetoSavedRosterId: null, replacementNomineeRosterId: null, voteOpenedAt: null, voteDeadlineAt: null, phase: 'VETO_DECISION_OPEN' },
       })
       await appendBigBrotherAudit(leagueId, config.configId, 'phase_transition', { adminAction: 'reopen_veto', cycleId: current.id })
       return { ok: true, message: 'Veto decision reopened' }
@@ -124,12 +120,17 @@ export async function runBigBrotherAdminAction(input: BigBrotherAdminInput): Pro
     case 'extend_vote_window': {
       if (!current) return { ok: false, error: 'No cycle' }
       const minutes = Math.max(1, Math.min(10080, Number(params.minutes) || 60))
-      const cycle = await prisma.bigBrotherCycle.findUnique({ where: { id: current.id }, select: { voteDeadlineAt: true } })
-      if (!cycle?.voteDeadlineAt) return { ok: false, error: 'No vote deadline set' }
-      const newDeadline = new Date(cycle.voteDeadlineAt.getTime() + minutes * 60 * 1000)
-      await prisma.bigBrotherCycle.update({ where: { id: current.id }, data: { voteDeadlineAt: newDeadline } })
+      const cycle = await prisma.bigBrotherCycle.findUnique({ where: { id: current.id }, select: { voteDeadlineAt: true, phase: true, closedAt: true } })
+      if (!cycle || cycle.closedAt || !['VOTING_OPEN','VOTING_LOCKED'].includes(cycle.phase)) return { ok: false, error: 'No unresolved voting window' }
+      const newDeadline = new Date(Math.max(cycle.voteDeadlineAt?.getTime() ?? 0, Date.now()) + minutes * 60 * 1000)
+      await prisma.bigBrotherCycle.update({ where: { id: current.id }, data: { voteDeadlineAt: newDeadline, phase: 'VOTING_OPEN' } })
       await appendBigBrotherAudit(leagueId, config.configId, 'phase_transition', { adminAction: 'extend_vote_window', minutes, newDeadline: newDeadline.toISOString() })
       return { ok: true, message: `Vote window extended by ${minutes} minutes` }
+    }
+    case 'resolve_eviction_tie': {
+      if (!current || typeof params.rosterId !== 'string') return { ok: false, error: 'Choose a tied nominee' }
+      const result = await closeEviction(current.id, { commissionerTieBreakRosterId: params.rosterId, postToChat: true })
+      return result.ok ? { ok: true, message: 'Commissioner tie-break applied and eviction published' } : { ok: false, error: result.error }
     }
     case 'rerun_vote_tally': {
       if (!current) return { ok: false, error: 'No cycle' }
@@ -194,88 +195,10 @@ export async function runBigBrotherAdminAction(input: BigBrotherAdminInput): Pro
     }
     case 'force_advance_week': {
       if (!current) return { ok: false, error: 'No current cycle' }
-      const phase = current.phase as BigBrotherWeekPhase
-
-      // HOH phases — skip to nomination
-      if (phase === 'HOH_OPEN') {
-        await transitionPhase(current.id, 'HOH_LOCKED')
-        await transitionPhase(current.id, 'NOMINATION_OPEN')
-        return { ok: true, message: 'HOH skipped; nomination open (assign HOH manually or auto-nominate)' }
-      }
-      if (phase === 'HOH_LOCKED') {
-        await transitionPhase(current.id, 'NOMINATION_OPEN')
-        return { ok: true, message: 'Advanced to nomination open' }
-      }
-
-      // Nomination — auto-nominate and lock
-      if (phase === 'NOMINATION_OPEN') {
-        const res = await runAutoNomination(current.id, {})
-        if (!res.ok) return { ok: false, error: res.error }
-        await transitionPhase(current.id, 'NOMINATION_LOCKED')
-        return { ok: true, message: 'Auto-nomination applied' }
-      }
-      if (phase === 'NOMINATION_LOCKED') {
-        await transitionPhase(current.id, 'VETO_DRAW')
-        return { ok: true, message: 'Advanced to veto draw' }
-      }
-
-      // Veto phases
-      if (phase === 'VETO_DRAW') {
-        const { selectVetoCompetitors } = await import('./BigBrotherVetoEngine')
-        const res = await selectVetoCompetitors(current.id)
-        if (!res.ok) return { ok: false, error: res.error }
-        await transitionPhase(current.id, 'VETO_CHALLENGE_OPEN')
-        return { ok: true, message: 'Veto draw completed; challenge open' }
-      }
-      if (phase === 'VETO_CHALLENGE_OPEN') {
-        await transitionPhase(current.id, 'VETO_DECISION_OPEN')
-        return { ok: true, message: 'Advanced to veto decision' }
-      }
-      if (phase === 'VETO_DECISION_OPEN') {
-        await transitionPhase(current.id, 'VOTING_OPEN')
-        return { ok: true, message: 'Veto kept noms; voting open' }
-      }
-      if (phase === 'REPLACEMENT_NOMINATION_OPEN') {
-        const res = await runAutoReplacementNominee(current.id, {})
-        if (!res.ok) return { ok: false, error: res.error }
-        await transitionPhase(current.id, 'VOTING_OPEN')
-        return { ok: true, message: 'Auto-replacement applied; voting open' }
-      }
-
-      // Voting — close eviction
-      if (phase === 'VOTING_OPEN' || phase === 'VOTING_LOCKED') {
-        const res = await closeEviction(current.id, { postToChat: true })
-        if (!res.ok) return { ok: false, error: res.error ?? 'Close eviction failed' }
-        return { ok: true, message: 'Eviction closed' }
-      }
-
-      // Post-eviction — advance to next week
-      if (phase === 'EVICTION_RESOLVED') {
-        await transitionPhase(current.id, 'JURY_UPDATE')
-        return { ok: true, message: 'Advanced to jury update' }
-      }
-      if (phase === 'JURY_UPDATE') {
-        await transitionPhase(current.id, 'RESET_NEXT_WEEK')
-        return { ok: true, message: 'Advanced to reset/next week' }
-      }
-      if (phase === 'RESET_NEXT_WEEK') {
-        // Create next cycle
-        const nextWeek = current.week + 1
-        const existing = await prisma.bigBrotherCycle.findFirst({
-          where: { leagueId, configId: config.configId, week: nextWeek },
-        })
-        if (existing) return { ok: true, message: `Week ${nextWeek} cycle already exists` }
-        await prisma.bigBrotherCycle.create({
-          data: { leagueId, configId: config.configId, week: nextWeek, phase: 'HOH_OPEN' },
-        })
-        await appendBigBrotherAudit(leagueId, config.configId, 'phase_transition', {
-          event: 'new_week_started', week: nextWeek, adminForced: true,
-        })
-        return { ok: true, message: `Week ${nextWeek} started (HOH_OPEN)` }
-      }
-
-      const exhaustive: never = phase
-      return { ok: false, error: `Unknown phase: ${exhaustive}` }
+      const actions = { HOH_OPEN: 'auto_hoh', NOMINATION_OPEN: 'auto_nominate', VETO_DRAW: 'veto_draw', VETO_CHALLENGE_OPEN: 'auto_veto', VETO_DECISION_OPEN: 'veto_decision_timeout', REPLACEMENT_NOMINATION_OPEN: 'auto_replacement', VOTING_OPEN: 'close_eviction' } as const
+      const result = await runAutomation({ leagueId, action: actions[current.phase as keyof typeof actions] ?? 'tick' })
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, message: result.actionTaken?.startsWith('skipped') ? `Progression waiting: ${result.actionTaken.replace('skipped_', '').replaceAll('_', ' ')}` : `Advanced to ${result.phase}` }
     }
     default:
       return { ok: false, error: `Unknown action: ${action}` }

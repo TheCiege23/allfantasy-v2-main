@@ -19,17 +19,18 @@ const db = vi.hoisted(() => ({
   ]),
 }))
 
-vi.mock('@/lib/prisma', () => ({
+vi.mock('@/lib/prisma', async () => {
+  /* Applies each read's `where` — see the helper for why a fixed answer no longer tests anything. */
+  const { fakeWeeklyMatchup } = await import('./helpers/fakeWeeklyMatchup')
+  return {
   prisma: {
-    weeklyMatchup: {
-      groupBy: async () => db.seasons,
-      findMany: async () => db.rows,
-    },
+    weeklyMatchup: fakeWeeklyMatchup(() => db.rows),
     leagueTeam: { findMany: async () => db.teams },
     matchupFact: { findMany: async () => [] },
     $queryRawUnsafe: async () => [],
   },
-}))
+  }
+})
 
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
 

@@ -118,3 +118,32 @@ describe('observed board freshness', () => {
     expect(await loadLatestAveragedAdpRowsFromDb('NBA' as never,'redraft',false,{season:2026,scoring:'points'})).toEqual([])
   })
 })
+
+/*
+ * 🛑 Outside football the board is one market. Fantrax publishes one NBA board (stored `standard`),
+ * while an NBA league's `scoring` is its own preset id (`points` on the test db). Requiring them to be
+ * equal left every NBA board on alphabetical order even once NBA ADP existed.
+ */
+describe('non-football leagues read the one board when their own scoring has none', () => {
+  const nbaRow = (scoring: string, adp: number): AdpRow => ({
+    playerName: 'Nikola Jokic', position: 'C', team: 'DEN', source: 'fantrax', adp, scoring, season: 2026,
+  })
+
+  it('an NBA league scored as `points` reads the `standard` board', async () => {
+    state.rows = [nbaRow('standard', 1.39)]
+    const rows = await loadLatestAveragedAdpRowsFromDb('NBA' as never, 'redraft', false, { season: 2026, scoring: 'points' })
+    expect(rows.map((r) => [r.name, r.adp])).toEqual([['Nikola Jokic', 1.39]])
+  })
+
+  it('a board published under the league’s own scoring still wins', async () => {
+    state.rows = [nbaRow('standard', 1.39), nbaRow('points', 4)]
+    const [row] = await loadLatestAveragedAdpRowsFromDb('NBA' as never, 'redraft', false, { season: 2026, scoring: 'points' })
+    expect(row.adp).toBe(4)
+  })
+
+  it('[control] football stays strict — a PPR league does not read the standard board', async () => {
+    state.rows = [{ playerName: 'Josh Allen', position: 'QB', team: 'BUF', source: 'sleeper', adp: 18.7, scoring: 'standard', season: 2026 }]
+    const rows = await loadLatestAveragedAdpRowsFromDb('NFL' as never, 'redraft', false, { season: 2026, scoring: 'ppr' })
+    expect(rows).toEqual([])
+  })
+})

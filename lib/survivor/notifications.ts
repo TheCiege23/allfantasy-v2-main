@@ -29,7 +29,7 @@ export function buildSurvivorNotifications(
     out.push({
       id: 'tribal_tonight',
       urgency: 'critical',
-      title: 'Tribal Council is active',
+      title: 'Elimination Council is active',
       body: 'Cast your vote before the deadline — details stay private until the reveal.',
       href: `/survivor/${leagueId}/tribal`,
       icon: '🗳',
@@ -127,11 +127,11 @@ export function buildSurvivorNotifications(
 export const SURVIVOR_NOTIFICATION_COPY = {
   challenge_posted: '⚡ New island challenge — check the deadline in-app.',
   challenge_closing: '⚡ Challenge closes soon — submit now.',
-  vote_reminder: '🗳 Tribal Council is active — vote by your league deadline.',
+  vote_reminder: '🗳 Elimination Council is active — vote by your league deadline.',
   vote_received: '🗳 Your vote has been received.',
   idol_received: '🔮 You have received a secret power.',
   idol_expiring: '🔮 A power may expire at the merge — check @Chimmy.',
-  tribal_tonight: '🔥 Tribal Council requires your attention.',
+  tribal_tonight: '🔥 Elimination Council requires your attention.',
   merge_announced: '🌊 The merge is here — drop your buffs.',
   exile_challenge_live: '🏚 Exile challenge is live — earn tokens.',
   token_earned: '🪙 Token earned on Exile Island.',

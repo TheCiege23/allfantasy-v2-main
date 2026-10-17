@@ -272,6 +272,13 @@ jobs:
         # #776 fixed mobile-auth this way (0 restarts after). Judge by the restart line's
         # count in each lane's log, not by a green run.
         NODE_OPTIONS: --max-old-space-size=8192
+        # ⚠ AND THE 8192MB HEAP WAS NOT ENOUGH ON ITS OWN HERE. This lane runs ONE spec
+        # (e2e/engagement-notification-routing-click-audit.spec.ts) yet global setup warmed all
+        # 33 default routes (161s), and the server still restarted mid-test in 6 of 13 runs
+        # measured 2026-10-03 — every one of those 6 flaky or failed, against 6 of 7 clean runs
+        # without a restart. Warm only the four routes the spec visits (one of which, /chimmy,
+        # the default list does not warm at all). If you add a @retention spec, add its routes.
+        E2E_WARM_ROUTES: /e2e/engagement-notification-routing,/trade-analyzer,/chimmy,/tools-hub
       run: npm run test:e2e:retention
     - name: Run Playwright tests (onboarding activation)
       if: matrix.lane == 'onboarding-activation'
@@ -292,6 +299,16 @@ jobs:
         NEXTAUTH_URL: http://localhost:3000
         # 8192MB heap: see the note on the retention-engagement step above.
         NODE_OPTIONS: --max-old-space-size=8192
+        # ⚠ THE SAME RESTART THE RETENTION LANE HAD, AND THE SAME FIX (2026-10-04). Global setup
+        # warmed all 33 default routes ("warmed 33 routes in 239s", /core among them) for a spec that
+        # renders two pages, and next dev then restarted on its memory line ("Server is approaching
+        # the used memory threshold, restarting...") just as the tests began. Every referral log
+        # measured that day had exactly one restart — the failed run on #2010 and the "1 flaky" runs on
+        # #2007 and #2035 — and the symptoms were the restart's: a /core goto that never finished,
+        # a track-click wait that timed out, an API call that died with ECONNRESET. Warm only what
+        # the spec touches: its two pages, and the API routes it calls (a POST-only route answers a
+        # GET with 405, which still compiles it). If you add a referral spec, add its routes.
+        E2E_WARM_ROUTES: /,/referral,/api/auth/csrf,/api/auth/session,/api/auth/register,/api/referral/link,/api/referral/stats,/api/referral/rewards,/api/referral/track-click
       run: npx playwright test e2e/referral-growth-suite.spec.ts --project=chromium
     # The phone gate. Two device projects over the public routes only — no login,
     # no fixture league, nothing that makes the core shards slow and flaky.

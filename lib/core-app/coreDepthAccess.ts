@@ -13,12 +13,13 @@
  *
  *   - Competitive Edge (AF Pro, and the War Room plan): what the manager on the other side of a
  *     decision has actually done — lib/competitive-edge/. The War Room's paid value, surfaced INSIDE
- *     the decision (the Trade Center today), not on the War Room screen itself.
+ *     the decision (the Trade Center, Waivers, Draft HQ) and, since 2026-10-02 (owner's decision),
+ *     as each manager's trade and waiver counts on Scout.
  *
- * ⚠ THE WAR ROOM SCREEN IS STILL NOT GATED. Scout withholds raw profiles from every caller by
- * design (Milestone 32 — an entitlement decides who pays, not what a raw dossier is), and Game
- * Plan is a safety feature. Gating either would charge for the wrong thing; the paid part is the
- * Competitive Edge the screen points to.
+ * ⚠ THE WAR ROOM SCREEN ITSELF IS STILL NOT GATED — only that one section of it. Scout's standings
+ * facts are the free Standings table, and Game Plan is a safety feature; gating either would charge
+ * for the wrong thing. The Scout section is loaded server-side only for an unlocked viewer
+ * (scoutEdgeLoader.loadScoutEdgeForScreen) and drawn as a lock for everyone else.
  *
  * ⚠ BEFORE PAYWALL LAUNCH EVERYTHING IS UNLOCKED, and `preLaunchFree` says so, so a screen can
  * say "Free until Oct 15" to the people who will lose it — not to plan holders, who won't.
