@@ -14,6 +14,7 @@ export async function canSendToChannel(
     where: { id: channelId, leagueId },
   })
   if (!channel) return { allowed: false, reason: 'channel_not_found' }
+  if (channel.isArchived) return { allowed: false, reason: 'channel_archived' }
 
   const isMember = channel.memberUserIds.includes(userId)
   if (!isMember) return { allowed: false, reason: 'not_a_member' }

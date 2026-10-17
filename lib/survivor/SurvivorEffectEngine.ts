@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { appendSurvivorAudit } from './SurvivorAuditLog'
-import { syncTribeChatMembersAfterShuffle } from './SurvivorChatMembershipService'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { getMinigameDef } from './SurvivorMiniGameRegistry'
 import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
@@ -652,10 +651,6 @@ export async function executeQueuedShuffleForCouncil(
   const shuffleResult = await runShuffle(leagueId)
   if (!shuffleResult.ok) {
     return { ok: false, shuffled: false, error: shuffleResult.error ?? 'Unable to run tribe shuffle' }
-  }
-  const syncResult = await syncTribeChatMembersAfterShuffle(leagueId)
-  if (!syncResult.ok) {
-    return { ok: false, shuffled: true, error: syncResult.error ?? 'Unable to sync tribe chat memberships after shuffle' }
   }
   return { ok: true, shuffled: true }
 }

@@ -10,7 +10,7 @@ const AI_HOST_NAME = '@Chimmy'
 
 async function getTribeChatChannelId(leagueId: string, tribeId: string): Promise<string | null> {
   const channel = await (prisma as any).survivorChatChannel.findFirst({
-    where: { leagueId, channelType: 'tribe', tribeId },
+    where: { leagueId, channelType: 'tribe', tribeId, isArchived: false },
     select: { id: true },
   })
   return channel?.id ?? null
