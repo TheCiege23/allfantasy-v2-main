@@ -2200,7 +2200,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
-        <header className="af-topbar" data-lf-search-open={props.leagueFirst && lfSearchOpen ? 'true' : undefined}>
+        <header className="af-topbar" data-lf-search-open={lfSearchOpen ? 'true' : undefined}>
           {/*
             ⚠ THE CREST, PHONE ONLY — `display: none` above 720px.
 
@@ -2252,21 +2252,31 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               archivedIds={props.archivedLeagueIds}
             />
           ) : null}
-          {props.leagueFirst ? (
-            <button
-              type="button"
-              className="af-lf-search-btn"
-              aria-label={
-                language === 'es'
-                  ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
-                  : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+          {/*
+            The search icon. Phone only in both modes (hidden above 720px by af-core-shell.css): the
+            phone header folds the full-width search behind it so the topbar stays one row.
+          */}
+          <button
+            type="button"
+            className="af-lf-search-btn"
+            aria-label={
+              language === 'es'
+                ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
+                : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+            }
+            aria-expanded={lfSearchOpen}
+            onClick={(event) => {
+              const opening = !lfSearchOpen
+              setLfSearchOpen(opening)
+              // Put the cursor in the field it just revealed, so one tap is enough to start typing.
+              if (opening) {
+                const header = event.currentTarget.closest('.af-topbar')
+                requestAnimationFrame(() => header?.querySelector<HTMLInputElement>('.af-search-input')?.focus())
               }
-              aria-expanded={lfSearchOpen}
-              onClick={() => setLfSearchOpen((open) => !open)}
-            >
-              <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
-            </button>
-          ) : null}
+            }}
+          >
+            <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
+          </button>
           {/*
             League-first: the inbox — trade offers, waiver results, mentions, lineup alerts — one tap
             from every screen. The phone header hides `.af-topbar-right` and the nav, so without this
