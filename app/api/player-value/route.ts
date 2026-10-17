@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { openaiChatJson } from '@/lib/openai-client';
 import { getPlayerADP } from '@/lib/adp-data';
 import { z } from 'zod';
+import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch';
+import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow';
 
 const requestSchema = z.object({
   playerName: z.string().min(1),
@@ -12,28 +14,113 @@ const requestSchema = z.object({
   leagueContext: z.string().optional(),
 });
 
-async function lookupPlayerContext(playerName: string) {
+/*
+ * DynastyTradeForm posts the asset LABEL, "Josh Allen (QB)", not a bare name — so the position the
+ * form knows arrives inside `playerName`. Split it off; an explicit `position` field still wins.
+ */
+function splitNameAndPosition(raw: string, position?: string | null): { name: string; position: string | null } {
+  const m = raw.trim().match(/^(.*\S)\s*\(([A-Za-z/]{1,6})\)$/);
+  const name = m ? m[1]! : raw.trim();
+  const pos = position?.trim() || (m ? m[2]!.toUpperCase() : null);
+  return { name, position: pos };
+}
+
+/** DB pre-filter only: the asked name minus a trailing suffix, so "X Jr." still reaches "X Jr". */
+function namePrefix(name: string): string {
+  return name.trim().replace(/\s+(jr|sr|ii|iii|iv|v)\.?\s*$/i, '');
+}
+
+/*
+ * 🛑 BOUND BY NAME, VERIFIED, NEVER `contains` + `findFirst` (2026-10-12). This read
+ * `sport: 'nfl'` — 0 of 24,148 NFL rows match, all are stored 'NFL' — so GET always answered
+ * not_found and POST never added DB context. Uppercasing alone would have shipped the worse bug
+ * underneath: `contains` + an unordered findFirst picks whichever row Postgres returns first, and
+ * "Michael Carter" matches four rows across RB 7607 (TEN) and CB 7835 (PHI, also "Michael Carter II").
+ *
+ * So: read every NFL row whose name could normalize to the asked one, collapse each Sleeper id to its
+ * authoritative row (one athlete, many ingest sources — see `authoritativePlayerRow`), and bind with
+ * `resolveVerifiedMatch` on the position the form sent. A shared name with no position is REFUSED.
+ */
+async function lookupPlayerContext(playerName: string, position: string | null) {
   try {
-    const player = await (prisma as any).sportsPlayer.findFirst({
-      where: { name: { contains: playerName, mode: 'insensitive' }, sport: 'nfl' },
-      select: { name: true, position: true, team: true, age: true, status: true },
+    const key = normalizeMatchName(playerName);
+    if (!key) return null;
+    const rows: Array<{
+      source: string;
+      sleeperId: string | null;
+      name: string;
+      position: string | null;
+      team: string | null;
+      age: number | null;
+      status: string | null;
+      fetchedAt: Date | null;
+    }> = await (prisma as any).sportsPlayer.findMany({
+      // `startsWith` reaches suffixed spellings ("Michael Carter II"); normalizeMatchName decides.
+      where: { sport: 'NFL', name: { startsWith: namePrefix(playerName), mode: 'insensitive' }, sleeperId: { not: null } },
+      select: { source: true, sleeperId: true, name: true, position: true, team: true, age: true, status: true, fetchedAt: true },
+      take: 200,
     });
-    return player;
+    const sameName = rows.filter((r) => normalizeMatchName(r.name) === key);
+    const byId = authoritativeRowsBySleeperId(sameName);
+    const { match } = resolveVerifiedMatch(buildNameIndex([...byId.values()]), { name: playerName, position });
+    if (!match) return null;
+    return { name: match.name, position: match.position, team: match.team, age: match.age, status: match.status };
   } catch {
     return null;
   }
 }
 
-async function lookupTradeInsight(playerName: string) {
+/*
+ * Same rule for the insight table: `contains` matched "Josh Allen" against any row whose name merely
+ * held it. One row per (name, position) — newest season — then the same verified bind.
+ */
+async function lookupTradeInsight(playerName: string, position: string | null) {
   try {
-    const insight = await (prisma as any).tradeLearningInsight.findFirst({
-      where: { playerName: { contains: playerName, mode: 'insensitive' } },
-      select: { avgValueGiven: true, avgValueReceived: true, winRate: true, marketTrend: true, sampleSize: true },
+    const key = normalizeMatchName(playerName);
+    if (!key) return null;
+    const rows: Array<{
+      playerName: string | null;
+      position: string | null;
+      avgValueGiven: number | null;
+      avgValueReceived: number | null;
+      winRate: number | null;
+      marketTrend: string | null;
+      sampleSize: number;
+    }> = await (prisma as any).tradeLearningInsight.findMany({
+      where: { playerName: { startsWith: namePrefix(playerName), mode: 'insensitive' } },
+      orderBy: { season: 'desc' },
+      select: { playerName: true, position: true, avgValueGiven: true, avgValueReceived: true, winRate: true, marketTrend: true, sampleSize: true },
+      take: 50,
     });
-    return insight;
+    const seen = new Set<string>();
+    const candidates: Array<(typeof rows)[number] & { name: string }> = [];
+    for (const r of rows) {
+      if (normalizeMatchName(r.playerName) !== key) continue;
+      const dedupe = String(r.position ?? '').toUpperCase();
+      if (seen.has(dedupe)) continue;
+      seen.add(dedupe);
+      candidates.push({ ...r, name: r.playerName ?? '' });
+    }
+    // A PARTIAL list (21 named rows on 2026-10-12): a lone RB "Michael Carter" row is not the CB's.
+    const { match } = resolveVerifiedMatch(
+      buildNameIndex(candidates),
+      { name: playerName, position },
+      { refuseContradictedSingle: true },
+    );
+    if (!match) return null;
+    const { avgValueGiven, avgValueReceived, winRate, marketTrend, sampleSize } = match;
+    return { avgValueGiven, avgValueReceived, winRate, marketTrend, sampleSize };
   } catch {
     return null;
   }
+}
+
+/** The insight is keyed on position too: use the form's, else the position of the player we bound. */
+async function lookupBoth(rawName: string, rawPosition?: string | null) {
+  const { name, position } = splitNameAndPosition(rawName, rawPosition);
+  const playerContext = await lookupPlayerContext(name, position);
+  const tradeInsight = await lookupTradeInsight(name, position ?? playerContext?.position ?? null);
+  return { playerContext, tradeInsight };
 }
 
 export async function GET(req: Request) {
@@ -52,10 +139,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'name parameter required' }, { status: 400 });
   }
 
-  const [playerContext, tradeInsight] = await Promise.all([
-    lookupPlayerContext(playerName),
-    lookupTradeInsight(playerName),
-  ]);
+  const { playerContext, tradeInsight } = await lookupBoth(playerName, searchParams?.get('position'));
 
   if (playerContext) {
     return NextResponse.json({
@@ -96,10 +180,7 @@ export async function POST(req: Request) {
   const { playerName, position, leagueContext } = parsed.data;
 
   try {
-    const [playerContext, tradeInsight] = await Promise.all([
-      lookupPlayerContext(playerName),
-      lookupTradeInsight(playerName),
-    ]);
+    const { playerContext, tradeInsight } = await lookupBoth(playerName, position);
 
     let groundingContext = '';
     if (playerContext) {

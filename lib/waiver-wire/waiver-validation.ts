@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { DAILY_LOCKED_MESSAGE, type DailyTransactionPolicy } from '@/lib/waivers/dailyWaiverSchedule'
 
 export type ClaimLimitContext = {
   leagueId: string
@@ -211,4 +212,16 @@ export function conceptOverridesBlockWaivers(overrides: unknown): string | null 
   const o = overrides as Record<string, unknown>
   if (o.waiverBlocked === true) return 'Waivers are temporarily blocked for this league concept.'
   return null
+}
+
+/**
+ * Per-day waiver schedule gate for a CLAIM (lib/waivers/dailyWaiverSchedule.ts). `policy` is null
+ * when the league has no enabled daily schedule. A Locked day refuses claims; every other day accepts
+ * them (a claim made on a free-agent day waits for the next waiver run).
+ */
+export function assertDailyScheduleAllowsClaim(
+  policy: DailyTransactionPolicy | null | undefined,
+): { ok: true } | { ok: false; message: string } {
+  if (!policy || policy.claimsAllowed) return { ok: true }
+  return { ok: false, message: DAILY_LOCKED_MESSAGE }
 }

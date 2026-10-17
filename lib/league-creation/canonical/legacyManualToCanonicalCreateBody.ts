@@ -143,6 +143,7 @@ export function buildLegacyManualCanonicalCreatePayload(input: LegacyManualCanon
 
   const conceptSetup: Record<string, unknown> = {}
   if (ltRaw === 'survivor') {
+    if (sw.survivorTribeSlots !== undefined) conceptSetup.survivorTribeSlots = sw.survivorTribeSlots
     const tribe = sw.survivor_suggested_tribe_count
     if (typeof tribe === 'number' && Number.isFinite(tribe)) {
       conceptSetup.survivorTribeCount = Math.max(2, Math.min(4, Math.round(tribe)))

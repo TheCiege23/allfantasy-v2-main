@@ -17,6 +17,7 @@ import {
   Zap,
 } from 'lucide-react'
 import type { DraftUISettings, TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
 import { DEFAULT_TRADE_RULES } from '@/lib/commissioner-ai-draft-manager/types'
 import { DraftImportFlow } from './DraftImportFlow'
 import { SwapManagerModal } from './SwapManagerModal'
@@ -248,7 +249,7 @@ export function CommissionerControlCenterModal({
   }
 
   const handleSetTimer = () => {
-    const sec = Math.max(0, Math.min(86400, parseInt(timerInput, 10) || 90))
+    const sec = Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, parseInt(timerInput, 10) || 90))
     setTimerInput(String(sec))
     run('set_timer', () => onAction('set_timer_seconds', { seconds: sec, resetCurrentTimer: true }))
   }

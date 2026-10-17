@@ -15,7 +15,7 @@ vi.mock('@/components/core-app/screens/useLeagueRosters', async (importOriginal)
 })
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
-import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
+import { gradeTrade, withYourTeamLetter } from '@/lib/decision-os/trade/tradeGrade'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import { decodeTradeDraft, tradeDeviceDraftKey } from '@/components/core-app/screens/tradeDeviceDraft'
@@ -97,31 +97,47 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
-  it('keeps the headline letter and asset totals separate from personal roster utility', async () => {
+  const mcBrideGrade = () => {
     const grade = gradeTrade({ giveValue: 5000, getValue: 5153, giveMarket: 5000, getMarket: 4500,
       unpriced: 0, giveCount: 1, getCount: 1, basis: ANALYSIS.valueBasis.label,
       scoringApplied: true, needApplied: false, needGap: null,
       lines: [{ side: 'give', name: 'Kenneth Walker', marketValue: 5000, leagueValue: 5000 },
         { side: 'get', name: 'Trey McBride', marketValue: 4500, leagueValue: 5153 }], moves: [] })
     if (!grade.graded) throw new Error('expected the complete trade to be graded')
-    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
-      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS,
-          percentDiff: grade.percentDiff, getTotal: 5153,
-          grade: { ...grade, rosterFit: { giveValue: 5000, getValue: 5928, percentDiff: 16,
-            moves: [{ side: 'get', name: 'Trey McBride', base: 4500, leagueValue: 5928,
-              reasons: ['you cannot fill 1 TE slot and there is no TE available on waivers'] }] } },
-          valueBasis: { ...ANALYSIS.valueBasis, needAdjusted: false },
-          players: { ...ANALYSIS.players, get: [{ ...ANALYSIS.players.get[0], leagueValue: 5153,
-            valueAdjustments: [ANALYSIS.players.get[0].valueAdjustments[0]] }] },
-        }) }
-      : { ok: false, status: 500, json: async () => ({}) })
-    const { container } = render(<TradeCenter league={{ id: 'grade-fit-separation', name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    return { ...grade, rosterFit: { giveValue: 5000, getValue: 5928, percentDiff: 16,
+      moves: [{ side: 'get' as const, name: 'Trey McBride', base: 4500, leagueValue: 5928,
+        reasons: ['you cannot fill 1 TE slot and there is no TE available on waivers'] }] } }
+  }
+  const serve = (grade: unknown) => fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+    ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS,
+        percentDiff: 3, getTotal: 5153, grade,
+        valueBasis: { ...ANALYSIS.valueBasis, needAdjusted: false },
+        players: { ...ANALYSIS.players, get: [{ ...ANALYSIS.players.get[0], leagueValue: 5153,
+          valueAdjustments: [ANALYSIS.players.get[0].valueAdjustments[0]] }] },
+      }) }
+    : { ok: false, status: 500, json: async () => ({}) })
+
+  it('grades your trade for your team and keeps the market letter and asset totals beside it (2026-10-10)', async () => {
+    // An empty TE slot nobody on waivers can fill: +3 on league value (C), +16 for this roster (B).
+    serve(withYourTeamLetter(mcBrideGrade()))
+    const { container } = render(<TradeCenter league={{ id: 'grade-fit-your-team', name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    expect([...container.querySelectorAll('.af-tc-grade-letter')].map(el => el.textContent)).toEqual(['B', 'C', 'C'])
+    expect(screen.getByTestId('trade-grade-market').textContent).toContain('C')
+    // The totals stay the league values the lines add up to.
+    expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,153')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('what your grade is taken on')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('you cannot fill 1 TE slot')
+    expect(screen.getByTestId('trade-value-grade-basis').textContent).toContain('Your grade is for your team')
+  })
+
+  it('keeps a league-value headline when the grade is not a your-team grade', async () => {
+    serve(mcBrideGrade())
+    const { container } = render(<TradeCenter league={{ id: 'grade-fit-market', name: 'L', format: 'Dynasty', teamCount: 12 }} />)
     await analyze(container)
     expect([...container.querySelectorAll('.af-tc-grade-letter')].map(el => el.textContent)).toEqual(['C', 'C'])
-    expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,153')
-    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('5,928')
-    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('you cannot fill 1 TE slot')
-    expect(screen.getByTestId('trade-value-grade-basis').textContent).toContain('Roster fit does not change the letter')
+    expect(screen.queryByTestId('trade-grade-market')).toBeNull()
+    expect(screen.getByTestId('trade-value-grade-basis').textContent).not.toMatch(/Roster fit does not change the letter/)
   })
   it('offers an explicit resume after remount, without treating an old proposal as a fresh trade', async () => {
     const league = { id: 'recovery-league', name: 'L', format: 'Dynasty', teamCount: 12 }

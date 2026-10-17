@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { prisma } from '../lib/prisma'
 import { getFantraxLeagueInfo, getFantraxMatchupScores, getFantraxTeamRosters } from '../lib/league-import/fantrax/fantraxApi'
 import { normalizeFantraxTeamName } from '../lib/league-import/fantrax/fantraxTeamIds'
-import { verifyFantraxWeeklyActuals, fantraxActualWriteDecision } from '../lib/league-import/fantrax/fantraxWeeklyActuals'
+import { verifyFantraxWeeklyActuals, fantraxActualWriteDecision, type FantraxZeroEvidence } from '../lib/league-import/fantrax/fantraxWeeklyActuals'
 
 async function main() {
   const manifestPath = process.argv.find(a => a.startsWith('--manifest='))?.slice(11)
@@ -25,6 +25,7 @@ async function main() {
   const teams = await prisma.leagueTeam.findMany({ where:{leagueId:manifest.leagueId},select:{externalId:true,teamName:true,ownerName:true} })
   const planned: Array<{week:number;playerId:string;rosterId:number;isStarter:boolean;points:number;sha256:string;sourceTeamId:string}> = []
   const seenPlayers = new Set<string>(), seenExports = new Set<string>()
+  const zeroEvidence = new Map<string, FantraxZeroEvidence[]>()
   for (const period of [...new Set(manifest.exports.map(e=>e.period))]) {
     const end = info.data.scoringPeriods?.find(p=>p.number===period)?.endDate
     if (!Number.isInteger(period) || period < 1 || !end || !Number.isFinite(Date.parse(end)) || Date.parse(end) >= Date.now()) throw new Error('Only completed source periods may be imported')
@@ -43,6 +44,7 @@ async function main() {
       if(matches.length!==1 || !/^\d+$/.test(String(matches[0]?.externalId)) || !Number.isInteger(rosterId) || rosterId<=0 || rosterId>2147483647) throw new Error('Stored roster mapping missing or ambiguous')
       const csv = readFileSync(entry.path, 'utf8'), sha256 = createHash('sha256').update(csv).digest('hex')
       const verified = verifyFantraxWeeklyActuals({csv,sourceTeamId:entry.sourceTeamId,roster,sourceTotal:sides[0]!.score})
+      zeroEvidence.set(`${period}:${entry.sourceTeamId}`, verified.zeroEvidence)
       for(const player of verified.players) {
         const key = `${period}:${player.playerId}`
         if(seenPlayers.has(key)) throw new Error('Player appears on multiple teams in the period')
@@ -68,7 +70,7 @@ async function main() {
     }
     for(const entry of manifest.exports) {
       const key=`fantrax-actuals-receipt:${league.platformLeagueId}:${manifest.season}:${entry.period}:${entry.sourceTeamId}`
-      const data={importedAt:new Date().toISOString(),period:entry.period,sourceTeamId:entry.sourceTeamId,rosterId:planned.find(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId)!.rosterId,sha256:planned.find(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId)!.sha256,rows:planned.filter(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId).length,transport:'operator-csv',verified:true}
+      const data={importedAt:new Date().toISOString(),period:entry.period,sourceTeamId:entry.sourceTeamId,rosterId:planned.find(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId)!.rosterId,sha256:planned.find(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId)!.sha256,rows:planned.filter(p=>p.week===entry.period&&p.sourceTeamId===entry.sourceTeamId).length,zeroEvidence:zeroEvidence.get(`${entry.period}:${entry.sourceTeamId}`)??[],transport:'operator-csv',verified:true}
       await tx.sportsDataCache.upsert({where:{cacheKey:key},create:{cacheKey:key,data,expiresAt:new Date(Date.now()+365*86400000)},update:{data,expiresAt:new Date(Date.now()+365*86400000)}})
     }
   },{timeout:120000})

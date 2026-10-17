@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * Draft pick trade: append traded picks to session and handle proposal accept.
  */
@@ -12,6 +13,7 @@ export async function appendDraftPickTrades(
   leagueId: string,
   newTrades: TradedPickRecord[]
 ): Promise<{ success: boolean; error?: string }> {
+  if (await isSeasonTournamentDraft(leagueId)) return { success: false, error: SEASON_DRAFT_MUTATION_BLOCKED }
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,

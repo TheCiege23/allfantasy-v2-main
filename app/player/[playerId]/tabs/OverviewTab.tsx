@@ -26,12 +26,12 @@ export function OverviewTab({ player }: { player: PlayerIdentity }) {
   const { data: projData } = usePlayerProjection(player.name, player.sport)
 
   useEffect(() => {
-    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&narrative=true`, { cache: 'no-store' })
+    fetch(`/api/player-outlook?playerName=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(player.sport)}&position=${encodeURIComponent(player.position)}&team=${encodeURIComponent(player.team)}&narrative=true`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [player.name, player.sport])
+  }, [player.name, player.sport, player.position, player.team])
 
   if (loading) {
     return (

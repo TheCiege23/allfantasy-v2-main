@@ -182,6 +182,7 @@ export async function GET(request: NextRequest) {
           gameId: data.detail.gameId,
           homeAbbrev: data.detail.home.abbrev,
           awayAbbrev: data.detail.away.abbrev,
+          upcoming: data.detail.status?.state === 'pre',
         })
       : null
     return NextResponse.json(
@@ -194,6 +195,7 @@ export async function GET(request: NextRequest) {
       userId: session?.user?.id ?? null,
       sport: request.nextUrl.searchParams.get('sport'),
       scope: request.nextUrl.searchParams.get('scope') === 'all' ? 'all' : 'my',
+      top25: request.nextUrl.searchParams.get('t25') === 'off' ? 'off' : 'on',
     })
 
     /*

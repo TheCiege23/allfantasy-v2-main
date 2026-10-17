@@ -25,6 +25,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { pickAgreedAge, type AgeRow } from '@/lib/player-age'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
 import { ageTrajectory, dynastyValue } from './dynastyPlayerValue'
 import { loadDynastyPickCapital, type DynastyPickCapital } from './dynastyPickCapital'
@@ -55,11 +56,6 @@ export type BuildDynastyWarRoomContextResult =
 
 const SUPERFLEX_RE = /super[_\s]?flex|sflex|2qb/i
 const FLEX_RE = /flex|^util$|^super_util$/i
-
-/** Normalized name key for age joins (matches injuryNameKey semantics). */
-function ageNameKey(name: string): string {
-  return String(name ?? '').trim().toLowerCase()
-}
 
 /** Map a normalized lineup section name to a War Room slotType. */
 function sectionSlotType(section: 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'): string {
@@ -278,29 +274,45 @@ export async function buildDynastyWarRoomContext(
   // --- value (dynasty ADP), ages (SportsPlayer), injuries/news (provider tables) ---
   const dynastyAdpByKey = await fetchDynastyValueByKey(sport, season)
 
-  const uniqueNames = Array.from(new Set(rawPlayers.map((p) => p.playerName).filter((n) => n && n.length > 1)))
-  const ageByName = new Map<string, number>()
-  if (uniqueNames.length > 0) {
-    const sportVar = [sport, sport.toUpperCase(), sport.toLowerCase()]
-    const ageRows = (await prisma.sportsPlayer
+  /*
+   * 🛑 AGES ARE BOUND TO ONE PLAYER, NOT TO A NAME (2026-10-11). This used to keep the FIRST row
+   * per lowercased name, and `SportsPlayer` holds namesakes with different ages — "Justin
+   * Jefferson" is 27 (WR, MIN) and 23 (LB, CLE) — so the receiver could read as a 23-year-old and
+   * the whole age trajectory with him. `pickAgreedAge` binds by Sleeper id when the league is a
+   * Sleeper league (roster ids ARE Sleeper ids there and nowhere else), else by name within the
+   * player's position group, and refuses rows that disagree. See lib/player-age.ts.
+   */
+  const sportVar = [sport, sport.toUpperCase(), sport.toLowerCase()]
+  const rosterIdsAreSleeperIds = String(league.platform ?? '').toLowerCase() === 'sleeper'
+  const loadAgeRows = async (players: Array<{ playerName: string; playerId?: string }>): Promise<AgeRow[]> => {
+    const names = Array.from(new Set(players.map((p) => p.playerName).filter((n) => n && n.length > 1)))
+    const ids = rosterIdsAreSleeperIds
+      ? Array.from(new Set(players.map((p) => p.playerId).filter((id): id is string => !!id)))
+      : []
+    if (names.length === 0 && ids.length === 0) return []
+    return (await prisma.sportsPlayer
       .findMany({
-        where: { sport: { in: sportVar }, name: { in: uniqueNames }, age: { not: null } },
-        select: { name: true, age: true },
+        where: {
+          sport: { in: sportVar },
+          age: { not: null },
+          OR: [{ name: { in: names } }, ...(ids.length > 0 ? [{ sleeperId: { in: ids } }] : [])],
+        },
+        select: { name: true, age: true, position: true, sleeperId: true },
       })
-      .catch(() => [])) as Array<{ name: string; age: number | null }>
-    for (const a of ageRows) {
-      if (a.age == null) continue
-      const k = ageNameKey(a.name)
-      if (!ageByName.has(k)) ageByName.set(k, a.age)
-    }
+      .catch(() => [])) as AgeRow[]
   }
+  const rosterAgeRows = await loadAgeRows(rawPlayers)
 
   const injuryNews = await fetchRedraftInjuryNews(sport)
 
   function toPlayerFact(p: RawPlayer): DynastyPlayerFact {
     const key = buildPlayerKey(p.playerName, p.position)
     const adp = dynastyAdpByKey.get(key) ?? null
-    const age = ageByName.get(ageNameKey(p.playerName)) ?? null
+    const age = pickAgreedAge(rosterAgeRows, {
+      name: p.playerName,
+      position: p.position,
+      sleeperId: rosterIdsAreSleeperIds ? p.playerId : null,
+    })
     const injuryStatus = injuryNews.injuryByName.get(injuryNameKey(p.playerName))?.status ?? null
     const base: DynastyPlayerFact = {
       playerId: p.playerId,
@@ -402,8 +414,14 @@ export async function buildDynastyWarRoomContext(
     scoringFormat: scoring.scoringPreset.toLowerCase(),
     limit: 60,
   })
+  /*
+   * ⚠ FREE AGENTS GET THEIR OWN AGE ROWS. The old map was built from ROSTERED names only, so a
+   * free agent had an age only when a rostered player shared his name — i.e. only in the namesake
+   * case, and then it was the other man's age.
+   */
+  const freeAgentAgeRows = await loadAgeRows(freeAgentRows.map((fa) => ({ playerName: fa.playerName })))
   const freeAgents: DynastyPlayerFact[] = freeAgentRows.map((fa) => {
-    const age = ageByName.get(ageNameKey(fa.playerName)) ?? null
+    const age = pickAgreedAge(freeAgentAgeRows, { name: fa.playerName, position: fa.position })
     return {
       playerId: fa.playerKey,
       playerName: fa.playerName,
@@ -422,7 +440,7 @@ export async function buildDynastyWarRoomContext(
 
   // --- availability contract ---
   const valuesAvailable = dynastyAdpByKey.size > 0
-  const agesAvailable = ageByName.size > 0
+  const agesAvailable = allRosterPlayers.some((p) => p.age != null) || freeAgents.some((p) => p.age != null)
   const standingsAvailable = teamRows.some(
     (t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0 || (t.pointsFor ?? 0) > 0,
   )

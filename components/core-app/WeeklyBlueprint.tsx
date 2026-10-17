@@ -10,6 +10,7 @@ import { formatPct1, pct1 } from '@/lib/core-app/weeklyPercent'
 import '@/components/core-app/af-week-blueprint.css'
 import { WeeklySharing } from './WeeklySharing'
 import { WeeklyCalendar } from './WeeklyCalendar'
+import { WeeklyScheduleForecasts } from './WeeklyScheduleForecasts'
 import { buildWeeklySwings, sportWeekAdvice } from '@/lib/core-app/weeklySportPlan'
 import { playoffInputChanges } from '@/lib/core-app/weeklyPlayoffMovement'
 
@@ -49,6 +50,7 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
       <ul>{data.coverage.slice(0, 5).map(c => <li key={c.leagueId}><Link href={`/core/my-team?league=${encodeURIComponent(c.leagueId)}`}>{c.leagueName}</Link>: {c.af ? 'AF' : ''}{c.af && c.provider ? ' + ' : ''}{c.provider ? es ? 'proveedor' : 'provider' : ''}{!c.af && !c.provider ? es ? 'pronóstico actual no disponible' : 'current forecast unavailable' : ''}{c.partial ? es ? ' · parcial' : ' · partial' : ''}</li>)}</ul>
     </section>}</div>
     {data.sportPlans?.length ? <details className="af-wbp-sports"><summary>{es ? 'Preparación por deporte y formato' : 'Plan by sport and format'}</summary><p>{es ? 'El deporte no confirma el formato. Comprueba puntos, categorías, roto y reglas de bloqueo en cada liga. Los pronósticos de volumen, categorías y límites solo se muestran cuando hay datos verificados.' : 'Sport alone does not establish the format. Confirm points, categories, roto and lock rules in each league. Game-volume, category and limit forecasts require verified data.'}</p><ul>{[...new Set(data.sportPlans.map(s=>s.sport))].map(sport=><li key={sport}><strong>{sport}</strong><p>{sportWeekAdvice(sport,es)}</p><div>{data.sportPlans!.filter(s=>s.sport===sport).map(l=><Link key={l.leagueId} href={`/core/my-team?league=${encodeURIComponent(l.leagueId)}`}>{l.leagueName} → </Link>)}</div></li>)}</ul></details> : null}
+    <WeeklyScheduleForecasts forecasts={data.scheduleForecasts} es={es}/>
     <WeeklyCalendar data={data.calendar} />
     <WeeklySharing data={data} path={path} />
   </section>

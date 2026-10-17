@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — My team</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}a:hover{color:#67e8f9}</style>
+</helmet>
+<div class="af">
+  <nav class="rail" aria-label="Your leagues">
+    <a class="rail-home" href="#" aria-label="All leagues home">AF</a>
+    <div class="rail-sep"></div>
+    <sc-for list="{{rail}}" as="l" hint-placeholder-count="7">
+      <button class="{{l.cls}}" onClick="{{l.pick}}" aria-label="{{l.name}}">
+        <span class="rl-pill"></span>
+        <span class="av" style="background: {{l.bg}}; color: {{l.fg}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 3.5px {{l.ring}}">{{l.ini}}<span class="av-tag" style="background: {{l.tagBg}}; color: {{l.tagFg}}">{{l.tag}}</span><sc-if value="{{l.unread}}" hint-placeholder-val="{{ false }}"><span class="av-dot">{{l.unread}}</span></sc-if></span>
+        <span class="rl-score" style="color: {{l.ring}}">{{l.mini}}</span>
+        <span class="rl-tip"><span style="font: 600 14px/1.2 'Archivo', sans-serif; color: #eef0fa">{{l.name}}</span><span style="font: 500 11px/1.3 'JetBrains Mono', monospace; color: #989fc2">{{l.meta}}</span><span style="font: 700 11px/1.3 'Archivo', sans-serif; color: {{l.ring}}">{{l.status}}</span></span>
+      </button>
+    </sc-for>
+    <div class="rail-sep"></div>
+    <button class="rail-add" aria-label="Create or import a league"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+  </nav>
+
+  <nav class="snav" aria-label="League sections">
+    <a class="nv" href="#">‹ All leagues</a>
+    <div style="display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; padding: 12px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255,255,255,.07)">
+      <span class="av" style="width: 36px; height: 36px; font-size: 14px; background: #10131c; color: #22d3ee; border: 1px solid rgba(255,255,255,.13)">B</span>
+      <span style="display: flex; flex-direction: column; gap: 5px"><span style="font-weight: 600; font-size: 14px">Blah</span><span class="lbl" style="color: #34d399">Wk 5 · 3–1</span></span>
+    </div>
+    <sc-for list="{{nav}}" as="n" hint-placeholder-count="16">
+      <sc-if value="{{n.head}}" hint-placeholder-val="{{ false }}"><span class="lbl nv-h">{{n.label}}</span></sc-if>
+      <sc-if value="{{n.link}}" hint-placeholder-val="{{ true }}"><a class="{{n.cls}}" href="{{n.href}}" style="{{n.style}}">{{n.label}}<sc-if value="{{n.count}}" hint-placeholder-val="{{ false }}"><span class="nv-c">{{n.count}}</span></sc-if></a></sc-if>
+    </sc-for>
+  </nav>
+
+  <div class="mainc">
+    <header class="topb">
+      <button class="viewing"><span class="lbl">Viewing</span>Blah<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <label class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Find a player or jump to a league" aria-label="Search"><span class="kbd">⌘K</span></label>
+      <div style="flex: 1"></div>
+      <span class="chip chip-af">● Live on AF</span><span class="num" style="font-size: 11px; color: #989fc2">NFL WK 5</span>
+    </header>
+
+    <div class="wrap" style="display: flex; flex-direction: column; gap: 22px">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+        <div style="display: flex; flex-direction: column; gap: 8px"><span class="lbl">Blah · My team</span><h1 class="h1">TheCiege26's Team</h1><span class="num" style="font-size: 13px; color: #989fc2">3–1 · 2nd place · PF 478.6</span></div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <button class="btn btn-g">Propose trade</button>
+          <a class="btn btn-g" href="Waivers.dc.html">Add / drop</a>
+          <button class="btn btn-p">Optimize lineup</button>
+        </div>
+      </div>
+
+      <div class="seg" role="tablist" aria-label="Team view" style="max-width: 420px"><sc-for list="{{views}}" as="v" hint-placeholder-count="3"><button role="tab" class="{{v.cls}}" onClick="{{v.pick}}">{{v.label}}</button></sc-for></div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <div style="flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.25); flex-wrap: wrap">
+            <span class="chip chip-warn">Next lock 2h 33m</span>
+            <span style="font-size: 13px; color: #c3c9e6; flex: 1">Sun 1:00 PM games lock individually. {{hint}}</span>
+          </div>
+
+          <section class="card" style="padding: 6px 0">
+            <div class="lbl" style="padding: 14px 20px 8px; display: flex; justify-content: space-between"><span>Starters</span><span>Proj {{projTotal}}</span></div>
+            <sc-for list="{{starters}}" as="s" hint-placeholder-count="9">
+              <div style="display: flex; align-items: center; gap: 14px; padding: 10px 20px; border-top: 1px solid rgba(255,255,255,.05); background: {{s.bg}}">
+                <span class="pos p-{{s.pos}}">{{s.slot}}</span>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                  <span style="font-weight: 700; font-size: 14px; display: flex; gap: 8px; align-items: center">{{s.name}}<sc-if value="{{s.inj}}" hint-placeholder-val="{{ false }}"><span class="chip chip-warn" style="height: 18px; font-size: 9px">{{s.inj}}</span></sc-if></span>
+                  <span class="num" style="font-size: 11px; color: #989fc2">{{s.team}} · {{s.game}}</span>
+                </div>
+                <span class="num" style="width: 52px; text-align: right; font-size: 15px; font-weight: 600">{{s.proj}}</span>
+                <sc-if value="{{s.locked}}" hint-placeholder-val="{{ false }}"><span class="btn btn-g btn-sm" style="opacity: .5" aria-label="Locked">Locked</span></sc-if>
+                <sc-if value="{{s.open}}" hint-placeholder-val="{{ true }}"><button class="btn btn-sm {{s.btnCls}}" onClick="{{s.pick}}">{{s.btn}}</button></sc-if>
+              </div>
+            </sc-for>
+          </section>
+
+          <section class="card" style="padding: 6px 0">
+            <div class="lbl" style="padding: 14px 20px 8px">Bench</div>
+            <sc-for list="{{bench}}" as="b" hint-placeholder-count="6">
+              <div style="display: flex; align-items: center; gap: 14px; padding: 10px 20px; border-top: 1px solid rgba(255,255,255,.05); opacity: {{b.op}}">
+                <span class="pos p-BN">BN</span>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 14px">{{b.name}} <span style="color: #7d84a8; font-weight: 600">{{b.pos}}</span></span><span class="num" style="font-size: 11px; color: #989fc2">{{b.team}} · {{b.game}}</span></div>
+                <span class="num" style="width: 52px; text-align: right; font-size: 15px; font-weight: 600; color: #c3c9e6">{{b.proj}}</span>
+                <sc-if value="{{b.can}}" hint-placeholder-val="{{ false }}"><button class="btn btn-p btn-sm" onClick="{{b.pick}}">Swap in</button></sc-if>
+              </div>
+            </sc-for>
+            <div style="display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-top: 1px solid rgba(255,255,255,.05)"><span class="pos p-IR">IR</span><span style="font-size: 13px; color: #7d84a8">Empty — move an Out or IR player here to free a roster spot.</span></div>
+          </section>
+        </div>
+
+        <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
+            <span class="lbl">Roster moves</span>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+              <div style="padding: 12px; border-radius: 10px; background: #0b0d14; display: flex; flex-direction: column; gap: 8px"><span class="lbl">FAAB left</span><span class="num" style="font-size: 20px; font-weight: 600">$86<span style="font-size: 12px; color: #7d84a8"> / 100</span></span></div>
+              <div style="padding: 12px; border-radius: 10px; background: #0b0d14; display: flex; flex-direction: column; gap: 8px"><span class="lbl">Pending claims</span><span class="num" style="font-size: 20px; font-weight: 600">2</span></div>
+            </div>
+            <span style="font-size: 13px; color: #989fc2">Waivers run Wed 3:00 AM ET.</span>
+            <a class="btn btn-g" href="Waivers.dc.html">Manage claims</a>
+          </section>
+          <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 10px">
+            <span class="lbl">Trade block</span>
+            <span style="font-size: 13px; line-height: 1.5; color: #989fc2">Nobody on your block. Add players and AF will flag managers who need your positions.</span>
+            <button class="btn btn-g btn-sm">Add to trade block</button>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <button class="fab" aria-label="Ask Chimmy"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    this.state = { league: 'blah', view: 'lineup', sel: null,
+      st: [
+        ['QB','QB',['Jalen Hurts','QB','PHI','vs NYG · Sun 1:00 PM','22.4',null,false]],
+        ['RB','RB',['Bijan Robinson','RB','ATL','@ TB · Thu · Final','19.2',null,true]],
+        ['RB','RB',['Kyren Williams','RB','LAR','vs SF · Sun 8:20 PM','15.1',null,false]],
+        ['WR','WR',["Ja'Marr Chase",'WR','CIN','vs CLE · Sun 1:00 PM','18.7',null,false]],
+        ['WR','WR',['Puka Nacua','WR','LAR','vs SF · Sun 8:20 PM','16.3','Q',false]],
+        ['TE','TE',['Sam LaPorta','TE','DET','@ GB · Sun 4:25 PM','10.9',null,false]],
+        ['FLX','FLEX',['Jahmyr Gibbs','RB','DET','@ GB · Sun 4:25 PM','17.6',null,false]],
+        ['K','K',['Brandon Aubrey','K','DAL','vs PIT · Sun 4:05 PM','8.6',null,false]],
+        ['DEF','DEF',['Ravens D/ST','DEF','BAL','@ HOU · Sun 1:00 PM','7.2',null,false]]
+      ],
+      bn: [
+        ['Rashid Shaheed','WR','NO','vs CAR · Sun 1:00 PM','12.4'],
+        ['Jaylen Warren','RB','PIT','@ DAL · Sun 4:05 PM','10.1'],
+        ['Tyjae Spears','RB','TEN','vs IND · Sun 1:00 PM','8.8'],
+        ['Rome Odunze','WR','CHI','vs LV · Sun 1:00 PM','11.0'],
+        ['Dallas Goedert','TE','PHI','vs NYG · Sun 1:00 PM','8.9'],
+        ['Jordan Love','QB','GB','vs DET · Sun 4:25 PM','17.9']
+      ] };
+  }
+  shell(active) {
+    const G = '#34d399', R = '#fb5b78', C = '#22d3ee';
+    const L = [
+      ['blah','Blah','B','#10131c',C,'AF',G,'3–1','2nd · Wk 5 kicks off Sun','2026 · 12-team redraft · Half PPR',3,true],
+      ['parbur','Parbur','P','#1f2a4d','#9fd4ff','SLP',G,'88–71','Winning · Wk 5','2026 · 12-team redraft · PPR',0],
+      ['horse','Four Horsemen All-Stars 2023','4H','#12352a','#7ff0c4','SLP',R,'62–80','Losing · Wk 5','2026 · 4-team dynasty',0],
+      ['koth','KOTH','K','#3a2410','#f0b46a','SLP',G,'101–93','Winning · Wk 5','2026 · 10-team redraft',16],
+      ['pirate','Pirate League!','PL','#3a1d55','#dcb4ff','SLP',R,'70–74','Losing · Wk 5','2026 · 14-team redraft',13],
+      ['guil','Guillotine League 26','GL','#4a1414','#ffb4b4','SLP',G,'8TH','+35.9 over the cut','2026 · 14-team guillotine',0],
+      ['elim','Elimination Station 2','ES','#123244','#7fd4f0','SLP',G,'8TH','+17.5 over the cut','2026 · 14-team guillotine',0]
+    ];
+    const rail = L.map(([id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,nat]) => ({ id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,
+      tagBg: nat ? C : '#2a2f4a', tagFg: nat ? '#04050c' : '#c3c9e6',
+      cls: 'rl' + (this.state.league === id ? ' rl-on' : ''), pick: () => this.setState({ league: id }) }));
+    const H = label => ({ head: true, link: false, label });
+    const A = (id, label, href, count, style) => ({ head: false, link: true, label, href, count: count || 0, style: style || '', cls: 'nv' + (id === active ? ' nv-on' : '') });
+    const nav = [H('This league'), A('home','League home','Main.dc.html'), A('team','My team','Lineup.dc.html'), A('matchup','Matchup','Matchup.dc.html'),
+      A('players','Players & waivers','Waivers.dc.html', 2), A('trades','Trades','Trades.dc.html', 1), A('draft','Draft HQ','MockSetup.dc.html'), A('stand','Standings & playoffs','Standings.dc.html'),
+      A('chat','League chat','Chat.dc.html', 3), A('commish','Commissioner','Commissioner.dc.html', 0, 'color:#f6c445'),
+      H('This week'), A('war','War Room','#'), A('live','Live scores','#', 12), A('outlook','Season Outlook','#'),
+      H('Your record'), A('career','Your career','#'), A('rank','Rankings','#')];
+    return { rail, nav };
+  }
+  renderVals() {
+    const st = this.state;
+    const views = [['lineup','Lineup'],['roster','Full roster'],['moves','Moves']].map(([id,label]) => ({ label,
+      cls: 'sg' + (st.view === id ? ' sg-on' : ''), pick: () => this.setState({ view: id }) }));
+    const fits = (slotPos, p) => slotPos === 'FLEX' ? ['RB','WR','TE'].includes(p) : slotPos === p;
+    const starters = st.st.map(([slot, pos, pl], i) => {
+      const [name, ppos, team, game, proj, inj, locked] = pl;
+      const on = st.sel === i;
+      return { slot, pos, name, team, game, proj, inj, locked, open: !locked,
+        bg: on ? 'rgba(34,211,238,.08)' : 'transparent',
+        btn: on ? 'Cancel' : 'Move', btnCls: on ? 'btn-p' : 'btn-g',
+        pick: () => this.setState({ sel: on ? null : i }) };
+    });
+    const selSlot = st.sel === null ? null : st.st[st.sel][1];
+    const bench = st.bn.map((b, j) => {
+      const [name, pos, team, game, proj] = b;
+      const can = selSlot !== null && fits(selSlot, pos);
+      return { name, pos, team, game, proj, can, op: selSlot === null || can ? 1 : .45,
+        pick: () => {
+          const s = st.st.map(r => r.slice()); const bn = st.bn.map(r => r.slice());
+          const out = s[st.sel][2];
+          s[st.sel][2] = [name, pos, team, game, proj, null, false];
+          bn[j] = [out[0], out[1], out[2], out[3], out[4]];
+          this.setState({ st: s, bn, sel: null });
+        } };
+    });
+    const projTotal = st.st.reduce((t, r) => t + Number(r[2][4]), 0).toFixed(1);
+    const hint = selSlot ? 'Pick an eligible bench player to swap into ' + selSlot + '.' : 'Tap Move on a starter to swap.';
+    return { ...this.shell('team'), views, starters, bench, projTotal, hint };
+  }
+}
+</script>
+</body>
+</html>

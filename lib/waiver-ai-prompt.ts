@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { AI_CORE_PERSONALITY, getModeInstructions, SIGNATURE_PHRASES, MEMORY_AWARENESS, WHEN_TO_SPEAK_RULES } from '@/lib/ai-personality';
 import { getUniversalAIContext } from '@/lib/ai-player-context';
+import { legacyPromptSeason } from '@/lib/legacy/promptSeason';
+import { resolveSeasonState } from '@/lib/import-os/season';
 
 export const WaiverTypeSchema = z.enum(['FAAB', 'ROLLING', 'PRIORITY'])
 export const LeagueFormatSchema = z.enum(['redraft', 'dynasty', 'keeper'])
@@ -69,7 +71,78 @@ export const WaiverResponseSchema = z.object({
   risk_flags: z.array(z.string()),
 })
 
-export const WAIVER_AI_SYSTEM_PROMPT = `
+type WaiverPromptPhase = 'offseason' | 'preseason' | 'in_season' | 'unknown'
+
+/**
+ * Where the season is, from the calendar in `lib/import-os/season.ts`. The NFL postseason reads as
+ * offseason here: fantasy seasons end before the NFL playoffs do. A sport with no calendar is
+ * `unknown`, and the prompt then claims neither.
+ */
+export function waiverPromptPhase(sport: string | null | undefined, now: Date = new Date()): WaiverPromptPhase {
+  const { state } = resolveSeasonState({ sport: String(sport ?? 'nfl'), now })
+  if (state === 'regular_season') return 'in_season'
+  if (state === 'preseason') return 'preseason'
+  if (state === 'offseason' || state === 'postseason') return 'offseason'
+  return 'unknown'
+}
+
+function phaseMentality(phase: WaiverPromptPhase, season: number): string {
+  switch (phase) {
+    case 'offseason':
+      return `## OFFSEASON STASH BOARD MENTALITY
+
+It is the offseason. Focus on:
+- Value creation, not points
+- Players who could be worth more in 3-6 months
+- Situations that might resolve favorably
+- Free agency and draft implications`
+    case 'preseason':
+      return `## PRESEASON STASH BOARD MENTALITY
+
+It is the preseason: camp and exhibition games, no ${season} regular-season points yet. Focus on:
+- Camp battles and depth-chart movement
+- Players who could be worth more once the season starts
+- Value creation over points`
+    case 'in_season':
+      return `## IN-SEASON WAIVER MENTALITY
+
+The ${season} regular season is under way (current_week is in the request). Focus on:
+- Points this week and over the next 2-3 for teams that are competing
+- Value spikes from injuries and role changes for teams that are not
+- Bye-week and injury coverage
+- Stashes only where the upside is real`
+    default:
+      return `## WAIVER MENTALITY
+
+Judge from today's date and the request's current_week whether games are being played. Balance points now against value later.`
+  }
+}
+
+function windowBasis(phase: WaiverPromptPhase): string {
+  switch (phase) {
+    case 'offseason':
+      return 'This is the OFFSEASON - classify based on roster strength + future outlook, NOT recent record.'
+    case 'preseason':
+      return 'No games have been played yet - classify based on roster strength + future outlook.'
+    case 'in_season':
+      return "Classify based on roster strength + future outlook. This season's record bears on this season's playoff odds, but a short run of results does not decide the window."
+    default:
+      return 'Classify based on roster strength + future outlook, not a short run of results.'
+  }
+}
+
+/**
+ * 🛑 THIS WAS A MODULE CONSTANT THAT SAID "This is the OFFSEASON" AND "Championship window OPEN for
+ * 2025" (fixed 2026-10-12, NFL week 6 of the 2026 season). Both were claims about now, typed in, and a
+ * constant also froze them at process start. Built per call from the clock: the season from
+ * `legacyPromptSeason`, the phase from the import-os season calendar.
+ */
+export function buildWaiverAiSystemPrompt(opts: { sport?: string | null; now?: Date } = {}): string {
+  const now = opts.now ?? new Date()
+  const phase = waiverPromptPhase(opts.sport, now)
+  const season = legacyPromptSeason(now)
+  const tiersHeading = phase === 'offseason' ? 'OFFSEASON STASH BOARD TIERS' : 'STASH BOARD TIERS'
+  return `
 ${AI_CORE_PERSONALITY}
 
 ${getModeInstructions('scout')}
@@ -80,7 +153,7 @@ ${MEMORY_AWARENESS}
 
 ${WHEN_TO_SPEAK_RULES}
 
-${getUniversalAIContext()}
+${getUniversalAIContext(now)}
 
 You are THE ELITE AllFantasy Waiver AI Scout — you identify value before it's obvious.
 
@@ -111,13 +184,7 @@ Use foresight language like:
 4. CAMP BUZZ: Preseason winners, practice squad promotions, snap count trends
 5. INJURY WATCH: Who benefits if [Star Player] goes down?
 
-## OFFSEASON STASH BOARD MENTALITY
-
-This is the OFFSEASON. Focus on:
-- Value creation, not points
-- Players who could be worth more in 3-6 months
-- Situations that might resolve favorably
-- Free agency and draft implications
+${phaseMentality(phase, season)}
 
 ## UNIFIED AI VOICE (USE EVERYWHERE)
 
@@ -143,16 +210,16 @@ Reference their patterns when relevant:
 The Goal:
 After 10 minutes, users should feel: "This AI understands my team and my league better than my league mates do."
 
-## OFFSEASON WINDOW STATUS CLASSIFICATION
+## WINDOW STATUS CLASSIFICATION
 
-This is the OFFSEASON - classify based on roster strength + future outlook, NOT recent record.
+${windowBasis(phase)}
 
-**🏆 READY_TO_COMPETE** - Championship window OPEN for 2025
+**🏆 READY_TO_COMPETE** - Championship window OPEN for ${season}
 - 6+ confident starters (SF: includes 2 QBs)
 - Has elite difference-maker (top-tier QB/WR/TE)
 - Minimal aging concerns at key positions
 
-**🔨 REBUILDING** - Building for 2026+ contention
+**🔨 REBUILDING** - Building for ${season + 1}+ contention
 - <6 starters OR no elite difference-maker
 - Has 2+ future 1sts OR young assets not producing yet
 
@@ -207,7 +274,7 @@ Present BOTH paths:
 Let the user see what each path looks like
 **Motto: Pick a lane or die slowly**
 
-## OFFSEASON STASH BOARD TIERS
+## ${tiersHeading}
 
 🟢 **TIER 1 — STASH NOW OR PAY LATER**
 Scout insight: "Everyone will want him in 3 weeks. Get him now for free."
@@ -259,6 +326,7 @@ Name value with no role, old WRs with 3-target games, fantasy Twitter hype with 
 
 Always return valid JSON ONLY that matches the required schema.
 `.trim()
+}
 
 function safeNum(n: any, fallback = 0) {
   const v = Number(n)

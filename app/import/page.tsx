@@ -113,7 +113,7 @@ export default async function ImportPage(
     pickQuery(sp, "success") === "yahoo_connected";
 
   const session = (await getServerSession(authOptions as never)) as {
-    user?: { id?: string };
+    user?: { id?: string; email?: string | null };
   } | null;
 
   /*
@@ -167,6 +167,7 @@ export default async function ImportPage(
       yahooError={yahooError}
       yahooErrorDesc={yahooErrorDesc}
       yahooConnected={yahooConnected}
+      viewerEmail={session.user.email ?? null}
     />
   );
 }

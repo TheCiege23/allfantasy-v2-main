@@ -1,3 +1,4 @@
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -65,6 +66,8 @@ export async function POST(req: NextRequest) {
     if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
     const gate = await assertLeagueCommissioner(leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const denied = await survivorHostGuard(leagueId, userId)
+    if (denied) return denied
     const week = typeof body.week === 'number' ? body.week : 1
     const mode = body.mode === 'manual' ? 'manual' : 'auto'
     const ch = await createWeeklyChallenge(leagueId, week, mode)
@@ -82,6 +85,7 @@ export async function POST(req: NextRequest) {
     if (!challengeId) return NextResponse.json({ error: 'challengeId required' }, { status: 400 })
     const ch = await prisma.survivorChallenge.findUnique({ where: { id: challengeId } })
     if (!ch) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (ch.submissionMode === 'automatic') return NextResponse.json({ error: 'This challenge settles from finalized league scores; no submission is needed.' }, { status: 409 })
     const gate = await assertLeagueMember(ch.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
@@ -119,6 +123,8 @@ export async function POST(req: NextRequest) {
     if (!ch) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const gate = await assertLeagueCommissioner(ch.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const denied = await survivorHostGuard(ch.leagueId, userId)
+    if (denied) return denied
     await lockChallengeSubmissions(challengeId)
     return NextResponse.json({ ok: true })
   }
@@ -130,8 +136,14 @@ export async function POST(req: NextRequest) {
     if (!ch) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const gate = await assertLeagueCommissioner(ch.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    const out = await tallyChallengeResults(challengeId)
-    return NextResponse.json(out)
+    const denied = await survivorHostGuard(ch.leagueId, userId)
+    if (denied) return denied
+    try {
+      const out = await tallyChallengeResults(challengeId)
+      return NextResponse.json(out)
+    } catch {
+      return NextResponse.json({ error: 'Challenge result is pending a verified scoring source.' }, { status: 409 })
+    }
   }
 
   return NextResponse.json({ error: 'Use GET for listing or set intent' }, { status: 400 })

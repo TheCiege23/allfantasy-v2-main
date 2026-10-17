@@ -1,5 +1,6 @@
 import { getRedraftSportConfig } from '@/lib/redraft/sportConfig'
 import type { ResolvedRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { isRuledOut } from '@/lib/core-app/injuryStatus'
 
 export type RedraftLineupIssueSeverity = 'error' | 'warning'
 
@@ -270,7 +271,12 @@ export function validateRedraftLineup(args: {
     }
 
     const injuryStatus = normalizedInjuryStatus(player)
-    if (INJURY_ERROR_STATUSES.has(injuryStatus)) {
+    /*
+     * The local set keeps its roster words (RESERVE, COVID, INACTIVE, DNR) the shared rule does not
+     * own; `isRuledOut` adds the absences it spelled only one way — "Suspension" (the table's actual
+     * spelling) and "Sus" were startable, as were "60-day IL" / "I.L." in MLB/NHL leagues.
+     */
+    if (INJURY_ERROR_STATUSES.has(injuryStatus) || isRuledOut(player.injuryStatus)) {
       issues.push(
         issue({
           code: 'starter_ineligible_injury',

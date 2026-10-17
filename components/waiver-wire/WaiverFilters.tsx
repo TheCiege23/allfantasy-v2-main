@@ -41,14 +41,14 @@ export default function WaiverFilters({
 }: Props) {
   const positionFilters = getPositionFiltersForSport(sport ?? undefined, formatType)
   return (
-    <div className="sticky top-0 z-10 -mx-4 mb-3 border-b border-white/10 bg-black/70 px-4 pb-2 pt-2 backdrop-blur sm:-mx-0 sm:rounded-xl sm:border sm:bg-black/60 sm:px-3 sm:pt-3">
-      <div className="flex items-center gap-2 text-xs text-white/60">
+    <div className="af-waiver-filters sticky top-0 z-10 -mx-4 mb-3 border-b border-[var(--line2)] bg-[var(--surface2)] px-4 pb-2 pt-2 backdrop-blur sm:-mx-0 sm:rounded-xl sm:border sm:bg-[var(--surface2)] sm:px-3 sm:pt-3">
+      <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
         <Filter className="h-3.5 w-3.5" />
         <span>Filters</span>
       </div>
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <div className="af-waiver-filter-main mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/40" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
           <input
             type="text"
             value={search}
@@ -56,7 +56,7 @@ export default function WaiverFilters({
             placeholder="Search players…"
             aria-label="Waiver player search"
             data-testid="waiver-search-input"
-            className="w-full rounded-full border border-white/15 bg-black/40 py-1.5 pl-7 pr-3 text-xs text-white placeholder:text-white/40 outline-none"
+            className="w-full rounded-full border border-[var(--line2)] bg-[var(--surface2)] py-1.5 pl-7 pr-3 text-xs text-[var(--text)] placeholder:text-[var(--muted)] outline-none"
           />
         </div>
         <div className="flex flex-1 flex-wrap items-center gap-1.5 text-[11px]">
@@ -66,9 +66,10 @@ export default function WaiverFilters({
                 key={pos}
                 type="button"
                 onClick={() => onPositionChange(pos)}
+                aria-pressed={position === pos}
                 data-testid={`waiver-position-filter-${pos}`}
                 className={`rounded-full border px-2.5 py-1 ${
-                  position === pos ? "border-[#ff3d81] bg-[#ff3d81]/20 text-[#ffd7e5]" : "border-white/15 bg-black/40 text-white/65"
+                  position === pos ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]" : "border-[var(--line2)] bg-[var(--surface2)] text-[var(--muted)]"
                 }`}
               >
                 {pos}
@@ -81,7 +82,7 @@ export default function WaiverFilters({
               onChange={(e) => onTeamChange(e.target.value)}
               aria-label="Waiver team filter"
               data-testid="waiver-team-filter"
-              className="ml-auto rounded-full border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white outline-none"
+              className="ml-auto rounded-full border border-[var(--line2)] bg-[var(--surface2)] px-2 py-1 text-[11px] text-[var(--text)] outline-none"
             >
               <option value="">All teams</option>
               {teams.map((t) => (
@@ -93,16 +94,17 @@ export default function WaiverFilters({
           )}
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+      <div className="af-waiver-filter-bottom mt-2 flex items-center justify-between gap-2 text-[11px]">
         <div className="flex items-center gap-1.5">
           {WAIVER_STATUS_FILTERS.map((s) => (
             <button
               key={s.value}
               type="button"
               onClick={() => onStatusChange(s.value)}
+              aria-pressed={status === s.value}
               data-testid={`waiver-status-filter-${s.value}`}
               className={`rounded-full px-2 py-0.5 ${
-                status === s.value ? "bg-white text-black" : "bg-black/40 text-white/65"
+                status === s.value ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface2)] text-[var(--muted)]"
               }`}
             >
               {s.label}
@@ -110,13 +112,13 @@ export default function WaiverFilters({
           ))}
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-white/50">Sort</span>
+          <span className="text-[var(--muted)]">Sort</span>
           <select
             value={sort}
             onChange={(e) => onSortChange(e.target.value)}
             aria-label="Waiver sort order"
             data-testid="waiver-sort-order"
-            className="rounded-lg border border-white/15 bg-black/60 px-2 py-1 text-[11px] text-white outline-none"
+            className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2 py-1 text-[11px] text-[var(--text)] outline-none"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -127,7 +129,7 @@ export default function WaiverFilters({
               type="button"
               onClick={onResetFilters}
               data-testid="waiver-reset-filters"
-              className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/70 hover:text-white"
+              className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2 py-1 text-[11px] text-[var(--muted)] hover:text-[var(--text)]"
             >
               Reset
             </button>

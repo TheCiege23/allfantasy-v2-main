@@ -88,7 +88,7 @@ export function PlayerSharesBoard({
           {rows.map((r, i) => {
             const cell = league?.cells[r.player.sleeperId] ?? null
             const holder = cell ? holderLabel(cell.holder, t) : null
-            const href = `/core/players?q=${encodeURIComponent(r.player.name)}&player=${encodeURIComponent(playerRef(r.player.sport, r.player.externalId))}${leagueParam}`
+            const href = `/core/players?q=${encodeURIComponent(r.player.name)}&player=${encodeURIComponent(playerRef(r.player.sport, r.player.externalId, r.player.source))}${leagueParam}`
             const pct = Math.round(shareOf(r.leagues, leaguesRead) * 100)
             return (
               <li key={r.player.sleeperId} className="af-pf-share" data-tone={r.status?.tone ?? 'none'}>

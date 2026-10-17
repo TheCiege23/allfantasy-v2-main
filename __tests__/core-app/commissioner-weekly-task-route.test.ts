@@ -46,3 +46,5 @@ describe('league-scoped weekly tasks', () => {
 })
 
 describe('weekly issue traceability',()=>{it('stores an exact-league issue link and rejects foreign issue IDs',async()=>{expect((await POST(req('POST',{...body,issueId:'B:lineup'}))).status).toBe(400);expect(m.create).not.toHaveBeenCalled();expect((await POST(req('POST',{...body,issueId:'A:lineup'}))).status).toBe(200);expect(m.create.mock.calls[0][0].data[0].relatedLinks[0].href).toBe('/core/week?league=A#weekly-issue-A%3Alineup')})})
+
+describe('weekly task permission revocation',()=>{it('rechecks permission before a status update and leaves the audit untouched',async()=>{m.role.mockResolvedValue(false);const patch={id:'task',expectedStatus:'open',expectedUpdatedAt:'2026-10-07T12:00:00Z',status:'completed'};expect((await PATCH(req('PATCH',patch))).status).toBe(403);expect(m.update).not.toHaveBeenCalled();expect(m.audit).not.toHaveBeenCalled()})})

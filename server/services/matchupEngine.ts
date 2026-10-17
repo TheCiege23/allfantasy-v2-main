@@ -70,7 +70,7 @@ async function resolveCategoryOutcomesForWeek(
   }
 
   const rows = await prisma.teamWeekResult.findMany({
-    where: { leagueId, season, week },
+    where: { leagueId, season, week, status: 'final' },
   })
   const byId = new Map(rows.map((r) => [r.rosterId, r]))
 
@@ -171,7 +171,7 @@ export async function resolveMatchupOutcomesForWeek(
   const tieMode = getMatchupTiebreakerMode(scoringSettings)
 
   const rows = await prisma.teamWeekResult.findMany({
-    where: { leagueId, season, week },
+    where: { leagueId, season, week, status: 'final' },
   })
   const byId = new Map(rows.map((r) => [r.rosterId, r]))
 

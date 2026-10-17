@@ -108,11 +108,11 @@ export const HOME_TOPICS = {
   startersInDoubt: {
     en: {
       title: 'Starters in doubt',
-      body: 'Players in at least one of your starting lineups whose status rules them out: Out, IR or IL, PUP, NFI or a suspension. Questionable and Doubtful players aren’t listed. The most valuable come first; a player we hold no trade value for goes after every priced one.',
+      body: 'Players in at least one of your starting lineups whose status rules them out: Out, IR or IL, PUP, NFI or a suspension. Questionable and Doubtful players aren’t listed. The most valuable come first; a player we hold no trade value for goes after every priced one. Best ball leagues set the lineup for you, so they never count as starting; instead you see a depth check when at least half the players at a position are hurt or questionable and the healthy ones barely fill the slots.',
     },
     es: {
       title: 'Titulares en duda',
-      body: 'Jugadores en al menos una de tus alineaciones titulares cuyo estado los descarta: Fuera, IR o IL, PUP, NFI o una suspensión. Los marcados como Dudoso o Poco probable no aparecen. Los más valiosos van primero; un jugador sin valor de cambio registrado va después de todos los que tienen precio.',
+      body: 'Jugadores en al menos una de tus alineaciones titulares cuyo estado los descarta: Fuera, IR o IL, PUP, NFI o una suspensión. Los marcados como Dudoso o Poco probable no aparecen. Los más valiosos van primero; un jugador sin valor de cambio registrado va después de todos los que tienen precio. Las ligas best ball arman la alineación solas, así que nunca cuentan como titulares; en su lugar ves un aviso de profundidad cuando al menos la mitad de los jugadores de una posición están lesionados o en duda y los sanos apenas cubren los puestos.',
     },
   },
   participationTier: {

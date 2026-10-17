@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attachSlateGames, deriveImpact } from '@/lib/live/liveImpact'
+import { attachSlateGames, deriveImpact, playAgeLabel, starterStageCounts, starterStageDetail } from '@/lib/live/liveImpact'
 import type { LiveGameCard, LivePlay } from '@/lib/live/liveScoresPage'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import { liveViewUrl } from '@/components/core-app/screens/LiveScores'
@@ -126,23 +126,53 @@ describe('liveViewUrl', () => {
   })
 })
 
-describe('impact total label', () => {
+describe('impact total — kept in the data, no longer the headline', () => {
   const two = [
     card('g1', 'A', 'B', { tieIns: [{ leagueId: 'L1', playerName: 'Ann', points: 5 }, { leagueId: 'L2', playerName: 'Ann', points: 4 }] }),
   ]
-  it('counts distinct leagues and sums the points from each', () => {
+  it('still counts distinct leagues and sums the points from each', () => {
     const impact = deriveImpact(two, [], { onlyTheseGamesPlays: false })
     expect(impact).toMatchObject({ totalPoints: 9, liveLeagues: 2 })
   })
-  it('says the total spans leagues when it does', async () => {
-    const { impactTotalLabel } = await import('@/lib/live/liveImpact')
-    const impact = deriveImpact(two, [], { onlyTheseGamesPlays: false })
-    expect(impactTotalLabel(impact, false)).toBe('fantasy pts scored live across your 2 leagues right now')
+  it('counts the player ONCE as a live starter, however many leagues he starts in', () => {
+    const sameAnn = two.map((g) => ({ ...g, tieIns: g.tieIns.map((t) => ({ ...t, playerId: 'ann' })) }))
+    const impact = deriveImpact(sameAnn, [], { onlyTheseGamesPlays: false })
+    expect(impact).toMatchObject({ livePlayers: 1, upcomingPlayers: 0, finishedPlayers: 0 })
   })
-  it('says this league when one is held, and stays plain for a single league', async () => {
-    const { impactTotalLabel } = await import('@/lib/live/liveImpact')
-    expect(impactTotalLabel({ liveLeagues: 2 }, true)).toBe('fantasy pts scored live in this league right now')
-    expect(impactTotalLabel({ liveLeagues: 1 }, false)).toBe('fantasy pts scored live right now')
-    expect(impactTotalLabel({}, false)).toBe('fantasy pts scored live right now')
+})
+
+describe('starterStageCounts / starterStageDetail / playAgeLabel', () => {
+  const tie = (playerId: string, isStarter = true) => ({
+    leagueId: 'L1', leagueName: 'L1', playerId, playerName: playerId, position: 'WR', imageUrl: null, isStarter, points: 1,
+  })
+  const g = (isLive: boolean, completed: boolean, ids: ReturnType<typeof tie>[]) => ({ isLive, completed, tieIns: ids })
+
+  it('buckets starters by their game, once each, and leaves the bench out', () => {
+    const counts = starterStageCounts([
+      g(true, false, [tie('a'), tie('b'), tie('bench', false)]),
+      g(false, false, [tie('c'), tie('d')]),
+      g(false, true, [tie('e')]),
+    ])
+    expect(counts).toEqual({ live: 2, upcoming: 2, finished: 1 })
+  })
+
+  it('a player in a live game is not also "still to play"', () => {
+    expect(starterStageCounts([g(true, false, [tie('a')]), g(false, false, [tie('a')])])).toEqual({ live: 1, upcoming: 0, finished: 0 })
+  })
+
+  it('describes the rest of the slate', () => {
+    expect(starterStageDetail({ livePlayers: 47, liveGames: 3, upcomingPlayers: 17, finishedPlayers: 140 })).toBe(
+      'across 3 games · 17 still to play · 140 done',
+    )
+    expect(starterStageDetail({ livePlayers: 0, liveGames: 0, upcomingPlayers: 4, finishedPlayers: 0 })).toBe('4 still to play')
+  })
+
+  it('says how long ago a play happened, and nothing without a clock', () => {
+    const now = Date.parse('2026-10-11T18:30:00Z')
+    expect(playAgeLabel('2026-10-11T18:29:40Z', now)).toBe('just now')
+    expect(playAgeLabel('2026-10-11T18:26:00Z', now)).toBe('4 min ago')
+    expect(playAgeLabel('2026-10-11T16:00:00Z', now)).toBe('2 hr ago')
+    expect(playAgeLabel('2026-10-11T18:26:00Z', null)).toBeNull()
+    expect(playAgeLabel('not a date', now)).toBeNull()
   })
 })

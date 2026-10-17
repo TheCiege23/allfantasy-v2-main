@@ -1,3 +1,4 @@
+import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -7,7 +8,6 @@ import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/leagu
 import {
   lockVoting,
   openTribalCouncil,
-  submitVote,
 } from '@/lib/survivor/votingEngine'
 import { playIdol } from '@/lib/survivor/idolEngine'
 import { executeRocksDraw } from '@/lib/survivor/rocksEngine'
@@ -15,6 +15,8 @@ import { removeRosterFromTribeChat } from '@/lib/survivor/SurvivorChatMembership
 import { enrollInExile } from '@/lib/survivor/SurvivorExileEngine'
 import { enrollJuryMember, shouldJoinJury } from '@/lib/survivor/SurvivorJuryEngine'
 import { postLeagueRevealFollowUp, postScrollRevealToTribeChat } from '@/lib/survivor/leagueChatPoster'
+
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -51,6 +53,11 @@ export async function POST(req: NextRequest) {
   const action = typeof body.action === 'string' ? body.action : ''
   if (!leagueId || !action) return NextResponse.json({ error: 'leagueId and action required' }, { status: 400 })
 
+  if (!['vote', 'play_idol'].includes(action)) {
+    const denied = await survivorHostGuard(leagueId, userId)
+    if (denied) return denied
+  }
+
   if (action === 'open') {
     const gate = await assertLeagueCommissioner(leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -64,29 +71,8 @@ export async function POST(req: NextRequest) {
   if (action === 'vote') {
     const gate = await assertLeagueMember(leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
-    const councilId = typeof body.councilId === 'string' ? body.councilId : ''
-    const targetUserId = typeof body.targetUserId === 'string' ? body.targetUserId : ''
-    const voterRosterId = typeof body.voterRosterId === 'string' ? body.voterRosterId : ''
-    const targetRosterId = typeof body.targetRosterId === 'string' ? body.targetRosterId : ''
-    if (!councilId || !targetUserId || !voterRosterId || !targetRosterId) {
-      return NextResponse.json({ error: 'councilId, targetUserId, voterRosterId, targetRosterId required' }, { status: 400 })
-    }
-    const council = await prisma.survivorTribalCouncil.findUnique({
-      where: { id: councilId, leagueId },
-      select: { id: true },
-    })
-    if (!council) return NextResponse.json({ error: 'Council not found' }, { status: 404 })
-    try {
-      const out = await submitVote(councilId, userId, targetUserId, { voterRosterId, targetRosterId })
-      return NextResponse.json(out)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Conflict'
-      const status = msg.startsWith('409_CONFLICT') || msg.includes('409') ? 409 : 400
-      return NextResponse.json(
-        { error: msg.replace(/^409_CONFLICT:\s*/, '') },
-        { status },
-      )
-    }
+    const result = await submitPrivateVoteCommand(leagueId, userId, typeof body.message === 'string' ? body.message : '')
+    return NextResponse.json(result, { status: result.ok ? 200 : result.status })
   }
 
   if (action === 'play_idol') {

@@ -815,8 +815,10 @@ const spanish: Record<string, string> = {
   'Search league or platform': 'Buscar liga o plataforma',
   'No connected league matches that search.': 'Ninguna liga conectada coincide con la búsqueda.',
   'Trade Center': 'Centro de intercambios',
-  'Choose a league, add what you send and get, then review the grade. League scoring, roster fit, schedule and strategy stay beside the result.': 'Elige una liga, añade lo que envías y recibes, y revisa la calificación. Junto al resultado verás la puntuación, las plantillas, el calendario y la estrategia.',
+  'Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.': 'Elige una liga, añade lo que envías y recibes, y revisa la calificación. La calificación compara el valor de mercado para el formato y la puntuación de esta liga; el encaje en tu plantilla y el cambio en tu alineación aparecen al lado.',
   'AllFantasy never sends a trade for you — build it here, then send it there.': 'AllFantasy no envía el intercambio por ti. Prepáralo aquí y envíalo en tu plataforma.',
+  'Roster spot you give up — you receive more players, so a full roster drops one': 'Plaza de plantilla que cedes: recibes más jugadores, así que una plantilla llena tiene que soltar uno',
+  'Roster spot you gain — you receive fewer players, so you can add one': 'Plaza de plantilla que ganas: recibes menos jugadores, así que puedes fichar uno',
   'Switch league': 'Cambiar de liga',
   connected: 'conectadas',
   'tradeable asset types': 'tipos de activos intercambiables',
@@ -926,7 +928,7 @@ const spanish: Record<string, string> = {
   'Pricing this deal against your league’s values and rosters — usually 5 to 15 seconds.': 'Calculando el valor según tu liga y las plantillas. Suele tardar entre 5 y 15 segundos.',
   'trade value today — roster fit and realized production are separate': 'Valor actual del intercambio · el ajuste a tu plantilla y el rendimiento real se muestran aparte',
   'Graded on market value': 'Calificado según el valor de mercado',
-  'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Roster fit does not change the letter. Refreshed market values can change a later evaluation.': 'Esta calificación usa las mismas reglas de puntuación y valoración que el historial y el correo. El ajuste a tu plantilla no cambia la letra. Una evaluación posterior puede variar si cambian los valores de mercado.',
+  'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Refreshed market values can change a later evaluation.': 'Esta calificación usa las mismas reglas de puntuación y valoración que el historial y el correo. Una evaluación posterior puede variar si cambian los valores de mercado.',
   'Grade unavailable': 'Calificación no disponible',
   'No verdict': 'Sin evaluación',
   Favours: 'Favorece a',
@@ -1265,6 +1267,24 @@ const spanish: Record<string, string> = {
   Suspension: 'Suspendido',
   Suspended: 'Suspendido',
   'Injured Reserve': 'Lista de lesionados',
+  // Bracket Challenge's picks panel and where its picks are kept (components/core-app/screens/BracketChallenge.tsx).
+  'Pick your champion': 'Elige a tu campeón',
+  Champion: 'Campeón',
+  'Choose a team…': 'Elige un equipo…',
+  Change: 'Cambiar',
+  'In how many games?': '¿En cuántos partidos?',
+  'Series length': 'Duración de la serie',
+  'Loading your saved picks…': 'Cargando tus selecciones guardadas…',
+  'Your picks are saved to your account, so a reload keeps them. This is your own pick, not a pool entry — to play it against friends,':
+    'Tus selecciones se guardan en tu cuenta, así que siguen aquí al recargar. Es tu predicción personal, no una entrada de pool. Para competir con amigos,',
+  'Picks here are a preview and are not saved — a reload clears them. To make picks that count,':
+    'Estas selecciones son una vista previa y no se guardan: al recargar se borran. Para hacer selecciones que cuenten,',
+  'join or start a pool': 'únete a un pool o crea uno',
+  'Saving…': 'Guardando…',
+  Saved: 'Guardado',
+  'Not saved — check your connection and try again.': 'No se guardó. Revisa tu conexión e inténtalo de nuevo.',
+  'Try again': 'Reintentar',
+  'Nothing picked yet — picks save as you make them.': 'Aún no has elegido nada. Tus selecciones se guardan al hacerlas.',
 }
 
 /** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */

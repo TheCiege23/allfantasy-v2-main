@@ -36,19 +36,21 @@ import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSetti
 const ROOT = resolve(__dirname, '../components/league-settings')
 const FILES = ['DraftSettingsCommissionerPanel.tsx', 'RosterSettingsEditor.tsx', 'PlayoffSettingsEditor.tsx',
   ...['ReadOnlyRosterRow', 'ResetToDefaultButton', 'RosterRowControl', 'RosterSectionRenderer'].map((f) => `roster/${f}.tsx`)]
-const TIMERS = [30, 60, 90, 120, 300, 600, 3600, 14400, 28800, 43200, 86400]
+// The draft panel's timer list lives in lib/draft/draftSettingsPolicy.ts (standard + legacy 12h/24h).
+const TIMERS = [30, 60, 90, 120, 300, 600, 1200, 1800, 3600, 7200, 14400, 21600, 28800, 43200, 86400]
+const DRAFT_POLICY = resolve(__dirname, '../lib/draft/draftSettingsPolicy.ts')
 const CATEGORIES = ['offense', 'flex', 'kicker', 'dst', 'idp', 'bench', 'reserve', 'college']
 
 describe('every key the editors name exists in BOTH languages', () => {
   const keys = [...new Set(FILES.flatMap((f) => [...readFileSync(resolve(ROOT, f), 'utf8').matchAll(/['"`](lsEd\.[A-Za-z0-9_.]+)['"`]/g)].map((m) => m[1]!)))]
   it('🛑 read from the files', () => {
-    expect(keys.length).toBeGreaterThanOrEqual(90) // the scan must see the real keys
-    expect(keys).toEqual(expect.arrayContaining(['lsEd.dr.w2fDesc', 'lsEd.ro.importMapping', 'lsEd.po.intro', 'lsEd.ro.decrease']))
+    expect(keys.length).toBeGreaterThanOrEqual(75) // (was 90 before the roster import block was removed) the scan must see the real keys
+    expect(keys).toEqual(expect.arrayContaining(['lsEd.dr.w2fDesc', 'lsEd.ro2.injured', 'lsEd.po.intro', 'lsEd.ro.decrease']))
     expect(keys.filter((k) => !translations.en[k])).toEqual([])
     expect(keys.filter((k) => !translations.es[k])).toEqual([])
   })
   it('the keys built at runtime — timer options and category headings', () => {
-    const draft = readFileSync(resolve(ROOT, FILES[0]!), 'utf8')
+    const draft = readFileSync(DRAFT_POLICY, 'utf8')
     for (const s of TIMERS) expect(draft, String(s)).toContain(String(s))
     const runtime = [...TIMERS.map((s) => `lsEd.dr.timer.s${s}`), ...CATEGORIES.map((c) => `lsEd.ro.cat.${c}`)]
     expect(runtime.filter((k) => !translations.en[k] || !translations.es[k])).toEqual([])
@@ -128,33 +130,35 @@ describe('🛑 the editors read Spanish in Spanish', () => {
     const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
     await r.findByText('Vista previa del orden del draft de novatos 2027')
     const text = r.container.textContent ?? ''
-    for (const s of ['Define la hora del draft', 'Según tu zona horaria local', 'Serpiente', 'Lineal', 'Subasta', '90 segundos', '8 horas', '15 rondas',
-      'Pausar desde', 'Llenar con IA', 'Vacío', '(Haz clic para reasignar)', 'Definir jugadores keeper/dynasty', 'Definir jugadores',
-      'Calculado automáticamente para la temporada 2027', 'Modo de orden del draft', 'Sin playoffs', 'Equipos de playoffs', 'Campeón', 'Subcampeón']) {
+    for (const s of ['Horario, reloj de selección, rondas y orden del draft.', 'Según tu zona horaria local', 'Elige una fecha', 'Elige una hora',
+      'Serpiente', 'Lineal', 'Subasta', '90 segundos', '8 horas', '15 rondas', 'Draft en vivo', 'Solo para drafts lentos',
+      'Llenar con CI', 'Vacío', 'Calculado automáticamente para la temporada 2027', 'Modo de orden del draft', 'Sin playoffs', 'Equipos de playoffs', 'Campeón', 'Subcampeón']) {
       expect(text, s).toContain(s)
     }
-    expect(r.container.querySelector('[title="Llenar todos los puestos vacíos del draft con rivales de IA"]')).not.toBeNull()
+    expect(r.container.querySelector('[title="Llenar los puestos vacíos con equipos de Chimmy Intelligence"]')).not.toBeNull()
+    // Keepers block is gone; the panel never says "IA" (the brand is Chimmy Intelligence).
+    expect(text).not.toContain('Definir jugadores')
+    expect(text).not.toMatch(/\bIA\b/)
     expect(englishIn(r.container)).toEqual([])
   })
 
-  it('the roster editor, as commissioner — totals, template, import, categories, row controls', async () => {
+  it('the roster editor, as commissioner — template, categories, row controls (no totals, no import)', async () => {
     lang.language = 'es'
     stubFetch()
     const r = render(<RosterSettingsEditor leagueId="l1" />)
     await r.findByText('Ajustes de plantilla')
     const text = r.container.textContent ?? ''
-    for (const s of ['Define los puestos de la alineación', 'Titulares:', 'Banca/Reserva:', 'La plantilla actual ya no coincide', 'Plantilla base', 'Personalizada',
-      'Aplicar plantilla', 'Mapeo de importación', 'Plataforma de origen', 'JSON de puestos importados', 'Vista previa de la importación', 'Aplicar importación',
-      'Principal', 'Ofensiva', 'Pateador', 'Banca', 'Guardar', 'Restablecer al predeterminado de la liga']) {
+    // The totals line and the Yahoo-JSON import block are gone from the commissioner UI (2026-10-14);
+    // the fixture's sport is MLB, so the starters heading is the sport-neutral one, not "Offense".
+    for (const s of ['Define los puestos de la alineación', 'La plantilla actual ya no coincide', 'Plantilla base', 'Personalizada',
+      'Aplicar plantilla', 'Alineación titular', 'Pateador', 'Banca', 'Guardar', 'Restablecer al predeterminado de la liga', 'MLB']) {
       expect(text, s).toContain(s)
     }
     expect(r.container.querySelector('[aria-label="Reducir QB"]')).not.toBeNull()
     expect(r.container.querySelector('[aria-label="Aumentar QB"]')).not.toBeNull()
     expect(englishIn(r.container)).toEqual([])
-    // A bad import payload reports in Spanish.
-    fireEvent.change(r.container.querySelector('#roster-import-json')!, { target: { value: '{"QB": "x"}' } })
-    fireEvent.click(r.getByText('Vista previa de la importación'))
-    await r.findByText('El puesto importado QB debe ser numérico')
+    for (const gone of ['Titulares:', 'Banca/Reserva:', 'Mapeo de importación', 'JSON de puestos importados']) expect(text, gone).not.toContain(gone)
+    expect(r.container.querySelector('#roster-import-json')).toBeNull()
   })
 
   it('the roster editor, read-only', async () => {
@@ -188,7 +192,8 @@ describe('🛑 the editors read Spanish in Spanish', () => {
     stubFetch()
     const d = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
     await d.findByText('2027 Rookie Draft Order Preview')
-    for (const s of ['90 Seconds', '15 Rounds', 'Snake', 'Fill with AI', 'Auto-calculated for 2027 season', 'Champion', 'Runner-Up']) expect(d.container.textContent, s).toContain(s)
+    for (const s of ['90 Seconds', '15 rounds', 'Snake', 'Fill with CI', 'Pick a date', 'Live draft', 'Auto-calculated for 2027 season', 'Champion', 'Runner-Up']) expect(d.container.textContent, s).toContain(s)
+    expect(d.container.textContent).not.toMatch(/\bAI\b|Set Players|Keepers/)
     cleanup()
     const p = render(<PlayoffSettingsEditor leagueId="l1" />)
     await p.findByText('Playoff Format — NFL')

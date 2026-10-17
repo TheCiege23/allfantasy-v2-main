@@ -3,6 +3,7 @@
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
@@ -67,12 +68,22 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
   const { language } = useOptionalLanguage()
   const es = language === 'es'
   const copy = (english: string) => coreUiCopy(english, language)
+  /*
+   * Arriving from the home's "Add <player> in <league>" button (TriageBestAdd): `player` is the add
+   * to highlight, `out` the injured starter the button priced at zero. Passing `out` on prices this
+   * board the same way, so the player the button named is the one at the top here. Null-safe: tests
+   * and pages without the app router have no search params.
+   */
+  const params = useSearchParams()
+  const highlight = params?.get('player') ?? null
+  const outParam = params?.get('out') ?? null
+  const out = outParam && /^[A-Za-z0-9_-]{1,32}$/.test(outParam) ? outParam : null
 
   useEffect(() => {
     let alive = true
     setBoard(null)
     setFailed(false)
-    fetch(`/api/idp/players?leagueId=${encodeURIComponent(leagueId)}&view=waiver-board&limit=10`)
+    fetch(`/api/idp/players?leagueId=${encodeURIComponent(leagueId)}&view=waiver-board&limit=10${out ? `&unavailable=${encodeURIComponent(out)}` : ''}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status))
         return (await r.json()) as WaiverBoard
@@ -82,7 +93,14 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
     return () => {
       alive = false
     }
-  }, [leagueId])
+  }, [leagueId, out])
+
+  // Bring the highlighted add into view once the board has drawn him.
+  useEffect(() => {
+    if (!highlight || !board) return
+    const el = document.querySelector(`[data-wlb-player="${CSS.escape(highlight)}"]`)
+    if (el && typeof (el as HTMLElement).scrollIntoView === 'function') (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [highlight, board])
 
   /*
    * A panel that cannot form an opinion removes itself. The rest of this screen is the real
@@ -147,7 +165,12 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
       ) : (
         <ul className="af-wlb-list">
           {board.candidates.map((c) => (
-            <li key={c.sleeperId ?? c.playerKey ?? c.name} className="af-wlb-row">
+            <li
+              key={c.sleeperId ?? c.playerKey ?? c.name}
+              className="af-wlb-row"
+              data-wlb-player={c.sleeperId ?? undefined}
+              data-highlight={highlight && c.sleeperId === highlight ? 'true' : undefined}
+            >
               <span className="af-wlb-who">
                 <span className="af-wlb-name">
                   {/*

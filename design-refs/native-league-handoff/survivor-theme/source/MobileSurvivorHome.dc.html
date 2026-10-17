@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor league home (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="ex" style="height: 844px; display: flex; flex-direction: column; overflow: hidden">
+  <div style="flex: 1; overflow-y: auto">
+    <section style="position: relative; height: 330px; overflow: hidden">
+      <img src="{{bg}}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 66% 60%">
+      <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,8,13,.35) 0%, rgba(7,8,13,.05) 35%, #07080d 100%)"></div>
+      <div style="position: relative; height: 100%; display: flex; flex-direction: column; padding: 12px 14px 22px; color: #fff">
+        <div style="display: flex; gap: 8px; align-items: center">
+          <a class="ex-btn" href="Mobile.dc.html" aria-label="Back" style="min-height: 44px; padding: 0 14px; background: rgba(7,8,13,.5); border-color: rgba(255,255,255,.16); color: #fff">‹</a>
+          <span style="flex: 1"></span>
+          <div class="ex-seg" style="background: rgba(7,8,13,.55)"><sc-for list="{{moods}}" as="m" hint-placeholder-count="4"><button class="{{m.cls}}" onClick="{{m.pick}}" style="min-height: 36px; padding: 0 9px; flex: none">{{m.label}}</button></sc-for></div>
+        </div>
+        <span style="flex: 1"></span>
+        <span style="font: 700 11px 'Cinzel', serif; letter-spacing: .2em; color: #f1d58a; text-shadow: 0 2px 12px rgba(0,0,0,.5)">{{tag}}</span>
+        <h1 style="margin: 4px 0 6px; font: 700 34px/1 'Archivo', sans-serif; letter-spacing: -.03em; text-shadow: 0 2px 18px rgba(0,0,0,.5)">Blah Survivor</h1>
+        <span style="font-size: 13px; color: rgba(255,255,255,.85)">Week 6 · 12 of 16 left · Tribe Vela</span>
+      </div>
+    </section>
+    <div style="position: relative; display: flex; flex-direction: column; gap: 12px; padding: 0 14px 20px; margin-top: -8px">
+      <div class="ex-card2" style="padding: 14px; display: flex; gap: 12px; align-items: center; border-color: rgba(242,201,76,.3)">
+        <img src="survivor/idols/immunity.svg" alt="" style="height: 92px">
+        <div style="display: flex; flex-direction: column; gap: 4px"><span class="ex-lbl" style="color: #d9b45a">Your idol</span><span style="font: 700 16px 'Cinzel', serif; color: #f2c94c">Immunity idol</span><span class="ex-t2" style="font-size: 12px">Play it before votes close tonight.</span></div>
+      </div>
+      <div class="ex-card2" style="padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline"><span class="ex-lbl">Tribal Council</span><span class="ex-num" style="color: #d9b45a; font-size: 16px">1d 04:12</span></div>
+        <img src="exile/scroll-sealed.svg" alt="" style="width: 70%; align-self: center">
+        <a class="ex-btn ex-btn-gold" href="MobileTribal.dc.html" style="min-height: 46px">Cast your vote</a>
+      </div>
+      <div class="ex-card2" style="padding: 6px 14px">
+        <sc-for list="{{tribes}}" as="t" hint-placeholder-count="4">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: {{t.bt}}"><img src="{{t.mark}}" alt="" style="width: 30px; height: 30px; border-radius: 999px"><span style="flex: 1; font-weight: 600">{{t.name}}</span><span class="ex-num ex-t2">{{t.pts}}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { mood: 'dusk' }; }
+  renderVals() {
+    const st = this.state;
+    const M = [['day', 'Day', 'Regular week'], ['dusk', 'Dusk', 'Vote deadline today'], ['night', 'Night', 'Tribal Council'], ['exile', 'Exile', 'Exile Island']];
+    const moods = M.map(([id, label]) => ({ label, cls: 'ex-sg' + (st.mood === id ? ' ex-sg-on' : ''), pick: () => this.setState({ mood: id }) }));
+    const tribes = [['Vela', 'manta', '131.2'], ['Koa', 'shark', '118.4'], ['Rumo', 'boar', '102.9'], ['Tiki', 'tiki', '96.0']].map(([name, m, pts], i) => ({ name, pts, mark: 'tribes/marks/' + m + '.svg', bt: i ? '1px solid rgba(255,255,255,.06)' : '0' }));
+    return { bg: 'survivor/bg/' + st.mood + '-football.svg', moods, tag: M.find(m => m[0] === st.mood)[2], tribes };
+  }
+}
+</script>
+</body>
+</html>

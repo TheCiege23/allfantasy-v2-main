@@ -74,7 +74,7 @@ describe('G32 NFL redraft league home dashboard', () => {
     expect(screen.getAllByRole('heading', { name: 'Draft HQ' })[0]).toBeInTheDocument()
     expect(screen.getByTestId('g32-manager-intelligence-section')).toHaveTextContent('Locked Manager Intelligence preview')
     expect(screen.getByText('AF Pro preview')).toBeInTheDocument()
-    expect(screen.getByText('Ask Chimmy')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ask Chimmy' })).toBeInTheDocument()
     expect(screen.getByText('League helper')).toBeInTheDocument()
   })
 

@@ -151,6 +151,8 @@ export async function loadAuditTimeline(grant: CommissionerGrant, limit = 40): P
         select: {
           id: true,
           actionType: true,
+          beforeState: true,
+          afterState: true,
           entityType: true,
           metadata: true,
           createdAt: true,

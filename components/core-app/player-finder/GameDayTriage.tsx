@@ -91,7 +91,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
       ) : (
         <ul className="af-pf-triage-list">
           {rows.map((r) => {
-            const href = `/core/players?q=${encodeURIComponent(r.player.name)}&player=${encodeURIComponent(playerRef(r.player.sport, r.player.externalId))}`
+            const href = `/core/players?q=${encodeURIComponent(r.player.name)}&player=${encodeURIComponent(playerRef(r.player.sport, r.player.externalId, r.player.source))}`
             const locked = r.kickoff ? lockState(r.kickoff, nowIso).state === 'locked' : false
             const detail = chipDetail(r.status?.label ?? null, r.description)
             const count = r.leagues.length

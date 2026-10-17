@@ -692,6 +692,7 @@ export async function getMatchupPulse(
   ]
 
   const platformByLeague = new Map(pending.map((p) => [p.leagueId, p.platform]))
+  const sportByLeague = new Map(pending.map((p) => [p.leagueId, p.sport]))
   // In Sleeper ids: an ESPN lineup translated, any other foreign one emptied — a Fleaflicker/MFL/
   // Fantrax/Yahoo starter id (or an untranslatable ESPN one: 12483 is Stafford there, Jack Bech in
   // Sleeper's space) would be priced as a stranger; such a lineup lands in `unpriceable`.
@@ -704,6 +705,7 @@ export async function getMatchupPulse(
           })
           .catch(() => []),
         (r) => platformByLeague.get(r.leagueId),
+        (r) => sportByLeague.get(r.leagueId),
       )
     : []
   const startersBy = new Map<string, string[]>()

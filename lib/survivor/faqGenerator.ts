@@ -43,8 +43,8 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
 
 **HOW IT WORKS**
 • Tribes compete weekly through fantasy ${sport} scoring
-• The tribe with the lowest combined score goes to Tribal Council
-• At Tribal Council, tribe members vote someone out privately via @Chimmy
+• The tribe with the lowest combined score goes to Elimination Council
+• At Elimination Council, tribe members vote someone out privately via @Chimmy
 • Voted-out players are sent to Exile Island
 • At a configured point, tribes merge into one — individual immunity begins
 • After merge, the highest individual scorer each week wins immunity

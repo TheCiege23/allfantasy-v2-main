@@ -1,0 +1,43 @@
+/* AllFantasy Survivor share cards. Designed at native export size; scale the .shc box to preview. */
+.shc{box-sizing:border-box;position:relative;overflow:hidden;background:#07080d;color:#f3ead6;font-family:'Archivo',system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+.shc *{box-sizing:border-box}
+.shc-post{width:1080px;height:1350px;padding:72px 72px 64px}
+.shc-story{width:1080px;height:1920px;padding:120px 80px 110px}
+.shc-link{width:1200px;height:630px;padding:48px 56px;flex-direction:row;align-items:center;gap:40px}
+.shc-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.shc-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(7,8,13,.55) 0%,rgba(7,8,13,.15) 30%,rgba(7,8,13,.35) 55%,rgba(7,8,13,.92) 82%,#07080d 100%)}
+.shc-link .shc-veil{background:linear-gradient(90deg,rgba(7,8,13,.25) 0%,rgba(7,8,13,.55) 40%,rgba(7,8,13,.94) 62%,#07080d 100%)}
+.shc-top,.shc-mid,.shc-text,.shc-foot{position:relative;z-index:2}
+.shc-top{display:flex;align-items:center;justify-content:space-between}
+.shc-brand{display:flex;align-items:center;gap:14px;font:800 34px 'Archivo',sans-serif;letter-spacing:-.02em;color:#fff}
+.shc-brand i{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font:800 22px 'Archivo';font-style:normal;color:#1a1204;background:linear-gradient(135deg,#f1d58a,#d9b45a 55%,#a77c26)}
+.shc-league{display:flex;align-items:center;gap:12px;padding:10px 18px 10px 10px;border-radius:999px;background:rgba(7,8,13,.6);border:1px solid rgba(255,255,255,.14);font:600 24px 'Archivo';color:#e8eaf2}
+.shc-league img{width:44px;height:44px}
+.shc-mid{flex:1;display:flex;align-items:center;justify-content:center;position:relative}
+.shc-mid::before{content:"";position:absolute;width:70%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,var(--glow,rgba(242,201,76,.45)),transparent 65%)}
+.shc-hero{position:relative;max-height:100%;filter:drop-shadow(0 30px 40px rgba(0,0,0,.6))}
+.shc-post .shc-hero{height:560px}
+.shc-story .shc-hero{height:780px}
+.shc-link .shc-mid{flex:0 0 420px;height:100%}
+.shc-link .shc-hero{height:440px}
+.shc-text{display:flex;flex-direction:column;gap:18px}
+.shc-link .shc-text{flex:1;gap:14px}
+.shc-kick{display:inline-flex;align-self:flex-start;align-items:center;gap:10px;padding:8px 16px;border-radius:6px;font:700 22px 'Archivo';letter-spacing:.14em;text-transform:uppercase;color:var(--accent,#f2c94c);background:rgba(7,8,13,.55);border:1.5px solid var(--accent,#f2c94c)}
+.shc-head{margin:0;font:700 84px/1.04 'Cinzel',serif;letter-spacing:.01em;color:var(--head,#f1d58a);text-shadow:0 4px 24px rgba(0,0,0,.6)}
+.shc-story .shc-head{font-size:100px}
+.shc-link .shc-head{font-size:54px}
+.shc-sub{font:500 32px/1.35 'Archivo';color:#d6d9e6}
+.shc-link .shc-sub{font-size:24px}
+.shc-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+.shc-stat{display:flex;flex-direction:column;gap:4px;padding:14px 20px;border-radius:12px;background:rgba(16,19,28,.78);border:1px solid rgba(255,255,255,.1);min-width:170px}
+.shc-stat>b{font:700 40px 'JetBrains Mono',monospace;color:#fff}
+.shc-stat>span{font:600 18px 'Archivo';letter-spacing:.1em;text-transform:uppercase;color:#8d93ad}
+.shc-link .shc-stat{padding:10px 14px;min-width:120px}.shc-link .shc-stat>b{font-size:28px}.shc-link .shc-stat>span{font-size:13px}
+.shc-foot{display:flex;align-items:center;justify-content:space-between;margin-top:34px;padding-top:26px;border-top:1px solid rgba(255,255,255,.12);font:600 24px 'Archivo';color:#a3a9c2}
+.shc-foot b{color:#f1d58a;font-weight:700}
+.shc-link .shc-foot{margin-top:14px;padding-top:14px;font-size:17px}
+/* moods */
+.shc-m-out{--accent:#ff9a3c;--head:#f3ead6;--glow:rgba(255,122,42,.35)}
+.shc-m-idol{--accent:#7fe0c0;--head:#f1d58a;--glow:rgba(127,224,192,.4)}
+.shc-m-exile{--accent:#f2c94c;--head:#f1d58a;--glow:rgba(242,201,76,.5)}
+.shc-m-champ{--accent:#f2c94c;--head:#ffe7a3;--glow:rgba(255,214,107,.6)}

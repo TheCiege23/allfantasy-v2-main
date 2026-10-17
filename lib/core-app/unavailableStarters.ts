@@ -50,15 +50,17 @@ export async function loadAbsencesBySport(args: {
   const playerRows = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: [...args.sleeperIds] }, sport: { in: sports } },
-      select: { sleeperId: true, name: true, team: true, sport: true },
+      select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
     })
     .catch(() => [])
   await Promise.all(
     sports.map(async (sport) => {
       const players = playerRows.filter((p) => String(p.sport).toUpperCase() === sport)
-      const teams = new Map([...composePlayerIdentities(players)].map(([id, p]) => [id, p.team]))
+      const identities = composePlayerIdentities(players)
+      const teams = new Map([...identities].map(([id, p]) => [id, p.team]))
+      const positions = new Map([...identities].map(([id, p]) => [id, p.position ?? null]))
       const [statuses, byes] = await Promise.all([
-        readInjuryStatusById(sport, namesBySleeperId(players), teams),
+        readInjuryStatusById(sport, namesBySleeperId(players), teams, positions),
         getByeWeeks({ sport, season: args.season, playerTeams: teams, fromWeek: args.week, horizon: 0 }).catch(() => null),
       ])
       const byId = new Map<string, Absence>()

@@ -82,7 +82,7 @@ describe('gradeSleeperActivityTrade', () => {
     expect(g).toEqual({
       graded: true, basis: 'first-graded', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }],
       // How the original was priced rides with it, so the feed can say so (`gradeMoment`).
-      moment: { frozenAt: '2026-09-20T12:00:00.000Z', frozenBasis: null, pricedAsOf: null, tradeAt: null },
+      moment: { frozenAt: '2026-09-20T12:00:00.000Z', frozenBasis: null, pricedAsOf: null, tradeAt: null, guillotine: false },
     })
   })
 

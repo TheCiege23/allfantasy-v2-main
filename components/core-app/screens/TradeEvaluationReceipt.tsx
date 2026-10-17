@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { TradeEvaluationReceipt as Receipt } from '@/lib/decision-os/trade/evaluationReceipt'
 import { evaluationReceiptSchema } from '@/lib/decision-os/trade/evaluationReceipt'
+import { rosterSpotRowLabel } from '@/lib/trade-value/rosterSpotCharge'
 
 const number = (value: number | null, locale: string) => value == null ? 'Unpriced' : value.toLocaleString(locale)
 
@@ -15,19 +16,22 @@ function Evaluation({ title, grade }: { title: string; grade: Receipt['grade'] }
     <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
     <h3>{copy(title)}</h3>
     {grade.graded ? <>
-      <p>{copy("Your value grade: ")}<strong>{copy(grade.letter)}</strong>{copy(" · Other team: ")}<strong>{copy(grade.partnerLetter)}</strong>{copy(" · ")}{copy(grade.percentDiff > 0 ? '+' : '')}{copy(grade.percentDiff)}{copy("%")}</p>
+      {grade.letterBasis === 'your_team' && grade.market
+        ? <p>{copy("Your grade, for your team: ")}<strong>{copy(grade.letter)}</strong>{copy(" · Market: ")}<strong>{copy(grade.market.letter)}</strong>{copy(" · Other team, on the market: ")}<strong>{copy(grade.partnerLetter)}</strong>{copy(" · ")}{copy(grade.percentDiff > 0 ? '+' : '')}{copy(grade.percentDiff)}{copy("%")}</p>
+        : <p>{copy("Your value grade: ")}<strong>{copy(grade.letter)}</strong>{copy(" · Other team: ")}<strong>{copy(grade.partnerLetter)}</strong>{copy(" · ")}{copy(grade.percentDiff > 0 ? '+' : '')}{copy(grade.percentDiff)}{copy("%")}</p>}
       <p>{copy(grade.basis)}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 16 }}>
         {(['give', 'get'] as const).map(side => <div key={side}>
           <h4>{copy(side === 'give' ? 'You give' : 'You get')}{copy(" · ")}{copy(number(side === 'give' ? grade.giveValue : grade.getValue, locale))}</h4>
           <ul>{grade.lines.filter(line => line.side === side).map((line, index) => <li key={index} style={{ overflowWrap: 'anywhere' }}>
             {line.name}{copy(": ")}<strong>{copy(number(line.leagueValue, locale))}</strong>{copy(line.marketValue !== line.leagueValue ? ` (base ${number(line.marketValue, locale)})` : '')}
-          </li>)}</ul>
+          </li>)}
+          {grade.rosterSpot?.side === side ? <li style={{ overflowWrap: 'anywhere' }}>{copy(rosterSpotRowLabel(grade.rosterSpot, 'viewer'))}{copy(": ")}<strong>{copy(number(grade.rosterSpot.value, locale))}</strong></li> : null}</ul>
         </div>)}
       </div>
       {grade.recommendation ? <p>{copy(grade.recommendation)}</p> : null}
       {grade.moves?.length ? <ul>{grade.moves.map((move, index) => <li key={index}>{move.name}{copy(": ")}{copy(move.reasons.join('; '))}</li>)}</ul> : null}
-      {grade.rosterFit ? <p>{copy("Original personal roster utility: ")}{copy(number(grade.rosterFit.giveValue, locale))}{copy(" given, ")}{copy(number(grade.rosterFit.getValue, locale))}{copy(" received. This is separate from the value grade.")}</p> : null}
+      {grade.rosterFit ? <p>{copy("Original personal roster utility: ")}{copy(number(grade.rosterFit.giveValue, locale))}{copy(" given, ")}{copy(number(grade.rosterFit.getValue, locale))}{copy(grade.letterBasis === 'your_team' ? " received. Your grade above was taken on these." : " received.")}</p> : null}
     </> : <p>{copy("Not graded: ")}{copy(grade.reason)}</p>}
   </div>
 }

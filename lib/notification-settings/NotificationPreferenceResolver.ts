@@ -4,6 +4,7 @@ import type {
   NotificationChannelPrefs,
 } from "./types"
 import {
+  EMAIL_DEFAULT_OFF_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_IDS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
   SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS,
@@ -40,7 +41,11 @@ export function getDefaultCategoryPreferences(
   opts: { smsConsented?: boolean } = {},
 ): NotificationChannelPrefs {
   if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) return { ...OPT_IN_CHANNEL }
-  return { ...DEFAULT_CHANNEL, sms: Boolean(opts.smsConsented) && SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS.includes(id) }
+  return {
+    ...DEFAULT_CHANNEL,
+    email: !EMAIL_DEFAULT_OFF_CATEGORY_IDS.includes(id),
+    sms: Boolean(opts.smsConsented) && SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS.includes(id),
+  }
 }
 
 /**

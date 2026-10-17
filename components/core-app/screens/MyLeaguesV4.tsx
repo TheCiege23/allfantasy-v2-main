@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueWorkspaceHref } from '@/lib/league/league-workspace-navigation'
 import { useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -524,8 +525,13 @@ function LeagueCard({
   tier: MyLeaguesTier
   view: ViewMode
 }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   const chips = league.chips ?? []
   const tone = league.priority === 'urgent' ? 'bad' : league.reason ? 'warn' : null
+  const dashboardLabel = league.actionLabel && league.actionLabel !== 'Open league'
+    ? league.actionLabel
+    : es ? 'Panel de la liga' : 'League dashboard'
 
   return (
     <article className="af-ml-card" data-tier={tier} data-tone={tone ?? undefined} data-view={view}>
@@ -576,9 +582,14 @@ function LeagueCard({
         </div>
       ) : null}
 
-      <Link href={league.hub?.href ?? league.href} className="af-ml-open">
-        {league.hub ? 'Open shared hub →' : league.actionLabel ?? 'Open league'}
-      </Link>
+      <div className="af-ml-card-actions">
+        <Link href={league.hub?.href ?? league.href} className="af-ml-open">
+          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : dashboardLabel}
+        </Link>
+        {!league.hub ? (
+          <Link href={leagueWorkspaceHref(league.id)} className="af-ml-open af-ml-open--workspace">{es ? 'Abrir liga ↗' : 'Open League ↗'}</Link>
+        ) : null}
+      </div>
     </article>
   )
 }

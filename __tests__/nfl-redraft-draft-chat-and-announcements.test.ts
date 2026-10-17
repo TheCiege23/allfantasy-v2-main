@@ -103,10 +103,13 @@ describe('Pick announcement is emitted only on the submitPick success path', () 
     // file than the announcement's `void import('@/lib/draft-room/postDraftPickChatEvent')`.
     const announceIdx = src.indexOf("void import('@/lib/draft-room/postDraftPickChatEvent')")
     expect(announceIdx).toBeGreaterThan(0)
+    const core = src.slice(src.indexOf('async function _submitPickCore('), src.indexOf('export async function submitPick('))
+    const coreAnnounceIdx = core.indexOf("void import('@/lib/draft-room/postDraftPickChatEvent')")
+    expect(coreAnnounceIdx).toBeGreaterThan(0)
     const failureReturnRegex = /return \{ success: false[\s\S]*?\}/g
     let m: RegExpExecArray | null
-    while ((m = failureReturnRegex.exec(src)) !== null) {
-      expect(m.index).toBeLessThan(announceIdx)
+    while ((m = failureReturnRegex.exec(core)) !== null) {
+      expect(m.index).toBeLessThan(coreAnnounceIdx)
     }
   })
 })

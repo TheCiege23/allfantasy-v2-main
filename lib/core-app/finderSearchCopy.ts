@@ -305,18 +305,34 @@ export type StripCopy = {
   label: string
   summary: (yours: number, free: number, other: number) => string
   unreadable: (n: number) => string
+  /** The folded strip (LeagueStrip.tsx FOLD_AFTER): one toggle per group that is not yours. */
+  foldLabel: string
+  foldFree: (n: number) => string
+  foldOther: (n: number) => string
+  foldUnknown: (n: number) => string
+  noneYours: string
 }
 
 const STRIP_EN: StripCopy = {
   label: 'Where he is in each of your leagues',
   summary: (y, f, o) => `Yours in ${y} · available in ${f} · elsewhere in ${o}`,
   unreadable: (n) => ` · can't read ${n}`,
+  foldLabel: 'Leagues where he is not yours',
+  foldFree: (n) => `Available in ${n}`,
+  foldOther: (n) => `Taken in ${n}`,
+  foldUnknown: (n) => `Can't read ${n}`,
+  noneYours: 'Not on any of your rosters.',
 }
 
 const STRIP_ES: StripCopy = {
   label: 'Dónde está en cada una de tus ligas',
   summary: (y, f, o) => `Tuyo en ${y} · disponible en ${f} · con otro equipo en ${o}`,
   unreadable: (n) => ` · sin poder leer ${n}`,
+  foldLabel: 'Ligas donde no es tuyo',
+  foldFree: (n) => `Disponible en ${n}`,
+  foldOther: (n) => `Con otro equipo en ${n}`,
+  foldUnknown: (n) => `Sin leer ${n}`,
+  noneYours: 'No está en ninguna de tus plantillas.',
 }
 
 export function stripCopy(language: string): StripCopy {

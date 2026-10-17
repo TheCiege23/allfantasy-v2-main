@@ -54,6 +54,27 @@
 export const INJURY_STALE_AFTER_HOURS = 36
 
 /**
+ * Weekly-schedule sports: one injury report per game week.
+ *
+ * 🛑 36 HOURS IS LESS THAN ONE NFL REPORT CYCLE (2026-10-11). Designations are issued Wednesday to
+ * Friday for a Sunday or Monday game, and a feed re-dates a row only when its word CHANGES — so a
+ * Friday "Out" was "stale" by Sunday morning on every source. Stale "Out"s are read as last week's
+ * news (`ruledOutByFact`), so Chimmy's "are my starters playing" counted 59 Rolling Insights and 74
+ * ESPN "Out" starters as playing on game day, and the readers that drop stale facts hid them.
+ * Measured the same day: with a 7-day horizon, no live NFL "Out" on either feed is stale.
+ */
+export const WEEKLY_SPORT_INJURY_STALE_AFTER_HOURS = 7 * 24
+
+const WEEKLY_INJURY_SPORTS = new Set(['NFL', 'NCAAF', 'NCAAFB'])
+
+/** How old a still-live claim may be before it is flagged `stale`, for this sport. */
+export function injuryStaleAfterHours(sport: string | null | undefined): number {
+  return WEEKLY_INJURY_SPORTS.has(String(sport ?? '').trim().toUpperCase())
+    ? WEEKLY_SPORT_INJURY_STALE_AFTER_HOURS
+    : INJURY_STALE_AFTER_HOURS
+}
+
+/**
  * Beyond this, a report cannot be describing the CURRENT season and is dropped
  * outright rather than returned with a caveat.
  *

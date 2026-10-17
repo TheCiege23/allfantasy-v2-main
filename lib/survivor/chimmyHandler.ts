@@ -74,7 +74,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
     const currentWeek = await resolveSurvivorCurrentWeek(leagueId)
     const council = typeof currentWeek === 'number' ? await getCouncil(leagueId, currentWeek) : null
     if (!council || council.closedAt || new Date() > council.voteDeadlineAt) {
-      return 'Idols can only be played during an active Tribal Council before the vote deadline. Wait for the next council.'
+      return 'Idols can only be played during an active Elimination Council before the vote deadline. Wait for the next council.'
     }
 
     // Auto-play only when unambiguous: one idol + no target needed (self-protect).
@@ -96,7 +96,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
     }
 
     const lines = playable.map((i) => `• **${i.powerLabel ?? i.powerType}**`).join('\n')
-    return `You have multiple powers or a power that needs a target — open the active Tribal Council and tap "Play Idol" to choose the idol and target.\n${lines}`
+    return `You have multiple powers or a power that needs a target — open the active Elimination Council and tap "Play Idol" to choose the idol and target.\n${lines}`
   }
 
   // ===== CHECK MY IDOLS =====
@@ -131,7 +131,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
 
   // ===== VOTE REDIRECT =====
   if (lower.startsWith('i vote') || lower.includes('vote for')) {
-    return 'Record your vote in the Tribal Council flow when voting is open — roster verification is required for your ballot.'
+    return 'Send your vote privately here as @Chimmy vote @manager. Use the manager selector for a verified mention.'
   }
 
   if (!player) {
@@ -150,7 +150,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
     const sport = league?.sport ?? 'NFL'
     const sched = getSportSchedule(sport)
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    return `Tribal Council: ${days[sched.tribalCouncilDay]} at ${sched.tribalCouncilHourUtc}:00 UTC\nVote deadline: ${days[sched.voteDeadlineDay]} at ${sched.voteDeadlineHourUtc}:00 UTC\nChallenge posted: ${days[sched.challengePostDay]}\nScoring finalizes: ${days[sched.scoringFinalizeDay]}`
+    return `Elimination Council: ${days[sched.tribalCouncilDay]} at ${sched.tribalCouncilHourUtc}:00 UTC\nVote deadline: ${days[sched.voteDeadlineDay]} at ${sched.voteDeadlineHourUtc}:00 UTC\nChallenge posted: ${days[sched.challengePostDay]}\nScoring finalizes: ${days[sched.scoringFinalizeDay]}`
   }
 
   // ===== SETTINGS-AWARE RULE ANSWERS =====
@@ -211,7 +211,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
       immune: 'You have IMMUNITY this week — you cannot be voted out.',
       exile: 'You are on EXILE ISLAND. Compete to earn tokens and return.',
       jury: 'You are a JURY MEMBER. You will vote for the Sole Survivor.',
-      finalist: 'You are a FINALIST — prepare for Final Tribal Council!',
+      finalist: 'You are a FINALIST — prepare for Final Elimination Council!',
       eliminated: 'You have been eliminated from the game.',
     }
     return statuses[player.playerState] ?? `Your status: ${player.playerState}`

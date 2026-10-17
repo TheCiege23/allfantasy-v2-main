@@ -120,21 +120,32 @@ export function chimmyCall(
 export function buildWeeklyRecap(input: {
   leagueName: string
   sleeperLeagueId: string
-  h2h: Pick<LeagueH2HPayload, 'managers' | 'records'>
+  h2h: Pick<LeagueH2HPayload, 'managers' | 'records'> & { missing?: readonly string[] }
   awards: WeeklyAwards
   rosters: WireRoster[] | null
   users: WireUser[] | null
   matchups: WireMatchup[] | null
 }): string {
   const { awards, h2h } = input
-  const nameOf = (ownerId: string | null | undefined) => h2h.managers.find((m) => m.ownerId === ownerId)?.name ?? 'Manager'
+  /*
+   * ONE name per manager across the whole post. The results used the week feed's team name and the
+   * awards used the H2H display name, so one person read as "KuppMyFootBalls" in the results and
+   * "Johnnydollaz18" two lines later. The team name wins when the feed has one — it is what the
+   * results and the table already show — and the H2H name covers a feed that failed to load.
+   */
+  const displayOf = new Map(
+    (input.users ?? []).map((u) => [u.user_id, u.metadata?.team_name?.trim() || u.display_name]),
+  )
+  const nameOf = (ownerId: string | null | undefined) =>
+    (ownerId ? displayOf.get(ownerId) : undefined) ??
+    h2h.managers.find((m) => m.ownerId === ownerId)?.name ??
+    'Manager'
 
   const lines: string[] = [`📺 Week ${awards.week} recap — ${input.leagueName} (${awards.season})`]
 
   // ── Results: straight from the Sleeper week feed ──
   if (input.rosters && input.users && input.matchups) {
     const ownerOf = new Map(input.rosters.map((r) => [r.roster_id, r.owner_id]))
-    const displayOf = new Map(input.users.map((u) => [u.user_id, u.metadata?.team_name?.trim() || u.display_name]))
     const label = (rosterId: number) => {
       const owner = ownerOf.get(rosterId)
       return (owner && (displayOf.get(owner) ?? nameOf(owner))) || `Team ${rosterId}`
@@ -205,7 +216,12 @@ export function buildWeeklyRecap(input: {
     broken.push(`${nameOf(r.closestGame.winnerOwnerId)} won the closest game in league history, by ${r.closestGame.margin.toFixed(1)}`)
   if (r.longestWinStreak?.active && r.longestWinStreak.toSeason === awards.season && r.longestWinStreak.toWeek === awards.week)
     broken.push(`${nameOf(r.longestWinStreak.ownerId)} extended the longest win streak ever to ${r.longestWinStreak.length} straight`)
-  if (broken.length > 0) {
+  /*
+   * "All-time" is only true of the whole history. A sync that could not read every season (`missing`,
+   * e.g. a rate-limited Sleeper read) would crown a record that an unread season already beat, so the
+   * section is left out until the history is complete.
+   */
+  if (broken.length > 0 && !(h2h.missing && h2h.missing.length > 0)) {
     lines.push('', '📜 Records broken')
     lines.push(...broken.map((b) => `  ${b}`))
   }

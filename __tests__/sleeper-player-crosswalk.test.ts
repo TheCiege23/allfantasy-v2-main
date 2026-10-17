@@ -14,7 +14,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { resolveSleeperPlayerIdentities } from '@/lib/players/sleeperPlayerCrosswalk'
+import { playerImageKey, resolveImagesByPlayerName, resolveSleeperPlayerIdentities } from '@/lib/players/sleeperPlayerCrosswalk'
 
 describe('resolveSleeperPlayerIdentities', () => {
   beforeEach(() => {
@@ -85,6 +85,22 @@ describe('resolveSleeperPlayerIdentities', () => {
   })
 
   /*
+   * 🛑 One row per source shares the Sleeper id, and TheSportsDB's got it by NAME: its 11304 is
+   * G Elgton Jenkins (CLE), not TE E.J. Jenkins (PHI). The last row used to win.
+   */
+  it('names the id from its Sleeper row, not a later TheSportsDB namesake', async () => {
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:11304', sleeperId: '11304', source: 'sleeper', name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles', imageUrl: null, fetchedAt: new Date('2026-10-01') },
+      { externalId: '34163931', sleeperId: '11304', source: 'thesportsdb', name: 'Elgton Jenkins', position: 'G', team: 'Cleveland Browns', imageUrl: 'https://www.thesportsdb.com/images/media/player/cutout/elgton.png', fetchedAt: new Date('2026-10-11') },
+    ])
+
+    const { byId } = await resolveSleeperPlayerIdentities(['11304'], 'nfl')
+
+    expect(byId.get('11304')).toMatchObject({ name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles', source: 'sports_player' })
+    expect(byId.get('11304')?.imageUrl).not.toContain('elgton')
+  })
+
+  /*
    * `externalId` is unique only within a sport — `340` is five different athletes
    * across five sports. An unfiltered query returns an arbitrary one.
    */
@@ -138,5 +154,95 @@ describe('resolveSleeperPlayerIdentities', () => {
 
     expect(resolved).toBe(0)
     expect(unresolved).toBe(1)
+  })
+})
+
+/*
+ * 🛑 PRODUCTION `Player` ROWS, 2026-10-11: two Justin Jeffersons. The name hops used to build a
+ * lower-cased-name Map — LAST row wins — so with the linebacker listed second the receiver got
+ * the linebacker's canonical id and face.
+ */
+const JEFFERSONS = [
+  { id: 'nfl-justin-jefferson-28fd81ce', name: 'Justin Jefferson', imageUrl: 'https://img/wr.png', position: 'WR', team: 'MIN' },
+  { id: 'nfl-justin-jefferson-a6b68cb2', name: 'Justin Jefferson', imageUrl: 'https://img/lb.png', position: 'LB', team: 'CLE' },
+]
+
+describe('🛑 resolveSleeperPlayerIdentities hop 2 binds a shared name by position/team', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.rosterPlayerFindMany.mockResolvedValue([])
+    mocks.playerFindMany.mockResolvedValue(JEFFERSONS)
+  })
+
+  it('the receiver gets the receiver’s canonical row, though the LB row comes last', async () => {
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      // Sleeper rows spell the team out; the canonical table abbreviates it.
+      { externalId: 'sleeper:6794', sleeperId: '6794', name: 'Justin Jefferson', position: 'WR', team: 'Minnesota Vikings', imageUrl: null },
+    ])
+    const { byId } = await resolveSleeperPlayerIdentities(['6794'], 'nfl')
+    expect(byId.get('6794')).toMatchObject({
+      canonicalPlayerId: 'nfl-justin-jefferson-28fd81ce',
+      imageUrl: 'https://img/wr.png',
+    })
+  })
+
+  it('same-position namesakes are told apart by team, with Sleeper’s spelled-out team abbreviated', async () => {
+    mocks.playerFindMany.mockResolvedValue([
+      { id: 'nfl-mike-williams-pit', name: 'Mike Williams', imageUrl: 'https://img/pit.png', position: 'WR', team: 'PIT' },
+      { id: 'nfl-mike-williams-nyj', name: 'Mike Williams', imageUrl: 'https://img/nyj.png', position: 'WR', team: 'NYJ' },
+    ])
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:4068', sleeperId: '4068', name: 'Mike Williams', position: 'WR', team: 'Pittsburgh Steelers', imageUrl: null },
+    ])
+    const { byId } = await resolveSleeperPlayerIdentities(['4068'], 'nfl')
+    expect(byId.get('4068')?.canonicalPlayerId).toBe('nfl-mike-williams-pit')
+  })
+
+  it('a shared name with nothing to verify by keeps its name but takes NO canonical row', async () => {
+    mocks.sportsPlayerFindMany.mockResolvedValue([])
+    mocks.rosterPlayerFindMany.mockResolvedValue([
+      { playerId: '6794', playerName: 'Justin Jefferson', position: null, team: null },
+    ])
+    const { byId } = await resolveSleeperPlayerIdentities(['6794'], 'nfl')
+    expect(byId.get('6794')?.name).toBe('Justin Jefferson')
+    expect(byId.get('6794')?.canonicalPlayerId).toBeNull()
+    // The numeric id's own CDN face, never the linebacker's.
+    expect(byId.get('6794')?.imageUrl).not.toBe('https://img/lb.png')
+  })
+})
+
+describe('🛑 resolveImagesByPlayerName', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.playerFindMany.mockResolvedValue(JEFFERSONS)
+  })
+
+  it('gives each namesake his own face when position/team are supplied', async () => {
+    const wr = { name: 'Justin Jefferson', position: 'WR', team: 'MIN' }
+    const lb = { name: 'Justin Jefferson', position: 'LB', team: 'CLE' }
+    const out = await resolveImagesByPlayerName([wr, lb], 'nfl')
+    expect(out.get(playerImageKey(wr))).toBe('https://img/wr.png')
+    expect(out.get(playerImageKey(lb))).toBe('https://img/lb.png')
+  })
+
+  it('a bare shared name gets no image — initials, not another man’s face', async () => {
+    const out = await resolveImagesByPlayerName(['Justin Jefferson'], 'nfl')
+    expect(out.get(playerImageKey('Justin Jefferson'))).toBeUndefined()
+    expect(out.size).toBe(0)
+  })
+
+  it('a lone row on the other side of the ball is refused', async () => {
+    mocks.playerFindMany.mockResolvedValue([JEFFERSONS[1]])
+    const wr = { name: 'Justin Jefferson', position: 'WR', team: 'MIN' }
+    const out = await resolveImagesByPlayerName([wr], 'nfl')
+    expect(out.size).toBe(0)
+  })
+
+  it('[control] a unique name still resolves from the name alone', async () => {
+    mocks.playerFindMany.mockResolvedValue([
+      { name: 'Brian Thomas Jr.', imageUrl: 'https://img/bt.png', position: 'WR', team: 'JAX' },
+    ])
+    const out = await resolveImagesByPlayerName(['Brian Thomas Jr.'], 'nfl')
+    expect(out.get(playerImageKey('Brian Thomas Jr.'))).toBe('https://img/bt.png')
   })
 })

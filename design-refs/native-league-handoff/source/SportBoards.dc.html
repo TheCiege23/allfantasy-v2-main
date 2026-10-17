@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Draft boards — all 7 sports</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}
+.sp{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:64px;padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:#10131c;color:#989fc2;cursor:pointer;text-align:left}
+.sp-on{border-color:#22d3ee;background:rgba(34,211,238,.10);color:#eef0fa}
+.hs{position:relative;width:38px;height:38px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;font:800 11px/1 'Archivo',sans-serif;color:#c3c9e6;background:linear-gradient(160deg,#1c2342,#10131c);border:1px solid rgba(255,255,255,.1)}
+.tl{position:absolute;right:-7px;bottom:-4px;min-width:24px;height:15px;padding:0 3px;border-radius:5px;display:flex;align-items:center;justify-content:center;font:900 7px/1 'JetBrains Mono',monospace;border:2px solid #10131c;background:#2a2f4a;color:#eef0fa}</style>
+</helmet>
+<div class="af" style="flex-direction: column">
+  <header class="topb" style="background: #0b0d14">
+    <a class="btn btn-g btn-sm" href="DraftLive.dc.html">‹ Draft HQ</a>
+    <span style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 17px; letter-spacing: -0.03em">Draft boards by sport</span><span class="lbl">Same room, sport-aware positions, rosters and schedules</span></span>
+  </header>
+
+  <div class="wrap" style="display: flex; flex-direction: column; gap: 20px">
+    <nav aria-label="Sport" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="7">
+        <button class="{{t.cls}}" onClick="{{t.pick}}" aria-pressed="{{t.on}}"><span style="font: 700 16px/1 'Archivo', sans-serif; letter-spacing: -0.02em">{{t.name}}</span><span class="lbl" style="color: inherit">{{t.sub}}</span></button>
+      </sc-for>
+    </nav>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+      <!-- Board -->
+      <section class="card" style="flex: 999 1 640px; min-width: 0; padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow-x: auto">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+          <h2 class="h2">{{s.title}}</h2><span class="chip">{{s.format}}</span><div style="flex: 1"></div>
+          <sc-for list="{{legend}}" as="l" hint-placeholder-count="5"><span class="lbl" style="color: {{l.c}}">■ {{l.pos}}</span></sc-for>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 6px; min-width: 700px">
+          <sc-for list="{{heads}}" as="h" hint-placeholder-count="6"><div style="padding: 8px; border-radius: 10px; background: {{h.bg}}; border: 1px solid {{h.line}}; font: 600 11px/1.2 'Archivo', sans-serif; color: {{h.c}}">{{h.name}}</div></sc-for>
+          <sc-for list="{{cells}}" as="c" hint-placeholder-count="12">
+            <div style="min-height: 62px; padding: 7px 8px; border-radius: 9px; background: {{c.bg}}; border: 1px {{c.ls}} {{c.line}}; display: flex; flex-direction: column; justify-content: space-between; gap: 2px">
+              <span class="num" style="font-size: 9px; color: #7d84a8">{{c.label}}</span>
+              <span style="font-weight: 600; font-size: 11px; line-height: 1.2; color: {{c.nc}}">{{c.name}}</span>
+              <span class="num" style="font-size: 9px; font-weight: 700; color: {{c.pc}}">{{c.meta}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="padding: 12px 14px; border-radius: 12px; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.35); font-size: 13px; line-height: 1.5; color: #c3c9e6"><span class="lbl" style="color: #22d3ee">AF says draft next</span><br>{{s.tip}}</div>
+      </section>
+
+      <!-- Roster -->
+      <section class="card" style="flex: 1 1 320px; min-width: 0; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between"><span class="lbl">Your roster · starters first</span><span class="num" style="font-size: 11px; color: #989fc2">{{filled}} of {{slotCount}}</span></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+          <sc-for list="{{roster}}" as="r" hint-placeholder-count="12">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; min-height: 40px; background: {{r.bg}}; border: 1px {{r.ls}} {{r.line}}">
+              <span style="min-width: 38px; height: 22px; padding: 0 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font: 600 9px/1 'JetBrains Mono', monospace; background: {{r.sb}}; color: {{r.sc}}">{{r.slot}}</span>
+              <span style="font-size: 12px; font-weight: 700; color: {{r.nc}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.name}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-size: 12px; color: #7d84a8">{{s.rosterNote}}</span>
+      </section>
+    </div>
+
+    <!-- Pool -->
+    <section class="card" style="overflow-x: auto">
+      <div style="min-width: 900px">
+        <div class="lbl" style="display: grid; grid-template-columns: 50px minmax(220px, 2fr) 150px 90px minmax(200px, 2fr) 120px; gap: 10px; padding: 14px 18px">
+          <span>AF ADP</span><span>Player pool</span><span>{{s.schedLabel}}</span><span style="text-align: right">Proj</span><span>{{s.statLabel}}</span><span style="text-align: right">Action</span>
+        </div>
+        <sc-for list="{{pool}}" as="p" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: 50px minmax(220px, 2fr) 150px 90px minmax(200px, 2fr) 120px; gap: 10px; align-items: center; padding: 9px 18px; border-top: 1px solid rgba(255,255,255,.05); background: {{p.bg}}">
+            <span class="num" style="font-size: 14px; font-weight: 700; color: {{p.rc}}">{{p.adp}}</span>
+            <span style="display: flex; align-items: center; gap: 12px"><span class="hs" role="img" aria-label="{{p.name}} headshot">{{p.ini}}<span class="tl">{{p.team}}</span></span><span style="display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 600; font-size: 14px">{{p.name}}</span><span class="num" style="font-size: 10px; font-weight: 700; color: {{p.pc}}">{{p.pos}} · {{p.team}}</span></span></span>
+            <span class="num" style="font-size: 12px; font-weight: 700; color: {{p.schedC}}">{{p.sched}}</span>
+            <span class="num" style="font-size: 14px; font-weight: 600; text-align: right">{{p.proj}}</span>
+            <span class="num" style="font-size: 11px; color: #c3c9e6">{{p.stat}}</span>
+            <span style="display: flex; justify-content: flex-end; gap: 6px"><button class="btn btn-g btn-sm">+ Queue</button></span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sport: 'nfl' }; }
+  renderVals() {
+    const PAL = ['#fb8aa0','#5ee6b0','#7fb7e8','#fbbf24','#c4b5fd','#cbd5e1','#f0b46a'];
+    const S = {
+      nfl: { name: 'NFL', sub: 'Weekly · BYE', title: 'NFL', format: '12 teams · Snake · Half PPR', pos: ['QB','RB','WR','TE','K','DEF'],
+        roster: ['QB','RB','RB','WR','WR','TE','FLEX','K','DEF','BN','BN','BN','BN','BN','BN'], schedLabel: 'Bye week', statLabel: '2025 stats',
+        tip: 'RB run is on — 4 of the last 6 picks. Take Achane before the tier closes; WR depth holds into round 3.',
+        rosterNote: 'Flex fills last among starters; bench fills only after every starter has a player.',
+        p: [['Bijan Robinson','RB','ATL','BYE 5'],["Ja'Marr Chase",'WR','CIN','BYE 10'],['Jahmyr Gibbs','RB','DET','BYE 8'],['Justin Jefferson','WR','MIN','BYE 6'],['CeeDee Lamb','WR','DAL','BYE 10'],['Saquon Barkley','RB','PHI','BYE 9'],['Puka Nacua','WR','LAR','BYE 8'],['Amon-Ra St. Brown','WR','DET','BYE 8'],['Malik Nabers','WR','NYG','BYE 11'],['Christian McCaffrey','RB','SF','BYE 14'],['Brian Thomas Jr.','WR','JAX','BYE 8'],['Nico Collins','WR','HOU','BYE 6'],
+          ["De'Von Achane",'RB','MIA','BYE 12','268.4','1,456 scrim · 12 TD'],['Brock Bowers','TE','LV','BYE 8','201.7','1,194 yds · 5 TD'],['Josh Allen','QB','BUF','BYE 7','389.0','3,731 pass · 40 total TD'],['Derrick Henry','RB','BAL','BYE 7','259.3','1,921 yds · 18 TD']] },
+      ncaaf: { name: 'NCAAF', sub: 'Weekly · BYE', title: 'College football', format: '12 teams · Snake · PPR · Superflex', pos: ['QB','RB','WR','TE','K'],
+        roster: ['QB','SFLX','RB','RB','WR','WR','WR','TE','FLEX','K','BN','BN','BN','BN','BN'], schedLabel: 'Bye week · opp tier', statLabel: '2025 stats',
+        tip: 'Two top QBs left and superflex is open — QBs are going 2 rounds earlier than NFL boards. Grab Sellers now.',
+        rosterNote: 'College byes vary by conference; AF flags FCS "cupcake" weeks as boosts, not just byes.',
+        p: [['Arch Manning','QB','TEX','BYE 6'],['Jeremiah Smith','WR','OSU','BYE 7'],['Ryan Williams','WR','ALA','BYE 8'],['Bryce Underwood','QB','MICH','BYE 9'],['Julian Sayin','QB','OSU','BYE 7'],['Cam Coleman','WR','AUB','BYE 6'],['Dante Moore','QB','ORE','BYE 10'],['Isaac Brown','RB','LOU','BYE 7'],['Ahmad Hardy','RB','MIZ','BYE 8'],['Justice Haynes','RB','MICH','BYE 9'],['Malachi Toney','WR','MIA','BYE 6'],['Dakorien Moore','WR','ORE','BYE 10'],
+          ['LaNorris Sellers','QB','SCAR','BYE 7 · FCS wk 3','341.2','2,700 pass · 1,000 rush'],['Jordan Marshall','RB','MICH','BYE 9','214.5','1,100 rush · 12 TD'],['Eli Raridon','TE','ND','BYE 5','131.0','520 yds · 4 TD'],['Kaytron Allen','RB','PSU','BYE 6','198.3','1,050 rush · 10 TD']] },
+      nba: { name: 'NBA', sub: 'Daily · games/wk', title: 'NBA', format: '12 teams · Snake · Points', pos: ['PG','SG','SF','PF','C'],
+        roster: ['PG','SG','G','SF','PF','F','C','C','UTIL','UTIL','BN','BN','BN','IR'], schedLabel: 'Games wk 1 · B2Bs', statLabel: '2025–26 per game',
+        tip: 'Bigs are thin after this round — only 3 centers left above 45 fantasy pts. Take Sabonis; guards run deep.',
+        rosterNote: 'Players fill the most specific open slot first (C before UTIL); IR does not count against the 13.',
+        p: [['Nikola Jokić','C','DEN','4 g · 1 B2B'],['Shai Gilgeous-Alexander','PG','OKC','3 g'],['Victor Wembanyama','C','SAS','4 g'],['Luka Dončić','PG','LAL','4 g · 1 B2B'],['Giannis Antetokounmpo','PF','MIL','3 g'],['Anthony Edwards','SG','MIN','4 g'],['Cade Cunningham','PG','DET','3 g'],['Anthony Davis','PF','DAL','4 g'],['Karl-Anthony Towns','C','NYK','3 g'],['Jalen Brunson','PG','NYK','3 g'],['Trae Young','PG','ATL','4 g'],['LaMelo Ball','PG','CHA','4 g · 1 B2B'],
+          ['Domantas Sabonis','C','SAC','4 g','52.1 fp/g','19.1 pts · 13.9 reb · 6.0 ast'],['Devin Booker','SG','PHX','3 g','44.8 fp/g','25.6 pts · 4.1 reb · 7.1 ast'],['Jaren Jackson Jr.','PF','MEM','4 g','41.9 fp/g','22.2 pts · 5.6 reb · 1.6 blk'],['Paolo Banchero','PF','ORL','3 g','44.0 fp/g','25.9 pts · 7.5 reb · 4.8 ast']] },
+      mlb: { name: 'MLB', sub: 'Daily · 2-start SP', title: 'MLB', format: '12 teams · Snake · 5×5 roto', pos: ['C','1B','2B','3B','SS','OF','SP','RP'],
+        roster: ['C','1B','2B','3B','SS','OF','OF','OF','UTIL','SP','SP','RP','RP','P','P','BN','BN','BN'], schedLabel: 'Opening wk', statLabel: '2025 stats',
+        tip: 'Elite SP is gone after Crochet — 5 of the last 7 picks were pitchers. Take a bat: Lindor gives you SS + steals.',
+        rosterNote: 'Two-way players (Ohtani) can fill a hitter or pitcher slot; AF picks the slot that frees more roster.',
+        p: [['Shohei Ohtani','DH/SP','LAD','7 g · 1 start'],['Aaron Judge','OF','NYY','6 g'],['Bobby Witt Jr.','SS','KC','6 g'],['Juan Soto','OF','NYM','6 g'],['Tarik Skubal','SP','DET','2 starts'],['Elly De La Cruz','SS','CIN','7 g'],['Paul Skenes','SP','PIT','2 starts'],['José Ramírez','3B','CLE','6 g'],['Julio Rodríguez','OF','SEA','7 g'],['Gunnar Henderson','SS','BAL','6 g'],['Corbin Carroll','OF','ARI','6 g'],['Garrett Crochet','SP','BOS','1 start'],
+          ['Francisco Lindor','SS','NYM','6 g','612 pts','31 HR · 31 SB · .267'],['Fernando Tatis Jr.','OF','SD','7 g','574 pts','25 HR · 32 SB · .268'],['Zack Wheeler','SP','PHI','2 starts','512 pts','12 W · 2.71 ERA · 195 K'],['Cal Raleigh','C','SEA','6 g','598 pts','60 HR · 125 RBI']] },
+      nhl: { name: 'NHL', sub: 'Daily · games/wk', title: 'NHL', format: '12 teams · Snake · Points', pos: ['C','LW','RW','D','G'],
+        roster: ['C','C','LW','LW','RW','RW','D','D','D','D','UTIL','G','G','BN','BN','BN','BN'], schedLabel: 'Games wk 1', statLabel: '2025–26 stats',
+        tip: 'Goalies are about to run — 3 managers have none. Take Shesterkin now; elite D falls to round 3.',
+        rosterNote: 'Goalie starts are capped per week; AF counts light-schedule nights when it ranks skaters.',
+        p: [['Connor McDavid','C','EDM','4 g'],['Nathan MacKinnon','C','COL','3 g'],['Leon Draisaitl','C','EDM','4 g'],['Nikita Kucherov','RW','TBL','3 g'],['Auston Matthews','C','TOR','4 g'],['Cale Makar','D','COL','3 g'],['David Pastrňák','RW','BOS','4 g'],['Kirill Kaprizov','LW','MIN','3 g'],['Jack Hughes','C','NJD','4 g'],['Quinn Hughes','D','VAN','3 g'],['Connor Hellebuyck','G','WPG','4 g · 3 starts'],['Mitch Marner','RW','VGK','4 g'],
+          ['Igor Shesterkin','G','NYR','3 g · 3 starts','298 pts','.912 SV% · 2.40 GAA'],['Artemi Panarin','LW','NYR','3 g','261 pts','37 G · 52 A · 256 SOG'],['Kyle Connor','LW','WPG','4 g','255 pts','41 G · 56 A'],['Jack Eichel','C','VGK','4 g','249 pts','28 G · 66 A']] },
+      ncaab: { name: 'NCAAB', sub: 'Weekly · games/wk', title: 'College basketball', format: '10 teams · Snake · Points', pos: ['G','F','C'],
+        roster: ['G','G','F','F','C','UTIL','UTIL','BN','BN','BN','BN'], schedLabel: 'Games wk 1', statLabel: '2025–26 per game',
+        tip: 'Bigs are scarce — only two C-eligible players left in the top 40. Take Reed; guards stay deep.',
+        rosterNote: 'Conference-tournament weeks get extra games; AF raises players whose teams play 3+ that week.',
+        p: [['Cameron Boozer','F','DUKE','2 g'],['AJ Dybantsa','F','BYU','2 g'],['Darryn Peterson','G','KU','3 g'],['Caleb Wilson','F','UNC','2 g'],['Braden Smith','G','PUR','2 g'],['Mikel Brown Jr.','G','LOU','3 g'],['JT Toppin','F','TTU','2 g'],['Koa Peat','F','ARIZ','2 g'],['Yaxel Lendeborg','F','MICH','2 g'],['Labaron Philon','G','ALA','3 g'],['Thomas Haugh','F','FLA','2 g'],['Nate Ament','F','TENN','2 g'],
+          ['Tarris Reed Jr.','C','UCONN','3 g','31.8 fp/g','14.1 pts · 8.9 reb · 2.1 blk'],['Braylon Mullins','G','UCONN','3 g','27.4 fp/g','15.9 pts · 4.0 reb'],['Alex Condon','C','FLA','2 g','30.2 fp/g','12.8 pts · 8.1 reb · 3.4 ast'],['Tounde Yessoufou','F','BAY','2 g','26.6 fp/g','16.0 pts · 5.4 reb']] },
+      soccer: { name: 'Soccer', sub: 'Gameweeks · DGW', title: 'Soccer · Premier League', format: '10 teams · Snake · Points', pos: ['GK','DEF','MID','FWD'],
+        roster: ['GK','DEF','DEF','DEF','DEF','MID','MID','MID','MID','FWD','FWD','BN','BN','BN','BN'], schedLabel: 'Next 3 fixtures', statLabel: '2025–26 stats',
+        tip: 'Arsenal defenders carry the best fixture run (GW 8–12). Take Saliba before the clean-sheet run gets priced in.',
+        rosterNote: 'Formation must stay legal (3–5 DEF, 3–5 MID, 1–3 FWD); AF blocks a pick that would break it.',
+        p: [['Erling Haaland','FWD','MCI','BRE · ful · TOT'],['Mohamed Salah','MID','LIV','eve · CHE · bha'],['Cole Palmer','MID','CHE','LIV · bur · avl'],['Bukayo Saka','MID','ARS','ful · CRY · wol'],['Alexander Isak','FWD','LIV','eve · CHE · bha'],['Bruno Fernandes','MID','MUN','SUN · bha · NEW'],['Florian Wirtz','MID','LIV','eve · CHE · bha'],['Bryan Mbeumo','MID','MUN','SUN · bha · NEW'],['Declan Rice','MID','ARS','ful · CRY · wol'],['Ollie Watkins','FWD','AVL','bur · TOT · che'],['Morgan Rogers','MID','AVL','bur · TOT · che'],['Chris Wood','FWD','NFO','new · LEE · ars'],
+          ['William Saliba','DEF','ARS','ful · CRY · wol','168 pts','16 CS · 2 G'],['Jarrod Bowen','MID','WHU','lee · BRE · bou','171 pts','13 G · 8 A'],['Virgil van Dijk','DEF','LIV','eve · CHE · bha','160 pts','14 CS · 3 G'],['David Raya','GK','ARS','ful · CRY · wol','158 pts','14 CS · 92 saves']] }
+    };
+    const key = this.state.sport, s = S[key];
+    const pc = pos => { const base = pos.split('/')[0]; const i = s.pos.indexOf(base); return PAL[i >= 0 ? i : 5]; };
+    const tabs = Object.keys(S).map(k => ({ name: S[k].name, sub: S[k].sub, on: k === key ? 'true' : 'false', cls: 'sp' + (k === key ? ' sp-on' : ''), pick: () => this.setState({ sport: k }) }));
+    const legend = s.pos.map(p => ({ pos: p, c: pc(p) }));
+    const ME = 2, NT = 6;
+    const heads = ['Team 1','Team 2','You','Team 4','Team 5','Team 6'].map((n, i) => ({ name: n, bg: i === ME ? 'rgba(34,211,238,.12)' : '#0b0d14', line: i === ME ? 'rgba(34,211,238,.45)' : 'rgba(255,255,255,.07)', c: i === ME ? '#22d3ee' : '#eef0fa' }));
+    const cells = [];
+    for (let r = 0; r < 3; r++) for (let col = 0; col < NT; col++) {
+      const i = r % 2 === 0 ? col : NT - 1 - col, n = r * NT + i, p = s.p[n];
+      const label = (r + 1) + '.' + String(i + 1).padStart(2, '0');
+      if (r < 2 && p) { const c = pc(p[1]); cells.push({ label, name: p[0], meta: p[1] + ' · ' + p[2] + ' · ' + p[3], pc: c, nc: '#eef0fa', bg: 'rgba(255,255,255,.04)', ls: 'solid', line: col === ME ? 'rgba(34,211,238,.45)' : 'rgba(255,255,255,.05)' }); }
+      else if (r === 2 && col === ME) { const q = s.p[12]; cells.push({ label, name: q[0], meta: 'AF pick for you', pc: '#22d3ee', nc: '#22d3ee', bg: 'rgba(34,211,238,.10)', ls: 'dashed', line: '#22d3ee' }); }
+      else cells.push({ label, name: '', meta: '', pc: '', nc: '', bg: 'transparent', ls: 'solid', line: 'rgba(255,255,255,.05)' });
+    }
+    const mine = [s.p[ME], s.p[NT + (NT - 1 - ME)]];
+    const used = new Set();
+    const fits = (slot, pos) => { const ps = pos.split('/'); if (ps.includes(slot)) return true;
+      const flex = { FLEX: ['RB','WR','TE'], SFLX: ['QB','RB','WR','TE'], G: ['PG','SG','G'], F: ['SF','PF','F'], UTIL: ['*'], P: ['SP','RP'] }[slot];
+      return flex && (flex[0] === '*' ? !ps.includes('SP') && !ps.includes('RP') && !ps.includes('G') || slot === 'UTIL' : ps.some(x => flex.includes(x))); };
+    const assign = {};
+    mine.forEach(pl => { const idx = s.roster.findIndex((sl, j) => !assign[j] && sl !== 'BN' && sl !== 'IR' && fits(sl, pl[1])); if (idx >= 0) assign[idx] = pl; else { const b = s.roster.findIndex((sl, j) => !assign[j] && sl === 'BN'); if (b >= 0) assign[b] = pl; } });
+    const roster = s.roster.map((slot, j) => { const pl = assign[j]; const bench = slot === 'BN' || slot === 'IR';
+      return { slot, name: pl ? pl[0] : (bench ? 'Bench' : 'Open starter'), nc: pl ? '#eef0fa' : bench ? '#7d84a8' : '#fbbf24',
+        bg: pl ? '#0b0d14' : 'transparent', ls: pl ? 'solid' : 'dashed', line: pl ? 'rgba(255,255,255,.1)' : bench ? 'rgba(255,255,255,.08)' : 'rgba(251,191,36,.35)',
+        sb: bench ? 'transparent' : 'rgba(255,255,255,.07)', sc: bench ? '#7d84a8' : '#c3c9e6' }; });
+    const pool = s.p.slice(12).map((p, i) => ({ adp: 19 + i, name: p[0], pos: p[1], team: p[2], sched: p[3], proj: p[4], stat: p[5], pc: pc(p[1]),
+      ini: p[0].split(' ').map(x => x[0]).join('').slice(0, 2), schedC: /BYE|DGW/.test(p[3]) ? '#fbbf24' : '#c3c9e6',
+      bg: i === 0 ? 'rgba(34,211,238,.07)' : 'transparent', rc: i === 0 ? '#22d3ee' : '#eef0fa' }));
+    return { tabs, s, legend, heads, cells, roster, pool, filled: Object.keys(assign).length, slotCount: s.roster.length };
+  }
+}
+</script>
+</body>
+</html>

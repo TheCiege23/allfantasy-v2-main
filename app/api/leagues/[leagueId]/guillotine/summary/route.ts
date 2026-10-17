@@ -11,6 +11,7 @@ import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
+import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guillotine/guillotineCurrentWeek'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,14 +32,19 @@ export async function GET(
   const isGuillotine = await isGuillotineLeague(leagueId)
   if (!isGuillotine) return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
 
+  // No `?week=` means "the current week" — it used to mean week 1, all season.
+  const config = await getGuillotineConfig(leagueId)
   const weekParam = req.nextUrl.searchParams?.get('week')
-  const weekOrPeriod = weekParam ? Math.max(1, parseInt(weekParam, 10)) || 1 : 1
+  const weekOrPeriod = weekParam
+    ? Math.max(1, parseInt(weekParam, 10)) || 1
+    : await resolveGuillotineCurrentWeek(leagueId, config)
 
-  const [summary, config, myEscapes] = await Promise.all([
+  const [summary, myEscapes, myRosterId] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
-    getGuillotineConfig(leagueId),
     // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
     getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
+    // So a surface can say "you" without a second request. Never fails the summary.
+    findViewerRosterId(leagueId, userId).catch(() => null),
   ])
 
   if (!summary) return NextResponse.json({ error: 'Summary not available' }, { status: 500 })
@@ -46,6 +52,7 @@ export async function GET(
   return NextResponse.json({
     ...summary,
     myEscapes,
+    myRosterId,
     config: config
       ? {
           eliminationStartWeek: config.eliminationStartWeek,

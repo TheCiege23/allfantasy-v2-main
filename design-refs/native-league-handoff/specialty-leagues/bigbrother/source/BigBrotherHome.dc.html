@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Big Brother league home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.bb-ph{display:flex;align-items:center;gap:0}
+.bb-ph div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+.bb-ph div::before{content:"";position:absolute;top:15px;left:-50%;right:50%;height:3px;background:#22305a}
+.bb-ph div:first-child::before{display:none}
+.bb-ph i{position:relative;z-index:1;width:32px;height:32px;border-radius:99px;display:grid;place-items:center;font:700 12px 'JetBrains Mono';font-style:normal;background:#10131c;border:2px solid #22305a;color:#7d84a3}
+.bb-ph span{font:600 11.5px 'Archivo';color:#7d84a3;text-align:center}
+.bb-ph .done i{background:#1d4ed8;border-color:#3b82f6;color:#fff}.bb-ph .done::before{background:#3b82f6}
+.bb-ph .on i{background:#ff5ec8;border-color:#ff9ad8;color:#fff;box-shadow:0 0 0 5px rgba(255,94,200,.18)}.bb-ph .on span{color:#ffb3e3}.bb-ph .on::before{background:#3b82f6}
+.bb-spot{flex:1 1 200px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.07);text-align:center}
+.bb-hg{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+</style>
+</helmet>
+<div class="sp" style="--acc: #3b82f6; --acc2: #9fd0ff; --accInk: #fff; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<section class="sp-hero" style="margin: 20px 28px 0">
+  <img class="sp-bg" src="specialty/bigbrother/banner.svg" alt="">
+  <div class="sp-veil"></div>
+  <div class="sp-in">
+    <img src="specialty/bigbrother/emblem.svg" alt="" style="width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,.6))">
+    <div style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sp-chip">NFL</span><span class="sp-chip">2026</span><span class="sp-chip">Big Brother</span><span class="sp-chip">14 houseguests · 10 in the house</span></div>
+      <span class="sp-title">Blah House</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--acc2)">Week 6 · Veto meeting tonight</span>
+      <span class="sp-t2" style="font-size: 14px; max-width: 620px">Redraft fantasy with a house twist: fantasy points win HOH and the Veto, the house votes someone out, and the last one in wins the league.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px"><a class="sp-btn sp-btn-p" href="#" style="min-height: 46px; padding: 0 20px">Go to the house</a><a class="sp-btn" href="BigBrotherEviction.dc.html" style="min-height: 46px; padding: 0 20px">Eviction night</a><a class="sp-btn" href="#" style="min-height: 46px; padding: 0 20px">My lineup</a></div>
+    </div>
+    <div class="sp-clock"><span class="sp-lbl" style="color: var(--acc2)">Eviction vote closes</span><span class="sp-num" style="font-size: 36px; font-weight: 700; color: #fff">2d 04:15</span><span class="sp-t3" style="font-size: 12px">Thursday 8:00 PM ET</span></div>
+  </div>
+</section>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+  <section style="flex: 1 1 700px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <div class="sp-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+      <span class="sp-lbl">This week in the house</span>
+      <div class="bb-ph"><sc-for list="{{phases}}" as="p" hint-placeholder-count="6"><div class="{{p.cls}}"><i>{{p.n}}</i><span>{{p.label}}</span></div></sc-for></div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 14px">
+      <div class="bb-spot" style="border-color: rgba(242,201,76,.4)"><img src="specialty/bigbrother/icon-hoh.svg" alt="" style="width: 52px"><span class="sp-lbl" style="color: #f2c94c">Head of Household</span><span class="sp-av" style="width: 50px; height: 50px; background: #1d3a3a; box-shadow: 0 0 0 3px #07080d, 0 0 0 5px #f2c94c">O7</span><span style="font-weight: 700">Open Team 7</span><span class="sp-t3 sp-num" style="font-size: 12px">Won with 151.2 points</span></div>
+      <div class="bb-spot" style="flex: 2 1 340px; border-color: rgba(255,94,200,.4)"><span class="sp-lbl" style="color: #ff9ad8">On the block</span>
+        <div style="display: flex; gap: 24px; justify-content: center"><sc-for list="{{noms}}" as="n" hint-placeholder-count="2"><div style="display: flex; flex-direction: column; align-items: center; gap: 6px"><span class="sp-av" style="width: 50px; height: 50px; background: {{n.c}}; box-shadow: 0 0 0 3px #07080d, 0 0 0 5px #ff5ec8">{{n.ini}}</span><span style="font-weight: 700">{{n.name}}</span><span class="sp-t3" style="font-size: 12px">{{n.sub}}</span></div></sc-for></div>
+        <span class="sp-t2" style="font-size: 12.5px">The Veto holder can save one of them tonight. The HOH would then name a replacement.</span></div>
+      <div class="bb-spot" style="border-color: rgba(127,200,255,.4)"><img src="specialty/bigbrother/icon-veto.svg" alt="" style="width: 52px"><span class="sp-lbl" style="color: #9fd0ff">Veto holder</span><span class="sp-av" style="width: 50px; height: 50px; background: #4a1f2c; box-shadow: 0 0 0 3px #07080d, 0 0 0 5px #7ec8ff">O2</span><span style="font-weight: 700">Open Team 2</span><span class="sp-t3 sp-num" style="font-size: 12px">Top Veto score · 139.8</span></div>
+    </div>
+    <div class="sp-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">Houseguests</span><span class="sp-t3" style="font-size: 12px">Evicted managers lose their team. Their players go to waivers.</span></div>
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px">
+        <sc-for list="{{hg}}" as="h" hint-placeholder-count="14"><div class="bb-hg" style="opacity: {{h.op}}; border-color: {{h.line}}"><span class="sp-av" style="width: 42px; height: 42px; background: {{h.c}}; filter: {{h.f}}; box-shadow: 0 0 0 2px #10131c, 0 0 0 4px {{h.ring}}">{{h.ini}}</span><span style="font-size: 11.5px; font-weight: 600; text-align: center">{{h.name}}</span><span class="sp-tag" style="background: {{h.tbg}}; color: {{h.tc}}; font-size: 9.5px; height: 18px">{{h.tag}}</span></div></sc-for>
+      </div>
+    </div>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 18px; display: flex; gap: 14px; align-items: center; border-color: rgba(59,130,246,.4)"><img src="specialty/bigbrother/icon-hoh.svg" alt="" style="width: 46px; filter: grayscale(.4)"><div style="display: flex; flex-direction: column; gap: 3px"><span class="sp-lbl" style="color: #9fd0ff">Your week</span><span style="font-weight: 700; font-size: 16px">You’re safe and you vote Thursday</span><span class="sp-t2" style="font-size: 12.5px">You’re not nominated. Your eviction ballot is private until the season ends.</span></div></div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">How a week works</span><div class="sp-rule"><b>1</b><span>Top fantasy score among eligible houseguests wins HOH.</span></div><div class="sp-rule"><b>2</b><span>The HOH nominates two houseguests.</span></div><div class="sp-rule"><b>3</b><span>Top score among the Veto players wins the Veto and can save a nominee.</span></div><div class="sp-rule"><b>4</b><span>The house votes to evict. The HOH only votes to break a tie.</span></div><div class="sp-rule"><b>5</b><span>Evicted managers lose their team. From the jury threshold on, they vote in the finale.</span></div></div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Latest</span><div class="sp-feed"><img src="specialty/bigbrother/icon-hoh.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 7 is the new HOH</span><span class="sp-t3" style="font-size: 11.5px">Week 6 · 151.2 points</span></div></div><div class="sp-feed"><img src="specialty/bigbrother/icon-veto.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 2 won the Veto</span><span class="sp-t3" style="font-size: 11.5px">139.8 · meeting tonight 9 PM</span></div></div><div class="sp-feed"><img src="specialty/bigbrother/icon-evict.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 13 was evicted</span><span class="sp-t3" style="font-size: 11.5px">Week 5 · 6–2 · first juror</span></div></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic { renderVals() {
+  const P = ['HOH', 'Nominations', 'Veto comp', 'Veto meeting', 'Eviction vote', 'Live eviction'];
+  const HG = [['Open Team 7', 'O7', '#1d3a3a'], ['Open Team 2', 'O2', '#4a1f2c'], ['TheCiege26', 'TC', '#22314f'], ['Open Team 6', 'O6', '#2c2a4a'], ['Open Team 9', 'O9', '#3a3418'], ['Open Team 5', 'O5', '#12352a'], ['Open Team 12', 'O12', '#3a1f30'], ['Open Team 4', 'O4', '#1f2a4d'], ['Open Team 11', 'O11', '#2a3a1a'], ['Open Team 1', 'O1', '#38203a'], ['Open Team 3', 'O3', '#2a2a2a'], ['Open Team 8', 'O8', '#2a2a2a'], ['Open Team 10', 'O10', '#2a2a2a'], ['Open Team 13', 'O13', '#2a2a2a']];
+  const st = { 0: 'HOH', 1: 'Veto', 2: 'You', 4: 'Nominee', 7: 'Nominee', 10: 'Evicted', 11: 'Evicted', 12: 'Evicted', 13: 'Jury' };
+  const sty = { HOH: ['rgba(242,201,76,.16)', '#f2c94c', '#f2c94c'], Veto: ['rgba(127,200,255,.14)', '#9fd0ff', '#7ec8ff'], Nominee: ['rgba(255,94,200,.16)', '#ff9ad8', '#ff5ec8'], Evicted: ['#151926', '#7d84a3', '#4a4f5c'], Jury: ['rgba(167,139,250,.14)', '#c4b5fd', '#a78bfa'], You: ['rgba(59,130,246,.18)', '#9fd0ff', '#3b82f6'], Safe: ['rgba(58,190,120,.1)', '#7fe0a6', '#2a3350'] };
+  return { phases: P.map((label, i) => ({ label, n: i < 3 ? '✓' : i + 1, cls: i < 3 ? 'done' : i === 3 ? 'on' : '' })),
+    noms: [['Open Team 9', 'O9', '#3a3418', 'Nominated by HOH'], ['Open Team 4', 'O4', '#1f2a4d', 'Nominated by HOH']].map(([name, ini, c, sub]) => ({ name, ini, c, sub })),
+    hg: HG.map(([name, ini, c], i) => { const t = st[i] || 'Safe'; const s = sty[t]; const out = t === 'Evicted' || t === 'Jury';
+      return { name: name.replace('Open Team', 'OT'), ini, c, tag: t, tbg: s[0], tc: s[1], ring: s[2], op: out ? '.6' : '1', f: out ? 'grayscale(1) brightness(.75)' : 'none', line: t === 'You' ? 'rgba(59,130,246,.45)' : 'rgba(255,255,255,.06)' }; }) };
+} }
+</script>
+</body>
+</html>

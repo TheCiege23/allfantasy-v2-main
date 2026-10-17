@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor Guillotine home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.sg-c{font-family:'Cinzel',serif;letter-spacing:.06em}
+.sg-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e2672a; --acc2: #ffc08a; --accInk: #1a0a04; --disp: Cinzel; min-height: 100vh; display: flex; flex-direction: column">
+<section class="sp-hero" style="margin: 20px 28px 0">
+  <img class="sp-bg" src="specialty/survguil/banner.svg" alt="">
+  <div class="sp-veil"></div>
+  <div class="sp-in">
+    <img src="specialty/survguil/emblem.svg" alt="" style="width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,.6))">
+    <div style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sp-chip">NFL</span><span class="sp-chip">2026</span><span class="sp-chip">Survivor Guillotine</span><span class="sp-chip">12 managers · 8 left</span></div>
+      <span class=""><span class="sg-c" style="font-size: 44px; font-weight: 700; color: #ffd8a8">Blade &amp; Torch</span></span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--acc2)">Week 6 · Tribe Vela is trailing the tribe race</span>
+      <span class="sp-t2" style="font-size: 14px; max-width: 620px">Survivor tribes, but nobody votes. The losing tribe’s lowest score is chopped automatically, unless that manager plays an idol in time.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px"><a class="sp-btn sp-btn-p" href="SGTribeRace.dc.html" style="min-height: 46px; padding: 0 20px">Tribe race</a><a class="sp-btn" href="SGIdolVault.dc.html" style="min-height: 46px; padding: 0 20px">Idol vault</a><a class="sp-btn" href="SurvivorGuillotineChop.dc.html" style="min-height: 46px; padding: 0 20px">Watch the chop</a></div>
+    </div>
+    <div class="sp-clock"><span class="sp-lbl" style="color: var(--acc2)">Lineups lock in</span><span class="sp-num" style="font-size: 36px; font-weight: 700; color: #fff">1d 19:02</span><span class="sp-t3" style="font-size: 12px">Sunday 1:00 PM ET · idols must be played by then</span></div>
+  </div>
+</section>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+  <section style="flex: 1 1 680px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <div class="sp-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">Tribe race · live</span><span class="sp-prop">Proposed rules · no spec in the repo yet</span></div>
+      <div style="display: flex; justify-content: space-between"><span class="sg-c" style="font-weight: 700; color: #b8a8ff">Vela <span class="sp-num" style="color: #fff">402.1</span></span><span class="sg-c" style="font-weight: 700; color: #7fd3de"><span class="sp-num" style="color: #fff">471.6</span> Koa</span></div>
+      <div style="height: 14px; border-radius: 99px; overflow: hidden; display: flex"><span style="width: 46%; background: linear-gradient(90deg,#5a4aa8,#8b7be0)"></span><span style="flex: 1; background: linear-gradient(90deg,#2f8f9e,#3fa7b5)"></span></div>
+      <span class="sp-t2" style="font-size: 12.5px">If it ends like this, Vela loses and its lowest score is chopped. No vote.</span>
+    </div>
+    <div class="sp-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; border-color: rgba(226,103,42,.35)">
+      <div style="display: flex; align-items: center; gap: 10px"><img src="specialty/survguil/icon-chop.svg" alt="" style="width: 28px"><span class="sp-lbl" style="flex: 1">Chop line inside Tribe Vela</span><span class="sp-t3" style="font-size: 12px">Live points · 2 games left</span></div>
+      <sc-for list="{{vela}}" as="r" hint-placeholder-count="4">
+        <div class="sg-row" style="border-color: {{r.line}}; background: {{r.bg}}"><span class="sp-av" style="background: {{r.c}}">{{r.ini}}</span><span style="flex: 0 0 160px; font-weight: 600">{{r.name}}</span>
+          <div class="sp-bar" style="flex: 1"><span style="width: {{r.w}}; background: {{r.bc}}"></span></div><span class="sp-num" style="width: 60px; text-align: right; font-weight: 700">{{r.pts}}</span>
+          <span class="sp-tag" style="width: 110px; justify-content: center; background: {{r.tbg}}; color: {{r.tc}}">{{r.tag}}</span></div>
+      </sc-for>
+    </div>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 16px; display: flex; gap: 14px; align-items: center; border-color: rgba(127,224,192,.4)">
+            <img src="specialty/survguil/idol-block.svg" alt="" style="width: 60px">
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span class="sp-lbl" style="color: #7fe0c0">Your hidden idol</span><span style="font-weight: 700">You hold a Blade Block</span><span class="sp-t2" style="font-size: 12.5px">You’re 2nd lowest in Vela. If Open Team 8 plays an idol, the blade moves to you. Play yours before lock.</span></div>
+    </div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">How it works</span><div class="sp-rule"><b>1</b><span>Tribes race on total points each week.</span></div><div class="sp-rule"><b>2</b><span>The losing tribe’s lowest score is chopped. No vote, no ties to argue.</span></div><div class="sp-rule"><b>3</b><span>An idol played before lock blocks the blade. The next lowest is chopped instead.</span></div><div class="sp-rule"><b>4</b><span>At 6 left the tribes merge. Then the lowest score overall is chopped.</span></div><div class="sp-rule"><b>5</b><span>Last one standing wins the league.</span></div></div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Latest</span><div class="sp-feed"><img src="specialty/survguil/icon-chop.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 12 was chopped</span><span class="sp-t3" style="font-size: 11.5px">Week 5 · Koa lost by 31.4</span></div></div><div class="sp-feed"><img src="specialty/survguil/icon-idolsave.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">An idol blocked the blade</span><span class="sp-t3" style="font-size: 11.5px">Week 4 · Open Team 4 survived</span></div></div><div class="sp-feed"><img src="specialty/survguil/icon-safe.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Vela won the tribe race</span><span class="sp-t3" style="font-size: 11.5px">Week 3 · +58.2</span></div></div></div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><span class="sp-lbl">Around the island</span><div style="display: flex; flex-wrap: wrap; gap: 6px"><a class="sp-chip" href="SGTribeRace.dc.html">Tribe race</a><a class="sp-chip" href="SGChopZone.dc.html">Chop zone</a><a class="sp-chip" href="SGIdolVault.dc.html">Idol vault</a><a class="sp-chip" href="SGTribes.dc.html">Tribes</a><a class="sp-chip" href="SGTribeSetup.dc.html">Tribe setup</a><a class="sp-chip" href="SGLineup.dc.html">My lineup</a><a class="sp-chip" href="SGTribeChat.dc.html">Tribe chat</a><a class="sp-chip" href="SGWaivers.dc.html">Waivers</a><a class="sp-chip" href="SGMerge.dc.html">Merge</a><a class="sp-chip" href="SGFinale.dc.html">Final two</a><a class="sp-chip" href="SGNotifications.dc.html">Notifications</a><a class="sp-chip" href="SGControl.dc.html">Commissioner</a><a class="sp-chip" href="SGSeasonEnd.dc.html">Season recap</a></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic { renderVals() {
+  const V = [['Open Team 5','O5','#12352a',118.4],['Open Team 4','O4','#1f2a4d',104.0],['TheCiege26 (you)','TC','#22314f',94.6],['Open Team 8','O8','#3a2410',85.1]];
+  return { vela: V.map(([name, ini, c, p], i) => { const low = i === 3, me = ini === 'TC';
+    return { name, ini, c, pts: p.toFixed(1), w: (p / 130 * 100).toFixed(0) + '%', bc: low ? 'linear-gradient(90deg,#7a1a12,#e0402e)' : me ? 'linear-gradient(90deg,#7a5a1a,#ffc46b)' : 'linear-gradient(90deg,#5a4aa8,#8b7be0)',
+      tag: low ? 'Under the blade' : me ? '9.5 above it' : 'Safe', tbg: low ? 'rgba(224,64,46,.2)' : me ? 'rgba(255,196,107,.14)' : 'rgba(58,190,120,.12)', tc: low ? '#ff9a8a' : me ? '#ffc46b' : '#7fe0a6',
+      line: low ? 'rgba(224,64,46,.45)' : me ? 'rgba(127,183,232,.4)' : 'rgba(255,255,255,.05)', bg: low ? 'rgba(224,64,46,.07)' : '#10131c' }; }) };
+} }
+</script>
+</body>
+</html>

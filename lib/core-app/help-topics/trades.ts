@@ -14,7 +14,7 @@ import type { HelpTopic } from '../helpTopics'
  *   tradeValueBalance ........ TradeCenter.tsx `balance` (pricedTotal, pct ÷ max), valueOf (market → league)
  *   tradeLeagueValue ......... lib/trade-value/leagueTradeValue.ts LeagueValuedLine.base, LEAGUE_FACTOR_MIN/MAX;
  *                              leagueTradeGrader.ts (the letter's pass has needFactors: null — scoring only)
- *   tradeRosterFit ........... leagueTradeGrader.ts rosterFitGrade (second pass, never the letter);
+ *   tradeRosterFit ........... leagueTradeGrader.ts rosterFitGrade (the your-team letter, tradeGrade.ts withYourTeamLetter);
  *                              lib/trade-value/viewerNeedFactors.ts allocateNeedFactors; rosterNeed.ts counterpartyPriceDelta
  *   tradeAfThisWeek .......... TradeCenter.tsx afWeekTotal (display only); trades/rosters/route.ts afEngineForLeague
  *   tradeProductionLean ...... lib/trade-value-console/build-trade-intelligence.ts whoWinsNow (|net| < 1 = even),
@@ -73,21 +73,21 @@ export const TRADES_TOPICS = {
   tradeLeagueValue: {
     en: {
       title: 'Market value and league value',
-      body: 'Market value is the trade-chart price for this league’s format: dynasty or redraft, 1QB or superflex, team count and PPR. League value adjusts it for this league’s own scoring, such as a real tight-end premium, and the combined change stays between half and double the market price. The letter is graded on league value; each asset listed here shows its change and the rule behind it.',
+      body: 'Market value is the trade-chart price for this league’s format: dynasty or redraft, 1QB or superflex, team count and PPR. League value adjusts it for this league’s reception scoring, such as a real tight-end premium, and the combined change stays between half and double the market price. Other scoring rules, such as 6-point passing touchdowns, do not change it yet. The letter is graded on league value; each asset listed here shows its change and the rule behind it.',
     },
     es: {
       title: 'Valor de mercado y valor de liga',
-      body: 'El valor de mercado es el precio de la tabla de intercambios para el formato de esta liga: dinastía o redraft, 1QB o superflex, número de equipos y PPR. El valor de liga lo ajusta según la puntuación propia de esta liga, como un premio real para tight ends, y el cambio total se queda entre la mitad y el doble del precio de mercado. La letra se califica con el valor de liga; cada activo de esta lista muestra su cambio y la regla que lo explica.',
+      body: 'El valor de mercado es el precio de la tabla de intercambios para el formato de esta liga: dinastía o redraft, 1QB o superflex, número de equipos y PPR. El valor de liga lo ajusta según la puntuación por recepción de esta liga, como un premio real para tight ends, y el cambio total se queda entre la mitad y el doble del precio de mercado. Otras reglas de puntuación, como 6 puntos por touchdown de pase, todavía no lo cambian. La letra se califica con el valor de liga; cada activo de esta lista muestra su cambio y la regla que lo explica.',
     },
   },
   tradeRosterFit: {
     en: {
       title: 'Your roster fit',
-      body: 'The same deal re-priced for your roster. A player who fills a starting slot you would otherwise leave open is worth more to you, most of all when the waiver wire has nobody at that position; sending a starter the deal doesn’t replace costs more, and sending surplus depth costs a little less. It’s a second calculation beside the grade: it never changes the letter, and it isn’t a win probability.',
+      body: 'The same deal re-priced for your roster. A player who fills a starting slot you would otherwise leave open is worth more to you, most of all when the waiver wire has nobody at that position; sending a starter the deal doesn’t replace costs more, and sending surplus depth costs a little less. On your own trades your letter is taken on it — that is your grade for your team — and the market letter beside it is the same deal on league value alone, which is what the other manager and trade history see. Your team’s place in the standings doesn’t change it, and it isn’t a win probability.',
     },
     es: {
       title: 'Encaje en tu plantilla',
-      body: 'El mismo intercambio, revalorado para tu plantilla. Un jugador que cubre un puesto titular que quedaría vacío vale más para ti, sobre todo si no hay nadie en esa posición entre los agentes libres; enviar a un titular que el intercambio no reemplaza cuesta más, y enviar profundidad sobrante cuesta un poco menos. Es un segundo cálculo junto a la calificación: nunca cambia la letra y no es una probabilidad de ganar.',
+      body: 'El mismo intercambio, revalorado para tu plantilla. Un jugador que cubre un puesto titular que quedaría vacío vale más para ti, sobre todo si no hay nadie en esa posición entre los agentes libres; enviar a un titular que el intercambio no reemplaza cuesta más, y enviar profundidad sobrante cuesta un poco menos. En tus propios intercambios tu letra se calcula con él — es tu calificación para tu equipo — y la letra de mercado a su lado es el mismo intercambio solo por valor de liga, que es lo que ven el otro mánager y el historial. Tu posición en la clasificación no la cambia, y no es una probabilidad de ganar.',
     },
   },
   tradeAfThisWeek: {

@@ -75,6 +75,86 @@ describe('league-free trade analyzer', () => {
     expect(screen.getByText(/fantasycalc · as of/)).toBeTruthy()
   })
 
+  it('ends the value basis with one full stop, whether or not the basis already has one (2026-10-11)', async () => {
+    const run = async (basis: string) => {
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({
+        grade: { graded: true, letter: 'B', partnerLetter: 'D', sideAdvantage: 'you', percentDiff: 12, label: 'Slightly favors you',
+          recommendation: 'x', giveMarket: 776, getMarket: 883, basis, lines: [] },
+      }) })
+      const view = render(<GenericTradeAnalyzer />)
+      fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Player One' } })
+      fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Player Two' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
+      const hint = await screen.findByText(/^Value basis:/)
+      const text = hint.textContent ?? ''
+      view.unmount()
+      return text
+    }
+    // The live MLB basis on allfantasy.ai read "…until this one has enough games.. Valuation checked".
+    const sentence = await run('Projections are built from the 2026 season until this one has enough games.')
+    expect(sentence).toContain('enough games. Valuation checked')
+    expect(sentence).not.toContain('..')
+    expect(await run('General market values')).toContain('General market values. Valuation checked')
+  })
+
+  it('shows the roster-spot credit that is inside the totals, so the values add up', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({
+      grade: { graded: true, letter: 'C', partnerLetter: 'C', sideAdvantage: 'even', percentDiff: -2,
+        label: 'Even', recommendation: 'Quoted values: even.',
+        giveMarket: 9190, getMarket: 9000, basis: 'General market values',
+        lines: [
+          { side: 'give', name: 'Star Player', marketValue: 9000, leagueValue: 9000, valueSource: 'fantasycalc', valueAsOf: '2026-10-09T00:00:00Z' },
+          { side: 'get', name: 'Depth One', marketValue: 4500, leagueValue: 4500, valueSource: 'fantasycalc', valueAsOf: '2026-10-09T00:00:00Z' },
+          { side: 'get', name: 'Depth Two', marketValue: 4500, leagueValue: 4500, valueSource: 'fantasycalc', valueAsOf: '2026-10-09T00:00:00Z' },
+        ],
+        rosterSpot: { side: 'give', spots: 1, valuePerSpot: 190, value: 190 },
+      },
+    }) })
+    render(<GenericTradeAnalyzer />)
+    fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Star Player' } })
+    fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Depth One' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
+    fireEvent.click(await screen.findByText('Why this grade? View asset values and sources'))
+    const row = screen.getByTestId('generic-roster-spot')
+    expect(row.textContent).toContain('Open roster spot Team B gains (it receives fewer players)')
+    expect(row.textContent).toContain('190')
+  })
+
+  it('asks how an NBA deal is scored, defaulting to 9-category, and sends nothing extra for other sports', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({
+      grade: { graded: true, letter: 'B', partnerLetter: 'D', sideAdvantage: 'you', label: 'Slightly favors you',
+        recommendation: 'Review the market gap.', giveMarket: 100, getMarket: 120, basis: 'Category value', lines: [] },
+    }) })
+    const view = render(<GenericTradeAnalyzer />)
+    expect(screen.queryByLabelText('NBA scoring')).toBeNull()
+    const analyze = async () => {
+      fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Player One' } })
+      fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Player Two' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+      const body = JSON.parse(fetchMock.mock.calls.at(-1)![1].body)
+      fetchMock.mockClear()
+      return body
+    }
+    expect(await analyze()).not.toHaveProperty('scoringFormat')
+    fireEvent.change(view.container.querySelector('.af-tc-generic-sport select')!, { target: { value: 'NBA' } })
+    expect((screen.getByLabelText('NBA scoring') as HTMLSelectElement).value).toBe('nba_9cat')
+    expect(await analyze()).toMatchObject({ sportFilter: 'NBA', scoringFormat: 'nba_9cat' })
+    fireEvent.change(screen.getByLabelText('NBA scoring'), { target: { value: 'points' } })
+    expect(await analyze()).toMatchObject({ scoringFormat: 'points' })
+
+    // MLB asks its own question, defaulting to 5x5; each sport keeps its own answer.
+    const sportSelect = view.container.querySelector('.af-tc-generic-sport select')!
+    fireEvent.change(sportSelect, { target: { value: 'MLB' } })
+    expect(screen.queryByLabelText('NBA scoring')).toBeNull()
+    expect((screen.getByLabelText('MLB scoring') as HTMLSelectElement).value).toBe('mlb_5x5')
+    expect(await analyze()).toMatchObject({ sportFilter: 'MLB', scoringFormat: 'mlb_5x5' })
+    fireEvent.change(screen.getByLabelText('MLB scoring'), { target: { value: 'mlb_6x6' } })
+    expect(await analyze()).toMatchObject({ scoringFormat: 'mlb_6x6' })
+    fireEvent.change(sportSelect, { target: { value: 'NBA' } })
+    expect((screen.getByLabelText('NBA scoring') as HTMLSelectElement).value).toBe('points')
+  })
+
   it('converts a known overall pick into a 12-team reference tier', () => {
     render(<GenericTradeAnalyzer />)
     fireEvent.change(screen.getByLabelText('Overall pick, if known'), { target: { value: '13' } })

@@ -1,3 +1,5 @@
+import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 ﻿/**
  * Post-draft artifacts after DraftSession is marked completed: roster materialization + persisted grades.
  * Kept separate from DraftSessionService to avoid circular imports with ranking/draft-grade code.
@@ -36,6 +38,7 @@ function prunePostDraftArtifactThrottle() {
  *   waivers, trades, scoring, and lineup tools see the drafted roster.
  */
 export async function runPostDraftFinalizationArtifacts(leagueId: string): Promise<void> {
+  if (await isSeasonTournamentDraft(leagueId)) return
   const { finalizeRosterAssignments } = await import('@/lib/live-draft-engine/RosterAssignmentService')
   await finalizeRosterAssignments(leagueId)
 
@@ -133,6 +136,14 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
     })
   }
 
+  // Await Survivor setup here so the completion repair/poll path can retry it too.
+  // Transaction failures propagate to the throttle; rule/ownership blockers are persisted for the commissioner.
+  const { runSurvivorPostDraftBootstrap } = await import('@/lib/survivor/SurvivorDraftBootstrapService')
+  const survivor = await runSurvivorPostDraftBootstrap(leagueId, { canonicalOnly: true })
+  if (survivor.setupComplete === false) {
+    console.warn('[postDraftFinalizeArtifacts] Survivor setup needs attention', { leagueId, warnings: survivor.warnings })
+  }
+
   const { computeAndPersistDraftRankings } = await import('@/lib/post-draft-manager-ranking')
   await computeAndPersistDraftRankings(leagueId)
 }
@@ -173,6 +184,8 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
  * Calls `completeDraftSession` which is idempotent when already completed.
  */
 export async function repairDraftCompletionIfBoardFull(leagueId: string): Promise<boolean> {
+  const seasonCompleted = await completeSeasonDraft(leagueId)
+  if (seasonCompleted !== null) return seasonCompleted
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,

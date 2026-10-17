@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
 import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
 import {
@@ -13,6 +14,8 @@ import {
   type RedraftLineupValidationResult,
 } from '@/lib/redraft/lineupValidation'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
+import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
+import { applyNbaSurvivorPickLineupLocks } from '@/lib/survivor/survivorNbaWeeklyScoring'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import {
   getCanonicalNflPlayerByNameTeam,
@@ -24,6 +27,13 @@ import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
 import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
+import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace'
+import {
+  crosswalkToRollingInsightsIds,
+  type RiCrosswalkDb,
+} from '@/lib/player-identity/rollingInsightsCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,13 +70,6 @@ type RedraftRosterRouteRow = {
   [key: string]: unknown
 }
 
-function playerInjuryKey(player: { playerId?: string | null; playerName?: string | null; sport?: string | null }) {
-  const sport = String(player.sport ?? '').toUpperCase()
-  const playerId = String(player.playerId ?? '').trim()
-  if (playerId) return `${sport}:id:${playerId}`
-  return `${sport}:name:${String(player.playerName ?? '').trim().toLowerCase()}`
-}
-
 async function hydrateCurrentInjuryStatuses<T extends RosterPlayerRow>(
   players: T[],
   season: number,
@@ -90,18 +93,17 @@ async function hydrateCurrentInjuryStatuses<T extends RosterPlayerRow>(
     take: Math.max(50, players.length * 3),
   })) as SportsInjuryRow[]
 
-  const statusByKey = new Map<string, string | null>()
-  for (const row of rows) {
-    const idKey = playerInjuryKey(row)
-    if (!statusByKey.has(idKey)) statusByKey.set(idKey, row.status ?? null)
-    const nameKey = `${String(row.sport ?? '').toUpperCase()}:name:${String(row.playerName ?? '').trim().toLowerCase()}`
-    if (!statusByKey.has(nameKey)) statusByKey.set(nameKey, row.status ?? null)
-  }
-
-  return players.map((player) => {
-    const status = statusByKey.get(playerInjuryKey(player))
-    return status ? { ...player, injuryStatus: status } : player
-  })
+  /*
+   * 🛑 THE STORED SNAPSHOT IS CLEARED FIRST (2026-10-11). `RedraftRosterPlayer.injuryStatus` is written at
+   * import/refresh time and is stale by construction, and `applyInjuryStatuses` leaves a player it finds no
+   * live row for untouched — so last week's "Out" survived into the response, the lineup validation
+   * (`starter_ineligible_injury`) and the projection. Only a live row may set a status now; none is null,
+   * "no news".
+   */
+  return applyInjuryStatuses(
+    players.map((p) => ({ ...p, injuryStatus: null })),
+    rows,
+  ) as T[]
 }
 
 function buildLineupValidation(args: {
@@ -113,6 +115,106 @@ function buildLineupValidation(args: {
   rosterConfig?: Parameters<typeof validateRedraftLineup>[0]['rosterConfig']
 }): RedraftLineupValidationResult {
   return validateRedraftLineup(args)
+}
+
+/**
+ * Each roster player's OWN Rolling Insights regular-season row, keyed `${rosterPlayerId}:${sport}`.
+ *
+ * 🛑 NEVER `playerSeasonStats.playerId IN <roster ids>` (fixed 2026-10-11). Those rows are keyed on the
+ * PROVIDER's own number and an NFL roster holds Sleeper ids (ESPN / Fleaflicker rosters, their own ids):
+ * the same digits are a different man. Measured on production: 251 rostered NFL ids joined a stranger's
+ * 2026 RI row — Justin Jefferson (Sleeper 6794) read DaRon Bland's line (RI 6794), Saquon Barkley (4866)
+ * Anthony Nelson's, Bijan Robinson (9509) Malachi Fields' — and that stranger's games fed the projection
+ * confidence and, with no other projection, his PPG became the weekly projection.
+ *
+ * Every roster id is asked of the ONE identity column its league speaks (`leagueIdentityColumns`), its
+ * `rollingInsightsId` reaches the stats table, and an id that does not map one-to-one gets nothing.
+ *
+ * `api_sports` rows are NOT read: `PlayerIdentityMap.apiSportsId` is empty for every NFL row (0 of the
+ * table, 2026-10-11), so there is no crosswalk to reach them by — the 11 the old query attached were all
+ * strangers. `thesportsdb` rows are not Rolling Insights and were mislabeled as such.
+ */
+async function loadOwnRollingInsightsSeasonStats(args: {
+  players: Array<{ playerId: string; sport: string }>
+  platform: string | null | undefined
+  season: string
+}): Promise<Map<string, SeasonStatsRow>> {
+  const out = new Map<string, SeasonStatsRow>()
+  const idsBySport = new Map<string, string[]>()
+  for (const p of args.players) {
+    const sport = String(p.sport ?? '').trim().toUpperCase()
+    if (!sport || !p.playerId) continue
+    idsBySport.set(sport, [...(idsBySport.get(sport) ?? []), p.playerId])
+  }
+  for (const [sport, ids] of idsBySport) {
+    const lookups = leagueIdentityColumns(ids, sport, args.platform)
+    if (lookups.length === 0) continue
+    const { byId } = await crosswalkToRollingInsightsIds(prisma as unknown as RiCrosswalkDb, { sport, lookups })
+    const rosterIdByRi = new Map<string, string>()
+    for (const [rosterId, identity] of byId) rosterIdByRi.set(identity.rollingInsightsId, rosterId)
+    if (rosterIdByRi.size === 0) continue
+    const rows = (await prisma.playerSeasonStats.findMany({
+      where: {
+        sport,
+        source: 'rolling_insights',
+        season: args.season,
+        seasonType: 'regular',
+        playerId: { in: [...rosterIdByRi.keys()] },
+      },
+      orderBy: [{ fetchedAt: 'desc' }],
+      select: {
+        playerId: true,
+        sport: true,
+        fantasyPointsPerGame: true,
+        gamesPlayed: true,
+        stats: true,
+        fetchedAt: true,
+        source: true,
+      },
+    })) as SeasonStatsRow[]
+    const byRosterId = new Map<string, SeasonStatsRow>()
+    for (const row of rows) {
+      if (row.source !== 'rolling_insights') continue
+      const rosterId = rosterIdByRi.get(row.playerId)
+      if (rosterId && !byRosterId.has(rosterId)) byRosterId.set(rosterId, { ...row, playerId: rosterId })
+    }
+    // Keyed with the roster row's own sport spelling — the same key the caller reads with.
+    for (const p of args.players) {
+      if (String(p.sport ?? '').trim().toUpperCase() !== sport) continue
+      const row = byRosterId.get(p.playerId)
+      if (row) out.set(`${p.playerId}:${p.sport}`, row)
+    }
+  }
+  return out
+}
+
+/**
+ * `fantasy_projections` holds TWO different projections under one Sleeper id: the provider's line
+ * (`source: 'sleeper'`) and AllFantasy's own engine number mirrored in (`source: 'allfantasy'`, see
+ * `writeAfProjectionSnapshots`). The read used to take whichever row came last and hand it to the engine
+ * as the PROVIDER projection — so the AF engine's number went out labelled `provider_projection`.
+ * Each row now goes to the input it actually is.
+ */
+function splitProjectionRows(rows: FantasyProjectionRow[]): {
+  provider: Map<string, FantasyProjectionRow>
+  afMirror: Map<string, FantasyProjectionRow>
+} {
+  const provider = new Map<string, FantasyProjectionRow>()
+  const afMirror = new Map<string, FantasyProjectionRow>()
+  for (const row of rows) {
+    const key = `${row.playerId}:${row.sport}`
+    const target = row.source === 'allfantasy' ? afMirror : provider
+    const held = target.get(key)
+    if (!held || row.fetchedAt > held.fetchedAt) target.set(key, row)
+  }
+  return { provider, afMirror }
+}
+
+function afMirrorConfidenceLevel(row: FantasyProjectionRow | undefined): string | null {
+  const stats = row?.stats
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return null
+  const level = (stats as Record<string, unknown>).confidenceLevel
+  return typeof level === 'string' && level.trim() ? level : null
 }
 
 export async function GET(req: NextRequest) {
@@ -130,7 +232,6 @@ export async function GET(req: NextRequest) {
   if (!parsedWeek.ok) {
     return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
   }
-  const week = parsedWeek.value ?? 1
 
   const lookup = await resolveRedraftRosterLookup({
     userId,
@@ -154,8 +255,10 @@ export async function GET(req: NextRequest) {
   // downstream rejects moving a locked player.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true },
+    select: { settings: true, platform: true, survivorMode: true },
   })
+  // No `?week=`: an imported season's stored week is never advanced — see resolveEffectiveRedraftWeek.
+  const week = parsedWeek.value ?? (await resolveEffectiveRedraftWeek({ id: lookup.season.id, currentWeek: roster.season.currentWeek }, leagueForLock?.platform))
   const lockHydrated = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,
     season: roster.season.season,
@@ -163,31 +266,66 @@ export async function GET(req: NextRequest) {
     rosterId: roster.id,
     leagueSettings: leagueForLock?.settings ?? null,
     players: roster.players,
+    // Lock on the club he plays for now — the display is corrected further down, the lock must be too.
+    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+      sport: roster.season.sport,
+      platform: leagueForLock?.platform ?? null,
+      playerIds: roster.players.map((p) => p.playerId),
+    }),
   })
-  roster.players = lockHydrated.players as RosterPlayerRow[]
+  roster.players = leagueForLock?.survivorMode && roster.season.sport === 'NBA'
+    ? await applyNbaSurvivorPickLineupLocks({ leagueId: roster.leagueId, redraftRosterId: roster.id, week, settings: leagueForLock.settings, players: lockHydrated.players as RosterPlayerRow[] })
+    : lockHydrated.players as RosterPlayerRow[]
   // G10: resolve the commissioner roster config so lineup validation honors the
   // league's configured slots (FLEX/SF/K/IDP/counts) + bench/IR/taxi limits.
   const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
 
   const playerIds = roster.players.map((p) => p.playerId)
   const sports = Array.from(new Set(roster.players.map((p) => p.sport).filter(Boolean)))
+  /*
+   * 🛑 AN IMPORTED ROSTER HOLDS ITS PLATFORM'S IDS, AND EVERY NFL TABLE BELOW IS KEYED ON SLEEPER'S.
+   * Same digits, different man: measured on production, 65 ESPN/Fleaflicker entries (57 ids)
+   * are also another player's Sleeper id — Fleaflicker 12892 (Christian McCaffrey) is Sleeper's Da'Quan
+   * Felton, ESPN 12483 (Matthew Stafford) read Jack Bech's 4.4-pt projection, and the canonical context
+   * (which treats any bare number as a Sleeper id) handed 48 of them a stranger's injury, bye and depth
+   * chart. Each roster id is translated ONCE here (`sleeperLookupId`, as matchupProjections/myTeam do);
+   * one that does not translate reads NOTHING by id. Results stay keyed on the roster's own id.
+   *
+   * NFL only: the other sports' rows here are written in the roster's own id space (the NCAAF score sync
+   * writes `player_weekly_scores` under the Fantrax roster id, sport NCAAFB) and filtered by sport, so a
+   * Sleeper translation there would only lose them.
+   */
+  const leaguePlatform = leagueForLock?.platform ?? null
+  const translatesToSleeper = String(roster.season.sport ?? '').trim().toUpperCase() === 'NFL'
+  // A team defence (ESPN -16012, Fleaflicker 2343) maps to Sleeper's team code from its row — the player
+  // crosswalk has no row for one, so without this every imported D/ST read no score (teamDefenseCrosswalk.ts).
+  const sleeperIdByRosterId = translatesToSleeper
+    ? withTeamDefenseIds(
+        leaguePlatform,
+        await crosswalkToSleeperIds(String(leaguePlatform ?? ''), 'NFL', playerIds).catch(() => new Map<string, string>()),
+        roster.players,
+      )
+    : new Map<string, string>()
+  const lookupOf = (id: string): string | null =>
+    translatesToSleeper ? sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId) : id
+  const lookupIds = [...new Set(playerIds.map(lookupOf).filter((x): x is string => x != null))]
   const seasonString = String(roster.season.season)
   let scores: PlayerWeeklyScoreRow[] = []
   let fantasyProjectionRows: FantasyProjectionRow[] = []
   let afProjectionRows: AfProjectionRow[] = []
-  let seasonStatRows: SeasonStatsRow[] = []
+  let seasonStatsByPlayer = new Map<string, SeasonStatsRow>()
   let adpRows: Array<{ playerKey: string | null; averageOverallPick: number }> = []
   if (playerIds.length) {
     ;[
       scores,
       fantasyProjectionRows,
       afProjectionRows,
-      seasonStatRows,
+      seasonStatsByPlayer,
       adpRows,
     ] = await Promise.all([
       prisma.playerWeeklyScore.findMany({
         where: {
-          playerId: { in: playerIds },
+          playerId: { in: lookupIds },
           week,
           season: roster.season.season,
           sport: { in: sports },
@@ -196,18 +334,18 @@ export async function GET(req: NextRequest) {
       prisma.fantasyProjection
         .findMany({
           where: {
-            playerId: { in: playerIds },
+            playerId: { in: lookupIds },
             week,
             season: seasonString,
             sport: { in: sports },
           },
-          select: { playerId: true, sport: true, projectedPoints: true, fetchedAt: true },
+          select: { playerId: true, sport: true, projectedPoints: true, fetchedAt: true, source: true, stats: true },
         })
         .catch(() => []) as Promise<FantasyProjectionRow[]>,
       prisma.aFProjectionSnapshot
         .findMany({
           where: {
-            playerId: { in: playerIds },
+            playerId: { in: lookupIds },
             week,
             season: roster.season.season,
             sport: { in: sports },
@@ -216,26 +354,11 @@ export async function GET(req: NextRequest) {
           select: { playerId: true, sport: true, afProjection: true, confidenceLevel: true, computedAt: true },
         })
         .catch(() => []) as Promise<AfProjectionRow[]>,
-      prisma.playerSeasonStats
-        .findMany({
-          where: {
-            playerId: { in: playerIds },
-            season: seasonString,
-            seasonType: 'regular',
-            sport: { in: sports },
-          },
-          orderBy: [{ source: 'desc' }, { fetchedAt: 'desc' }],
-          select: {
-            playerId: true,
-            sport: true,
-            fantasyPointsPerGame: true,
-            gamesPlayed: true,
-            stats: true,
-            fetchedAt: true,
-            source: true,
-          },
-        })
-        .catch(() => []) as Promise<SeasonStatsRow[]>,
+      loadOwnRollingInsightsSeasonStats({
+        players: roster.players,
+        platform: leagueForLock?.platform ?? null,
+        season: seasonString,
+      }).catch(() => new Map<string, SeasonStatsRow>()),
       prisma.allFantasyAdpSnapshot
         .findMany({
           where: {
@@ -251,37 +374,49 @@ export async function GET(req: NextRequest) {
     ])
   }
   const scoreByPlayer = new Map(scores.map((score) => [`${score.playerId}:${score.sport}`, score]))
-  const projectionByPlayer = new Map(fantasyProjectionRows.map((row) => [`${row.playerId}:${row.sport}`, row]))
+  const { provider: projectionByPlayer, afMirror: afMirrorByPlayer } = splitProjectionRows(fantasyProjectionRows)
   const afProjectionByPlayer = new Map<string, AfProjectionRow>()
   for (const row of afProjectionRows) {
     const key = `${row.playerId}:${row.sport}`
     if (!afProjectionByPlayer.has(key)) afProjectionByPlayer.set(key, row)
   }
-  const seasonStatsByPlayer = new Map<string, SeasonStatsRow>()
-  for (const row of seasonStatRows) {
-    const key = `${row.playerId}:${row.sport}`
-    const existing = seasonStatsByPlayer.get(key)
-    const rowIsRi = row.source === 'rolling_insights'
-    const existingIsRi = existing?.source === 'rolling_insights'
-    if (!existing || (rowIsRi && !existingIsRi) || (rowIsRi === existingIsRi && row.fetchedAt > existing.fetchedAt)) {
-      seasonStatsByPlayer.set(key, row)
-    }
-  }
+  // Rows arrive ADP-ascending, so first-seen is the best ADP. Stored keys are re-keyed so a stored
+  // `kenneth walker iii|rb` meets the roster's "Kenneth Walker" (see computeAllFantasyAdp.buildPlayerKey).
   const adpByPlayerKey = new Map<string, number>()
   for (const row of adpRows) {
-    if (row.playerKey && !adpByPlayerKey.has(row.playerKey)) {
-      adpByPlayerKey.set(row.playerKey, row.averageOverallPick)
-    }
+    if (!row.playerKey) continue
+    const key = normalizeStoredPlayerKey(row.playerKey)
+    if (!adpByPlayerKey.has(key)) adpByPlayerKey.set(key, row.averageOverallPick)
   }
 
+  // Live designations BEFORE projecting, so the projection is never priced on the stored snapshot.
+  const liveRosterPlayers = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
   const scoredPlayers = await Promise.all(
-    roster.players.map(async (player) => {
-      const weeklyScore = scoreByPlayer.get(`${player.playerId}:${player.sport}`) ?? null
-      const projectionKey = `${player.playerId}:${player.sport}`
-      const providerProjection = projectionByPlayer.get(projectionKey)
-      const afProjection = afProjectionByPlayer.get(projectionKey)
-      const seasonStats = seasonStatsByPlayer.get(projectionKey)
+    liveRosterPlayers.map(async (player) => {
+      const lookupId = lookupOf(player.playerId)
+      // Read on the translated id; an id with none reads nothing (see `lookupOf` above).
+      const lookupKey = lookupId ? `${lookupId}:${player.sport}` : null
+      const weeklyScore = (lookupKey ? scoreByPlayer.get(lookupKey) : null) ?? null
+      const providerProjection = lookupKey ? projectionByPlayer.get(lookupKey) : undefined
+      const afProjection = lookupKey ? afProjectionByPlayer.get(lookupKey) : undefined
+      const afMirror = lookupKey ? afMirrorByPlayer.get(lookupKey) : undefined
+      // Already keyed on the roster id: `loadOwnRollingInsightsSeasonStats` does its own crosswalk.
+      const seasonStats = seasonStatsByPlayer.get(`${player.playerId}:${player.sport}`)
       const adp = adpByPlayerKey.get(buildPlayerKey(player.playerName, player.position)) ?? null
+      const canonical =
+        String(player.sport).toUpperCase() === 'NFL'
+          ? (lookupId
+              ? await getCanonicalNflPlayerContext(lookupId, {
+                  season: roster.season.season,
+                  week,
+                }).catch(() => null)
+              : null) ??
+            (await getCanonicalNflPlayerByNameTeam(player.playerName, player.team, {
+              position: player.position,
+              season: roster.season.season,
+              week,
+            }).catch(() => null))
+          : null
       const projection = buildAllFantasyProjection({
         playerId: player.playerId,
         playerName: player.playerName,
@@ -291,27 +426,18 @@ export async function GET(req: NextRequest) {
         currentWeek: week,
         totalWeeks: roster.season.totalWeeks ?? 17,
         byeWeek: player.byeWeek,
-        injuryStatus: player.injuryStatus,
+        // NFL: the canonical designation (live feed by verified name, staleness applied); otherwise the
+        // live row hydrated above. Never the stored roster snapshot.
+        injuryStatus: canonical ? canonical.injuryStatus : player.injuryStatus,
         adp,
         providerWeeklyProjection: providerProjection?.projectedPoints ?? null,
-        allFantasyWeeklyProjection: afProjection?.afProjection ?? null,
-        allFantasyConfidenceLevel: afProjection?.confidenceLevel ?? null,
+        // The engine snapshot, else its Sleeper-keyed mirror row — the same AF number, never the provider's.
+        allFantasyWeeklyProjection: afProjection?.afProjection ?? afMirror?.projectedPoints ?? null,
+        allFantasyConfidenceLevel: afProjection ? afProjection.confidenceLevel : afMirrorConfidenceLevel(afMirror),
         rollingInsightsFantasyPointsPerGame: seasonStats?.fantasyPointsPerGame ?? null,
         rollingInsightsGamesPlayed: seasonStats?.gamesPlayed ?? null,
         rollingInsightsStats: seasonStats?.stats ?? null,
       })
-      const canonical =
-        String(player.sport).toUpperCase() === 'NFL'
-          ? (await getCanonicalNflPlayerContext(player.playerId, {
-              season: roster.season.season,
-              week,
-            }).catch(() => null)) ??
-            (await getCanonicalNflPlayerByNameTeam(player.playerName, player.team, {
-              position: player.position,
-              season: roster.season.season,
-              week,
-            }).catch(() => null))
-          : null
       const weeklyProjection = canonical?.projection?.projectedPoints ?? projection.weeklyProjection
       const restOfSeasonProjection = canonical?.projection?.restOfSeason ?? projection.restOfSeasonProjection
       const floorProjection = canonical?.projection?.floor ?? projection.floorProjection
@@ -364,6 +490,8 @@ export async function GET(req: NextRequest) {
         ...projectionFields,
         weeklyScore: {
           ...weeklyScore,
+          // The row is stored under the Sleeper id; the response speaks the roster's.
+          playerId: player.playerId,
           fantasyPts: await calculateScoreFromSportConfig(
             roster.leagueId,
             player.playerId,
@@ -375,7 +503,7 @@ export async function GET(req: NextRequest) {
       }
     }),
   )
-  const players = await hydrateCurrentInjuryStatuses(scoredPlayers, roster.season.season, week)
+  const players = scoredPlayers
   const unifiedRosterRows = await getNormalizedPlayerData({
     surface: 'roster',
     leagueId: lookup.season.leagueId,
@@ -396,8 +524,13 @@ export async function GET(req: NextRequest) {
       playerName: canonical?.displayName ?? player.playerName,
       position: canonical?.fantasyPosition ?? player.position,
       team: canonical?.teamAbbr ?? player.team,
-      injuryStatus: canonical?.injury.designation ?? unified?.injuryStatus ?? player.injuryStatus,
-      providerInjuryLabel: canonical?.injury.designation ?? unified?.injuryStatus ?? null,
+      /*
+       * ⚠ NOT `unified?.injuryStatus`: that is the stored `sports_players` snapshot column, and it sat ABOVE
+       * the live designation hydrated into `player.injuryStatus`. Dead today (its ids are `NFL:<id>`, so 0
+       * of 153,414 roster entries can match), but the first id fix would have made the stale column win.
+       */
+      injuryStatus: canonical?.injury.designation ?? player.injuryStatus,
+      providerInjuryLabel: canonical?.injury.designation ?? null,
       activeStatus: canonical?.activeStatus ?? null,
       weeklyProjection: canonicalProjection?.weeklyProjectedPoints ?? player.weeklyProjection,
       restOfSeasonProjection: canonicalProjection?.restOfSeasonProjectedPoints ?? player.restOfSeasonProjection,
@@ -452,6 +585,8 @@ type FantasyProjectionRow = {
   sport: string
   projectedPoints: number
   fetchedAt: Date
+  source?: string | null
+  stats?: unknown
 }
 
 type AfProjectionRow = {
@@ -518,16 +653,25 @@ export async function PATCH(req: NextRequest) {
   // applying moves, so a player whose game has kicked off cannot be moved.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true },
+    select: { settings: true, platform: true, survivorMode: true },
   })
-  const { players: currentPlayers } = await hydrateRedraftLineupLocks(prisma, {
+  const { players: hydratedPlayers } = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,
     season: roster.season.season,
     week,
     rosterId: roster.id,
     leagueSettings: leagueForLock?.settings ?? null,
     players: injuryHydrated,
+    // The enforcing path: lock on his current club, not the team stored when he was added.
+    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+      sport: roster.season.sport,
+      platform: leagueForLock?.platform ?? null,
+      playerIds: injuryHydrated.map((p) => p.playerId),
+    }),
   })
+  const currentPlayers = leagueForLock?.survivorMode && roster.season.sport === 'NBA'
+    ? await applyNbaSurvivorPickLineupLocks({ leagueId: roster.leagueId, redraftRosterId: roster.id, week, settings: leagueForLock.settings, players: hydratedPlayers })
+    : hydratedPlayers
   const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
   const applied = applyRedraftLineupMoves(currentPlayers, body.moves)
   const lineupValidation = buildLineupValidation({

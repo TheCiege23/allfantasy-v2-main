@@ -24,7 +24,10 @@ export async function POST(
     const status =
       message === 'Unauthorized' ? 401 :
       message === 'Forbidden' ? 403 :
-      message === 'Draft not found' ? 404 : 500
-    return NextResponse.json({ error: message }, { status })
+      message === 'Draft not found' ? 404 :
+      message.startsWith('SURVIVOR_CAST_INCOMPLETE:') ? 409 : 500
+    return NextResponse.json(message.startsWith('SURVIVOR_CAST_INCOMPLETE:')
+      ? { code: 'SURVIVOR_CAST_INCOMPLETE', error: message.slice('SURVIVOR_CAST_INCOMPLETE:'.length) }
+      : { error: message }, { status })
   }
 }

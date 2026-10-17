@@ -203,3 +203,54 @@ describe('sleeperReadableRosters', () => {
     expect(await sleeperReadablePlayerDataOf('sleeper', pd)).toBe(pd)
   })
 })
+
+/*
+ * A native league speaks Sleeper ids only in NFL. A native NHL roster holds Rolling Insights ids, and
+ * production rows carry a `sleeperId` for NFL players alone — so read as Sleeper ids they are NFL
+ * strangers. Measured 2026-10-12 on league d41382f9… ("NHL Season Verification"): 49 of 72 ids did,
+ * NHL A.J. Greer (RI 1114) as NFL WR Justin Blackmon and Adam Clendening (RI 268) as QB Alex Smith.
+ */
+describe('a native league of another sport', () => {
+  const NHL_ROSTER = { players: ['1114', '268', 'tsdb_34220053'], starters: ['1114'], lineup_sections: { starters: ['1114'] } }
+  const STRIPPED = { players: [], starters: [], lineup_sections: { starters: [] } }
+
+  it('is foreign once the sport is known; an NFL or unknown sport keeps the Sleeper space', () => {
+    for (const p of ['manual', 'allfantasy', 'af', 'native']) {
+      for (const s of ['NHL', 'nba', 'MLB', 'NCAAF', 'SOCCER']) expect(rosterIdSpaceOf(p, s)).toBe('other')
+      for (const s of ['NFL', 'nfl', '', null, undefined]) expect(rosterIdSpaceOf(p, s)).toBe('sleeper')
+    }
+  })
+
+  it('leaves a SLEEPER league of another sport alone — its ids ARE Sleeper ids, read by sport downstream', () => {
+    expect(rosterIdSpaceOf('sleeper', 'NBA')).toBe('sleeper')
+    expect(rosterIdSpaceOf('espn', 'NHL')).toBe('espn')
+    expect(rosterIdSpaceOf('fleaflicker', 'NFL')).toBe('other')
+    // No league row at all: no platform to call native.
+    expect(rosterIdSpaceOf('', 'NHL')).toBe('sleeper')
+  })
+
+  it('strips the NHL roster — every id gone, no identity read — and leaves the NFL one as the same object', async () => {
+    const nfl = { leagueId: 'NFL', playerData: { players: ['1114'] } }
+    const nhl = { leagueId: 'NHL', playerData: NHL_ROSTER }
+    const out = await sleeperReadableRosters([nfl, nhl], 'manual', (r) => r.leagueId)
+    expect(out[0]).toBe(nfl)
+    expect(out[1]!.playerData).toEqual(STRIPPED)
+    expect(mockIdentityFindMany).not.toHaveBeenCalled()
+  })
+
+  it('every entry point takes the sport: one roster, by league, and the translator', async () => {
+    expect(await sleeperReadablePlayerDataOf('manual', NHL_ROSTER, 'NHL')).toEqual(STRIPPED)
+    expect(await sleeperReadablePlayerDataOf('manual', NHL_ROSTER, 'NFL')).toBe(NHL_ROSTER)
+    const byLeague = await translateRostersByLeague(
+      [{ leagueId: 'A', playerData: NHL_ROSTER }, { leagueId: 'B', playerData: NHL_ROSTER }],
+      new Map([['A', 'manual'], ['B', 'manual']]),
+      new Map([['A', 'NHL']]),
+    )
+    expect(byLeague[0]!.playerData).toEqual(STRIPPED)
+    expect(byLeague[1]!.playerData).toBe(NHL_ROSTER) // no sport known for B: the platform-only answer
+    const t = await translateRostersToSleeperIds('manual', [{ playerData: NHL_ROSTER }], 'NHL')
+    expect(t.idSpace).toBe('other')
+    expect(t.total).toBe(3)
+    expect(t.rosters[0]!.playerData).toEqual(STRIPPED)
+  })
+})

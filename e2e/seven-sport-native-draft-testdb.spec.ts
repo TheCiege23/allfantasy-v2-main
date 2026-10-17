@@ -44,7 +44,7 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         await page.getByTestId('g30-team-count').fill('4')
         await page.getByTestId('g30-privacy-private').click()
         await page.getByTestId('g30-step-draft').click()
-        await page.getByTestId('g30-draft-type').selectOption('snake')
+        await page.getByTestId('g31-draft-type-snake').click()
         await page.getByTestId('g30-draft-date').fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
         await page.getByTestId('g30-draft-time').fill('20:00')
         await page.getByTestId('g30-timezone').selectOption('America/Chicago')

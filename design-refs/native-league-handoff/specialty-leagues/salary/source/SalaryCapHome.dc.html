@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Salary cap league home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.sc-seg{display:flex;height:26px;border-radius:7px;overflow:hidden;background:#151926;border:1px solid rgba(255,255,255,.08)}
+.sc-seg span{height:100%}
+.sc-yr{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.sc-col{position:relative;width:100%;height:150px;border-radius:8px;background:#10131c;border:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.sc-capline{position:absolute;left:0;right:0;border-top:2px dashed #e8c66a}
+</style>
+</helmet>
+<div class="sp" style="--acc: #3aa86a; --acc2: #9be3b8; --accInk: #04100a; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<section class="sp-hero" style="margin: 20px 28px 0">
+  <img class="sp-bg" src="specialty/salary/banner.svg" alt="">
+  <div class="sp-veil"></div>
+  <div class="sp-in">
+    <img src="specialty/salary/emblem.svg" alt="" style="width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0,0,0,.6))">
+    <div style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sp-chip">NFL</span><span class="sp-chip">2026</span><span class="sp-chip">Salary cap dynasty</span><span class="sp-chip">12 teams</span><span class="sp-chip">Year 3</span></div>
+      <span class="sp-title">Front Office League</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--acc2)">Week 6 · $231.6 of $250.0 committed</span>
+      <span class="sp-t2" style="font-size: 14px; max-width: 620px">Every player has a salary and a contract length. Stay under the cap, plan for next year, and pay dead money when you cut someone early.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px"><a class="sp-btn sp-btn-p" href="#" style="min-height: 46px; padding: 0 20px">Contracts</a><a class="sp-btn" href="SalaryCapBid.dc.html" style="min-height: 46px; padding: 0 20px">Free-agent bids</a><a class="sp-btn" href="#" style="min-height: 46px; padding: 0 20px">Trade with cap check</a></div>
+    </div>
+    <div class="sp-clock"><span class="sp-lbl" style="color: var(--acc2)">Cap space</span><span class="sp-num" style="font-size: 36px; font-weight: 700; color: #fff">$18.4</span><span class="sp-t3" style="font-size: 12px">of $250.0 · after $6.0 dead money</span></div>
+  </div>
+</section>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 32px; align-items: flex-start">
+  <section style="flex: 1 1 720px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <div class="sp-card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px"><img src="specialty/salary/icon-cap.svg" alt="" style="width: 28px"><span class="sp-lbl" style="flex: 1">2026 cap</span><span class="sp-num" style="font-size: 13px">$231.6 / $250.0</span></div>
+      <div class="sc-seg"><span style="width: 86.2%; background: linear-gradient(90deg,#1e7a4a,#3aa86a)"></span><span style="width: 2.4%; background: #ff6a4a"></span><span style="width: 4.8%; background: repeating-linear-gradient(45deg,#e8c66a 0 6px,#b8963a 6px 12px)"></span></div>
+      <div style="display: flex; gap: 18px; font-size: 12px; color: #a3a9c2; flex-wrap: wrap"><span style="display: flex; gap: 6px; align-items: center"><span style="width: 10px; height: 10px; border-radius: 3px; background: #3aa86a"></span>Active contracts $225.6</span><span style="display: flex; gap: 6px; align-items: center"><span style="width: 10px; height: 10px; border-radius: 3px; background: #ff6a4a"></span>Dead money $6.0</span><span style="display: flex; gap: 6px; align-items: center"><span style="width: 10px; height: 10px; border-radius: 3px; background: #e8c66a"></span>Rollover credit +$12.0</span></div>
+      <span class="sp-lbl" style="margin-top: 8px">Future years · committed vs cap</span>
+      <div style="display: flex; gap: 14px">
+        <sc-for list="{{years}}" as="y" hint-placeholder-count="4">
+          <div class="sc-yr"><div class="sc-col"><span class="sc-capline" style="bottom: {{y.capB}}"></span><span style="height: {{y.h}}; background: linear-gradient(180deg,#3aa86a,#1e5a3a)"></span></div><span class="sp-num" style="font-size: 12px; font-weight: 700">{{y.yr}}</span><span class="sp-t3 sp-num" style="font-size: 11px">${{y.used}} / ${{y.cap}}</span></div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="sp-card" style="padding: 8px 14px 4px">
+      <table class="sp-tbl"><thead><tr><th>Player</th><th>Pos</th><th class="n">Salary</th><th class="n">Years left</th><th>Status</th></tr></thead><tbody><tr><td style="font-weight: 600; color: #e8eaf2">Ja’Marr Chase</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">WR</span></td><td class="n">$48.0</td><td class="n">3</td>
+<td><span class="sp-tag" style="background: rgba(58,168,106,.16); color: #9be3b8">Extension eligible 2027</span></td></tr><tr><td style="font-weight: 600; color: #e8eaf2">Bijan Robinson</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">RB</span></td><td class="n">$41.5</td><td class="n">2</td>
+<td></td></tr><tr><td style="font-weight: 600; color: #e8eaf2">Jayden Daniels</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">QB</span></td><td class="n">$12.0</td><td class="n">2</td>
+<td><span class="sp-tag" style="background: rgba(127,183,232,.14); color: #9fd0ff">Rookie deal</span></td></tr><tr><td style="font-weight: 600; color: #e8eaf2">Puka Nacua</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">WR</span></td><td class="n">$9.0</td><td class="n">1</td>
+<td><span class="sp-tag" style="background: rgba(232,198,106,.16); color: #f1d58a">Expiring · tag candidate</span></td></tr><tr><td style="font-weight: 600; color: #e8eaf2">Brock Bowers</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">TE</span></td><td class="n">$14.0</td><td class="n">3</td>
+<td><span class="sp-tag" style="background: rgba(127,183,232,.14); color: #9fd0ff">Rookie deal</span></td></tr><tr><td style="font-weight: 600; color: #e8eaf2">Saquon Barkley</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">RB</span></td><td class="n">$33.0</td><td class="n">1</td>
+<td><span class="sp-tag" style="background: rgba(255,196,107,.14); color: #ffc46b">Expiring</span></td></tr><tr><td style="font-weight: 600; color: #e8eaf2">Drake London</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">WR</span></td><td class="n">$22.5</td><td class="n">2</td>
+<td></td></tr><tr><td style="font-weight: 600; color: #e8eaf2">Mark Andrews</td><td><span class="sp-tag" style="background: #151926; color: #a3a9c2">TE</span></td><td class="n">$6.0</td><td class="n">—</td>
+<td><span class="sp-tag" style="background: rgba(255,106,74,.16); color: #ff9a8a">Cut · dead money</span></td></tr></tbody></table>
+    </div>
+  </section>
+  <aside style="flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card2" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl">Offseason calendar</span>
+      <div style="display: flex; align-items: center; gap: 12px"><img src="specialty/salary/icon-contract.svg" alt="" style="width: 32px"><div style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Extension window</span><span class="sp-t3" style="font-size: 11.5px">Feb 1 – Feb 28</span></div></div><div style="display: flex; align-items: center; gap: 12px"><img src="specialty/salary/icon-tag.svg" alt="" style="width: 32px"><div style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Franchise tag deadline</span><span class="sp-t3" style="font-size: 11.5px">Mar 4 · top-5 position average</span></div></div><div style="display: flex; align-items: center; gap: 12px"><img src="specialty/salary/icon-contract.svg" alt="" style="width: 32px"><div style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Rookie draft</span><span class="sp-t3" style="font-size: 11.5px">Linear · slot salary scale</span></div></div><div style="display: flex; align-items: center; gap: 12px"><img src="specialty/salary/icon-cap.svg" alt="" style="width: 32px"><div style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Free-agent bidding</span><span class="sp-t3" style="font-size: 11.5px">Mar 12 · salary + years, blind</span></div></div>
+    </div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px"><span class="sp-lbl">Cap rules</span><div class="sp-rule"><b>1</b><span>Every move is checked against this year’s cap and your future years.</span></div><div class="sp-rule"><b>2</b><span>Cutting a player early costs 25% of the remaining salary per remaining year.</span></div><div class="sp-rule"><b>3</b><span>Up to $25 of unused cap rolls over to next season.</span></div><div class="sp-rule"><b>4</b><span>Trades move the contract and cap hit to the new team.</span></div></div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Latest</span><div class="sp-feed"><img src="specialty/salary/icon-contract.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 4 signed Jauan Jennings</span><span class="sp-t3" style="font-size: 11.5px">$7.5 × 2 years</span></div></div><div class="sp-feed"><img src="specialty/salary/icon-dead.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">You cut Mark Andrews</span><span class="sp-t3" style="font-size: 11.5px">$6.0 dead money this year</span></div></div><div class="sp-feed"><img src="specialty/salary/icon-tag.svg" alt=""><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 13px">Open Team 9 is $3.2 over next year’s cap</span><span class="sp-t3" style="font-size: 11.5px">Must clear space by Mar 12</span></div></div></div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic { renderVals() {
+  const Y = [['2026', 231.6, 250], ['2027', 196.0, 262.5], ['2028', 142.5, 275.6], ['2029', 61.0, 289.4]];
+  return { years: Y.map(([yr, used, cap]) => ({ yr, used: used.toFixed(1), cap: cap.toFixed(1), h: (used / 300 * 150).toFixed(0) + 'px', capB: (cap / 300 * 150).toFixed(0) + 'px' })) };
+} }
+</script>
+</body>
+</html>

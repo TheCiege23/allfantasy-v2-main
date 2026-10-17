@@ -1,0 +1,214 @@
+/* The daily streak strip at the top of the /core home (DailyStreakCardView.tsx, 2026-10-08).
+   Token-authored on the af-core palette. One compact row on desktop; on a phone the week dots and
+   today's glance wrap underneath, and the glance scrolls sideways rather than growing the card. */
+
+.af-streak {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line));
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--warn) 14%, transparent), transparent 60%),
+    var(--surface);
+}
+.af-streak[data-at-risk='true'] {
+  border-style: dashed;
+}
+
+.af-streak-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.af-streak-flame {
+  position: relative;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  line-height: 1;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+.af-streak-count {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--bg);
+  background: var(--warn);
+  border: 2px solid var(--surface);
+}
+.af-streak[data-at-risk='true'] .af-streak-flame {
+  filter: grayscale(0.6);
+  opacity: 0.75;
+}
+
+.af-streak-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 160px;
+}
+.af-streak-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-streak-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-streak-week {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+}
+.af-streak-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.af-streak-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--bg);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border: 1px solid var(--line);
+}
+.af-streak-day[data-checked='true'] .af-streak-dot {
+  background: var(--warn);
+  border-color: var(--warn);
+}
+.af-streak-day[data-today='true'] .af-streak-dot {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--warn) 55%, transparent);
+}
+.af-streak-wd {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.af-streak-best {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+/* Today at a glance */
+.af-streak-glance {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.af-streak-glance::-webkit-scrollbar {
+  display: none;
+}
+.af-streak-chip,
+.af-core .af-streak-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--text);
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--good) 30%, var(--line));
+}
+.af-streak-chip > span {
+  color: var(--good);
+  font-weight: 900;
+}
+.af-streak-chip[data-tone='warn'] {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+}
+.af-streak-chip[data-tone='warn'] > span {
+  color: var(--warn);
+}
+
+/* The visit that extends the streak gets one small celebration; every later load that day is quiet. */
+.af-streak[data-celebrate='true'] .af-streak-flame {
+  animation: af-streak-pop 900ms cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+}
+.af-streak[data-celebrate='true'] .af-streak-day[data-today='true'] .af-streak-dot {
+  animation: af-streak-fill 700ms 250ms ease-out both;
+}
+@keyframes af-streak-pop {
+  0% {
+    transform: scale(0.6) rotate(-12deg);
+  }
+  60% {
+    transform: scale(1.18) rotate(6deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+@keyframes af-streak-fill {
+  from {
+    transform: scale(0.4);
+    opacity: 0.2;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-streak[data-celebrate='true'] .af-streak-flame,
+  .af-streak[data-celebrate='true'] .af-streak-day[data-today='true'] .af-streak-dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .af-streak {
+    padding: 10px 12px;
+  }
+  /* Week dots take their own row under the headline; the best-ever pill sits at its end. */
+  .af-streak-week {
+    order: 3;
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+  .af-streak-best {
+    order: 2;
+  }
+  .af-streak-chip,
+  .af-core .af-streak-chip {
+    min-height: 40px;
+  }
+}

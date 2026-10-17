@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 
 export interface InsightCitation {
   source: string
@@ -133,39 +135,53 @@ async function generateInjuryAlerts(
       where: { sleeperId: { in: Array.from(ownedPlayerIds) } },
     })
 
-    const playerNames = identities.map(i => i.canonicalName)
-    if (playerNames.length === 0) return
+    if (identities.length === 0) return
 
-    const injuries = await prisma.sportsInjury.findMany({
-      where: {
-        playerName: { in: playerNames },
-        status: { in: ['Out', 'Doubtful', 'Questionable', 'IR'] },
-      },
-      orderBy: { updatedAt: 'desc' },
-    })
+    /*
+     * 🛑 THROUGH THE CANONICAL INJURY PORT, ONE FACT PER PLAYER. This read used to take every
+     * `SportsInjury` row whose NAME matched — any sport, any age, every provider's copy — and
+     * raise one alert per ROW. So a name shared by two athletes (WR vs LB Justin Jefferson)
+     * alerted on the other player's status, a months-old "Out" alerted as news, and one injury
+     * reported by three feeds alerted three times. The port binds by name VERIFIED by team and
+     * position, drops expired rows, and marks stale ones; a stale claim does not alert.
+     */
+    const ALERT_STATUSES = new Set(['Out', 'Doubtful', 'Questionable', 'IR'])
+    const bySport = new Map<string, typeof identities>()
+    for (const i of identities) {
+      const sport = (i.sport || 'NFL').toUpperCase()
+      bySport.set(sport, [...(bySport.get(sport) ?? []), i])
+    }
 
-    if (injuries.length > 0) sourcesUsed.add('injury_reports')
-    for (const inj of injuries) {
-      const severity = inj.status === 'Out' || inj.status === 'IR' ? 90 : inj.status === 'Doubtful' ? 75 : 55
-      insights.push({
-        type: 'injury_alert',
-        category: 'roster',
-        title: `${inj.playerName} is ${inj.status}`,
-        body: `Your player ${inj.playerName} (${inj.team || 'Unknown'}) is listed as ${inj.status}${inj.description ? ': ' + inj.description : ''}. Consider checking your waiver wire for a replacement.`,
-        priority: severity,
-        confidence: 0.95,
-        data: {
-          playerName: inj.playerName,
-          team: inj.team,
-          status: inj.status,
-          description: inj.description,
-        },
-        citations: [{
-          source: 'API-Sports Injury Report',
-          timestamp: inj.updatedAt?.toISOString() || new Date().toISOString(),
-          confidence: 'high',
-        }],
+    for (const [sport, group] of bySport) {
+      const res = await resolveInjuryFacts({
+        sport,
+        players: group.map(i => ({ name: i.canonicalName, team: i.currentTeam, position: i.position })),
       })
+      for (const i of group) {
+        const fact = res.byPlayer.get(normalizeMatchName(i.canonicalName))
+        if (!fact || fact.stale || !fact.status || !ALERT_STATUSES.has(String(fact.status))) continue
+        sourcesUsed.add('injury_reports')
+        const severity = fact.status === 'Out' || fact.status === 'IR' ? 90 : fact.status === 'Doubtful' ? 75 : 55
+        insights.push({
+          type: 'injury_alert',
+          category: 'roster',
+          title: `${i.canonicalName} is ${fact.status}`,
+          body: `Your player ${i.canonicalName} (${i.currentTeam || 'Unknown'}) is listed as ${fact.status}${fact.description ? ': ' + fact.description : ''}. Consider checking your waiver wire for a replacement.`,
+          priority: severity,
+          confidence: 0.95,
+          data: {
+            playerName: i.canonicalName,
+            team: i.currentTeam,
+            status: fact.status,
+            description: fact.description,
+          },
+          citations: [{
+            source: 'API-Sports Injury Report',
+            timestamp: fact.reportedAt.toISOString(),
+            confidence: 'high',
+          }],
+        })
+      }
     }
   } catch (err) {
     errors.push(`injury_alerts: ${String(err)}`)

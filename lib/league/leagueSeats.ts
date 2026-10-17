@@ -17,6 +17,7 @@
  */
 import type { Prisma } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type Db = Prisma.TransactionClient
 
@@ -113,7 +114,7 @@ export async function assignLeagueSeat(
   const { leagueId, rosterId, userId } = args
 
   const [league, roster, user] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
     tx.roster.findFirst({
       where: { id: rosterId, leagueId },
       select: { id: true, platformUserId: true, playerData: true, settings: true },
@@ -246,6 +247,22 @@ export async function assignLeagueSeat(
   }
   const teamNumber = slot?.slotNumber ?? (typeof foundation.slotNumber === 'number' ? foundation.slotNumber : null)
 
+  // Creation reserves a draft slot for every open Survivor team. Claiming the
+  // roster must also replace its draft-room "Open Team" label and open flag.
+  if (native && league.survivorMode) {
+    const draft = await tx.draftSession.findFirst({
+      where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { id: true, slotOrder: true },
+    })
+    if (draft && Array.isArray(draft.slotOrder)) {
+      const order = draft.slotOrder.map((entry) => {
+        const row = asRecord(entry)
+        return row.rosterId === rosterId ? { ...row, displayName: name, open: false } : entry
+      })
+      await tx.draftSession.update({ where: { id: draft.id }, data: { slotOrder: order as Prisma.InputJsonValue } })
+    }
+  }
+
   await tx.redraftLeagueMember.upsert({
     where: { leagueId_userId: { leagueId, userId } },
     create: {
@@ -284,7 +301,7 @@ export async function releaseLeagueSeat(
 ): Promise<{ ok: true; previousOwner: string | null } | { ok: false; code: 'ROSTER_NOT_FOUND' }> {
   const { leagueId, rosterId } = args
   const [league, roster] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
     tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
   ])
   if (!league || !roster) return { ok: false, code: 'ROSTER_NOT_FOUND' }
@@ -327,6 +344,20 @@ export async function releaseLeagueSeat(
     })
   }
   await tx.leagueEntrySlot.updateMany({ where: { leagueId, rosterId }, data: { status: 'OPEN' } })
+  if (native && league.survivorMode) {
+    const draft = await tx.draftSession.findFirst({
+      where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { id: true, slotOrder: true },
+    })
+    if (draft && Array.isArray(draft.slotOrder)) {
+      const order = draft.slotOrder.map((entry) => {
+        const row = asRecord(entry)
+        return row.rosterId === rosterId
+          ? { ...row, displayName: `Open Team ${String(row.slot ?? '')}`, open: true } : entry
+      })
+      await tx.draftSession.update({ where: { id: draft.id }, data: { slotOrder: order as Prisma.InputJsonValue } })
+    }
+  }
 
   if (previousOwner) {
     if (previousOwner === league.userId) {

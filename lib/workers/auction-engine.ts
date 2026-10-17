@@ -9,6 +9,7 @@ import {
   getAuctionStateFromSession,
   getBudgetsFromSession,
 } from '@/lib/live-draft-engine/auction/AuctionEngine'
+import { selectRowForExternalRef } from '@/lib/player-match/authoritativePlayerRow'
 
 export type NominationResult = {
   success: boolean
@@ -28,7 +29,44 @@ export type AuctionResult = {
   amount?: number
 }
 
-async function resolveAuctionPlayerFromId(leagueId: string, playerId: string) {
+/**
+ * The `SportsPlayer` row a draft's player id names, IN THE LEAGUE'S SPORT. Shared with the snake
+ * draft worker so the two cannot disagree.
+ *
+ * 🛑 `externalId` IS PER SPORT AND PER SOURCE. Measured on production 2026-10-12: 18,731
+ * `externalId`s exist in more than one sport, and 372 `(sport, externalId)` pairs carry rows from
+ * several sources. The old unscoped `findFirst` returned whichever row Postgres reached first — an
+ * NFL pick could be filed as the NHL player of that number. Our own id wins outright; otherwise the
+ * `externalId` rows go through `selectRowForExternalRef`, which refuses (null) when they describe
+ * different men rather than pick one at random.
+ */
+export async function resolveSportsPlayerRow(sport: string, playerId: string) {
+  const scoped = String(sport ?? '').trim().toUpperCase()
+  if (!scoped || !playerId) return null
+  const rows = await prisma.sportsPlayer.findMany({
+    where: {
+      sport: scoped,
+      OR: [{ id: playerId }, { externalId: playerId }],
+    },
+    select: {
+      id: true,
+      name: true,
+      position: true,
+      team: true,
+      sport: true,
+      externalId: true,
+      source: true,
+      sleeperId: true,
+      fetchedAt: true,
+    },
+  })
+  // Belt and braces for the `where`: another sport's row never answers.
+  const inSport = rows.filter((row) => String(row.sport ?? '').toUpperCase() === scoped)
+  return inSport.find((row) => row.id === playerId)
+    ?? selectRowForExternalRef(inSport.filter((row) => row.externalId === playerId))
+}
+
+async function resolveAuctionPlayerFromId(sport: string, playerId: string) {
   const player = await prisma.player.findUnique({
     where: { id: playerId },
     select: { id: true, name: true, position: true, team: true },
@@ -43,17 +81,7 @@ async function resolveAuctionPlayerFromId(leagueId: string, playerId: string) {
     }
   }
 
-  const sportsPlayer = await prisma.sportsPlayer.findFirst({
-    where: {
-      OR: [{ id: playerId }, { externalId: playerId }],
-    },
-    select: {
-      id: true,
-      name: true,
-      position: true,
-      team: true,
-    },
-  })
+  const sportsPlayer = await resolveSportsPlayerRow(sport, playerId)
 
   if (sportsPlayer?.id) {
     return {
@@ -73,7 +101,7 @@ export async function nominateDraftPlayer(
   playerId: string
 ): Promise<NominationResult> {
   const context = await assertLiveDraftContext(draftId)
-  const player = await resolveAuctionPlayerFromId(context.leagueId, playerId)
+  const player = await resolveAuctionPlayerFromId(context.sport, playerId)
   if (!player) {
     return { success: false, error: 'Player not found for nomination' }
   }

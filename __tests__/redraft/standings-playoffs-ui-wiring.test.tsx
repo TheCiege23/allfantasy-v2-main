@@ -143,3 +143,19 @@ describe('StandingsView — commissioner playoff controls (contextual + gated)',
     expect(screen.queryByTestId('redraft-playoff-seeds')).not.toBeInTheDocument()
   })
 })
+
+describe('Standings table accessibility and empty state', () => {
+  it('names each team as its row header and preserves completed scores', () => {
+    render(<StandingsView rows={STANDINGS} seasonId={null} />)
+    expect(screen.getByRole('rowheader', { name: 'Alpha' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'PF' })).toHaveAttribute('scope', 'col')
+    expect(screen.getByText('800.0')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'League standings table' })).toHaveAccessibleDescription('Scroll the table horizontally to see all statistics.')
+  })
+  it('shows an honest empty table and disables bracket generation without teams', () => {
+    render(<StandingsView rows={[]} seasonId={null} isCommissioner />)
+    expect(screen.getByText('No standings have been recorded yet.')).toBeInTheDocument()
+    expect(screen.queryAllByRole('rowheader')).toHaveLength(0)
+    expect(screen.getByTestId('redraft-generate-bracket')).toBeDisabled()
+  })
+})

@@ -1,0 +1,90 @@
+/* AllFantasy core shell — tokens mirror components/core-app/af-core.css (dark) */
+.af{--bg:#06070f;--surface:#0d1020;--surface2:#0a0c1a;--line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.13);--chip:rgba(255,255,255,.05);--text:#eef0fa;--text2:#c3c9e6;--muted:#989fc2;--faint:#7d84a8;--accent:#22d3ee;--accent-ink:#04050c;--accent-soft:rgba(34,211,238,.12);--accent-line:rgba(34,211,238,.28);--good:#34d399;--good-soft:rgba(52,211,153,.12);--warn:#fbbf24;--warn-soft:rgba(251,191,36,.12);--bad:#fb5b78;--bad-soft:rgba(251,91,120,.12);--gold:#f6c445;--gold-soft:rgba(246,196,69,.14);
+background:var(--bg);color:var(--text);font-family:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:stretch}
+.af *{box-sizing:border-box}
+.af a{color:var(--accent);text-decoration:none}.af a:hover{color:#67e8f9}
+.lbl{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-weight:700;font-size:10px;line-height:1;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.num{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;background:var(--chip);border:1px solid rgba(255,255,255,.1);font:700 10px/1 'JetBrains Mono',monospace;color:var(--text2);letter-spacing:.06em;white-space:nowrap;text-transform:uppercase}
+.chip-af{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.chip-gold{background:var(--gold-soft);border-color:rgba(246,196,69,.3);color:var(--gold)}
+.chip-warn{background:var(--warn-soft);border-color:rgba(251,191,36,.3);color:var(--warn)}
+.chip-bad{background:var(--bad-soft);border-color:rgba(251,91,120,.3);color:var(--bad)}
+.chip-good{background:var(--good-soft);border-color:rgba(52,211,153,.3);color:var(--good)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:10px;font:800 13px/1 'Archivo',system-ui,sans-serif;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.af a.btn-p,.btn-p{background:var(--accent);color:var(--accent-ink)}
+.af a.btn-g,.btn-g{background:transparent;color:var(--text2);border-color:var(--line2)}
+.btn-g:hover{background:var(--chip)}
+.btn-sm{min-height:34px;padding:0 12px;font-size:12px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+
+/* league rail — Sleeper-style switcher with AF status rings */
+.rail{flex:none;width:84px;background:var(--surface2);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0;overflow-y:auto}
+.rail-home{width:44px;height:44px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 15px/1 'Archivo',sans-serif;letter-spacing:-.03em;margin-bottom:6px}
+.rail-sep{width:32px;height:1px;background:var(--line2);margin:6px 0}
+.rl{position:relative;width:72px;display:flex;flex-direction:column;align-items:center;gap:5px;padding:7px 0;border:0;border-radius:12px;background:transparent;cursor:pointer;color:var(--text2)}
+.rl:hover{background:rgba(255,255,255,.04)}
+.rl-pill{position:absolute;left:-6px;top:50%;width:4px;height:8px;margin-top:-14px;border-radius:0 4px 4px 0;background:var(--text2);opacity:0;transition:height .15s,opacity .15s}
+.rl:hover .rl-pill{opacity:1;height:18px;margin-top:-18px}
+.rl-on .rl-pill{opacity:1;height:36px;margin-top:-27px;background:var(--accent)}
+.av{position:relative;width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font:900 16px/1 'Archivo',sans-serif;letter-spacing:-.03em;transition:border-radius .15s}
+.rl:hover .av,.rl-on .av{border-radius:12px}
+.av-tag{position:absolute;right:-5px;bottom:-5px;height:16px;padding:0 4px;border-radius:5px;border:2px solid var(--surface2);display:flex;align-items:center;font:800 8px/1 'JetBrains Mono',monospace}
+.av-dot{position:absolute;right:-4px;top:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--bad);color:#16040a;border:2px solid var(--surface2);display:flex;align-items:center;justify-content:center;font:800 9px/1 'JetBrains Mono',monospace}
+.rl-score{font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.02em}
+.rl-tip{display:none;position:absolute;left:78px;top:6px;z-index:20;min-width:200px;padding:10px 12px;border-radius:10px;background:#141c3a;border:1px solid var(--line2);box-shadow:0 18px 40px -16px rgba(0,0,0,.8);flex-direction:column;gap:5px;text-align:left;pointer-events:none}
+.rl:hover .rl-tip{display:flex}
+.rail-add{width:44px;height:44px;border-radius:14px;border:1px dashed var(--line2);background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
+
+/* section nav (core) */
+.snav{flex:none;width:232px;background:var(--surface2);border-right:1px solid var(--line);padding:14px 12px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.nv{display:flex;align-items:center;gap:10px;min-height:38px;padding:0 12px;border-radius:10px;font:700 14px/1 'Archivo',sans-serif;color:var(--muted)!important}
+.nv:hover{background:rgba(255,255,255,.04);color:var(--text)!important}
+.nv-on{background:var(--accent-soft);color:var(--text)!important;box-shadow:inset 0 0 0 1px var(--accent-line)}
+.nv-c{margin-left:auto;min-width:20px;height:18px;padding:0 6px;border-radius:6px;background:var(--chip);color:var(--text2);display:flex;align-items:center;justify-content:center;font:700 10px/1 'JetBrains Mono',monospace}
+.nv-h{padding:16px 12px 8px}
+
+/* top bar */
+.mainc{flex:1;min-width:0;display:flex;flex-direction:column}
+.topb{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:60px;padding:10px 24px;border-bottom:1px solid var(--line)}
+.viewing{display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line2);background:var(--surface);color:var(--text);font:800 13px/1 'Archivo',sans-serif;cursor:pointer}
+.search{flex:1 1 260px;max-width:520px;display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--accent-line);background:var(--surface2);color:var(--faint);font:500 13px/1 'Archivo',sans-serif}
+.search input{flex:1;min-width:0;background:transparent;border:0;color:var(--text);font:500 13px 'Archivo',sans-serif;outline:none}
+.kbd{font:700 10px/1 'JetBrains Mono',monospace;color:var(--faint);padding:4px 6px;border-radius:6px;border:1px solid var(--line2)}
+.wrap{width:100%;max-width:1320px;margin:0 auto;padding:24px}
+.fab{position:fixed;right:24px;bottom:24px;width:52px;height:52px;border-radius:999px;background:var(--accent);color:var(--accent-ink);border:0;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px -10px rgba(34,211,238,.6);cursor:pointer}
+
+/* league header + tabs */
+.lhead{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.h1{margin:0;font-size:40px;line-height:1;font-weight:900;letter-spacing:-.03em}
+.h2{margin:0;font-size:22px;line-height:1.1;font-weight:900;letter-spacing:-.03em}
+.tabs{display:flex;gap:26px;overflow-x:auto;border-bottom:1px solid var(--line)}
+.tab{display:inline-flex;align-items:center;gap:8px;height:46px;font:700 14px/1 'Archivo',sans-serif;color:var(--muted)!important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab:hover{color:var(--text)!important}
+.tab-on{color:var(--text)!important;border-bottom-color:var(--accent)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px}
+.row:hover{background:rgba(255,255,255,.03)}
+.seg{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--surface2);border:1px solid var(--line)}
+.sg{flex:1;min-height:36px;padding:0 12px;border-radius:8px;border:0;background:transparent;color:var(--muted);font:800 12px/1 'Archivo',sans-serif;cursor:pointer;white-space:nowrap}
+.sg-on{background:var(--accent);color:var(--accent-ink)}
+.pos{display:inline-flex;align-items:center;justify-content:center;width:40px;height:26px;border-radius:7px;font:800 10px/1 'JetBrains Mono',monospace;letter-spacing:.04em;flex:none}
+.p-QB{background:rgba(251,91,120,.14);color:#fb8aa0}.p-RB{background:rgba(52,211,153,.14);color:#5ee6b0}.p-WR{background:rgba(77,155,224,.18);color:#7fb7e8}.p-TE{background:rgba(251,191,36,.14);color:#fbbf24}.p-FLEX{background:rgba(255,255,255,.08);color:var(--text2)}.p-K{background:rgba(167,139,250,.16);color:#c4b5fd}.p-DEF{background:rgba(148,163,184,.16);color:#cbd5e1}.p-BN{background:transparent;color:var(--faint);border:1px solid var(--line2)}.p-IR{background:var(--bad-soft);color:var(--bad)}
+.bar{height:6px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;display:flex}
+
+/* phone */
+.ph{width:390px;height:844px;background:var(--bg);color:var(--text);font-family:'Archivo',system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+.ph *{box-sizing:border-box}
+.ph a{color:var(--accent);text-decoration:none}
+.ph-scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.strip{display:flex;gap:10px;overflow-x:auto;padding:12px 16px 10px}
+.strip .rl{width:60px;flex:none;padding:4px 0}
+.strip .rl-pill{display:none}
+.strip .av{width:46px;height:46px;border-radius:999px}
+.ring-on .av{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+.bnav{display:flex;border-top:1px solid var(--line);background:var(--surface2);padding:4px 4px 20px}
+.bb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:54px;font:700 10px/1 'Archivo',sans-serif;color:var(--faint)!important}
+.bb-on{color:var(--accent)!important}
+.iconbtn{width:44px;height:44px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+
+@media (max-width:900px){.af{flex-direction:column}.rail{width:auto;flex-direction:row;padding:8px 12px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}.rl-tip,.rail-sep{display:none}.snav{display:none}.rl-pill{display:none}}

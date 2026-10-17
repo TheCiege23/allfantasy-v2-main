@@ -1,3 +1,5 @@
+import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
@@ -422,11 +424,44 @@ export async function createCanonicalLeagueInTransaction(
   const inviteToken = randomUUID()
   mergedSettings.league_privacy_visibility = leagueVisibility
   mergedSettings.inviteCode = inviteToken
+  // TE premium (NFL): extra points per tight-end catch. The bootstrap seeds it into the scoring
+  // store and turns the engine's TE_PREMIUM toggle on; validateCreatePayload already checked it.
+  if (sport === 'NFL' && typeof conceptSetupForPrivacy.tePremiumPoints === 'number') {
+    mergedSettings.te_premium_points = conceptSetupForPrivacy.tePremiumPoints
+  }
 
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
   /** Calendar season year for list badges / filters (must not rely on Prisma's static default). */
   const seasonYear = resolveLeagueCreationSeason(sport)
+
+  if (formatId === 'survivor') {
+    const setup = body.conceptSetup ?? {}
+    const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup, defaultTeamCount: managerCount,
+      tribeCount: setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount })
+    Object.assign(mergedSettings, buildSurvivorSettingsSnapshotPatch({ ...settings }))
+  }
+
+  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+    const setup = body.conceptSetup ?? {}
+    const draftAt = typeof setup.draftDate === 'string' && typeof setup.draftTime === 'string'
+      ? toUtc(setup.draftDate, setup.draftTime, String(setup.draftTimezone ?? body.timezone ?? 'America/New_York')) : undefined
+    const exileSettings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup })
+    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: seasonYear, castSize: managerCount, draftAt,
+      endWeek: typeof setup.survivorSeasonEndWeek === 'number' ? setup.survivorSeasonEndWeek : undefined })
+    // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver.
+    mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
+      ...(foundationDefaults.rosterSettings.starter_slots as Record<string, number>),
+      BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
+      [sport === 'NBA' ? 'IL' : 'IR']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
+    } }
+    // Keep creation-time Exile choices consistent with the saved season calendar.
+    Object.assign(mergedSettings, { exileIslandEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: plan.exileReturnWeek ?? exileSettings.exileReturnWeek, exileReturnTokens: exileSettings.exileReturnTokens })
+    mergedSettings.survivor_full_season_plan = plan
+    mergedSettings.regular_season_weeks = plan.endWeek
+    mergedSettings.playoff_team_count = 0
+    mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: plan.endWeek + 1 }
+  }
 
   const isGuillotine = formatId === 'guillotine'
   const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })
@@ -473,7 +508,19 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
-      leagueVariant: resolution.modifiers.includes('idp') && supportsIdpLeagueSport(sport) ? 'idp' : null,
+      /*
+       * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
+       * VARIANT — the Zombie tab and its landing (`LeagueShell`), the trades tab, Chimmy's zombie context,
+       * the clip overlay. The legacy create route set it; this path never did, so a new zombie league
+       * looked like plain redraft. IDP keeps precedence because its scoring format reads the variant
+       * (an NFL IDP zombie league is a known gap). Survivor sets its own variant below.
+       */
+      leagueVariant:
+        resolution.modifiers.includes('idp') && supportsIdpLeagueSport(sport)
+          ? 'idp'
+          : formatId === 'zombie'
+            ? 'zombie'
+            : null,
       timezone: body.timezone ?? 'America/New_York',
       language: body.language ?? 'en',
       joinCode,
@@ -556,6 +603,7 @@ export async function createCanonicalLeagueInTransaction(
           }
         : {}),
       ...leagueModeColumns(formatId),
+      ...(formatId === 'survivor' ? { ...buildSurvivorLeagueColumnPatch(normalizeSurvivorFoundationSettings(mergedSettings)), leagueVariant: 'survivor', survivorPhase: 'pre_draft' } : {}),
     },
   })
 
@@ -810,6 +858,7 @@ export async function createCanonicalLeagueInTransaction(
       aiAutoPick: isAuto,
       draftOrderMethod: bestBallSettings?.orderMethod === 'randomize' ? 'random' : 'manual',
       draftDateUtc,
+      ...(formatId === 'survivor' ? { autostart: true } : {}),
     },
   })
 
@@ -907,21 +956,22 @@ export async function createCanonicalLeagueInTransaction(
     },
   })
 
+  const nonPlayingHost = formatId === 'survivor' && normalizeSurvivorFoundationSettings(mergedSettings).commissionerParticipationMode === 'non_participating_host'
   const roster = await tx.roster.create({
     data: {
       leagueId: league.id,
-      platformUserId: appUserId,
+      platformUserId: nonPlayingHost ? `open-slot-${league.id}-1` : appUserId,
       playerData: {
         draftPicks: [],
         foundation: {
           slotNumber: 1,
-          openTeam: false,
+          openTeam: nonPlayingHost,
           createdBy: 'canonical_create',
         },
       },
       settings: {
-        openSlot: false,
-        commissioner: true,
+        openSlot: nonPlayingHost,
+        commissioner: !nonPlayingHost,
       },
     },
   })
@@ -930,12 +980,13 @@ export async function createCanonicalLeagueInTransaction(
     data: {
       leagueId: league.id,
       externalId: roster.id,
-      ownerName: managerName,
-      teamName: `${managerName}'s Team`,
-      claimedByUserId: appUserId,
-      platformUserId: appUserId,
-      isCommissioner: true,
-      role: 'commissioner',
+      ownerName: nonPlayingHost ? buildOpenTeamName(1) : managerName,
+      teamName: nonPlayingHost ? buildOpenTeamName(1) : `${managerName}'s Team`,
+      claimedByUserId: nonPlayingHost ? null : appUserId,
+      platformUserId: nonPlayingHost ? `open-slot-${league.id}-1` : appUserId,
+      isOrphan: nonPlayingHost,
+      isCommissioner: !nonPlayingHost,
+      role: nonPlayingHost ? 'member' : 'commissioner',
     },
   })
 
@@ -944,7 +995,7 @@ export async function createCanonicalLeagueInTransaction(
       leagueId: league.id,
       userId: appUserId,
       role: 'COMMISSIONER',
-      teamNumber: 1,
+      teamNumber: nonPlayingHost ? null : 1,
     },
   })
 
@@ -952,8 +1003,8 @@ export async function createCanonicalLeagueInTransaction(
     {
       slot: 1,
       rosterId: roster.id,
-      displayName: managerName,
-      open: false,
+      displayName: nonPlayingHost ? buildOpenTeamName(1) : managerName,
+      open: nonPlayingHost,
     },
   ]
   const slotData: Prisma.LeagueEntrySlotCreateManyInput[] = []
@@ -961,7 +1012,7 @@ export async function createCanonicalLeagueInTransaction(
     id: randomUUID(),
     leagueId: league.id,
     slotNumber: 1,
-    status: 'FILLED',
+    status: nonPlayingHost ? 'OPEN' : 'FILLED',
     rosterId: roster.id,
   })
 

@@ -1,0 +1,9 @@
+import {describe,it,expect,vi} from 'vitest'
+import {validateDownloadUrl,downloadActualCsv} from '../tools/fantrax-browser-connector/download.js'
+const url='https://www.fantrax.com/fxpa/downloadTeamRosterStats?leagueId=v2kzedypmm8jp61b&teamId=qoat4t4imm8jp61g&period=4&seasonOrProjection=SEASON_50t_BY_PERIOD&timeframeTypeCode=BY_PERIOD&scoringCategoryType=5&statsType=1&view=STATS&adminMode=false'
+describe('browser-only Fantrax downloads',()=>{
+ it('allows only the captured actual-score endpoint and parameter namespace',()=>{expect(validateDownloadUrl(url)).toBe(url);expect(()=>validateDownloadUrl(url.replace('www.fantrax.com','evil.test'))).toThrow();expect(()=>validateDownloadUrl(url.replace('BY_PERIOD&','PROJECTED_WEEKLY&'))).toThrow();expect(()=>validateDownloadUrl(url+'&token=secret')).toThrow();expect(()=>validateDownloadUrl(url+'&period=5')).toThrow()})
+ it('uses the browser session without setting or returning cookie headers',async()=>{const fetcher=vi.fn().mockResolvedValue({ok:true,text:async()=> '"ID","Fantasy Points"\n"p","0"'});expect(await downloadActualCsv(url,fetcher)).toContain('Fantasy Points');expect(fetcher.mock.calls[0][1]).toMatchObject({credentials:'include',redirect:'error'});expect(fetcher.mock.calls[0][1]).not.toHaveProperty('headers')})
+ it('refuses a successful HTTP login error or HTML page',async()=>{await expect(downloadActualCsv(url,vi.fn().mockResolvedValue({ok:true,text:async()=>'{"pageError":{"code":"WARNING_NOT_LOGGED_IN"}}'}))).rejects.toThrow('sign in');await expect(downloadActualCsv(url,vi.fn().mockResolvedValue({ok:true,text:async()=>'<html>login</html>'}))).rejects.toThrow('sign in')})
+ it('fails on rate limits without a download loop',async()=>{const fetcher=vi.fn().mockResolvedValue({ok:false,status:429});await expect(downloadActualCsv(url,fetcher)).rejects.toThrow('rate limit');expect(fetcher).toHaveBeenCalledTimes(1)})
+})

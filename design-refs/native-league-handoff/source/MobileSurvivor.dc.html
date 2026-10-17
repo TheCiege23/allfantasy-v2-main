@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor — idol DM (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}
+@keyframes glint{0%,100%{box-shadow:0 0 0 1px rgba(246,196,69,.5),0 0 18px -4px rgba(246,196,69,.6)}50%{box-shadow:0 0 0 1px rgba(246,196,69,.9),0 0 30px -2px rgba(246,196,69,.85)}}
+.idol{animation:glint 2.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.idol{animation:none}}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <header style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #0b0d14; border-bottom: 1px solid rgba(255,255,255,.07)">
+    <a class="iconbtn" href="MobileChat.dc.html" aria-label="Back to chats">‹</a>
+    <span class="av" style="width: 36px; height: 36px; border-radius: 999px; background: #22d3ee; color: #04050c; font-size: 12px">AF</span>
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 15px">AF Host</span><span class="lbl">Survivor · Tribe Vela · DM</span></span>
+    <span class="chip chip-gold">Private</span>
+  </header>
+
+  <div class="ph-scroll" style="padding: 14px 12px; gap: 10px">
+    <span class="lbl" style="text-align: center; padding: 4px 0">Today · 6:42 AM · draft complete</span>
+    <div style="align-self: flex-start; max-width: 88%; padding: 12px 14px; border-radius: 16px 16px 16px 4px; background: #141c3a; font-size: 14px; line-height: 1.5; color: #eef0fa">The draft is over. Somewhere in the picks, 7 idols were hidden. You drafted <strong>1</strong> of them.</div>
+
+    <div class="idol" style="align-self: stretch; padding: 18px; border-radius: 18px; background: #10131c; border: 1px solid rgba(246,196,69,.5); display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+      <span aria-hidden="true" style="width: 72px; height: 72px; border-radius: 22px; background: #f6c445; color: #1a1204; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700">◆</span>
+      <span class="lbl" style="color: #f6c445">Hidden idol</span>
+      <span style="font-size: 22px; font-weight: 700; letter-spacing: -0.03em">Immunity idol</span>
+      <span style="font-size: 13px; line-height: 1.5; color: #c3c9e6">Protects you from elimination for one week. It was hidden with <strong style="color: #eef0fa">Ladd McConkey</strong> (your 2.06 pick).</span>
+      <span style="font-size: 11px; color: #989fc2">It's yours even if you trade or drop McConkey.</span>
+    </div>
+
+    <div style="align-self: flex-start; max-width: 88%; padding: 12px 14px; border-radius: 16px 16px 16px 4px; background: #141c3a; font-size: 14px; line-height: 1.5; color: #eef0fa">Nobody else knows you have it. Play it from My team › Idols before lineups lock in the week you need it.</div>
+
+    <div style="display: flex; gap: 8px; padding-top: 4px">
+      <a class="btn btn-p" href="#" style="flex: 1">View my idols</a>
+      <a class="btn btn-g" href="#" style="flex: 1">Ask Chimmy</a>
+    </div>
+  </div>
+
+  <div style="padding: 10px 12px 26px; border-top: 1px solid rgba(255,255,255,.07); background: #0b0d14; font-size: 12px; color: #7d84a8; text-align: center">AF Host messages are one-way. Replies go to Chimmy.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

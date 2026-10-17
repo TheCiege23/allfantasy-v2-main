@@ -12,6 +12,7 @@ import { TradeComparisonSnapshots } from './TradeComparisonSnapshots'
 import { TradeValueChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import styles from './GenericTradeAnalyzer.module.css'
+import { rosterSpotRowLabel } from '@/lib/trade-value/rosterSpotCharge'
 
 type Result = {
   grade?: TradeGradeView
@@ -24,6 +25,28 @@ type Result = {
 const SPORTS = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'] as const
 
 type SearchPlayer = { playerId: string | null; name: string; position: string | null; team: string | null; value: number | null }
+/**
+ * How a deal is graded with no league, for the sports that offer a choice: a standard category preset, or
+ * fantasy points. The first choice is the default — most NBA and MLB leagues are category leagues.
+ */
+const SCORING_CHOICES: Readonly<Record<string, { label: string; choices: ReadonlyArray<{ value: string; label: string }> }>> = {
+  NBA: {
+    label: 'NBA scoring',
+    choices: [
+      { value: 'nba_9cat', label: '9-category head-to-head' },
+      { value: 'nba_8cat_standard', label: '8-category (no turnovers)' },
+      { value: 'points', label: 'Points' },
+    ],
+  },
+  MLB: {
+    label: 'MLB scoring',
+    choices: [
+      { value: 'mlb_5x5', label: '5x5 categories' },
+      { value: 'mlb_6x6', label: '6x6 categories (adds TB and holds)' },
+      { value: 'points', label: 'Points' },
+    ],
+  },
+}
 
 function assets(text: string, sport: string, verified: Record<string, string>) {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((name) => {
@@ -81,6 +104,8 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
 
   const comparisonScope = `generic:${viewerId ?? 'device'}`
   const [sport, setSport] = useState<string>('NFL')
+  const [scoringBySport, setScoringBySport] = useState<Record<string, string>>({ NBA: 'nba_9cat', MLB: 'mlb_5x5' })
+  const scoring = SCORING_CHOICES[sport] ? scoringBySport[sport] ?? SCORING_CHOICES[sport]!.choices[0]!.value : null
   const [teamA, setTeamA] = useState('')
   const [teamB, setTeamB] = useState('')
   const [result, setResult] = useState<Result | null>(null)
@@ -196,6 +221,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           sideGive,
           sideGet,
           skipAi: true,
+          ...(scoring ? { scoringFormat: scoring } : {}),
         }),
       })
       const data = await response.json() as Result
@@ -236,6 +262,13 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           {SPORTS.map((value) => <option key={value} value={value}>{copy(value)}</option>)}
         </select>
       </label>
+      {/* NBA and MLB leagues are mostly category leagues; the grade values each the way it is won. */}
+      {scoring && SCORING_CHOICES[sport] ? (
+        <label className="af-tc-generic-sport">{copy("Scoring ")}<select aria-label={copy(SCORING_CHOICES[sport]!.label)} value={scoring} onChange={(event) => { const value = event.target.value; setScoringBySport((prev) => ({ ...prev, [sport]: value })); setResult(null) }}>
+            {SCORING_CHOICES[sport]!.choices.map((choice) => <option key={choice.value} value={choice.value}>{copy(choice.label)}</option>)}
+          </select>
+        </label>
+      ) : null}
       <div className="af-tc-generic-sides">
         <div className="af-tc-generic-side">
           <label>{copy("Team A sends ")}<textarea value={teamA} onChange={(event) => { setTeamA(event.target.value); setScreenshotConfirmed(false); setResult(null) }} placeholder={copy('Player name\n2027 round 1')} rows={5} />
@@ -287,7 +320,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
               <h3>{copy(result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value')}</h3>
               <p>{copy("Team A receives ")}{copy(result.grade.getMarket.toLocaleString(locale))}{copy(" in general market value and sends ")}{copy(result.grade.giveMarket.toLocaleString(locale))}{copy("; Team B sees the reverse. The value gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the larger side.")} <TopicTip topic="tradeGrade" /></p>
               <p className="af-tc-generic-hint">{copy("This grade compares market value only. Position matters only through each asset’s quoted value; there is no team-specific position adjustment. League scoring, roster needs, injury risk, acceptance likelihood, and future results are not priced separately.")}</p>
-              <p className="af-tc-generic-hint">{copy("Value basis: ")}{copy(result.grade.basis)}{copy(". Valuation checked ")}{copy(result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString(locale) : 'at analysis time; source date unavailable')}{copy(".")}</p>
+              <p className="af-tc-generic-hint">{copy("Value basis: ")}{copy(result.grade.basis)}{copy(/[.!?]\s*$/.test(result.grade.basis) ? " Valuation checked " : ". Valuation checked ")}{copy(result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString(locale) : 'at analysis time; source date unavailable')}{copy(".")}</p>
               <TradeDecisionSummary grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeEvidencePanel grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeValueChart grade={result.grade} generic />
@@ -301,7 +334,13 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                       <span>{copy(line.marketValue == null ? 'Value unavailable' : `${line.marketValue.toLocaleString(locale)} market value`)}</span>
                       <small>{copy(line.valueSource ?? line.source ?? 'Source unavailable')}{copy(line.valueAsOf && Number.isFinite(Date.parse(line.valueAsOf)) ? ` · as of ${new Date(line.valueAsOf).toLocaleDateString(locale)}` : ' · source date unavailable')}</small>
                     </li>
-                  ))}</ul>
+                  ))}
+                  {result.grade.rosterSpot ? (
+                    <li data-testid="generic-roster-spot">
+                      <strong>{copy(rosterSpotRowLabel(result.grade.rosterSpot, 'teams'))}</strong>
+                      <span>{copy(`${result.grade.rosterSpot.value.toLocaleString(locale)} — the last rostered player in a league this size`)}</span>
+                    </li>
+                  ) : null}</ul>
                 </details>
               ) : null}
               {result.grade.lines.some((line) => line.marketValue == null || line.leagueValue == null) ? (

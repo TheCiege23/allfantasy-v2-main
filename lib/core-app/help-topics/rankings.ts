@@ -140,21 +140,21 @@ export const RANKINGS_TOPICS = {
   liveImpactTotal: {
     en: {
       title: 'Your live impact',
-      body: 'Live fantasy points from your starters in games being played now. A player on three of your teams counts three times — once per league — because he is affecting three of your matchups.',
+      body: 'How many of your starters are in games being played right now, plus how many are still to play and how many are done. Each player counts once, even if he starts for you in several leagues. Points are under Contributions by league, one league at a time, because each league scores its own way.',
     },
     es: {
       title: 'Tu impacto en vivo',
-      body: 'Puntos de fantasía en vivo de tus titulares en los partidos que se juegan ahora. Un jugador en tres de tus equipos cuenta tres veces, una por liga, porque afecta a tres de tus enfrentamientos.',
+      body: 'Cuántos de tus titulares están en partidos que se juegan ahora, además de cuántos faltan por jugar y cuántos ya terminaron. Cada jugador cuenta una vez, aunque sea titular en varias de tus ligas. Los puntos están en Contribuciones por liga, liga por liga, porque cada liga puntúa a su manera.',
     },
   },
   biggestMover: {
     en: {
-      title: 'Biggest mover',
-      body: 'The most recent play by one of your starters in a live game — the latest moment, not necessarily the biggest scorer.',
+      title: 'Latest for you',
+      body: 'The most recent notable play by one of your starters in a game being played now, with how long ago it happened. It is the newest moment, not a ranking of who scored most.',
     },
     es: {
-      title: 'Mayor movimiento',
-      body: 'La jugada más reciente de uno de tus titulares en un partido en vivo: el último momento, no necesariamente el que más anotó.',
+      title: 'Lo último para ti',
+      body: 'La jugada destacada más reciente de uno de tus titulares en un partido que se juega ahora, con cuánto hace que ocurrió. Es el momento más nuevo, no una clasificación de quién anotó más.',
     },
   },
   liveGameWinEstimate: {

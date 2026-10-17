@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 240 300" width="240" height="300">
+  <defs>
+    <radialGradient id="spyglass-aura" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#99f6e4" stop-opacity="0.5"/>
+      <stop offset="0.5" stop-color="#2dd4bf" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#0f766e" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="spyglass-shadow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#000" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="spyglass-bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="0.35" stop-color="#e6d6b2"/>
+      <stop offset="0.75" stop-color="#a88e62"/>
+      <stop offset="1" stop-color="#5e4a2c"/>
+    </linearGradient>
+    <linearGradient id="spyglass-brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2c4"/>
+      <stop offset="0.3" stop-color="#e2b04c"/>
+      <stop offset="0.7" stop-color="#9a6a1c"/>
+      <stop offset="1" stop-color="#4a300a"/>
+    </linearGradient>
+    <linearGradient id="spyglass-wood" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b8743e"/>
+      <stop offset="0.5" stop-color="#7a4220"/>
+      <stop offset="1" stop-color="#3a1c0a"/>
+    </linearGradient>
+    <radialGradient id="spyglass-lens" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.3" stop-color="#ccfbf1"/>
+      <stop offset="0.7" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#0d6b63"/>
+    </radialGradient>
+    <linearGradient id="spyglass-beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#99f6e4" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#99f6e4" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="spyglass-blur10" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="spyglass-blur4" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="spyglass-blur2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.8"/></filter>
+    <filter id="spyglass-grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04 0.5" numOctaves="2" seed="3" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.25  0 0 0 0 0.18  0 0 0 0 0.08  -2.6 0 0 0 1.4" result="d"/>
+      <feComposite in="d" in2="SourceAlpha" operator="in"/>
+    </filter>
+    <path id="spyglass-barrel" d="M-8,-19 L84,-23 L84,23 L-8,19 Z"/>
+  </defs>
+
+  <!-- aura -->
+  <ellipse cx="120" cy="140" rx="114" ry="128" fill="url(#spyglass-aura)"/>
+  <circle cx="186" cy="56" r="40" fill="#99f6e4" opacity="0.35" filter="url(#spyglass-blur10)"/>
+  <!-- contact shadow -->
+  <ellipse cx="120" cy="268" rx="72" ry="9" fill="url(#spyglass-shadow)"/>
+
+  <!-- tripod legs -->
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <path d="M116,160 L70,262" stroke="#120c06" stroke-width="15"/>
+    <path d="M116,160 L70,262" stroke="url(#spyglass-wood)" stroke-width="9"/>
+    <path d="M124,160 L172,262" stroke="#120c06" stroke-width="15"/>
+    <path d="M124,160 L172,262" stroke="url(#spyglass-wood)" stroke-width="9"/>
+    <path d="M114,161 L69,258" stroke="#e0a066" stroke-width="1.4" opacity="0.8"/>
+    <!-- bone feet -->
+    <path d="M64,256 L78,256 L80,266 L60,266 Z" fill="url(#spyglass-bone)" stroke="#120c06" stroke-width="2.6"/>
+    <path d="M164,256 L178,256 L182,266 L162,266 Z" fill="url(#spyglass-bone)" stroke="#120c06" stroke-width="2.6"/>
+  </g>
+  <!-- front leg -->
+  <path d="M120,162 L124,268" stroke="#120c06" stroke-width="16" stroke-linecap="round"/>
+  <path d="M120,162 L124,268" stroke="url(#spyglass-wood)" stroke-width="10" stroke-linecap="round"/>
+  <path d="M118,166 L121.5,262" stroke="#e0a066" stroke-width="1.6" opacity="0.8"/>
+  <path d="M113,262 L135,262 L137,272 L111,272 Z" fill="url(#spyglass-bone)" stroke="#120c06" stroke-width="2.6" stroke-linejoin="round"/>
+  <!-- leg binding cords -->
+  <g stroke-linecap="round">
+    <path d="M104,176 L138,176 M104,182 L138,182 M106,188 L136,188" stroke="#120c06" stroke-width="5"/>
+    <path d="M104,176 L138,176 M104,182 L138,182 M106,188 L136,188" stroke="#c9a46a" stroke-width="2.6"/>
+    <path d="M106,175 L130,175" stroke="#f3dfb5" stroke-width="1"/>
+  </g>
+  <circle cx="102" cy="190" r="4.5" fill="#5eead4" stroke="#120c06" stroke-width="2"/>
+  <circle cx="140" cy="190" r="4.5" fill="#5eead4" stroke="#120c06" stroke-width="2"/>
+  <path d="M102,195 L100,210 M140,195 L142,210" stroke="#120c06" stroke-width="3.5"/>
+  <path d="M102,195 L100,210 M140,195 L142,210" stroke="#c9a46a" stroke-width="1.6"/>
+  <!-- tripod head (brass yoke) -->
+  <path d="M104,146 L136,146 L132,166 L108,166 Z" fill="url(#spyglass-brass)" stroke="#120c06" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="120" cy="156" r="4" fill="#4a300a" stroke="#120c06" stroke-width="1.5"/>
+
+  <!-- telescope -->
+  <g transform="translate(118,124) rotate(-47) scale(1.08)">
+    <!-- light beam from lens -->
+    <path d="M104,-22 L142,-32 L142,32 L104,22 Z" fill="url(#spyglass-beam)" filter="url(#spyglass-blur4)"/>
+    <!-- eyepiece -->
+    <rect x="-112" y="-12" width="16" height="24" rx="3" fill="url(#spyglass-brass)" stroke="#120c06" stroke-width="3"/>
+    <path d="M-110,-8 L-98,-8" stroke="#fff6d6" stroke-width="1.4" opacity="0.9"/>
+    <!-- draw tube 2 (bone, ringed) -->
+    <rect x="-98" y="-10" width="42" height="20" fill="url(#spyglass-bone)" stroke="#120c06" stroke-width="3"/>
+    <path d="M-88,-10 L-88,10 M-78,-10 L-78,10 M-68,-10 L-68,10" stroke="#5e4a2c" stroke-width="1.6"/>
+    <path d="M-96,-6 L-58,-6" stroke="#fffaf0" stroke-width="1.4" opacity="0.9"/>
+    <!-- brass ring -->
+    <rect x="-60" y="-14" width="8" height="28" rx="2" fill="url(#spyglass-brass)" stroke="#120c06" stroke-width="2.6"/>
+    <!-- draw tube 1 (brass) -->
+    <rect x="-52" y="-14" width="42" height="28" fill="url(#spyglass-brass)" stroke="#120c06" stroke-width="3"/>
+    <path d="M-50,-9 L-12,-9" stroke="#fff6d6" stroke-width="1.6" opacity="0.9"/>
+    <path d="M-40,-14 L-40,14 M-22,-14 L-22,14" stroke="#4a300a" stroke-width="1.2" opacity="0.7"/>
+    <!-- collar -->
+    <rect x="-14" y="-21" width="10" height="42" rx="2.5" fill="url(#spyglass-brass)" stroke="#120c06" stroke-width="3"/>
+    <!-- main bone barrel -->
+    <use xlink:href="#spyglass-barrel" fill="#120c06" stroke="#120c06" stroke-width="6" stroke-linejoin="round"/>
+    <use xlink:href="#spyglass-barrel" fill="url(#spyglass-bone)"/>
+    <use xlink:href="#spyglass-barrel" fill="#000" filter="url(#spyglass-grain)" opacity="0.4"/>
+    <path d="M-6,-14 L82,-17" stroke="#fffaf0" stroke-width="2" opacity="0.9"/>
+    <!-- tiki face 1 -->
+    <g>
+      <path d="M4,-13 L32,-14 L32,13 L4,12" fill="none" stroke="#3d2c14" stroke-width="2.2"/>
+      <path d="M6,-9 Q12,-13 18,-9 M18,-9 Q24,-13 30,-9" stroke="#2a1d0c" stroke-width="2.6" fill="none"/>
+      <ellipse cx="12" cy="-4" rx="4" ry="3" fill="#2a1d0c"/>
+      <ellipse cx="24" cy="-4" rx="4" ry="3" fill="#2a1d0c"/>
+      <circle cx="12" cy="-4" r="2.2" fill="#99f6e4"/>
+      <circle cx="24" cy="-4" r="2.2" fill="#99f6e4"/>
+      <path d="M16,-2 L20,-2 L21,4 L15,4 Z" fill="#8a7048"/>
+      <rect x="9" y="6" width="18" height="5" rx="1" fill="#2a1d0c"/>
+      <path d="M12,6 L12,11 M16,6 L16,11 M20,6 L20,11 M24,6 L24,11" stroke="#e6d6b2" stroke-width="1.2"/>
+    </g>
+    <!-- cord wrap -->
+    <path d="M37,-20 L37,20 M41,-20 L41,20 M45,-21 L45,21" stroke="#120c06" stroke-width="4.4"/>
+    <path d="M37,-20 L37,20 M41,-20 L41,20 M45,-21 L45,21" stroke="#c9a46a" stroke-width="2.4"/>
+    <path d="M37,-19 L37,-6 M41,-19 L41,-6 M45,-20 L45,-7" stroke="#f3dfb5" stroke-width="0.9"/>
+    <!-- tiki face 2 (spiral) -->
+    <g>
+      <path d="M52,-16 L80,-17 L80,16 L52,15" fill="none" stroke="#3d2c14" stroke-width="2.2"/>
+      <path d="M54,-11 L66,-7 L78,-11" stroke="#2a1d0c" stroke-width="2.6" fill="none"/>
+      <circle cx="60" cy="-3" r="4.2" fill="#2a1d0c"/>
+      <circle cx="72" cy="-3" r="4.2" fill="#2a1d0c"/>
+      <circle cx="60" cy="-3" r="2.3" fill="#99f6e4"/>
+      <circle cx="72" cy="-3" r="2.3" fill="#99f6e4"/>
+      <path d="M57,6 Q66,14 75,6 Z" fill="#2a1d0c"/>
+      <path d="M60,7 L61,10 M66,8 L66,11.5 M72,7 L71,10" stroke="#e6d6b2" stroke-width="1.2"/>
+    </g>
+    <!-- brass hood -->
+    <path d="M82,-25 L100,-29 L100,29 L82,25 Z" fill="url(#spyglass-brass)" stroke="#120c06" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M84,-21 L98,-24" stroke="#fff6d6" stroke-width="1.6"/>
+    <path d="M90,-27 L90,27" stroke="#4a300a" stroke-width="1.2" opacity="0.8"/>
+    <!-- lens -->
+    <ellipse cx="101" cy="0" rx="11" ry="30" fill="#99f6e4" opacity="0.8" filter="url(#spyglass-blur4)"/>
+    <ellipse cx="101" cy="0" rx="8" ry="28" fill="#120c06"/>
+    <ellipse cx="101" cy="0" rx="6" ry="24.5" fill="url(#spyglass-lens)"/>
+    <ellipse cx="99.5" cy="-10" rx="2" ry="7" fill="#ffffff" opacity="0.9"/>
+    <!-- underside rim light -->
+    <path d="M-6,20 L83,24" stroke="#99f6e4" stroke-width="1.8" opacity="0.6"/>
+  </g>
+
+  <!-- sparkles -->
+  <path d="M204,28 L206,34 L212,36 L206,38 L204,44 L202,38 L196,36 L202,34 Z" fill="#ccfbf1"/>
+  <path d="M216,74 L217,77 L220,78 L217,79 L216,82 L215,79 L212,78 L215,77 Z" fill="#99f6e4"/>
+</svg>

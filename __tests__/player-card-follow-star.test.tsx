@@ -2,6 +2,9 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, waitFor } from '@testing-library/react'
 
+// This suite pins player-card writes; X feed reads are covered independently.
+vi.mock('@/components/core-app/highlights/PlayerRecentClips', () => ({ default: () => null }))
+
 import PlayerCardSheet from '@/components/core-app/player-card/PlayerCardSheet'
 import type { PlayerCardData } from '@/lib/core-app/playerCard'
 

@@ -84,7 +84,7 @@ describe('the Railway scheduler fires exactly what the GitHub workflow fired', (
     for (const s of schedules) expect(fired.get(s) ?? 0, s).toBeGreaterThan(0)
     expect(fired.get('0 * * * *')).toBe(7 * 24)
     expect(fired.get('15,45 * * * *')).toBe(7 * 48)
-    expect(fired.get('0 14 * * 2')).toBe(1)
+    expect(fired.get('0 14-16 * * 2')).toBe(3)
   })
 })
 

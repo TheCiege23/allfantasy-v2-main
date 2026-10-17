@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Promotion day</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.dv-col{flex:1 1 220px;display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:12px;background:#0b0d14;border:1px solid rgba(255,255,255,.07);min-width:0}
+.dv-p{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.dv-yr{display:inline-grid;place-items:center;min-width:44px;height:22px;padding:0 6px;border-radius:6px;font:700 11px 'JetBrains Mono'}
+.dv-flip{perspective:1200px;width:300px;height:400px}
+.dv-in{position:relative;width:100%;height:100%;transition:transform .9s cubic-bezier(.4,.1,.2,1);transform-style:preserve-3d}
+.dv-on .dv-in{transform:rotateY(180deg)}
+.dv-face{position:absolute;inset:0;border-radius:18px;backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;border:2px solid rgba(255,255,255,.12)}
+.dv-back{transform:rotateY(180deg)}
+.dv-jersey{width:150px;height:150px}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e8701e; --acc2: #ffb36a; --accInk: #1a0a04; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="DevyHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Promotion day</h1><span class="sp-t2">Class of ’27 Dynasty · the day after the NFL draft</span></div>
+  
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 30px; padding: 26px 28px 32px; align-items: center; justify-content: center">
+  <div class="dv-flip {{flipCls}}">
+    <div class="dv-in">
+      <div class="dv-face" style="background: linear-gradient(180deg,#3a1a0a,#13254a); border-color: rgba(232,112,30,.5)">
+        <span class="sp-lbl" style="color: #ffb36a">Devy stash · college</span><svg class="dv-jersey" viewBox="0 0 150 150" aria-hidden="true"><path d="M45,20 L60,12 C66,22 84,22 90,12 L105,20 L135,38 L124,66 L108,58 L108,138 L42,138 L42,58 L26,66 L15,38 Z" fill="#c2501a" stroke="#000" stroke-width="4" stroke-linejoin="round"/><path d="M42,70 H108 M42,80 H108" stroke="#fff3e0" stroke-width="5"/><text x="75" y="122" text-anchor="middle" font-family="Archivo Black, Arial Black" font-size="34" fill="#fff3e0">4</text></svg>
+        <span style="font-weight: 800; font-size: 22px">Jeremiah Smith</span><span class="sp-t2">WR · Ohio State · Jr</span><span class="dv-yr" style="background: rgba(255,106,74,.2); color: #ff9a8a">Declared</span></div>
+      <div class="dv-face dv-back" style="background: linear-gradient(180deg,#13254a,#0b0d14); border-color: rgba(127,183,232,.5)">
+        <span class="sp-lbl" style="color: #9fd0ff">Pro roster · rookie</span><svg class="dv-jersey" viewBox="0 0 150 150" aria-hidden="true"><path d="M45,20 L60,12 C66,22 84,22 90,12 L105,20 L135,38 L124,66 L108,58 L108,138 L42,138 L42,58 L26,66 L15,38 Z" fill="#1d3a8a" stroke="#000" stroke-width="4" stroke-linejoin="round"/><path d="M42,70 H108 M42,80 H108" stroke="#f2c94c" stroke-width="5"/><text x="75" y="122" text-anchor="middle" font-family="Archivo Black, Arial Black" font-size="34" fill="#f2c94c">1</text></svg>
+        <span style="font-weight: 800; font-size: 22px">Jeremiah Smith</span><span class="sp-t2">WR · drafted 1st round, pick 4</span><span class="dv-yr" style="background: rgba(58,190,120,.16); color: #7fe0a6">Promoted</span></div>
+    </div>
+  </div>
+  <section style="flex: 0 1 520px; display: flex; flex-direction: column; gap: 14px">
+    <span style="font: 800 30px/1.1 'Archivo'; letter-spacing: -.02em">{{head}}</span>
+    <span class="sp-t2" style="font-size: 14px">{{sub}}</span>
+    <div class="sp-card2" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl">Where he goes</span>
+      <div style="display: flex; gap: 8px"><sc-for list="{{dest}}" as="d" hint-placeholder-count="2"><button class="sp-btn" onClick="{{d.pick}}" aria-pressed="{{d.on}}" style="flex: 1; min-height: 52px; flex-direction: column; gap: 2px; border-color: {{d.line}}; background: {{d.bg}}"><span>{{d.label}}</span><span class="sp-t3" style="font-size: 11px; font-weight: 500">{{d.sub}}</span></button></sc-for></div>
+      <div style="display: flex; gap: 16px; font-size: 12.5px; color: #a3a9c2"><span>Devy slots <b class="sp-num" style="color: #ffb36a">{{devy}}</b></span><span>Pro roster <b class="sp-num" style="color: #9fd0ff">{{pro}}</b></span><span>Taxi <b class="sp-num" style="color: #c4b5fd">{{taxi}}</b></span></div>
+    </div>
+    <div style="display: flex; gap: 10px">
+      <sc-if value="{{canGo}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{go}}" style="min-height: 48px; padding: 0 24px"><img src="specialty/devy/icon-promote.svg" alt="" style="width: 24px">Promote him</button></sc-if>
+      <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><button class="sp-btn" onClick="{{reset}}">Replay</button></sc-if>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":560}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { on: false, dest: 'pro' }; }
+  renderVals() {
+    const st = this.state; const pro = st.dest === 'pro';
+    return { flipCls: st.on ? 'dv-on' : '', canGo: !st.on, done: st.on, go: () => this.setState({ on: true }), reset: () => this.setState({ on: false }),
+      head: st.on ? 'Welcome to the pros' : 'Promote Jeremiah Smith?', sub: st.on ? 'He’s off your devy stash and on your ' + (pro ? 'pro roster. He scores from week 1.' : 'taxi squad. Move him up any week before the trade deadline.') : 'He was drafted 1st round, pick 4. Promoting frees a devy slot for next year’s devy draft.',
+      dest: [['pro', 'Pro roster', 'Scores now · 23/24'], ['taxi', 'Taxi squad', 'Doesn’t score · 4/4']].map(([id, label, sub]) => ({ label, sub, on: st.dest === id ? 'true' : 'false', line: st.dest === id ? '#e8701e' : 'rgba(255,255,255,.12)', bg: st.dest === id ? 'rgba(232,112,30,.12)' : '#151926', pick: () => this.setState({ dest: id }) })),
+      devy: st.on ? '5/6' : '6/6', pro: st.on && pro ? '23/24' : '22/24', taxi: st.on && !pro ? '4/4' : '3/4' };
+  }
+}
+</script>
+</body>
+</html>

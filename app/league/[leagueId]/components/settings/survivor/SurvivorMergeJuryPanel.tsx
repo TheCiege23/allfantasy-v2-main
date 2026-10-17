@@ -1,48 +1,35 @@
 'use client'
 
-import { useState } from 'react'
-import { SettingsSection, SettingsRow, Toggle, Select, Input } from '../../../tabs/settings/components'
+import Link from 'next/link'
+import { useCallback, useEffect, useState } from 'react'
+import { SettingsSection, SettingsRow } from '../../../tabs/settings/components'
 import type { SurvivorSettingsPanelProps } from './types'
 
-export function SurvivorMergeJuryPanel({ canEdit }: SurvivorSettingsPanelProps) {
-  const [mergeChat, setMergeChat] = useState(true)
-  const [preMergeExpire, setPreMergeExpire] = useState(true)
-  const [finalThree, setFinalThree] = useState(true)
-  const [juryStart, setJuryStart] = useState('post_merge')
-  const d = !canEdit
+type MergeConfig = { mergeTrigger: string; mergeWeek: number; mergePlayerCount: number | null; juryStartAfterMerge: number }
 
-  return (
-    <div className="space-y-5 px-6 py-6 text-[13px] text-white/85">
-      <p className="text-[11px] text-amber-200/80">Merge & jury cadence — finale timers are display-only until persisted.</p>
-      <SettingsSection id="sv-merge" title="Merge">
-        <SettingsRow label="Merge week" control={<Input type="number" defaultValue={7} disabled={d} className="w-20" />} />
-        <SettingsRow label="Merge tribe name" control={<Input placeholder="Auto or custom" disabled={d} />} />
-        <SettingsRow label="Auto-create merge chat" control={<Toggle checked={mergeChat} onChange={setMergeChat} disabled={d} />} />
-        <SettingsRow label="Pre-merge idol expiration" control={<Toggle checked={preMergeExpire} onChange={setPreMergeExpire} disabled={d} />} />
-      </SettingsSection>
-      <SettingsSection id="sv-jury" title="Jury">
-        <SettingsRow
-          label="Jury start"
-          control={
-            <Select value={juryStart} onChange={setJuryStart} disabled={d}>
-              <option value="post_merge">Post-merge</option>
-              <option value="vote_1">After first merge vote</option>
-              <option value="count">At player count</option>
-            </Select>
-          }
-        />
-        <SettingsRow label="Final 3 (vs Final 2)" control={<Toggle checked={finalThree} onChange={setFinalThree} disabled={d} />} />
-      </SettingsSection>
-      <SettingsSection id="sv-finale" title="Finale">
-        <SettingsRow
-          label="Jury Q&A window (hours)"
-          control={<Input type="number" defaultValue={48} disabled={d} className="w-20" />}
-        />
-        <SettingsRow
-          label="Jury vote deadline (hours after Q&A)"
-          control={<Input type="number" defaultValue={24} disabled={d} className="w-20" />}
-        />
-      </SettingsSection>
-    </div>
-  )
+export function SurvivorMergeJuryPanel({ leagueId }: SurvivorSettingsPanelProps) {
+  const [config, setConfig] = useState<MergeConfig | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/config`, { credentials: 'include' })
+      const payload = await response.json()
+      if (!response.ok || !payload.config) throw new Error(payload.error ?? 'Could not load merge rules')
+      setConfig(payload.config as MergeConfig)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load merge rules')
+    }
+  }, [leagueId])
+  useEffect(() => { void load() }, [load])
+
+  return <div className="space-y-5 px-6 py-6 text-[13px] text-white/85">
+    <p className="text-[11px] text-amber-200/80">Merge timing is configured in Survivor Setup. Finale format and jury Q&A timers are system-managed for this NBA pilot.</p>
+    {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
+    {!config && !error && <p role="status" className="text-sm text-white/50">Loading merge rules…</p>}
+    {config && <SettingsSection id="sv-merge-current" title="Current merge and jury rules">
+      <SettingsRow label="Merge trigger" control={<span>{config.mergeTrigger === 'player_count' ? `${config.mergePlayerCount ?? '—'} active managers` : `Week ${config.mergeWeek}`}</span>} />
+      <SettingsRow label="Jury starts" control={<span>{config.juryStartAfterMerge === 1 ? 'After merge' : `After ${config.juryStartAfterMerge} merge eliminations`}</span>} />
+    </SettingsSection>}
+    <Link href={`/survivor/${encodeURIComponent(leagueId)}/jury`} className="inline-flex text-sm text-cyan-300 hover:text-cyan-200">Open Jury chamber →</Link>
+  </div>
 }

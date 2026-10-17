@@ -29,3 +29,7 @@
 
 .af-wbp-sports li { margin-block: 12px; overflow-wrap: anywhere; }
 .af-wbp-sports li a { display: inline-block; margin: 4px 12px 4px 0; min-height: 44px; padding-block: 10px; }
+
+/* X publisher: the post result sits on the same row as "Publish now on X". */
+.af-core .af-wbp-x-publish-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.af-core .af-wbp-x-publish-row .af-wbp-x-status { margin: 0; flex: 1 1 220px; font-weight: 600; }

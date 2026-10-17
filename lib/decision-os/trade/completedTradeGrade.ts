@@ -106,7 +106,10 @@ export function completedTradeInputs(trade: GradedTrade, currentSeason: number):
       // Used: the draft resolved it to a player. Checked FIRST — a current-season pick is used too.
       const drafted = pick.resolved?.name?.trim()
       if (drafted) out.assets.push(sleeperPlayerInput(drafted, pick.resolved?.playerId, pick.resolved?.position))
-      else if (Number.isFinite(year) && year >= currentSeason && pick.round > 0) out.assets.push({ kind: 'pick', year, round: pick.round })
+      else if (Number.isFinite(year) && year >= currentSeason && pick.round > 0) {
+        // Its original owner decides where it lands (`loadPickSlotProjection`).
+        out.assets.push({ kind: 'pick', year, round: pick.round, ...(pick.originalRosterId != null ? { originalRosterId: String(pick.originalRosterId) } : {}) })
+      }
       else out.unpriceable.push(pick.label)
     }
     // FAAB LAST — players, picks, FAAB is the order the email lists a side's assets and aligns values to.

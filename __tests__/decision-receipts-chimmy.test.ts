@@ -215,3 +215,20 @@ describe('resolveChimmyAdviceOutcomes', () => {
     expect(await resolveChimmyAdviceOutcomes({ userId: '', leagues: [ICE], currentWeek: 6, since: SINCE })).toBeNull()
   })
 })
+
+describe('the triage card\'s tips are AllFantasy\'s, never Chimmy\'s (2026-10-17)', () => {
+  const tip = advice({ surface: 'triage_swap', rec: { key: 'in', name: 'Tyler Allgeier' }, alt: { key: 'out', name: 'Jeremiyah Love' }, slot: null, confidencePct: null })
+
+  it('🛑 a tip gets its own receipt and is kept out of Chimmy\'s', async () => {
+    db({ rows: [tip], scores: [score('in', 14.2, true), score('out', 0, false)] })
+    const out = await getChimmyAdviceReceipts({ userId: USER, leagues: [ICE], currentWeek: 6 })
+    expect(out?.chimmy).toEqual([])
+    expect(out?.afTips?.[0]).toMatchObject({ recommended: { name: 'Tyler Allgeier', points: 14.2 }, call: 'right', followed: 'yes' })
+  })
+
+  it('🛑 what Chimmy learns from excludes the tips', async () => {
+    db({ rows: [tip, advice()], scores: [score('in', 14.2, true), score('out', 0, false)] })
+    const out = await resolveChimmyAdviceOutcomes({ userId: USER, leagues: [ICE], currentWeek: 12, since: new Date('2026-06-01T00:00:00Z') })
+    expect(out?.advice.map((a) => a.surface)).toEqual(['start_vs_comparison'])
+  })
+})

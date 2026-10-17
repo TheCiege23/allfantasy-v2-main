@@ -28,6 +28,7 @@ export async function GET() {
     {
       ok: true,
       sha,
+      capabilities: { bigBrotherDeadlines: 1 },
       shortSha: sha ? sha.slice(0, 9) : null,
       branch:
         process.env.RAILWAY_GIT_BRANCH ||

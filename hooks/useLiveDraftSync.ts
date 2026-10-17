@@ -81,9 +81,12 @@ export function useLiveDraftSync({
   const refetchOnceRef = useRef<(() => void) | null>(null)
   const pollTickRef = useRef(0)
   const pollInFlightRef = useRef(false)
+  const secondaryInFlightRef = useRef(false)
 
   const fetchLiveSync = useCallback(
     async (opts: { since?: string; includeQueue: boolean; includeChat: boolean }): Promise<boolean> => {
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 20_000)
       try {
         const sp = new URLSearchParams()
         if (opts.since) sp.set('since', opts.since)
@@ -91,10 +94,11 @@ export function useLiveDraftSync({
         if (!opts.includeChat) sp.set('chat', '0')
         const res = await fetch(
           `/api/leagues/${encodeURIComponent(leagueId)}/draft/live-sync?${sp.toString()}`,
-          { cache: 'no-store' },
+          { cache: 'no-store', signal: controller.signal },
         )
         const data = await res.json().catch(() => ({}))
         if (!res.ok) return false
+        if (data.degraded === true) return false
 
         if (data.session && controlActionInflightRef.current === 0) {
           setSession((prev) => mergeDraftSessionSnapshot(prev, data.session as DraftSessionSnapshot))
@@ -117,6 +121,8 @@ export function useLiveDraftSync({
         return true
       } catch {
         return false
+      } finally {
+        window.clearTimeout(timeout)
       }
     },
     [leagueId],
@@ -141,20 +147,30 @@ export function useLiveDraftSync({
         const shouldRefreshChat = chatSyncActive || (tick % CHAT_POLL_EVERY_N_TICKS) === 0
         const shouldRefreshPool = (tick % POOL_POLL_EVERY_N_TICKS) === 0
 
-        const sessionPollOk = await fetchLiveSync({
-          since,
-          includeQueue: shouldRefreshQueue,
-          includeChat: shouldRefreshChat,
-        })
+        // Clock and pause state are the critical path. Queue/chat reads can be
+        // slower, so request them in the independent ancillary batch below.
+        let sessionPollOk = await fetchLiveSync({ since, includeQueue: false, includeChat: false })
+        if (!sessionPollOk) sessionPollOk = Boolean(await fetchSession())
 
-        const secondary: Promise<unknown>[] = []
-        if (shouldRefreshSettings) secondary.push(fetchDraftSettings())
-        if (shouldRefreshSettings) secondary.push(fetchDraftAssistantContext())
-        if (shouldRefreshPool) secondary.push(fetchDraftPool())
+        const secondary: Array<() => Promise<unknown>> = []
+        if (shouldRefreshQueue || shouldRefreshChat) {
+          secondary.push(() => fetchLiveSync({ since, includeQueue: shouldRefreshQueue, includeChat: shouldRefreshChat }))
+        }
+        if (shouldRefreshSettings) secondary.push(fetchDraftSettings)
+        if (shouldRefreshSettings) secondary.push(fetchDraftAssistantContext)
+        if (shouldRefreshPool) secondary.push(fetchDraftPool)
 
         const skipAiAdp = aiAdpEnabled && aiAdpComputedAt && Date.now() - aiAdpComputedAt < AI_ADP_POLL_SKIP_MS
-        if (aiAdpEnabled && !skipAiAdp) secondary.push(fetchLeagueAiAdp())
-        await Promise.all(secondary)
+        if (aiAdpEnabled && !skipAiAdp) secondary.push(fetchLeagueAiAdp)
+        // An expensive pool or AI refresh must not block the next session poll.
+        // Keep at most one ancillary batch in flight while clock/pause state
+        // continues syncing at its own cadence.
+        if (secondary.length > 0 && !secondaryInFlightRef.current) {
+          secondaryInFlightRef.current = true
+          void Promise.allSettled(secondary.map((fetcher) => fetcher())).finally(() => {
+            secondaryInFlightRef.current = false
+          })
+        }
 
         if (!sessionPollOk) {
           pollSessionFailStreakRef.current += 1
@@ -180,6 +196,7 @@ export function useLiveDraftSync({
   }, [
     leagueId,
     fetchLiveSync,
+    fetchSession,
     fetchDraftSettings,
     fetchDraftAssistantContext,
     fetchDraftPool,

@@ -1,3 +1,4 @@
+import { prisma } from '@/lib/prisma'
 /**
  * GET/PUT: Survivor league config. PROMPT 349 QA — commissioner or league member can read; only commissioner can write.
  */
@@ -8,6 +9,7 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isSurvivorLeague, getSurvivorConfig, upsertSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
+import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +82,22 @@ export async function PUT(
   if (!isSurvivor) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
+  if (body.idolCount != null) return NextResponse.json({ error: 'Set idol count in Survivor Idols settings before the draft.' }, { status: 400 })
+  const mutableAfterDraft = new Set(['voteDeadlineDayOfWeek', 'voteDeadlineTimeUtc'])
+  const changingLockedRule = Object.keys(body).some(key => !mutableAfterDraft.has(key))
+  if (changingLockedRule && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
+    return NextResponse.json({ error: 'Season rules lock when the draft starts. Only the vote deadline can change during the season.' }, { status: 409 })
+  }
+  if (body.idolPowerPool != null) {
+    if (!Array.isArray(body.idolPowerPool) || body.idolPowerPool.length === 0 ||
+      body.idolPowerPool.some((power: unknown) => typeof power !== 'string' || SURVIVOR_IDOL_CATALOG[power as SurvivorIdolPowerType]?.resolution !== 'phase2')) {
+      return NextResponse.json({ error: 'The idol pool may contain only implemented powers.' }, { status: 422 })
+    }
+  }
+  if (body.tribeCount != null || body.tribeSize != null) {
+    const current = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { tribeCount: true, tribeSize: true } })
+    if ((body.tribeCount != null && Number(body.tribeCount) !== current?.tribeCount) || (body.tribeSize != null && Number(body.tribeSize) !== current?.tribeSize)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
+  }
   const updated = await upsertSurvivorConfig(leagueId, {
     ...(body.mode != null && { mode: String(body.mode) }),
     ...(body.tribeCount != null && { tribeCount: Number(body.tribeCount) }),
@@ -91,7 +109,6 @@ export async function PUT(
     ...(body.juryStartAfterMerge != null && { juryStartAfterMerge: Number(body.juryStartAfterMerge) }),
     ...(body.exileReturnEnabled != null && { exileReturnEnabled: Boolean(body.exileReturnEnabled) }),
     ...(body.exileReturnTokens != null && { exileReturnTokens: Number(body.exileReturnTokens) }),
-    ...(body.idolCount != null && { idolCount: Number(body.idolCount) }),
     ...(body.idolPowerPool != null && { idolPowerPool: Array.isArray(body.idolPowerPool) ? body.idolPowerPool.map(String) : undefined }),
     ...(body.tribeShuffleEnabled != null && { tribeShuffleEnabled: Boolean(body.tribeShuffleEnabled) }),
     ...(body.tribeShuffleConsecutiveLosses != null && { tribeShuffleConsecutiveLosses: Number(body.tribeShuffleConsecutiveLosses) }),

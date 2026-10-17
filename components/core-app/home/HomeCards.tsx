@@ -32,6 +32,10 @@ import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastV
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import type { Dash34Result } from '@/lib/core-app/dash34'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import type { StreakSummary } from '@/lib/core-app/dailyStreak'
+import { DailyStreakCardView, StreakGlanceView, type StreakGlanceItem } from '@/components/core-app/home/DailyStreakCardView'
+import '@/components/core-app/home/af-streak.css'
 import type { PortfolioSummaryMeta } from '@/lib/core-app/homePortfolioSummary'
 import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
 
@@ -100,10 +104,17 @@ export type HomeLoads = {
   plays: Promise<ComponentProps<typeof DashGameDayBand>['plays']>
   regularSeason: Promise<ComponentProps<typeof DashGameDayBand>['regularSeasonUnderway']>
   trades: Promise<ComponentProps<typeof DashTradeBand>['trades']>
+  /** AF Pro's trade depth — gates the band's "why this grade" line. Null when it could not be read. */
+  tradeDepth: Promise<CoreDepthAccess | null>
+  /**
+   * AF Pro's player depth — gates the triage card's best-free-agent button and its Questionable
+   * game-time calls (2026-10-17). Absent or null when it could not be read: the card fails OPEN.
+   */
+  playerDepth?: Promise<CoreDepthAccess | null>
+  /** The daily check-in streak (lib/core-app/dailyStreakStore.ts). Null when it could not be read. */
+  streak: Promise<StreakSummary | null>
   brief: Promise<ComponentProps<typeof DashSinceLastVisit>['brief']>
   drafts: Promise<ComponentProps<typeof DashDraftsBand>['data']>
-  /** Not a card: settles once the trade scan's pending-offers cache write has. The tab badges wait on it. */
-  offersSettled: Promise<void>
 }
 
 /**
@@ -129,9 +140,10 @@ export function emptyHomeLoads(): HomeLoads {
     plays: none([]) as HomeLoads['plays'],
     regularSeason: none(false),
     trades: none([]) as HomeLoads['trades'],
+    tradeDepth: none(null),
+    streak: none(null),
     brief: none(null),
     drafts: none(null),
-    offersSettled: none(undefined),
   }
 }
 
@@ -147,6 +159,7 @@ export type HomeCardName =
   | 'schedule'
   | 'routine'
   | 'issues'
+  | 'streak'
   | 'matchups'
   | 'chimmy'
   | 'career'
@@ -289,14 +302,16 @@ async function DraftsCard({ drafts, now }: { drafts: HomeLoads['drafts']; now: D
   return <DashDraftsBand data={await drafts} now={now} />
 }
 
-async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: Date }) {
-  const data = await dash34
+async function TriageCard({ dash34, playerDepth, now }: { dash34: HomeLoads['dash34']; playerDepth?: HomeLoads['playerDepth']; now: Date }) {
+  const [data, depth] = await Promise.all([dash34, (playerDepth ?? Promise.resolve(null)).catch(() => null)])
   if (!data) return null
   return (
     <Dash3ATriage
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
+      pro={depth ? { unlocked: depth.unlocked, upgradePath: depth.upgradePath } : null}
       valueBasis={data.valueBasis ?? null}
+      depthAlerts={data.depthAlerts ?? []}
       freshness={
         <Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries', parts: { kind: 'injuries' } })]} />
       }
@@ -304,8 +319,59 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
   )
 }
 
-async function TradeBandCard({ trades, now }: { trades: HomeLoads['trades']; now: Date }) {
-  return <><CoreTradeRefresh /><DashTradeBand trades={await trades} now={now} /></>
+/**
+ * The daily streak strip. It awaits ONLY the streak read — one cache row — so it paints before the
+ * league reads land; today's glance streams into it separately (StreakGlance) and is simply absent
+ * until then. A failed streak read renders nothing: no card beats a "Day 0" that is not true.
+ */
+async function StreakCard({ loads, now }: { loads: HomeLoads; now: Date }) {
+  const streak = await loads.streak.catch(() => null)
+  if (!streak) return null
+  return (
+    <DailyStreakCardView streak={streak}>
+      <Suspense fallback={null}>
+        <StreakGlance dash34={loads.dash34} trades={loads.trades} now={now} />
+      </Suspense>
+    </DailyStreakCardView>
+  )
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Today at a glance: lineups, injuries, trades — counted from reads the home already makes, so the
+ * glance costs no query of its own. A read that failed drops its chip rather than claiming "all set".
+ */
+async function StreakGlance({ dash34, trades, now }: Pick<HomeLoads, 'dash34' | 'trades'> & { now: Date }) {
+  const [data, recent] = await Promise.all([dash34.catch(() => null), trades.catch(() => null)])
+  const items: StreakGlanceItem[] = []
+  if (data) {
+    const leagues = data.allLeagues ?? data.leagues ?? []
+    const needs = leagues.filter((l) => (l.emptyStarters ?? 0) > 0 || (l.hurtStarters ?? 0) > 0)
+    items.push({
+      key: 'lineups',
+      tone: needs.length > 0 ? 'warn' : 'ok',
+      count: needs.length,
+      href: needs[0] ? `/core/my-team?league=${encodeURIComponent(needs[0].id)}` : '/core/my-team',
+    })
+    const flagged =
+      ((data.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length +
+      (data.depthAlerts?.length ?? 0)
+    items.push({ key: 'injuries', tone: flagged > 0 ? 'warn' : 'ok', count: flagged, href: flagged > 0 ? '#af-home-triage' : '/my-players' })
+  }
+  if (Array.isArray(recent)) {
+    const n = recent.filter((t) => {
+      const at = new Date(t.acceptedAt).getTime()
+      return Number.isFinite(at) && now.getTime() - at <= DAY_MS
+    }).length
+    items.push({ key: 'trades', tone: 'ok', count: n, href: '/core/trades' })
+  }
+  return <StreakGlanceView items={items} />
+}
+
+async function TradeBandCard({ trades, tradeDepth, now }: { trades: HomeLoads['trades']; tradeDepth: HomeLoads['tradeDepth']; now: Date }) {
+  const [rows, depth] = await Promise.all([trades, tradeDepth.catch(() => null)])
+  return <><CoreTradeRefresh /><DashTradeBand trades={rows} now={now} depth={depth} /></>
 }
 
 async function CarryoverCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
@@ -499,8 +565,8 @@ export function CoreHomeCards({
       <GameDayCard strip={loads.strip} plays={loads.plays} regularSeason={loads.regularSeason} now={now} />,
     ),
     drafts: card('drafts', <DraftsCard drafts={loads.drafts} now={now} />),
-    triage: card('triage', <TriageCard dash34={loads.dash34} now={now} />),
-    'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} now={now} />),
+    triage: card('triage', <TriageCard dash34={loads.dash34} playerDepth={loads.playerDepth} now={now} />),
+    'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} tradeDepth={loads.tradeDepth} now={now} />),
     carryover: card('carryover', <CarryoverCard dash34={loads.dash34} />),
     'user-os': card('user-os', <UserOsCard userOs={loads.userOs} />),
     schedule: card('schedule', <ScheduleCard schedule={loads.schedule} syncLabel={syncLabel} />),
@@ -530,6 +596,11 @@ export function CoreHomeCards({
             ahead of the news bands, because a decision is what the reader can act on. It replaced
             the "Outstanding issues" section inside the dashboard below; see DecisionQueue.
           */}
+          {/*
+            The daily streak leads as a single compact row (founder, 2026-10-08). It sits above the
+            decision queue but stays one row tall on a phone, so the decisions still open the fold.
+          */}
+          {card('streak', <StreakCard loads={loads} now={now} />)}
           {card(
             'issues',
             <DecisionsCard

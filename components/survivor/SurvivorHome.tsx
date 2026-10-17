@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { Flame, MessageSquare, Settings, Sparkles, Zap, ChevronDown, Users } from 'lucide-react'
+import { MessageSquare, Settings, Sparkles, Zap, ChevronDown, Users } from 'lucide-react'
 import type { SurvivorSummary, SurvivorView } from './types'
 import { SurvivorTribeBoard } from './SurvivorTribeBoard'
+import { SurvivorNbaGamePicker } from './SurvivorNbaGamePicker'
 import { SurvivorChallengeCenter } from './SurvivorChallengeCenter'
 import { SurvivorTribalCouncilView } from './SurvivorTribalCouncilView'
 import { SurvivorIdolsView } from './SurvivorIdolsView'
@@ -15,20 +16,17 @@ import { SurvivorFirstEntryModal } from './SurvivorFirstEntryModal'
 import {
   EXILE_ISLAND_RULES,
   SURVIVOR_CONDUCT_BULLETS,
-  SURVIVOR_ISLAND_TAGLINE,
-  SURVIVOR_POOL_RULES,
-  SURVIVOR_PRIZE_EXAMPLES,
-  SURVIVOR_TRIBE_THEME_CONTEXT,
   SURVIVOR_TOKEN_POOL_BLURB,
   SURVIVOR_TIPS,
   SURVIVOR_WELCOME_BLURB,
 } from '@/lib/survivor/survivorIslandContent'
 import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
+import { SurvivorIslandHero } from './SurvivorIslandHero'
 
 const VIEW_LABELS: Record<SurvivorView, string> = {
   'tribe-board': 'Tribe Board',
   challenge: 'Challenge Center',
-  council: 'Tribal Council',
+  council: 'Elimination Council',
   idols: 'Idols & Advantages',
   exile: 'Exile Island',
   'merge-jury': 'Merge & Jury',
@@ -45,6 +43,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<SurvivorView>('tribe-board')
   const [showIntro, setShowIntro] = useState(false)
+  const introSeen = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -72,7 +71,8 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
   }, [load])
 
   useEffect(() => {
-    if (summary) {
+    if (summary && !introSeen.current) {
+      introSeen.current = true
       setShowIntro(true)
     }
   }, [summary])
@@ -98,13 +98,37 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
 
   const names = summary?.rosterDisplayNames ?? {}
   const cal = summary?.seasonCalendar
-  const themeHeadline =
-    summary?.config?.seasonThemeLabel?.trim() ||
-    `${summary?.config?.tribeCount ?? 3}-tribe season — set a headline in Survivor settings`
+  const leagueName = summary?.leagueName || 'Survivor League'
   const tribeChatHref = summary?.myTribeSource
     ? `/league/${leagueId}?tab=Chat&source=${encodeURIComponent(summary.myTribeSource)}`
     : `/league/${leagueId}?tab=Chat`
   const theme = getSurvivorThemeById(summary?.config?.visualThemeId, leagueId)
+  const tribesFormed = Boolean(summary?.tribes?.some((tribe) => tribe.members.length > 0))
+  const openCouncil = summary?.council && !summary.council.closedAt && !summary.council.isRevealed
+  const openChallenge = summary?.challenges?.find((challenge) => challenge.status === 'open')
+  const nextAction = !tribesFormed
+    ? {
+        headline: 'Your island is filling up',
+        description: 'Invite managers, set the draft time, and get your queue ready. Tribes form after the draft.',
+        primaryAction: { href: `/league/${leagueId}/draft`, label: 'Open draft board' },
+      }
+    : openCouncil
+      ? {
+          headline: 'The elimination vote is open',
+          description: 'Eligible managers vote privately with @Chimmy and @the manager they choose. Ballots stay sealed until the read.',
+          primaryAction: { href: `/survivor/${leagueId}/tribal`, label: 'View council' },
+        }
+      : openChallenge
+        ? {
+            headline: openChallenge.title || 'Your next challenge is live',
+            description: 'See the challenge rules and submit before it closes.',
+            primaryAction: { href: `/survivor/${leagueId}/challenges`, label: 'Open challenge' },
+          }
+        : {
+            headline: summary?.merged ? 'The island has merged' : 'This week on the island',
+            description: 'See tribe standings, your private advantages, Exile, and the latest league activity.',
+            primaryAction: { href: `/survivor/${leagueId}`, label: 'Explore island home' },
+          }
 
   return (
     <div className={`relative overflow-hidden rounded-[28px] ${theme.backgroundClass} p-4 sm:p-5` }>
@@ -117,40 +141,31 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_25%,rgba(0,0,0,0.28)_100%)] opacity-40" />
       <div className="relative space-y-6">
-      {/* Survivor branding header */}
-      <header className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-950/30 sm:h-20 sm:w-20">
-          <Flame className="h-8 w-8 text-amber-400 sm:h-10 sm:w-10" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold text-white sm:text-2xl">{themeHeadline}</h1>
-          <p className="mt-1 text-sm text-amber-100/85">{SURVIVOR_ISLAND_TAGLINE}</p>
-          {cal && (
-            <p className="mt-2 text-xs text-cyan-200/80">
-              Regular-season weeks (no playoffs): {cal.firstWeek}–{cal.lastWeek} · {cal.sport}
-            </p>
-          )}
-          <p className="mt-2 text-sm text-white/60">
-            Tribes · Challenges · Tribal Council · Idols · Exile · Merge & Jury
-          </p>
-        </div>
-      </header>
+      <SurvivorIslandHero
+        leagueId={leagueId}
+        leagueName={leagueName}
+        sport={cal?.sport}
+        week={summary?.currentWeek}
+        phase={tribesFormed ? (summary?.merged ? 'Merged island' : 'Tribe season') : 'Before the draft'}
+        visualThemeId={summary?.config?.visualThemeId}
+        headline={nextAction.headline}
+        description={nextAction.description}
+        primaryAction={nextAction.primaryAction}
+        secondaryAction={{ href: `/survivor/${leagueId}`, label: 'Full island home' }}
+      />
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
-        <h2 className="text-sm font-semibold text-white">Island guide</h2>
+        <h2 className="text-sm font-semibold text-white">How this league works</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/70">{SURVIVOR_WELCOME_BLURB}</p>
-        <p className="mt-3 text-sm leading-relaxed text-white/65">{SURVIVOR_TRIBE_THEME_CONTEXT}</p>
-        <p className="mt-3 text-xs text-white/50">{SURVIVOR_PRIZE_EXAMPLES}</p>
         <details className="mt-4 rounded-xl border border-white/[0.08] bg-black/20 p-3">
           <summary className="cursor-pointer text-sm font-medium text-cyan-200/95">
-            Tips, conduct & pool rules
+            Tips & conduct
           </summary>
           <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-white/65">
             {SURVIVOR_TIPS.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>
-          <p className="mt-3 text-sm text-white/60">{SURVIVOR_POOL_RULES}</p>
           <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-white/65">
             {SURVIVOR_CONDUCT_BULLETS.map((t) => (
               <li key={t}>{t}</li>
@@ -164,12 +179,18 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
           <p className="mt-3 text-sm text-white/70">{SURVIVOR_TOKEN_POOL_BLURB}</p>
           <p className="mt-2 text-sm font-medium text-white/85">{EXILE_ISLAND_RULES.headline}</p>
           <p className="mt-1 text-sm text-white/65">{EXILE_ISLAND_RULES.intro}</p>
-          <p className="mt-2 text-sm text-white/65">{EXILE_ISLAND_RULES.lineup}</p>
+          <p className="mt-2 text-sm text-white/65">{cal?.sport === 'NBA'
+            ? 'Each week starts with an empty Exile roster. Claim an NBA point guard to reserve that real-world team, then claim only that team’s players. All players return to waivers after the week.'
+            : EXILE_ISLAND_RULES.lineup}</p>
           <p className="mt-2 text-sm text-white/65">{EXILE_ISLAND_RULES.tokens}</p>
           <p className="mt-2 text-sm text-white/65">{EXILE_ISLAND_RULES.bossReset}</p>
           <p className="mt-2 text-sm text-amber-100/80">{EXILE_ISLAND_RULES.conduct}</p>
         </details>
       </section>
+
+      {summary?.nbaWeeklyScoringMode === 'one_game_per_player' && summary.myRosterId && summary.currentWeek > 0 && (
+        <SurvivorNbaGamePicker leagueId={leagueId} week={summary.currentWeek} />
+      )}
 
       {/* Quick links: Chat, Tribe chat entry, Settings, AI, Waivers */}
       <div className="flex flex-wrap gap-2">
@@ -240,7 +261,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
 
       {/* Panel content */}
       {view === 'tribe-board' && summary && (
-        <SurvivorTribeBoard leagueId={leagueId} summary={summary} names={names} />
+        <SurvivorTribeBoard leagueId={leagueId} summary={summary} names={names} onRefresh={load} />
       )}
       {view === 'challenge' && summary && (
         <SurvivorChallengeCenter leagueId={leagueId} summary={summary} names={names} />

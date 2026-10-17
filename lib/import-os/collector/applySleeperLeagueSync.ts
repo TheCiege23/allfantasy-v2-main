@@ -21,6 +21,7 @@ import type { Prisma } from '@prisma/client'
 import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { prisma } from '@/lib/prisma'
 import { syncFantraxRedraftLineups } from './syncFantraxRedraftLineups'
+import { planSupersededTeams, SUPERSEDED_ARCHIVE_REASON, type LiveTeam, type SupersedePlan } from './supersededTeams'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import {
   bootstrapLeagueFromNormalizedImport,
@@ -453,7 +454,69 @@ async function applyTeamsRosters(
       for (const c of champions) if (c.championTeamId) carriesHistory.add(c.championTeamId)
     }
 
+    /*
+     * 🛑 A CLAIMED TEAM THAT VANISHED MAY BE THE SAME SEAT UNDER A NEW ID (2026-10-08). A provider that
+     * re-keys its teams (Fantrax: `fantrax-team:<slug>` -> numeric) leaves the old row claimed and
+     * CURRENT beside the new one forever, because the branch below only ever marks a claimed team
+     * orphan. When a live team in THIS complete response is the same seat, the old row is a
+     * duplicate: archive it (never delete — history keys hang off it) and make sure exactly one row
+     * holds the claim. A claim held by someone ELSE on the live row is a conflict and is left alone.
+     * See ./supersededTeams.ts for the rule; a team with no live counterpart is a real departure.
+     */
+    const claimedStale = staleTeams.filter(
+      (t): t is typeof t & { claimedByUserId: string } => Boolean(t.claimedByUserId) && !t.archivedAt,
+    )
+    const supersedeById = new Map<string, SupersedePlan>()
+    if (claimedStale.length > 0) {
+      const liveTeams = await prisma.leagueTeam
+        .findMany({
+          where: { leagueId, externalId: { in: Array.from(liveTeamIds) } },
+          select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true },
+        })
+        .catch(() => [] as LiveTeam[])
+      for (const plan of planSupersededTeams(claimedStale, liveTeams)) supersedeById.set(plan.staleId, plan)
+    }
+
     for (const t of staleTeams) {
+      const supersede = supersedeById.get(t.id)
+      if (supersede && (supersede.kind === 'archive' || supersede.kind === 'move_claim_and_archive')) {
+        const done = await prisma
+          .$transaction(async (tx) => {
+            if (supersede.kind === 'move_claim_and_archive') {
+              // Only onto a row that is still unclaimed — a claim made since the read wins.
+              const moved = await tx.leagueTeam.updateMany({
+                where: { id: supersede.liveId, claimedByUserId: null },
+                data: { claimedByUserId: supersede.userId },
+              })
+              if (moved.count !== 1) throw new Error('live team claimed since read')
+            }
+            await tx.leagueTeam.update({
+              where: { id: t.id },
+              data: {
+                lifecycleState: 'ARCHIVED',
+                archivedAt: new Date(),
+                archiveReason: SUPERSEDED_ARCHIVE_REASON,
+                isOrphan: true,
+                claimedByUserId: null,
+              },
+            })
+          })
+          .then(() => true)
+          .catch(() => false)
+        if (done) {
+          out.removed += 1
+          out.notes.push(
+            `teams_rosters: claimed team ${t.externalId} is the same seat as live team ${supersede.liveExternalId} — archived as superseded${supersede.kind === 'move_claim_and_archive' ? ', claim moved' : ''}`,
+          )
+          continue
+        }
+        // A failed supersede falls through to the orphan rule below: the claim and data survive.
+      }
+      if (supersede?.kind === 'conflict') {
+        out.notes.push(
+          `teams_rosters: claimed team ${t.externalId} matches live team ${supersede.liveExternalId}, which another user has claimed — left for review`,
+        )
+      }
       if (t.claimedByUserId) {
         // A claimed team (and its roster) is NEVER deleted by reconciliation — the user's claim + data
         // survive. If it truly vanished upstream, mark it orphaned so the surface can disclose that.

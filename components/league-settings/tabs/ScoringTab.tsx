@@ -11,10 +11,14 @@ import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerS
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
+/**
+ * Exactly ONE sport's editor renders — the league's own sport. There is no football fallback:
+ * an NBA league gets the NBA panel (no Passing/Rushing), and an unsupported sport gets a message.
+ */
 function SportScoringPanel({ sport, leagueId, isCommissioner }: { sport: string; leagueId: string; isCommissioner: boolean }) {
   const { t } = useLanguage()
   const props = { leagueId, isCommissioner }
-  switch (sport) {
+  switch (String(sport ?? '').trim().toUpperCase()) {
     case 'NFL':
       return <NflScoringSettingsPanel {...props} />
     case 'NBA':
@@ -40,17 +44,21 @@ export function ScoringTab({ ctx }: LeagueSettingsTabProps) {
     : null
 
   return (
-    <div className="space-y-6">
-      <ScoringSettingsFullSection
-        league={ctx.league}
-        sleeperSettingsHref={sleeperSettingsHref}
-        showEditLink={Boolean(sleeperSettingsHref)}
-      />
+    <div className="min-w-0 space-y-6">
       <SportScoringPanel
         sport={ctx.league.sport}
         leagueId={ctx.league.id}
         isCommissioner={ctx.isCommissioner}
       />
+      {/* The host's raw scoring_settings mirror only means something for a host-linked league;
+          for a native league it was an empty "no rules" list beside the real editor. */}
+      {sleeperSettingsHref ? (
+        <ScoringSettingsFullSection
+          league={ctx.league}
+          sleeperSettingsHref={sleeperSettingsHref}
+          showEditLink
+        />
+      ) : null}
     </div>
   )
 }

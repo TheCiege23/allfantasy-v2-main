@@ -101,13 +101,45 @@ export function buildNameIndex<T extends NameMatchCandidate>(rows: readonly T[])
   return index
 }
 
+const OFFENSE = new Set(['QB', 'RB', 'HB', 'FB', 'WR', 'TE', 'OL', 'OT', 'OG', 'T', 'G', 'C', 'IOL'])
+const DEFENSE = new Set(['DL', 'DE', 'DT', 'NT', 'EDGE', 'LB', 'ILB', 'OLB', 'MLB', 'DB', 'CB', 'S', 'SS', 'FS', 'SAF'])
+const SPECIAL = new Set(['K', 'PK', 'P', 'LS'])
+
+/** Offense / defense / special teams, or null when the label is unknown (no claim either way). */
+function sideOfBall(position: string | null | undefined): 'O' | 'D' | 'ST' | null {
+  const p = normalizeToken(position)
+  if (!p) return null
+  if (OFFENSE.has(p)) return 'O'
+  if (DEFENSE.has(p)) return 'D'
+  if (SPECIAL.has(p)) return 'ST'
+  return null
+}
+
+/**
+ * Both sides state a team and they differ, or both state a position on different sides of the
+ * ball. Sub-positions on one side never contradict (a DE in one feed is an OLB in another).
+ */
+function contradicts(
+  candidate: NameMatchCandidate,
+  lookup: { position?: string | null; team?: string | null },
+): boolean {
+  const ct = normalizeToken(candidate.team)
+  const lt = normalizeToken(lookup.team)
+  if (ct && lt && ct !== lt) return true
+  const cs = sideOfBall(candidate.position)
+  const ls = sideOfBall(lookup.position)
+  return cs != null && ls != null && cs !== ls
+}
+
 /**
  * Resolve one lookup against the index.
  *
  * Rules, in order:
  *  1. No candidates → `not_found`.
  *  2. Exactly one candidate → bind (`unique_name`). A unique name is not a
- *     collision risk, so position data is not required.
+ *     collision risk, so position data is not required — unless the caller set
+ *     `refuseContradictedSingle` and the lone candidate's team or side of the
+ *     ball contradicts the lookup.
  *  3. Multiple candidates → narrow by position, then by team. Bind only if
  *     exactly one survives; otherwise `ambiguous` and NO bind.
  *
@@ -118,11 +150,28 @@ export function buildNameIndex<T extends NameMatchCandidate>(rows: readonly T[])
 export function resolveVerifiedMatch<T extends NameMatchCandidate>(
   index: Map<string, T[]>,
   lookup: { name: string; position?: string | null; team?: string | null },
+  opts: {
+    /**
+     * Refuse a LONE candidate whose team, or side of the ball, contradicts the lookup.
+     *
+     * 🛑 "UNIQUE IN THE INDEX" IS NOT "UNIQUE IN THE LEAGUE" (2026-10-11). An index built from
+     * injury rows holds only the athletes who HAVE a row, so when one of two namesakes is on the
+     * report the name looks unique and rule 2 binds it to whoever asked. Measured that day: WR
+     * DeVonta Smith (PHI) was Out and CB DeVonta Smith (CAR) had no row, so the corner read as
+     * Out; RB Michael Carter (TEN) Out did the same to CB Michael Carter (PHI). Only set this
+     * where the index is a PARTIAL list (injury feeds); a full roster index has no such gap.
+     */
+    refuseContradictedSingle?: boolean
+  } = {},
 ): NameMatchResult<T> {
   const key = normalizeMatchName(lookup.name)
   const candidates = key ? index.get(key) ?? [] : []
   if (candidates.length === 0) return { match: null, reason: 'not_found', candidateCount: 0 }
   if (candidates.length === 1) {
+    if (opts.refuseContradictedSingle && contradicts(candidates[0]!, lookup)) {
+      // The only row belongs to somebody else: this player has no row, which is not a collision.
+      return { match: null, reason: 'not_found', candidateCount: 1 }
+    }
     return { match: candidates[0]!, reason: 'unique_name', candidateCount: 1 }
   }
 
