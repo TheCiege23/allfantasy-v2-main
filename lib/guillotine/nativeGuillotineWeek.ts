@@ -151,9 +151,11 @@ export async function runNativeGuillotineWeek(
 
     // Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
     const points = new Map<string, number>()
+    const benchPoints = new Map<string, number>()
     for (const r of active) {
-      const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season })
+      const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true })
       points.set(r.id, s.points)
+      if (typeof s.benchPoints === 'number') benchPoints.set(r.id, s.benchPoints)
     }
 
     // Into the engine's id space. A team that cannot be placed would silently escape the chop.
@@ -185,14 +187,28 @@ export async function runNativeGuillotineWeek(
     // This season only: `GuillotinePeriodScore` is keyed by league, so last year's weeks are here too.
     const previous = await prisma.guillotinePeriodScore.findMany({
       where: { leagueId: season.leagueId, season: season.season, weekOrPeriod: { lt: week } },
-      select: { rosterId: true, periodPoints: true },
+      select: { rosterId: true, periodPoints: true, weekOrPeriod: true },
     })
     const cumulBefore = new Map<string, number>()
-    for (const p of previous) cumulBefore.set(p.rosterId, (cumulBefore.get(p.rosterId) ?? 0) + p.periodPoints)
+    const lastWeek = new Map<string, number>()
+    for (const p of previous) {
+      cumulBefore.set(p.rosterId, (cumulBefore.get(p.rosterId) ?? 0) + p.periodPoints)
+      if (p.weekOrPeriod === week - 1) lastWeek.set(p.rosterId, p.periodPoints)
+    }
+    /*
+     * The tiebreak's `bench_points` and `previous_period` steps read these. They were never filled on the
+     * native path, so both compared 0 with 0 and every tie fell through to season points.
+     */
     const periodScores = active.map((r) => {
       const rosterId = rosterForRedraft.get(r.id)!
       const periodPoints = points.get(r.id) ?? 0
-      return { rosterId, periodPoints, seasonPointsCumul: Math.round(((cumulBefore.get(rosterId) ?? 0) + periodPoints) * 100) / 100 }
+      return {
+        rosterId,
+        periodPoints,
+        seasonPointsCumul: Math.round(((cumulBefore.get(rosterId) ?? 0) + periodPoints) * 100) / 100,
+        ...(benchPoints.has(r.id) ? { benchPoints: benchPoints.get(r.id) } : {}),
+        ...(lastWeek.has(rosterId) ? { previousPeriodPoints: lastWeek.get(rosterId) } : {}),
+      }
     })
     await savePeriodScores({ leagueId: season.leagueId, weekOrPeriod: week, season: season.season, scores: periodScores })
 

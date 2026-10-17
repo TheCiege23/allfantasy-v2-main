@@ -301,6 +301,11 @@ export type RosterScoreSummary = {
   missingPlayerIds: string[]
   allFinal: boolean
   statTotals?: TeamStatTotals
+  /**
+   * Lineup leagues only: points the benched players scored (never IR/taxi/devy). Not part of `points`;
+   * the guillotine tiebreak's `bench_points` step reads it.
+   */
+  benchPoints?: number
   /** Best ball only: the lineup the system started this week, and any seat nobody could fill. */
   bestBall?: { assignments: OptimalSlotAssignment[]; unfilledSlots: { slot: string; seat: number }[] }
 }
@@ -323,6 +328,7 @@ async function scoreRosterStarters(args: {
   seasonYear: number
   useDevyEngine: boolean
   bestBall?: BestBallScoringContext | null
+  includeBench?: boolean
 }): Promise<RosterScoreSummary> {
   if (args.bestBall && !args.useDevyEngine) return scoreRosterBestBall({ ...args, bestBall: args.bestBall })
   if (args.useDevyEngine) {
@@ -387,16 +393,31 @@ async function scoreRosterStarters(args: {
     if (!row.isFinalized) allFinal = false
   }
 
+  let benchPts = 0
+  for (const p of args.includeBench ? starters : []) {
+    const slot = weekSlotType(p, weekLineups)
+    if (isScoringStarterSlot(slot) || NON_BENCH_RESERVE_SLOTS.has(String(slot ?? '').trim().toLowerCase())) continue
+    const row = await prisma.playerWeeklyScore.findUnique({
+      where: { playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport } },
+    })
+    if (!row) continue
+    benchPts += await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, row.stats as Record<string, number>, p.position)
+  }
+
   return {
     rosterId: args.rosterId,
     starterCount: activeStarters.length,
     scoredStarterCount,
     points: Math.round(pts * 100) / 100,
+    ...(args.includeBench ? { benchPoints: Math.round(benchPts * 100) / 100 } : {}),
     statTotals: accumulateTeamTotals(statMaps),
     missingPlayerIds,
     allFinal,
   }
 }
+
+/** Reserve slots that are not the bench: their players count for neither the lineup nor bench points. */
+const NON_BENCH_RESERVE_SLOTS = new Set(['ir', 'taxi', 'devy', 'reserve', 'injured_reserve'])
 
 /**
  * Best ball: score every eligible player, then start the highest-scoring legal lineup
@@ -483,6 +504,8 @@ export async function scoreRosterForWeek(args: {
   rosterId: string
   week: number
   seasonYear: number
+  /** Also score the bench into `benchPoints` (the guillotine tiebreak). Off by default: extra reads. */
+  includeBench?: boolean
 }): Promise<RosterScoreSummary> {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
