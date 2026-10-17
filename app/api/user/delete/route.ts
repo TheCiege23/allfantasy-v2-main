@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { releaseDeletedAccountLinks } from "@/lib/account/releaseDeletedAccountLinks"
 import { revokeAllSessionsForUser } from "@/lib/auth/sessionRevocation"
+import { cancelSubscriptionsOnDelete } from "@/lib/account/cancelSubscriptionsOnDelete"
+import { getStripeClient } from "@/lib/stripe-client"
 
 export const dynamic = "force-dynamic"
 
@@ -54,8 +56,40 @@ export async function POST(req: Request) {
     )
   }
 
+  /*
+   * Cancel billing FIRST, and refuse to erase if that fails. Erasing first and cancelling after
+   * could leave an anonymized account — no email, no login — still being charged, with no way for
+   * its owner to reach the billing portal. See lib/account/cancelSubscriptionsOnDelete.
+   */
+  let billing: Awaited<ReturnType<typeof cancelSubscriptionsOnDelete>>
+  try {
+    billing = await cancelSubscriptionsOnDelete(userId, {
+      findSubscriptions: (id) =>
+        prisma.userSubscription.findMany({
+          where: { userId: id },
+          select: { stripeSubscriptionId: true, stripeCustomerId: true, source: true, status: true },
+        }),
+      getStripe: getStripeClient,
+    })
+  } catch (error) {
+    console.error("[user/delete] subscription cancel failed:", error instanceof Error ? error.message : error)
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't cancel your subscription, so nothing was deleted. Please try again, or cancel it in Billing first.",
+        code: "subscription_cancel_failed",
+      },
+      { status: 502 },
+    )
+  }
+
+  // The legacy MFL session row is keyed by this browser's cookie, not by the user (see
+  // releaseDeletedAccountLinks). Read from the header so the route needs no request scope.
+  const mflSessionId = readCookie(req.headers.get("cookie"), "mfl_session")
+
   try {
     await prisma.$transaction(async (tx) => {
+      await tx.genericTradeComparison.deleteMany({ where: { userId } })
       await tx.authAccount.deleteMany({ where: { userId } })
       await tx.emailVerifyToken.deleteMany({ where: { userId } }).catch(() => undefined)
       await tx.passwordResetToken.deleteMany({ where: { userId } }).catch(() => undefined)
@@ -78,7 +112,7 @@ export async function POST(req: Request) {
        * account and every re-import refused. Found 2026-09-28 by deleting the App Review demo
        * account. See lib/account/releaseDeletedAccountLinks.
        */
-      await releaseDeletedAccountLinks(tx, userId)
+      await releaseDeletedAccountLinks(tx, userId, { mflSessionId })
     })
   } catch (error) {
     console.error("[user/delete] erasure failed:", error)
@@ -92,6 +126,30 @@ export async function POST(req: Request) {
    */
   await revokeAllSessionsForUser(userId).catch(() => undefined)
 
-  console.warn("[user/delete] account erased", { userId })
-  return NextResponse.json({ ok: true, deleted: true })
+  console.warn("[user/delete] account erased", { userId, cancelledSubscriptions: billing.cancelled.length })
+  const response = NextResponse.json({
+    ok: true,
+    deleted: true,
+    cancelledSubscriptions: billing.cancelled.length,
+    // An App Store subscription is the user's to cancel; the client tells them where.
+    appleSubscriptionActive: billing.hasAppleSubscription,
+  })
+  if (mflSessionId) response.cookies.set("mfl_session", "", { maxAge: 0, path: "/" })
+  return response
+}
+
+function readCookie(header: string | null, name: string): string | null {
+  for (const part of (header ?? "").split(";")) {
+    const eq = part.indexOf("=")
+    if (eq > 0 && part.slice(0, eq).trim() === name) {
+      const value = part.slice(eq + 1).trim()
+      if (!value) return null
+      try {
+        return decodeURIComponent(value)
+      } catch {
+        return value
+      }
+    }
+  }
+  return null
 }

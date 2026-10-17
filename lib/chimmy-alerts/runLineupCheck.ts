@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { buildLineupOptimization, type LineupOptimization } from '@/lib/chimmy/lineupOptimizerGrounding'
 import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
 import { keepBestPerRealLeague } from '@/lib/core-app/realLeague'
@@ -22,6 +21,7 @@ import {
 import {
   categoryOn,
   CLAIM_TTL_MS,
+  isBestBallAudienceLeague,
   loadRegularSeasonGames,
   PROACTIVE_CATEGORY,
   proactiveDeliveryDeps,
@@ -169,7 +169,7 @@ export async function runLineupCheck(
       }
       const leagues = (audience.get(userId) ?? []).filter(
         (l) =>
-          !isBestBallLeague(l.leagueVariant, l.bestBallMode) &&
+          !isBestBallAudienceLeague(l) &&
           isCategoryAllowedForLeague(n, CATEGORY, l.id) &&
           !lineupCheckMutedBy(settings.chimmy, l.id),
       )

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 /**
  * [NEW] lib/big-brother/BigBrotherChatAnnouncements.ts
  * Post deterministic announcement payloads to league chat. Chimmy/bot posts; AI can narrate later.
@@ -26,8 +27,9 @@ async function post(
   const userId = await getAnnouncerUserId(leagueId, options.systemUserId)
   if (!userId) return
   await createLeagueChatMessage(leagueId, userId, message, {
+    idempotencyKey: 'bb-announcement-' + createHash('sha256').update(`${leagueId}:${JSON.stringify(options.metadata ?? {})}`).digest('hex'),
     type: options.type ?? 'text',
-    metadata: { bigBrother: true, ...options.metadata },
+    metadata: { bigBrother: true, ...options.metadata, chimmy: true },
   })
 }
 

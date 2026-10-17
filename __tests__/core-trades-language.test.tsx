@@ -61,7 +61,11 @@ describe('Trades Spanish view', () => {
   it('keeps trade grade amounts and timing in translated explanations', () => {
     expect(tradeUiCopy('Gridiron Vultures got the better end — Tú got 7,200 in league value for 9,000.', 'es'))
       .toContain('tú recibiste 7,200 por 9,000')
+    // The date inside the label is Spanish too ("el 5 sep"), not the English "Sep 5" it once kept.
     expect(tradeUiCopy("Graded on this league's values when first graded Sep 5 (Dynasty · 12 teams).", 'es'))
-      .toContain('cuando se calificó por primera vez Sep 5')
+      .toContain('cuando se calificó por primera vez el 5 sep')
+    // A grade priced at the time of the trade says so, in Spanish, with the trade date.
+    expect(tradeUiCopy("Graded on this league's values at the time of the trade (Sep 5) (Dynasty · 12 teams).", 'es'))
+      .toContain('en la fecha del traspaso (5 sep)')
   })
 })

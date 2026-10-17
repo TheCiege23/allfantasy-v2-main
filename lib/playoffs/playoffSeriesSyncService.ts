@@ -11,6 +11,7 @@ import {
   type RollingInsightsScheduleGameRow,
 } from "@/lib/sports-live-scores-service"
 import { normalizeTeamAbbrev } from "@/lib/team-abbrev"
+import { isSingleGameSeries } from "./singleGame"
 import type { PlayoffSport } from "./types"
 
 export type PlayoffSeriesSyncGame = {
@@ -283,6 +284,8 @@ const SPORT_TO_LEAGUE_SPORT: Record<PlayoffSport, LeagueSport> = {
   nba: "NBA",
   nhl: "NHL",
   mlb: "MLB",
+  // Mapped so the type is total; NOT syncable yet — see SYNCABLE_PLAYOFF_SPORTS.
+  ncaaf: "NCAAF",
 }
 
 /**
@@ -1265,7 +1268,19 @@ function liveGame(games: PlayoffSeriesSyncGame[]): PlayoffSeriesSyncGame | null 
   return games.find((game) => statusFromGame(game) === "in_progress") ?? null
 }
 
-function buildSeriesSummary(homeTeamName: string, awayTeamName: string, homeWins: number, awayWins: number, winnerTeamName: string | null): string {
+function buildSeriesSummary(
+  homeTeamName: string,
+  awayTeamName: string,
+  homeWins: number,
+  awayWins: number,
+  winnerTeamName: string | null,
+  bestOf: number,
+): string {
+  // A single game (CFP) has no series to lead or win "1-0" — see lib/playoffs/singleGame.ts.
+  if (isSingleGameSeries({ bestOf })) {
+    if (winnerTeamName) return `${winnerTeamName} won`
+    return "Game starts TBD"
+  }
   if (winnerTeamName) {
     const verb = winnerTeamName.toLowerCase().endsWith("s") ? "win" : "wins"
     return `${winnerTeamName} ${verb} series ${Math.max(homeWins, awayWins)}-${Math.min(homeWins, awayWins)}`
@@ -1343,7 +1358,7 @@ function aggregateSeriesGames(series: any, games: PlayoffSeriesSyncGame[]): Play
 
   const nextGame = nextScheduledGame(games)
   const activeGame = liveGame(games)
-  const seriesSummary = buildSeriesSummary(homeTeamName, awayTeamName, homeWins, awayWins, winnerTeamName)
+  const seriesSummary = buildSeriesSummary(homeTeamName, awayTeamName, homeWins, awayWins, winnerTeamName, bestOf)
 
   return {
     games,

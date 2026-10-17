@@ -64,10 +64,15 @@ describe('Zombie League Comprehensive Test Suite', () => {
           expect(config.weaponThresholds.length).toBeGreaterThan(0)
           config.weaponThresholds.forEach((wt) => {
             expect(wt).toHaveProperty('type')
-            expect(wt).toHaveProperty('minPoints')
-            expect(typeof wt.minPoints).toBe('number')
-            expect(wt.minPoints).toBeGreaterThanOrEqual(0)
+            // A weapon earned without a points line (NBA Gun: attacks survived; Bomb: a win streak)
+            // carries no minPoints. One that has a line must be a real, non-negative number.
+            if (wt.minPoints !== undefined) {
+              expect(typeof wt.minPoints).toBe('number')
+              expect(wt.minPoints).toBeGreaterThanOrEqual(0)
+            }
           })
+          // ...and at least one weapon is still earned on points.
+          expect(config.weaponThresholds.some((wt) => typeof wt.minPoints === 'number')).toBe(true)
         })
 
         it(`${sport} should have serum award triggers`, () => {
@@ -179,7 +184,7 @@ describe('Zombie League Comprehensive Test Suite', () => {
         // Award weapons by score threshold
         config.weaponThresholds.forEach((wt) => {
           expect(wt.type).toBeTruthy()
-          expect(wt.minPoints).toBeGreaterThanOrEqual(0)
+          if (wt.minPoints !== undefined) expect(wt.minPoints).toBeGreaterThanOrEqual(0)
           expect(wt.description).toBeTruthy()
         })
       })

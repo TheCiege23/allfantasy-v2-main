@@ -501,7 +501,6 @@
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
 }
-.af-crm-chip--ro { color: var(--good); background: var(--good-soft); border-color: transparent; }
 
 .af-crm-body { display: flex; flex-direction: column; gap: 9px; padding: 14px; }
 

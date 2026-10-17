@@ -35,9 +35,12 @@ describe("Quick Actions i18n key fix (app/brackets/page.tsx)", () => {
     expect(src).not.toContain('key: "joinWithCode"')
   })
 
-  it('QUICK_ACTIONS uses "continue" not "continueBracket"', () => {
+  it('QUICK_ACTIONS never uses the stale "continueBracket" key', () => {
+    // The "continue" action itself was removed on 2026-10-01: it pointed at the
+    // World Cup (switched off as a destination) and there is no cross-sport
+    // "my brackets" page to send it to. The guard against the old key stays.
     const src = read("app/brackets/page.tsx")
-    expect(src).toContain('key: "continue"')
+    expect(src).not.toContain('key: "continue"')
     expect(src).not.toContain('key: "continueBracket"')
   })
 

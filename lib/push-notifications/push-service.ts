@@ -11,6 +11,14 @@ import { IOS_ENDPOINT_PREFIX, isIosEndpoint, isValidDeviceToken, sendApns } from
 
 let vapidConfigured = false
 
+/** Conversation alerts: a new one on the same tag should buzz, not silently replace. */
+const CHAT_PUSH_TYPES: ReadonlySet<string> = new Set(["direct_message", "huddle_message", "mention", "league_chat_message"])
+
+/** Whether a web push should alert again when it replaces a notification with the same tag. PURE. */
+export function shouldRenotify(type: string | null | undefined, tag: string | null | undefined): boolean {
+  return Boolean(tag) && CHAT_PUSH_TYPES.has(String(type))
+}
+
 function ensureVapid() {
   if (vapidConfigured) return
   const publicKey = process.env.VAPID_PUBLIC_KEY?.trim()
@@ -71,7 +79,7 @@ export async function removePushSubscription(
 }
 
 /** Get all subscriptions for a user. */
-export async function getPushSubscriptions(userId: string): Promise<
+export async function getPushSubscriptions(userId: string, strict = false): Promise<
   { id: string; endpoint: string; p256dh: string; auth: string }[]
 > {
   const rows = await (prisma as any).webPushSubscription
@@ -79,7 +87,7 @@ export async function getPushSubscriptions(userId: string): Promise<
       where: { userId },
       select: { id: true, endpoint: true, p256dh: true, auth: true },
     })
-    .catch(() => [])
+    .catch((error: unknown) => { if(strict)throw error;return [] })
   return rows
 }
 
@@ -123,10 +131,18 @@ async function sendToSubscription(
     href,
     url: href,
     tag: payload.tag ?? undefined,
+    /*
+     * A chat alert reuses its conversation's tag, so the 10-minute re-alert REPLACED the old
+     * notification without a sound or buzz (`renotify` defaults to false in public/sw.js). For a
+     * conversation the new message is the point, so it alerts again.
+     */
+    ...(shouldRenotify(payload.type, payload.tag) ? { renotify: true } : {}),
     type: payload.type ?? "notification",
     leagueId: payload.leagueId ?? null,
     // public/sw.js already passes `payload.image` to showNotification; Android shows it large.
     image: payload.imageUrl ?? undefined,
+    // public/sw.js reads `payload.icon` (falling back to the crest): the sender's face on a DM.
+    icon: payload.iconUrl ?? undefined,
   })
 
   const pushSubscription = {
@@ -155,12 +171,17 @@ async function sendToSubscription(
  */
 export async function sendPushToUser(
   userId: string,
-  input: PushPayload
+  input: PushPayload,
+  options?: { strictSubscriptionRead?: boolean }
 ): Promise<SendPushResult[]> {
-  const all = await getPushSubscriptions(userId)
+  const all = await getPushSubscriptions(userId, options?.strictSubscriptionRead)
   if (all.length === 0) return []
   // Resolved once here so the APNs and web-push halves see the same, already-vetted picture.
-  const payload: PushPayload = { ...input, imageUrl: absolutePushImageUrl(input.imageUrl) }
+  const payload: PushPayload = {
+    ...input,
+    imageUrl: absolutePushImageUrl(input.imageUrl),
+    iconUrl: absolutePushImageUrl(input.iconUrl),
+  }
 
   /*
    * iPhones (endpoint `apns:<token>`, registered by the iOS app) go to Apple's push service;
@@ -175,7 +196,8 @@ export async function sendPushToUser(
   if (ios.length > 0) {
     const sent = await sendApns(
       ios.map((s) => s.endpoint.slice(IOS_ENDPOINT_PREFIX.length)),
-      payload,
+      // iOS has no remote icon slot: a face with no other picture rides the attachment instead.
+      { ...payload, imageUrl: payload.imageUrl ?? payload.iconUrl ?? null },
     )
     for (let i = 0; i < ios.length; i += 1) {
       const r = sent[i]

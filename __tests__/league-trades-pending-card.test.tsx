@@ -12,7 +12,24 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import React from 'react'
-import { PendingTradeCard, toAnalyzeAssets } from '@/app/league/[leagueId]/tabs/TradesTab'
+import { PendingTradeCard, pendingVerdictFromGrade, toAnalyzeAssets } from '@/app/league/[leagueId]/tabs/TradesTab'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+
+describe('pendingVerdictFromGrade — per-asset values', () => {
+  const grade = {
+    graded: true, letter: 'B', partnerLetter: 'D', percentDiff: 12, label: 'x', basis: 'b', giveValue: 4100, getValue: 4600,
+    lines: [
+      { side: 'give', name: 'Kenneth Walker III', marketValue: 4100, leagueValue: 4100 },
+      { side: 'get', name: '2027 1st', marketValue: 3034, leagueValue: 3034 },
+      { side: 'get', name: '2027 2nd', marketValue: 1559, leagueValue: 1559 },
+    ],
+  } as unknown as TradeGradeView
+
+  it('matches a pick by its year and round, not by its place in the list', () => {
+    const v = pendingVerdictFromGrade(grade, ['Kenneth Walker'], ['2027 round 2', '2027 round 1'])
+    expect(v && v.kind === 'ok' ? v.values : null).toEqual({ 'kenneth walker': 4100, '2027 round 2': 1559, '2027 round 1': 3034 })
+  })
+})
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 
 vi.mock('next-auth/react', () => ({ useSession: () => ({ data: { user: { id: 'user-a' } } }) }))
@@ -90,7 +107,25 @@ describe('PendingTradeCard — the provider card shape with the AF read on top',
     const t = card(INCOMING).container.textContent ?? ''
     expect(t).toContain('Cold Takes FC has proposed a trade')
     expect(t.indexOf('Cold Takes FC')).toBeLessThan(t.indexOf('You'))
-    expect(t.indexOf('Bijan Robinson')).toBeLessThan(t.indexOf('CeeDee Lamb'))
+    // Each block lists what that manager GETS: Cold Takes gets CeeDee (yours), you get Bijan (theirs).
+    expect(t.indexOf('CeeDee Lamb')).toBeLessThan(t.indexOf('Bijan Robinson'))
+    expect(t).not.toContain('sends')
+  })
+
+  it('puts each manager’s letter and total over what that manager GETS', () => {
+    const { container } = card(INCOMING, {
+      verdict: {
+        kind: 'ok', fairnessScore: 41, fairnessLabel: 'Tilts toward Cold Takes FC', confidenceLabel: 'Moderate', degraded: false,
+        giveGrade: 'C', getGrade: 'B', giveTotal: 8200, getTotal: 7900,
+        values: { 'ceedee lamb': 8200, 'bijan robinson': 7900 }, dropped: [],
+      },
+    })
+    const t = container.textContent ?? ''
+    // You (graded side, C) get Bijan at 7,900; Cold Takes (B) gets CeeDee at 8,200.
+    const you = t.slice(t.indexOf('YOU'))
+    expect(you).toMatch(/^YOU.*gets.*C.*7,900.*Bijan Robinson/)
+    const them = t.slice(t.indexOf('Cold Takes FCgets'), t.indexOf('YOU'))
+    expect(them).toMatch(/gets.*B.*8,200.*CeeDee Lamb/)
   })
 
   it('⚠ shows the offer without any value while the read is missing', () => {
@@ -197,5 +232,28 @@ describe('PendingTradeCard — the provider card shape with the AF read on top',
     expect(t).toContain('$25 FAAB')
     expect(t).toContain('Improves survival odds.')
     expect(t).toContain('Adds waiver flexibility.')
+    // No `received` on a three-team row: who got what is unknown, so it keeps "sends" rather than "gets: Nothing".
+    expect(t).not.toContain('Nothing')
+    expect(t).toContain('sends')
+  })
+
+  it('a three-team proposal with `received` lists what each manager gets', () => {
+    const asset = (id: string, label: string) => ({ id, label, sublabel: null, headshotUrl: null, accent: 'teal' as const })
+    const { container } = card({
+      ...INCOMING,
+      direction: 'complete',
+      proposerName: 'Alpha',
+      participantSides: [
+        { rosterId: 'r1', name: 'Alpha', avatarUrl: null, isViewer: false, assets: [asset('a1', 'Josh Allen')], received: [asset('c1', '$25 FAAB')], grade: 'A', reason: null },
+        { rosterId: 'r2', name: 'Beta', avatarUrl: null, isViewer: true, assets: [asset('b1', '2027 1st')], received: [asset('a1', 'Josh Allen')], grade: 'B', reason: null },
+        { rosterId: 'r3', name: 'Gamma', avatarUrl: null, isViewer: false, assets: [asset('c1', '$25 FAAB')], received: [asset('b1', '2027 1st')], grade: 'C', reason: null },
+      ],
+    })
+    const t = container.textContent ?? ''
+    expect(t).not.toContain('sends')
+    expect(t.indexOf('Alpha')).toBeLessThan(t.indexOf('$25 FAAB'))
+    expect(t.indexOf('$25 FAAB')).toBeLessThan(t.indexOf('Beta'))
+    expect(t.indexOf('Beta')).toBeLessThan(t.indexOf('Josh Allen'))
+    expect(t.indexOf('Gamma')).toBeLessThan(t.indexOf('2027 1st'))
   })
 })

@@ -12,6 +12,7 @@ import {
   teamDisplayNameForSport,
 } from '@/lib/team-abbrev'
 import { getPlayersBySport } from '@/lib/sleeper-client'
+import { storedInjuryFields } from '@/lib/injuries/storedInjuryDesignation'
 
 const UPSERT_BATCH_SIZE = 100
 const SLEEPER_SOURCE = 'sleeper'
@@ -137,8 +138,11 @@ function normalizeSleeperPlayer(
     college: player.college?.trim() || null,
     yearsExp: toFiniteNumber(player.years_exp),
     status: player.status?.trim() || (player.active === false ? 'inactive' : null),
-    injuryStatus: player.injury_status?.trim() || null,
-    injuryNotes: player.injury_notes?.trim() || null,
+    /*
+     * Only a designation is stored: Sleeper's `injury_status` also carries "NA", and the provider
+     * path below can carry any roster code. Same predicate as the importer's write path and guard.
+     */
+    ...storedInjuryFields(player.injury_status, player.injury_notes),
   }
 }
 
@@ -179,8 +183,10 @@ function normalizeProviderPlayer(
     college: String(row.college ?? '').trim() || null,
     yearsExp: toFiniteNumber(row.yearsExp ?? row.years_exp),
     status: String(row.status ?? '').trim() || null,
-    injuryStatus: String(row.injuryStatus ?? row.injury_status ?? '').trim() || null,
-    injuryNotes: String(row.injuryNotes ?? row.injury_notes ?? '').trim() || null,
+    ...storedInjuryFields(
+      String(row.injuryStatus ?? row.injury_status ?? '').trim() || null,
+      String(row.injuryNotes ?? row.injury_notes ?? '').trim() || null,
+    ),
   }
 }
 

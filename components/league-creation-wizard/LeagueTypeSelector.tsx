@@ -2,7 +2,7 @@
 
 import { Label } from '@/components/ui/label'
 import {
-  LEAGUE_TYPE_IDS,
+  getAllowedLeagueTypesForSport,
   LEAGUE_TYPE_LABELS,
 } from '@/lib/league-creation-wizard/league-type-registry'
 import { getLeagueTypeMedia } from '@/lib/league-media/leagueTypeMedia'
@@ -24,7 +24,7 @@ const LEAGUE_TYPE_TOOLTIPS: Partial<Record<LeagueTypeId, string>> = {
   devy: 'Long-term devy format: NFL/NCAAF or NBA/NCAAB prospect pipelines — not available for MLB, NHL, or Soccer.',
   c2c: 'Campus to Canton: college + pro assets in one league with live college scoring; supports football and basketball ecosystems.',
   guillotine: 'Lowest scorer each week is eliminated. Roster released to waivers. Last team standing wins.',
-  survivor: 'Tribes compete weekly. Losing tribe votes someone out. Idols, exile island, merge, jury — full Survivor experience.',
+  survivor: 'NBA Survivor pilot: tribes, private votes, idols, Exile, merge and jury. Full-season automation is still being certified.',
   zombie: 'Infection mechanics, whisperer role, serums & weapons. Eliminated teams can spread the virus.',
   salary_cap: 'Salary cap and contracts.',
 }
@@ -40,8 +40,8 @@ const LEAGUE_TYPE_BADGES: Partial<Record<LeagueTypeId, 'POPULAR' | 'NEW' | 'FLAG
 /**
  * League type selection (redraft, dynasty, keeper, etc.). Options filtered by sport.
  */
-export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps) {
-  const visibleLeagueTypes = LEAGUE_TYPE_IDS
+export function LeagueTypeSelector({ sport = 'NFL', value, onChange }: LeagueTypeSelectorProps) {
+  const visibleLeagueTypes = getAllowedLeagueTypesForSport(sport)
   const safeValue = visibleLeagueTypes.includes(value) ? value : visibleLeagueTypes[0]!
   const selectedMedia = getLeagueTypeMedia(safeValue)
 
@@ -61,7 +61,7 @@ export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps)
       <div className="space-y-3">
         <Label className="text-cyan-300">Type</Label>
         <div className="grid gap-3 sm:grid-cols-2">
-          {LEAGUE_TYPE_IDS.filter((id) => visibleLeagueTypes.includes(id)).map((id) => {
+          {visibleLeagueTypes.map((id) => {
             const media = getLeagueTypeMedia(id)
             return (
               <button

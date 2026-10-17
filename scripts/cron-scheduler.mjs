@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * cron-scheduler.mjs — runs the app's crons from Railway instead of GitHub Actions.
  *
@@ -25,11 +24,15 @@
  * anything while the workflows are still live. Going live and disabling the workflows is one step.
  *
  * Env: CRON_SCHEDULER_LIVE ('1' = send requests), APP_URL, CRON_SECRET (required when live).
+ *
+ * Also hosts the superseded-build reaper (scripts/cron-build-reaper.mjs) on its own once-a-minute
+ * loop at second 30, with its own env switches. It never touches the cron loops above.
  */
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { reapOnce } from './cron-build-reaper.mjs'
 import { readCronSchedule, slowTierSchedules } from './cron-tier.mjs'
 
 /** A fast window that ends sooner than this (crash, config error) waits out the rest before respawning. */
@@ -176,6 +179,16 @@ async function slowTier(live, compiled) {
   }
 }
 
+/** Once a minute at second 30, never overlapping itself; reapOnce never throws. */
+async function reaperLoop() {
+  while (!stopping) {
+    const wait = Math.floor(Date.now() / 60_000) * 60_000 + 90_000 - Date.now()
+    await sleep(wait > 60_000 ? wait - 60_000 : wait)
+    if (stopping) break
+    await reapOnce({ log: (...a) => log(...a) })
+  }
+}
+
 async function main() {
   const live = process.env.CRON_SCHEDULER_LIVE === '1'
   const schedules = slowTierSchedules(readCronSchedule(path.resolve(here, '..')))
@@ -204,7 +217,7 @@ async function main() {
   process.on('SIGTERM', () => stop('SIGTERM'))
   process.on('SIGINT', () => stop('SIGINT'))
 
-  await Promise.all([fastTier(live), slowTier(live, compiled)])
+  await Promise.all([fastTier(live), slowTier(live, compiled), reaperLoop()])
   // Only reachable once stopping; let in-flight children finish inside the grace period.
   while (children.size) await sleep(250)
   process.exit(0)

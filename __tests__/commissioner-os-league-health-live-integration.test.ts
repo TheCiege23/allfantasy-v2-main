@@ -20,7 +20,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
  * `league` and `leagueTeam`, not `roster`.
  *
  * 🛑 THE MOCK AND THE MODULE HAD DISAGREED SINCE `resolveActiveLeagueId` STOPPED RESOLVING BY
- * ROSTER. It now asks `prisma.league.findMany({ where: { userId } })` — commissioner-of, not
+ * ROSTER. It now asks `prisma.league.findMany` for leagues owned OR co-commissioned via a claimed team — commissioner-of, not
  * plays-in — while this mock still supplied only `roster`, so every test that reached it died on
  * `Cannot read properties of undefined (reading 'findMany')` before its own assertion ran. Five
  * suites, red on main.
@@ -210,7 +210,16 @@ describe("League Health live.ts — getEvidence gating and resolution", () => {
       error: null,
     })
     await liveLeagueHealthClient.getEvidence()
-    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }))
+    // Owner, OR a co-commissioner/commissioner via a team they CLAIMED — never a viewer. Exact,
+    // not objectContaining: the viewer exclusion and claimedByUserId are the authority boundary.
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        OR: [
+          { userId: "user-1" },
+          { teams: { some: { claimedByUserId: "user-1", role: { not: "viewer" }, OR: [{ isCommissioner: true }, { isCoCommissioner: true }] } } },
+        ],
+      },
+    }))
     expect(callDecisionOSMock).toHaveBeenCalledWith("league-health", `/api/v1/intelligence/league?leagueId=${encodeURIComponent("lg live/one")}`)
   })
 })

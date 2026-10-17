@@ -34,13 +34,13 @@ export const DEFAULT_IDOL_EXPIRY_PLAYERS_REMAINING = 5
 
 /**
  * Key position per sport for Exile Island team draft.
- * Claiming this position's player wins you the entire real-world team.
+ * Claiming this position reserves exclusive team rights; teammates are claimed individually.
  */
 export const EXILE_KEY_POSITION_BY_SPORT: Record<string, string> = {
   NFL: 'QB',
   MLB: 'SP',
   NHL: 'G',
-  NBA: 'C',
+  NBA: 'PG',
   NCAAF: 'QB',
   NCAAB: 'C',
   SOCCER: 'GK',
@@ -116,7 +116,7 @@ export const DEFAULT_IDOL_POWER_POOL = IDOL_POWER_TYPES.filter(
 export const IDOL_POWER_DESCRIPTIONS: Record<string, string> = {
   protect_self: 'Play before votes are counted — all votes against you are cancelled.',
   protect_self_plus_one: 'Protect yourself AND one ally from all votes this tribal.',
-  extra_vote: 'Cast one extra vote at tribal council.',
+  extra_vote: 'Cast one extra vote at elimination council.',
   double_vote: 'Your vote counts as two votes.',
   vote_nullifier: "Cancel one other player's vote — it won't be counted.",
   vote_steal: "Steal another player's vote. They lose theirs, you cast it.",
@@ -134,7 +134,7 @@ export const IDOL_POWER_DESCRIPTIONS: Record<string, string> = {
   idol_sniffer: 'Reveal whether a specific player holds any idol.',
   reveal_tribe_powers: 'Reveal all idols held by members of one tribe.',
   jury_influence: 'Your closing speech gets a bonus prompt with the jury.',
-  finale_advantage: 'Advantage in the final tribal council.',
+  finale_advantage: 'Advantage in the final elimination council.',
 }
 
 /** League chat source for tribe-scoped messages (filter by membership). */
@@ -150,13 +150,13 @@ export function parseTribeIdFromSource(source: string | null): string | null {
 
 /**
  * Key-position map used to pick the "anchor" player for exile team drafts.
- * Claiming the anchor position grants that player's full real-world team.
+ * Claiming the anchor position reserves that player's real-world team.
  */
 export const KEY_POSITION_BY_SPORT: Record<string, { code: string; label: string }> = {
   NFL: { code: 'QB', label: 'Quarterback' },
   MLB: { code: 'SP', label: 'Starting Pitcher' },
   NHL: { code: 'G', label: 'Goaltender' },
-  NBA: { code: 'C', label: 'Center' },
+  NBA: { code: 'PG', label: 'Point Guard' },
   NCAAF: { code: 'QB', label: 'Quarterback' },
   NCAAB: { code: 'C', label: 'Center' },
   SOCCER: { code: 'GK', label: 'Goalkeeper' },

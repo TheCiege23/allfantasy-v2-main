@@ -25,6 +25,9 @@
 
 import { PrismaClient } from '@prisma/client'
 
+import { vendorRowMayCarrySleeperId } from '@/lib/player-match/authoritativePlayerRow'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+
 const prisma = new PrismaClient()
 
 const SLEEPER_API = 'https://api.sleeper.app/v1/players/nfl'
@@ -166,11 +169,12 @@ async function main() {
   })
   console.log(`DB sportsPlayer rows (NFL): ${dbPlayers.length}`)
 
-  // Index DB by sleeperId and by name+position
+  // Index DB by sleeperId and by name+position. For a Sleeper id the Sleeper row itself wins:
+  // a vendor row carrying the same id is at best a copy and at worst a namesake.
   const dbBySleeperId = new Map<string, typeof dbPlayers[0]>()
   const dbByNamePos = new Map<string, typeof dbPlayers[0]>()
   for (const row of dbPlayers) {
-    if (row.sleeperId) dbBySleeperId.set(row.sleeperId, row)
+    if (row.sleeperId && (row.source === 'sleeper' || !dbBySleeperId.has(row.sleeperId))) dbBySleeperId.set(row.sleeperId, row)
     const nameKey = `${row.name?.toLowerCase().trim()}|${(row.position || '').toLowerCase()}`
     if (!dbByNamePos.has(nameKey)) dbByNamePos.set(nameKey, row)
   }
@@ -183,6 +187,25 @@ async function main() {
     dbRow: typeof dbPlayers[0] | null
     action: 'create' | 'update_image' | 'update_team' | 'update_all'
   }> = []
+
+  /*
+   * 🛑 THE UPDATE BELOW STAMPS `sleeperId` ONTO WHATEVER ROW THE KEY FOUND, WHATEVER ITS
+   * SOURCE — the only writer in the tree that puts a Sleeper id on another feed's row, and
+   * it matched on name + exact position with no team and no namesake check. Measured
+   * 2026-10-12: TheSportsDB's `tsdb_34249738` "Byron Murphy DT Seattle Seahawks" carries
+   * 5864 — the Vikings CB — and every Sleeper-keyed read (leagues, projection, rank)
+   * followed it to the wrong man. 727 of 2,247 TheSportsDB NFL rows carry a stamp, every one
+   * created on or before 2026-04-26 and none of the 463 created since: a hand run, not a cron.
+   * So a vendor row is now written only when `vendorRowMayCarrySleeperId` agrees: same name,
+   * agreeing position group, same stated team, and a name unique in Sleeper's universe.
+   * Anything else is refused and reported. Existing stamps are NOT touched here.
+   */
+  const sleeperNameCount = new Map<string, number>()
+  for (const p of allSleeper) {
+    const key = normalizeMatchName(playerFullName(p))
+    if (key) sleeperNameCount.set(key, (sleeperNameCount.get(key) ?? 0) + 1)
+  }
+  let refusedVendorStamp = 0
 
   let missingInDb = 0
   let wrongTeam = 0
@@ -200,6 +223,20 @@ async function main() {
     const nameKey = `${name.toLowerCase().trim()}|${pos.toLowerCase()}`
     const dbByNameMatch = dbByNamePos.get(nameKey)
     const dbRow = dbBySleeperMatch || dbByNameMatch || null
+
+    if (
+      dbRow &&
+      dbRow.source !== 'sleeper' &&
+      !vendorRowMayCarrySleeperId(
+        { name, position: p.position ?? null, team },
+        dbRow,
+        sleeperNameCount.get(normalizeMatchName(name)) ?? 0,
+      )
+    ) {
+      refusedVendorStamp++
+      issues.push({ player_id: p.player_id, name, pos, team: team || 'FA', issue: 'REFUSED_VENDOR_STAMP', detail: `${dbRow.source} ${dbRow.externalId} "${dbRow.name}" ${dbRow.position ?? '-'} ${dbRow.team ?? 'FA'} is not verifiably this player` })
+      continue
+    }
 
     if (!dbRow) {
       // Only create players who are currently active AND on a roster
@@ -250,6 +287,7 @@ async function main() {
   console.log(`Missing in DB (active):  ${missingInDb}`)
   console.log(`No/invalid image (UUID): ${noImage}`)
   console.log(`Wrong team:              ${wrongTeam}`)
+  console.log(`Refused vendor stamps:   ${refusedVendorStamp}`)
   console.log(`Total to fix:            ${toUpsert.length}`)
   console.log('')
 

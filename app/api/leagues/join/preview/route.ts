@@ -6,6 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
+import { prisma } from '@/lib/prisma'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { SURVIVOR_TRIBE_CATALOG, tribeCrestUrl } from '@/lib/survivor/survivorTribeIdentity'
+import { getZombieJoinPreview } from '@/lib/zombie/zombieJoinPreview'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +18,39 @@ export async function GET(req: NextRequest) {
   if (!code) return NextResponse.json({ error: 'Missing code' }, { status: 400 })
 
   const result = await validateFantasyInviteCode(code)
+  async function survivorPreview(leagueId: string) {
+    const league = await prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { id: true, leagueVariant: true, survivorMode: true, settings: true, leagueSize: true, userId: true, season: true, sport: true },
+    })
+    if (!league || (league.leagueVariant !== 'survivor' && !league.survivorMode)) return null
+    const settings = normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null)
+    const [joined, host, draft] = await Promise.all([
+      prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }),
+      prisma.userProfile.findFirst({ where: { userId: league.userId }, select: { displayName: true } }),
+      prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftDateUtc: true } }),
+    ])
+    return {
+      castSize: league.leagueSize || settings.defaultTeamCount,
+      joined,
+      inviter: host?.displayName || 'the commissioner',
+      season: league.season,
+      draftAt: draft?.draftDateUtc?.toISOString() ?? null,
+      tribeCount: settings.tribeCount,
+      tribes: settings.survivorTribeSlots.map(slot => ({
+        name: SURVIVOR_TRIBE_CATALOG.find(tribe => tribe.id === slot.catalogId)?.name ?? slot.catalogId,
+        logoUrl: tribeCrestUrl(slot.catalogId, String(league.sport)),
+        managerCount: slot.managerCount,
+      })),
+      idolCount: settings.idolCount,
+      mergeWeek: settings.mergeWeek,
+      exileEnabled: settings.exileIslandEnabled,
+      exileReturnTokens: settings.exileReturnTokens,
+      councilDay: settings.tribalCouncilDay,
+      councilTime: settings.tribalCouncilTime,
+      tieRule: 'revote, then season points',
+    }
+  }
   if (result.valid) {
     return NextResponse.json({
       leagueId: result.preview.leagueId,
@@ -22,6 +59,8 @@ export async function GET(req: NextRequest) {
       requiresPassword: result.preview.requiresPassword,
       inviteExpired: result.preview.expired,
       inviteCode: result.preview.inviteCode,
+      survivor: await survivorPreview(result.preview.leagueId),
+      zombie: await getZombieJoinPreview(result.preview.leagueId),
     })
   }
 
@@ -52,6 +91,8 @@ export async function GET(req: NextRequest) {
       requiresPassword: true,
       inviteExpired: result.preview.expired,
       inviteCode: result.preview.inviteCode,
+      survivor: await survivorPreview(result.preview.leagueId),
+      zombie: await getZombieJoinPreview(result.preview.leagueId),
     })
   }
 
@@ -67,6 +108,8 @@ export async function GET(req: NextRequest) {
             requiresPassword: result.preview.requiresPassword,
             inviteExpired: result.preview.expired,
             inviteCode: result.preview.inviteCode,
+            survivor: await survivorPreview(result.preview.leagueId),
+            zombie: await getZombieJoinPreview(result.preview.leagueId),
           }
         : {}),
     },

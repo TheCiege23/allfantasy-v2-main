@@ -1,6 +1,8 @@
 'use client'
 
 import '@/components/core-app/af-draft-hq.css'
+import { TopicTip } from '@/components/core-app/TopicTip'
+import { DraftPreparation } from './DraftPreparation'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
 import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
@@ -61,7 +63,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
             <div className="af-dh-facts">
               <div className="af-dh-fact">
                 <div className="af-dh-fact-value af-num">{data.session.data.draftType}</div>
-                <div className="af-label">{copy('Format')}</div>
+                <div className="af-label">{copy('Format')} <TopicTip topic="draftFormat" /></div>
               </div>
               <div className="af-dh-fact">
                 <div className="af-dh-fact-value af-num">{data.session.data.rounds}</div>
@@ -75,7 +77,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
                 <div className="af-dh-fact-value af-num">
                   {data.session.data.yourSlot != null ? `#${data.session.data.yourSlot}` : '—'}
                 </div>
-                <div className="af-label">{copy('Your slot')}</div>
+                <div className="af-label">{copy('Your slot')} <TopicTip topic="draftSlot" /></div>
               </div>
             </div>
           </>
@@ -87,6 +89,8 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
         )}
       </section>
 
+      {data.preparation && <DraftPreparation data={data.preparation} leagueId={data.league.id} />}
+
       {/* ── Pick inventory ──────────────────────────────────────────── */}
       {/*
         Left out when it would only repeat the board's own sentence word for word ("no upcoming
@@ -97,7 +101,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       data.pickSlots.reason === data.session.reason ? null : (
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Your picks')}</h2>
+          <h2 className="af-label">{copy('Your picks')} <TopicTip topic="pickOwnership" /></h2>
           {data.pickSlots.available && data.pickSlots.data.note ? (
             <span className="af-dh-section-note" data-testid="draft-hq-picks-note">
               {copy(data.pickSlots.data.note)}
@@ -145,7 +149,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       {/* ── What you drafted ────────────────────────────────────────── */}
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('What you drafted')}</h2>
+          <h2 className="af-label">{copy('What you drafted')} <TopicTip topic="draftedPlayers" /></h2>
           {data.madePicks.available ? (
             <span className="af-chip af-num">{data.madePicks.data.length}</span>
           ) : null}
@@ -199,7 +203,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       {/* -- Draft grades, one card per team ------------------------- */}
       <section className="af-frame af-dh-section af-dh-grades">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Draft grades')}</h2>
+          <h2 className="af-label">{copy('Draft grades')} <TopicTip topic="draftGrades" /></h2>
           {data.grades.available ? (
             <span className="af-dh-board-meta af-num">
               {data.grades.data.season} &middot; {data.grades.data.gradedPicks}/
@@ -279,7 +283,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
 
       <section className="af-frame af-dh-section af-dh-boardfull">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Draft board')}</h2>
+          <h2 className="af-label">{copy('Draft board')} <TopicTip topic="recordedDraftBoard" /></h2>
           {data.board.available ? (
             <span className="af-dh-board-meta af-num">
               {data.board.data.season} &middot; {data.board.data.teams.length} {copy('teams')} &middot;{' '}
@@ -349,7 +353,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       {/* -- Lottery -------------------------------------------------- */}
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Weighted lottery')}</h2>
+          <h2 className="af-label">{copy('Weighted lottery')} <TopicTip topic="draftLottery" /></h2>
         </header>
         {/*
           Odds from the lottery engine's read-only preview for THIS league's settings
@@ -424,7 +428,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
           )}
         </section>
         <section className="af-card af-dh-section">
-          <h2 className="af-label">{copy('Keepers')}</h2>
+          <h2 className="af-label">{copy('Keepers')} <TopicTip topic="keepers" /></h2>
           {data.keepers.available ? (
             <>
               <p className="af-dh-unavailable">

@@ -26,17 +26,53 @@
  * ever takes things AWAY. Spoofing the marker gets you a website you cannot
  * pay on; removing it gets you the normal website. Never use this marker to
  * GRANT anything — no gate exemption, no entitlement, no trust.
+ *
+ * ── Apple in-app purchase (builds that carry IOS_APP_IAP_UA_MARKER) ──────────
+ * From build 1.1 the app has a StoreKit bridge (ios-app/ios/App/App/
+ * AppleIAPHandler.swift) and appends a second marker. For those builds the
+ * plan and token pages reopen and buy through Apple (lib/monetization/
+ * apple-iap-client) — 3.1.1 is satisfied by selling through IAP, not by
+ * selling nothing. Everything else stays closed: Stripe checkout APIs, the
+ * billing portal, donations, the marketplace and league dues.
+ *
+ * The IAP marker DOES open something, so the rule above needs its reason
+ * restated: what it opens is the pricing pages, which every browser already
+ * sees, and the purchase itself is verified server-side from Apple's signed
+ * transaction (lib/monetization/applePurchases). Forging the marker gets a
+ * pricing page with no StoreKit behind it — still nothing granted.
+ * Builds without the marker (1.0) keep the full gate: they have no bridge, so
+ * a reopened page would be a dead end.
  */
 
 export const IOS_APP_UA_MARKER = "AllFantasyiOS"
+/** Appended by builds that can buy through StoreKit (ios-app/capacitor.config.json). */
+export const IOS_APP_IAP_UA_MARKER = "AFIAP"
 
 export function isIosAppUserAgent(userAgent: string | null | undefined): boolean {
   return typeof userAgent === "string" && userAgent.includes(IOS_APP_UA_MARKER)
 }
 
+/** An iOS app build with the StoreKit bridge. Implies isIosAppUserAgent. */
+export function isIosAppIapUserAgent(userAgent: string | null | undefined): boolean {
+  return isIosAppUserAgent(userAgent) && (userAgent as string).includes(IOS_APP_IAP_UA_MARKER)
+}
+
 /** In the browser: is this page running inside the iOS app? Always false on the server. */
 export function isInIosAppClient(): boolean {
   return typeof navigator !== "undefined" && isIosAppUserAgent(navigator.userAgent)
+}
+
+/** In the browser: inside an iOS app build that sells through Apple? */
+export function isInIosAppWithIapClient(): boolean {
+  return typeof navigator !== "undefined" && isIosAppIapUserAgent(navigator.userAgent)
+}
+
+/**
+ * Inside an app that sells NOTHING (a build without the StoreKit bridge). This,
+ * not isInIosAppClient, is the test for "hide the offer to buy a plan or tokens".
+ */
+export function isInIosAppWithoutIapClient(): boolean {
+  return isInIosAppClient() && !isInIosAppWithIapClient()
 }
 
 /**
@@ -92,6 +128,36 @@ export function isIosAppPurchasePage(pathname: string): boolean {
   )
 }
 
+/**
+ * The purchase pages an IAP build may open: they sell only catalog plans and
+ * token packs, every one of which is an App Store product, and they check out
+ * through lib/monetization/checkout-client, which hands an app purchase to
+ * StoreKit. A subset of IOS_APP_PURCHASE_PAGE_PREFIXES — donations (/donate,
+ * /support) and the Survivor exile shop are not App Store products and stay
+ * closed in every build.
+ * Keep in step with the `html[data-ios-app]:not([data-ios-iap])` link rules in
+ * app/globals.css.
+ */
+export const IOS_APP_IAP_PAGE_PREFIXES: readonly string[] = [
+  "/upgrade",
+  "/pricing",
+  "/commissioner-upgrade",
+  "/tokens",
+]
+
+export function isIosAppIapPage(pathname: string): boolean {
+  return IOS_APP_IAP_PAGE_PREFIXES.some((p) => matchesPrefix(pathname, p))
+}
+
+/**
+ * Is this page closed to a request with this User-Agent? Only meaningful for an
+ * iOS app UA: the purchase pages, minus the IAP pages when the build can buy.
+ */
+export function isIosAppClosedPage(pathname: string, userAgent: string | null | undefined): boolean {
+  if (!isIosAppPurchasePage(pathname)) return false
+  return !(isIosAppIapUserAgent(userAgent) && isIosAppIapPage(pathname))
+}
+
 export function isIosAppPurchaseApi(pathname: string): boolean {
   return (
     IOS_APP_PURCHASE_API_PREFIXES.some((p) => matchesPrefix(pathname, p)) ||
@@ -101,8 +167,11 @@ export function isIosAppPurchaseApi(pathname: string): boolean {
 
 /**
  * Runs before first paint (inline in the root layout) so hidden purchase links
- * never flash. Kept here so the marker is spelled once.
+ * never flash. Kept here so the markers are spelled once. `data-ios-iap` is set
+ * only alongside `data-ios-app`, mirroring isIosAppIapUserAgent.
  */
-export const IOS_APP_HTML_FLAG_SCRIPT = `try{if(navigator.userAgent.indexOf(${JSON.stringify(
+export const IOS_APP_HTML_FLAG_SCRIPT = `try{var u=navigator.userAgent;if(u.indexOf(${JSON.stringify(
   IOS_APP_UA_MARKER,
-)})!==-1)document.documentElement.setAttribute("data-ios-app","1")}catch(e){}`
+)})!==-1){document.documentElement.setAttribute("data-ios-app","1");if(u.indexOf(${JSON.stringify(
+  IOS_APP_IAP_UA_MARKER,
+)})!==-1)document.documentElement.setAttribute("data-ios-iap","1")}}catch(e){}`

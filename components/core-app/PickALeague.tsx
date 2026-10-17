@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
+import type { CoreIssue, IssueSeverity } from '@/lib/core-app/outstandingIssues'
 import '@/components/core-app/af-pick-league.css'
 import type { ReactNode } from 'react'
 import { NoLeaguesYet } from '@/components/core-app/boards/BoardKit'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * The no-league state for a league-scoped screen.
@@ -27,8 +28,11 @@ export type PickALeagueProps = {
   /** The /core segment this screen renders, e.g. 'waivers'. Rows link back to it. */
   tabKey: string
   title: string
-  /** Why this screen is per-league. Kept from the old empty state — it was correct. */
-  blurb: string
+  /**
+   * Why this screen is per-league. Kept from the old empty state — it was correct. A node, not only a
+   * string, so a caller can pass client copy that follows the language switch (see `MatchupPickerCopy`).
+   */
+  blurb: ReactNode
   issues: CoreIssue[]
   /**
    * `imageUrl` and `mark` are the rail's already-resolved crest and letter
@@ -56,10 +60,28 @@ export type PickALeagueProps = {
   above?: ReactNode
   /** Inventory-only views do not compute a decision queue or claim that it is clear. */
   showQueue?: boolean
+  /**
+   * Where an issue row goes. Defaults to this tab in the issue's league — right for a tab that
+   * is where the issue lives (Waivers, Draft HQ). A tab that is NOT (War Room: its league view is
+   * Scout, which fixes neither a stale sync nor a draft) passes the issue's own destination.
+   */
+  issueHref?: (issue: CoreIssue & { leagueId: string }) => string
+  /**
+   * The queue's all-clear sentence, when the default overclaims. The queue only knows what
+   * `deriveOutstandingIssues` detects (stale syncs and drafts), so on a screen that shows other
+   * urgent work above it, "Nothing … is waiting on a decision" contradicts the screen.
+   */
+  queueClearText?: string
 }
 
-/** Most severe first, and only rows that name a league — a row we cannot route is noise here. */
-const RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+/**
+ * Most severe first, and only rows that name a league — a row we cannot route is noise here.
+ *
+ * Keyed on `IssueSeverity` itself, so a severity added there is a compile error here rather than
+ * another silent miss. It was once keyed on critical/high/medium/low — values no CoreIssue carries —
+ * so every lookup fell through to one default and this sort never moved a row.
+ */
+const RANK: Record<IssueSeverity, number> = { bad: 0, warn: 1, info: 2 }
 
 export function PickALeague({
   tabKey,
@@ -69,10 +91,14 @@ export function PickALeague({
   leagues,
   above,
   showQueue = true,
+  issueHref,
+  queueClearText,
 }: PickALeagueProps) {
+  const hrefFor = (i: CoreIssue & { leagueId: string }) =>
+    issueHref ? issueHref(i) : `/core/${tabKey}?league=${encodeURIComponent(i.leagueId)}`
   const routable = issues
-    .filter((i) => i.leagueId != null)
-    .sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9))
+    .filter((i): i is CoreIssue & { leagueId: string } => i.leagueId != null)
+    .sort((a, b) => RANK[a.severity] - RANK[b.severity])
     .slice(0, 10)
 
   const leagueCount = new Set(routable.map((i) => i.leagueId)).size
@@ -110,9 +136,16 @@ export function PickALeague({
       {showQueue ? routable.length > 0 ? (
         <section className="af-pl-panel" aria-labelledby="af-pl-queue">
           <header className="af-pl-panel-head">
-            <h2 className="af-label" id="af-pl-queue">
-              Needs you first
-            </h2>
+            {/*
+              The "?" sits BESIDE the heading, not inside it: the heading names this section
+              through aria-labelledby. Grouped so space-between keeps it next to the words.
+            */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <h2 className="af-label" id="af-pl-queue">
+                Needs you first
+              </h2>
+              <TopicTip topic="needsYouFirst" />
+            </div>
             <span className="af-pl-panel-note">
               {routable.length} across {leagueCount} {leagueCount === 1 ? 'league' : 'leagues'}
             </span>
@@ -121,10 +154,7 @@ export function PickALeague({
           <ul className="af-pl-rows">
             {routable.map((i) => (
               <li key={i.id}>
-                <Link
-                  className="af-pl-row"
-                  href={`/core/${tabKey}?league=${encodeURIComponent(i.leagueId as string)}`}
-                >
+                <Link className="af-pl-row" href={hrefFor(i)}>
                   <span className="af-pl-sev" data-sev={i.severity} aria-hidden>
                     {i.glyph}
                   </span>
@@ -144,15 +174,18 @@ export function PickALeague({
         </section>
       ) : (
         <section className="af-pl-panel" data-empty="true">
-          <h2 className="af-label">Needs you first</h2>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <h2 className="af-label">Needs you first</h2>
+            <TopicTip topic="needsYouFirst" />
+          </div>
           {/*
             "Nothing needs you" and "we could not work out what needs you" are
             different facts and must not share a rendering. This branch is only
             the first: the queue ran and came back empty.
           */}
           <p className="af-pl-quiet">
-            Nothing in your leagues is waiting on a decision right now. Pick one below to look
-            around anyway.
+            {queueClearText ??
+              'Nothing in your leagues is waiting on a decision right now. Pick one below to look around anyway.'}
           </p>
         </section>
       ) : null}

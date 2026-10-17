@@ -14,7 +14,7 @@ const FOOTER_SECTIONS = [
       { href: '/discover/leagues', label: 'Leagues' },
       { href: '/war-room', label: 'AF Legacy' },
       { href: '/ai/tools', label: 'AF Intelligence Hub' },
-      { href: '/af-rankings', label: 'Rankings' },
+      { href: '/core/rankings', label: 'Rankings' },
       { href: '/find-league', label: 'Find a League' },
     ],
   },
@@ -127,6 +127,9 @@ export default function SeoLandingFooter() {
             </Link>
             <Link href="/data-deletion" className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
               {t('landing.footer.dataDeletion')}
+            </Link>
+            <Link href="/privacy/choices" className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
+              {t('landing.footer.privacyChoices')}
             </Link>
             {signedIn ? null : (
               <Link href={loginUrlWithIntent('/dashboard')} className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>

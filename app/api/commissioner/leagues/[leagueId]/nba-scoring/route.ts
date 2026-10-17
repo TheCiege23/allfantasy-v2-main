@@ -1,3 +1,4 @@
+import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 /**
  * [NEW] app/api/commissioner/leagues/[leagueId]/nba-scoring/route.ts
  * GET: Returns NBA scoring config + available presets.
@@ -31,7 +32,7 @@ export async function GET(
   const { leagueId } = await params
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { userId: true, sport: true },
+    select: { userId: true, sport: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
@@ -46,7 +47,7 @@ export async function GET(
     isPremium = access.allowed
   } catch { isPremium = false }
 
-  return NextResponse.json({ config, presets, isCommissioner, isPremium })
+  return NextResponse.json({ config, presets, isCommissioner, isPremium, categoryScoring: nativeCategoryScoringContext(league.settings, 'NBA') })
 }
 
 export async function PUT(
@@ -59,11 +60,13 @@ export async function PUT(
   const { leagueId } = await params
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { userId: true, sport: true },
+    select: { userId: true, sport: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
+
+  if (nativeCategoryScoringContext(league.settings, 'NBA')) return NextResponse.json({ error: 'This league uses categories; point weights do not apply.' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
   const presetKey = (body.presetKey ?? 'af_default') as NbaScoringPresetKey

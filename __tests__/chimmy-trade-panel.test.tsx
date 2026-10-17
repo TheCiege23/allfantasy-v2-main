@@ -55,14 +55,17 @@ it('shows each team’s ONE grade on completed trades, realized points as a fact
   fireEvent.click(screen.getByRole('button', { name: /Trade intelligence/ }))
   await screen.findByText('League grade: Hoovi D · Nicolodeon B')
   expect(fetcher.mock.calls.some(([url]) => url.includes('trades-panel') && url.includes('history=1'))).toBe(true)
-  expect(screen.getByText('Hoovi sent: Woody Marks (2,000)')).toBeTruthy()
-  expect(screen.getByText('Nicolodeon sent: 2027 round 3 (1,500)')).toBeTruthy()
+  // Each line is what that team RECEIVED: Hoovi's D is for getting 1,500 back for 2,000.
+  expect(screen.getByText('Hoovi received: 2027 round 3 (1,500)')).toBeTruthy()
+  expect(screen.getByText('Nicolodeon received: Woody Marks (2,000)')).toBeTruthy()
+  expect(screen.queryByText(/ sent: /)).toBeNull()
   expect(screen.getByText('Nicolodeon got the better end — Hoovi got 1,500 in league value for 2,000.')).toBeTruthy()
   expect(screen.getByText(/Realized so far: Hoovi net 17\.8 fantasy points · Nicolodeon net -17\.8 fantasy points/)).toBeTruthy()
   expect(screen.queryByText(/Realized grade/)).toBeNull()
   const card = screen.getByText('League grade: Hoovi D · Nicolodeon B').closest('article')!
   fireEvent.click(card.querySelector('button')!)
   expect(onAsk).toHaveBeenCalledWith(expect.stringContaining("The AllFantasy grade on this league's values today is Hoovi D (got 1,500 for 2,000) and Nicolodeon B."))
+  expect(onAsk).toHaveBeenCalledWith(expect.stringContaining('Hoovi received 2027 round 3 (1,500); Nicolodeon received Woody Marks (2,000).'))
 })
 
 it('a graded provider trade shows both letters instead of "Grade unavailable", and hands the grade to Chimmy', async () => {
@@ -75,8 +78,13 @@ it('a graded provider trade shows both letters instead of "Grade unavailable", a
   await screen.findByText(/League grade: you D · sharpshoooter B/)
   const card = screen.getByText(/League grade: you D · sharpshoooter B/).closest('article')!
   expect(card.textContent).not.toContain('Grade unavailable')
+  // `sent` left the viewer's roster, so it is what the partner received.
+  expect(card.textContent).toContain('You received: 2027 2nd')
+  expect(card.textContent).toContain('sharpshoooter received: DK Metcalf')
+  expect(card.textContent).not.toContain('Sent:')
   fireEvent.click(card.querySelector('button')!)
   expect(onAsk).toHaveBeenCalledWith(expect.stringContaining('is my side D (got 1,500 for 2,000) and sharpshoooter B'))
+  expect(onAsk).toHaveBeenCalledWith(expect.stringContaining('I received: 2027 2nd. sharpshoooter received: DK Metcalf.'))
 })
 
 it('when the graded history cannot be read, the ledger is shown WITHOUT its realized letter', async () => {

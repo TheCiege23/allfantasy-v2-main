@@ -4,10 +4,11 @@ import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { fetchWeatherForTeamHomeWindow } from '@/lib/weather/venueResolver'
 import { defaultNflGameTime } from '@/lib/weather/defaultGameTimes'
 import { calculateWeatherImpact } from '@/lib/weather/weatherImpactEngine'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { findPlayerByName, getTrendingPlayers, getValueTier, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getLiveAdpByName, lookupLiveAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
+import { isInjuryDesignation, latestInjuryClaims } from '@/lib/injuries/matchInjuryRows'
 import { getConsensusADP } from '@/lib/multi-platform-adp'
 import { getTrendingAdds, getTrendingDrops, getPlayerName, getAllPlayers } from '@/lib/sleeper-client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -218,11 +219,23 @@ export async function enrichChatWithData(
           }
         }
 
+        /*
+         * Scoped to the sport and to live rows: with neither, a months-old row from any sport
+         * could be presented as today's report. Each line below names the row's own team, so
+         * two athletes sharing a name stay distinguishable to the reader.
+         */
+        // No `status <> 'Active'` here: a cleared player's newer Active must beat an older live
+        // Questionable from another feed, so non-designations are dropped AFTER the newest claim.
         const whereClause: any = {
-          status: { not: 'Active' },
+          sport,
+          expiresAt: { gt: new Date() },
         }
         if (teams.length > 0) {
-          whereClause.team = { in: teams }
+          // Feeds write "Minnesota Vikings"; the message gave "MIN". Ask for both spellings, or
+          // this branch matches nothing at all.
+          whereClause.team = {
+            in: teams.flatMap((t) => [t, getTeamInfo(t)?.fullName].filter((x): x is string => Boolean(x))),
+          }
         }
         if (players.length > 0 && teams.length === 0) {
           whereClause.playerName = {
@@ -230,11 +243,16 @@ export async function enrichChatWithData(
           }
         }
 
-        const injuries = await prisma.sportsInjury.findMany({
-          where: whereClause,
-          orderBy: { updatedAt: 'desc' },
-          take: 10,
-        })
+        const injuries = latestInjuryClaims(
+          await prisma.sportsInjury.findMany({
+            where: whereClause,
+            orderBy: { updatedAt: 'desc' },
+            take: 200,
+          }),
+          sport,
+        )
+          .filter((i) => isInjuryDesignation(i.status))
+          .slice(0, 10)
 
         if (injuries.length > 0) {
           enrichSourcesUsed.push('injuries')
@@ -369,22 +387,24 @@ export async function enrichChatWithData(
     tasks.push((async () => {
       try {
         for (const playerName of players.slice(0, 3)) {
-          const [firstName, ...rest] = playerName.split(' ')
-          const lastName = rest.join(' ')
-
-          const identity = await prisma.playerIdentityMap.findFirst({
-            where: {
-              OR: [
-                { canonicalName: { contains: lastName, mode: 'insensitive' } },
-                { canonicalName: { equals: playerName, mode: 'insensitive' } },
-              ],
-            },
+          /*
+           * 🛑 EXACT NAME, ONE ATHLETE, RI ID AGAINST RI ROWS. This matched `canonicalName
+           * contains <last name>` ("Allen" → any Allen) and took the first row, then read season
+           * stats by `rollingInsightsId || sleeperId` with no source — a Sleeper id there finds
+           * Rolling Insights' player of that number (Sleeper 8394 is Percy Butler; RI 8394 is Rome
+           * Odunze). A name two athletes share is skipped: a chat message gives no team to split them.
+           */
+          const identities = await prisma.playerIdentityMap.findMany({
+            where: { sport: 'NFL', canonicalName: { equals: playerName, mode: 'insensitive' } },
+            take: 2,
           })
+          const identity = identities.length === 1 ? identities[0]! : null
 
-          if (identity) {
+          if (identity?.rollingInsightsId) {
             const seasonStats = await prisma.playerSeasonStats.findFirst({
               where: {
-                playerId: identity.rollingInsightsId || identity.sleeperId || '',
+                playerId: identity.rollingInsightsId,
+                source: 'rolling_insights',
                 sport: 'NFL',
               },
               orderBy: { season: 'desc' },

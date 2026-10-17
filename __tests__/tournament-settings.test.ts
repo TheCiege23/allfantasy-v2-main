@@ -147,3 +147,9 @@ it('reports no prior advancement when none has run', async () => {
   const out = await updateTournamentSettings({ ...ARGS, patch: { wildcardCount: 32 } })
   expect(out).toMatchObject({ ok: true, alreadyAdvanced: false })
 })
+
+it.each(['blueprint', 'rules_published'])('blocks legacy settings for %s shells', async status => {
+  shellFindFirst.mockResolvedValue({ id: 't1', status, currentParticipantCount: 0 })
+  expect(await updateTournamentSettings({ ...ARGS, patch: { name: 'Changed' } })).toMatchObject({ ok: false, status: 400 })
+  expect(shellUpdate).not.toHaveBeenCalled()
+})

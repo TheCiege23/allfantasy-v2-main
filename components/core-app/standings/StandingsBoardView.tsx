@@ -1,7 +1,8 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   explainOrder,
   formatRecord,
@@ -49,6 +50,45 @@ const ZONE: Record<Zone, { label: string; icon: string }> = {
   eliminated: { label: 'Eliminated', icon: '✕' },
 }
 
+/**
+ * 🛑 AN ELIMINATION LEAGUE HAS NO PLAYOFFS. In a guillotine league this table drew "★ Bye — top 2",
+ * "● Playoffs — top 6" and a playoff line (owner's report, 2026-10-03). When the screen passes
+ * `elimination`, every team reads Safe / On the bubble / Eliminated instead — the same three as Scout's
+ * cards, from the same reads: who has been chopped (`getLeagueEliminations`) and this week's bubble
+ * (`RailStanding.bubble`, the cut banner's own ordering). A live team with no ranked week reads nothing.
+ */
+export type EliminationZones = {
+  /** Roster ids already chopped. */
+  eliminated: readonly string[]
+  /** Roster ids in this week's bottom three; null when the week cannot be ranked yet. */
+  bubble: readonly string[] | null
+}
+export type EliminationStatus = 'safe' | 'bubble' | 'eliminated'
+
+export function eliminationStatusOf(rosterId: string, zones: EliminationZones): EliminationStatus | null {
+  if (zones.eliminated.includes(rosterId)) return 'eliminated'
+  if (!zones.bubble) return null
+  return zones.bubble.includes(rosterId) ? 'bubble' : 'safe'
+}
+
+const ELIM: Record<EliminationStatus, { label: string; icon: string; zone: Zone }> = {
+  safe: { label: 'Safe', icon: '●', zone: 'playoff' },
+  bubble: { label: 'On the bubble', icon: '◐', zone: 'bubble' },
+  eliminated: { label: 'Eliminated', icon: '✕', zone: 'eliminated' },
+}
+
+const EliminationContext = createContext<EliminationZones | null>(null)
+
+/** The colour a row or card takes: its elimination status in an elimination league, else its zone. */
+function useZoneOf(): (t: BoardTeam) => Zone | undefined {
+  const zones = useContext(EliminationContext)
+  return (t) => {
+    if (!zones) return t.zone
+    const st = eliminationStatusOf(t.rosterId, zones)
+    return st ? ELIM[st].zone : undefined
+  }
+}
+
 const LAYOUT_STORAGE_KEY = 'af-standings-layout'
 /** Below this the table cannot show a record without a sideways scroll, so the list is the default. */
 const PHONE_QUERY = '(max-width: 640px)'
@@ -77,6 +117,17 @@ function gamesBackText(gb: number | null): string {
 
 function ZoneChip({ team }: { team: BoardTeam }) {
   const language = useOptionalLanguage().language
+  const zones = useContext(EliminationContext)
+  if (zones) {
+    const st = eliminationStatusOf(team.rosterId, zones)
+    if (!st) return null
+    return (
+      <span className="af-stb-zone" data-zone={ELIM[st].zone} data-elim={st}>
+        <span aria-hidden>{ELIM[st].icon}</span>
+        {coreUiCopy(ELIM[st].label, language)}
+      </span>
+    )
+  }
   const zone = ZONE[team.zone]
   const clinched = team.clinched === 'bye' ? 'Clinched bye' : team.clinched === 'playoff' ? 'Clinched' : null
   return (
@@ -175,6 +226,7 @@ function oddsTone(pct: number): 'good' | 'warn' | 'bad' {
 }
 
 function OddsCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
+  const language = useOptionalLanguage().language
   const o = odds.byRoster[team.rosterId]
   if (!o) return <span className="af-stb-muted">—</span>
   const status = boardStatus(team)
@@ -188,7 +240,7 @@ function OddsCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
       <span className="af-num">
         {formatOdds(o.playoffPct, status)}
         {!o.modelled && !status ? (
-          <abbr title="Too few completed weeks to model this team — read the record, not the number">*</abbr>
+          <abbr title={coreUiCopy('Too few completed weeks to model this team — read the record, not the number', language)}>*</abbr>
         ) : null}
       </span>
     </span>
@@ -202,33 +254,47 @@ function sosTone(rank: number, of: number): 'hard' | 'easy' | undefined {
   return undefined
 }
 
-function sosTitle(o: StandingsOdds['byRoster'][string], odds: StandingsOdds): string {
-  if (o.sosRank == null) return 'No modelled opponents left to rank'
+function sosTitle(o: StandingsOdds['byRoster'][string], odds: StandingsOdds, language = 'en'): string {
+  const es = language === 'es'
+  if (o.sosRank == null) return es ? 'No quedan rivales modelados que clasificar' : 'No modelled opponents left to rank'
   const avg =
     o.sosOpponentMu != null && odds.leagueMu != null
-      ? ` Opponents left average ${o.sosOpponentMu.toFixed(1)} a week; the league averages ${odds.leagueMu.toFixed(1)}.`
+      ? es
+        ? ` Los rivales restantes promedian ${o.sosOpponentMu.toFixed(1)} por semana; la liga promedia ${odds.leagueMu.toFixed(1)}.`
+        : ` Opponents left average ${o.sosOpponentMu.toFixed(1)} a week; the league averages ${odds.leagueMu.toFixed(1)}.`
       : ''
-  return `${ordinal(o.sosRank)}-hardest remaining schedule of ${odds.sosRanked}.${avg}`
+  return es
+    ? `${o.sosRank}.º calendario restante más difícil de ${odds.sosRanked}.${avg}`
+    : `${ordinal(o.sosRank)}-hardest remaining schedule of ${odds.sosRanked}.${avg}`
 }
 
 function SosCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
+  const language = useOptionalLanguage().language
+  const es = language === 'es'
   const o = odds.byRoster[team.rosterId]
   if (!o || o.sosRank == null) return <span className="af-stb-muted">—</span>
   return (
-    <span className="af-stb-sos af-num" data-tone={sosTone(o.sosRank, odds.sosRanked)} title={sosTitle(o, odds)}>
-      {ordinal(o.sosRank)}
-      <span className="af-sr"> hardest of {odds.sosRanked}</span>
+    <span className="af-stb-sos af-num" data-tone={sosTone(o.sosRank, odds.sosRanked)} title={sosTitle(o, odds, language)}>
+      {es ? `${o.sosRank}.º` : ordinal(o.sosRank)}
+      <span className="af-sr">{es ? ` más difícil de ${odds.sosRanked}` : ` hardest of ${odds.sosRanked}`}</span>
     </span>
   )
 }
 
 function NextCell({ team, seedOf }: { team: BoardTeam; seedOf: Map<string, number> }) {
+  const language = useOptionalLanguage().language
   const n = team.next
   if (!n) return <span className="af-stb-muted">—</span>
   const seed = seedOf.get(n.opponentId)
   return (
     <span className="af-stb-next">
-      {n.inProgress ? <span className="af-stb-live">Live</span> : <span className="af-stb-muted af-num">Wk {n.week}</span>}
+      {n.inProgress ? (
+        <span className="af-stb-live">{coreUiCopy('Live', language)}</span>
+      ) : (
+        <span className="af-stb-muted af-num">
+          {language === 'es' ? 'Sem' : 'Wk'} {n.week}
+        </span>
+      )}
       <span className="af-stb-nextname" title={n.opponentName}>
         {seed != null ? <span className="af-stb-muted af-num">#{seed} </span> : null}
         {n.opponentName}
@@ -244,12 +310,14 @@ function NextCell({ team, seedOf }: { team: BoardTeam; seedOf: Map<string, numbe
  * elimination on its own, and a column of "E —" reads as missing data rather than as "not yet".
  */
 function PathCell({ team }: { team: BoardTeam }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const { winsToClinch: w, lossesToElimination: l, gamesLeft } = team.path
-  if (w === 0) return <span className="af-stb-muted">Clinched</span>
-  if (l === 0) return <span className="af-stb-muted">Eliminated</span>
+  if (w === 0) return <span className="af-stb-muted">{copy('Clinched')}</span>
+  if (l === 0) return <span className="af-stb-muted">{copy('Eliminated')}</span>
   if (w == null && l == null) {
     return (
-      <span className="af-stb-muted" title="Not settled by this team's own results yet — it depends on games elsewhere">
+      <span className="af-stb-muted" title={copy("Not settled by this team's own results yet — it depends on games elsewhere")}>
         —
       </span>
     )
@@ -259,24 +327,24 @@ function PathCell({ team }: { team: BoardTeam }) {
       {w != null ? (
         <span
           data-k="clinch"
-          title={
+          title={copy(
             w === gamesLeft
               ? 'Winning out guarantees a playoff spot, whatever else happens'
-              : `${w} more ${w === 1 ? 'win' : 'wins'} of ${gamesLeft} guarantee a playoff spot, whatever else happens`
-          }
+              : `${w} more ${w === 1 ? 'win' : 'wins'} of ${gamesLeft} guarantee a playoff spot, whatever else happens`,
+          )}
         >
           <span aria-hidden>C </span>
-          <span className="af-sr">Wins to clinch: </span>
+          <span className="af-sr">{copy('Wins to clinch:')} </span>
           <span className="af-num">{w}</span>
         </span>
       ) : null}
       {l != null ? (
         <span
           data-k="elim"
-          title={`${l} more ${l === 1 ? 'loss' : 'losses'} of ${gamesLeft} eliminate this team, whatever else happens`}
+          title={copy(`${l} more ${l === 1 ? 'loss' : 'losses'} of ${gamesLeft} eliminate this team, whatever else happens`)}
         >
           <span aria-hidden>E </span>
-          <span className="af-sr">Losses to elimination: </span>
+          <span className="af-sr">{copy('Losses to elimination:')} </span>
           <span className="af-num">{l}</span>
         </span>
       ) : null}
@@ -303,14 +371,19 @@ function groupTeams(teams: BoardTeam[], board: StandingsBoard, division: string)
 
 /** "W3" — a streak in the form the Last 5 column already speaks. */
 function StreakCell({ team }: { team: BoardTeam }) {
+  const language = useOptionalLanguage().language
   const s = team.streak
   if (!s) return <span className="af-stb-muted">—</span>
   const word = s.result === 'W' ? 'won' : s.result === 'L' ? 'lost' : 'tied'
+  /* One sentence, translated once: the tooltip and the screen-reader copy say the same thing. */
+  const said = coreUiCopy(`${word.charAt(0).toUpperCase()}${word.slice(1)} the last ${s.length}`, language)
+  /* The letter follows the Last 5 column's own Spanish (G/P/E). */
+  const letter = language === 'es' ? (s.result === 'W' ? 'G' : s.result === 'L' ? 'P' : 'E') : s.result
   return (
-    <span className="af-stb-streak af-num" data-r={s.result} title={`${word.charAt(0).toUpperCase()}${word.slice(1)} the last ${s.length}`}>
-      {s.result}
+    <span className="af-stb-streak af-num" data-r={s.result} title={said}>
+      {letter}
       {s.length}
-      <span className="af-sr"> — {word} the last {s.length}</span>
+      <span className="af-sr"> — {said.charAt(0).toLowerCase()}{said.slice(1)}</span>
     </span>
   )
 }
@@ -338,6 +411,8 @@ function SortTh({
   className?: string
   children: React.ReactNode
 }) {
+  const language = useOptionalLanguage().language
+  const es = language === 'es'
   const active = sort.key === sortKey
   const nextDir = active ? (sort.dir === 'asc' ? 'desc' : 'asc') : SORT_DEFAULT_DIR[sortKey]
   return (
@@ -350,9 +425,13 @@ function SortTh({
         type="button"
         className="af-stb-sortbtn"
         data-active={active || undefined}
-        title={title}
+        title={title ? coreUiCopy(title, language) : undefined}
         onClick={() => onSort(sortKey)}
-        aria-label={`${label}: sort ${nextDir === 'asc' ? 'ascending' : 'descending'}`}
+        aria-label={
+          es
+            ? `${coreUiCopy(label, language)}: ordenar ${nextDir === 'asc' ? 'ascendente' : 'descendente'}`
+            : `${label}: sort ${nextDir === 'asc' ? 'ascending' : 'descending'}`
+        }
       >
         {children}
         <span className="af-stb-sortmark" aria-hidden>
@@ -380,6 +459,9 @@ function OfficialTable({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const zoneOf = useZoneOf()
+  /* An elimination league has no bye or playoff line to draw. */
+  const noLines = useContext(EliminationContext) != null
   const explanation = standingsBoardCopy(board, language)
   const hasDiv = board.divisions.length > 0
   const hasProj = board.teams.some((t) => t.projected)
@@ -413,7 +495,7 @@ function OfficialTable({
         <thead>
           <tr>
             <SortTh {...th} sortKey="seed" label="Position" className="af-stb-sticky af-stb-sticky-rank">
-              <abbr title="Position">#</abbr>
+              <abbr title={copy('Position')}>#</abbr>
             </SortTh>
             <th scope="col" className="af-stb-sticky af-stb-sticky-team">
               {copy('Team')}
@@ -427,10 +509,10 @@ function OfficialTable({
                 {hasSplit ? (
                   <>
                     <th scope="col" className="af-stb-n">
-                      <abbr title="Head-to-head games only">H2H</abbr>
+                      <abbr title={copy('Head-to-head games only')}>H2H</abbr>
                     </th>
                     <th scope="col" className="af-stb-n">
-                      <abbr title="Median games only: a win for finishing in the top half of the week">Median</abbr>
+                      <abbr title={copy('Median games only: a win for finishing in the top half of the week')}>{copy('Median')}</abbr>
                     </th>
                   </>
                 ) : null}
@@ -444,8 +526,8 @@ function OfficialTable({
             ) : null}
             {hasPath ? (
               <th scope="col" className="af-stb-n">
-                <abbr title="C: more wins that guarantee a playoff spot. E: more losses that end the chase. Both hold whatever every other game does.">
-                  Magic #
+                <abbr title={copy('C: more wins that guarantee a playoff spot. E: more losses that end the chase. Both hold whatever every other game does.')}>
+                  {copy('Magic #')}
                 </abbr>
               </th>
             ) : null}
@@ -473,13 +555,13 @@ function OfficialTable({
             </th>
             {h2h ? (
               <>
-                <th scope="col">Last 5</th>
+                <th scope="col">{copy('Last 5')}</th>
                 <SortTh {...th} sortKey="streak" label="Streak" title="The current run of identical results" className="af-stb-n">
-                  Strk
+                  {copy('Strk')}
                 </SortTh>
               </>
             ) : null}
-            {hasNext ? <th scope="col">Next</th> : null}
+            {hasNext ? <th scope="col">{copy('Next')}</th> : null}
             {odds ? (
               <SortTh
                 {...th}
@@ -488,7 +570,7 @@ function OfficialTable({
                 title="Strength of the schedule still to play: 1st is the hardest in the league, judged by each opponent's average weekly score"
                 className="af-stb-n"
               >
-                SOS left
+                {copy('SOS left')}
               </SortTh>
             ) : null}
             {hasDiv ? (
@@ -502,7 +584,7 @@ function OfficialTable({
                   <span className="af-stb-projtag">{copy('Model')}</span> {copy('Proj. W-L')}
                 </th>
                 <SortTh {...th} sortKey="proj" label="Projected position" className="af-stb-n af-stb-proj">
-                  <span className="af-stb-projtag">Model</span> Proj. #
+                  <span className="af-stb-projtag">{copy('Model')}</span> {copy('Proj. #')}
                 </SortTh>
               </>
             ) : null}
@@ -520,7 +602,7 @@ function OfficialTable({
             {g.teams.map((t, i) => {
               const next = g.teams[i + 1]
               const line =
-                plain && next
+                !noLines && plain && next
                   ? t.seed === byes && byes > 0
                     ? 'bye'
                     : t.seed === field
@@ -529,7 +611,7 @@ function OfficialTable({
                   : null
               return (
                 <FragmentRows key={t.rosterId} line={line} cols={cols} board={board} byes={byes} field={field}>
-                  <tr data-you={t.isYou ? 'true' : undefined} data-zone={t.zone}>
+                  <tr data-you={t.isYou ? 'true' : undefined} data-zone={zoneOf(t)}>
                     <td className="af-stb-sticky af-stb-sticky-rank af-num">{t.seed}</td>
                     <th scope="row" className="af-stb-sticky af-stb-sticky-team">
                       <TeamCell team={t} showTiebreak tiebreakText={language === 'es' ? spanishTiebreak(board, t) : null} />
@@ -718,10 +800,10 @@ function PowerTable({
             {efficiency ? (
               <>
                 <th scope="col" className="af-stb-n">
-                  <abbr title="Points scored as a share of the best lineup the team could have set from its own roster">Lineup %</abbr>
+                  <abbr title={copy('Points scored as a share of the best lineup the team could have set from its own roster')}>{copy('Lineup %')}</abbr>
                 </th>
                 <th scope="col" className="af-stb-n">
-                  <abbr title="Points left on the bench per week — the best lineup minus the one that was set">Bench/wk</abbr>
+                  <abbr title={copy('Points left on the bench per week — the best lineup minus the one that was set')}>{copy('Bench/wk')}</abbr>
                 </th>
               </>
             ) : null}
@@ -807,6 +889,8 @@ function Cards({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const zoneOf = useZoneOf()
+  const noLines = useContext(EliminationContext) != null
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const h2h = board.hasHeadToHead
@@ -820,12 +904,12 @@ function Cards({
           <ol className="af-stb-cards">
             {g.teams.map((t, i) => {
               const rank = view === 'power' ? t.powerRank : t.seed
-              const line = plain && g.teams[i + 1] ? (t.seed === byes && byes > 0 ? 'bye' : t.seed === field ? 'playoff' : null) : null
+              const line = !noLines && plain && g.teams[i + 1] ? (t.seed === byes && byes > 0 ? 'bye' : t.seed === field ? 'playoff' : null) : null
               const headingId = `af-stb-card-${view}-${t.rosterId}`
               return (
                 <Fragment key={t.rosterId}>
                 <li>
-                  <article className="af-stb-card" data-you={t.isYou ? 'true' : undefined} data-zone={t.zone} aria-labelledby={headingId}>
+                  <article className="af-stb-card" data-you={t.isYou ? 'true' : undefined} data-zone={zoneOf(t)} aria-labelledby={headingId}>
                     {/*
                       ⚠ ONE ROW PER TEAM UNTIL TAPPED. Every card used to open as a full stat sheet, ~800px
                       tall on a phone, so twelve teams were a 10,000px page and nobody could see the table.
@@ -883,7 +967,7 @@ function Cards({
                       ) : null}
                       {h2h && t.split ? (
                         <div>
-                          <dt>Head-to-head · median</dt>
+                          <dt>{copy('Head-to-head · median')}</dt>
                           <dd className="af-num">
                             {formatRecord(t.split.headToHead)} · {formatRecord(t.split.median)}
                           </dd>
@@ -891,7 +975,7 @@ function Cards({
                       ) : null}
                       {h2h && t.streak ? (
                         <div>
-                          <dt>Streak</dt>
+                          <dt>{copy('Streak')}</dt>
                           <dd>
                             <StreakCell team={t} />
                           </dd>
@@ -937,7 +1021,7 @@ function Cards({
                           ) : null}
                           {efficiency?.byRoster[t.rosterId] ? (
                             <div>
-                              <dt>Lineup efficiency</dt>
+                              <dt>{copy('Lineup efficiency')}</dt>
                               <dd>
                                 <EfficiencyCell team={t} efficiency={efficiency} />{' '}
                                 <span className="af-stb-muted">
@@ -961,7 +1045,7 @@ function Cards({
                           ) : null}
                           {hasPath ? (
                             <div>
-                              <dt>Magic number</dt>
+                              <dt>{copy('Magic number')}</dt>
                               <dd>
                                 <PathCell team={t} />
                               </dd>
@@ -969,7 +1053,7 @@ function Cards({
                           ) : null}
                           {odds ? (
                             <div>
-                              <dt>Playoff odds</dt>
+                              <dt>{copy('Playoff odds')}</dt>
                               <dd>
                                 <OddsCell team={t} odds={odds} />
                               </dd>
@@ -977,7 +1061,7 @@ function Cards({
                           ) : null}
                           {t.next ? (
                             <div>
-                              <dt>Next</dt>
+                              <dt>{copy('Next')}</dt>
                               <dd>
                                 <NextCell team={t} seedOf={seedOf} />
                               </dd>
@@ -985,9 +1069,12 @@ function Cards({
                           ) : null}
                           {odds && odds.byRoster[t.rosterId]?.sosRank != null ? (
                             <div>
-                              <dt>Schedule left</dt>
+                              <dt>{copy('Schedule left')}</dt>
                               <dd>
-                                <SosCell team={t} odds={odds} /> <span className="af-stb-muted">hardest of {odds.sosRanked}</span>
+                                <SosCell team={t} odds={odds} />{' '}
+                                <span className="af-stb-muted">
+                                  {language === 'es' ? `más difícil de ${odds.sosRanked}` : `hardest of ${odds.sosRanked}`}
+                                </span>
                               </dd>
                             </div>
                           ) : null}
@@ -1039,26 +1126,31 @@ function Cards({
  * games have no opponent — so a row here need not add up to the W-L column in a median league.
  */
 function HeadToHeadGrid({ board }: { board: StandingsBoard }) {
+  const language = useOptionalLanguage().language
+  const es = language === 'es'
+  const copy = (value: string) => coreUiCopy(value, language)
   const teams = board.teams
   const met = teams.some((a) => teams.some((b) => (board.h2h[a.rosterId]?.[b.rosterId] ?? null) != null))
   if (!met) return null
   return (
     <section className="af-stb-section" aria-labelledby="af-stb-h2h-title">
       <h3 id="af-stb-h2h-title" className="af-label">
-        Head to head
+        {copy('Head to head')}
       </h3>
       <p className="af-stb-small">
-        Read across: each row’s record against the team in that column. Head-to-head games only{board.medianGames ? ' — median games have no opponent' : ''}.
+        {es
+          ? `Lee cada fila de izquierda a derecha: el récord de ese equipo contra el de cada columna. Solo partidos cara a cara${board.medianGames ? '; los partidos contra la mediana no tienen rival' : ''}.`
+          : `Read across: each row’s record against the team in that column. Head-to-head games only${board.medianGames ? ' — median games have no opponent' : ''}.`}
       </p>
-      <div className="af-stb-scroll" role="region" aria-label="Head-to-head records" tabIndex={0}>
+      <div className="af-stb-scroll" role="region" aria-label={copy('Head-to-head records')} tabIndex={0}>
         <table className="af-stb-table af-stb-h2h">
           <thead>
             <tr>
               <th scope="col" className="af-stb-sticky af-stb-sticky-rank">
-                <abbr title="Position">#</abbr>
+                <abbr title={copy('Position')}>#</abbr>
               </th>
               <th scope="col" className="af-stb-sticky af-stb-sticky-team">
-                Team
+                {copy('Team')}
               </th>
               {teams.map((c) => (
                 <th key={c.rosterId} scope="col" className="af-stb-h2h-col" data-you={c.isYou ? 'true' : undefined}>
@@ -1087,7 +1179,9 @@ function HeadToHeadGrid({ board }: { board: StandingsBoard }) {
                   return (
                     <td key={c.rosterId} className="af-stb-h2h-cell af-num" data-res={res}>
                       {rec ? formatRecord(rec) : <span className="af-stb-muted">–</span>}
-                      <span className="af-sr">{rec ? ` against ${c.name}` : ` — has not played ${c.name}`}</span>
+                      <span className="af-sr">
+                        {rec ? (es ? ` contra ${c.name}` : ` against ${c.name}`) : es ? ` — no ha jugado contra ${c.name}` : ` — has not played ${c.name}`}
+                      </span>
                     </td>
                   )
                 })}
@@ -1284,6 +1378,7 @@ export function StandingsBoardView({
   odds: finalOdds = null,
   live = null,
   efficiency = null,
+  elimination = null,
 }: {
   board: StandingsBoard
   initial: StandingsViewState
@@ -1296,6 +1391,8 @@ export function StandingsBoardView({
   live?: StandingsBoard | null
   /** Lineup efficiency per team (Sleeper only). Absent draws no efficiency columns. */
   efficiency?: LineupEfficiency | null
+  /** Set for an elimination league: Safe / On the bubble / Eliminated, no playoff zones or lines. */
+  elimination?: EliminationZones | null
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
@@ -1419,9 +1516,10 @@ export function StandingsBoardView({
   }
 
   return (
+    <EliminationContext.Provider value={elimination}>
     <div className="af-stb" ref={containerRef}>
-      <div className="af-stb-controls" role="group" aria-label="Standings view">
-        <div className="af-stb-seg" role="radiogroup" aria-label="Which table">
+      <div className="af-stb-controls" role="group" aria-label={copy('Standings view')}>
+        <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which table')}>
           <button type="button" role="radio" aria-checked={view === 'official'} onClick={() => setView('official')}>
             {copy('League table')}
           </button>
@@ -1430,12 +1528,12 @@ export function StandingsBoardView({
           </button>
         </div>
         {live ? (
-          <div className="af-stb-seg" role="radiogroup" aria-label="Which results">
+          <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which results')}>
             <button type="button" role="radio" aria-checked={!asIf} onClick={() => setAsIf(false)}>
-              Final results
+              {copy('Final results')}
             </button>
             <button type="button" role="radio" aria-checked={asIf} onClick={() => setAsIf(true)}>
-              If scores held
+              {copy('If scores held')}
             </button>
           </div>
         ) : null}
@@ -1467,11 +1565,13 @@ export function StandingsBoardView({
         {view === 'official' ? (
           <p>
             <strong>{board.rules.platformLabel === 'the platform' ? copy('The league table.') : language === 'es' ? `Tabla de ${board.rules.platformLabel}.` : `${board.rules.platformLabel}’s table.`}</strong>{' '}
-            {board.hasHeadToHead ? copy('Record decides the order; this is what seeds the playoffs.') : explanation.record}
+            {board.hasHeadToHead ? copy('Record decides the order; this is what seeds the playoffs.') : explanation.record}{' '}
+            <TopicTip topic="standingsColumns" />
           </p>
         ) : (
           <p>
-            <strong>{copy('AllFantasy analysis — not the league table.')}</strong> {explanation.power}
+            <strong>{copy('AllFantasy analysis — not the league table.')}</strong> {explanation.power}{' '}
+            <TopicTip topic="allPlayLuck" />
           </p>
         )}
       </div>
@@ -1490,7 +1590,19 @@ export function StandingsBoardView({
         </p>
       ) : null}
 
-      {view === 'official' ? (
+      {view === 'official' && elimination ? (
+        <ul className="af-stb-legend" aria-label={copy('Status key')}>
+          <li data-zone="playoff">
+            <span aria-hidden>●</span> {copy('Safe — not in the bottom three this week')}
+          </li>
+          <li data-zone="bubble">
+            <span aria-hidden>◐</span> {copy('On the bubble — the bottom three this week')}
+          </li>
+          <li data-zone="eliminated">
+            <span aria-hidden>✕</span> {copy('Eliminated — already chopped')}
+          </li>
+        </ul>
+      ) : view === 'official' ? (
         <ul className="af-stb-legend" aria-label={copy('Status key')}>
           {byes > 0 ? (
             <li data-zone="bye">
@@ -1531,7 +1643,7 @@ export function StandingsBoardView({
         <Cards board={board} groups={groups} view={view} odds={odds} efficiency={efficiency} plain={plain} />
       ) : view === 'official' ? (
         <>
-          <p className="af-stb-cue">Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.</p>
+          <p className="af-stb-cue">{copy('Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.')}</p>
           <OfficialTable board={board} groups={groups} plain={plain} odds={odds} sort={sortable} onSort={chooseSort} />
         </>
       ) : (
@@ -1560,16 +1672,36 @@ export function StandingsBoardView({
             </p>
             {board.showPaths ? (
               <p>
-                Magic numbers: <strong>C</strong> is how many more wins guarantee a playoff spot, <strong>E</strong> how many more
-                losses end the chase — each whatever every other game does, so help from elsewhere can only lower them.
+                {language === 'es' ? (
+                  <>
+                    Números mágicos: <strong>C</strong> son las victorias que faltan para asegurar plaza de playoffs y <strong>E</strong> las
+                    derrotas que acaban con las opciones, pase lo que pase en los demás partidos; la ayuda de otros resultados solo puede bajarlos.
+                  </>
+                ) : (
+                  <>
+                    Magic numbers: <strong>C</strong> is how many more wins guarantee a playoff spot, <strong>E</strong> how many more
+                    losses end the chase — each whatever every other game does, so help from elsewhere can only lower them.
+                  </>
+                )}
               </p>
             ) : null}
             {odds ? (
               <p>
-                Playoff % and schedule strength come from{' '}
-                <Link href={odds.href}>Season Outlook</Link>’s simulation of the rest of the season ({odds.iterations.toLocaleString('en-US')}{' '}
-                runs), which seeds on wins then points for. “In” and “Out” are printed only where this table’s own arithmetic has
-                settled it.
+                {language === 'es' ? (
+                  <>
+                    El % de playoffs y la dificultad del calendario vienen de la simulación del resto de la temporada de{' '}
+                    <Link href={odds.href}>Proyección de temporada</Link> ({odds.iterations.toLocaleString('es-ES')} simulaciones), que
+                    ordena por victorias y luego por puntos a favor. «Dentro» y «Fuera» solo aparecen cuando la propia aritmética de esta
+                    tabla lo ha decidido.
+                  </>
+                ) : (
+                  <>
+                    Playoff % and schedule strength come from{' '}
+                    <Link href={odds.href}>Season Outlook</Link>’s simulation of the rest of the season ({odds.iterations.toLocaleString('en-US')}{' '}
+                    runs), which seeds on wins then points for. “In” and “Out” are printed only where this table’s own arithmetic has
+                    settled it.
+                  </>
+                )}
               </p>
             ) : null}
             <p className="af-stb-projnote">
@@ -1607,5 +1739,6 @@ export function StandingsBoardView({
         <StandingsPointsChart board={board} teams={board.teams} />
       </section>
     </div>
+    </EliminationContext.Provider>
   )
 }

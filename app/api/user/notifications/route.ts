@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getSettingsProfile, updateUserProfile } from "@/lib/user-settings"
+import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 
 export const dynamic = "force-dynamic"
 
@@ -13,6 +14,17 @@ const DEFAULT_DASHBOARD_TOGGLES = {
   draftReminders: true,
   injuryAlerts: true,
 } as const
+
+const togglesSchema = z.object({
+  waiverWireCloses: z.boolean().optional(), tradeActivity: z.boolean().optional(),
+  leagueChatMessages: z.boolean().optional(), draftReminders: z.boolean().optional(),
+  injuryAlerts: z.boolean().optional(),
+}).strict().refine(value => Object.keys(value).length > 0)
+const requestSchema = z.object({ dashboardToggles: togglesSchema }).strict()
+const receiptSchema = z.object({
+  ids: z.union([z.literal('all'), z.array(z.string().trim().min(1)).min(1).max(1000)]),
+  leagueId: z.string().trim().min(1).optional(),
+}).strict()
 
 /**
  * GET /api/user/notifications
@@ -32,7 +44,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl
     const unreadOnly = searchParams?.get("unread") === "true"
     const limitRaw = Number(searchParams?.get("limit") ?? 20)
-    const limit = Math.min(50, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 20))
+    const limit = Math.min(50, Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 20))
 
     const userId = session.user.id
 
@@ -87,7 +99,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = (await req.json().catch(() => ({}))) as { ids?: unknown; leagueId?: unknown }
+    const parsed = receiptSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Invalid notification receipt' }, { status: 400 })
+    const body = parsed.data
     const { ids } = body
     if (body.leagueId !== undefined && (typeof body.leagueId !== 'string' || !body.leagueId.trim())) {
       return NextResponse.json({ error: 'leagueId must be a nonempty string' }, { status: 400 })
@@ -102,7 +116,7 @@ export async function PATCH(req: NextRequest) {
         data: { readAt: now },
       })
     } else if (Array.isArray(ids)) {
-      const idList = ids.map(String).filter(Boolean)
+      const idList = [...new Set(ids)]
       if (idList.length === 0) {
         return NextResponse.json({ error: "ids array required" }, { status: 400 })
       }
@@ -135,39 +149,30 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const body = (await req.json().catch(() => ({}))) as {
-    dashboardToggles?: Partial<Record<keyof typeof DEFAULT_DASHBOARD_TOGGLES, boolean>>
+  const parsed = requestSchema.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid notification preferences' }, { status: 400 })
+  try {
+    // This write needs a verified row read, not a display loader's empty fallback.
+    const current = await prisma.userProfile.findUnique({ where: { userId: session.user.id }, select: { notificationPreferences: true } })
+    const previous = z.record(z.unknown()).safeParse(current?.notificationPreferences ?? {})
+    if (!previous.success) return NextResponse.json({ error: 'Could not verify saved preferences. Reload before retrying.' }, { status: 503 })
+    const oldToggles = z.record(z.boolean()).safeParse(previous.data.dashboardToggles ?? {})
+    if (!oldToggles.success) return NextResponse.json({ error: 'Could not verify saved preferences. Reload before retrying.' }, { status: 503 })
+    const nextToggles = { ...DEFAULT_DASHBOARD_TOGGLES, ...oldToggles.data, ...parsed.data.dashboardToggles }
+    const merged = { ...previous.data, dashboardToggles: nextToggles } as Prisma.InputJsonObject
+    if (current) {
+      const result = await prisma.userProfile.updateMany({
+        where: { userId: session.user.id, notificationPreferences: { equals: current.notificationPreferences ?? Prisma.AnyNull } },
+        data: { notificationPreferences: merged },
+      })
+      if (result.count !== 1) return NextResponse.json({ error: 'Preferences changed while saving. Reload before retrying.' }, { status: 409 })
+    } else {
+      await prisma.userProfile.create({ data: { userId: session.user.id, notificationPreferences: merged } })
+    }
+    return NextResponse.json({ ok: true, dashboardToggles: nextToggles })
+  } catch (error) {
+    const conflict = typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'
+    return NextResponse.json({ error: conflict ? 'Preferences changed while saving. Reload before retrying.' : 'Could not verify saved preferences. Reload before retrying.' }, { status: conflict ? 409 : 503 })
   }
-
-  const current = await getSettingsProfile(session.user.id)
-  const prev = (current?.notificationPreferences as Record<string, unknown>) ?? {}
-  const prevToggles =
-    (prev.dashboardToggles as Record<string, boolean> | undefined) ?? {}
-
-  const nextToggles = {
-    ...DEFAULT_DASHBOARD_TOGGLES,
-    ...prevToggles,
-    ...(body.dashboardToggles && typeof body.dashboardToggles === "object"
-      ? body.dashboardToggles
-      : {}),
-  }
-
-  const merged: Record<string, unknown> = {
-    ...prev,
-    dashboardToggles: nextToggles,
-  }
-
-  const result = await updateUserProfile(session.user.id, {
-    notificationPreferences: merged,
-  })
-
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.error ?? "Failed to save notifications" },
-      { status: 400 }
-    )
-  }
-
-  return NextResponse.json({ ok: true, dashboardToggles: nextToggles })
 }
 

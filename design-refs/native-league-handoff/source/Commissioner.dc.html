@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Commissioner center</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+a{color:#22d3ee;text-decoration:none}a:hover{color:#67e8f9}
+.lbl{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-weight:700;font-size:10px;line-height:1;letter-spacing:.12em;text-transform:uppercase;color:#7d84a8}
+.num{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:#10131c;border:1px solid rgba(255,255,255,.07);border-radius:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:10px;font:600 13px/1 'Archivo',system-ui,sans-serif;cursor:pointer;border:1px solid transparent}
+.btn-p{background:#22d3ee;color:#04050c}
+.btn-g{background:transparent;color:#c3c9e6;border-color:rgba(255,255,255,.13)}
+.btn-g:hover{background:rgba(255,255,255,.05)}
+.side{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:10px;font:700 14px/1 'Archivo',system-ui,sans-serif;color:#989fc2;background:transparent;border:0;text-align:left;cursor:pointer;width:100%}
+.side:hover{background:rgba(255,255,255,.04);color:#eef0fa}
+.side-on{background:rgba(34,211,238,.12);color:#eef0fa}
+.field{display:flex;flex-direction:column;gap:8px}
+.flbl{font-size:13px;font-weight:700;color:#c3c9e6}
+.inp{height:44px;box-sizing:border-box;padding:0 12px;border-radius:10px;background:#0b0d14;border:1px solid rgba(255,255,255,.13);color:#eef0fa;font:600 14px 'Archivo',system-ui,sans-serif}
+.inp:focus{outline:none;border-color:#22d3ee;box-shadow:0 0 0 3px rgba(34,211,238,.25)}
+.help{font-size:12px;line-height:1.45;color:#7d84a8}
+.seg{flex:1;min-height:44px;border-radius:8px;border:0;background:transparent;color:#989fc2;font:600 13px/1 'Archivo',sans-serif;cursor:pointer}
+.seg-on{background:#22d3ee;color:#04050c}
+.tool{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:#eef0fa}
+</style>
+</helmet>
+<div class="af">
+  <nav class="rail" aria-label="Your leagues">
+    <a class="rail-home" href="#" aria-label="All leagues home">AF</a>
+    <div class="rail-sep"></div>
+    <sc-for list="{{rail}}" as="l" hint-placeholder-count="7">
+      <button class="{{l.cls}}" onClick="{{l.pickL}}" aria-label="{{l.name}}">
+        <span class="rl-pill"></span>
+        <span class="av" style="background: {{l.bg}}; color: {{l.fg}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 3.5px {{l.ring}}">{{l.ini}}<span class="av-tag" style="background: {{l.tagBg}}; color: {{l.tagFg}}">{{l.tag}}</span><sc-if value="{{l.unread}}" hint-placeholder-val="{{ false }}"><span class="av-dot">{{l.unread}}</span></sc-if></span>
+        <span class="rl-score" style="color: {{l.ring}}">{{l.mini}}</span>
+        <span class="rl-tip"><span style="font: 600 14px/1.2 'Archivo', sans-serif; color: #eef0fa">{{l.name}}</span><span style="font: 500 11px/1.3 'JetBrains Mono', monospace; color: #989fc2">{{l.meta}}</span><span style="font: 700 11px/1.3 'Archivo', sans-serif; color: {{l.ring}}">{{l.status}}</span></span>
+      </button>
+    </sc-for>
+    <div class="rail-sep"></div>
+    <button class="rail-add" aria-label="Create or import a league"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+  </nav>
+  <nav class="snav" aria-label="League sections">
+    <a class="nv" href="#">‹ All leagues</a>
+    <div style="display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; padding: 12px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255,255,255,.07)">
+      <span class="av" style="width: 36px; height: 36px; font-size: 14px; background: #10131c; color: #22d3ee; border: 1px solid rgba(255,255,255,.13)">B</span>
+      <span style="display: flex; flex-direction: column; gap: 5px"><span style="font-weight: 600; font-size: 14px">Blah</span><span class="lbl" style="color: #fbbf24">Setup</span></span>
+    </div>
+    <sc-for list="{{nav}}" as="n" hint-placeholder-count="16">
+      <sc-if value="{{n.head}}" hint-placeholder-val="{{ false }}"><span class="lbl nv-h">{{n.label}}</span></sc-if>
+      <sc-if value="{{n.link}}" hint-placeholder-val="{{ true }}"><a class="{{n.cls}}" href="{{n.href}}" style="{{n.style}}">{{n.label}}<sc-if value="{{n.count}}" hint-placeholder-val="{{ false }}"><span class="nv-c">{{n.count}}</span></sc-if></a></sc-if>
+    </sc-for>
+  </nav>
+  <div class="mainc">
+  <header class="topb">
+    <button class="viewing"><span class="lbl">Viewing</span>Blah<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+    <label class="search"><input type="text" placeholder="Find a player or jump to a league" aria-label="Search"><span class="kbd">⌘K</span></label>
+    <div style="flex: 1"></div>
+    <span class="chip chip-gold">Commissioner</span>
+  </header>
+
+  <section style="padding: 28px 24px 0">
+    <div style="max-width: 1360px; margin: 0 auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <a href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Back to league home
+        </a>
+        <h1 style="margin: 0; font-size: 40px; line-height: 1; font-weight: 700; letter-spacing: -0.03em">Commissioner center</h1>
+        <p style="margin: 0; font-size: 15px; color: #989fc2">Every rule for Blah lives here. Changes post to league activity so managers can see them.</p>
+      </div>
+      <div style="display: flex; gap: 10px">
+        <button class="btn btn-g">Discard</button>
+        <button class="btn btn-p">Save changes</button>
+      </div>
+    </div>
+  </section>
+
+  <main style="padding: 28px 24px 48px; flex: 1">
+    <div style="max-width: 1360px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+      <!-- Settings nav -->
+      <nav aria-label="Settings sections" style="flex: 1 1 220px; max-width: 260px; min-width: 200px; display: flex; flex-direction: column; gap: 18px">
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span class="lbl" style="padding: 0 12px 8px">{{g.title}}</span>
+            <sc-for list="{{g.items}}" as="it" hint-placeholder-count="4">
+              <button class="{{it.cls}}" onClick="{{it.pick}}">
+                <span style="flex: 1">{{it.label}}</span>
+                <sc-if value="{{it.flag}}" hint-placeholder-val="{{ false }}">
+                  <span aria-label="Needs attention" role="img" style="width: 8px; height: 8px; border-radius: 999px; background: #fbbf24"></span>
+                </sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </sc-for>
+      </nav>
+
+      <!-- Draft settings -->
+      <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+        <section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 24px">
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <span class="lbl">Draft</span>
+            <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.03em">Main draft</h2>
+          </div>
+
+          <div class="field">
+            <span class="flbl" id="dtype">Draft type</span>
+            <div role="radiogroup" aria-labelledby="dtype" style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #0b0d14; border: 1px solid rgba(255,255,255,.07); max-width: 420px">
+              <sc-for list="{{types}}" as="t" hint-placeholder-count="3">
+                <button role="radio" aria-checked="{{t.on}}" class="{{t.cls}}" onClick="{{t.pick}}">{{t.label}}</button>
+              </sc-for>
+            </div>
+            <span class="help">{{typeHelp}}</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px">
+            <div class="field"><label class="flbl" for="ddate">Date</label><input id="ddate" class="inp" type="text" placeholder="Pick a date"></div>
+            <div class="field"><label class="flbl" for="dtime">Start time (ET)</label><input id="dtime" class="inp" type="text" placeholder="8:00 PM"></div>
+            <div class="field">
+              <label class="flbl" for="dtimer">Pick timer</label>
+              <select id="dtimer" class="inp"><option>90 seconds</option><option>60 seconds</option><option>2 minutes</option><option>8 hours (slow draft)</option></select>
+            </div>
+            <div class="field"><label class="flbl" for="drounds">Rounds</label><input id="drounds" class="inp num" type="text" placeholder="[ROUNDS]"></div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.07)">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <span class="flbl">Draft order</span>
+                <span class="help">Not set. Randomize live so managers can watch, or drag to set it by hand.</span>
+              </div>
+              <div style="display: flex; gap: 8px">
+                <button class="btn btn-g">Set manually</button>
+                <button class="btn btn-p">Randomize order</button>
+              </div>
+            </div>
+            <ol style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)); gap: 8px">
+              <sc-for list="{{slots}}" as="s" hint-placeholder-count="12">
+                <li style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border-radius: 10px; border: 1px dashed rgba(255,255,255,.13); color: #7d84a8; font-size: 13px">
+                  <span class="num" style="font-weight: 600; color: #989fc2">{{s.n}}</span><span>Pick {{s.n}}</span>
+                </li>
+              </sc-for>
+            </ol>
+          </div>
+        </section>
+
+        <section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 4px">
+          <span class="lbl" style="margin-bottom: 12px">Practice &amp; extra drafts</span>
+          <sc-for list="{{toggles}}" as="o" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,.05)">
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                <span style="font-weight: 700; font-size: 14px">{{o.title}}</span>
+                <span class="help" style="font-size: 13px; color: #989fc2">{{o.detail}}</span>
+              </div>
+              <button role="switch" aria-checked="{{o.on}}" aria-label="{{o.title}}" onClick="{{o.flip}}" style="width: 48px; height: 28px; flex: none; border-radius: 999px; border: 0; padding: 3px; cursor: pointer; display: flex; justify-content: {{o.justify}}; background: {{o.track}}">
+                <span style="width: 22px; height: 22px; border-radius: 999px; background: {{o.knob}}"></span>
+              </button>
+            </div>
+          </sc-for>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; padding-top: 16px">
+            <button class="btn btn-g">Start a supplemental draft</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- Tools -->
+      <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+        <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <span class="lbl" style="margin-bottom: 6px">Commissioner tools</span>
+          <sc-for list="{{tools}}" as="t" hint-placeholder-count="5">
+            <a href="#" class="tool" style="opacity: {{t.opacity}}">
+              <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                <span style="font-weight: 600; font-size: 14px">{{t.title}}</span>
+                <span style="font-size: 12px; line-height: 1.4; color: #989fc2">{{t.detail}}</span>
+              </span>
+              <span style="font: 700 9px/1 'JetBrains Mono', monospace; letter-spacing: .1em; text-transform: uppercase; color: {{t.stateColor}}; white-space: nowrap">{{t.state}}</span>
+            </a>
+          </sc-for>
+        </section>
+
+        <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span class="lbl">Managers</span>
+          <div style="display: flex; align-items: baseline; gap: 8px">
+            <span class="num" style="font-size: 28px; font-weight: 600">1</span>
+            <span class="num" style="font-size: 14px; color: #989fc2">/ 12 joined</span>
+          </div>
+          <div aria-hidden="true" style="height: 6px; border-radius: 999px; background: rgba(255,255,255,.07)"><div style="height: 6px; width: 8.33%; border-radius: 999px; background: #22d3ee"></div></div>
+          <button class="btn btn-p">Copy invite link</button>
+        </section>
+      </aside>
+    </div>
+  </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { section: 'draft', type: 'snake', mocks: true, supp: false, trade: true };
+  }
+  renderVals() {
+    const st = this.state;
+    const item = (id, label, flag) => ({ label, flag: !!flag,
+      cls: 'side' + (st.section === id ? ' side-on' : ''), pick: () => this.setState({ section: id }) });
+    const groups = [
+      { title: 'League', items: [item('general','General'), item('members','Managers & invites', true), item('divisions','Divisions')] },
+      { title: 'Rules', items: [item('scoring','Scoring'), item('rosters','Roster slots'), item('draft','Draft', true), item('waivers','Waivers & free agents', true), item('trades','Trades'), item('schedule','Schedule'), item('playoffs','Playoffs', true)] },
+      { title: 'Season ops', items: [item('lineups','Lineup & roster locks'), item('corrections','Score corrections'), item('log','Audit log'), item('danger','Delete or reset')] }
+    ];
+    const typeDefs = [['snake','Snake'],['linear','Linear'],['auction','Auction']];
+    const types = typeDefs.map(([id,label]) => ({ label, on: st.type === id ? 'true' : 'false',
+      cls: 'seg' + (st.type === id ? ' seg-on' : ''), pick: () => this.setState({ type: id }) }));
+    const typeHelp = { snake: 'Order reverses each round.', linear: 'Same order every round.', auction: 'Managers bid on every player from a set budget.' }[st.type];
+    const slots = Array.from({ length: 12 }, (_, i) => ({ n: i + 1 }));
+    const tog = (key, title, detail) => {
+      const on = !!st[key];
+      return { title, detail, on: on ? 'true' : 'false', justify: on ? 'flex-end' : 'flex-start',
+        track: on ? '#22d3ee' : 'rgba(255,255,255,.13)', knob: on ? '#04050c' : '#c3c9e6',
+        flip: () => this.setState({ [key]: !on }) };
+    };
+    const toggles = [
+      tog('mocks', 'Let managers run mock drafts', 'Mocks use this league’s scoring, roster and draft type.'),
+      tog('trade', 'Allow pick trading before the draft', 'Traded picks show on the draft board.'),
+      tog('supp', 'Supplemental draft for late joiners', 'Runs after the main draft from the remaining player pool.')
+    ];
+    const T = (title, detail, live) => ({ title, detail, state: live ? 'Ready' : 'In season',
+      stateColor: live ? '#34d399' : '#7d84a8', opacity: live ? 1 : .6 });
+    const tools = [
+      T('Edit any lineup', 'Set or fix a manager’s starters.', false),
+      T('Lock or unlock rosters', 'Freeze adds, drops and trades.', true),
+      T('Score corrections', 'Adjust a final with a logged reason.', false),
+      T('Advance / finalize week', 'Close a scoring week by hand.', false),
+      T('Audit log', 'Every commissioner change, timestamped.', true)
+    ];
+    return { ...this.shell('commish'), groups, types, typeHelp, slots, toggles, tools };
+  }
+  shell(active) {
+    const G = '#34d399', R = '#fb5b78', A2 = '#fbbf24', C = '#22d3ee';
+    const L = [
+      ['blah','Blah','B','#10131c',C,'AF',A2,'SETUP','Draft Mon, Oct 19 · 4 setup steps left','2026 · 12-team redraft · Half PPR',3,true],
+      ['parbur','Parbur','P','#1f2a4d','#9fd4ff','SLP',G,'88–71','Winning · Wk 5','2026 · 12-team redraft · PPR',0],
+      ['horse','Four Horsemen All-Stars 2023','4H','#12352a','#7ff0c4','SLP',R,'62–80','Losing · Wk 5','2026 · 4-team dynasty',0],
+      ['koth','KOTH','K','#3a2410','#f0b46a','SLP',G,'101–93','Winning · Wk 5','2026 · 10-team redraft',16],
+      ['pirate','Pirate League!','PL','#3a1d55','#dcb4ff','SLP',R,'70–74','Losing · Wk 5','2026 · 14-team redraft',13],
+      ['guil','Guillotine League 26','GL','#4a1414','#ffb4b4','SLP',G,'8TH','+35.9 over the cut','2026 · 14-team guillotine',0],
+      ['elim','Elimination Station 2','ES','#123244','#7fd4f0','SLP',G,'8TH','+17.5 over the cut','2026 · 14-team guillotine',0]
+    ];
+    const curL = this.state.league || 'blah';
+    const rail = L.map(([id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,nat]) => ({ id,name,ini,bg,fg,tag,ring,mini,status,meta,unread,
+      tagBg: nat ? C : '#2a2f4a', tagFg: nat ? '#04050c' : '#c3c9e6',
+      cls: 'rl' + (curL === id ? ' rl-on' : ''), pickL: () => this.setState({ league: id }) }));
+    const H = label => ({ head: true, link: false, label });
+    const A = (id, label, href, count, style) => ({ head: false, link: true, label, href, count: count || 0, style: style || '', cls: 'nv' + (id === active ? ' nv-on' : '') });
+    const nav = [H('This league'), A('home','League home','Main.dc.html'), A('team','My team','Lineup.dc.html'), A('matchup','Matchup','Matchup.dc.html'),
+      A('players','Players & waivers','Waivers.dc.html'), A('trades','Trades','Trades.dc.html', 1), A('draft','Draft HQ','MockSetup.dc.html'), A('stand','Standings & playoffs','Standings.dc.html'),
+      A('chat','League chat','Chat.dc.html', 3), A('commish','Commissioner','Commissioner.dc.html', 0, 'color:#f6c445'),
+      H('This week'), A('war','War Room','#'), A('live','Live scores','#', 12), A('outlook','Season Outlook','#'),
+      H('Your record'), A('career','Your career','#'), A('rank','Rankings','#')];
+    return { rail, nav };
+  }
+}
+</script>
+</body>
+</html>

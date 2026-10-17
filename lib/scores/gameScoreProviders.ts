@@ -429,12 +429,101 @@ export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
 // ── CollegeFootballData (NCAAF) ──────────────────────────────────────────────
 
 export async function fetchCfbdGames(season: number, week?: number): Promise<ProviderResult> {
+  return fetchCfbdSlate(season, 'regular', week)
+}
+
+/**
+ * Bowls and the College Football Playoff — CFBD's `seasonType=postseason` slate for one season.
+ *
+ * ⚠ `season` IS THE COLLEGE SEASON, NOT THE CALENDAR YEAR. The 2025 title game was played on
+ * 2026-01-19 and CFBD files it under 2025. Use `cfbPostseasonSeason` to pick it.
+ *
+ * Rows are written with `seasonType: 'post'` and `week: null`. CFBD numbers its postseason from
+ * week 1 again, and several NCAAF readers key on `(season, week)` WITHOUT a season type —
+ * `playerWeeklyScoreService` does not even filter by source — so a bowl stored as week 1 would
+ * join regular-season week 1. TheSportsDB's postseason rows already carry `week: null` (measured
+ * 2026-10-02: all 73 Dec–Jan 2025 rows), so this is the shape the table already holds. The
+ * vendor's own week survives in `raw`.
+ *
+ * Which of these games are Playoff games is NOT decided here. No field has been seen to say so:
+ * CFBD's `playoff` is null on all 3,681 stored rows and `notes` is free text ("Aflac Kickoff").
+ * The playoff sync identifies its games by the bracket's own team pairs.
+ */
+export async function fetchCfbdPostseasonGames(season: number): Promise<ProviderResult> {
+  return fetchCfbdSlate(season, 'postseason')
+}
+
+/**
+ * The college season whose postseason is being played at `now`, or null outside December and
+ * January (US Eastern). December belongs to that year's season; January to the year before.
+ *
+ * Bowls start mid-December and the title game falls in mid-to-late January, so these two months
+ * cover every game. Conference championship weekend (early December) is `regular` in CFBD and is
+ * still fetched by the regular call, which this does not replace.
+ */
+export function cfbPostseasonSeason(now: Date = new Date()): number | null {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(now)
+  const year = Number(parts.find((p) => p.type === 'year')?.value)
+  const month = Number(parts.find((p) => p.type === 'month')?.value)
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null
+  if (month === 12) return year
+  if (month === 1) return year - 1
+  return null
+}
+
+/**
+ * The CFBD entry in the NCAAF chain: the regular slate as before, plus the postseason when one is
+ * being played. ONE provider result, because both are the same source writing the same id space
+ * (`source: 'cfbd'`) — two entries would overwrite each other in the route's `bySource`.
+ *
+ * A failure on either half is reported with which half failed, alongside whatever the other half
+ * returned; a quota wall on the postseason call must not read as "no bowls".
+ */
+export async function fetchCfbdForTick(args: {
+  /** Null skips the regular call (a postseason-only backfill). */
+  regularSeason: number | null
+  week?: number
+  postseasonSeason: number | null
+  deadlineAt?: number
+}): Promise<ProviderResult> {
+  const parts: Array<{ label: string; result: ProviderResult }> = []
+  if (args.regularSeason != null) {
+    parts.push({ label: 'regular', result: await fetchCfbdGames(args.regularSeason, args.week) })
+  }
+  if (args.postseasonSeason != null) {
+    const outOfTime = Date.now() >= (args.deadlineAt ?? Number.POSITIVE_INFINITY)
+    parts.push({
+      label: 'postseason',
+      result: outOfTime
+        ? { source: 'cfbd', games: [], error: 'skipped: run budget exhausted before this provider was reached' }
+        : await fetchCfbdPostseasonGames(args.postseasonSeason),
+    })
+  }
+  const errors = parts
+    .filter((p) => p.result.error)
+    .map((p) => (parts.length > 1 ? `${p.label}: ${p.result.error}` : p.result.error!))
+  return {
+    source: 'cfbd',
+    games: parts.flatMap((p) => p.result.games),
+    error: errors.length > 0 ? errors.join('; ') : null,
+  }
+}
+
+async function fetchCfbdSlate(
+  season: number,
+  slate: 'regular' | 'postseason',
+  week?: number,
+): Promise<ProviderResult> {
   const key = process.env.CFBD_KEY?.trim() || process.env.CFBD_API_KEY?.trim() || null
   if (!key) return { source: 'cfbd', games: [], error: 'CFBD key not configured' }
 
-  const weekParam = week != null && week > 0 ? `&week=${week}` : ''
+  const weekParam = slate === 'regular' && week != null && week > 0 ? `&week=${week}` : ''
   const { body, failure } = await getJson(
-    `${CFBD_BASE_URL}/games?year=${season}&seasonType=regular${weekParam}`,
+    `${CFBD_BASE_URL}/games?year=${season}&seasonType=${slate}${weekParam}`,
     { Authorization: `Bearer ${key}` },
   )
   const rows = body as Record<string, unknown>[] | null
@@ -483,11 +572,13 @@ export async function fetchCfbdGames(season: number, week?: number): Promise<Pro
       awayScore: played ? awayPoints : null,
       status: played ? 'final' : 'scheduled',
       startTime: toDate(r.startDate),
-      week: weekOrNull(r.week),
-      // The query string above pins `seasonType=regular`, so every row here IS
-      // regular season — asserted from the request, not guessed from the payload.
-      seasonType: normalizeSeasonType(r.seasonType) ?? 'regular',
-      season: num(r.season),
+      // Postseason weeks restart at 1 — see fetchCfbdPostseasonGames for why they are not stored.
+      week: slate === 'postseason' ? null : weekOrNull(r.week),
+      // The query string above pins the slate, so every row here IS that slate —
+      // asserted from the request, not guessed from the payload.
+      seasonType: slate === 'postseason' ? 'post' : (normalizeSeasonType(r.seasonType) ?? 'regular'),
+      // A January game must keep the COLLEGE season it was asked for, never fall to the calendar.
+      season: slate === 'postseason' ? (num(r.season) ?? season) : num(r.season),
       raw: r,
     })
   }
@@ -786,6 +877,12 @@ export async function fetchGamesForSport(
      * `lib/scores/cfbdThrottle.ts`. Reported like a deadline skip, never omitted.
      */
     skip?: Partial<Record<string, string>>
+    /**
+     * NCAAF only: the college season whose postseason CFBD should also be asked for
+     * (`cfbPostseasonSeason`), or null for none. `regular: false` skips the regular call — a
+     * postseason-only backfill.
+     */
+    cfbd?: { postseasonSeason: number | null; regular?: boolean }
   },
 ): Promise<ProviderResult[]> {
   const deadlineAt = opts?.deadlineAt ?? Number.POSITIVE_INFINITY
@@ -818,7 +915,16 @@ export async function fetchGamesForSport(
     { source: 'thesportsdb', run: () => fetchTheSportsDbGames(sport) },
     sport === 'NFL'
       ? { source: 'rolling_insights', run: () => fetchRollingInsightsNflGames() }
-      : { source: 'cfbd', run: () => fetchCfbdGames(season, week) },
+      : {
+          source: 'cfbd',
+          run: () =>
+            fetchCfbdForTick({
+              regularSeason: opts?.cfbd?.regular === false ? null : season,
+              week,
+              postseasonSeason: opts?.cfbd?.postseasonSeason ?? null,
+              deadlineAt,
+            }),
+        },
   ]
 
   const attempts: ProviderResult[] = []

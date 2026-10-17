@@ -143,8 +143,12 @@ const RULES: PresetRule[] = [
   ncaafPreset('ncaaf_ppr_college', 'College Full PPR', '1.0 per reception for college football.', { ppr: 'full' }),
   fbPreset('fb_std', 'Standard', 'No PPR classic yardage + TD scoring.', { ppr: 'standard' }),
   fbPreset('fb_ppr', 'Full PPR', '1.0 per reception, WR/TE friendly.', { ppr: 'full' }),
-  fbPreset('fb_standard', 'Standard', 'No PPR — classic yardage + TD scoring.', { ppr: 'standard' }),
   fbPreset('fb_half_ppr', 'Half PPR', '0.5 per reception — balanced modern default.', { ppr: 'half' }),
+  // A site's own default league scoring (2026). The NFL rules each one seeds live in
+  // NflScoringPresets (espn_ppr / sleeper_default) via nflScoringSeedForCreate.
+  fbPreset('fb_espn_ppr', 'ESPN default (PPR)', "ESPN's default scoring: 1 per catch, -2 per interception.", { ppr: 'full' }),
+  fbPreset('fb_sleeper_ppr', 'Sleeper default (PPR)', "Sleeper's default scoring: 1 per catch, -1 per interception.", { ppr: 'full' }),
+  fbPreset('fb_standard', 'Classic (no PPR)', 'No points per catch — classic yardage + TD scoring.', { ppr: 'standard' }),
   fbPreset('fb_full_ppr', 'Full PPR', '1.0 per reception — WR/TE friendly.', { ppr: 'full' }),
   fbPreset('fb_te_premium', 'TE Premium', 'Half PPR + boosted TE scoring.', {
     ppr: 'half',
@@ -251,6 +255,15 @@ const RULES: PresetRule[] = [
       }),
     }),
   ),
+  ...(['mlb_5x5', 'mlb_6x6'] as const).flatMap(preset => (['each', 'most', 'roto'] as const).map(recordMode => ({
+    id: `${preset}_${recordMode}`,
+    label: `${preset === 'mlb_5x5' ? '5×5' : '6×6'} ${recordMode === 'roto' ? 'Rotisserie' : `H2H (${recordMode === 'each' ? 'each category' : 'most categories'})`}`,
+    hint: 'Weekly lineups. AVG uses total hits / at bats; ERA and WHIP use total pitching outs. 6×6 adds total bases and holds.',
+    matches: (ctx: PresetCtx) => ctx.sport === 'MLB' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    build: () => ({ scoring: 'default', isSuperflex: false, scoringSettings: {
+      preset, source: 'af', scoringMode: recordMode === 'roto' ? 'roto' : 'h2h_category', categoryPresetId: preset, categoryRecordMode: recordMode,
+    } }),
+  }))),
   // NBA H2H-category presets. Matchups are resolved per category (PTS, REB,
   // AST, STL, BLK, TO, FG%, FT%, optional 3PM) instead of by summed points.
   // Standings track category wins/losses. Category-mode leagues still share
@@ -260,7 +273,7 @@ const RULES: PresetRule[] = [
     id: 'nba_9cat',
     label: '9-cat H2H',
     hint: 'Head-to-head categories: PTS, REB, AST, STL, BLK, TO, FG%, FT%, 3PM.',
-    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected,
+    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
     build: () => ({
       scoring: 'default',
       isSuperflex: false,
@@ -269,14 +282,15 @@ const RULES: PresetRule[] = [
         source: 'af',
         scoringMode: 'h2h_category',
         categoryPresetId: 'nba_9cat',
+        categoryRecordMode: 'most',
       },
     }),
   },
   {
     id: 'nba_8cat',
     label: '8-cat H2H',
-    hint: 'Head-to-head categories: PTS, REB, AST, STL, BLK, TO, FG%, FT% (no 3PM).',
-    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected,
+    hint: 'Weekly head-to-head categories: PTS, REB, AST, STL, BLK, FG%, FT%, 3PM (no turnovers).',
+    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
     build: () => ({
       scoring: 'default',
       isSuperflex: false,
@@ -284,7 +298,8 @@ const RULES: PresetRule[] = [
         preset: 'nba_8cat',
         source: 'af',
         scoringMode: 'h2h_category',
-        categoryPresetId: 'nba_8cat',
+        categoryPresetId: 'nba_8cat_standard',
+        categoryRecordMode: 'most',
       },
     }),
   },

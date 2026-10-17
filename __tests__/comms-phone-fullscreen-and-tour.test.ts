@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
  *
  * Geometry was measured in Chromium, before and after, at 390x844, 375x667, 820x1180 and 1280x800:
  * phones went from [19,16,354,810] with a 26px radius to [0,0,390,844] with none; tablet and desktop
- * were byte-identical. The phone welcome guide now sits in document flow, so it cannot
+ * were byte-identical. The welcome guide now sits in document flow at every width, so it cannot
  * cover the content it is introducing or the chat entry point.
  * jsdom applies no media queries, so these pin the rules that produced that — anchored to line
  * starts, so a comment ABOUT a rule cannot satisfy them.
@@ -46,14 +46,16 @@ describe('chat is the whole screen on a phone', () => {
   })
 })
 
-describe('the welcome tour stays out of the chat bubble and mobile content', () => {
+describe('the welcome tour stays out of the chat bubble and page controls', () => {
   const base = tour.slice(tour.indexOf('.af-welcome {'), tour.indexOf('}', tour.indexOf('.af-welcome {')))
   const phoneStart = tour.indexOf('@media (max-width: 720px)')
   const phone = tour.slice(phoneStart, tour.indexOf('}', tour.indexOf('.af-welcome {', phoneStart)))
 
-  it('uses slot 1 beside desktop content, while phones place it in the page flow', () => {
-    expect(base).toMatch(/^\s+bottom: var\(--af-fab-slot-1, 86px\);$/m)
-    expect(base).toMatch(/^\s+right: var\(--af-fab-inset, 18px\);$/m)
+  it('stays in page flow on desktop, tablet and phones', () => {
+    expect(base).toMatch(/^\s+position: relative;$/m)
+    expect(base).toMatch(/^\s+width: 100%;$/m)
+    expect(base).toMatch(/^\s+margin-bottom: 18px;$/m)
+    expect(base).not.toMatch(/^\s+(?:position: fixed|bottom:|right:)/m)
     expect(phone).toContain('position: relative;')
     expect(phone).toContain('bottom: auto;')
     expect(phone).toContain('right: auto;')

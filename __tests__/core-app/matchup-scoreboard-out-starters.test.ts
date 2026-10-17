@@ -228,3 +228,49 @@ describe('Matchup scoreboard — the live lineup', () => {
     expect(sides?.opponent.lineup.map((s) => s.playerId)).toEqual(['c', 'd'])
   })
 })
+
+/*
+ * 🛑 "ACTIVE" IS NOT AN INJURY. Every non-empty status used to become a tag, so nearly every healthy
+ * starter on the production board wore an amber "ACTI" chip (2026-10-02). Only a real designation
+ * may reach `atRiskBySleeperId`.
+ */
+describe('Matchup scoreboard — the injury tag', () => {
+  it('🛑 a healthy designation (Active, ACT, NA) carries no tag', async () => {
+    db.injuries = [
+      { playerName: 'Player a', status: 'Active' },
+      { playerName: 'Player b', status: 'ACT' },
+      { playerName: 'Player c', status: 'NA' },
+    ]
+    const sides = await load()
+    expect(sides?.atRiskBySleeperId).toEqual({})
+  })
+
+  it('control: Questionable still carries one, and does not change the price', async () => {
+    db.injuries = [{ playerName: 'Player a', status: 'Questionable' }]
+    const sides = await load()
+    expect(sides?.atRiskBySleeperId).toEqual({ a: 'Questionable' })
+    expect(sides?.you.projectedRemaining).toBe(16)
+  })
+})
+
+/*
+ * 🛑 AN EMPTY SLOT IS NOT AN UNPRICED STARTER. `'0'` used to be looked up, found nothing and counted
+ * as unprojected — so an opponent with four empty IDP slots refused the whole win probability
+ * ("5 starters could not be priced") while the all-leagues board priced the game (2026-10-02).
+ */
+describe('Matchup scoreboard — an empty slot', () => {
+  it('🛑 keeps its place on the board, counts as no unpriced starter, and the odds still come', async () => {
+    const sides = await load({ you: ['a', 'b'], opponent: ['c', '0'] })
+    expect(sides?.opponent.lineup.map((s) => s.playerId)).toEqual(['c', '0'])
+    expect(sides?.opponent.unprojected).toBe(0)
+    const { winProbabilityFor, NO_LIVE_POINTS } = await import('@/lib/core-app/matchupProjections')
+    expect(winProbabilityFor(sides!, NO_LIVE_POINTS).available).toBe(true)
+  })
+
+  it('CONTROL: a real starter with no projection still refuses', async () => {
+    const sides = await load({ you: ['a', 'b'], opponent: ['c', 'nobody'] })
+    expect(sides?.opponent.unprojected).toBe(1)
+    const { winProbabilityFor, NO_LIVE_POINTS } = await import('@/lib/core-app/matchupProjections')
+    expect(winProbabilityFor(sides!, NO_LIVE_POINTS).available).toBe(false)
+  })
+})

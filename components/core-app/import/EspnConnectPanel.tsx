@@ -33,7 +33,9 @@
  * published extension would break the flow for every real user today.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
+
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /*
  * af-core.css FIRST and it is load bearing — the same rule ImportV4's header spells
@@ -78,6 +80,17 @@ const EXTENSION_ID = process.env.NEXT_PUBLIC_ESPN_EXTENSION_ID?.trim() || null
  * button that goes nowhere.
  */
 const EXTENSION_STORE_URL = process.env.NEXT_PUBLIC_ESPN_EXTENSION_STORE_URL?.trim() || null
+
+/**
+ * Fill `{{slot}}` placeholders in a translated sentence with React nodes (a `<strong>`, a
+ * `<kbd>`), so a translation can reorder the sentence around them. Text outside the slots is
+ * returned as plain strings, so the rendered text is identical to the inline JSX it replaced.
+ */
+function renderRich(template: string, slots: Record<string, ReactNode>): ReactNode[] {
+  return template
+    .split(/\{\{(\w+)\}\}/g)
+    .map((part, i) => (i % 2 === 1 ? <Fragment key={i}>{slots[part] ?? `{{${part}}}`}</Fragment> : part))
+}
 
 type ExtensionMessageResponse = { ok: boolean; code?: string; message?: string } | null
 
@@ -139,6 +152,7 @@ export type EspnConnectPanelProps = {
 }
 
 export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading')
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
@@ -265,7 +279,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
     try {
       const res = await sendExtensionMessage({ type: 'connectEspn' })
       if (!res) {
-        setOneClickError('Could not reach the extension. Use the manual option below instead.')
+        setOneClickError(t('import.espn.extUnreachable'))
         return
       }
       if (!res.ok) {
@@ -279,14 +293,14 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
           setEspnSessionMissing(true)
           return
         }
-        setOneClickError(res.message || 'Could not connect ESPN. Please try again.')
+        setOneClickError(res.message || t('import.espn.connectFailed'))
         return
       }
       setEspnSessionMissing(false)
       setEditing(false)
       setMessage({
         tone: 'success',
-        text: 'ESPN connected. Private leagues can now be previewed and imported.',
+        text: t('import.espn.connectedSuccess'),
       })
       await refresh()
     } finally {
@@ -298,7 +312,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
     const trimmedSwid = swid.trim()
     const trimmedS2 = espnS2.trim()
     if (!trimmedSwid || !trimmedS2) {
-      setMessage({ tone: 'error', text: 'Enter both the SWID and espn_s2 cookie values.' })
+      setMessage({ tone: 'error', text: t('import.espn.enterBoth') })
       return
     }
     setSaving(true)
@@ -313,7 +327,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
       if (!res.ok) {
         setMessage({
           tone: 'error',
-          text: data?.error || 'Could not save ESPN cookies. Please try again.',
+          text: data?.error || t('import.espn.saveFailed'),
         })
         return
       }
@@ -323,11 +337,11 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
       setEditing(false)
       setMessage({
         tone: 'success',
-        text: 'ESPN connected. Private leagues can now be previewed and imported.',
+        text: t('import.espn.connectedSuccess'),
       })
       await refresh()
     } catch {
-      setMessage({ tone: 'error', text: 'Network error — please try again.' })
+      setMessage({ tone: 'error', text: t('import.espn.networkError') })
     } finally {
       setSaving(false)
     }
@@ -336,7 +350,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
   const handleDisconnect = async () => {
     if (
       typeof window !== 'undefined' &&
-      !window.confirm("Disconnect ESPN? Private ESPN leagues won't import until you reconnect.")
+      !window.confirm(t('import.espn.disconnectConfirm'))
     ) {
       return
     }
@@ -349,13 +363,13 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
         body: JSON.stringify({ platform: 'espn' }),
       })
       if (!res.ok) {
-        setMessage({ tone: 'error', text: 'Could not disconnect ESPN. Please try again.' })
+        setMessage({ tone: 'error', text: t('import.espn.disconnectFailed') })
         return
       }
-      setMessage({ tone: 'success', text: 'ESPN disconnected.' })
+      setMessage({ tone: 'success', text: t('import.espn.disconnected') })
       await refresh()
     } catch {
-      setMessage({ tone: 'error', text: 'Network error — please try again.' })
+      setMessage({ tone: 'error', text: t('import.espn.networkError') })
     } finally {
       setDisconnecting(false)
     }
@@ -365,7 +379,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
     return (
       <div className="af-espn af-espn--loading" role="status" aria-live="polite">
         <span className="af-espn-spinner" aria-hidden />
-        <span>Checking your ESPN connection&hellip;</span>
+        <span>{t('import.espn.loading')}</span>
       </div>
     )
   }
@@ -391,11 +405,15 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
           because the extension is not published yet. Naming the steps precisely is the
           least-bad version of it: a vague "get your cookies" is how someone gives up.
         */}
-        Private ESPN leagues need two cookies from your browser. With{' '}
-        <strong>fantasy.espn.com</strong> open and signed in, press <kbd>F12</kbd> &rarr;{' '}
-        <strong>Application</strong> &rarr; <strong>Cookies</strong>, then copy{' '}
-        <strong>SWID</strong> and <strong>espn_s2</strong> here. Both are{' '}
-        <strong>stored encrypted</strong> and used only to read your leagues.
+        {renderRich(t('import.espn.manualInstructions'), {
+          site: <strong>fantasy.espn.com</strong>,
+          key: <kbd>F12</kbd>,
+          application: <strong>{t('import.espn.devtoolsApplication')}</strong>,
+          cookies: <strong>{t('import.espn.devtoolsCookies')}</strong>,
+          swid: <strong>SWID</strong>,
+          s2: <strong>espn_s2</strong>,
+          encrypted: <strong>{t('import.espn.storedEncrypted')}</strong>,
+        })}
       </p>
       <div className="af-espn-fields">
         <label className="af-espn-field">
@@ -424,7 +442,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="Long cookie value"
+            placeholder={t('import.espn.s2Placeholder')}
             value={espnS2}
             onChange={(e) => setEspnS2(e.target.value)}
             disabled={saving}
@@ -452,7 +470,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
             aria-pressed={revealed}
             onClick={() => setRevealed((v) => !v)}
           >
-            {revealed ? 'Hide values' : 'Show what I pasted'}
+            {revealed ? t('import.espn.hideValues') : t('import.espn.showPasted')}
           </button>
         </div>
       ) : null}
@@ -463,7 +481,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
           onClick={() => void handleSave()}
           disabled={saving || !swid.trim() || !espnS2.trim()}
         >
-          {saving ? 'Saving…' : 'Save ESPN cookies'}
+          {saving ? t('import.espn.saving') : t('import.espn.save')}
         </button>
         {status === 'connected' && (
           <button
@@ -477,7 +495,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
             }}
             disabled={saving}
           >
-            Cancel
+            {t('import.espn.cancel')}
           </button>
         )}
       </div>
@@ -488,13 +506,15 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
     <div className="af-espn" data-connected={status === 'connected' ? 'true' : 'false'}>
       {status === 'connected' && !editing ? (
         <div className="af-espn-connected">
-          <span className="af-espn-badge af-num">ESPN connected</span>
+          <span className="af-espn-badge af-num">{t('import.espn.badge')}</span>
           {updatedAt ? (
-            <span className="af-espn-since">since {new Date(updatedAt).toLocaleDateString()}</span>
+            <span className="af-espn-since">
+              {tInterpolate('import.espn.since', { date: new Date(updatedAt).toLocaleDateString() })}
+            </span>
           ) : null}
           <span className="af-espn-connected-actions">
             <button type="button" className="af-btn af-btn--ghost" onClick={() => setEditing(true)}>
-              Update cookies
+              {t('import.espn.updateCookies')}
             </button>
             <button
               type="button"
@@ -502,7 +522,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
               onClick={() => void handleDisconnect()}
               disabled={disconnecting}
             >
-              {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+              {disconnecting ? t('import.espn.disconnecting') : t('import.espn.disconnect')}
             </button>
           </span>
         </div>
@@ -527,20 +547,18 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
               <span className="af-espn-dot" aria-hidden />
               <span className="af-label">
                 {extensionStatus === 'checking'
-                  ? 'Looking for the extension'
+                  ? t('import.espn.extChecking')
                   : extensionReady
-                    ? 'Extension detected'
-                    : 'Extension not installed'}
+                    ? t('import.espn.extDetected')
+                    : t('import.espn.extNotInstalled')}
               </span>
               <EspnHint />
             </p>
             <h3 className="af-espn-h">
-              {extensionReady ? 'Connect with 1 click' : 'One click, once it is installed'}
+              {extensionReady ? t('import.espn.oneClick') : t('import.espn.oneClickPending')}
             </h3>
             <p className="af-espn-body">
-              {extensionReady
-                ? 'We read only your ESPN league cookies, in your own browser, and store them encrypted to import your leagues — nothing else.'
-                : 'Add the AllFantasy extension once and a single click connects any private ESPN league. It reads only your ESPN league cookies, stored encrypted — nothing else.'}
+              {extensionReady ? t('import.espn.readyBody') : t('import.espn.installBody')}
             </p>
             {extensionReady ? (
               <button
@@ -550,7 +568,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
                 disabled={oneClickConnecting || espnSessionMissing}
                 data-testid="espn-one-click-connect"
               >
-                {oneClickConnecting ? 'Connecting…' : 'Connect with 1 click'}
+                {oneClickConnecting ? t('import.espn.connecting') : t('import.espn.oneClick')}
               </button>
             ) : EXTENSION_STORE_URL ? (
               <a
@@ -559,7 +577,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
                 target="_blank"
                 rel="noreferrer noopener"
               >
-                Install the extension &rarr;
+                {t('import.espn.install')}
               </a>
             ) : (
               /*
@@ -569,10 +587,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
                 as the primary path. It returns the moment
                 NEXT_PUBLIC_ESPN_EXTENSION_STORE_URL is set.
               */
-              <p className="af-espn-note">
-                The extension isn&rsquo;t published yet &mdash; use the cookie paste below for
-                now. It is the same encrypted storage either way.
-              </p>
+              <p className="af-espn-note">{t('import.espn.notPublished')}</p>
             )}
             {oneClickError && (
               <p className="af-espn-msg af-espn-msg--error" role="alert">
@@ -593,8 +608,8 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
                 !
               </span>
               <span>
-                <strong>Log into ESPN first.</strong> We couldn&rsquo;t find an ESPN session in
-                this browser, so there are no league cookies to read yet.
+                <strong>{t('import.espn.sessionMissingStrong')}</strong>{' '}
+                {t('import.espn.sessionMissingBody')}
               </span>
             </p>
           ) : null}
@@ -607,13 +622,14 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
               aria-expanded={manualOpen}
               onClick={() => setManualOpenedByUser((v) => !v)}
             >
-              <span className="af-label">Manual fallback</span>
+              <span className="af-label">{t('import.espn.manualFallback')}</span>
               <span className="af-espn-fallback-lead">
-                Paste your SWID and espn_s2 cookie values instead &mdash;{' '}
-                <strong>stored encrypted</strong>.
+                {renderRich(t('import.espn.fallbackLead'), {
+                  encrypted: <strong>{t('import.espn.storedEncrypted')}</strong>,
+                })}
               </span>
               <span className="af-espn-fallback-cue">
-                {manualOpen ? 'Hide the cookie form' : 'Paste cookies manually →'}
+                {manualOpen ? t('import.espn.hideForm') : t('import.espn.pasteManually')}
               </span>
             </button>
             {manualOpen ? <div className="af-espn-fallback-body">{manualForm}</div> : null}
@@ -638,19 +654,16 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
       */}
       {showForm ? (
         <p className="af-espn-note af-espn-note--mobile">
-          <LockGlyph /> On a phone? Extensions don&rsquo;t work on most mobile browsers, and the
-          cookie below has to be copied out of a desktop browser&rsquo;s developer tools. Open{' '}
-          <strong>allfantasy.ai</strong> on your computer, sign in as the same account, and connect
-          ESPN there.{' '}
           {/*
-            ⚠ THE SECOND SENTENCE IS THE ONE THAT CHANGES THE ERRAND, and it is only true because
-            `league_auths` is keyed on the USER. The connection is not tied to the device that made
-            it, so the phone needs nothing handed to it — it just has to look again, which the
-            visibility effect above now does. Telling someone to "come back and press Retry" when
-            the screen updates itself is a worse instruction than telling them it will.
+            ⚠ THE LAST SENTENCE OF `import.espn.mobileNote` IS THE ONE THAT CHANGES THE ERRAND, and
+            it is only true because `league_auths` is keyed on the USER. The connection is not tied
+            to the device that made it, so the phone needs nothing handed to it — it just has to
+            look again, which the visibility effect above now does. Telling someone to "come back
+            and press Retry" when the screen updates itself is a worse instruction than telling
+            them it will.
           */}
-          This page will notice by itself when you come back &mdash; you won&rsquo;t need to start
-          over, and you only have to do it once.
+          <LockGlyph />{' '}
+          {renderRich(t('import.espn.mobileNote'), { site: <strong>allfantasy.ai</strong> })}
         </p>
       ) : null}
     </div>
@@ -659,13 +672,14 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
 
 /** 6b's `?` beside the extension status, carrying the trust explanation. */
 function EspnHint() {
+  const { t } = useOptionalLanguage()
   const [open, setOpen] = useState(false)
   return (
     <span className="af-espn-hint">
       <button
         type="button"
         className="af-espn-hint-btn"
-        aria-label="How the ESPN extension works"
+        aria-label={t('import.espn.hintAria')}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         onMouseEnter={() => setOpen(true)}
@@ -674,9 +688,7 @@ function EspnHint() {
         ?
       </button>
       <span className="af-espn-hint-bubble" role="tooltip" hidden={!open}>
-        ESPN gives no public way to read a private league. The AllFantasy extension reads only
-        your ESPN league cookies, in your own browser, and sends them to your account stored
-        encrypted. It never reads any other site.
+        {t('import.espn.hintBody')}
       </span>
     </span>
   )

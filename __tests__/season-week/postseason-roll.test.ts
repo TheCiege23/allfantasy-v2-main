@@ -227,3 +227,23 @@ describe('linked tournament ownership', () => {
     expect(finalizeSeason).not.toHaveBeenCalled()
   })
 })
+
+
+describe('rotisserie postseason routing', () => {
+  beforeEach(() => findManySeasons.mockResolvedValue([{...SEASON,league:{settings:{scoring_mode:'roto'}},status:'regular_season_complete'}]))
+  it('finalizes cumulative standings without generating or advancing a bracket', async () => {
+    finalizeSeason.mockResolvedValue({ok:true,championRosterId:'roto-winner',offseasonEntered:true})
+    expect(await rollPostseason()).toMatchObject({finalized:1,generated:0,advanced:0})
+    expect(generateBracket).not.toHaveBeenCalled()
+    expect(advanceRound).not.toHaveBeenCalled()
+    expect(finalizeSeason).toHaveBeenCalledTimes(1)
+  })
+  it('writes nothing during a roto dry run', async () => {
+    expect(await rollPostseason({dryRun:true})).toMatchObject({held:1,finalized:0})
+    expect(finalizeSeason).not.toHaveBeenCalled()
+  })
+  it('holds a tied or incompletely scored roto season', async () => {
+    finalizeSeason.mockResolvedValue({ok:false,code:'NO_WINNER'})
+    expect(await rollPostseason()).toMatchObject({held:1,finalized:0,outcomes:[expect.objectContaining({detail:'NO_WINNER'})]})
+  })
+})

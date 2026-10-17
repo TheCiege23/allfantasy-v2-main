@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Switch league (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <header style="padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid rgba(255,255,255,.07)">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <span class="rail-home" style="margin: 0; width: 40px; height: 40px">AF</span>
+      <h1 style="margin: 0; flex: 1; font-size: 24px; font-weight: 700; letter-spacing: -0.03em">Your leagues</h1>
+      <a class="iconbtn" href="Mobile.dc.html" aria-label="Close">×</a>
+    </div>
+    <label class="search" style="max-width: none; flex: none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Find a league" aria-label="Find a league"></label>
+    <div class="seg" role="radiogroup" aria-label="Filter"><sc-for list="{{filters}}" as="f" hint-placeholder-count="4"><button role="radio" aria-checked="{{f.on}}" class="{{f.cls}}" onClick="{{f.pick}}">{{f.label}}</button></sc-for></div>
+  </header>
+
+  <div class="ph-scroll" style="padding: 8px 8px 12px">
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+      <span class="lbl" style="padding: 14px 10px 8px; color: {{g.color}}">{{g.title}}</span>
+      <sc-for list="{{g.items}}" as="l" hint-placeholder-count="3">
+        <a href="Mobile.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 12px; color: #eef0fa; background: {{l.bg2}}">
+          <span class="av" style="width: 46px; height: 46px; border-radius: 999px; flex: none; background: {{l.bg}}; color: {{l.fg}}; box-shadow: 0 0 0 2px #07080d, 0 0 0 3.5px {{l.ring}}">{{l.ini}}<span class="av-tag" style="background: {{l.tagBg}}; color: {{l.tagFg}}; border-color: #07080d">{{l.tag}}</span></span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px">
+            <span style="font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{l.name}}</span>
+            <span style="font-size: 12px; font-weight: 700; color: {{l.ring}}">{{l.status}}</span>
+            <span class="num" style="font-size: 10px; color: #7d84a8">{{l.meta}}</span>
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px">
+            <span class="num" style="font-size: 13px; font-weight: 600; color: {{l.ring}}">{{l.mini}}</span>
+            <sc-if value="{{l.unread}}" hint-placeholder-val="{{ false }}"><span class="av-dot" style="position: static; border: 0">{{l.unread}}</span></sc-if>
+          </span>
+        </a>
+      </sc-for>
+    </sc-for>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 28px; border-top: 1px solid rgba(255,255,255,.07); background: #0b0d14">
+    <button class="btn btn-p">Create league</button>
+    <button class="btn btn-g">Import league</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { f: 'all' }; }
+  renderVals() {
+    const G = '#34d399', R = '#fb5b78', A = '#fbbf24', C = '#22d3ee';
+    const L = [
+      ['Blah','B','#10131c',C,'AF',A,'SETUP','Draft Mon, Oct 19 · 4 steps left','2026 · 12 teams · Half PPR',3,true,'needs'],
+      ['Pirate League!','PL','#3a1d55','#dcb4ff','SLP',R,'70–74','Losing · 1 starter Out','2026 · 14 teams · PPR',13,false,'needs'],
+      ['Parbur','P','#1f2a4d','#9fd4ff','SLP',G,'88–71','Winning · 3 left to play','2026 · 12 teams · PPR',0,false,'live'],
+      ['KOTH','K','#3a2410','#f0b46a','SLP',G,'101–93','Winning · 2 left to play','2026 · 10 teams · PPR',16,false,'live'],
+      ['Four Horsemen All-Stars 2023','4H','#12352a','#7ff0c4','SLP',R,'62–80','Losing · 4 left to play','2026 · 4 teams · Dynasty',0,false,'live'],
+      ['Guillotine League 26','GL','#4a1414','#ffb4b4','SLP',G,'8TH','+35.9 over the cut','2026 · 14 teams · Guillotine',0,false,'live'],
+      ['Elimination Station 2','ES','#123244','#7fd4f0','SLP',G,'8TH','+17.5 over the cut','2026 · 14 teams · Guillotine',0,false,'live']
+    ].map(([name,ini,bg,fg,tag,ring,mini,status,meta,unread,nat,grp]) => ({ name,ini,bg,fg,tag,ring,mini,status,meta,unread,nat,grp,
+      tagBg: nat ? C : '#2a2f4a', tagFg: nat ? '#04050c' : '#c3c9e6', bg2: name === 'Blah' ? 'rgba(34,211,238,.06)' : 'transparent' }));
+    const f = this.state.f;
+    const keep = l => f === 'all' || (f === 'native' && l.nat) || (f === 'synced' && !l.nat) || (f === 'live' && l.grp === 'live');
+    const groups = [['needs','Needs you',A],['live','Live now · Wk 5',G]]
+      .map(([id,title,color]) => ({ title, color, items: L.filter(l => l.grp === id && keep(l)) }))
+      .filter(g => g.items.length);
+    const filters = [['all','All 7'],['native','On AF'],['synced','Synced'],['live','Live']].map(([id,label]) => ({ label,
+      on: f === id ? 'true' : 'false', cls: 'sg' + (f === id ? ' sg-on' : ''), pick: () => this.setState({ f: id }) }));
+    return { groups, filters };
+  }
+}
+</script>
+</body>
+</html>

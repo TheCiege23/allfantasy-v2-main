@@ -19,6 +19,7 @@
 		AF0CA1000000000000000001 /* AppBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000011 /* AppBridgeViewController.swift */; };
 		AF0CA1000000000000000002 /* CareerWidgetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000012 /* CareerWidgetPlugin.swift */; };
 		AF0CA1000000000000000003 /* CareerWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000013 /* CareerWidgetShared.swift */; };
+		AF0CA1000000000000000004 /* AppleIAPHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000014 /* AppleIAPHandler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		AF0CA1000000000000000011 /* AppBridgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBridgeViewController.swift; sourceTree = "<group>"; };
 		AF0CA1000000000000000012 /* CareerWidgetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CareerWidgetPlugin.swift; sourceTree = "<group>"; };
 		AF0CA1000000000000000013 /* CareerWidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CareerWidgetShared.swift; sourceTree = "<group>"; };
+		AF0CA1000000000000000014 /* AppleIAPHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIAPHandler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +76,7 @@
 				AF0CA1000000000000000011 /* AppBridgeViewController.swift */,
 				AF0CA1000000000000000012 /* CareerWidgetPlugin.swift */,
 				AF0CA1000000000000000013 /* CareerWidgetShared.swift */,
+				AF0CA1000000000000000014 /* AppleIAPHandler.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -172,6 +175,7 @@
 				AF0CA1000000000000000001 /* AppBridgeViewController.swift in Sources */,
 				AF0CA1000000000000000002 /* CareerWidgetPlugin.swift in Sources */,
 				AF0CA1000000000000000003 /* CareerWidgetShared.swift in Sources */,
+				AF0CA1000000000000000004 /* AppleIAPHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

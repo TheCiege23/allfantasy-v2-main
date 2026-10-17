@@ -1,3 +1,5 @@
+import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
+
 /**
  * A stored manager or team name, or null when what is stored is a placeholder rather than a name.
  *
@@ -35,5 +37,9 @@ export function rosterLabel(names: ReadonlyArray<string | null | undefined>, ros
     if (real) return real
   }
   const id = String(rosterId ?? '').trim()
+  // 🛑 A departed Sleeper manager's games are keyed `former:sleeper:<ownerId>`, which is an internal
+  // key, not a roster number: Rivalry Radar printed "Team former:sleeper:843306215671996416" (production
+  // 2026-10-06). Same label Draft HQ and season history already use for these keys.
+  if (parseFormerSleeperKey(id)) return 'Former manager'
   return id ? `Team ${id}` : 'Opponent'
 }

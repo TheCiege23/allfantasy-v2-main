@@ -34,6 +34,42 @@ export async function getNativeMatchupOutcomes(
   week: number,
   season: number,
 ): Promise<MatchupOutcome[] | null> {
+  const results = await loadNativeWeekResults(leagueId, week, season)
+  if (!results) return null
+  const out: MatchupOutcome[] = []
+  for (const r of results) {
+    if (!r.final || !r.homeRosterId || !r.awayRosterId) continue
+    if (r.homeScore === r.awayScore) continue // a tie infects nobody
+    out.push(
+      r.homeScore > r.awayScore
+        ? { matchupId: r.matchupId, winnerRosterId: r.homeRosterId, loserRosterId: r.awayRosterId }
+        : { matchupId: r.matchupId, winnerRosterId: r.awayRosterId, loserRosterId: r.homeRosterId },
+    )
+  }
+  return out
+}
+
+/** One head-to-head matchup of a native week, in the zombie engine's roster id space. */
+export type NativeWeekResult = {
+  matchupId: string
+  /** League roster ids; null when the season roster cannot be placed. */
+  homeRosterId: string | null
+  awayRosterId: string | null
+  homeScore: number
+  awayScore: number
+  final: boolean
+}
+
+/**
+ * Every real (non-bye) matchup of a native week, mapped to league roster ids, with its scores. Infection
+ * and weekly winnings both read this, so one week has one result. Null for a league with no season that
+ * year (an imported league).
+ */
+export async function loadNativeWeekResults(
+  leagueId: string,
+  week: number,
+  season: number,
+): Promise<NativeWeekResult[] | null> {
   const redraftSeason = await prisma.redraftSeason.findFirst({
     where: { leagueId, season },
     select: { id: true },
@@ -61,22 +97,18 @@ export async function getNativeMatchupOutcomes(
     return rosters.find((r) => r.platformUserId === ownerId)?.id ?? null
   }
 
-  const out: MatchupOutcome[] = []
+  const out: NativeWeekResult[] = []
   for (const m of matchups) {
     if (!m.awayRosterId) continue // a bye
     const status = String(m.status ?? '').toLowerCase()
-    if (status !== 'final' && status !== 'complete' && status !== 'completed') continue
-    const home = Number(m.homeScore ?? 0)
-    const away = Number(m.awayScore ?? 0)
-    if (home === away) continue // a tie infects nobody
-    const homeRoster = toRoster(m.homeRosterId)
-    const awayRoster = toRoster(m.awayRosterId)
-    if (!homeRoster || !awayRoster) continue
-    out.push(
-      home > away
-        ? { matchupId: m.id, winnerRosterId: homeRoster, loserRosterId: awayRoster }
-        : { matchupId: m.id, winnerRosterId: awayRoster, loserRosterId: homeRoster },
-    )
+    out.push({
+      matchupId: m.id,
+      homeRosterId: toRoster(m.homeRosterId),
+      awayRosterId: toRoster(m.awayRosterId),
+      homeScore: Number(m.homeScore ?? 0),
+      awayScore: Number(m.awayScore ?? 0),
+      final: status === 'final' || status === 'complete' || status === 'completed',
+    })
   }
   return out
 }

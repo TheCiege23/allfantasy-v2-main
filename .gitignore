@@ -167,3 +167,6 @@ lint-report.json
 
 # Firebase app configuration from the owner's PWABuilder ZIP (keep local)
 ios-pwabuilder/src/AllFantasy/GoogleService-Info.plist
+
+# Local licensed sports-provider captures for tournament contract analysis.
+artifacts/tournament-provider-samples/

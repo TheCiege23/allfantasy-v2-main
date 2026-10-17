@@ -43,8 +43,9 @@ catalog. See §8.
 ### 3a. /core depths (`lib/core-app/coreDepthAccess.ts:41-72`)
 
 - **Before launch:** every depth is open to everyone, marked "Free until Oct 15 — then {plan}"
-  (`components/core-app/CoreDepthLock.tsx:69-77`).
-- **After launch:** a viewer without the plan sees the lock card with "See {plan}" (`:62-64`).
+  (`components/core-app/CoreDepthLock.tsx:73-82`). Spanish readers get «Gratis hasta el 15 de octubre —
+  luego, {plan}»; the words live in `lib/core-app/coreDepthLockCopy.ts`, the gate does not read the language.
+- **After launch:** a viewer without the plan sees the lock card with "See {plan}" / «Ver {plan}» (`:66-68`).
 - **If the plan lookup fails after launch, the depth stays LOCKED** (`lib/core-app/corePaywall.ts:30`).
 
 | Depth | Plan | Where |
@@ -62,8 +63,8 @@ catalog. See §8.
 
 | Key | Plan feature | Routes |
 |---|---|---|
-| `start_sit_ai` | `pro_start_sit` | `ai-tools/start-sit/analyze`, `leagues/[id]/ai/start-sit`, `start-sit/chimmy` |
-| `trade_ai` | `trade_analyzer` | `ai/trade-analysis`, `dynasty-trade-analyzer`, `trade-value/chimmy`, `trades/analyze` |
+| `start_sit_ai` | `pro_start_sit` | `leagues/[id]/ai/start-sit`, `start-sit/chimmy` |
+| `trade_ai` | `trade_analyzer` | `ai/trade-analysis`, `dynasty-trade-analyzer`, `trades/analyze` |
 | `trade_finder` | `trade_analyzer` | `trade-finder` (3/day anonymous until launch) |
 | `draft_ai` | `pro_draft_ai` | `ai/draft-help`, `draft-ai` |
 | `chimmy_voice` | `ai_chat` | `chimmy/voice` |
@@ -130,14 +131,32 @@ Each needs a *production* read, and the two kinds differ:
   (`RECIPES_SEND_TOGGLE`, `lib/core-app/commissioner/recipes.ts:50`), so its production value is a
   database read. Default off; commissioners can save recipes and nothing sends.
 
-- [ ] **Founding coupon.**
+- [x] **Founding coupon.** ✅ **Done 2026-10-04.** `FOUNDING_MEMBER_2026` in LIVE Stripe (`acct_1ReIO1Ht5tjM1ovR`,
+  the same account production's key uses): **20% off, repeating 12 months**, no redemption cap, no expiry.
+  `STRIPE_FOUNDING_COUPON_ID=FOUNDING_MEMBER_2026` and `FOUNDING_OFFER_LABEL="20% off your first year"`
+  set on `allfantasy-v2-main`; `/pricing` signed in shows "Founding member: 20% off your first year,
+  applied automatically at checkout." Because it is not `forever`, the email drops "doesn't expire".
   - Create it in the LIVE Stripe account.
   - Set `STRIPE_FOUNDING_COUPON_ID` on `allfantasy-v2-main`, plus `FOUNDING_OFFER_LABEL` if you want
     the discount named in copy.
   - While it is unset, no page mentions founding pricing and checkout accepts promo codes as before
     (`foundingMember.ts:15-17,27-30`). This is a Railway variable write, so it redeploys.
-  - Current value: **UNVERIFIED.**
-- [ ] **Tell existing users.** Decided 2026-09-24: an offer by **Oct 8**. Nothing in code sends it.
+  - **Read 2026-10-04 (presence only, no value printed): NOT SET**, and no `FOUNDING_OFFER_LABEL`. Still the
+    blocker for the email below.
+- [x] **Tell existing users.** Decided 2026-09-24: an offer by **Oct 8**. ✅ **SENT 2026-10-06 04:07 UTC:
+  83 founding members** (82 en, 1 es) via `scripts/send-founding-offer.ts` — a test to the owner on
+  2026-10-04 first (landed in the Inbox), then 82 with 0 failures; Resend reported delivered, no
+  bounces. The claim ledger records all 83, so a re-run sends nothing. Skipped at send time: 45
+  unverified, 5 undeliverable domains, 5 opted out.
+  - **Sender built 2026-10-04: `scripts/send-founding-offer.ts`.** Dry run by default; `--apply` refuses
+    unless the key is LIVE, the coupon is set and valid in live Stripe, the paywall has not started and
+    links point at production (`foundingSendBlockers`, unit-tested). Once per address (claim ledger),
+    honours unsubscribes AND `productUpdates = false`, verified emails only unless
+    `--include-unverified`. Prints "doesn't expire" only for a `forever` coupon; Spanish never quotes
+    the English label. **Dry run against production 2026-10-04:** 136 accounts before launch → **81
+    recipients** (80 en, 1 es); skipped 45 unverified, 5 undeliverable domains, 5 opted out. The only
+    blocker: the coupon. Run it with `railway run` from the linked primary checkout (header has the
+    command); send `--only=<your email> --apply` to yourself first.
   - **Copy drafted 2026-09-30: [`FOUNDING_OFFER_EMAIL_DRAFT.md`](./FOUNDING_OFFER_EMAIL_DRAFT.md)** —
     subject options, an English body in two variants (with and without `FOUNDING_OFFER_LABEL`), a
     Spanish note, and every claim traced to the file it came from.
@@ -150,7 +169,7 @@ Each needs a *production* read, and the two kinds differ:
   - ⚠ One sentence in the draft the code **cannot** verify: "your founding pricing doesn't expire"
     is true only if the coupon is `forever` rather than `once`/`repeating`. Duration lives in Stripe
     (`foundingMember.ts:10-13`), so check it against the coupon you create or cut the clause.
-- [ ] **Live price IDs.** The 11 `STRIPE_PRICE_AF_*` variables (8 subscription, 3 token) must point at
+- [x] **Live price IDs.** The 11 `STRIPE_PRICE_AF_*` variables (8 subscription, 3 token) must point at
   live prices matching the catalog:
 
   | Plan | Monthly | Yearly |
@@ -163,12 +182,19 @@ Each needs a *production* read, and the two kinds differ:
   Tokens: $4.99 / $8.99 / $19.99 (`lib/monetization/catalog.ts`).
   `scripts/verify-stripe-price-parity.ts` checks every price. It is hand-run only (not in
   `package.json`). Run it with a read-only view of the live key.
+  - ✅ **Run 2026-10-04 against the LIVE key via `railway run` (no value printed): 11/11 ok.** The script
+    now also checks each price is ACTIVE, in USD and recurring on the catalog's interval (one-time for
+    token packs) — it used to compare the amount only, so a yearly SKU on a monthly-billing price read
+    "ok". A positive control (yearly pointed at the monthly price, in-process only) reported both the
+    amount and "bills every month, catalog says every year", exit 1.
 - [x] **Stripe webhook events.** Fixed by the owner 2026-09-24 and verified read-only the same day: 26
   events, including the 7 the handler needs. Only re-check if the endpoint has been edited since.
-- [ ] **`commissioner_recipes_send_enabled`** (platform toggle, default off).
+- [x] **`commissioner_recipes_send_enabled`** (platform toggle, default off). ✅ **Confirmed ON for launch by
+  the owner, 2026-10-06** — the `true` read below is intended.
   - Commissioners can save automation recipes; nothing sends until this is on
     (`runCommissionerRecipesJob.ts:332`), and the hub says so (`AutomationRecipes.tsx:78-82`).
-  - Decide whether it is on for launch. Production value: **UNVERIFIED.**
+  - Decide whether it is on for launch. **Production value read 2026-10-04: `true` — it is ON.**
+    Someone enabled it after this list was written; confirm that was intended for launch.
 
 ## 6. Engineering checks before launch
 

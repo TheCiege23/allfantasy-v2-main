@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import type { LeagueVisibility } from '@/lib/league-privacy'
+import ManagerClassPanel from '@/components/app/settings/ManagerClassPanel'
 
 type PrivacySettings = {
   visibility: LeagueVisibility
@@ -380,6 +381,8 @@ export default function LeaguePrivacyAndInvitesPanel({ leagueId }: { leagueId: s
           </div>
         </div>
       )}
+
+      {isCommissioner && <ManagerClassPanel leagueId={leagueId} />}
 
       {isCommissioner && (
         <div className="flex items-center gap-2 pt-2">

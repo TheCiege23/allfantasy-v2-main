@@ -1,7 +1,7 @@
-import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-drafts.css'
 import type { DraftHqAllData, DraftHqAllRow } from '@/lib/core-app/draftHqAll'
+import { DashDraftsBandView } from '@/components/core-app/screens/DashDraftsBandView'
 
 /**
  * Drafts on the clock — the band that LEADS the /core home whenever the
@@ -36,30 +36,12 @@ import type { DraftHqAllData, DraftHqAllRow } from '@/lib/core-app/draftHqAll'
 
 const VISIBLE_CAP = 4
 
-function prettyStatus(raw: string): string {
-  const s = raw.trim().replace(/_/g, ' ').toUpperCase()
-  return s.length > 0 ? s : 'LIVE'
-}
-
-/**
- * Coarse pick-clock label from a millisecond delta. Server paint only — the
- * page does not tick, so seconds precision would just be precisely stale.
- */
-function formatPickClock(ms: number): string {
-  if (ms <= 0) return 'Pick timer expired'
-  if (ms < 60_000) return 'Under 1 min on the pick clock'
-  const totalMins = Math.floor(ms / 60_000)
-  if (totalMins < 60) return `${totalMins} min on the pick clock`
-  const hours = Math.floor(totalMins / 60)
-  const mins = totalMins % 60
-  return `${hours}h ${String(mins).padStart(2, '0')}m on the pick clock`
-}
-
-function pickClockOf(row: DraftHqAllRow, now: Date): string | null {
+/** Milliseconds left on the pick clock at `now` — the view words it (coarse, server paint only). */
+function pickClockMs(row: DraftHqAllRow, now: Date): number | null {
   if (!row.pickExpiresAt) return null
   const t = new Date(row.pickExpiresAt).getTime()
   if (Number.isNaN(t)) return null
-  return formatPickClock(t - now.getTime())
+  return t - now.getTime()
 }
 
 export function DashDraftsBand({ data, now }: { data: DraftHqAllData | null; now: Date }) {
@@ -70,67 +52,24 @@ export function DashDraftsBand({ data, now }: { data: DraftHqAllData | null; now
   const visible = live.slice(0, VISIBLE_CAP)
   const overflow = live.length - visible.length
 
+  /*
+   * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This band decides what to say — which drafts are
+   * live, and each pick clock against the server's `now` — and DashDraftsBandView says it in the
+   * reader's language. Only the fields each card shows cross the boundary.
+   */
   return (
-    <section className="af-core af-drafts" aria-label="Drafts on the clock">
-      <div className="af-drafts-head">
-        <span className="af-label af-drafts-kicker">Drafts on the clock</span>
-        <span className="af-drafts-count af-num">
-          {live.length === 1 ? '1 draft live now' : `${live.length} drafts live now`}
-        </span>
-      </div>
-
-      <div className="af-drafts-grid">
-        {visible.map((row) => {
-          const clock = pickClockOf(row, now)
-          return (
-            <article key={row.leagueId} className="af-drafts-card">
-              <div className="af-drafts-id">
-                {/* The league's own avatar — six live cards named "…12-Team NFL
-                    Redraft League" are unreadable without one. Missing avatar
-                    renders the name's initials, not a broken image. */}
-                <span className="af-drafts-tile" aria-hidden>
-                  {row.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={row.imageUrl} alt="" />
-                  ) : (
-                    row.leagueName.trim().slice(0, 2).toUpperCase()
-                  )}
-                </span>
-                <h3 className="af-drafts-name">{row.leagueName}</h3>
-                <span className="af-drafts-state af-num">{prettyStatus(row.rawStatus)}</span>
-              </div>
-
-              <p className="af-drafts-meta af-num">
-                {[
-                  row.yourSlot != null ? `Your slot ${row.yourSlot}` : null,
-                  row.picksMade != null
-                    ? `${row.picksMade} ${row.picksMade === 1 ? 'pick' : 'picks'} made`
-                    : 'No picks recorded yet',
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-
-              <p className="af-drafts-clock af-num" data-known={clock ? 'true' : 'false'}>
-                {clock ?? 'On the clock — no pick timer reported'}
-              </p>
-
-              <Link
-                className="af-drafts-open"
-                href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}
-              >
-                Open draft room
-              </Link>
-            </article>
-          )
-        })}
-      </div>
-
-      {overflow > 0 ? (
-        <Link className="af-drafts-more" href="/core/draft-hq">
-          +{overflow} more in Draft HQ
-        </Link>
-      ) : null}
-    </section>
+    <DashDraftsBandView
+      liveCount={live.length}
+      visible={visible.map((row) => ({
+        leagueId: row.leagueId,
+        leagueName: row.leagueName,
+        imageUrl: row.imageUrl,
+        rawStatus: row.rawStatus,
+        yourSlot: row.yourSlot,
+        picksMade: row.picksMade,
+        clockMs: pickClockMs(row, now),
+      }))}
+      overflow={overflow}
+    />
   )
 }

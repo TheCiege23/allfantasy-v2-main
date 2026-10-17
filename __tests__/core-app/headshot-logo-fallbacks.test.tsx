@@ -6,6 +6,8 @@ import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { teamLogoUrl as mediaTeamLogoUrl } from '@/lib/media-url'
+import { isNotATeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 
 /*
  * A URL on file is not an image that loads: Sleeper refuses ~10% of current NFL ids, and a guessed
@@ -63,5 +65,24 @@ describe('a team logo is never guessed for something that is not a team', () => 
   it('gives the trade screens nothing for a free agent, through the safe helper', () => {
     expect(teamLogoUrl('NFL', 'FA')).toBeNull()
     expect(teamLogoUrl('NFL', 'KC')).toMatch(/kc\.png$/)
+  })
+})
+
+describe('lib/media-url never builds a crest for a non-team either', () => {
+  it('returns an empty string for a free agent outside NFL, where it builds the path itself', () => {
+    expect(mediaTeamLogoUrl('FA', 'NBA')).toBe('')
+    expect(mediaTeamLogoUrl('N/A', 'MLB')).toBe('')
+    expect(mediaTeamLogoUrl('FA', 'NFL')).toBe('')
+  })
+
+  it('still builds one for a real club', () => {
+    expect(mediaTeamLogoUrl('LAL', 'NBA')).toMatch(/\/nba\/500\/lal\.png$/)
+    expect(mediaTeamLogoUrl('KC', 'NFL')).toMatch(/kc\.png$/)
+  })
+
+  it('isNotATeam is the one rule both paths read', () => {
+    expect(isNotATeam(' fa ')).toBe(true)
+    expect(isNotATeam(null)).toBe(true)
+    expect(isNotATeam('KC')).toBe(false)
   })
 })

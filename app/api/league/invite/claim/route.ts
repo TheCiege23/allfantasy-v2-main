@@ -9,6 +9,7 @@ import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
+import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
 
 const claimSchema = z.object({
   token: z.string().min(1),
@@ -86,6 +87,26 @@ export async function POST(req: NextRequest) {
       { error: 'This imported team belongs to a different linked manager account.' },
       { status: 403 }
     )
+  }
+
+  /*
+   * The division gate (ADR F2.10a). A 'matched' claim is the player's OWN team — their linked
+   * platform account already manages it — so they already play in this league and are exempt.
+   * An 'open' seat is gated: for canonical and commissioner-minted leagues this token IS the
+   * league's public join code, so it is only an invitation when the league is private.
+   */
+  if (eligibility === 'open') {
+    const divisionGate = await evaluateJoinDivisionGate({
+      userId,
+      leagueId: invite.leagueId,
+      credential: { kind: 'invite_token', token },
+    })
+    if (divisionGate.outcome === 'deny') {
+      return NextResponse.json(
+        divisionGateRefusal(divisionGate, invite.leagueId),
+        { status: 403 },
+      )
+    }
   }
 
   const existingClaim = await prisma.leagueManagerClaim.findFirst({

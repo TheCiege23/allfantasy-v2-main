@@ -1,0 +1,38 @@
+.af-setup-checklist {
+  --setup-surface: var(--surface, var(--panel, #0d1020));
+  --setup-line: var(--line, rgba(128, 144, 180, .2));
+  --setup-accent: var(--accent, #22d3ee);
+  margin: 16px 16px 0;
+  padding: 18px;
+  border: 1px solid var(--setup-line);
+  border-radius: 12px;
+  background: var(--setup-surface);
+  color: var(--text, #eef0fa);
+}
+.af-setup-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.af-setup-heading > button:first-child { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.af-setup-heading > button:last-child { margin-left: auto; }
+.af-setup-heading button { min-height: 36px; padding: 6px; }
+.af-setup-heading button:disabled { opacity: .45; }
+.af-setup-count, .af-setup-summary, .af-setup-steps p { color: var(--muted, #a3acc9); font-size: 12px; line-height: 1.6; }
+.af-setup-checklist progress { display: block; width: 100%; height: 5px; margin: 14px 0 10px; accent-color: var(--setup-accent); border: 0; border-radius: 6px; overflow: hidden; }
+.af-setup-checklist progress::-webkit-progress-bar { background: var(--setup-line); }
+.af-setup-checklist progress::-webkit-progress-value { background: var(--setup-accent); }
+.af-setup-checklist progress::-moz-progress-bar { background: var(--setup-accent); }
+.af-setup-steps { list-style: none; margin: 12px 0 0; padding: 0; }
+.af-setup-steps li { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--setup-line); }
+.af-setup-steps h3 { font-size: 13px; font-weight: 650; }
+.af-setup-icon { color: var(--muted, #a3acc9); }
+.af-setup-steps [data-done='true'] .af-setup-icon { color: var(--setup-accent); }
+.af-setup-optional { margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--muted, #a3acc9); }
+.af-setup-steps :is(button, a) { display: inline-flex; justify-content: center; align-items: center; min-height: 44px; padding: 8px 12px; border: 1px solid var(--setup-line); border-radius: 8px; font-size: 12px; color: var(--text, #eef0fa); }
+.af-setup-steps :is(button, a):hover { border-color: var(--setup-accent); }
+.af-setup-checklist :is(button, a):focus-visible { outline: 2px solid var(--setup-accent); outline-offset: 3px; }
+.af-setup-error { padding-top: 12px; font-size: 13px; }
+.af-setup-error button { text-decoration: underline; min-height: 44px; margin-left: 8px; }
+@media (max-width: 599px) {
+  .af-setup-checklist { padding: 14px; }
+  .af-setup-count { flex-basis: 100%; order: 3; }
+  .af-setup-steps li { grid-template-columns: 20px minmax(0, 1fr); }
+  .af-setup-steps :is(button, a) { grid-column: 2; justify-self: start; width: 100%; }
+}

@@ -117,15 +117,15 @@ describe('AppShell left rail wrapper — no broken flex chain', () => {
   })
 })
 
-// ─── Chat visible by default ──────────────────────────────────────────────────
+// ─── Chat collapsed by default ──────────────────────────────────────────────────
 
-describe('League shell — chat visible by default on desktop', () => {
-  it('desktopChatOpen initialises to true (chat always shown on first load)', () => {
-    expect(leagueShellSrc).toContain('useState<boolean>(true)')
+describe('League shell — chat collapsed by default on desktop', () => {
+  it('desktopChatOpen initialises to false to give roster management more room', () => {
+    expect(leagueShellSrc).toContain('const [desktopChatOpen, setDesktopChatOpen] = useState<boolean>(false)')
   })
 
-  it('My Leagues right rail defaults to visible for the 40/35/25 shell', () => {
-    expect(leagueShellSrc).toContain("defaultCollapsed: false")
+  it('My Leagues right rail defaults to collapsed and keeps its saved preference', () => {
+    expect(leagueShellSrc).toContain("defaultCollapsed: true")
     expect(leagueShellSrc).toContain('af-league-myleagues-rail-collapsed')
   })
 })

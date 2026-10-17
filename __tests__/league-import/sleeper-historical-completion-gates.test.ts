@@ -139,8 +139,8 @@ describe('Sleeper historical draft sync — completion gate', () => {
     expect(result.providerCallsAvoided).toBe(1)
     // 2025 (in progress, refetched) and 2023 (finished but never imported).
     expect(getLeagueDrafts).toHaveBeenCalledTimes(2)
-    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2025')
-    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2023')
+    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2025', { strict: true })
+    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2023', { strict: true })
   })
 
   it('🛑 REGRESSION: the season being PLAYED is refetched even though it has rows', async () => {
@@ -158,7 +158,7 @@ describe('Sleeper historical draft sync — completion gate', () => {
 
     expect(result.seasonsSkippedAlreadyComplete).toBe(2) // 2024 + 2023
     expect(getLeagueDrafts).toHaveBeenCalledTimes(1)
-    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2025')
+    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2025', { strict: true })
   })
 
   it('does not call the provider at all when every season is finished and imported', async () => {
@@ -325,8 +325,8 @@ describe('🛑 Sleeper historical draft sync — each pick records who owned the
     expect(result.refreshed).toBe(true)
     const rows = (draftFactCreateMany.mock.calls[0]![0] as { data: Array<Record<string, unknown>> }).data
     expect(rows.map((r) => r.playerId)).toEqual(['p1', 'p2'])
-    expect(rows[0]!.metadata).toEqual({ ownerSleeperId: 'sl-a' })
-    expect(rows[1]).not.toHaveProperty('metadata')
+    expect(rows[0]!.metadata).toMatchObject({ ownerSleeperId: 'sl-a' })
+    expect(rows[1]!.metadata).not.toHaveProperty('ownerSleeperId')
   })
 
   /*
@@ -350,9 +350,11 @@ describe('🛑 Sleeper historical draft sync — each pick records who owned the
     await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
 
     const rows = (draftFactCreateMany.mock.calls[0]![0] as { data: Array<Record<string, unknown>> }).data
-    expect(rows[0]!.metadata).toEqual({ ownerSleeperId: 'sl-a', isKeeper: true })
-    expect(rows[1]!.metadata).toEqual({ ownerSleeperId: 'sl-a' })
-    expect(rows[2]!.metadata).toEqual({ isKeeper: true })
+    expect(rows[0]!.metadata).toMatchObject({ ownerSleeperId: 'sl-a', isKeeper: true })
+    expect(rows[1]!.metadata).toMatchObject({ ownerSleeperId: 'sl-a' })
+    expect(rows[1]!.metadata).not.toHaveProperty('isKeeper')
+    expect(rows[2]!.metadata).toMatchObject({ isKeeper: true })
+    expect(rows[2]!.metadata).not.toHaveProperty('ownerSleeperId')
   })
 
   it("🛑 credits a departed manager's picks to them, not to whoever holds their old slot now", async () => {
@@ -375,7 +377,7 @@ describe('🛑 Sleeper historical draft sync — each pick records who owned the
     const rows = (draftFactCreateMany.mock.calls[0]![0] as { data: Array<Record<string, unknown>> }).data
     // sl-b moved from slot 2 to slot 3 and claimed the team; slot 3's 2024 owner has left.
     expect(rows.map((r) => r.managerId)).toEqual(['1', '3', 'former:sleeper:sl-gone', 'former:sleeper:slot:2024:4'])
-    expect(rows[2]!.metadata).toEqual({ ownerSleeperId: 'sl-gone', coOwnerSleeperIds: ['sl-helper'] })
+    expect(rows[2]!.metadata).toMatchObject({ ownerSleeperId: 'sl-gone', coOwnerSleeperIds: ['sl-helper'] })
   })
 
   it('⚠ leaves a season alone when its rosters cannot be read', async () => {
@@ -452,5 +454,50 @@ describe('planDraftTeamRemap', () => {
       { draftId: 'y', managerId: '7' },
       { draftId: 'z', managerId: 'former:sleeper:sl-gone' },
     ])
+  })
+})
+
+
+describe('Sleeper archive persistence', () => {
+  it('persists separate same-season draft identities and the provider ownership records', async () => {
+    vi.clearAllMocks()
+    leagueFindUnique.mockResolvedValue({ id: 'league-1', platform: 'sleeper', platformLeagueId: 'lg-current', sport: 'nfl' })
+    chainMock.mockResolvedValue([{ season: 2025, externalLeagueId: 'lg-current', league: { season: '2025', status: 'in_season', scoring_settings: { rec: 1 } } }] as never)
+    rosterFindMany.mockResolvedValue([{ platformUserId: 'u1', playerData: { source_team_id: '1', source_manager_id: 'u1' } }])
+    vi.mocked(getLeagueRosters).mockResolvedValue([{ roster_id: 1, owner_id: 'u1' }] as never)
+    vi.mocked(getLeagueDrafts).mockResolvedValue([{ draft_id: 'startup', type: 'snake' }, { draft_id: 'rookie', type: 'linear' }])
+    vi.mocked(getDraftPicks).mockResolvedValue([{ player_id: 'player', roster_id: 1, picked_by: 'u1', draft_slot: 1, round: 1, pick_no: 1, is_keeper: true, metadata: { first_name: 'Player', last_name: 'Then', team: 'OLD' } }])
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([{ round: 1, roster_id: 1, owner_id: 2, previous_owner_id: 1 }]), { status: 200 })))
+    try {
+      const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1', force: true })
+      expect(result.error).toBeUndefined()
+      expect(result.importedDraftCount).toBe(2)
+      const rows = draftFactCreateMany.mock.calls[0][0].data
+      expect(rows).toHaveLength(2)
+      expect(rows.map((row: { metadata: { sourceDraftId: string } }) => row.metadata.sourceDraftId)).toEqual(['startup', 'rookie'])
+      expect(rows[0].metadata).toMatchObject({ ownerSleeperId: 'u1', isKeeper: true, selectionRosterId: '1', archiveDraft: { format: 'snake', tradeCoverage: 'provider_ownership_snapshot', tradedPicks: [{ round: 1, roster_id: 1, owner_id: 2, previous_owner_id: 1 }] } })
+    } finally { vi.unstubAllGlobals() }
+  })
+})
+
+
+describe('Sleeper archive failed refresh', () => {
+  it('keeps stored history when one draft provider read fails', async () => {
+    vi.clearAllMocks()
+    leagueFindUnique.mockResolvedValue({ id: 'league-1', platform: 'sleeper', platformLeagueId: 'lg-current', sport: 'nfl' })
+    chainMock.mockResolvedValue([{ season: 2025, externalLeagueId: 'lg-current', league: { season: '2025', status: 'in_season' } }] as never)
+    rosterFindMany.mockResolvedValue([{ platformUserId: 'u1', playerData: { source_team_id: '1', source_manager_id: 'u1' } }])
+    vi.mocked(getLeagueRosters).mockResolvedValue([{ roster_id: 1, owner_id: 'u1' }] as never)
+    vi.mocked(getLeagueDrafts).mockResolvedValue([{ draft_id: 'missing', status: 'complete' }])
+    vi.mocked(getDraftPicks).mockRejectedValueOnce(new Error('Provider temporarily unavailable'))
+    const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1', force: true })
+    expect(getDraftPicks).toHaveBeenCalledWith('missing', { strict: true })
+    expect(result.error).toContain('Provider temporarily unavailable')
+    expect(draftFactDeleteMany).not.toHaveBeenCalled()
+    expect(draftFactCreateMany).not.toHaveBeenCalled()
+    vi.mocked(getDraftPicks).mockResolvedValueOnce([])
+    const empty = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1', force: true })
+    expect(empty.error).toContain('selections unavailable')
+    expect(draftFactDeleteMany).not.toHaveBeenCalled()
   })
 })

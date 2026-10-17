@@ -3,6 +3,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { identifyTarget, describeTarget } = require("./db-target-identity.cjs");
+const { findCrMigrations, formatCrlfRefusal } = require("./migration-line-endings.cjs");
 
 function stripQuotes(value) {
   const trimmed = value.trim();
@@ -148,6 +149,17 @@ if (targetsProd && process.env.ALLOW_PROD_MIGRATION !== "1") {
       "Run: ALLOW_PROD_MIGRATION=1 npm run db:migrate:deploy:prod\n"
   );
   process.exit(1);
+}
+// LF-only for production, checked BEFORE any credential is read or Prisma is run: a Windows
+// checkout makes Prisma record CRLF checksums no Linux checkout will match (four production rows
+// on 2026-10-03). Every production deploy passes through --prod — the target gate below refuses
+// production without it — and scripts/railway-prod-migrate.cjs calls this file with --prod.
+if (targetsProd) {
+  const crlf = findCrMigrations(path.join(process.cwd(), "prisma", "migrations"));
+  if (crlf.length > 0) {
+    console.error(formatCrlfRefusal(crlf));
+    process.exit(1);
+  }
 }
 const envPath = path.join(process.cwd(), targetsProd ? ".env.prod-deploy" : ".env");
 const envKeys = [

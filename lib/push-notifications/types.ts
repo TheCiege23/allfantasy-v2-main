@@ -34,6 +34,13 @@ export interface PushPayload {
    * never the only place information lives.
    */
   imageUrl?: string | null
+  /**
+   * A face for the notification — the sender of a DM. Same URL rules as `imageUrl`. Web push sends
+   * it as `icon`, which `public/sw.js` already reads (Android draws it as the large round icon
+   * beside the text; without it the crest is used). APNs has no icon slot for a remote picture, so
+   * when there is no `imageUrl` it is attached through the service extension the same way.
+   */
+  iconUrl?: string | null
 }
 
 /** Subscription as stored and as needed by web-push. */

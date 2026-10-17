@@ -1,3 +1,4 @@
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 /**
  * Public `/live` renders the same ESPN-style game card as `/core/live`.
  *

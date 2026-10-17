@@ -42,7 +42,8 @@ import {
 
 describe('canRunSeasonForSport', () => {
   it('is the set whose stat path AND finalizer were both measured', () => {
-    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NBA', 'NCAAB', 'NCAAF'])
+    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NBA', 'MLB', 'NCAAB', 'NCAAF'])
+    expect(canRunSeasonForSport('MLB')).toBe(true)
     expect(canRunSeasonForSport('NCAAF')).toBe(true)
     expect(canRunSeasonForSport('NFL')).toBe(true)
     expect(canRunSeasonForSport('NHL')).toBe(true)
@@ -50,9 +51,8 @@ describe('canRunSeasonForSport', () => {
   })
 
   it('refuses every sport that cannot yet run one', () => {
-    // NCAAF joined 2026-09-28 (see the checklist in lib/sport-scope.ts). MLB has no recorded 2027
-    // opener yet and SOCCER's scoring is not merged, so neither claims a season.
-    for (const sport of ['MLB', 'SOCCER']) {
+    // Soccer remains outside the general season-capability gate.
+    for (const sport of ['SOCCER']) {
       expect(canRunSeasonForSport(sport), `${sport} must not claim season capability`).toBe(false)
     }
   })

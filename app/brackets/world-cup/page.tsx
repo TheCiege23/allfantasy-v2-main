@@ -157,7 +157,7 @@ export default async function WorldCupBracketsPage() {
         </Link>
         <div className="flex items-center gap-2">
           <ModeToggle className="rounded-lg border px-3 py-2 text-xs font-bold shadow-sm" />
-          <LanguageToggle variant="compact" refreshOnChange />
+          <LanguageToggle variant="compact" />
           {userId && (
             <Link
               href="/settings"

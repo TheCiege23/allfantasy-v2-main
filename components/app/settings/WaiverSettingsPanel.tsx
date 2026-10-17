@@ -1,8 +1,9 @@
 'use client'
 
 import { useLeagueSectionData } from '@/hooks/useLeagueSectionData'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { waiverSettingsRequestSchema } from '@/lib/waiver-wire/settings-request'
 
 type WaiverConfig = {
   waiver_type?: string
@@ -74,6 +75,10 @@ function toEditableForm(config: WaiverConfig): EditableWaiverForm {
 }
 
 export default function WaiverSettingsPanel({ leagueId }: { leagueId: string }) {
+  return <LeagueWaiverSettingsPanel key={leagueId} leagueId={leagueId} />
+}
+
+function LeagueWaiverSettingsPanel({ leagueId }: { leagueId: string }) {
   const { data: config, loading, error, reload } = useLeagueSectionData<WaiverConfig>(
     leagueId,
     'waiver/config',
@@ -83,6 +88,9 @@ export default function WaiverSettingsPanel({ leagueId }: { leagueId: string }) 
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<EditableWaiverForm | null>(null)
+  const mounted = useRef(true)
+  const savingRef = useRef(false)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   useEffect(() => {
     if (!leagueId) return
@@ -91,9 +99,10 @@ export default function WaiverSettingsPanel({ leagueId }: { leagueId: string }) 
     fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/waivers?type=settings`, {
       cache: 'no-store',
     })
-      .then((res) => {
+      .then(async (res) => {
+        const settings = await res.json().catch(() => null)
         if (!active) return
-        setCanEdit(res.ok)
+        setCanEdit(res.ok && settings?.leagueId === leagueId && typeof settings?.waiverType === 'string')
       })
       .catch(() => {
         if (!active) return
@@ -110,6 +119,10 @@ export default function WaiverSettingsPanel({ leagueId }: { leagueId: string }) 
 
   useEffect(() => {
     if (!config) return
+    if (typeof config.waiver_type !== 'string' || !waiverSettingsRequestSchema.safeParse(toEditableForm(config)).success) {
+      setForm(null)
+      return
+    }
     setForm(toEditableForm(config))
   }, [config])
 
@@ -119,7 +132,10 @@ export default function WaiverSettingsPanel({ leagueId }: { leagueId: string }) 
   )
 
   async function saveOverrides() {
-    if (!form || saving) return
+    if (!form || savingRef.current || !canEdit) return
+    const validated = waiverSettingsRequestSchema.safeParse(form)
+    if (!validated.success) { toast.error('Check waiver limits and processing time before saving'); return }
+    savingRef.current = true
     setSaving(true)
     try {
       const res = await fetch(
@@ -140,15 +156,22 @@ export default function WaiverSettingsPanel({ leagueId }: { leagueId: string }) 
         }
       )
       const json = await res.json().catch(() => ({}))
+      if (!mounted.current) return
       if (!res.ok) {
         toast.error(json?.error ?? 'Failed to save waiver overrides')
+        return
+      }
+      if (json?.leagueId !== leagueId || typeof json?.waiverType !== 'string') {
+        toast.error('Could not confirm saved waiver settings. Reload before retrying.')
         return
       }
       setEditing(false)
       toast.success('Waiver overrides saved')
       await reload()
+    } catch {
+      if (mounted.current) toast.error('Could not confirm saved waiver settings. Reload before retrying.')
     } finally {
-      setSaving(false)
+      if (mounted.current) { savingRef.current = false; setSaving(false) }
     }
   }
 
@@ -179,7 +202,7 @@ export default function WaiverSettingsPanel({ leagueId }: { leagueId: string }) 
     )
   }
 
-  if (!form) return null
+  if (!form) return <p role="alert">Could not verify this league&apos;s waiver settings. Reload before editing.</p>
 
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-4">

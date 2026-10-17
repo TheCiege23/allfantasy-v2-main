@@ -1,3 +1,4 @@
+import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import type { C2CMatchupScore } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -67,6 +68,16 @@ export async function GET(req: NextRequest) {
       where: { id: matchupId },
       include: { homeRoster: true, awayRoster: true, season: true },
     })
+    if (!m && matchupId.startsWith('fantrax:')) {
+      const sourceSeasonId = matchupId.split(':')[1]
+      const sourceSeason = sourceSeasonId ? await prisma.redraftSeason.findFirst({ where: { id: sourceSeasonId } }) : null
+      if (!sourceSeason) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      const sourceGate = await assertLeagueMember(sourceSeason.leagueId, userId)
+      if (!sourceGate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: sourceGate.status })
+      const imported = await loadFantraxNativePresentation(sourceSeason)
+      const matchup = imported?.matchups.find(row => row.id === matchupId)
+      return matchup ? NextResponse.json({ matchup, source: 'fantrax', readOnly: true }) : NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
     if (!m) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const gate = await assertLeagueMember(m.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
@@ -97,6 +108,9 @@ export async function GET(req: NextRequest) {
     if (!season) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const gate = await assertLeagueMember(season.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+
+    const imported = await loadFantraxNativePresentation(season)
+    if (imported) return NextResponse.json({ matchups: imported.matchups.filter(row => row.week === w), source: imported.source, readOnly: true, coverage: { incompleteMatchups: imported.incompleteMatchups } })
 
     const matchups = await prisma.redraftMatchup.findMany({
       where: { seasonId, week: w },

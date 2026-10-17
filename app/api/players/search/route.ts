@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 import { playerSlug } from '@/lib/core-app/playerSlug';
 import { asHeadshotUrl } from '@/lib/core-app/playerIdentityCompose';
+import { withoutDetectablyWrongHeadshots } from '@/lib/player-assets/playerImageStore';
 
 const querySchema = z.object({
   q: z.string().min(2),
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
   const { q, limit, sport } = parsed.data;
   const sportUpper = sport?.toUpperCase();
 
-  const players = await (prisma as any).sportsPlayer.findMany({
+  const found = await (prisma as any).sportsPlayer.findMany({
     where: {
       ...(sportUpper ? { sport: sportUpper } : {}),
       // A result with no sleeperId has no public /players/{slug} page — see
@@ -65,6 +66,9 @@ export async function GET(req: Request) {
     take: Math.min(limit * PROVIDER_ROWS_PER_PERSON, 200),
     orderBy: [{ name: 'asc' }, { id: 'asc' }],
   });
+  // `asHeadshotUrl` checks only the shape; the image cron's unvetted copies in this column can be
+  // another person's photo, and those are served as no image.
+  const players: SearchRow[] = await withoutDetectablyWrongHeadshots(found as SearchRow[]);
 
   const withSlug = collapseSamePerson(
     players.map((p: SearchRow) => ({

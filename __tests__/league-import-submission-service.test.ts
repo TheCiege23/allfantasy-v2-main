@@ -191,6 +191,33 @@ describe('LeagueCreationImportSubmissionService', () => {
     expect(commit.error).toBe(reason)
   })
 
+  /*
+   * The import screen shows its verify step off this flag (ImportVerifyGate). It is set from the
+   * route's own code, never re-read from the sentence — and AGE_REQUIRED, from the same guard, is a
+   * different step the card cannot complete.
+   */
+  it('flags VERIFICATION_REQUIRED on discover, preview and commit — and nothing else', async () => {
+    const refused = () => new Response(JSON.stringify({ error: 'VERIFICATION_REQUIRED' }), { status: 403 })
+    const ageGate = () => new Response(JSON.stringify({ error: 'AGE_REQUIRED' }), { status: 403 })
+    const { discoverProviderLeagues, fetchImportPreview, submitImportCreation } = await import(
+      '@/lib/league-import/LeagueCreationImportSubmissionService'
+    )
+
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => refused()))
+    const d = await discoverProviderLeagues('sleeper', '')
+    const p = await fetchImportPreview('sleeper', '123')
+    const c = await submitImportCreation('sleeper', '123', '')
+    for (const r of [d, p, c]) {
+      expect(r.ok).toBe(false)
+      expect(r.verificationRequired).toBe(true)
+      expect(r.error).toBe('Verify your email or phone before importing a league.')
+    }
+
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => ageGate()))
+    expect((await discoverProviderLeagues('sleeper', '')).verificationRequired).toBe(false)
+    expect((await submitImportCreation('sleeper', '123', '')).verificationRequired).toBe(false)
+  })
+
   it('sends the chosen team as claimSourceTeamId when one is given', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ leagueId: 'l1', name: 'x', sport: 'NFL' }), { status: 200 }),

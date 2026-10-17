@@ -27,6 +27,8 @@ export async function setNominations(
     return { ok: false, error: 'HOH cannot be nominated' }
   }
 
+  const members = await prisma.roster.findMany({ where: { leagueId: cycle.leagueId, id: { in: [nominee1RosterId, nominee2RosterId] } }, select: { id: true } })
+  if (new Set(members.map(r => r.id)).size !== 2) return { ok: false, error: 'Nominees must belong to this league' }
   const excluded = await getExcludedRosterIds(cycle.leagueId)
   if (excluded.includes(nominee1RosterId) || excluded.includes(nominee2RosterId)) {
     return { ok: false, error: 'Cannot nominate evicted player' }
@@ -57,6 +59,7 @@ export async function setReplacementNominee(
       hohRosterId: true,
       vetoUsed: true,
       vetoSavedRosterId: true,
+      vetoWinnerRosterId: true,
       nominee1RosterId: true,
       nominee2RosterId: true,
     },
@@ -68,6 +71,9 @@ export async function setReplacementNominee(
     return { ok: false, error: 'Saved player cannot be replacement nominee' }
   }
 
+  if (replacementRosterId === cycle.vetoWinnerRosterId || replacementRosterId === cycle.nominee1RosterId || replacementRosterId === cycle.nominee2RosterId) return { ok: false, error: 'Replacement must be a different eligible houseguest' }
+  const member = await prisma.roster.findFirst({ where: { leagueId: cycle.leagueId, id: replacementRosterId }, select: { id: true } })
+  if (!member) return { ok: false, error: 'Replacement must belong to this league' }
   const excluded = await getExcludedRosterIds(cycle.leagueId)
   if (excluded.includes(replacementRosterId)) return { ok: false, error: 'Cannot nominate evicted player' }
 

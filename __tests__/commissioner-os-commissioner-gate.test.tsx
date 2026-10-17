@@ -35,7 +35,7 @@ beforeEach(() => {
 })
 
 describe('commissioner gate — who resolves a league', () => {
-  it('queries leagues the user OWNS, never leagues they hold a roster in', async () => {
+  it('queries leagues the user owns or co-commissions, never leagues they merely hold a roster in', async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: 'user-1' } })
     prismaMock.league.findMany.mockResolvedValue([{ id: 'lg-1', status: 'active', name: 'Mine' }])
 
@@ -47,7 +47,14 @@ describe('commissioner gate — who resolves a league', () => {
      * the only thing that distinguishes them for the 3 users who do not.
      */
     expect(prismaMock.league.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1' } }),
+      expect.objectContaining({ where: { OR: [
+        { userId: 'user-1' },
+        { teams: { some: {
+          claimedByUserId: 'user-1',
+          role: { not: 'viewer' },
+          OR: [{ isCommissioner: true }, { isCoCommissioner: true }],
+        } } },
+      ] } }),
     )
   })
 

@@ -12,7 +12,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY cron-schedule.json ./
-COPY scripts/cron-scheduler.mjs scripts/cron-fast-tier-loop.mjs scripts/cron-tier.mjs scripts/cron-dispatch.mjs ./scripts/
+COPY scripts/cron-scheduler.mjs scripts/cron-fast-tier-loop.mjs scripts/cron-tier.mjs scripts/cron-dispatch.mjs scripts/cron-build-reaper.mjs ./scripts/
 # The fast loop reads each route's `maxDuration` to size its request timeout. Without these the
 # 300s routes silently fall back to a default timeout and read as failures. The test asserts every
 # fast-tier route lives under one of these directories.

@@ -1,3 +1,4 @@
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 /** Respect a dynasty commissioner's regular season length when materializing the first season. */
 export function resolveCreatedSeasonWeeks(league: {
@@ -8,6 +9,8 @@ export function resolveCreatedSeasonWeeks(league: {
   playoffTeams?: number | null
   playoffWeeksPerRound?: number | null
 }, sportDefaultWeeks: number): number {
+  const survivorPlan = readSurvivorFullSeasonPlan(league.settings)
+  if (survivorPlan) return survivorPlan.endWeek
   if (isNativeTournamentLeague(league)) {
     const settings = (league.settings as { best_ball_settings?: { regularSeasonLength: number; tournamentAdvancementRounds: number; roundEndWeeks?: number[] } } | null)?.best_ball_settings
     if (settings) return tournamentRoundEnds(settings).at(-1)!

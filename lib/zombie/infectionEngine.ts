@@ -9,6 +9,8 @@ export type InfectionResolutionResult = {
   zombieLeagueId: string
   week: number
   infectionsCreated: number
+  /** Who infected whom, in league roster ids — weekly winnings move the victim's week to the infector. */
+  infected: { victimRosterId: string; infectorRosterId: string }[]
 }
 
 /**
@@ -91,6 +93,7 @@ export async function resolveWeeklyInfections(
     zombieLeagueId,
     week,
     infectionsCreated: outcome.infected.length,
+    infected: outcome.infected.map((i) => ({ victimRosterId: i.survivorRosterId, infectorRosterId: i.infectedByRosterId })),
   }
 }
 

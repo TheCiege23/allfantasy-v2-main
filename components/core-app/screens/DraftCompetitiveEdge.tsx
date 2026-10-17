@@ -1,11 +1,13 @@
 'use client'
 
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { DraftEdge } from '@/lib/competitive-edge/draftEdge'
 import type { EdgeFact } from '@/lib/competitive-edge/tradeEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /*
  * Competitive Edge on Draft HQ: what each other manager has actually taken in this league's past
@@ -64,13 +66,14 @@ export function DraftCompetitiveEdge({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
-  if (access && !access.unlocked) return <CoreDepthLock access={access} what="Competitive Edge" />
+  if (access && !access.unlocked) return <CoreDepthLock access={access} what={lockSubjectText('Competitive Edge', language)} lang={language} />
   if (!edge) return null
 
   const head = (
     <header className="af-dh-section-head">
       <h2 className="af-label">{copy('Competitive Edge · how the others draft')}</h2>
-      {access ? <FreeUntilNote access={access} /> : null}
+      <TopicTip topic="competitiveEdgeDraft" />
+      {access ? <FreeUntilNote access={access} lang={language} /> : null}
     </header>
   )
 

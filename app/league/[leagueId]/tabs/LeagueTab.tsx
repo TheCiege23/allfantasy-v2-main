@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Settings, Zap, RotateCcw, Calendar, Trophy, Users, ClipboardList, CreditCard } from 'lucide-react'
@@ -21,6 +24,8 @@ import type { LeagueActivityItem, LeagueActivityLine } from '@/components/league
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
 import { buildLeagueHomePulse } from '@/lib/decision-os/league-pulse'
+import { localizeLeaguePulse } from '@/lib/i18n/decision-os/leaguePulse'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import ManagerDnaCard from '@/components/decision-os/ManagerDnaCard'
 import DecisionRecommendationsCard from '@/components/decision-os/DecisionRecommendationsCard'
 import UserOsCard from '@/components/decision-os/UserOsCard'
@@ -581,6 +586,7 @@ export function LeagueTab({
   idpLeagueUi = false,
   userTeam = null,
 }: LeagueTabProps) {
+  const { language } = useOptionalLanguage()
   const scoring = leagueDashboard.scoring
   const previewSeason =
     typeof league.season === 'number'
@@ -628,13 +634,16 @@ export function LeagueTab({
   // LeaguePulseCard renders that state honestly — no UI-side predicate can disagree.
   const leaguePulse = useMemo(
     () =>
-      buildLeagueHomePulse({
-        league,
-        teams,
-        isCommissioner: Boolean(isCommissioner),
-        managerDna: managerIntelligence?.managerDna ?? null,
-      }),
-    [isCommissioner, league, teams, managerIntelligence]
+      localizeLeaguePulse(
+        buildLeagueHomePulse({
+          league,
+          teams,
+          isCommissioner: Boolean(isCommissioner),
+          managerDna: managerIntelligence?.managerDna ?? null,
+        }),
+        language,
+      ),
+    [isCommissioner, league, teams, managerIntelligence, language]
   )
   const managerDna = useMemo(
     () => buildManagerDnaViewModel({ source: managerIntelligence?.managerDna ?? null }),
@@ -664,7 +673,7 @@ export function LeagueTab({
   }, [league.id])
 
   return (
-    <div className="space-y-4 p-5">
+    <div className="af-core af-league-overview space-y-4 p-5">
       {/* Decision OS launchers — Manager Intelligence (all members; entry shown only when the
           hub client flag is on) + Commissioner "League Intelligence" (member-readable; the
           commissioner-only cards are API-gated with 403 + an honest restricted state in the hub).

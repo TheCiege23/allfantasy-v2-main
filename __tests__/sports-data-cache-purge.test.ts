@@ -111,6 +111,9 @@ const KEEP_EXPIRED_FAMILIES = [
   'h2h:season:v1:',
   'h2h-facts:v1:',
   'fantasycalc:values:',
+  // A league's daily FantasyCalc board (lib/fantasycalc-profile-capture.ts): a permanent record that
+  // prices completed trades at the time of the trade. Nothing rebuilds a past day.
+  'fantasycalc:profile-capture:v1:',
   'player-valuations:',
   'college-team-directory:v1',
   'projection_accuracy:',
@@ -166,6 +169,21 @@ describe('purgeExpiredCache', () => {
 
     expect(keys(t.rows)).toEqual(keys(kept))
     expect(result).toMatchObject({ deleted: 1, capped: false })
+  })
+
+  it('never sweeps a FantasyCalc profile capture — the prefix the writer uses is on the keep list', async () => {
+    const { PROFILE_CAPTURE_PREFIX, profileCaptureKey } = await import('@/lib/fantasycalc-profile-capture')
+    // Bound to the module's own prefix, so renaming it cannot leave this list guarding a dead name.
+    expect(KEEP_EXPIRED_FAMILIES).toContain(PROFILE_CAPTURE_PREFIX)
+    const { purgeExpiredCache } = await load()
+    const capture = profileCaptureKey({ isDynasty: true, numQbs: 2, numTeams: 10, ppr: 0.5 }, '2026-10-04')
+    // Expired a year ago — far past anything a capture is written with — and still kept.
+    const t = fakeTable([{ cacheKey: capture, expiresAt: at(-365 * DAY) }, { cacheKey: 'api:abc', expiresAt: at(-HOUR) }])
+
+    const result = await purgeExpiredCache(t.client, { now: NOW })
+
+    expect(keys(t.rows)).toEqual([capture])
+    expect(result.deleted).toBe(1)
   })
 
   it('deletes expired rows in every allow-listed family', async () => {

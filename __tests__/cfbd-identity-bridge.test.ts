@@ -32,7 +32,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     playerIdentityMap: {
       findMany: (...a: unknown[]) => pimFindMany(...a),
-      update: (...a: unknown[]) => pimUpdate(...a),
+      updateMany: (...a: unknown[]) => pimUpdate(...a),
     },
   },
 }))
@@ -44,7 +44,7 @@ function statLine(cfbdId: string, name: string, team: string | null) {
 
 /** A PlayerIdentityMap row as the bridge selects it. */
 function pim(id: string, normalizedName: string, currentTeam: string | null, cfbdId: string | null = null) {
-  return { id, normalizedName, currentTeam, cfbdId }
+  return { id, normalizedName, currentTeam, position: 'QB', cfbdId }
 }
 
 beforeEach(() => {
@@ -52,7 +52,7 @@ beforeEach(() => {
   statFindFirst.mockReset().mockResolvedValue({ season: '2026' })
   statFindMany.mockReset().mockResolvedValue([])
   pimFindMany.mockReset().mockResolvedValue([])
-  pimUpdate.mockReset().mockResolvedValue({})
+  pimUpdate.mockReset().mockResolvedValue({ count: 1 })
 })
 
 describe('what the bridge refuses', () => {
@@ -129,7 +129,7 @@ describe('what the bridge links', () => {
     const r = await backfillCfbdIdsForNcaaf()
 
     expect(r.linked).toBe(1)
-    expect(pimUpdate).toHaveBeenCalledWith({ where: { id: 'a' }, data: { cfbdId: '111' } })
+    expect(pimUpdate).toHaveBeenCalledWith({ where: { id: 'a', sport: 'NCAAF', cfbdId: null, normalizedName: 'gunner stockton', currentTeam: 'GEORGIA', position: 'QB' }, data: { cfbdId: '111' } })
   })
 
   it('uses TEAM to separate two same-named athletes at different schools', async () => {
@@ -174,5 +174,38 @@ describe('what the bridge links', () => {
 
     expect(pimUpdate).not.toHaveBeenCalled()
     expect(r.linked).toBe(1)
+  })
+})
+
+
+describe('namesake and established-link regressions', () => {
+  it.each([
+    ['missing school', null, 'QB', 'GEORGIA', 'QB'],
+    ['school disagreement', 'HAWAII', 'QB', 'WYOMING', 'QB'],
+    ['Jacob Clark QB versus LB', 'MISSOURI STATE', 'QB', 'MISSOURI STATE', 'LB'],
+    ['Landon Sims RB versus QB', 'HAWAII', 'RB', 'HAWAII', 'QB'],
+    ['missing identity role', 'GEORGIA', null, 'GEORGIA', 'QB'],
+    ['missing provider role', 'GEORGIA', 'QB', 'GEORGIA', null],
+  ])('refuses %s', async (_label, school, position, providerSchool, providerPosition) => {
+    statFindMany.mockResolvedValue([{ playerId: 'wrong', team: providerSchool, stats: { name: 'Alex Smith', position: providerPosition } }])
+    pimFindMany.mockResolvedValue([{ ...pim('a', 'alex smith', school), position }])
+    const { backfillCfbdIdsForNcaaf } = await import('@/lib/sports-data/cfbdIdentityBridge')
+    const r = await backfillCfbdIdsForNcaaf()
+    expect(r.linked).toBe(0)
+    expect(pimUpdate).not.toHaveBeenCalled()
+  })
+  it('does not overwrite a verified link with a different athlete id', async () => {
+    statFindMany.mockResolvedValue([statLine('wrong', 'Alex Smith', 'GEORGIA')])
+    pimFindMany.mockResolvedValue([pim('a', 'alex smith', 'GEORGIA', 'verified')])
+    const { backfillCfbdIdsForNcaaf } = await import('@/lib/sports-data/cfbdIdentityBridge')
+    expect((await backfillCfbdIdsForNcaaf()).linked).toBe(0)
+    expect(pimUpdate).not.toHaveBeenCalled()
+  })
+  it('does not report a link when a concurrent writer changed the identity', async () => {
+    statFindMany.mockResolvedValue([statLine('111', 'Alex Smith', 'GEORGIA')])
+    pimFindMany.mockResolvedValue([pim('a', 'alex smith', 'GEORGIA')])
+    pimUpdate.mockResolvedValue({ count: 0 })
+    const { backfillCfbdIdsForNcaaf } = await import('@/lib/sports-data/cfbdIdentityBridge')
+    expect((await backfillCfbdIdsForNcaaf()).linked).toBe(0)
   })
 })

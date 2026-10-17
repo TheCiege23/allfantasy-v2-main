@@ -1,0 +1,492 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-03T20:33:06.7818419Z",
+    "source": "https://www.fantrax.com/fxea/general/getLeagueInfo?leagueId=ww1yl5pglbugn6hl",
+    "note": "Public league, no account credentials. Scoring and first eight roster player references only."
+  },
+  "info": {
+    "seasonYear": 2023,
+    "rosterInfo": {
+      "positionConstraints": {
+        "2B": {
+          "maxActive": 1
+        },
+        "SS": {
+          "maxActive": 1
+        },
+        "P": {
+          "maxActive": 9
+        },
+        "1B": {
+          "maxActive": 1
+        },
+        "C": {
+          "maxActive": 1
+        },
+        "CI": {
+          "maxActive": 1
+        },
+        "OF": {
+          "maxActive": 5
+        },
+        "MI": {
+          "maxActive": 1
+        },
+        "UT": {
+          "maxActive": 1
+        },
+        "3B": {
+          "maxActive": 1
+        }
+      },
+      "maxTotalPlayers": 30,
+      "maxTotalActivePlayers": 22,
+      "maxTotalReservePlayers": 8
+    },
+    "scoringSystem": {
+      "scoringCategories": {
+        "HITTING": {
+          "2B": {
+            "Default": "points2"
+          },
+          "BB": {
+            "Default": "points1"
+          },
+          "1B": {
+            "Default": "points1"
+          },
+          "R": {
+            "Default": "points1"
+          },
+          "HBP": {
+            "Default": "points1"
+          },
+          "RBI": {
+            "Default": "points1"
+          },
+          "HR": {
+            "Default": "points4"
+          },
+          "SB": {
+            "Default": "points2"
+          },
+          "3B": {
+            "Default": "points3"
+          }
+        },
+        "PITCHING": {
+          "QS": {
+            "Default": "points3"
+          },
+          "SV": {
+            "Default": "points7"
+          },
+          "IP": {
+            "Default": "points1"
+          },
+          "W": {
+            "Default": "points10"
+          },
+          "K": {
+            "Default": "points1"
+          },
+          "L": {
+            "Default": "points-5"
+          },
+          "ER": {
+            "Default": "points-1"
+          }
+        }
+      },
+      "scoringCategorySettings": [
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_DOUBLES",
+                "name": "Doubles",
+                "id": "0070",
+                "shortName": "2B"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_HIT_BY_PITCHES",
+                "name": "Hit By Pitches",
+                "id": "0150",
+                "shortName": "HBP"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_HOME_RUNS",
+                "name": "Home Runs",
+                "id": "0200",
+                "shortName": "HR"
+              },
+              "points": 4.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RBIS",
+                "name": "RBI",
+                "id": "0310",
+                "shortName": "RBI"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RUNS_SCORED",
+                "name": "Runs Scored",
+                "id": "0330",
+                "shortName": "R"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SINGLES",
+                "name": "Singles",
+                "id": "0375",
+                "shortName": "1B"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_STOLEN_BASES",
+                "name": "Stolen Bases",
+                "id": "0380",
+                "shortName": "SB"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TRIPLES",
+                "name": "Triples",
+                "id": "0420",
+                "shortName": "3B"
+              },
+              "points": 3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_WALKS",
+                "name": "Walks",
+                "id": "0430",
+                "shortName": "BB"
+              },
+              "points": 1.0
+            }
+          ],
+          "group": {
+            "code": "BASEBALL_HITTING",
+            "name": "Hitting",
+            "id": "10",
+            "shortName": "Hit"
+          }
+        },
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_EARNED_RUNS_ALLOWED",
+                "name": "Earned Runs Allowed",
+                "id": "0080",
+                "shortName": "ER"
+              },
+              "points": -1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_INNINGS_PITCHED",
+                "name": "Innings Pitched",
+                "id": "0220",
+                "shortName": "IP"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_LOSSES",
+                "name": "Losses",
+                "id": "0250",
+                "shortName": "L"
+              },
+              "points": -5.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_QUALITY_STARTS",
+                "name": "Quality Starts",
+                "id": "0300",
+                "shortName": "QS"
+              },
+              "points": 3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SAVES",
+                "name": "Saves",
+                "id": "0360",
+                "shortName": "SV"
+              },
+              "points": 7.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_STRIKE_OUTS_PITCHED",
+                "name": "Strikeouts Pitched",
+                "id": "0410",
+                "shortName": "K"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_WINS",
+                "name": "Wins",
+                "id": "0460",
+                "shortName": "W"
+              },
+              "points": 10.0
+            }
+          ],
+          "group": {
+            "code": "BASEBALL_PITCHING",
+            "name": "Pitching",
+            "id": "20",
+            "shortName": "Pit"
+          }
+        }
+      ],
+      "type": "HEAD_TO_HEAD_POINTS_BASED"
+    },
+    "leagueName": "TRAX50 Classic Draft (32)"
+  },
+  "playerMap": {
+    "04yk2": {
+      "statsIncId": 11914,
+      "rotowireId": 16672,
+      "sportRadarId": "12085747-6898-4d08-9ceb-c6860dd35f6d",
+      "name": "Torkelson, Spencer",
+      "fantraxId": "04yk2",
+      "team": "DET",
+      "position": "1B"
+    },
+    "02n2x": {
+      "statsIncId": 10657,
+      "rotowireId": 14190,
+      "sportRadarId": "22dabc06-611e-4d36-81af-7153e7ba86e6",
+      "name": "Sewald, Paul",
+      "fantraxId": "02n2x",
+      "team": "TOR",
+      "position": "RP"
+    },
+    "04ali": {
+      "statsIncId": 10903,
+      "rotowireId": 14672,
+      "sportRadarId": "4749846b-ab83-43a9-a114-3fd701909b89",
+      "name": "Cabrera, Edward",
+      "fantraxId": "04ali",
+      "team": "CHC",
+      "position": "SP"
+    },
+    "03yrz": {
+      "statsIncId": 11268,
+      "rotowireId": 15160,
+      "sportRadarId": "1015a557-8e55-4c12-b63c-3306e25ae6e6",
+      "name": "Contreras, William",
+      "fantraxId": "03yrz",
+      "team": "MIL",
+      "position": "C"
+    },
+    "026lz": {
+      "statsIncId": 9883,
+      "rotowireId": 12141,
+      "sportRadarId": "49edaec4-ea7c-455b-ac2c-92961b4261f0",
+      "name": "Bell, Josh",
+      "fantraxId": "026lz",
+      "team": "MIN",
+      "position": "DH"
+    },
+    "03qqf": {
+      "rotowireId": 17695,
+      "sportRadarId": "10f105d7-8c28-4df0-9e3b-e3a7408a7912",
+      "name": "Diaz, Alexis",
+      "fantraxId": "03qqf",
+      "team": "TEX",
+      "position": "RP"
+    },
+    "01seb": {
+      "statsIncId": 9378,
+      "rotowireId": 10503,
+      "sportRadarId": "962bf98a-22a3-4958-b296-f569bfd7407f",
+      "name": "Grossman, Robbie",
+      "fantraxId": "01seb",
+      "team": "(N/A)",
+      "position": "RF"
+    }
+  },
+  "roster": {
+    "rosterItems": [
+      {
+        "id": "04yk2",
+        "position": "UT",
+        "status": "ACTIVE"
+      },
+      {
+        "id": "02n2x",
+        "position": "P",
+        "status": "ACTIVE"
+      },
+      {
+        "id": "04ali",
+        "position": "P",
+        "status": "RESERVE"
+      },
+      {
+        "id": "03yrz",
+        "position": "C",
+        "status": "ACTIVE"
+      },
+      {
+        "id": "01c5o",
+        "position": "OF",
+        "status": "ACTIVE"
+      },
+      {
+        "id": "026lz",
+        "position": "1B",
+        "status": "ACTIVE"
+      },
+      {
+        "id": "03qqf",
+        "position": "P",
+        "status": "ACTIVE"
+      },
+      {
+        "id": "01seb",
+        "position": "OF",
+        "status": "ACTIVE"
+      }
+    ],
+    "teamName": "Fixture team"
+  }
+}

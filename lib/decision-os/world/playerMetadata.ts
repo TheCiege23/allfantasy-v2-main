@@ -18,6 +18,7 @@
  */
 import type { RawPlayerMetadataRow } from './facts'
 import { loadPlayerMetadataRows } from './port'
+import { indexRowsByLeagueId } from './rowKeys'
 
 /** Required metadata = the fields downstream lineup legality actually needs. */
 const REQUIRED_FIELDS = ['name', 'position'] as const
@@ -87,12 +88,8 @@ export function projectPlayerMetadata(
 ): PlayerMetadataResult {
   const requested = Array.from(new Set(requestedIds.filter((x) => typeof x === 'string' && x.length > 0)))
 
-  // Index raw rows by every provider key they expose (first write wins → freshest row kept).
-  const rowByKey = new Map<string, RawPlayerMetadataRow>()
-  for (const row of rows) {
-    if (row.externalId && !rowByKey.has(row.externalId)) rowByKey.set(row.externalId, row)
-    if (row.sleeperId && !rowByKey.has(row.sleeperId)) rowByKey.set(row.sleeperId, row)
-  }
+  // One key per row, in the space it belongs to — never a provider number as a Sleeper id (rowKeys.ts).
+  const rowByKey = indexRowsByLeagueId(rows)
 
   const byId = new Map<string, NormalizedPlayerMetadata>()
   const unresolvedIds: string[] = []

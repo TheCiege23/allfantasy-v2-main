@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { CommissionerDepthLocked } from '@/components/commissioner-os/shell/CommissionerDepthLocked'
-import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { CommissionerFreeUntilNote } from '@/components/commissioner-os/shell/CommissionerFreeUntilNote'
 import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 import { AutomationCenterView } from '@/components/commissioner-os/automations/AutomationCenterView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
@@ -22,7 +22,7 @@ export default async function AutomationCenterPage() {
 
   return (
     <CommissionerPageContainer>
-      <FreeUntilNote access={depth} />
+      <CommissionerFreeUntilNote access={depth} />
       <AutomationCenterView
         catalog={catalog}
         historyByAutomationId={historyByAutomationId}

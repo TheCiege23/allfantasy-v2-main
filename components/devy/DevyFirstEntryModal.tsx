@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
 const DEVY_INTRO_VIDEO = '/league-type-devy-intro.mp4'
 const C2C_INTRO_VIDEO = '/league-type-c2c-intro.mp4'
-const STORAGE_KEY_PREFIX = 'devy_intro_seen_'
-const C2C_STORAGE_KEY_PREFIX = 'c2c_intro_seen_'
 
 const DEVY_TAGLINE = 'Draft the future. Dynasty starts in college.'
 const C2C_TAGLINE = 'One franchise. College and pro stars in the same war room.'
@@ -62,8 +61,7 @@ export function DevyFirstEntryModal({
   const [videoKey, setVideoKey] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
 
-  const storagePrefix = mode === 'c2c' ? C2C_STORAGE_KEY_PREFIX : STORAGE_KEY_PREFIX
-  const storageKey = `${storagePrefix}${leagueId}_${userId}`
+  const storageKey = firstEntryIntroStorageKey(mode === 'c2c' ? 'c2c' : 'devy', leagueId, userId)
   const resolvedVideoSrc = videoSrc || (mode === 'c2c' ? C2C_INTRO_VIDEO : DEVY_INTRO_VIDEO)
   const tagline = mode === 'c2c' ? C2C_TAGLINE : DEVY_TAGLINE
   const welcome = mode === 'c2c' ? C2C_WELCOME : DEVY_WELCOME

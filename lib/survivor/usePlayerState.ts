@@ -13,6 +13,7 @@ export type UseSurvivorPlayerStateResult = {
   error: string | null
   season: SurvivorSeasonPayload | null
   leagueName: string
+  leagueSport: string | null
   /** True when `/api/survivor/season` reports survivor mode for this league. */
   survivorModeEnabled: boolean
   isCommissioner: boolean
@@ -110,6 +111,7 @@ export function useSurvivorPlayerState(leagueId: string): UseSurvivorPlayerState
       error,
       season,
       leagueName: settings?.league?.name ?? 'Survivor League',
+      leagueSport: settings?.league?.sport ?? null,
       survivorModeEnabled: Boolean(season?.mode),
       isCommissioner,
       canEditLeagueSettings: Boolean(settings?.canEdit),

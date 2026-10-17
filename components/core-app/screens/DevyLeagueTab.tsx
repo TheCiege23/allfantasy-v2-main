@@ -20,6 +20,10 @@ import '../af-core.css'
 import '../af-devy.css'
 import type { DevyNewsItem, DevyTrend, DevyViewState } from './DevyCore'
 import DevyTrendMark from './DevyTrendMark'
+import { TopicTip } from '@/components/core-app/TopicTip'
+
+/** Eyebrow and "?" grouped so the section head's space-between does not split them. */
+const EYEBROW_WITH_TIP = { display: 'inline-flex', alignItems: 'center', gap: 6 } as const
 
 /**
  * Devy — the per-league tab.
@@ -243,8 +247,11 @@ export default function DevyLeagueTab({
         <>
           <section className="af-devy-card" aria-labelledby="af-devy-slots">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-slots">
-                Your devy slots
+              <div style={EYEBROW_WITH_TIP}>
+                <div className="af-devy-eyebrow" id="af-devy-slots">
+                  Your devy slots
+                </div>
+                <TopicTip topic="devySlots" />
               </div>
               <span className="af-devy-pill">
                 {slots.filter((s) => s.player).length} of {slots.length} filled
@@ -277,8 +284,11 @@ export default function DevyLeagueTab({
 
           <section className="af-devy-card" aria-labelledby="af-devy-fa">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-fa">
-                Available devy free agents
+              <div style={EYEBROW_WITH_TIP}>
+                <div className="af-devy-eyebrow" id="af-devy-fa">
+                  Available devy free agents
+                </div>
+                <TopicTip topic="devyGrade" />
               </div>
             </div>
             {/*
@@ -348,8 +358,11 @@ export default function DevyLeagueTab({
 
           <section className="af-devy-card" aria-labelledby="af-devy-board">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-board">
-                Devy draft board · {draftRoundLabel}
+              <div style={EYEBROW_WITH_TIP}>
+                <div className="af-devy-eyebrow" id="af-devy-board">
+                  Devy draft board · {draftRoundLabel}
+                </div>
+                <TopicTip topic="devyDraftBoard" />
               </div>
               {draftCountdown ? <span className="af-devy-pill">{draftCountdown}</span> : null}
             </div>
@@ -432,7 +445,9 @@ export default function DevyLeagueTab({
                   <tr>
                     <th scope="col">Player</th>
                     <th scope="col">Value</th>
-                    <th scope="col">Trend</th>
+                    <th scope="col">
+                      Trend <TopicTip topic="devyTrend" />
+                    </th>
                     <th scope="col">Status</th>
                   </tr>
                 </thead>

@@ -1417,6 +1417,21 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-tiles::-webkit-scrollbar {
   display: none;
 }
+.af-tc-strip-more {
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-tc-strip-more:hover,
+.af-tc-strip-more:focus-visible { border-color: var(--accent-line); }
 .af-tc-tile {
   flex: 0 0 224px;
   display: flex;
@@ -1474,6 +1489,25 @@ html[data-mode='light'] .af-core .af-tc {
 }
 .af-tc-tile-status[data-tone='clear'] {
   color: var(--muted);
+}
+.af-tc-tile-deadline,
+.af-tc-tile-last {
+  color: var(--text2);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.af-tc-tile-last {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-tc-tile-action {
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 /* ── Context bar, team cards ────────────────────────────────────────── */
@@ -2613,3 +2647,156 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-moves-why b { color: var(--text); }
 .af-tc-moves-why[data-dir='up'] b { color: var(--good); }
 .af-tc-moves-why[data-dir='down'] b { color: var(--bad); }
+
+/* ── Phone audit, 2026-10-01 ─────────────────────────────────────────────────
+ *
+ * Top-level rules and one sibling @media at end of file, so nothing here can be carried into
+ * another band by an early-closed outer query.
+ */
+
+/*
+ * ⚠ ONE LONG PICKED NAME SCROLLED THE WHOLE PAGE SIDEWAYS ON THE "WHAT YOU GET" STEP. The
+ * builder is one `1fr` column on a phone — `minmax(auto, 1fr)` — and a grid item's `auto`
+ * minimum is its min-content width. A picked row ("Amon-Ra St. Brown · WR · DET · AF 17.4 ·
+ * 9,116 · +6% · base …") measured 350px, the side panel 380px, the page 396px on a 375px
+ * screen. `min-width: 0` lets the panel fit the screen; the name ellipsises inside its row as it
+ * already does on the "give" side. Unscoped: the desktop columns have a fixed 280px minimum.
+ */
+.af-tc-builder > .af-tc-team {
+  min-width: 0;
+}
+
+/*
+ * ⚠ THE LEAGUE NAME GOT 74px. On a phone the context row is a non-wrapping scroller (rule
+ * above: chip rows scroll rather than wrap), but its name and meta are allowed to SHRINK, so
+ * the row never scrolled — the DEADLINE chip (138px, nowrap) and the format squeezed the name
+ * instead: "The / Gridiron / Dynasty / League — / 2026 / Superflex", a 152px card. Scrolling
+ * would put the deadline off screen, which is the one urgent thing in it, so this row wraps
+ * after all: tile and name share the first line, format and deadline the second. 105px.
+ */
+@media (max-width: 720px) {
+  .af-tc-context {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .af-tc-context .af-tc-context-name {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+  .af-tc-context .af-tc-context-meta {
+    flex: 0 0 auto;
+  }
+}
+/* League-free quick analyzer on the portfolio trade hub. */
+.af-tc-generic { margin: 18px 0 24px; padding: 22px; border: 1px solid var(--line, #334155); border-radius: 16px; background: var(--surface, #111b2a); }
+.af-tc-generic-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.af-tc-generic h2 { margin: 5px 0 7px; font-size: clamp(20px, 2vw, 28px); }
+.af-tc-generic h3 { margin: 18px 0 5px; }
+.af-tc-generic p { margin: 0 0 14px; color: var(--muted, #acb7ca); }
+.af-tc-generic-upload { position: relative; flex: none; display: inline-flex; align-items: center; min-height: 44px; padding: 10px 15px; border: 1px solid var(--accent, #26bfd0); border-radius: 10px; color: var(--text, #fff); cursor: pointer; font-weight: 700; }
+.af-tc-generic-upload:focus-within { outline: 2px solid var(--accent, #26bfd0); outline-offset: 2px; }
+.af-tc-generic-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.af-tc-generic-sport, .af-tc-generic-sides label { display: grid; gap: 7px; color: var(--text, #fff); font-weight: 700; }
+.af-tc-generic-sport { max-width: 180px; margin: 14px 0; }
+.af-tc-generic select, .af-tc-generic textarea { width: 100%; min-height: 44px; border: 1px solid var(--line, #475569); border-radius: 10px; padding: 10px 12px; background: var(--bg, #0a1220); color: var(--text, #fff); font: inherit; }
+.af-tc-generic textarea { min-height: 130px; resize: vertical; font-weight: 400; }
+.af-tc-generic select:focus-visible, .af-tc-generic textarea:focus-visible { outline: 2px solid var(--accent, #26bfd0); outline-offset: 2px; }
+.af-tc-generic-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.af-tc-generic-side { display: grid; align-content: start; gap: 10px; min-width: 0; }
+.af-tc-generic .af-tc-generic-hint { margin: 12px 0; font-size: 13px; }
+.af-tc-generic-error { margin-top: 12px !important; color: #fb7185 !important; }
+.af-tc-generic-result { margin-top: 20px; padding: 18px; border: 1px solid var(--line, #475569); border-radius: 12px; }
+.af-tc-generic-grades { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.af-tc-generic-grades > div { display: grid; gap: 4px; padding: 14px; border-radius: 10px; background: rgba(127, 148, 180, .12); }
+.af-tc-generic-grades strong { font-size: 34px; line-height: 1; }
+.af-tc-generic-grades small { color: var(--muted, #acb7ca); }
+@media (max-width: 720.01px) {
+  .af-tc-generic { padding: 16px; }
+  .af-tc-generic-heading, .af-tc-generic-sides { display: grid; grid-template-columns: 1fr; }
+  .af-tc-generic-upload { justify-content: center; }
+}
+
+.af-tc-hub-board { min-width: 0; }
+.af-tc-hub-board .af-bd > .af-bd-head { display: none; }
+.af-tc-grade-method, .af-tc-analysis-details, .af-tc-analysis-fold { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface2); }
+.af-tc-grade-method > summary, .af-tc-analysis-details > summary, .af-tc-analysis-fold > summary { cursor: pointer; color: var(--text); font-weight: 700; min-height: 28px; }
+.af-tc-grade-method p, .af-tc-grade-method li { color: var(--text2); font-size: 13px; line-height: 1.5; }
+.af-tc-grade-method ul { margin: 8px 0 0; padding-left: 20px; }
+.af-tc-analysis-details > *:not(summary), .af-tc-analysis-fold > *:not(summary) { margin-top: 12px; }
+.af-tc-handoff--verdict { padding-top: 0; }
+.af-tc-generic-search { position: relative; min-width: 0; }
+.af-tc-generic-search label { display: grid; gap: 6px; font-weight: 700; }
+.af-tc-generic-search input, .af-tc-generic-pick input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--line2); border-radius: 10px; padding: 9px 11px; background: var(--surface2); color: var(--text); font: inherit; }
+.af-tc-generic-search ul { max-height: 240px; overflow-y: auto; margin: 6px 0 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); }
+.af-tc-generic-search li + li { border-top: 1px solid var(--line); }
+.af-tc-generic-search li button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 10px; border: 0; color: var(--text); background: transparent; text-align: left; cursor: pointer; }
+.af-tc-generic-search li button:hover, .af-tc-generic-search li button:focus-visible { background: var(--accent-soft); }
+.af-tc-generic-search li span { color: var(--text2); }
+.af-tc-generic-search li small { margin-left: auto; color: var(--text2); }
+.af-tc-generic-pick { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.af-tc-generic-pick > strong { flex-basis: 100%; }
+.af-tc-generic-pick label { display: grid; gap: 5px; min-width: 85px; font-size: 13px; }
+.af-tc-generic-pick button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--accent-line); border-radius: 10px; background: var(--accent-soft); color: var(--text); cursor: pointer; }
+.af-tc-generic-confirm { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--text); font-weight: 700; }
+.af-tc-generic-confirm input { width: 20px; height: 20px; accent-color: var(--accent); }
+.af-tc-tile-sync { display: block; margin-top: 3px; color: var(--warn, #fbbf24); font-size: 11px; line-height: 1.35; }
+.af-tc-partner-summary, .af-tc-snapshots { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); }
+.af-tc-partner-summary { display: grid; gap: 8px; }
+.af-tc-partner-summary p, .af-tc-partner-summary small, .af-tc-snapshots p, .af-tc-share-card small { color: var(--text2); line-height: 1.45; }
+.af-tc-partner-summary p { margin: 4px 0; }
+.af-tc-partner-counter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.af-tc-partner-counter span { color: var(--text2); }
+.af-tc-snapshots-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.af-tc-snapshots h3 { margin: 0; font-size: 18px; }
+.af-tc-snapshots-head p { margin: 4px 0 0; font-size: 13px; }
+.af-tc-share-card { display: grid; gap: 12px; margin-top: 14px; padding: 16px; border: 1px solid var(--accent-line); border-radius: 12px; background: #0b1022; color: #eaf1ff; }
+.af-tc-share-top { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.af-tc-share-top span { color: #c8d4e7; }
+.af-tc-share-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.af-tc-share-sides > div { display: grid; gap: 4px; min-width: 0; padding: 12px; border-radius: 9px; background: #182442; }
+.af-tc-share-sides strong { color: #75e2dc; font-size: 30px; }
+.af-tc-share-sides small { overflow-wrap: anywhere; }
+.af-tc-share-card > .af-btn { justify-self: start; min-height: 44px; }
+.af-tc-saved-list { margin-top: 14px; }
+.af-tc-saved-list summary { cursor: pointer; font-weight: 700; }
+.af-tc-saved-list ul { list-style: none; margin: 8px 0 0; padding: 0; }
+.af-tc-saved-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.af-tc-saved-list button { min-height: 44px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
+@media (min-width: 721px) and (max-width: 1024px) {
+  .af-tc-builder, .af-tc-review, .af-tc-notes { grid-template-columns: minmax(0, 1fr); }
+  .af-tc-team, .af-tc-review-side { min-width: 0; }
+  .af-tc-hub-league-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720.01px) {
+  .af-tc-snapshots-head { align-items: stretch; flex-direction: column; }
+  .af-tc-share-sides { grid-template-columns: 1fr; }
+  .af-tc-generic-pick label { flex: 1 1 85px; }
+  .af-tc-generic-pick button { flex: 1 1 120px; }
+  .af-tc-generic-search li button { flex-wrap: wrap; }
+}
+.af-tc-review { margin:14px 0; padding:14px 16px; border:1px solid rgba(34,211,238,.35); border-radius:12px; background:rgba(34,211,238,.05); }
+.af-tc-review h3 { margin:0 0 8px; font-size:17px; }
+.af-tc-review p { margin:6px 0; line-height:1.45; }
+
+/*
+ * The shared "?" (TopicTip) on the Trade Center. The score's word and its tip share one row of the
+ * column-flex score block, and the value alerts' how-measured line sits under the <summary>, where a
+ * tap would otherwise toggle the panel.
+ */
+.af-tc-score-labelrow { display: inline-flex; align-items: center; }
+.af-tc-value-actions > .af-tc-value-actions-how { margin: 0; padding: 0 13px; }
+
+/* Saved/current variants retain readable, keyboard-accessible controls on narrow screens. */
+.af-tc-comparison-state { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.af-tc-variant-comparison { margin-top:16px; overflow-wrap:anywhere; }
+.af-tc-variant-comparison summary { min-height:44px; display:list-item; align-content:center; cursor:pointer; font-weight:700; }
+.af-tc-variant-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.af-tc-variant-grid section { min-width:0; padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+.af-tc-variant-grid h4 { margin:0 0 10px; font-size:16px; }
+.af-tc-variant-grid p, .af-tc-variant-grid small { font-size:14px; line-height:1.5; color:var(--text2); }
+.af-tc-snapshots button:focus-visible, .af-tc-snapshots summary:focus-visible { outline:2px solid var(--accent, #75e2dc); outline-offset:3px; }
+.af-tc-snapshots button { min-height:44px; white-space:normal; overflow-wrap:anywhere; }
+@media(max-width:720px) { .af-tc-variant-grid { grid-template-columns:1fr; } .af-tc-saved-list li { flex-wrap:wrap; } }
+
+.af-tc-saved-list summary, .af-tc-partner-evidence summary { min-height:44px; align-content:center; cursor:pointer; }
+.af-tc-partner-evidence summary:focus-visible { outline:2px solid var(--accent, #75e2dc); outline-offset:3px; }

@@ -67,6 +67,40 @@ export function applyBridge(playerData: unknown, map: ReadonlyMap<string, string
   return out
 }
 
+/** The prefix an unbridged id carries in `applyBridgeKeepingSlots` output. */
+export const UNBRIDGED_ID_PREFIX = 'unbridged:'
+
+/** Is this id a placeholder for a roster player the bridge could not identify? */
+export function isUnbridgedId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(UNBRIDGED_ID_PREFIX)
+}
+
+/**
+ * `applyBridge` for readers that need the roster's SHAPE, not just its membership.
+ *
+ * `applyBridge` drops an empty slot ('0') and every unbridged id, so a starters array shifts: the
+ * player in slot 3 lands in slot 2. A lineup reader maps starters to slots BY INDEX, so that shift
+ * misplaces players. Here an empty slot stays '0', and an unbridged id stays in place as
+ * `unbridged:<providerId>` — never a bare number, so nothing can read it as the Sleeper player who
+ * shares it, and a caller can count what it cannot see (`isUnbridgedId`) instead of losing it.
+ */
+export function applyBridgeKeepingSlots(playerData: unknown, map: ReadonlyMap<string, string>): Record<string, unknown> {
+  const pd = (playerData ?? {}) as Record<string, unknown>
+  const out: Record<string, unknown> = { ...pd }
+  for (const key of ROSTER_KEYS) {
+    const arr = pd[key]
+    if (!Array.isArray(arr)) continue
+    out[key] = arr.flatMap((x) => {
+      if (x == null) return []
+      const raw = String(x)
+      if (raw === '0') return ['0']
+      const to = map.get(raw)
+      return [to ?? `${UNBRIDGED_ID_PREFIX}${raw}`]
+    })
+  }
+  return out
+}
+
 /**
  * For the bridged-platform leagues among `leagues`: every roster read once, the bridge loaded once
  * per platform, and a readability verdict per league. Leagues on other platforms are absent from

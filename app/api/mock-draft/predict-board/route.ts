@@ -7,7 +7,7 @@ import { applyRealtimeAdpAdjustments } from '@/lib/mock-draft/adp-realtime-adjus
 import { loadSportAwareDraftPlayerPool, toSyntheticAdpEntries } from '@/lib/mock-draft/sport-player-pool'
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { resolveSleeperIds } from '@/lib/sleeper/players-cache'
+import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
 
 type ScenarioPreset = {
   id: string
@@ -497,20 +497,31 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let sleeperIdMap: Record<string, string> = {}
-    try {
-      const allPlayerNames = Array.from(new Set(forecasts.flatMap(f => f.topTargets.map(t => t.player))))
-      sleeperIdMap = await resolveSleeperIds(allPlayerNames)
-    } catch {}
-
     const playerTeamMap = new Map<string, string>()
     for (const p of pool) {
       playerTeamMap.set(p.name, p.team || '')
     }
 
+    /*
+     * Keyed `player|position` and position-verified: a name-only bind gave QB Josh Allen a
+     * free-agent guard's Sleeper id. Sleeper's dictionary is NFL-only, so another sport's pool
+     * would bind onto an NFL namesake (an NBA "G" is not an offensive guard) — NFL only.
+     */
+    const sleeperIdByKey = new Map<string, string | null>()
+    if (isNfl) {
+      try {
+        const keys = Array.from(new Set(forecasts.flatMap(f => f.topTargets.map(t => `${t.player}|${t.position}`))))
+        const ids = await resolveSleeperIdsBatch(keys.map((key) => {
+          const [name, position] = key.split('|')
+          return { name, position, team: playerTeamMap.get(name) || null }
+        }))
+        keys.forEach((key, i) => sleeperIdByKey.set(key, ids[i] ?? null))
+      } catch {}
+    }
+
     for (const f of forecasts) {
       for (const t of f.topTargets) {
-        (t as any).sleeperId = sleeperIdMap[t.player] || null;
+        (t as any).sleeperId = sleeperIdByKey.get(`${t.player}|${t.position}`) ?? null;
         (t as any).team = playerTeamMap.get(t.player) || null
       }
     }

@@ -1,6 +1,11 @@
 /** Per-player deadlines. One Thursday starter does not lock a Sunday lineup. */
 export function lineupDeadlines(
-  players: ReadonlyArray<{ kickoff: Date | null; issues: number }>,
+  /**
+   * `bye`: his club is off this week. He has no kickoff because there is no game — a known
+   * fact, not a hole in our schedule — so he is never counted in `unknownKickoffs`. He is
+   * still a fixable problem, so his issues stay actionable.
+   */
+  players: ReadonlyArray<{ kickoff: Date | null; issues: number; bye?: boolean }>,
   empty: number,
   now: number,
 ) {
@@ -11,7 +16,9 @@ export function lineupDeadlines(
   let nextFlagged: number | null = null
   for (const player of players) {
     const at = player.kickoff?.getTime()
-    if (at == null || !Number.isFinite(at)) {
+    if (player.bye) {
+      actionableSeverity += player.issues
+    } else if (at == null || !Number.isFinite(at)) {
       unknownKickoffs++
       actionableSeverity += player.issues
     } else if (at <= now) {

@@ -48,6 +48,10 @@ export interface PoolPlayerRecord {
    * `Clay Johnston ext=5850 src=rolling_insights`, and 5850 is Josh Jacobs' SLEEPER id.
    * A consumer that needs the id the NFL scoring path can actually address has to read
    * this field; reading `external_source_id` and hoping gets it a different man's stats.
+   *
+   * NFL only, since 2026-10-12: `SportPlayerPoolResolver` no longer puts a bare vendor number in
+   * `external_source_id` (it is the Sleeper id, a prefixed provider id like `tsdb_…`, or null), and
+   * `team_abbreviation` is the club code while `team` keeps the stored display name.
    */
   sleeper_id?: string | null
   age?: number | null

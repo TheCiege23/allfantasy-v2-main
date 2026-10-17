@@ -50,7 +50,9 @@ export default function CommissionerWaiverControls({ leagueId, onAfterAction }: 
     setBusy(key)
     try {
       if (action === "process") {
-        const res = await fetch(`/api/commissioner/leagues/${leagueId}/waivers`, { method: "POST" })
+        const res = await fetch(`/api/commissioner/leagues/${leagueId}/waivers`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "process" }),
+        })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) {
           toast.error(typeof json?.error === "string" ? json.error : "Failed to process waivers")

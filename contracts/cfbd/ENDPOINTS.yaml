@@ -1,0 +1,19 @@
+provider: college-football-data
+base_url: https://api.collegefootballdata.com
+reference: https://api.collegefootballdata.com/api/plays
+authentication: bearer_env_CFBD_API_KEY_or_CFBD_KEY
+endpoints:
+  play_stat_types:
+    path: /plays/stats/types
+    method: GET
+    response: array_of_id_number_and_name_string
+  game_play_stats:
+    path: /plays/stats
+    method: GET
+    query: {gameId: integer}
+    maximum_records: 2000
+    response: array_of_PlayStat
+    documented_fields: [gameId, season, week, team, conference, opponent, teamScore, opponentScore, driveId, playId, period, clock, yardsToGoal, down, distance, athleteId, athleteName, statType, stat]
+    completeness: reject_empty_or_at_limit_and_require_box_score_reconciliation
+    identity_namespace: CFBD_athleteId
+    scoring_semantics: field_goal_distance_verified_for_captured_game_only

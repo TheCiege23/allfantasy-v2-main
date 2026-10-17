@@ -8,6 +8,8 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
 import { resolveExileReturn } from '@/lib/survivor/SurvivorExileEngine'
 
+import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
+
 export const dynamic = 'force-dynamic'
 
 export async function POST(
@@ -19,6 +21,8 @@ export async function POST(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { leagueId } = params
+  const denied = await survivorHostGuard(leagueId, userId)
+  if (denied) return denied
   const gate = await assertLeagueCommissioner(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Commissioner only' }, { status: gate.status ?? 403 })
 

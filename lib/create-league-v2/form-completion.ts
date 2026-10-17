@@ -16,6 +16,7 @@ import {
   getIdpDraftTypeOptions,
   getScoringPresetOptionsForSelection,
   getTeamCountOptions,
+  getSurvivorTribeOptions,
 } from './rules-engine'
 import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
 
@@ -41,6 +42,10 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
   if (!lt) {
     issues.push({ code: 'concept_required', message: 'Choose a league concept to continue.' })
     return issues
+  }
+
+  if (lt === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)) {
+    issues.push({ code: 'survivor_tribes_invalid', message: 'Choose a valid starting tribe count for this cast size.' })
   }
 
   if (!state.sport) {
@@ -102,16 +107,24 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
     }
   }
 
-  if (!state.draftDate.trim()) {
-    issues.push({ code: 'draft_date_required', message: 'Choose a draft date.' })
-  }
+  // "Schedule later" is a real answer, not a missing one: the date is set after creation.
+  if (state.draftScheduleLater !== true) {
+    if (!state.draftDate.trim()) {
+      issues.push({ code: 'draft_date_required', message: 'Choose a draft date, or pick "Schedule later".' })
+    }
 
-  if (!state.draftTime.trim()) {
-    issues.push({ code: 'draft_time_required', message: 'Choose a draft time.' })
+    if (!state.draftTime.trim()) {
+      issues.push({ code: 'draft_time_required', message: 'Choose a draft time, or pick "Schedule later".' })
+    }
   }
 
   if (!state.timezone.trim()) {
     issues.push({ code: 'timezone_required', message: 'Choose a timezone.' })
+  }
+
+  // TE premium turned on must say how much: the commissioner picks the per-catch amount.
+  if (state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints !== 'number') {
+    issues.push({ code: 'te_premium_points_required', message: 'Choose how many extra points a tight end gets per catch, or turn TE premium off.' })
   }
 
   if (lt === 'tournament') {

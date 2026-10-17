@@ -1,3 +1,4 @@
+import { loadFantraxNativePresentation, projectFantraxStandings } from '@/lib/redraft/fantraxNativePresentation'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -24,6 +25,9 @@ export async function GET(req: NextRequest) {
     where: { seasonId },
     orderBy: [{ playoffSeed: 'asc' }, { wins: 'desc' }, { losses: 'asc' }, { pointsFor: 'desc' }, { pointsAgainst: 'asc' }],
   })
+
+  const imported = await loadFantraxNativePresentation(season)
+  if (imported && !season.medianGame) return NextResponse.json({ rosters: projectFantraxStandings(rosters, imported.matchups), source: 'fantrax', readOnly: true, dataStatus: imported.matchups.some(m => m.status === 'final') ? 'scored' : 'No finalized Fantrax results yet.', incompleteMatchups: imported.incompleteMatchups })
 
   const countedMatchups = await prisma.redraftMatchup.count({
     where: {

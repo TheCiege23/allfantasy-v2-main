@@ -1,7 +1,13 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { buildContextHash, type DraftContext, type DraftMode } from '@/lib/adp/computeAllFantasyAdp'
+import {
+  buildContextHash,
+  collapseStoredAdpRows,
+  normalizeStoredPlayerKey,
+  type DraftContext,
+  type DraftMode,
+} from '@/lib/adp/computeAllFantasyAdp'
 import { buildCrossSizeBoard, type CrossSizeRow } from '@/lib/adp/crossSizeAdp'
 
 /**
@@ -98,7 +104,13 @@ export async function loadAdpBoard(
     },
   })
 
-  const entries: AdpBoardEntry[] = exactRows.map((r) => ({
+  /*
+   * Stored keys are re-keyed to today's suffix-insensitive `buildPlayerKey`, and spelling variants
+   * of one player on this one board (`aaron jones sr.|rb` beside `aaron jones sr|rb`) collapse to
+   * the row with more samples — see computeAllFantasyAdp.preferStoredAdpRow. Without it the board
+   * carries the same player twice and readers keyed by `buildPlayerKey` find neither.
+   */
+  const entries: AdpBoardEntry[] = collapseStoredAdpRows(exactRows).map((r) => ({
     playerKey: r.playerKey,
     playerName: r.playerName,
     adp: r.averageOverallPick,
@@ -152,7 +164,10 @@ export async function loadAdpBoard(
       take: CROSS_SIZE_ROW_LIMIT,
     })
 
-    const projected = buildCrossSizeBoard(poolRows as CrossSizeRow[], {
+    // Variants are re-keyed but NOT collapsed here: each row is a disjoint set of real picks, and
+    // the weighted median below is the right way to combine them.
+    const rekeyed = poolRows.map((r) => ({ ...r, playerKey: normalizeStoredPlayerKey(r.playerKey) }))
+    const projected = buildCrossSizeBoard(rekeyed as CrossSizeRow[], {
       targetTeamCount: context.teamCount,
       targetDraftType: context.draftType,
     })

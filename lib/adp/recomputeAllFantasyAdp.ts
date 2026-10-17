@@ -16,6 +16,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { persistPreparationSnapshotHistory } from '@/lib/adp/preparationSnapshotWriter'
 import { collectDraftFactSamples } from '@/lib/adp/draftFactSamples'
 import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
@@ -142,6 +143,8 @@ export interface RecomputeAllFantasyAdpReport {
 }
 
 interface DraftPickWithSession {
+  team?: string | null
+  playerId?: string | null
   playerName: string
   position: string | null
   overall: number
@@ -157,12 +160,16 @@ interface DraftPickWithSession {
     teamCount: number
     draftType: string
     sportType: string | null
+    id?: string
+    playerPool?: string
+    draftModeLabel?: string | null
     league: {
       sport: string
       season: number
       scoring: string | null
       isDynasty: boolean
       leagueVariant: string | null
+      settings?: unknown
     } | null
   }
 }
@@ -276,7 +283,9 @@ export async function recomputeAllFantasyAdp(
         ...(sportFilter ? { session: { league: { sport: sportFilter } } } : {}),
       },
       select: {
-        playerName: true,
+        team: true,
+        playerId: true,
+      playerName: true,
         position: true,
         overall: true,
         round: true,
@@ -287,11 +296,15 @@ export async function recomputeAllFantasyAdp(
         pickMetadata: true,
         session: {
           select: {
+            id: true,
             sessionKind: true,
             status: true,
             teamCount: true,
             draftType: true,
             sportType: true,
+            sleeperDraftId: true,
+            playerPool: true,
+            draftModeLabel: true,
             league: {
               select: {
                 sport: true,
@@ -299,6 +312,7 @@ export async function recomputeAllFantasyAdp(
                 scoring: true,
                 isDynasty: true,
                 leagueVariant: true,
+                settings: true,
               },
             },
           },
@@ -448,6 +462,8 @@ export async function recomputeAllFantasyAdp(
     const final: AdpSnapshot[] = applyTrends(snapshots, { sevenDay: sevenMap, thirtyDay: thirtyMap })
 
     if (apply) {
+      const historyErrors = await persistPreparationSnapshotHistory(picksRaw, new Date())
+      report.errors.push(...historyErrors)
       const { written, errors: persistErrors } = await persistAllFantasyAdpSnapshots(final)
       report.snapshotsWritten = written
       report.errors.push(...persistErrors)

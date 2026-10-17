@@ -21,6 +21,7 @@ import { signedGapPct, type TradeGradeView } from './tradeGrade'
 import { gradeInputsFromNativeItems, gradeInputsFromRedraftAssets } from './tradeGradeInputs'
 import type { LoadedTrade, TradeRef, TradeSide } from './tradeRecord'
 import { buildTradeReview, type Known, type ReviewSideLineup, type TradeReview, type TradeReviewFacts } from './tradeReview'
+import { getDivisionsForUsers } from '@/lib/class-rating/reads'
 
 /**
  * Gather the facts commissioner review mode needs (`./tradeReview.ts`) for one stored trade, and build
@@ -52,6 +53,8 @@ export type TradeReviewDeps = {
   lastMoves: (args: LastMovesArgs) => Promise<Known<LastMoves>>
   forecast: (args: { leagueIds: string[]; season: number }) => Promise<{ week: number; teamForecasts: unknown } | null>
   deadlineKickoff: (args: { sport: string; season: number; week: number }) => Promise<Date | null>
+  /** Class division (1–5) per AllFantasy user id, ESTABLISHED ratings only; anyone else is absent. */
+  managerDivisions: (userIds: string[]) => Promise<Map<string, number>>
   now: () => Date
 }
 
@@ -311,6 +314,7 @@ async function defaultLastMoves(args: LastMovesArgs): Promise<Known<LastMoves>> 
 
 export const defaultTradeReviewDeps: TradeReviewDeps = {
   evaluate: evaluateStoredTrade,
+  managerDivisions: (ids) => getDivisionsForUsers(ids),
   leagueRow: (leagueId) => prisma.league.findUnique({ where: { id: leagueId } }).catch(() => null),
   pairHistory: (args) => defaultPairHistory(args).catch(() => ({ ok: false as const, reason: 'Trade history could not be read.' })),
   managerHealth: getLeagueManagerHealth,
@@ -486,6 +490,18 @@ export async function reviewStoredTrade(
     return { ok: true as const, value: kickoff.toISOString() }
   })()
 
+  // Class divisions (ADR F2.10a) — `managerUserId` is the AF user id once a team is claimed, otherwise
+  // a provider id with no Class, which the check reports as "no established Class". ESTABLISHED ratings
+  // only, and NO XP-level fallback: XP measures volume, and the owner ruled it out (2026-10-01).
+  const managerDivisions: TradeReviewFacts['managerDivisions'] = await (async () => {
+    const ids = [teamA?.managerUserId ?? null, teamB?.managerUserId ?? null]
+    if (!ids[0] && !ids[1]) return { ok: false as const, reason: 'The managers behind these teams could not be identified.' }
+    const present = ids.filter((x): x is string => Boolean(x))
+    const divisions = await d.managerDivisions(present).catch(() => null)
+    if (!divisions) return { ok: false as const, reason: 'Manager Classes could not be read.' }
+    return { ok: true as const, value: [ids[0] ? divisions.get(ids[0]) ?? null : null, ids[1] ? divisions.get(ids[1]) ?? null : null] as const }
+  })()
+
   const facts: TradeReviewFacts = {
     sides: [{ name: sideNames[0] }, { name: sideNames[1] }],
     gapPct,
@@ -497,6 +513,7 @@ export async function reviewStoredTrade(
     now: now.toISOString(),
     // The type the one grade priced the trade on — so "tanking" and "rebuild" follow the grade's own format.
     leagueType: receipt.grade.leagueType ? { type: receipt.grade.leagueType.type, label: receipt.grade.leagueType.label } : null,
+    managerDivisions,
   }
   return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sides: [sideA, sideB], facts }
 }

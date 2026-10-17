@@ -61,7 +61,7 @@ export async function loadLeagueForTrade(args: {
   })
   if (!row) return null
   // 🛑 Stripped HERE, once: this row's `settings` is carried whole into the league snapshot that
-  // trade-value/analyze, start-sit, trending and the war-room dashboard return to the browser.
+  // trade-value/analyze, start-sit and trending return to the browser.
   // Nothing reads the retired manager-label keys (lib/league/clientLeagueSettings.ts).
   const settings =
     row.settings && typeof row.settings === 'object' && !Array.isArray(row.settings)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 
-function roster(starters: Array<[string, string]>, bench: Array<[string, string]> = []) {
+function roster(starters: Array<[string, string]>, bench: Array<[string, string]> = [], idSpace: 'sleeper' | 'other' = 'sleeper') {
   const mk = ([playerId, playerName]: [string, string], isStarter: boolean) => ({
     playerId,
     playerName,
@@ -16,6 +16,7 @@ function roster(starters: Array<[string, string]>, bench: Array<[string, string]
     {
       userId: 'u1',
       teamName: 'My Team',
+      idSpace,
       starters: starters.map((s) => mk(s, true)),
       bench: bench.map((b) => mk(b, false)),
     },
@@ -39,6 +40,26 @@ describe('buildChimmyPlayerCards', () => {
       isStarter: true,
     })
     expect(cards[0].imageUrl).toContain('5859')
+  })
+
+  /* A native NHL roster's 1114 is A.J. Greer (Rolling Insights); Sleeper's NHL CDN face for 1114 is somebody else. */
+  it('derives no headshot from a roster whose ids are not Sleeper ids', () => {
+    const cards = buildChimmyPlayerCards({
+      answer: 'Start A.J. Greer tonight.',
+      rosters: roster([['1114', 'A.J. Greer']], [], 'other'),
+      sport: 'NHL' as never,
+    })
+    expect(cards).toHaveLength(1)
+    expect(cards[0].imageUrl).toBeNull()
+  })
+
+  it('CONTROL: a Sleeper NBA roster’s real Sleeper id still gets its Sleeper NBA headshot', () => {
+    const cards = buildChimmyPlayerCards({
+      answer: 'Start Jalen Brunson tonight.',
+      rosters: roster([['1308', 'Jalen Brunson']], [], 'sleeper'),
+      sport: 'NBA' as never,
+    })
+    expect(cards[0].imageUrl).toBe('https://sleepercdn.com/content/nba/players/1308.jpg')
   })
 
   it('ignores roster players the answer does not mention', () => {

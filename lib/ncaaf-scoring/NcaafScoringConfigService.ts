@@ -1,6 +1,7 @@
 /**
  * [NEW] lib/ncaaf-scoring/NcaafScoringConfigService.ts
  */
+import { importedNcaafPanelRules } from '@/lib/redraft/importedNcaafScoring'
 import { prisma } from '@/lib/prisma'
 import { getNcaafScoringPreset, detectNcaafPresetMatch, buildFullNcaafScoringConfig, type NcaafScoringPresetKey, type NcaafScoringSource } from './NcaafScoringPresets'
 import { receptionPointsForSportConfigPreset, storeSavedByPerson } from '@/lib/redraft/uiScoringStoreBridge'
@@ -21,6 +22,10 @@ export async function getLeagueNcaafScoringConfig(leagueId: string): Promise<Lea
   }
   const s = (league.settings as Record<string, unknown>) ?? {}
   const raw = s[`${PREFIX}config`] as Record<string, unknown> | undefined
+  if (!storeSavedByPerson(raw)) {
+    const imported = importedNcaafPanelRules(s, Object.keys(buildFullNcaafScoringConfig('af_default')))
+    if (imported) return { presetKey: 'custom', presetLabel: getNcaafScoringPreset('custom').label, source: 'IMPORTED_MAPPED', rules: imported, matchesPreset: false, premiumFeaturesUsed: false, lastUpdatedAt: null, lastUpdatedBy: null, warningFlags: ['imported_scoring_requires_coverage_verification'] }
+  }
   // Until a person saves this panel, reception is whatever the manager picked at create — the same
   // rule the scorer applies (uiScoringStoreBridge), so the panel shows what actually scores.
   const pickedReception = storeSavedByPerson(raw) ? null : receptionPointsForSportConfigPreset(s)

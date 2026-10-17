@@ -126,7 +126,8 @@ describe('POST /api/leagues/import/discover Sleeper account discovery', () => {
     const res = await POST(req as any)
     expect(res.status).toBe(404)
     await expect(res.json()).resolves.toEqual({
-      error: 'Provider account not found.',
+      error:
+        'We could not find a Sleeper account with that username. Check the spelling, or leave the field blank to use your linked Sleeper account.',
     })
     expect(getUserLeaguesMock).not.toHaveBeenCalled()
   })

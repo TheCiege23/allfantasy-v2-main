@@ -1,4 +1,5 @@
 import { coreUiCopy } from './coreUiCopy'
+import { gradeMomentToSpanish } from '@/lib/decision-os/trade/gradeMoment'
 
 /** Client display copy for the small set of data-derived trade grade sentences. */
 export function tradeUiCopy(english: string, language: string): string {
@@ -23,9 +24,11 @@ export function tradeUiCopy(english: string, language: string): string {
   if (best) return `El activo más valioso fue ${best[1]} y lo recibió ${best[2]}.`
   const split = english.match(/^Quality and quantity pulled apart: the best single asset was (.+), and (.+) got (?:him|it) — the other side won on the rest of the deal\.$/)
   if (split) return `La calidad y la cantidad dieron resultados distintos: ${split[2]} recibió el activo más valioso, ${split[1]}, pero el otro lado ganó con el resto del intercambio.`
-  const moment = english.match(/^Graded on this league's values (today|when first graded .+) \((.+)\)\.$/)
-  if (moment) return `Calificado con los valores de esta liga ${moment[1] === 'today' ? 'de hoy' : `cuando se calificó por primera vez ${moment[1].slice('when first graded '.length)}`} (${moment[2]}).`
-  const frozen = english.match(/^when first graded (.+)$/)
-  if (frozen) return `cuando se calificó por primera vez ${frozen[1]}`
-  return english
+  // `tradeGradeBreakdown`: "Graded on this league's values <moment> (<chart basis>)." — the moment is a
+  // `gradeMoment` phrase (today / at the time of the trade / from … after the trade / when first graded).
+  const moment = english.match(/^Graded on this league's values (.+?) \(([^()]+)\)\.$/)
+  const momentEs = moment ? gradeMomentToSpanish(moment[1]!) : null
+  if (moment && momentEs) return `Calificado con los valores de esta liga ${momentEs} (${moment[2]}).`
+  // A bare moment phrase, as the /core Trades row prints it after "in league value".
+  return gradeMomentToSpanish(english) ?? english
 }

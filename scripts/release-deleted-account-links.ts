@@ -8,6 +8,10 @@
  * same person from linking them to a new account. This runs the same release
  * over those accounts.
  *
+ * 2026-10: the release now also DELETES stored platform credentials (league_auths,
+ * YahooConnection, database sessions), so accounts deleted before that are reported
+ * and released here too.
+ *
  * Deleted accounts are recognised by the anonymized email the route writes:
  * `deleted+<id>@deleted.invalid`.
  *
@@ -43,13 +47,16 @@ async function main() {
 
     let still = 0
     for (const u of deleted) {
-      const [profile, identities, teams] = await Promise.all([
+      const [profile, identities, teams, credentials, yahoo, sessions] = await Promise.all([
         prisma.userProfile.findUnique({
           where: { userId: u.id },
           select: { sleeperUserId: true, phone: true, discordUserId: true, discordAccessToken: true, spotifyAccessToken: true },
         }),
         prisma.platformIdentity.count({ where: { userId: u.id } }),
         prisma.leagueTeam.count({ where: { claimedByUserId: u.id } }),
+        prisma.leagueAuth.count({ where: { userId: u.id } }),
+        prisma.yahooConnection.count({ where: { userId: u.id } }),
+        prisma.authSession.count({ where: { userId: u.id } }),
       ])
       const holds = {
         sleeper: Boolean(profile?.sleeperUserId),
@@ -59,8 +66,13 @@ async function main() {
         platformIdentities: identities,
         claimedTeams: teams,
         legacy: Boolean(u.legacyUserId),
+        platformCredentials: credentials,
+        yahooConnections: yahoo,
+        sessions,
       }
-      const anything = holds.sleeper || holds.phone || holds.discord || holds.spotifyToken || identities > 0 || teams > 0 || holds.legacy
+      const anything =
+        holds.sleeper || holds.phone || holds.discord || holds.spotifyToken || identities > 0 || teams > 0 || holds.legacy ||
+        credentials > 0 || yahoo > 0 || sessions > 0
       if (!anything) continue
       still += 1
       // Ids only — never the phone, handle or token themselves.

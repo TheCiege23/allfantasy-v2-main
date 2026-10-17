@@ -42,16 +42,27 @@ import { parseEgressGeofeed } from "@/lib/geo/privateRelayRanges"
 import { __resetAnonymizerCache } from "@/lib/geo/anonymizerCache"
 import { detectUserState } from "@/lib/geo/detectUserState"
 import { isAppleCorporateNetwork } from "@/lib/geo/appleNetwork"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import {
+  IOS_APP_HTML_FLAG_SCRIPT,
+  IOS_APP_IAP_PAGE_PREFIXES,
+  IOS_APP_IAP_UA_MARKER,
   IOS_APP_PLANS_PATH,
   IOS_APP_UA_MARKER,
+  isIosAppClosedPage,
+  isIosAppIapUserAgent,
   isIosAppPurchaseApi,
   isIosAppPurchasePage,
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
 
+/** A 1.0 build: no StoreKit bridge, sells nothing. */
 const IOS_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AllFantasyiOS/1.0"
+/** A build with the StoreKit bridge (ios-app/capacitor.config.json). */
+const IOS_IAP_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AllFantasyiOS/1.1 AFIAP/1"
 const SAFARI_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1"
 
@@ -184,6 +195,80 @@ describe("guideline 3.1.1 — nothing is sold inside the app", () => {
   it("leaves the rest of the app alone", async () => {
     const res = await middleware(request("/core", { ua: IOS_UA }))
     expect(location(res)?.pathname ?? null).not.toBe(IOS_APP_PLANS_PATH)
+  })
+})
+
+describe("guideline 3.1.1 — an IAP build sells plans and tokens through Apple only", () => {
+  it("recognises the IAP marker only alongside the app marker", () => {
+    expect(isIosAppIapUserAgent(IOS_IAP_UA)).toBe(true)
+    expect(isIosAppIapUserAgent(IOS_UA)).toBe(false)
+    expect(isIosAppIapUserAgent(`${SAFARI_UA} ${IOS_APP_IAP_UA_MARKER}/1`)).toBe(false)
+    expect(isIosAppIapUserAgent(null)).toBe(false)
+  })
+
+  it("the Apple-sellable pages are a subset of the purchase pages", () => {
+    for (const p of IOS_APP_IAP_PAGE_PREFIXES) expect(isIosAppPurchasePage(p), p).toBe(true)
+  })
+
+  it("opens the plan and token pages to an IAP build", async () => {
+    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens"]) {
+      const res = await middleware(request(p, { ua: IOS_IAP_UA }))
+      expect(location(res)?.pathname ?? null, p).not.toBe(IOS_APP_PLANS_PATH)
+    }
+  })
+
+  it("control: the same pages still redirect a 1.0 build with no StoreKit bridge", async () => {
+    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens"]) {
+      const res = await middleware(request(p, { ua: IOS_UA }))
+      expect(res.status, p).toBe(307)
+      expect(location(res)?.pathname, p).toBe(IOS_APP_PLANS_PATH)
+    }
+  })
+
+  it("keeps donations and the Survivor exile shop closed to an IAP build", async () => {
+    for (const p of ["/donate", "/support", "/survivor/abc/exile/tokens"]) {
+      expect(isIosAppClosedPage(p, IOS_IAP_UA), p).toBe(true)
+      const res = await middleware(request(p, { ua: IOS_IAP_UA }))
+      expect(res.status, p).toBe(307)
+      expect(location(res)?.pathname, p).toBe(IOS_APP_PLANS_PATH)
+    }
+  })
+
+  it("still refuses Stripe checkout and the billing portal from an IAP build", async () => {
+    for (const p of [
+      "/api/monetization/checkout/subscription",
+      "/api/monetization/checkout/tokens",
+      "/api/subscription/billing-portal",
+    ]) {
+      const res = await middleware(request(p, { ua: IOS_IAP_UA, method: "POST" }))
+      expect(res.status, p).toBe(403)
+      expect((await res.json()).error, p).toBe("not_available_in_ios_app")
+    }
+  })
+
+  it("leaves the Apple purchase APIs open to an IAP build", async () => {
+    for (const p of ["/api/monetization/apple/products", "/api/monetization/apple/transactions"]) {
+      expect(isIosAppPurchaseApi(p), p).toBe(false)
+      const res = await middleware(request(p, { ua: IOS_IAP_UA, method: p.endsWith("products") ? "GET" : "POST" }))
+      if (res.status === 403) expect((await res.json()).error, p).not.toBe("not_available_in_ios_app")
+    }
+  })
+
+  it("the pre-paint flag script sets data-ios-iap only for an IAP build", () => {
+    const run = (ua: string) => {
+      const attrs: Record<string, string> = {}
+      const fn = new Function("navigator", "document", IOS_APP_HTML_FLAG_SCRIPT)
+      fn({ userAgent: ua }, { documentElement: { setAttribute: (k: string, v: string) => (attrs[k] = v) } })
+      return attrs
+    }
+    expect(run(IOS_IAP_UA)).toEqual({ "data-ios-app": "1", "data-ios-iap": "1" })
+    expect(run(IOS_UA)).toEqual({ "data-ios-app": "1" })
+    expect(run(SAFARI_UA)).toEqual({})
+  })
+
+  it("ships the IAP marker in the Capacitor config, so builds actually send it", () => {
+    const config = JSON.parse(readFileSync(join(process.cwd(), "ios-app/capacitor.config.json"), "utf8"))
+    expect(isIosAppIapUserAgent(`Mozilla/5.0 (iPhone) ${config.ios.appendUserAgent}`)).toBe(true)
   })
 })
 

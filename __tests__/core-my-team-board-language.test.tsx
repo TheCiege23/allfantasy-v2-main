@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { MyTeamPulse } from '@/lib/core-app/myTeamPulse'
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
+
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({
   useOptionalLanguage: () => ({ language: 'es' }),
 }))

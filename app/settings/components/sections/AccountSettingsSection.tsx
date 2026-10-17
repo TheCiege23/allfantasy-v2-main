@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
@@ -17,10 +17,77 @@ export function AccountSettingsSection({
   const [deleteConfirm, setDeleteConfirm] = useState("")
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [dataBusy, setDataBusy] = useState(false)
+  const [dataStatus, setDataStatus] = useState<{ kind: "ready" | "partial" | "error"; message?: string } | null>(null)
   // No caller currently passes a real planLabel prop (it's always null) — this page never queried
   // a real plan before. Fall back to a live client-side entitlement check rather than always
   // showing "Free" regardless of the user's actual subscription.
   const ents = useEntitlements()
+  /*
+   * /api/user/delete cancels Stripe billing before it erases anything (lib/account/
+   * cancelSubscriptionsOnDelete) — immediately, with no refund for the rest of the period — so the
+   * dialog says so. An App Store subscription is the one we cannot cancel: Apple only lets the
+   * user do that. Same paid gate as BillingSettingsSection.
+   */
+  const hasLiveSubscription = ents.hasAnyPaid && !ents.isAdminBypassAccount
+
+  /*
+   * The delete dialog is modal, so it behaves like one: Escape closes it (never mid-deletion),
+   * Tab / Shift+Tab cycle INSIDE it rather than walking out into the page behind, the page does
+   * not scroll under it on a phone, and closing hands focus back to "Start deletion" instead of
+   * dropping it on <body>. Focus enters on the confirm input (autoFocus below).
+   */
+  const openerRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(false)
+
+  useEffect(() => {
+    if (!deleteOpen) {
+      if (wasOpen.current) {
+        wasOpen.current = false
+        openerRef.current?.focus()
+      }
+      return
+    }
+    wasOpen.current = true
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (!deleteBusy) {
+          e.preventDefault()
+          setDeleteOpen(false)
+        }
+        return
+      }
+      if (e.key !== "Tab") return
+      const panel = dialogRef.current
+      if (!panel) return
+      const items = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), a[href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      if (items.length === 0) return
+      const first = items[0]!
+      const last = items[items.length - 1]!
+      const active = document.activeElement
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener("keydown", onKey)
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [deleteOpen, deleteBusy])
 
   const createdLabel = accountCreatedAt
     ? new Date(accountCreatedAt).toLocaleDateString(undefined, {
@@ -34,7 +101,7 @@ export function AccountSettingsSection({
   // leaves hasSupreme/etc. at their last-known (false, on a first-load failure) value rather than
   // proving "free," so this checks ents.error explicitly instead of trusting those booleans alone.
   const derivedPlanDisplay = ents.error
-    ? "Unable to verify"
+    ? t("settings.billing.unableToVerify")
     : ents.hasSupreme
       ? "AF Supreme"
       : ents.hasCommissioner
@@ -60,15 +127,64 @@ export function AccountSettingsSection({
         body: JSON.stringify({ confirm: true }),
       })
       if (!res.ok) {
-        setDeleteError("Account deletion failed. Please try again.")
+        // The route explains a refused deletion (e.g. billing could not be cancelled, so nothing
+        // was deleted); show that rather than a generic failure.
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+        setDeleteError(
+          typeof data.error === "string" && data.error ? data.error : t("settings.account.deleteFailed"),
+        )
         return
       }
       // PII is erased and auth is revoked — sign the user out and leave.
       await signOutAndPurge({ callbackUrl: "/" })
     } catch {
-      setDeleteError("Account deletion failed. Please try again.")
+      setDeleteError(t("settings.account.deleteFailed"))
     } finally {
       setDeleteBusy(false)
+    }
+  }
+
+  /*
+   * "Download my data" (app/api/user/export). Fetched rather than linked, so a refusal — signed out,
+   * rate-limited, a failed read — shows its reason here instead of downloading an error page as
+   * the file. The export names any section it could not gather; when it does, say so, because a
+   * partial copy must never read as a complete one.
+   */
+  const handleDownloadData = async () => {
+    if (dataBusy) return
+    setDataBusy(true)
+    setDataStatus(null)
+    try {
+      const res = await fetch("/api/user/export", { cache: "no-store" })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: unknown; message?: unknown }
+        const reason = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : ""
+        setDataStatus({ kind: "error", message: res.status === 429 && reason ? reason : undefined })
+        return
+      }
+      const text = await res.text()
+      let partial = false
+      try {
+        const parsed = JSON.parse(text) as { unavailableSections?: unknown }
+        partial = Array.isArray(parsed.unavailableSections) && parsed.unavailableSections.length > 0
+      } catch {
+        // Unparseable is still the file the server sent; hand it over as-is.
+      }
+      const filename =
+        /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "allfantasy-data.json"
+      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }))
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setDataStatus({ kind: partial ? "partial" : "ready" })
+    } catch {
+      setDataStatus({ kind: "error" })
+    } finally {
+      setDataBusy(false)
     }
   }
 
@@ -96,7 +212,7 @@ export function AccountSettingsSection({
         </div>
         {ents.isAdminBypassAccount && (
           <p className="text-xs italic" style={{ color: "var(--muted)" }} data-testid="settings-account-bypass-notice">
-            Admin bypass — not a real Stripe subscription.
+            {t("settings.account.bypassNotice")}
           </p>
         )}
         {createdLabel && (
@@ -114,8 +230,51 @@ export function AccountSettingsSection({
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
           data-testid="settings-account-sign-out"
         >
-          Sign out
+          {t("settings.account.signOut")}
         </button>
+      </div>
+
+      <div
+        className="rounded-xl border p-4 space-y-3"
+        style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
+        data-testid="settings-account-data"
+      >
+        <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+          {t("settings.account.dataHeading")}
+        </p>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.account.dataIntro")}</p>
+        <button
+          type="button"
+          onClick={() => void handleDownloadData()}
+          disabled={dataBusy}
+          aria-busy={dataBusy}
+          className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:cursor-wait disabled:opacity-60"
+          style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          data-testid="settings-account-data-download"
+        >
+          {dataBusy ? t("settings.account.dataPreparing") : t("settings.account.dataDownload")}
+        </button>
+        {dataStatus ? (
+          <p
+            role={dataStatus.kind === "ready" ? "status" : "alert"}
+            className="text-xs"
+            style={{
+              color:
+                dataStatus.kind === "error"
+                  ? "var(--accent-red-strong)"
+                  : dataStatus.kind === "partial"
+                    ? "#fbbf24"
+                    : "var(--muted)",
+            }}
+            data-testid="settings-account-data-status"
+          >
+            {dataStatus.kind === "ready"
+              ? t("settings.account.dataReady")
+              : dataStatus.kind === "partial"
+                ? t("settings.account.dataPartial")
+                : dataStatus.message || t("settings.account.dataError")}
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-red-500/30 p-4 space-y-3" style={{ background: "var(--panel2)" }}>
@@ -124,6 +283,7 @@ export function AccountSettingsSection({
         </p>
         <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.account.deleteIntro")}</p>
         <button
+          ref={openerRef}
           type="button"
           onClick={() => {
             setDeleteOpen(true)
@@ -147,21 +307,39 @@ export function AccountSettingsSection({
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-account-title"
+          aria-describedby="delete-account-desc"
         >
           <div
+            ref={dialogRef}
             className="w-full max-w-md rounded-2xl border p-5 shadow-xl"
             style={{ borderColor: "var(--border)", background: "var(--panel)" }}
           >
             <h3 id="delete-account-title" className="text-lg font-semibold" style={{ color: "var(--text)" }}>
               {t("settings.account.confirmDeletionTitle")}
             </h3>
-            <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+            <p id="delete-account-desc" className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
               {t("settings.account.confirmDeletionBeforeWord")}{" "}
               <span className="font-mono font-semibold text-white">DELETE</span>{" "}
               {t("settings.account.confirmDeletionAfterWord")}
             </p>
+            {hasLiveSubscription ? (
+              <p
+                className="mt-3 rounded-lg border px-3 py-2 text-xs"
+                style={{ borderColor: "color-mix(in srgb, #fbbf24 45%, transparent)", color: "#fbbf24" }}
+                data-testid="settings-account-delete-subscription-warning"
+              >
+                {t("settings.account.deleteSubscriptionWarning")}
+              </p>
+            ) : null}
             <input
               type="text"
+              id="delete-account-confirm"
+              /* The name matches the visible sentence's opening words ("Type DELETE to confirm"), so
+                 voice control can target it by what is on screen; the full sentence, including that
+                 data is erased immediately, is read as its description when focus lands here. */
+              aria-label={t("settings.account.deleteConfirmAria")}
+              aria-describedby="delete-account-desc"
+              autoFocus
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               className="mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none"
@@ -192,6 +370,8 @@ export function AccountSettingsSection({
               <button
                 type="button"
                 onClick={() => setDeleteOpen(false)}
+                disabled={deleteBusy}
+                data-testid="settings-account-delete-cancel"
                 className="rounded-xl border px-4 py-2 text-sm font-semibold"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
               >

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guilly auction draft</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+</style>
+</helmet>
+<div class="sp" style="--acc: #ff3d2e; --acc2: #ffc531; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; align-items: center; gap: 16px; padding: 14px 28px; border-bottom: 1px solid rgba(255,255,255,.06); background: linear-gradient(90deg, rgba(255,61,46,.12), transparent 60%)">
+  <img src="specialty/guilly/emblem.svg" alt="" style="width: 44px">
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span class="gy-d" style="font-size: 30px; color: #fff">Guilly auction draft</span><span class="sp-t3" style="font-size: 12px">18 teams · $200 budget · 14 roster spots · nomination {{nomNo}} of 252</span></div>
+  <span class="gy-mode"><img src="specialty/guilly/icon-gavel.svg" alt="">Auction</span>
+  <span class="gy-mode"><img src="specialty/rules/scoring/pts.svg" alt="" style="width: 50px">Points · Standard</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 28px 28px; align-items: flex-start">
+  <section style="flex: 1 1 760px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card" style="padding: 22px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; background: radial-gradient(ellipse at 15% 50%, rgba(255,197,49,.14), transparent 60%), #0b0d14; border-color: rgba(255,197,49,.35)">
+      <div style="position: relative; width: 150px; height: 150px; flex: none">
+        <svg viewBox="0 0 100 100" style="position: absolute; inset: 0; transform: rotate(-90deg)"><circle cx="50" cy="50" r="44" fill="none" stroke="#151926" stroke-width="8"/><circle cx="50" cy="50" r="44" fill="none" stroke="{{ringC}}" stroke-width="8" stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="{{ringOff}}"/></svg>
+        <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><span class="gy-d" style="font-size: 54px; color: #fff">{{secs}}</span><span class="sp-t3" style="font-size: 11px">seconds</span></div>
+      </div>
+      <div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 6px">
+        <span class="sp-lbl" style="color: #ffc531">On the block · nominated by {{nomBy}}</span>
+        <div style="display: flex; align-items: center; gap: 10px"><span class="gy-pos" style="height: 26px; font-size: 11px; background: {{nom.bg}}; color: {{nom.c}}">{{nom.p}}</span><span class="gy-d" style="font-size: 46px; color: #fff">{{nomName}}</span></div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap"><sc-for list="{{nomStats}}" as="s" hint-placeholder-count="4"><div style="display: flex; flex-direction: column"><span class="sp-num" style="font-size: 17px; font-weight: 700">{{s.v}}</span><span class="sp-t3" style="font-size: 10.5px">{{s.l}}</span></div></sc-for></div>
+      </div>
+      <div style="flex: 0 0 240px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; flex-direction: column; align-items: flex-end"><span class="sp-lbl">High bid · {{highBy}}</span><span class="gy-d" style="font-size: 64px; color: #ffc531">${{bid}}</span></div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px"><sc-for list="{{quick}}" as="q" hint-placeholder-count="3"><button class="sp-btn {{q.cls}}" onClick="{{q.go}}" style="min-height: 44px; font-weight: 800">{{q.l}}</button></sc-for></div>
+        <span class="sp-t3" style="font-size: 11.5px; text-align: right">Your max bid: <b class="sp-num" style="color: #e8eaf2">${{myMax}}</b></span>
+      </div>
+    </div>
+    <div class="sp-card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="sp-lbl" style="flex: 1">Your roster · ${{myLeft}} left · {{open}} spots open</span><span class="sp-t3" style="font-size: 12px">Projected weekly floor <b class="sp-num" style="color: #e8eaf2">{{floor}}</b></span></div>
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px"><sc-for list="{{mine}}" as="m" hint-placeholder-count="14"><div style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 9px; background: {{m.bg}}; border: 1px solid {{m.line}}; min-height: 62px"><span class="gy-pos" style="align-self: flex-start; background: {{m.pb}}; color: {{m.pc}}">{{m.slot}}</span><span style="font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{m.n}}</span><span class="sp-num" style="font-size: 11px; color: #ffc531">{{m.price}}</span></div></sc-for></div>
+    </div>
+    <div class="sp-card2" style="padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-color: rgba(255,61,46,.35)"><img src="specialty/guilly/head-nervous.svg" alt="" style="width: 40px"><span class="sp-t2" style="font-size: 13px; flex: 1">Guilly tip: every week is an elimination, so depth beats one superstar. Your floor is your weakest realistic week — keep it above the league’s projected blade line (<b class="sp-num" style="color: #e8eaf2">560</b> after the draft).</span></div>
+  </section>
+  <aside style="flex: 0 1 400px; display: flex; flex-direction: column; gap: 16px">
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+      <div style="display: flex; gap: 8px; font: 600 10px 'Archivo'; letter-spacing: .08em; text-transform: uppercase; color: #5a6078; padding: 0 4px 4px"><span style="flex: 1">Team</span><span style="width: 50px; text-align: right">Left</span><span style="width: 50px; text-align: right">Max</span><span style="width: 40px; text-align: right">Open</span></div>
+      <sc-for list="{{teams}}" as="t" hint-placeholder-count="10"><div style="display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 7px; background: {{t.bg}}; font-size: 12.5px"><span class="sp-av" style="width: 24px; height: 24px; font-size: 9px; background: {{t.c}}">{{t.ini}}</span><span style="flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{t.n}}</span><span class="sp-num" style="width: 50px; text-align: right">${{t.left}}</span><span class="sp-num" style="width: 50px; text-align: right; color: #ffc531">${{t.max}}</span><span class="sp-num sp-t3" style="width: 40px; text-align: right">{{t.open}}</span></div></sc-for>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 4px">Just sold</span>
+      <sc-for list="{{sold}}" as="s" hint-placeholder-count="5"><div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 12.5px"><span class="gy-pos" style="background: {{s.bg}}; color: {{s.c}}">{{s.p}}</span><span style="flex: 1; font-weight: 600">{{s.n}}</span><span class="sp-t3" style="font-size: 11.5px">{{s.to}}</span><span class="sp-num" style="width: 40px; text-align: right; color: #ffc531; font-weight: 700">${{s.pr}}</span></div></sc-for>
+    </div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { bid: 31, by: 'DunkCity', secs: 7 }; }
+  renderVals() {
+    const PL = [["Nikola Jokic", "C"], ["Shai Gilgeous-Alexander", "PG/SG"], ["Victor Wembanyama", "C/PF"], ["Luka Doncic", "PG/SG"], ["Giannis Antetokounmpo", "PF/C"], ["Anthony Davis", "PF/C"], ["Anthony Edwards", "SG/SF"], ["Domantas Sabonis", "C/PF"], ["Karl-Anthony Towns", "C/PF"], ["Cade Cunningham", "PG"], ["Jalen Johnson", "PF/SF"], ["Trae Young", "PG"], ["Tyrese Maxey", "PG"], ["Jalen Williams", "SG/SF"], ["Chet Holmgren", "C/PF"], ["Alperen Sengun", "C"], ["LaMelo Ball", "PG"], ["Donovan Mitchell", "SG"], ["Devin Booker", "SG/PG"], ["Jalen Brunson", "PG"], ["Stephen Curry", "PG"], ["Kevin Durant", "SF/PF"], ["LeBron James", "SF/PF"], ["Bam Adebayo", "C"], ["Joel Embiid", "C"], ["Paolo Banchero", "PF"], ["Franz Wagner", "SF/PF"], ["Scottie Barnes", "SF/PF"], ["Evan Mobley", "PF/C"], ["Pascal Siakam", "PF"], ["Jaren Jackson Jr.", "PF/C"], ["Ja Morant", "PG"], ["Josh Giddey", "PG/SF"], ["De\u2019Aaron Fox", "PG"], ["Jamal Murray", "PG"], ["Zion Williamson", "PF"], ["James Harden", "PG"], ["Kawhi Leonard", "SF"], ["Ivica Zubac", "C"], ["Lauri Markkanen", "PF"], ["Dyson Daniels", "SG/PG"], ["Amen Thompson", "SG/SF"], ["Derrick White", "PG/SG"], ["Desmond Bane", "SG"], ["Austin Reaves", "SG"], ["Darius Garland", "PG"], ["Jarrett Allen", "C"], ["Rudy Gobert", "C"], ["Myles Turner", "C"], ["Nikola Vucevic", "C"], ["Deni Avdija", "SF/PF"], ["Cooper Flagg", "SF/PF"], ["Mikal Bridges", "SF"], ["OG Anunoby", "SF/PF"], ["Josh Hart", "SG/SF"], ["Brandon Miller", "SF"], ["Trey Murphy III", "SF"], ["Jimmy Butler", "SF"], ["Zach LaVine", "SG"], ["DeMar DeRozan", "SF"], ["Coby White", "PG/SG"], ["Jalen Duren", "C"], ["Walker Kessler", "C"], ["Onyeka Okongwu", "C"], ["Nic Claxton", "C"], ["Jakob Poeltl", "C"], ["Mark Williams", "C"], ["Isaiah Hartenstein", "C"], ["Stephon Castle", "PG/SG"], ["Alex Sarr", "C/PF"], ["Tyler Herro", "SG"], ["Norman Powell", "SG/SF"], ["Michael Porter Jr.", "SF"], ["Aaron Gordon", "PF"], ["Julius Randle", "PF"], ["Jalen Green", "SG"], ["Anfernee Simons", "SG"], ["Christian Braun", "SG"], ["Keegan Murray", "PF"], ["Herbert Jones", "SF"], ["Andrew Wiggins", "SF"], ["Miles Bridges", "SF/PF"], ["Kyle Kuzma", "PF"], ["Jerami Grant", "PF"], ["RJ Barrett", "SF"], ["Immanuel Quickley", "PG"], ["Jordan Poole", "SG/PG"], ["CJ McCollum", "SG"], ["Malik Monk", "SG"], ["Mike Conley", "PG"], ["Russell Westbrook", "PG"], ["Collin Sexton", "SG/PG"], ["Jordan Clarkson", "SG"], ["Bennedict Mathurin", "SG/SF"], ["Andrew Nembhard", "PG/SG"], ["Ausar Thompson", "SF"], ["Tobias Harris", "PF"], ["Paul George", "SF/PF"], ["Draymond Green", "PF/C"], ["Jonathan Kuminga", "PF"], ["Brandin Podziemski", "SG"], ["Klay Thompson", "SG"], ["P.J. Washington", "PF"], ["Dereck Lively II", "C"], ["Naz Reid", "C/PF"], ["Rui Hachimura", "PF"], ["Jaden McDaniels", "SF/PF"], ["Donte DiVincenzo", "SG"], ["Bilal Coulibaly", "SF"], ["Tari Eason", "PF"], ["Jabari Smith Jr.", "PF"], ["Kel\u2019el Ware", "C"], ["Shaedon Sharpe", "SG"], ["Scoot Henderson", "PG"], ["Toumani Camara", "SF/PF"], ["Cam Thomas", "SG"], ["Cameron Johnson", "SF"], ["Nickeil Alexander-Walker", "SG"], ["Keldon Johnson", "SF"], ["Devin Vassell", "SG"], ["Jeremy Sochan", "PF"], ["Matas Buzelis", "SF/PF"], ["Ayo Dosunmu", "SG"], ["Payton Pritchard", "PG"], ["Jrue Holiday", "PG/SG"], ["Jaylen Brown", "SG/SF"], ["Al Horford", "C"], ["Kevin Huerter", "SG"], ["Max Strus", "SF"], ["De\u2019Andre Hunter", "SF"], ["Caris LeVert", "SG"], ["Ty Jerome", "PG"], ["Luguentz Dort", "SG"], ["Cason Wallace", "PG/SG"], ["Aaron Nesmith", "SF"], ["Obi Toppin", "PF"], ["Jaime Jaquez Jr.", "SF"], ["Grayson Allen", "SG"], ["Royce O\u2019Neale", "SF"], ["Naji Marshall", "SF"], ["Quentin Grimes", "SG"], ["Jalen Suggs", "PG/SG"], ["Wendell Carter Jr.", "C/PF"], ["Goga Bitadze", "C"], ["Bobby Portis", "PF/C"], ["Gary Trent Jr.", "SG"], ["Nikola Jovic", "PF"], ["Duncan Robinson", "SF"], ["Harrison Barnes", "SF"], ["Keon Ellis", "SG"], ["Isaiah Stewart", "C"], ["Jaden Ivey", "SG/PG"], ["Dennis Schroder", "PG"], ["Terance Mann", "SG"], ["Kris Dunn", "PG/SG"], ["Derrick Jones Jr.", "SF"], ["Brandon Ingram", "SF/PF"], ["Mitchell Robinson", "C"], ["Yves Missi", "C"], ["Tre Jones", "PG"], ["Day\u2019Ron Sharpe", "C"], ["Nick Richards", "C"], ["Moussa Diabate", "C"], ["Guerschon Yabusele", "PF"], ["Daniel Gafford", "C"], ["Brook Lopez", "C"], ["Clint Capela", "C"], ["Jusuf Nurkic", "C"], ["Deandre Ayton", "C"], ["Kristaps Porzingis", "C"], ["Jonas Valanciunas", "C"], ["Zach Edey", "C"], ["Donovan Clingan", "C"], ["Kelly Oubre Jr.", "SF"], ["Chris Paul", "PG"], ["Bradley Beal", "SG"], ["Kevin Porter Jr.", "PG"], ["Spencer Dinwiddie", "PG"]];
+const TM = ["You \u00b7 TheCiege26", "BucketsOnly", "LoadManagement", "BoxOutBandits", "DunkCity", "SplashZone", "TripleDoubleTrouble", "AndOneAddicts", "PostUpPros", "FastBreakFam", "GlassCleaners", "ZoneDefense", "AlleyOops", "PaintBeasts", "BankShotBoys", "FlagrantFoul", "ShotClock", "HeatCheck"];
+const POS = {"QB": ["#e0553f", "#fff"], "RB": ["#3abf7a", "#06200f"], "WR": ["#3d8fe0", "#fff"], "TE": ["#e89a2c", "#1a1004"], "FLEX": ["#8a8fa8", "#0b0d14"], "SFLEX": ["#c04fd0", "#fff"], "K": ["#b48cf0", "#1a0d33"], "DST": ["#8a6a4a", "#fff"], "DL": ["#2fb5a5", "#04201d"], "LB": ["#1f8f86", "#fff"], "DB": ["#5fd0e0", "#05242a"], "IDP": ["#4a7f7a", "#fff"], "PG": ["#3d8fe0", "#fff"], "SG": ["#4fb3d9", "#05242a"], "SF": ["#3abf7a", "#06200f"], "PF": ["#e89a2c", "#1a1004"], "C": ["#e0553f", "#fff"], "G": ["#7aa6ec", "#0b1830"], "F": ["#7fd09c", "#06200f"], "UTIL": ["#8a8fa8", "#0b0d14"], "BN": ["#1d2130", "#a3a9c2"], "IR": ["#2a1418", "#ff9a8a"], "IL": ["#2a1418", "#ff9a8a"]};
+const G = "specialty/guilly/";
+const rng = (seed) => { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; };
+const AVC = ['#3a1418','#22314f','#1d3a3a','#2c2a4a','#3a3418','#12352a','#3a1f30','#1f2a4d','#2a3a1a','#3a2a14'];
+const av = (n) => { const s = n.replace('You · ', ''); let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 997; return { ini: s.replace(/[^A-Z0-9]/g, '').slice(0, 2) || s.slice(0, 2).toUpperCase(), c: AVC[h % AVC.length] }; };
+const short = (n) => { const p = n.split(' '); return p.length > 1 ? p[0][0] + '. ' + p.slice(1).join(' ') : n; };
+const pos1 = (p) => p.split('/')[0];
+const chip = (p) => ({ p, bg: POS[pos1(p)][0], c: POS[pos1(p)][1] });
+const fpg = (i) => Math.round((58 - i * 0.215 - (i > 40 ? (i - 40) * 0.04 : 0)) * 10) / 10;
+const price = (i) => Math.max(1, Math.round(74 * Math.exp(-i / 26)));
+const HEAD = { calm: G + 'head-calm.svg', nervous: G + 'head-nervous.svg', ko: G + 'head-ko.svg', crown: G + 'head-crown.svg' };
+// season: 18 teams, chops weeks 1..7 done, week 8 live
+const CHOPPED = [[1,'FlagrantFoul',498.2,'Started three centers who all sat the Sunday back-to-back.'],[2,'ShotClock',611.4,'Two games played all week. The schedule did him in.'],
+  [3,'HeatCheck',640.9,'Load-managed. Twice.'],[4,'BankShotBoys',702.3,'Lost by 0.6 to a late free throw.'],[5,'PaintBeasts',688.0,'Bid $0 on waivers for five straight weeks.'],
+  [6,'AlleyOops',731.5,'Benched a 61-point night. Bestball would have saved him.'],[7,'ZoneDefense',744.8,'Three starters on the injury report by Wednesday.']];
+const ALIVE = TM.filter(t => !CHOPPED.find(c => c[1] === t));
+    const SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL", "UTIL", "UTIL", "BN", "BN", "BN"];
+    const st = this.state, ni = 13, myLeft = 142, open = 8, myMax = myLeft - (open - 1);
+    const mineP = [[2, 'C', 58], [21, 'SF', 1], [40, 'SG', 9], [46, 'C', 0], [57, 'SF', 0], [70, 'SG', 0]];
+    const filled = { 'C': 2, 'SF': 21, 'SG': 40, 'UTIL': 46, 'F': 57, 'G': 70 };
+    const used = {}; const mine = SLOTS.map((s, k) => { let i = null;
+      if (filled[s] !== undefined && !used[s]) { i = filled[s]; used[s] = 1; }
+      const pb = POS[s] ? POS[s] : POS.BN;
+      return { slot: s, n: i !== null ? short(PL[i][0]) : 'Open', price: i !== null ? '$' + Math.max(1, Math.round(price(i) * (i === 2 ? .82 : 1))) : '', pb: pb[0], pc: pb[1], bg: i !== null ? '#151926' : '#0b0d14', line: i !== null ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.05)' }; });
+    const r = rng(42);
+    const teams = TM.map((n, k) => { const me = n.startsWith('You'); const left = me ? myLeft : Math.round(40 + r() * 140), op = me ? open : 5 + Math.floor(r() * 6);
+      return { n: me ? 'You' : n, left, max: left - (op - 1), open: op, ...av(n), bg: me ? 'rgba(255,197,49,.08)' : 'transparent' }; }).slice(0, 12);
+    const sold = [[12, 'DunkCity', 38], [11, 'BucketsOnly', 36], [10, 'SplashZone', 41], [9, 'LoadManagement', 44], [8, 'PostUpPros', 47]].map(([i, to, pr]) => ({ n: short(PL[i][0]), ...chip(PL[i][1]), p: pos1(PL[i][1]), to, pr }));
+    const bump = (d) => () => this.setState({ bid: st.bid + d, by: 'You', secs: 10 });
+    return { nomNo: 74, nomBy: 'GlassCleaners', nomName: PL[ni][0], nom: { ...chip(PL[ni][1]), p: PL[ni][1] },
+      nomStats: [[fpg(ni).toFixed(1), 'FP per game'], ['3.6', 'games / week'], ['$' + price(ni), 'Guilly value'], ['#' + (ni + 1), 'rank']].map(([v, l]) => ({ v, l })),
+      bid: st.bid, highBy: st.by, secs: st.secs, ringOff: (276.5 * (1 - st.secs / 10)).toFixed(1), ringC: st.secs <= 3 ? '#ff3d2e' : '#ffc531',
+      quick: [[1, 'sp-btn-p'], [5, ''], [10, '']].map(([d, cls]) => ({ l: '$' + (st.bid + d), go: bump(d), cls })),
+      myMax, myLeft, open, floor: '612', mine, teams, sold };
+  }
+}
+</script>
+</body>
+</html>

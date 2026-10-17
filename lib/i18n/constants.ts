@@ -24,9 +24,20 @@ export const FUTURE_LANGUAGE_CODES: LanguageCode[] = ['fr', 'ar']
  * flipped the whole app RTL with no RTL stylesheet behind it. They stay valid
  * as STORED values (resolveLanguage still accepts them, so nobody's saved
  * preference breaks), but they are not offered until real translations exist.
+ *
+ * 🛑 THE BETA LANGUAGES ARE HIDDEN TOO (owner's ruling, 2026-10-04). Chinese,
+ * Filipino and Vietnamese were offered as "(Beta)", but nearly all of /core is
+ * written as English or `language === 'es'` copy — the `t()` dictionary that
+ * holds ~340 strings each (Google-filled at runtime) covers little of it — so a
+ * reader who chose one got an English app. No account had chosen any of them
+ * (134 English, 1 Spanish, production read 2026-10-04). Same treatment as French
+ * and Arabic: still valid as stored values and still labelled "(Beta)" by
+ * `getLanguageOptionLabel`, so offering them again is removing them from this
+ * filter once /core reads them. `LanguageToggle` still lists a language someone
+ * already has selected.
  */
 export const SELECTABLE_LANGUAGES: LanguageCode[] = SUPPORTED_LANGUAGES.filter(
-  (code) => !FUTURE_LANGUAGE_CODES.includes(code)
+  (code) => !FUTURE_LANGUAGE_CODES.includes(code) && !BETA_LANGUAGE_CODES.includes(code)
 )
 
 export const LANGUAGE_DISPLAY_NAMES: Record<LanguageCode, string> = {

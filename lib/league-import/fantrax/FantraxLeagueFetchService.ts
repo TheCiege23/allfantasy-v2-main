@@ -493,6 +493,8 @@ export async function fetchFantraxLeagueForImport(
   const lookup = parseFantraxSourceInput(sourceInput)
   let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
   let liveScoringGaps: string[] = []
+  let sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> } | undefined
+  let sourceSeasonState: string | null = null
 
   /*
    * ⚠ A LIVE LEAGUE IS FETCHED HERE, THEN READ BACK AS A SNAPSHOT. Fantrax has a
@@ -539,6 +541,8 @@ export async function fetchFantraxLeagueForImport(
      */
     liveScoringRules = outcome.scoringRules
     liveScoringGaps = outcome.scoringGaps
+    sourceSettings = outcome.sourceSettings
+    sourceSeasonState = outcome.seasonState
   }
 
   const includeConfig = {
@@ -586,6 +590,32 @@ export async function fetchFantraxLeagueForImport(
     throw new FantraxImportLeagueNotFoundError(
       'Fantrax league not found. Use a Fantrax legacy league ID (UUID), or username|season|leagueName.'
     )
+  }
+
+  // A stored UUID is a lookup handle, not a fresh provider read. Collector
+  // refreshes and native carryover both enter here using that UUID.
+  if (!lookup.nativeLeague && leagueRecord.sourceLeagueId) {
+    const { importFantraxLeague } = await import('./importFantraxLeague')
+    const outcome = await importFantraxLeague({
+      leagueId: leagueRecord.sourceLeagueId,
+      teamName: leagueRecord.userTeam?.trim() || leagueRecord.user.fantraxUsername,
+      appUserId: userId,
+      refreshSnapshotId: leagueRecord.id,
+    })
+    if (!outcome.ok) {
+      // A failed refresh must not republish the old snapshot as current.
+      throw new FantraxImportUnavailableError(outcome.error)
+    }
+    leagueRecord = await prisma.fantraxLeague.findUnique({
+      where: { id: outcome.fantraxLeagueId }, include: includeConfig,
+    }) as any
+    if (!leagueRecord || leagueRecord.appUserId !== userId) {
+      throw new FantraxImportLeagueNotFoundError('Fantrax league snapshot not found')
+    }
+    liveScoringRules = outcome.scoringRules
+    liveScoringGaps = outcome.scoringGaps
+    sourceSettings = outcome.sourceSettings
+    sourceSeasonState = outcome.seasonState
   }
 
   const username = leagueRecord.user?.fantraxUsername ?? lookup.username ?? 'fantrax-user'
@@ -827,12 +857,12 @@ export async function fetchFantraxLeagueForImport(
       season,
       size: leagueRecord.teamCount || teams.length,
       currentWeek,
-      isFinished: season < new Date().getFullYear(),
+      isFinished: sourceSeasonState === 'complete' || season < new Date().getFullYear(),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),
     },
     settings: {
-      scoringType: leagueRecord.isDevy ? 'devy' : null,
+      scoringType: sport === 'MLB' ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
       rosterPositions: buildRosterPositionCounts(),
       /* The real per-team size, so the mapper stops deriving it from the pool. */
       rosterSize: medianRosterSize(rosterPlayers),
@@ -841,6 +871,8 @@ export async function fetchFantraxLeagueForImport(
         isDevy: leagueRecord.isDevy,
         sport: leagueRecord.sport,
         teamCount: leagueRecord.teamCount,
+        ...(sourceSettings ?? {}),
+        seasonState: sourceSeasonState,
         /* Categories the mapper could not place. Surfaced as coverage rather
            than dropped: a scoring rule we silently skipped is a wrong score. */
         ...(liveScoringGaps.length > 0 ? { scoringGaps: liveScoringGaps } : {}),

@@ -292,6 +292,8 @@ export async function buildWeekKickoffMap(
       // The finalizer's regular slate: labelled regular, or unlabelled. A replaced game's replacement is its own row.
       if (g.seasonType != null && g.seasonType !== 'regular') continue
       if (g.replacedBy || String(g.status ?? '').toLowerCase() === 'replaced') continue
+      // A postponed MLB original does not start a scoring game; the makeup locks on its own date.
+      if (sport === 'MLB' && String(g.status ?? '').toLowerCase() === 'postponed') continue
       if (!g.homeTeam && !g.awayTeam) {
         teamless += 1
         continue
@@ -415,11 +417,19 @@ type LockContext = {
   manualLocked: boolean
   overrides: LockOverride[]
   kickoffs: WeekKickoffs
+  /** Roster id → the club he is on now (null = none); see `currentTeamByPlayerId` on the hydrators. */
+  currentTeamByPlayerId?: ReadonlyMap<string, string | null>
 }
 
 async function loadLockContext(
   prisma: PrismaClient,
-  args: { sport: string; season: number; week: number; leagueSettings: unknown },
+  args: {
+    sport: string
+    season: number
+    week: number
+    leagueSettings: unknown
+    currentTeamByPlayerId?: ReadonlyMap<string, string | null>
+  },
 ): Promise<LockContext> {
   const { mode, manualLockedWeeks, overrides } = readLineupLockSettings(args.leagueSettings)
   // manual mode needs no schedule; kickoff-based modes do.
@@ -427,7 +437,14 @@ async function loadLockContext(
     mode === 'manual'
       ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
       : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
-  return { sport: args.sport, mode, manualLocked: manualLockedWeeks.has(args.week), overrides, kickoffs }
+  return {
+    sport: args.sport,
+    mode,
+    manualLocked: manualLockedWeeks.has(args.week),
+    overrides,
+    kickoffs,
+    currentTeamByPlayerId: args.currentTeamByPlayerId,
+  }
 }
 
 function stampLineupLock<T extends LockablePlayer>(
@@ -441,8 +458,13 @@ function stampLineupLock<T extends LockablePlayer>(
       (o.rosterId == null || o.rosterId === scope.rosterId) &&
       (o.playerId == null || o.playerId === player.playerId),
   )
+  // The club he plays for NOW, not the `team` snapshot stored when he was added — a traded player
+  // otherwise locks at his old club's kickoff. No entry = keep the stored team (see the resolver).
+  const lockTeam = ctx.currentTeamByPlayerId?.has(player.playerId)
+    ? ctx.currentTeamByPlayerId.get(player.playerId)
+    : player.team
   const playerKickoffUtc =
-    lockTeamLookupKeys(ctx.sport, player.team)
+    lockTeamLookupKeys(ctx.sport, lockTeam)
       .map((key) => ctx.kickoffs.byTeam.get(key))
       .find((kickoff): kickoff is Date => kickoff != null) ?? null
   const isLocked = computeLineupLock({
@@ -471,6 +493,11 @@ export async function hydrateRedraftLineupLocks<T extends LockablePlayer>(
     leagueSettings: unknown
     players: T[]
     now?: Date
+    /**
+     * Roster id → current team, from `resolveCurrentLockTeams` (lineupLockCurrentTeam.ts, server-only).
+     * Used for the kickoff lookup only; the returned players keep their own `team`.
+     */
+    currentTeamByPlayerId?: ReadonlyMap<string, string | null>
   },
 ): Promise<{ players: T[]; warnings: string[] }> {
   const now = args.now ?? new Date()
@@ -493,6 +520,8 @@ export async function hydrateRedraftLineupLocksForRosters<T extends LockablePlay
     leagueSettings: unknown
     players: T[]
     now?: Date
+    /** As on `hydrateRedraftLineupLocks`. */
+    currentTeamByPlayerId?: ReadonlyMap<string, string | null>
   },
 ): Promise<{ players: T[]; warnings: string[] }> {
   if (args.players.length === 0) return { players: [], warnings: [] }

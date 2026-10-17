@@ -3,7 +3,7 @@
  *
  * Fetches real game data via sports-router, calculates fantasy scores per roster,
  * and writes SurvivorWeeklyScore records. These scores drive:
- * - Tribe immunity (lowest tribe → tribal council)
+ * - Tribe immunity (lowest tribe → elimination council)
  * - Individual immunity (highest scorer post-merge)
  * - Challenge results validation
  * - Exile island scoring
@@ -146,7 +146,7 @@ export async function finalizeWeeklyScores(leagueId: string, week: number): Prom
 }
 
 /**
- * Determine which tribe lost (lowest total score) for tribal council.
+ * Determine which tribe lost (lowest total score) for elimination council.
  */
 export async function getLosingTribe(
   leagueId: string,

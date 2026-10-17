@@ -1,6 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { currentFantasySeason } from '@/lib/core-app/connectLeague'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 /** TTL for cached game logs: 6 hours (stats are stable during off-season; acceptable lag in-season). */
 const GAME_LOG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
@@ -65,6 +67,59 @@ function normalizeCachedWeekStats(payload: unknown): WeekStats[] {
   return logs
 }
 
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+interface SleeperWeekRow {
+  week: number
+  /** The opponent as the GAME ROW states it, or null when the row does not say. */
+  opponent: string | null
+  /** The team the player played for in THIS game, as the row states it — not his current team. */
+  team: string | null
+  stats: Record<string, unknown>
+}
+
+/**
+ * Sleeper's `grouping=week` payload, normalized. It arrives either as an array of rows or as an
+ * object keyed by week; a row's stat line may be flat or nested under `stats` (the same two shapes
+ * `PlayerGameLogImportService.normalizeStats` and `teamDefenseProvider` accept). Row-level
+ * `opponent` / `team` are read from the row, as the import service does.
+ *
+ * ⚠ THE OBJECT BRANCH USED TO READ STATS OFF THE ROW WITHOUT UNWRAPPING `stats`. The one non-DEF
+ * player row in production's `player_game_log_cache` (season 2025, synced 2026-04-27) holds
+ * seventeen weeks of `{week, opponent}` and not one stat — the opponents came from the current-team
+ * schedule and the stat line was never found.
+ */
+function toSleeperWeekRows(raw: unknown): SleeperWeekRow[] {
+  const entries: Array<{ key: string | null; value: unknown }> = Array.isArray(raw)
+    ? raw.map((value) => ({ key: null, value }))
+    : isRecord(raw)
+      ? Object.entries(raw).map(([key, value]) => ({ key, value }))
+      : []
+
+  const rows: SleeperWeekRow[] = []
+  for (const { key, value } of entries) {
+    if (!isRecord(value)) continue // a bye week is `null`
+    const stats = isRecord(value.stats) ? value.stats : value
+    const week = Number(value.week ?? stats.week ?? key)
+    if (!Number.isFinite(week) || week <= 0) continue
+    const opponentRaw = typeof value.opponent === 'string' ? value.opponent : typeof stats.opponent === 'string' ? stats.opponent : null
+    const teamRaw = typeof value.team === 'string' ? value.team : null
+    rows.push({
+      week,
+      opponent: opponentRaw && opponentRaw.trim() ? opponentRaw.trim() : null,
+      team: normalizeTeamAbbrev(teamRaw),
+      stats,
+    })
+  }
+  return rows
+}
+
 export const POST = withApiUsage({ endpoint: "/api/legacy/player-game-logs", tool: "LegacyPlayerGameLogs" })(async (req: NextRequest) => {
   const t0 = Date.now()
   try {
@@ -74,8 +129,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-game-logs", too
       return NextResponse.json({ error: 'Player ID required' }, { status: 400 })
     }
 
-    const rawSeason = String(season || '2025')
-    const currentSeason = /^\d{4}$/.test(rawSeason) ? rawSeason : '2025'
+    // Default to the CURRENT NFL season, derived — a literal '2025' here outlived the 2025 season.
+    const defaultSeason = String(currentFantasySeason(new Date()))
+    const rawSeason = String(season || defaultSeason)
+    const currentSeason = /^\d{4}$/.test(rawSeason) ? rawSeason : defaultSeason
     const sport = 'NFL'
     const seasonType = 'regular'
 
@@ -118,101 +175,61 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-game-logs", too
 
     const rawData = await res.json()
 
-    let scheduleMap: Record<string, { opponent: string }> = {}
+    const weekRows = toSleeperWeekRows(rawData)
+
+    /*
+     * 🛑 THE OPPONENT COMES FROM THE GAME ROW, NEVER FROM THE PLAYER'S *CURRENT* TEAM. This used to
+     * build every week's opponent from today's team, so a past season for a player who has since
+     * moved showed his NEW team's schedule beside his OLD team's stats. Now: the row's own
+     * `opponent`; else the row's own `team` (the team he played for THAT week) looked up in that
+     * season's schedule; else nothing. A blank cell is a gap — an invented opponent is a false fact.
+     */
+    const needsSchedule = weekRows.some((r) => !r.opponent && r.team)
+    const scheduleOpponents = new Map<string, string>()
     try {
-      const schedRes = await fetch(
+      const schedRes = needsSchedule ? await fetch(
         `https://api.sleeper.com/schedule/nfl/regular/${currentSeason}`,
         { next: { revalidate: 86400 } }
-      )
-      if (schedRes.ok) {
+      ) : null
+      if (schedRes?.ok) {
         const schedData = await schedRes.json()
         if (Array.isArray(schedData)) {
-          // Phase 3: canonical read path. This site needs only the player's team, so it uses
-          // the lightweight bulk accessor rather than `getCanonicalPlayerBySleeperId`, which
-          // would hydrate all seven satellites to answer a one-field question.
-          const { getCanonicalPlayersBySleeperIds } = await import('@/lib/canonical/getCanonicalPlayer')
-          const canonical = await getCanonicalPlayersBySleeperIds([player_id])
-          const playerTeam = canonical.get(player_id)?.team
-
-          if (playerTeam) {
-            for (const game of schedData) {
-              const week = game.week
-              if (game.home === playerTeam) {
-                scheduleMap[week] = { opponent: game.away }
-              } else if (game.away === playerTeam) {
-                scheduleMap[week] = { opponent: `@${game.home}` }
-              }
-            }
+          for (const game of schedData) {
+            const week = Number(game?.week)
+            const home = normalizeTeamAbbrev(typeof game?.home === 'string' ? game.home : null)
+            const away = normalizeTeamAbbrev(typeof game?.away === 'string' ? game.away : null)
+            if (!Number.isFinite(week) || !home || !away) continue
+            scheduleOpponents.set(`${week}:${home}`, away)
+            scheduleOpponents.set(`${week}:${away}`, `@${home}`)
           }
         }
       }
     } catch {}
 
-    const gameLogs: WeekStats[] = []
-
-    if (Array.isArray(rawData)) {
-      for (const entry of rawData) {
-        if (!entry || typeof entry !== 'object') continue
-        const stats = entry.stats || entry
-        const week = entry.week || stats.week
-
-        if (!week) continue
-
-        const schedule = scheduleMap[String(week)]
-
-        gameLogs.push({
-          week: Number(week),
-          opponent: schedule?.opponent || stats.opponent || undefined,
-          pts_ppr: stats.pts_ppr ?? stats.fantasy_points_ppr ?? undefined,
-          pts_half_ppr: stats.pts_half_ppr ?? undefined,
-          pts_std: stats.pts_std ?? undefined,
-          gp: stats.gp ?? stats.gms_active ?? undefined,
-          pass_att: stats.pass_att ?? undefined,
-          pass_cmp: stats.pass_cmp ?? undefined,
-          pass_yd: stats.pass_yd ?? undefined,
-          pass_td: stats.pass_td ?? undefined,
-          pass_int: stats.pass_int ?? undefined,
-          rush_att: stats.rush_att ?? undefined,
-          rush_yd: stats.rush_yd ?? undefined,
-          rush_td: stats.rush_td ?? undefined,
-          rec_tgt: stats.rec_tgt ?? undefined,
-          rec: stats.rec ?? undefined,
-          rec_yd: stats.rec_yd ?? undefined,
-          rec_td: stats.rec_td ?? undefined,
-          fum_lost: stats.fum_lost ?? undefined,
-        })
+    const gameLogs: WeekStats[] = weekRows.map((row) => {
+      const s = row.stats
+      return {
+        week: row.week,
+        opponent: row.opponent ?? (row.team ? scheduleOpponents.get(`${row.week}:${row.team}`) : undefined),
+        pts_ppr: num(s.pts_ppr) ?? num(s.fantasy_points_ppr),
+        pts_half_ppr: num(s.pts_half_ppr),
+        pts_std: num(s.pts_std),
+        gp: num(s.gp) ?? num(s.gms_active),
+        pass_att: num(s.pass_att),
+        pass_cmp: num(s.pass_cmp),
+        pass_yd: num(s.pass_yd),
+        pass_td: num(s.pass_td),
+        pass_int: num(s.pass_int),
+        rush_att: num(s.rush_att),
+        rush_yd: num(s.rush_yd),
+        rush_td: num(s.rush_td),
+        rec_tgt: num(s.rec_tgt),
+        rec: num(s.rec),
+        rec_yd: num(s.rec_yd),
+        rec_td: num(s.rec_td),
+        fum_lost: num(s.fum_lost),
       }
-    } else if (rawData && typeof rawData === 'object') {
-      for (const [weekKey, stats] of Object.entries(rawData)) {
-        const weekNum = parseInt(weekKey)
-        if (isNaN(weekNum)) continue
-        if (!stats || typeof stats !== 'object') continue
-        const s = stats as Record<string, unknown>
-        const schedule = scheduleMap[weekKey]
-
-        gameLogs.push({
-          week: weekNum,
-          opponent: schedule?.opponent || undefined,
-          pts_ppr: s.pts_ppr as number ?? s.fantasy_points_ppr as number ?? undefined,
-          pts_half_ppr: s.pts_half_ppr as number ?? undefined,
-          pts_std: s.pts_std as number ?? undefined,
-          gp: s.gp as number ?? s.gms_active as number ?? undefined,
-          pass_att: s.pass_att as number ?? undefined,
-          pass_cmp: s.pass_cmp as number ?? undefined,
-          pass_yd: s.pass_yd as number ?? undefined,
-          pass_td: s.pass_td as number ?? undefined,
-          pass_int: s.pass_int as number ?? undefined,
-          rush_att: s.rush_att as number ?? undefined,
-          rush_yd: s.rush_yd as number ?? undefined,
-          rush_td: s.rush_td as number ?? undefined,
-          rec_tgt: s.rec_tgt as number ?? undefined,
-          rec: s.rec as number ?? undefined,
-          rec_yd: s.rec_yd as number ?? undefined,
-          rec_td: s.rec_td as number ?? undefined,
-          fum_lost: s.fum_lost as number ?? undefined,
-        })
-      }
-    }
+    })
 
     gameLogs.sort((a, b) => a.week - b.week)
 

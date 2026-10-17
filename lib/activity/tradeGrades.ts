@@ -5,6 +5,7 @@ import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/t
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import type { SleeperTransaction } from '@/lib/sleeper-client'
 import type { ActivityTradeGrade } from '@/lib/activity/types'
+import { gradeMomentOf } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * THE grade on a League Buzz trade (2026-09-27).
@@ -88,6 +89,7 @@ export async function gradeSleeperActivityTrade(args: {
     return {
       graded: true,
       basis: g.frozenAt ? 'first-graded' : 'today',
+      ...(g.frozenAt ? { moment: gradeMomentOf(g) } : {}),
       sides: [
         { name: args.rosterNames.get(a) ?? `Team ${a}`, letter: g.letter },
         { name: args.rosterNames.get(b) ?? `Team ${b}`, letter: g.partnerLetter },

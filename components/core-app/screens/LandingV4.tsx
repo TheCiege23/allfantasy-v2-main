@@ -556,6 +556,7 @@ export function LandingV4({
             <Link href="/privacy">{c.footer.privacy}</Link>
             <Link href="/terms">{c.footer.terms}</Link>
             <Link href="/data-deletion">{c.footer.dataDeletion}</Link>
+            <Link href="/privacy/choices">{c.footer.privacyChoices}</Link>
           </nav>
         </div>
         <div className="af-lp-footer-legal">

@@ -16,6 +16,14 @@ const isRailwayRuntime = !!(
   process.env.RAILWAY_GIT_COMMIT_SHA
 );
 
+// The dev sign-in bypass is refused unless DATABASE_URL is known to be safe: `.env.local` points at
+// production, and a bypass session there writes to it. Required only off production, so a build or
+// `next start` never loads it. See scripts/dev-auth-bypass-guard.cjs.
+if (!isProd) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('./scripts/dev-auth-bypass-guard.cjs').applyDevAuthBypassGuard(process.env);
+}
+
 const nextConfig = {
   reactStrictMode: true,
   // No `X-Powered-By: Next.js` banner: it tells a scanner which advisories to try.

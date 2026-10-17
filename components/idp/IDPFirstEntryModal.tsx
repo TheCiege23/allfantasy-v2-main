@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
 const IDP_INTRO_VIDEO = '/league-type-idp-intro.mp4'
-const STORAGE_KEY_PREFIX = 'idp_intro_seen_'
 
 const IDP_TAGLINE = 'Individual Defensive Players. Real defenders. Real points.'
 
@@ -44,7 +44,7 @@ export function IDPFirstEntryModal({
   const [videoKey, setVideoKey] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
 
-  const storageKey = `${STORAGE_KEY_PREFIX}${leagueId}_${userId}`
+  const storageKey = firstEntryIntroStorageKey('idp', leagueId, userId)
 
   const markSeen = useCallback(() => {
     if (typeof window !== 'undefined' && leagueId && userId) {

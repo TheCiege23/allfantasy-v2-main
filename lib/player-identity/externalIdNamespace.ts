@@ -275,3 +275,24 @@ export function playerNamesAgree(a: string | null | undefined, b: string | null 
   const x = norm(a)
   return x.length > 0 && x === norm(b)
 }
+
+/**
+ * The `PlayerIdentityMap` filter for ONE league id. An NFL bare number is a Sleeper id
+ * (`mayBeSleeperId`), so it is asked of `sleeperId` alone: ORing it across `rollingInsightsId`,
+ * `espnId`, `apiSportsId` and the rest finds whichever provider uses that number for somebody else
+ * (Sleeper 8394 is Percy Butler; RI 8394 is Rome Odunze). Any other id keeps every column.
+ */
+export function identityWhereForLeagueId(rawId: string, sport: string) {
+  const id = String(rawId ?? '').trim()
+  if (mayBeSleeperId(id, sport)) return { sleeperId: id }
+  return {
+    OR: [
+      { sleeperId: id },
+      { fantasyCalcId: id },
+      { rollingInsightsId: id },
+      { apiSportsId: id },
+      { espnId: id },
+      { clearSportsId: id },
+    ],
+  }
+}

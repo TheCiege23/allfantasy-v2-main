@@ -1,32 +1,34 @@
-import { leagueSyncAttentionSignals, resolveStakeLeagueId } from '@/lib/decision-os/careerSignals'
-import type { LegacyStake } from './careerMilestones'
+import { leagueSyncAttentionSignals } from '@/lib/decision-os/careerSignals'
 import { platformLabel, type CareerWireData, type WireChange } from './careerWireModel'
 
 /**
  * Career feed — "since your last visit", turned into things to do. The pure half: every item is a
- * reading of rows the Career Wire and the Career screen ALREADY hold, so it can never disagree with
- * the cards around it, and it is testable without a database.
+ * reading of rows the Career Wire ALREADY holds, so it can never disagree with the cards around it,
+ * and it is testable without a database.
  *
- * Three sources, and one action each:
+ * Two sources, and one action each:
  *
  *   - a league whose sync is failing, gone or never ran   → Sync      (fix the data first)
  *   - a loss or a standings drop since the last visit     → My Team   (set the lineup)
- *   - a live league that would be a career ring           → Matchup   (the game that decides it)
  *   - a win or a climb since the last visit               → Matchup   (the next one)
  *
- * ⚠ THE SYNC AND STAKE ITEMS ARE DECISION OS'S OWN SIGNALS, NOT A SECOND READING OF THEM.
- * `leagueSyncAttentionSignals` and `resolveStakeLeagueId` are what the Manager Hub's command center
- * uses (`lib/decision-os/careerSignals.ts`), so the wording, the severity cut and the stake→league
- * match are the same on both screens. A stake that does not resolve to exactly one league is dropped
- * there and here — an item with no league has nowhere to send you.
+ * ⚠ THE SYNC ITEMS ARE DECISION OS'S OWN SIGNALS, NOT A SECOND READING OF THEM.
+ * `leagueSyncAttentionSignals` is what the Manager Hub's command center uses
+ * (`lib/decision-os/careerSignals.ts`), so the wording and the severity cut are the same on both
+ * screens.
+ *
+ * ⚠ NO STAKES (removed 2026-10-01). The feed briefly also carried "a title here would be ring #N",
+ * from the same stakes the overview's "In play" card (`LegacyStakes`) renders — so with three live
+ * title chances a phone showed six near-identical cards (peer review, measured). The "In play" card
+ * keeps them, with its own Chimmy prompt; the feed is what CHANGED.
  *
  * ⚠ NO INJURIES, NO TRADES. The Core home's brief already reports those, and the Career visit
  * marker deliberately leaves the injury snapshot empty (`careerWire.ts`). Adding them here would
  * mean two screens disagreeing about what is new.
  */
 
-export type CareerFeedKind = 'sync' | 'result' | 'stake'
-export type CareerFeedTone = 'warn' | 'bad' | 'good' | 'stake'
+export type CareerFeedKind = 'sync' | 'result'
+export type CareerFeedTone = 'warn' | 'bad' | 'good'
 
 export type CareerFeedItem = {
   key: string
@@ -51,7 +53,7 @@ export const feedHref = {
 }
 
 /** Problems first, then what you can still change, then good news. */
-const KIND_ORDER: Record<CareerFeedTone, number> = { warn: 0, bad: 1, stake: 2, good: 3 }
+const KIND_ORDER: Record<CareerFeedTone, number> = { warn: 0, bad: 1, good: 2 }
 
 function recordText(w: number, l: number, t: number): string {
   return `${w}-${l}${t ? `-${t}` : ''}`
@@ -99,13 +101,8 @@ function resultItem(c: WireChange): CareerFeedItem | null {
   }
 }
 
-export function buildCareerFeed(input: {
-  wire: CareerWireData
-  /** The Career screen's live stakes (`buildLegacyStakes(...).stakes`). Empty under a filter. */
-  stakes: readonly LegacyStake[]
-  now: Date
-}): CareerFeedItem[] {
-  const { wire, stakes, now } = input
+export function buildCareerFeed(input: { wire: CareerWireData; now: Date }): CareerFeedItem[] {
+  const { wire, now } = input
   const byId = new Map(wire.leagues.map((l) => [l.leagueId, l]))
   const items: CareerFeedItem[] = []
 
@@ -131,24 +128,7 @@ export function buildCareerFeed(input: {
     if (item) items.push(item)
   }
 
-  for (const stake of stakes) {
-    const leagueId = resolveStakeLeagueId(stake, wire.leagues)
-    if (!leagueId) continue
-    items.push({
-      key: `stake:${leagueId}:${stake.ringNumber}`,
-      kind: 'stake',
-      tone: 'stake',
-      leagueId,
-      leagueName: byId.get(leagueId)?.leagueName ?? stake.leagueName,
-      platform: platformLabel(byId.get(leagueId)?.platform ?? String(stake.platform).toLowerCase()),
-      title: stake.tone === 'streak' ? `A repeat would be ring #${stake.ringNumber}` : `A title would be ring #${stake.ringNumber}`,
-      detail: stake.detail,
-      action: { label: 'Open matchup', href: feedHref.matchup(leagueId) },
-      ask: stake.ask,
-    })
-  }
-
-  // Stable within a tone: the sources are already ordered (changes by games played, stakes as the card shows them).
+  // Stable within a tone: changes arrive ordered by games played.
   return items
     .map((item, i) => ({ item, i }))
     .sort((a, b) => KIND_ORDER[a.item.tone] - KIND_ORDER[b.item.tone] || a.i - b.i)

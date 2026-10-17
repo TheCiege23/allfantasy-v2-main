@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildSurvivorAccessContextFromSnapshot } from '@/lib/survivor/survivorAccessControl'
+import { buildSurvivorAccessContextFromSnapshot, canSeeSurvivorChannel } from '@/lib/survivor/survivorAccessControl'
 
 describe('Survivor access control', () => {
-  it('allows a non-playing commissioner host to see operational hidden state', () => {
+  it('allows a non-playing commissioner to inspect hidden game state while keeping user DMs private', () => {
     const access = buildSurvivorAccessContextFromSnapshot({
       leagueId: 'league-1',
       userId: 'commish',
@@ -16,6 +16,7 @@ describe('Survivor access control', () => {
     expect(access.isParticipatingCommissioner).toBe(false)
     expect(access.decisions.canSeeHiddenIdolAssignments).toBe(true)
     expect(access.decisions.canSeePrivateVotes).toBe(true)
+    expect(access.decisions.canSeePrivateUserDm).toBe(false)
     expect(access.decisions.canPerformSensitiveHostAction).toBe(true)
   })
 
@@ -54,4 +55,34 @@ describe('Survivor access control', () => {
 
     expect(access.decisions.canSeePrivateUserDm).toBe(false)
   })
+})
+
+describe('Survivor blind-mode bypass prevention', () => {
+  it.each(['commissioner', 'co_commissioner'] as const)('a %s with a roster cannot promote themselves to hidden host visibility', role => {
+    const access = buildSurvivorAccessContextFromSnapshot({ leagueId: 'l', userId: 'u', role,
+      settings: { commissionerParticipationMode: 'non_participating_host', coCommissionerMode: 'non_participating_host' }, roster: { id: 'r' } })
+    expect(access.isParticipatingCommissioner).toBe(true)
+    expect(access.decisions.canSeePrivateVotes).toBe(false)
+    expect(access.decisions.canSeeHiddenIdolAssignments).toBe(false)
+    expect(access.decisions.canPerformSensitiveHostAction).toBe(false)
+    expect(access.decisions.canUpdateSettings).toBe(true)
+  })
+  it('elimination does not grant a playing commissioner host access or stale tribe membership', () => {
+    const access = buildSurvivorAccessContextFromSnapshot({ leagueId: 'l', userId: 'u', role: 'commissioner',
+      player: { userId: 'u', playerState: 'exile', tribeId: 'old', canAccessTribeChat: false, canAccessMergeChat: false } })
+    expect(access.decisions.canSeePrivateVotes).toBe(false)
+    expect(canSeeSurvivorChannel(access, { channelType: 'tribe', tribeId: 'old', memberUserIds: ['u'] })).toBe(false)
+    expect(canSeeSurvivorChannel(access, { channelType: 'merge', memberUserIds: ['u'] })).toBe(false)
+  })
+  it('null tribe ids cannot accidentally grant private tribe access', () => {
+    const access = buildSurvivorAccessContextFromSnapshot({ leagueId: 'l', userId: 'u', role: 'member', roster: { id: 'r' } })
+    expect(canSeeSurvivorChannel(access, { channelType: 'tribe', tribeId: null })).toBe(false)
+  })
+})
+
+it('honors hideIdolsFromCommissioner for a non-playing host while preserving council control', () => {
+  const access = buildSurvivorAccessContextFromSnapshot({ leagueId: 'l', userId: 'host', role: 'commissioner', settings: { hideIdolsFromCommissioner: true }, player: null, roster: null })
+  expect(access.decisions.canSeeHiddenIdolAssignments).toBe(false)
+  expect(access.decisions.canSeePrivateVotes).toBe(false)
+  expect(access.decisions.canPerformSensitiveHostAction).toBe(true)
 })

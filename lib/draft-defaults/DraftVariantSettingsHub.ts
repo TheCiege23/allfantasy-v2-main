@@ -10,6 +10,7 @@ import type { DraftRoomConfig } from './DraftRoomConfigResolver'
 import { getDraftUISettingsForLeague, updateDraftUISettings } from './DraftUISettingsResolver'
 import type { DraftUISettings } from './DraftUISettingsResolver'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
 
 /** Keeper rules (from session when present). */
 export interface KeeperVariantSettings {
@@ -255,7 +256,7 @@ export async function updateDraftConfigForLeague(
 
   if (patch.draft_type !== undefined) next.draft_type = patch.draft_type
   if (patch.rounds !== undefined) next.draft_rounds = Math.max(1, Math.min(50, Math.round(patch.rounds)))
-  if (patch.timer_seconds !== undefined) next.draft_timer_seconds = patch.timer_seconds == null ? null : Math.max(0, Math.min(86400, Math.round(patch.timer_seconds)))
+  if (patch.timer_seconds !== undefined) next.draft_timer_seconds = patch.timer_seconds == null ? null : Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, Math.round(patch.timer_seconds)))
   if (patch.slow_timer_seconds !== undefined) next.draft_slow_timer_seconds = patch.slow_timer_seconds == null ? null : Math.max(300, Math.min(604800, Math.round(patch.slow_timer_seconds)))
   if (patch.pick_order_rules !== undefined) next.draft_pick_order_rules = patch.pick_order_rules
   if (patch.snake_or_linear !== undefined) next.draft_snake_or_linear = patch.snake_or_linear
@@ -344,7 +345,7 @@ async function syncConfigToSession(leagueId: string, config: Partial<DraftRoomCo
       ? (config.slow_timer_seconds ?? config.timer_seconds)
       : config.timer_seconds
     if (preferredTimerSeconds !== undefined) {
-      data.timerSeconds = preferredTimerSeconds == null ? null : Math.max(0, Math.min(86400, Math.round(preferredTimerSeconds)))
+      data.timerSeconds = preferredTimerSeconds == null ? null : Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, Math.round(preferredTimerSeconds)))
     }
   }
   if (config.third_round_reversal !== undefined) data.thirdRoundReversal = config.third_round_reversal

@@ -39,3 +39,11 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 2. Trim large bodies with `contracts/fleaflicker/scripts/trim-fixture.mjs` (it refuses to lose a key path); record any counts from the FULL body in `ENDPOINTS.yaml` first.
 3. Fixture + `ENDPOINTS.yaml` + this file, **in one commit**.
 4. A 403 is recorded here and work stops. No spoofed headers.
+
+## MLB fantasy import, 2026-10-03
+
+- RESOLVED: new fantasy-league/MLB endpoint captured via probe.sh, public league 13262, 2026; see ENDPOINTS.yaml. Do not re-probe.
+- AUTH_LEAGUE_NOT_VISIBLE: initial candidate 1189924578 returned HTTP 401 without cookies. No authorization bypass attempted.
+- UNVERIFIED: private connected-account league response. Synthetic cookie tests are not a live private-provider verification.
+- UNVERIFIED: MLB communication/activity endpoint and earlier-season response variants. Import reports unavailable coverage and never uses the NFL endpoint for MLB.
+- OPEN: custom category and roster pitching-limit fidelity. Native conversion must reject unrepresentable rules while retaining the source archive.

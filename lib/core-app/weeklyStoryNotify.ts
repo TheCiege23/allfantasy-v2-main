@@ -35,7 +35,14 @@ export function storyWeekKey(now: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export async function notifyWeeklyStories(now: Date = new Date()): Promise<{ targeted: number; sent: number; skipped: number }> {
+/**
+ * `pushedAlready`: people the weekly-recap push (weeklyRecapNotify.ts) reached a moment ago in the same
+ * cron fire. They still get the story's in-app row, but not a second push in the same minute.
+ */
+export async function notifyWeeklyStories(
+  now: Date = new Date(),
+  pushedAlready: ReadonlySet<string> = new Set(),
+): Promise<{ targeted: number; sent: number; skipped: number }> {
   const prefix = `${PREFIX}:${storyWeekKey(now)}`
   try {
     const rows = await prisma.$queryRaw<Array<{ userId: string }>>`
@@ -58,9 +65,15 @@ export async function notifyWeeklyStories(now: Date = new Date()): Promise<{ tar
     const done = new Set(existing.map((e) => e.sourceKey))
     const todo = userIds.filter((u) => !done.has(`${prefix}:${u}`))
 
-    for (let i = 0; i < todo.length; i += CHUNK) {
+    const pushNow = todo.filter((u) => !pushedAlready.has(u))
+    const inAppOnly = todo.filter((u) => pushedAlready.has(u))
+    const batches: Array<{ userIds: string[]; push: boolean }> = []
+    for (let i = 0; i < pushNow.length; i += CHUNK) batches.push({ userIds: pushNow.slice(i, i + CHUNK), push: true })
+    for (let i = 0; i < inAppOnly.length; i += CHUNK) batches.push({ userIds: inAppOnly.slice(i, i + CHUNK), push: false })
+
+    for (const batch of batches) {
       await dispatchNotification({
-        userIds: todo.slice(i, i + CHUNK),
+        userIds: batch.userIds,
         category: 'matchup_results',
         type: 'weekly_story',
         title: 'Your weekly story is ready',
@@ -70,7 +83,7 @@ export async function notifyWeeklyStories(now: Date = new Date()): Promise<{ tar
         severity: 'low',
         dedupePrefix: prefix,
         // A push and an in-app row, never a weekly email or text (user decision: the push).
-        skipChannels: { email: true, sms: true },
+        skipChannels: { email: true, sms: true, push: !batch.push },
         /*
          * Its own device tag. Every `matchup_results` push otherwise shares one
          * (`notif-matchup_results-global`), and the service worker silently REPLACES a shown

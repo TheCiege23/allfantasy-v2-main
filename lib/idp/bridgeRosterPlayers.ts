@@ -216,7 +216,7 @@ export async function bridgeRosterPlayersForLeague(
 
   const rows = (await prisma.sportsPlayer.findMany({
     where: { sport, sleeperId: { in: [...allIds] } },
-    select: { sleeperId: true, sport: true, name: true, position: true, team: true },
+    select: { sleeperId: true, sport: true, name: true, position: true, team: true, source: true, fetchedAt: true },
   })) as PlayerIdentityRow[]
   const identities = composePlayerIdentities(rows)
 

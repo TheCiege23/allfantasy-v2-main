@@ -12,6 +12,7 @@ import {
   isEligibleTarget,
   isEligibleVoter,
 } from '../lib/survivor/survivorBallotEligibility'
+import { getActiveCouncil, restrictCouncilToRevote } from '../lib/survivor/survivorCouncilService'
 
 // ── Pure eligibility ─────────────────────────────────────────────────────────
 describe('computeCouncilEligibility', () => {
@@ -47,6 +48,22 @@ describe('computeCouncilEligibility', () => {
   })
 })
 
+describe('revote eligibility', () => {
+  it('lets only non-tied managers vote and limits every ballot to tied managers', () => {
+    const scope = ['a', 'b', 'c', 'd'].map(userId => ({ userId, rosterId: `r${userId}`, displayName: userId }))
+    const firstRound = computeCouncilEligibility({ scopePlayers: scope, selfVotesAllowed: false })
+    const revote = restrictCouncilToRevote(firstRound, ['c', 'd'])
+    expect(revote.voterUserIds).toEqual(['a', 'b'])
+    expect(revote.targetUserIds).toEqual(['c', 'd'])
+    expect(revote.targetsByVoter).toEqual({ a: ['c', 'd'], b: ['c', 'd'] })
+  })
+  it('does not revive a revealed first-round tie after the revote is read', async () => {
+    prisma.survivorTribalCouncil.findFirst.mockResolvedValue(null)
+    await getActiveCouncil('league-1')
+    expect(prisma.survivorTribalCouncil.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ isRevealed: false }) }))
+  })
+})
+
 // ── DB-backed tally with mocks ───────────────────────────────────────────────
 const { prisma, loadCouncilContext } = vi.hoisted(() => ({
   prisma: {
@@ -69,12 +86,14 @@ import { submitVote } from '@/lib/survivor/survivorVoteService'
 
 type IdolPlay = {
   idolId: string
-  powerType: 'vote_shield' | 'extra_vote' | 'skip_tribal'
+  powerType: 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'vote_steal'
   playerUserId: string
   playerRosterId: string
   protectedRosterId?: string
   extraTargetUserId?: string
   extraTargetRosterId?: string
+  stolenVoterUserId?: string
+  stolenVoterRosterId?: string
   forfeitsVote?: boolean
   playedAt: string
 }
@@ -195,6 +214,20 @@ describe('tallyCouncil', () => {
     expect(res.tally.eliminatedUserId).toBe('d')
   })
 
+  it('Vote Steal stamps the taken ballot and counts the holder’s second vote', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ idolsPlayed: [{ idolId: 'i4', powerType: 'vote_steal', playerUserId: 'a', playerRosterId: 'ra', stolenVoterUserId: 'b', stolenVoterRosterId: 'rb', extraTargetUserId: 'd', extraTargetRosterId: 'rd', playedAt: 'x' }] }))
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+    ])
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.tally.countsByTargetUserId).toEqual({ d: 2 })
+    expect(res.tally.revealSequence.find(scroll => scroll.targetUserId === 'c')?.status).toBe('taken_by_vote_steal')
+    expect(res.tally.doesNotCountVoteIds).toContain('v2')
+  })
+
   it('Skip Tribal makes the holder a safe (does-not-count) target', async () => {
     loadCouncilContext.mockResolvedValue(
       makeCtx({ idolsPlayed: [{ idolId: 'i3', powerType: 'skip_tribal', playerUserId: 'd', playerRosterId: 'rd', playedAt: 'x' }] }),
@@ -225,7 +258,7 @@ describe('tallyCouncil', () => {
     expect(res.tally.eliminatedUserId).toBe('a')
   })
 
-  it('a tie returns tie_pending with a commissioner tiebreak and no elimination', async () => {
+  it('a first-round tie requires a revote and no elimination', async () => {
     loadCouncilContext.mockResolvedValue(makeCtx())
     prisma.survivorVote.findMany.mockResolvedValue([
       { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
@@ -235,7 +268,7 @@ describe('tallyCouncil', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.tally.isTie).toBe(true)
-    expect(res.tally.tiePhase).toBe('commissioner_tiebreak_required')
+    expect(res.tally.tiePhase).toBe('revote_required')
     expect(res.tally.eliminatedUserId).toBeNull()
     expect(res.status).toBe('tie_pending')
   })

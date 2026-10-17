@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { createLeagueChatMessage, updateLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
+import { getFinalNomineeRosterIds } from './BigBrotherNominationEngine'
 import { getEligibleVoterRosterIds } from './BigBrotherVoteEngine'
 
 async function getAnnouncerUserId(leagueId: string): Promise<string | null> {
@@ -50,7 +51,8 @@ export async function syncBigBrotherVoteProgressChat(leagueId: string, cycleId: 
 
   const eligible = await getEligibleVoterRosterIds(leagueId, cycleId, config.hohVotesOnlyInTie)
   const m = eligible.length
-  const n = await prisma.bigBrotherEvictionVote.count({ where: { cycleId } })
+  const finalNoms = await getFinalNomineeRosterIds(cycleId)
+  const n = await prisma.bigBrotherEvictionVote.count({ where: { cycleId, voterRosterId: { in: eligible }, targetRosterId: { in: finalNoms } } })
   const { text, urgency } = buildVoteProgressCopy({
     cast: n,
     eligible: m,
@@ -74,6 +76,7 @@ export async function syncBigBrotherVoteProgressChat(leagueId: string, cycleId: 
   }
 
   const created = await createLeagueChatMessage(leagueId, announcer, text, {
+    idempotencyKey: `bb-vote-progress-${cycleId}`,
     type: 'system',
     metadata: { ...metadata, isSystem: true },
   })

@@ -247,7 +247,7 @@ export function ProjectionsClient() {
             {filtered.map((p, i) => (
               <Link
                 key={`${p.playerName}-${i}`}
-                href={`/player/${encodeURIComponent(p.playerName.toLowerCase().replace(/\s+/g, '-'))}`}
+                href={`/player/${encodeURIComponent(p.playerName.toLowerCase().replace(/\s+/g, '-'))}?${new URLSearchParams({ sport, position: p.position ?? '', team: p.team ?? '' })}`}
                 className="block rounded-lg px-1 py-0.5 transition hover:bg-white/[0.04]"
               >
                 <ProjectionRow

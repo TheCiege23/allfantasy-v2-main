@@ -1,7 +1,10 @@
+import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
+import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -35,14 +38,11 @@ function isDefensivePosition(position: string): boolean {
 
 async function resolvePlayerMeta(addPlayerId: string, addPlayerName: string, sport: string) {
   const sportKeys = [sport.toUpperCase(), sport.toLowerCase()]
+  // By our id / Sleeper id first, a provider's own number only when it cannot be a Sleeper id —
+  // the old `externalId OR sleeperId OR id` findFirst could roster RI's player of the same number.
   const player = await prisma.sportsPlayer
-    .findFirst({
-      where: {
-        sport: { in: sportKeys },
-        OR: [{ externalId: addPlayerId }, { sleeperId: addPlayerId }, { id: addPlayerId }],
-      },
-      select: { name: true, position: true, team: true },
-    })
+    .findFirst({ where: { id: addPlayerId }, select: { name: true, position: true, team: true } })
+    .then((own) => own ?? findSportsPlayerByLeagueId(sport, addPlayerId))
     .catch(() => null)
   if (player) {
     return {
@@ -57,14 +57,7 @@ async function resolvePlayerMeta(addPlayerId: string, addPlayerName: string, spo
     .findFirst({
       where: {
         sport: { in: sportKeys },
-        OR: [
-          { sleeperId: addPlayerId },
-          { fantasyCalcId: addPlayerId },
-          { rollingInsightsId: addPlayerId },
-          { apiSportsId: addPlayerId },
-          { espnId: addPlayerId },
-          { clearSportsId: addPlayerId },
-        ],
+        ...identityWhereForLeagueId(addPlayerId, sport),
       },
       select: { canonicalName: true, position: true, currentTeam: true },
     })
@@ -153,6 +146,18 @@ export function compareWaiverClaims(a: WaiverClaimOrderFields, b: WaiverClaimOrd
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+/** Re-rank pending claims after a Survivor raid changes a roster's priority. */
+export function compareClaimsWithCurrentRosterPriority(
+  a: WaiverClaimOrderFields & { rosterId: string },
+  b: WaiverClaimOrderFields & { rosterId: string },
+  priorityByRoster: ReadonlyMap<string, number>,
+): number {
+  return compareWaiverClaims(
+    { ...a, priority: priorityByRoster.get(a.rosterId) ?? a.priority },
+    { ...b, priority: priorityByRoster.get(b.rosterId) ?? b.priority },
+  )
+}
+
 export async function processWaiverWindow(
   leagueId: string,
   seasonId: string,
@@ -171,6 +176,19 @@ export async function processWaiverWindow(
       { id: 'asc' },
     ],
   })
+
+  // A Survivor Steal 3 raid grants the raided roster top priority for this week.
+  // Claims can have been submitted before the raid, so their stored priority is
+  // stale. Re-rank only a raid week using current roster priority at settlement.
+  const survivorWeek = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } })
+  const raidBoostExists = survivorWeek && await prisma.survivorAuditEntry.findFirst({
+    where: { leagueId, week: survivorWeek.currentWeek, action: 'steal_three_waiver_boost' }, select: { id: true },
+  })
+  if (raidBoostExists && claims.length > 1) {
+    const currentRosters = await prisma.redraftRoster.findMany({ where: { seasonId, id: { in: [...new Set(claims.map(claim => claim.rosterId))] } }, select: { id: true, waiverPriority: true } })
+    const priorityByRoster = new Map(currentRosters.map(roster => [roster.id, roster.waiverPriority]))
+    claims.sort((a, b) => compareClaimsWithCurrentRosterPriority(a, b, priorityByRoster))
+  }
 
   const results: ProcessedClaim[] = []
   const acquiredPlayerIds = new Set<string>()
@@ -233,6 +251,12 @@ export async function processWaiverWindow(
             data: { droppedAt: new Date() },
           })
           if (dropResult.count === 0) throw new WaiverDropInactiveError()
+          if (survivorWeek) {
+            await movePlayerBoundIdolsInTransaction(tx, {
+              leagueId, playerId: claim.dropPlayerId,
+              fromRedraftRosterId: claim.rosterId, toRedraftRosterId: null, reason: 'waiver_drop',
+            })
+          }
         }
 
         await tx.redraftRosterPlayer.create({
@@ -247,6 +271,12 @@ export async function processWaiverWindow(
             acquisitionType: 'waiver',
           },
         })
+        if (survivorWeek) {
+          await movePlayerBoundIdolsInTransaction(tx, {
+            leagueId, playerId: claim.addPlayerId,
+            fromRedraftRosterId: null, toRedraftRosterId: claim.rosterId, reason: 'waiver_claim',
+          })
+        }
 
         await tx.redraftWaiverClaim.update({
           where: { id: claim.id },

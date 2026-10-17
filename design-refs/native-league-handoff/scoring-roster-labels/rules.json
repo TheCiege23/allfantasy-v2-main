@@ -1,0 +1,1028 @@
+{
+ "scoring": [
+  {
+   "id": "std",
+   "sport": "NFL",
+   "code": "STD",
+   "name": "Standard",
+   "colors": [
+    "#5b6b8c",
+    "#2c3550"
+   ],
+   "glyph": "shield",
+   "line": "No points for catches",
+   "bestFor": "Classic leagues, run-first value",
+   "type": "points",
+   "values": [
+    {
+     "key": "pass_yd",
+     "label": "Passing yard",
+     "value": 0.04
+    },
+    {
+     "key": "pass_td",
+     "label": "Passing TD",
+     "value": 4
+    },
+    {
+     "key": "int",
+     "label": "Interception",
+     "value": -2
+    },
+    {
+     "key": "rush_yd",
+     "label": "Rushing yard",
+     "value": 0.1
+    },
+    {
+     "key": "rush_td",
+     "label": "Rushing TD",
+     "value": 6
+    },
+    {
+     "key": "rec",
+     "label": "Reception",
+     "value": 0
+    },
+    {
+     "key": "rec_yd",
+     "label": "Receiving yard",
+     "value": 0.1
+    },
+    {
+     "key": "rec_td",
+     "label": "Receiving TD",
+     "value": 6
+    },
+    {
+     "key": "fum_lost",
+     "label": "Fumble lost",
+     "value": -2
+    },
+    {
+     "key": "two_pt",
+     "label": "2-pt conversion",
+     "value": 2
+    }
+   ],
+   "categories": [],
+   "image": "scoring/std.svg"
+  },
+  {
+   "id": "half",
+   "sport": "NFL",
+   "code": "HALF",
+   "name": "Half PPR",
+   "colors": [
+    "#e8b84a",
+    "#8a5d12"
+   ],
+   "glyph": "half",
+   "line": "0.5 per catch",
+   "bestFor": "The balanced default",
+   "type": "points",
+   "values": [
+    {
+     "key": "pass_yd",
+     "label": "Passing yard",
+     "value": 0.04
+    },
+    {
+     "key": "pass_td",
+     "label": "Passing TD",
+     "value": 4
+    },
+    {
+     "key": "int",
+     "label": "Interception",
+     "value": -2
+    },
+    {
+     "key": "rush_yd",
+     "label": "Rushing yard",
+     "value": 0.1
+    },
+    {
+     "key": "rush_td",
+     "label": "Rushing TD",
+     "value": 6
+    },
+    {
+     "key": "rec",
+     "label": "Reception",
+     "value": 0.5
+    },
+    {
+     "key": "rec_yd",
+     "label": "Receiving yard",
+     "value": 0.1
+    },
+    {
+     "key": "rec_td",
+     "label": "Receiving TD",
+     "value": 6
+    },
+    {
+     "key": "fum_lost",
+     "label": "Fumble lost",
+     "value": -2
+    },
+    {
+     "key": "two_pt",
+     "label": "2-pt conversion",
+     "value": 2
+    }
+   ],
+   "categories": [],
+   "image": "scoring/half.svg"
+  },
+  {
+   "id": "ppr",
+   "sport": "NFL",
+   "code": "PPR",
+   "name": "Full PPR",
+   "colors": [
+    "#3d8fe0",
+    "#173e70"
+   ],
+   "glyph": "hands",
+   "line": "1 per catch",
+   "bestFor": "Pass-catchers rise",
+   "type": "points",
+   "values": [
+    {
+     "key": "pass_yd",
+     "label": "Passing yard",
+     "value": 0.04
+    },
+    {
+     "key": "pass_td",
+     "label": "Passing TD",
+     "value": 4
+    },
+    {
+     "key": "int",
+     "label": "Interception",
+     "value": -2
+    },
+    {
+     "key": "rush_yd",
+     "label": "Rushing yard",
+     "value": 0.1
+    },
+    {
+     "key": "rush_td",
+     "label": "Rushing TD",
+     "value": 6
+    },
+    {
+     "key": "rec",
+     "label": "Reception",
+     "value": 1
+    },
+    {
+     "key": "rec_yd",
+     "label": "Receiving yard",
+     "value": 0.1
+    },
+    {
+     "key": "rec_td",
+     "label": "Receiving TD",
+     "value": 6
+    },
+    {
+     "key": "fum_lost",
+     "label": "Fumble lost",
+     "value": -2
+    },
+    {
+     "key": "two_pt",
+     "label": "2-pt conversion",
+     "value": 2
+    }
+   ],
+   "categories": [],
+   "image": "scoring/ppr.svg"
+  },
+  {
+   "id": "te",
+   "sport": "NFL",
+   "code": "TE+",
+   "name": "TE Premium",
+   "colors": [
+    "#e89a2c",
+    "#7a4610"
+   ],
+   "glyph": "te",
+   "line": "PPR + 0.5 per TE catch",
+   "bestFor": "Makes tight ends matter",
+   "type": "points",
+   "values": [
+    {
+     "key": "pass_yd",
+     "label": "Passing yard",
+     "value": 0.04
+    },
+    {
+     "key": "pass_td",
+     "label": "Passing TD",
+     "value": 4
+    },
+    {
+     "key": "int",
+     "label": "Interception",
+     "value": -2
+    },
+    {
+     "key": "rush_yd",
+     "label": "Rushing yard",
+     "value": 0.1
+    },
+    {
+     "key": "rush_td",
+     "label": "Rushing TD",
+     "value": 6
+    },
+    {
+     "key": "rec",
+     "label": "Reception",
+     "value": 1
+    },
+    {
+     "key": "rec_yd",
+     "label": "Receiving yard",
+     "value": 0.1
+    },
+    {
+     "key": "rec_td",
+     "label": "Receiving TD",
+     "value": 6
+    },
+    {
+     "key": "fum_lost",
+     "label": "Fumble lost",
+     "value": -2
+    },
+    {
+     "key": "two_pt",
+     "label": "2-pt conversion",
+     "value": 2
+    },
+    {
+     "key": "te_rec_bonus",
+     "label": "TE reception bonus",
+     "value": 0.5
+    }
+   ],
+   "categories": [],
+   "image": "scoring/te.svg"
+  },
+  {
+   "id": "six",
+   "sport": "NFL",
+   "code": "6PT",
+   "name": "6-pt passing TD",
+   "colors": [
+    "#e0553f",
+    "#6e1f14"
+   ],
+   "glyph": "target",
+   "line": "Half PPR, pass TD = 6",
+   "bestFor": "Quarterbacks score like everyone else",
+   "type": "points",
+   "values": [
+    {
+     "key": "pass_yd",
+     "label": "Passing yard",
+     "value": 0.04
+    },
+    {
+     "key": "pass_td",
+     "label": "Passing TD",
+     "value": 6
+    },
+    {
+     "key": "int",
+     "label": "Interception",
+     "value": -2
+    },
+    {
+     "key": "rush_yd",
+     "label": "Rushing yard",
+     "value": 0.1
+    },
+    {
+     "key": "rush_td",
+     "label": "Rushing TD",
+     "value": 6
+    },
+    {
+     "key": "rec",
+     "label": "Reception",
+     "value": 0.5
+    },
+    {
+     "key": "rec_yd",
+     "label": "Receiving yard",
+     "value": 0.1
+    },
+    {
+     "key": "rec_td",
+     "label": "Receiving TD",
+     "value": 6
+    },
+    {
+     "key": "fum_lost",
+     "label": "Fumble lost",
+     "value": -2
+    },
+    {
+     "key": "two_pt",
+     "label": "2-pt conversion",
+     "value": 2
+    }
+   ],
+   "categories": [],
+   "image": "scoring/six.svg"
+  },
+  {
+   "id": "fd",
+   "sport": "NFL",
+   "code": "1ST",
+   "name": "First downs",
+   "colors": [
+    "#3abf7a",
+    "#14563a"
+   ],
+   "glyph": "chain",
+   "line": "Half PPR + 0.5 per first down",
+   "bestFor": "Rewards volume, not just TDs",
+   "type": "points",
+   "values": [
+    {
+     "key": "pass_yd",
+     "label": "Passing yard",
+     "value": 0.04
+    },
+    {
+     "key": "pass_td",
+     "label": "Passing TD",
+     "value": 4
+    },
+    {
+     "key": "int",
+     "label": "Interception",
+     "value": -2
+    },
+    {
+     "key": "rush_yd",
+     "label": "Rushing yard",
+     "value": 0.1
+    },
+    {
+     "key": "rush_td",
+     "label": "Rushing TD",
+     "value": 6
+    },
+    {
+     "key": "rec",
+     "label": "Reception",
+     "value": 0.5
+    },
+    {
+     "key": "rec_yd",
+     "label": "Receiving yard",
+     "value": 0.1
+    },
+    {
+     "key": "rec_td",
+     "label": "Receiving TD",
+     "value": 6
+    },
+    {
+     "key": "fum_lost",
+     "label": "Fumble lost",
+     "value": -2
+    },
+    {
+     "key": "two_pt",
+     "label": "2-pt conversion",
+     "value": 2
+    },
+    {
+     "key": "first_down",
+     "label": "Rush/rec first down",
+     "value": 0.5
+    }
+   ],
+   "categories": [],
+   "image": "scoring/fd.svg"
+  },
+  {
+   "id": "bonus",
+   "sport": "NFL",
+   "code": "BONUS",
+   "name": "Big-play bonus",
+   "colors": [
+    "#c04fd0",
+    "#4f1a5a"
+   ],
+   "glyph": "burst",
+   "line": "Half PPR + yardage bonuses",
+   "bestFor": "Boom weeks pay extra",
+   "type": "points",
+   "values": [
+    {
+     "key": "pass_yd",
+     "label": "Passing yard",
+     "value": 0.04
+    },
+    {
+     "key": "pass_td",
+     "label": "Passing TD",
+     "value": 4
+    },
+    {
+     "key": "int",
+     "label": "Interception",
+     "value": -2
+    },
+    {
+     "key": "rush_yd",
+     "label": "Rushing yard",
+     "value": 0.1
+    },
+    {
+     "key": "rush_td",
+     "label": "Rushing TD",
+     "value": 6
+    },
+    {
+     "key": "rec",
+     "label": "Reception",
+     "value": 0.5
+    },
+    {
+     "key": "rec_yd",
+     "label": "Receiving yard",
+     "value": 0.1
+    },
+    {
+     "key": "rec_td",
+     "label": "Receiving TD",
+     "value": 6
+    },
+    {
+     "key": "fum_lost",
+     "label": "Fumble lost",
+     "value": -2
+    },
+    {
+     "key": "two_pt",
+     "label": "2-pt conversion",
+     "value": 2
+    },
+    {
+     "key": "bonus_100_rush_rec",
+     "label": "100+ rush or rec yards",
+     "value": 3
+    },
+    {
+     "key": "bonus_300_pass",
+     "label": "300+ passing yards",
+     "value": 3
+    },
+    {
+     "key": "bonus_40_td",
+     "label": "40+ yard TD",
+     "value": 2
+    }
+   ],
+   "categories": [],
+   "image": "scoring/bonus.svg"
+  },
+  {
+   "id": "pts",
+   "sport": "NBA",
+   "code": "PTS",
+   "name": "Points",
+   "colors": [
+    "#e8743a",
+    "#6e2a0e"
+   ],
+   "glyph": "hoop",
+   "line": "Every stat is worth points",
+   "bestFor": "Simple weekly totals",
+   "type": "points",
+   "values": [
+    {
+     "key": "pts",
+     "label": "Point",
+     "value": 1
+    },
+    {
+     "key": "reb",
+     "label": "Rebound",
+     "value": 1.2
+    },
+    {
+     "key": "ast",
+     "label": "Assist",
+     "value": 1.5
+    },
+    {
+     "key": "stl",
+     "label": "Steal",
+     "value": 3
+    },
+    {
+     "key": "blk",
+     "label": "Block",
+     "value": 3
+    },
+    {
+     "key": "to",
+     "label": "Turnover",
+     "value": -1
+    },
+    {
+     "key": "three",
+     "label": "3-pointer made",
+     "value": 0.5
+    }
+   ],
+   "categories": [],
+   "image": "scoring/pts.svg"
+  },
+  {
+   "id": "ptsb",
+   "sport": "NBA",
+   "code": "PTS+",
+   "name": "Points + bonuses",
+   "colors": [
+    "#e8b84a",
+    "#7a4a0e"
+   ],
+   "glyph": "burst",
+   "line": "Points + double-double and triple-double",
+   "bestFor": "Stat-sheet stuffers",
+   "type": "points",
+   "values": [
+    {
+     "key": "pts",
+     "label": "Point",
+     "value": 1
+    },
+    {
+     "key": "reb",
+     "label": "Rebound",
+     "value": 1.2
+    },
+    {
+     "key": "ast",
+     "label": "Assist",
+     "value": 1.5
+    },
+    {
+     "key": "stl",
+     "label": "Steal",
+     "value": 3
+    },
+    {
+     "key": "blk",
+     "label": "Block",
+     "value": 3
+    },
+    {
+     "key": "to",
+     "label": "Turnover",
+     "value": -1
+    },
+    {
+     "key": "three",
+     "label": "3-pointer made",
+     "value": 0.5
+    },
+    {
+     "key": "dd",
+     "label": "Double-double",
+     "value": 1.5
+    },
+    {
+     "key": "td",
+     "label": "Triple-double",
+     "value": 3
+    }
+   ],
+   "categories": [],
+   "image": "scoring/ptsb.svg"
+  },
+  {
+   "id": "cat9",
+   "sport": "NBA",
+   "code": "9CAT",
+   "name": "9-category",
+   "colors": [
+    "#4fb3d9",
+    "#12475e"
+   ],
+   "glyph": "grid9",
+   "line": "Win categories, not points",
+   "bestFor": "Balanced builds",
+   "type": "categories",
+   "values": [],
+   "categories": [
+    "FG%",
+    "FT%",
+    "3PM",
+    "PTS",
+    "REB",
+    "AST",
+    "STL",
+    "BLK",
+    "TO"
+   ],
+   "image": "scoring/cat9.svg"
+  },
+  {
+   "id": "cat8",
+   "sport": "NBA",
+   "code": "8CAT",
+   "name": "8-category",
+   "colors": [
+    "#3abf7a",
+    "#14563a"
+   ],
+   "glyph": "grid8",
+   "line": "9-cat without turnovers",
+   "bestFor": "Lets you play high-usage stars",
+   "type": "categories",
+   "values": [],
+   "categories": [
+    "FG%",
+    "FT%",
+    "3PM",
+    "PTS",
+    "REB",
+    "AST",
+    "STL",
+    "BLK"
+   ],
+   "image": "scoring/cat8.svg"
+  },
+  {
+   "id": "custom",
+   "sport": "ANY",
+   "code": "CUSTOM",
+   "name": "Custom",
+   "colors": [
+    "#8a8fa8",
+    "#2c3040"
+   ],
+   "glyph": "sliders",
+   "line": "Commissioner sets every value",
+   "bestFor": "Unique house rules",
+   "type": "custom",
+   "values": [],
+   "categories": [],
+   "image": "scoring/custom.svg"
+  }
+ ],
+ "rosters": [
+  {
+   "id": "nfl-std",
+   "sport": "NFL",
+   "name": "Standard",
+   "starters": [
+    "QB",
+    "RB",
+    "RB",
+    "WR",
+    "WR",
+    "TE",
+    "FLEX",
+    "K",
+    "DST"
+   ],
+   "bench": 7,
+   "injured": 1,
+   "startCount": 9,
+   "slots": 16,
+   "bestFor": "Most leagues",
+   "image": "roster/nfl-std.svg"
+  },
+  {
+   "id": "nfl-sf",
+   "sport": "NFL",
+   "name": "Superflex",
+   "starters": [
+    "QB",
+    "RB",
+    "RB",
+    "WR",
+    "WR",
+    "TE",
+    "FLEX",
+    "SFLEX",
+    "K",
+    "DST"
+   ],
+   "bench": 7,
+   "injured": 1,
+   "startCount": 10,
+   "slots": 17,
+   "bestFor": "Quarterbacks get valuable",
+   "image": "roster/nfl-sf.svg"
+  },
+  {
+   "id": "nfl-2qb",
+   "sport": "NFL",
+   "name": "2QB",
+   "starters": [
+    "QB",
+    "QB",
+    "RB",
+    "RB",
+    "WR",
+    "WR",
+    "TE",
+    "FLEX",
+    "K",
+    "DST"
+   ],
+   "bench": 7,
+   "injured": 1,
+   "startCount": 10,
+   "slots": 17,
+   "bestFor": "Deep quarterback strategy",
+   "image": "roster/nfl-2qb.svg"
+  },
+  {
+   "id": "nfl-3wr",
+   "sport": "NFL",
+   "name": "3WR",
+   "starters": [
+    "QB",
+    "RB",
+    "RB",
+    "WR",
+    "WR",
+    "WR",
+    "TE",
+    "FLEX",
+    "K",
+    "DST"
+   ],
+   "bench": 7,
+   "injured": 1,
+   "startCount": 10,
+   "slots": 17,
+   "bestFor": "Pairs well with PPR",
+   "image": "roster/nfl-3wr.svg"
+  },
+  {
+   "id": "nfl-skill",
+   "sport": "NFL",
+   "name": "Skill only",
+   "starters": [
+    "QB",
+    "RB",
+    "RB",
+    "WR",
+    "WR",
+    "WR",
+    "TE",
+    "FLEX",
+    "FLEX"
+   ],
+   "bench": 6,
+   "injured": 1,
+   "startCount": 9,
+   "slots": 15,
+   "bestFor": "No kickers or defenses",
+   "image": "roster/nfl-skill.svg"
+  },
+  {
+   "id": "nfl-idp",
+   "sport": "NFL",
+   "name": "IDP",
+   "starters": [
+    "QB",
+    "RB",
+    "RB",
+    "WR",
+    "WR",
+    "TE",
+    "FLEX",
+    "K",
+    "DST",
+    "DL",
+    "LB",
+    "DB",
+    "IDP"
+   ],
+   "bench": 8,
+   "injured": 1,
+   "startCount": 13,
+   "slots": 21,
+   "bestFor": "Defensive players too",
+   "image": "roster/nfl-idp.svg"
+  },
+  {
+   "id": "nba-std",
+   "sport": "NBA",
+   "name": "Standard",
+   "starters": [
+    "PG",
+    "SG",
+    "SF",
+    "PF",
+    "C",
+    "G",
+    "F",
+    "UTIL",
+    "UTIL",
+    "UTIL"
+   ],
+   "bench": 3,
+   "injured": 1,
+   "startCount": 10,
+   "slots": 13,
+   "bestFor": "Most leagues",
+   "image": "roster/nba-std.svg"
+  },
+  {
+   "id": "nba-small",
+   "sport": "NBA",
+   "name": "Lean",
+   "starters": [
+    "PG",
+    "SG",
+    "SF",
+    "PF",
+    "C",
+    "UTIL",
+    "UTIL"
+   ],
+   "bench": 3,
+   "injured": 1,
+   "startCount": 7,
+   "slots": 10,
+   "bestFor": "Fast drafts, bigger stars",
+   "image": "roster/nba-small.svg"
+  },
+  {
+   "id": "nba-deep",
+   "sport": "NBA",
+   "name": "Deep",
+   "starters": [
+    "PG",
+    "SG",
+    "SF",
+    "PF",
+    "C",
+    "G",
+    "F",
+    "UTIL",
+    "UTIL",
+    "UTIL"
+   ],
+   "bench": 6,
+   "injured": 2,
+   "startCount": 10,
+   "slots": 16,
+   "bestFor": "Bench depth matters",
+   "image": "roster/nba-deep.svg"
+  }
+ ],
+ "positions": {
+  "QB": {
+   "fill": "#e0553f",
+   "text": "#fff",
+   "image": "positions/qb.svg"
+  },
+  "RB": {
+   "fill": "#3abf7a",
+   "text": "#06200f",
+   "image": "positions/rb.svg"
+  },
+  "WR": {
+   "fill": "#3d8fe0",
+   "text": "#fff",
+   "image": "positions/wr.svg"
+  },
+  "TE": {
+   "fill": "#e89a2c",
+   "text": "#1a1004",
+   "image": "positions/te.svg"
+  },
+  "FLEX": {
+   "fill": "#8a8fa8",
+   "text": "#0b0d14",
+   "image": "positions/flex.svg"
+  },
+  "SFLEX": {
+   "fill": "#c04fd0",
+   "text": "#fff",
+   "image": "positions/sflex.svg"
+  },
+  "K": {
+   "fill": "#b48cf0",
+   "text": "#1a0d33",
+   "image": "positions/k.svg"
+  },
+  "DST": {
+   "fill": "#8a6a4a",
+   "text": "#fff",
+   "image": "positions/dst.svg"
+  },
+  "DL": {
+   "fill": "#2fb5a5",
+   "text": "#04201d",
+   "image": "positions/dl.svg"
+  },
+  "LB": {
+   "fill": "#1f8f86",
+   "text": "#fff",
+   "image": "positions/lb.svg"
+  },
+  "DB": {
+   "fill": "#5fd0e0",
+   "text": "#05242a",
+   "image": "positions/db.svg"
+  },
+  "IDP": {
+   "fill": "#4a7f7a",
+   "text": "#fff",
+   "image": "positions/idp.svg"
+  },
+  "PG": {
+   "fill": "#3d8fe0",
+   "text": "#fff",
+   "image": "positions/pg.svg"
+  },
+  "SG": {
+   "fill": "#4fb3d9",
+   "text": "#05242a",
+   "image": "positions/sg.svg"
+  },
+  "SF": {
+   "fill": "#3abf7a",
+   "text": "#06200f",
+   "image": "positions/sf.svg"
+  },
+  "PF": {
+   "fill": "#e89a2c",
+   "text": "#1a1004",
+   "image": "positions/pf.svg"
+  },
+  "C": {
+   "fill": "#e0553f",
+   "text": "#fff",
+   "image": "positions/c.svg"
+  },
+  "G": {
+   "fill": "#7aa6ec",
+   "text": "#0b1830",
+   "image": "positions/g.svg"
+  },
+  "F": {
+   "fill": "#7fd09c",
+   "text": "#06200f",
+   "image": "positions/f.svg"
+  },
+  "UTIL": {
+   "fill": "#8a8fa8",
+   "text": "#0b0d14",
+   "image": "positions/util.svg"
+  },
+  "BN": {
+   "fill": "#1d2130",
+   "text": "#a3a9c2",
+   "image": "positions/bn.svg"
+  },
+  "IR": {
+   "fill": "#2a1418",
+   "text": "#ff9a8a",
+   "image": "positions/ir.svg"
+  },
+  "IL": {
+   "fill": "#2a1418",
+   "text": "#ff9a8a",
+   "image": "positions/il.svg"
+  }
+ },
+ "defaults": {
+  "NFL": {
+   "scoring": "half",
+   "roster": "nfl-std"
+  },
+  "NBA": {
+   "scoring": "pts",
+   "roster": "nba-std"
+  }
+ },
+ "kdst": {
+  "note": "K and DST use the AF standard tables in every NFL preset."
+ }
+}
