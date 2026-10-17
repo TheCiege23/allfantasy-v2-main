@@ -33,6 +33,12 @@ describe('scheduled Survivor draft start', () => {
     expect(m.lock).toHaveBeenCalledWith('league-1', expect.any(Function))
     expect(m.start).toHaveBeenCalledOnce()
   })
+  it('scans guillotine leagues as well as survivor leagues', async () => {
+    await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
+    expect(m.due.mock.calls[0][0].where.league).toEqual({
+      is: { OR: [{ survivorMode: true }, { guillotineMode: true }, { leagueVariant: 'guillotine' }] },
+    })
+  })
   it('does not start a provider draft, a completed draft, or a cold player pool', async () => {
     m.due.mockResolvedValueOnce([{ leagueId: 'external', league: { platform: 'sleeper' } }])
     expect((await startScheduledSurvivorDrafts()).started).toBe(0)
