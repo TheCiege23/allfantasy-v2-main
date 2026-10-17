@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { postHostMessage } from './hostEngine'
 import { logSurvivorAuditEntry } from './auditEntry'
+import { EXILE_BOSS_USER_ID } from './exileRosterRules'
 
 /** Default conversion: 1 token → $5 FAAB on main league roster (Int field). */
 const TOKEN_TO_FAAB = 5
@@ -171,9 +172,22 @@ export async function scoreExileWeek(leagueId: string, week: number): Promise<bo
       const player = await tx.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId: entry.userId } } })
       if (player?.playerState === 'exile') eligible.push({ entry, player })
     }
-    if (!eligible.length) return false
-    const best = eligible[0].entry.weeklyScore
-    for (const { entry, player } of eligible.filter(row => row.entry.weeklyScore === best)) {
+    const boss = entries.find(entry => entry.userId === EXILE_BOSS_USER_ID && (proof?.source !== 'closed_exile_rosters_v1' || proof.userIds?.includes(entry.userId)))
+    const exiles = boss ? await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile' }, select: { userId: true, tokenBalance: true } }) : []
+    // An exile who fielded no roster scored nothing, so Chimmy's team still has to beat zero.
+    if (!eligible.length && !(boss && exiles.length)) return false
+    const best = eligible[0]?.entry.weeklyScore ?? 0
+    if (boss && boss.weeklyScore > best) {
+      // Chimmy outscored every exile: nobody earns a token and every balance returns to zero.
+      const shielded = await userIdsWithTokenShield(leagueId)
+      const reset = exiles.filter(player => player.tokenBalance > 0 && !shielded.has(player.userId)).map(player => player.userId)
+      if (reset.length) await tx.survivorPlayer.updateMany({ where: { leagueId, userId: { in: reset } }, data: { tokenBalance: 0 } })
+      await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_boss_won', targetUserId: EXILE_BOSS_USER_ID,
+        data: { bossScore: boss.weeklyScore, bestExileScore: best, resetUserIds: reset }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+      const channel = island.chatChannelId ? { id: island.chatChannelId } : await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'exile', isArchived: false }, select: { id: true } })
+      if (channel) await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'exile', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+        contentType: 'host_announcement', content: `Exile · Week ${week}\nChimmy's team scored ${boss.weeklyScore.toFixed(1)} and beat every exile (best: ${best.toFixed(1)}). All Exile tokens are reset to 0.` } })
+    } else for (const { entry, player } of eligible.filter(row => row.entry.weeklyScore === best)) {
       const award = league?.survivorTokenCap != null && player.tokenBalance >= league.survivorTokenCap ? 0 : 1
       await tx.survivorPlayer.update({ where: { id: player.id }, data: { tokenBalance: { increment: award }, totalTokensEarned: { increment: award } } })
       await tx.exileWeeklyEntry.update({ where: { id: entry.id }, data: { tokenEarned: award } })

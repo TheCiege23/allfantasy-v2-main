@@ -132,6 +132,31 @@ describe('Exile weekly award settlement', () => {
     expect(await scoreExileWeek('league', 10)).toBe(true)
     expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry' }, data: { tokenEarned: 1 } })
   })
+  it("resets every Exile token when Chimmy's team outscores all exiles", async () => {
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'boss', userId: 'survivor-exile-boss', weeklyScore: 120 }, { id: 'entry', userId: 'b', weeklyScore: 95 }])
+    m.db.survivorPlayer.findUnique.mockImplementation(async ({ where }) => where.leagueId_userId.userId === 'b' ? { ...players[1], playerState: 'exile' } : null)
+    expect(await scoreExileWeek('league', 10)).toBe(true)
+    expect(m.db.survivorPlayer.updateMany).toHaveBeenCalledWith({ where: { leagueId: 'league', userId: { in: ['a', 'b'] } }, data: { tokenBalance: 0 } })
+    expect(m.db.survivorPlayer.update).not.toHaveBeenCalled()
+    expect(m.db.survivorAuditEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'exile_boss_won', isVisibleToPublic: true }) }))
+    expect(m.db.survivorChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ content: expect.stringContaining('All Exile tokens are reset to 0') }) }))
+  })
+  it('awards the token as usual when an exile matches or beats Chimmy', async () => {
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'boss', userId: 'survivor-exile-boss', weeklyScore: 95 }, { id: 'entry', userId: 'b', weeklyScore: 95 }])
+    m.db.survivorPlayer.findUnique.mockImplementation(async ({ where }) => where.leagueId_userId.userId === 'b' ? { ...players[1], playerState: 'exile' } : null)
+    expect(await scoreExileWeek('league', 10)).toBe(true)
+    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry' }, data: { tokenEarned: 1 } })
+    expect(m.db.survivorPlayer.updateMany).not.toHaveBeenCalled()
+  })
+  it('lets Chimmy win a week in which no exile set a roster', async () => {
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'boss', userId: 'survivor-exile-boss', weeklyScore: 40 }])
+    m.db.survivorPlayer.findUnique.mockResolvedValue(null)
+    expect(await scoreExileWeek('league', 10)).toBe(true)
+    expect(m.db.survivorPlayer.updateMany).toHaveBeenCalledOnce()
+  })
 
 })
 

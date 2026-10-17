@@ -7,6 +7,9 @@ export type ExileWeeklyRoster = {
   version: 1; anchorId: string | null; team: string | null; players: ExileRosterPlayer[];
   closedAt: string | null; lockedAt: string | null
 }
+/** Chimmy's team in the weekly Exile contest; see exileBoss.ts. */
+export const EXILE_BOSS_USER_ID = 'survivor-exile-boss'
+
 export const emptyExileRoster = (): ExileWeeklyRoster => ({ version: 1, anchorId: null, team: null, players: [], closedAt: null, lockedAt: null })
 
 /** Only the server writes this envelope; legacy free-form submissions are never scored as rosters. */
