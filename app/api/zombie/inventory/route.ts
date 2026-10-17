@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   if (!roster) {
     return NextResponse.json({
       items: [],
-      rules: await getZombieRulesForSport(z.sport),
+      rules: await getZombieRulesForLeague(leagueId, z.sport),
       history: [],
       resolution: null,
       isCommissionerView: targetUserId !== session.user.id,
@@ -132,7 +132,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     items: team?.items ?? [],
     teamStatus: team?.status ?? 'Survivor',
-    rules: await getZombieRulesForSport(z.sport),
+    rules: await getZombieRulesForLeague(leagueId, z.sport),
     history,
     resolution,
     // Only a viewer allowed to know the Whisperer learns who it is.

@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { redraftTradePositionLimitRefusal } from '@/lib/league/positionLimitsServer'
 import {
   applyRedraftTradeCapTransfersInTransaction,
   refreshCapProjections,
@@ -113,6 +114,17 @@ async function finalizeAcceptedTrade(
     })
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
+
+  // Position limits, re-checked at settlement: either roster may have changed since the offer.
+  const positionRefusal = await redraftTradePositionLimitRefusal({
+    leagueId: proposal.leagueId,
+    rosterIds: [proposal.proposerRosterId, proposal.receiverRosterId],
+    assets: (proposal.assets ?? []).map((a) => ({ assetType: a.assetType, playerId: a.playerId, fromRosterId: a.fromRosterId, toRosterId: a.toRosterId })),
+  })
+  if (positionRefusal) {
+    await failEvent()
+    return NextResponse.json({ error: positionRefusal }, { status: 409 })
+  }
 
   // A cheap early refusal, NOT the verdict that decides. The cap numbers it reads can change before
   // the transaction below opens, so the check is repeated on `tx` after the claim — see there.

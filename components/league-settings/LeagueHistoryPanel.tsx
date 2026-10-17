@@ -9,9 +9,10 @@
  * Matches the Sleeper "Previous leagues" screenshot layout.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Trophy } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import type { AllTimeStandingRow } from '@/lib/league/allTimeStandings'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +66,7 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
   const [seasons, setSeasons] = useState<HistorySeason[]>([])
   const [, setLeagueName] = useState<string | null>(null)
   const [backfill, setBackfill] = useState<BackfillStatus | null>(null)
+  const [standings, setStandings] = useState<AllTimeStandingRow[]>([])
 
   useEffect(() => {
     let active = true
@@ -76,6 +78,7 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
           if (!active) return
           if (data.error) { setError(data.error); return }
           setSeasons(data.seasons ?? [])
+          setStandings(data.allTimeStandings ?? [])
           setLeagueName(data.leagueName ?? null)
           setBackfill(data.historicalBackfill ?? null)
           // Poll while the background backfill is still running.
@@ -199,12 +202,113 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
         </div>
       )}
 
+      {standings.length > 0 ? <AllTimeStandings rows={standings} /> : null}
+
       {/* Footer info */}
       <div className="border-t border-white/[0.06] pt-3">
         <p className="text-[11px] leading-relaxed text-white/25">
           {t('history.footer')}
         </p>
       </div>
+    </div>
+  )
+}
+
+type StandingsSort = 'winPct' | 'titles' | 'points'
+
+const pct = (n: number) => `${(n * 100).toFixed(1)}%`
+const points = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 })
+
+/**
+ * All-time standings: every manager across every season on file (lib/league/allTimeStandings.ts).
+ * The table scrolls sideways inside its card, so the page itself never does on a phone.
+ */
+function AllTimeStandings({ rows }: { rows: AllTimeStandingRow[] }) {
+  const { t } = useLanguage()
+  const [sort, setSort] = useState<StandingsSort>('winPct')
+  const sorted = useMemo(() => {
+    const copy = [...rows]
+    if (sort === 'titles') copy.sort((a, b) => b.championships - a.championships || b.winPct - a.winPct)
+    else if (sort === 'points') copy.sort((a, b) => b.totalPoints - a.totalPoints || b.winPct - a.winPct)
+    return copy
+  }, [rows, sort])
+  const showActivity = rows.some((r) => r.moves != null || r.messages != null)
+
+  return (
+    <div className="space-y-2" data-testid="league-history-all-time">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">{t('history.allTime.title')}</p>
+        <div className="flex gap-1" role="radiogroup" aria-label={t('history.allTime.sortBy')}>
+          {(
+            [
+              ['winPct', t('history.allTime.winPct')],
+              ['titles', t('history.allTime.titles')],
+              ['points', t('history.allTime.pf')],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={sort === key}
+              onClick={() => setSort(key)}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                sort === key ? 'border-cyan-300 bg-cyan-400 text-[#04131a]' : 'border-white/[0.12] bg-white/[0.04] text-white/60'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-white/[0.08] bg-black/20">
+        <table className="w-full min-w-[560px] text-left text-[12px]">
+          <thead className="text-[11px] uppercase tracking-wide text-white/40">
+            <tr>
+              <th className="px-3 py-2 font-semibold">{t('history.allTime.manager')}</th>
+              <th className="px-2 py-2 font-semibold">{t('history.allTime.record')}</th>
+              <th className="px-2 py-2 font-semibold">{t('history.allTime.winPct')}</th>
+              <th className="px-2 py-2 font-semibold">{t('history.allTime.pf')}</th>
+              <th className="px-2 py-2 font-semibold">{t('history.allTime.pa')}</th>
+              <th className="px-2 py-2 font-semibold">{t('history.allTime.titles')}</th>
+              {showActivity ? <th className="px-2 py-2 font-semibold">{t('history.allTime.moves')}</th> : null}
+              {showActivity ? <th className="px-2 py-2 font-semibold">{t('history.allTime.messages')}</th> : null}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.06]">
+            {sorted.map((r) => (
+              <tr key={r.managerKey} className="text-white/80">
+                <td className="px-3 py-2">
+                  <span className="block font-semibold text-white">{r.managerName}</span>
+                  <span className="text-[11px] text-white/40">
+                    {t('history.allTime.seasons').replace('{{n}}', String(r.seasonsPlayed))} · {r.yearRange}
+                  </span>
+                </td>
+                <td className="px-2 py-2 tabular-nums">
+                  {r.totalWins}-{r.totalLosses}
+                  {r.totalTies ? `-${r.totalTies}` : ''}
+                </td>
+                <td className="px-2 py-2 tabular-nums">{pct(r.winPct)}</td>
+                <td className="px-2 py-2 tabular-nums">{points(r.totalPoints)}</td>
+                <td className="px-2 py-2 tabular-nums">{points(r.totalPointsAgainst)}</td>
+                <td className="px-2 py-2 tabular-nums">
+                  {r.championships > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-amber-200">
+                      <Trophy className="h-3 w-3" aria-hidden />
+                      {r.championships}
+                    </span>
+                  ) : (
+                    0
+                  )}
+                </td>
+                {showActivity ? <td className="px-2 py-2 tabular-nums">{r.moves ?? '—'}</td> : null}
+                {showActivity ? <td className="px-2 py-2 tabular-nums">{r.messages ?? '—'}</td> : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {showActivity ? <p className="text-[11px] text-white/35">{t('history.allTime.activityNote')}</p> : null}
     </div>
   )
 }

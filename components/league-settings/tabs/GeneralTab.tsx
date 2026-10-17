@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { HubCard, HubChoices, HubToggle, rangeChoices } from './hubFields'
+import { TradesTab } from './TradesTab'
 import { SETTINGS_CARD_CLASS, SETTINGS_INPUT_CLASS, SETTINGS_LABEL_CLASS, WaiversSection } from './WaiversTab'
 
 const TZ_PRESETS = [
@@ -20,16 +23,33 @@ const TZ_PRESETS = [
   'UTC',
 ]
 
+/** The team counts commishes pick from; the league's own count is kept even when it is off-list. */
+const TEAM_COUNTS = [4, 6, 8, 10, 12, 14, 16, 18, 20]
+
+/** Core-rule switches, all plain `League` columns patched through the `general` section. */
+const CORE_TOGGLES = [
+  { key: 'medianGame', labelKey: 'lsHub.gen.median', hintKey: 'lsHub.gen.medianHint' },
+  { key: 'allowPreDraftMoves', labelKey: 'lsHub.gen.preDraftMoves', hintKey: null },
+  { key: 'preventBenchDrops', labelKey: 'lsHub.gen.benchDrops', hintKey: null },
+  { key: 'lockAllMoves', labelKey: 'lsHub.gen.lockMoves', hintKey: 'lsHub.gen.lockMovesHint' },
+  { key: 'overrideInviteCapacity', labelKey: 'lsHub.gen.inviteCapacity', hintKey: 'lsHub.gen.inviteCapacityHint' },
+  { key: 'disableInviteLinks', labelKey: 'lsHub.gen.disableInvites', hintKey: null },
+] as const
+type CoreToggleKey = (typeof CORE_TOGGLES)[number]['key']
+
 const DEFAULT_TZ = 'America/New_York'
 
 /**
- * General — league basics plus the Waivers & free agents section.
+ * League tab: identity, format, team count and core rules, with Waivers & free agents and Trades as
+ * sections of the same screen (they used to be two more tabs). Everything autosaves through the
+ * sectioned settings PATCH, so the server's commish/co-commish check and lifecycle locks apply.
  *
  * 🛑 This hub only renders for NATIVE AllFantasy leagues (`LeagueSettingsModal` routes imported
  * leagues to its own read-only summary), so there is no host platform here: the old
  * "League rules — read-only snapshot · edit on your host platform" block was removed from this tab.
  */
-export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+export function GeneralTab(props: LeagueSettingsTabProps) {
+  const { ctx, canEdit } = props
   const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
@@ -50,6 +70,17 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
     setLogoUrl(seedLogo())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.league.name, ctx.league.timezone, ctx.league.logoUrl])
+  const [leagueSize, setLeagueSize] = useState<number>(ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12)
+  const [dispersalRounds, setDispersalRounds] = useState<number>(ctx.league.dispersalDraftRounds ?? 0)
+  const [core, setCore] = useState<Record<CoreToggleKey, boolean>>(() => coreFrom(ctx.league))
+
+  useEffect(() => {
+    setLeagueSize(ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12)
+    setDispersalRounds(ctx.league.dispersalDraftRounds ?? 0)
+    setCore(coreFrom(ctx.league))
+  }, [ctx.league])
+
+  const teamCounts = TEAM_COUNTS.includes(leagueSize) ? TEAM_COUNTS : [...TEAM_COUNTS, leagueSize].sort((a, b) => a - b)
 
   // A league saved with a zone outside the presets must still show (and keep) that zone.
   const tzOptions = useMemo(
@@ -140,7 +171,63 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         ) : null}
       </section>
 
+      <LeagueTypeConfirm leagueId={leagueId} alwaysShow />
+
+      <HubCard title={t('lsHub.gen.format')} testId="league-settings-format-card">
+        <HubChoices
+          label={t('lsHub.gen.teams')}
+          value={leagueSize}
+          disabled={!canEdit}
+          options={teamCounts.map((n) => ({ value: n, label: String(n) }))}
+          onChange={(n) => {
+            setLeagueSize(n)
+            queuePatch({ leagueSize: n })
+          }}
+          testId="league-settings-team-count"
+        />
+        <p className="text-[11px] leading-relaxed text-white/45">{t('lsHub.gen.teamsLock')}</p>
+        <HubChoices
+          label={t('lsHub.gen.dispersal')}
+          value={dispersalRounds}
+          disabled={!canEdit}
+          options={rangeChoices(0, 7, (n) => (n === 0 ? t('lsHub.none') : String(n)))}
+          onChange={(n) => {
+            setDispersalRounds(n)
+            queuePatch({ dispersalDraftRounds: n })
+          }}
+        />
+      </HubCard>
+
+      <HubCard title={t('lsHub.gen.coreRules')} testId="league-settings-core-rules">
+        {CORE_TOGGLES.map((row) => (
+          <HubToggle
+            key={row.key}
+            label={t(row.labelKey)}
+            hint={row.hintKey ? t(row.hintKey) : undefined}
+            checked={core[row.key]}
+            disabled={!canEdit}
+            testId={`league-settings-${row.key}`}
+            onChange={(v) => {
+              setCore((c) => ({ ...c, [row.key]: v }))
+              queuePatch({ [row.key]: v })
+            }}
+          />
+        ))}
+      </HubCard>
+
       <WaiversSection ctx={ctx} canEdit={canEdit} timezone={timezone} />
+
+      <HubCard title={t('lsHub.tab.trades')} testId="league-settings-trades-section">
+        <TradesTab {...props} />
+      </HubCard>
+
     </div>
   )
+}
+
+function coreFrom(league: Partial<Record<CoreToggleKey, boolean | null>>): Record<CoreToggleKey, boolean> {
+  // Schema defaults: everything off except pre-draft moves.
+  return Object.fromEntries(
+    CORE_TOGGLES.map((row) => [row.key, league[row.key] ?? row.key === 'allowPreDraftMoves']),
+  ) as Record<CoreToggleKey, boolean>
 }

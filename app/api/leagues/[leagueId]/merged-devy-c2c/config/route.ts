@@ -1,6 +1,6 @@
 /**
  * GET/PATCH: Merged Devy / C2C league config. PROMPT 2/6.
- * Commissioner or league member can read; only commissioner can write.
+ * Commissioner or league member can read; only the commish writes, behind the specialty-settings gate.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,6 +9,8 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isC2CLeague, getC2CConfig, upsertC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
+import { parseC2CConfigPatch } from '@/lib/merged-devy-c2c/c2cConfigPatch'
+import { specialtySettingsEditRefusal } from '@/lib/league/specialty-settings-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,43 +106,19 @@ export async function PATCH(
   const isC2C = await isC2CLeague(leagueId)
   if (!isC2C) return NextResponse.json({ error: 'Not a C2C / Merged Devy league' }, { status: 404 })
 
-  const body = await req.json().catch(() => ({}))
-  const updated = await upsertC2CConfig(leagueId, {
-    ...(body.startupFormat !== undefined && { startupFormat: String(body.startupFormat) }),
-    ...(body.mergedStartupDraft !== undefined && { mergedStartupDraft: Boolean(body.mergedStartupDraft) }),
-    ...(body.separateStartupCollegeDraft !== undefined && { separateStartupCollegeDraft: Boolean(body.separateStartupCollegeDraft) }),
-    ...(body.collegeRosterSize !== undefined && { collegeRosterSize: Number(body.collegeRosterSize) }),
-    ...(body.collegeActiveLineupSlots !== undefined && { collegeActiveLineupSlots: body.collegeActiveLineupSlots }),
-    ...(body.taxiSize !== undefined && { taxiSize: Number(body.taxiSize) }),
-    ...(body.rookieDraftRounds !== undefined && { rookieDraftRounds: Number(body.rookieDraftRounds) }),
-    ...(body.collegeDraftRounds !== undefined && { collegeDraftRounds: Number(body.collegeDraftRounds) }),
-    ...(body.bestBallPro !== undefined && { bestBallPro: Boolean(body.bestBallPro) }),
-    ...(body.bestBallCollege !== undefined && { bestBallCollege: Boolean(body.bestBallCollege) }),
-    ...(body.promotionTiming !== undefined && { promotionTiming: String(body.promotionTiming) }),
-    ...(body.maxPromotionsPerYear !== undefined && { maxPromotionsPerYear: body.maxPromotionsPerYear === null ? null : Number(body.maxPromotionsPerYear) }),
-    ...(body.earlyDeclareBehavior !== undefined && { earlyDeclareBehavior: String(body.earlyDeclareBehavior) }),
-    ...(body.returnToSchoolHandling !== undefined && { returnToSchoolHandling: String(body.returnToSchoolHandling) }),
-    ...(body.rookiePickTradeRules !== undefined && { rookiePickTradeRules: String(body.rookiePickTradeRules) }),
-    ...(body.collegePickTradeRules !== undefined && { collegePickTradeRules: String(body.collegePickTradeRules) }),
-    ...(body.collegeScoringUntilDeadline !== undefined && { collegeScoringUntilDeadline: Boolean(body.collegeScoringUntilDeadline) }),
-    ...(body.standingsModel !== undefined && { standingsModel: String(body.standingsModel) }),
-    ...(body.mergedRookieCollegeDraft !== undefined && { mergedRookieCollegeDraft: Boolean(body.mergedRookieCollegeDraft) }),
-    ...(body.nflCollegeExcludeKDST !== undefined && { nflCollegeExcludeKDST: Boolean(body.nflCollegeExcludeKDST) }),
-    ...(body.proLineupSlots !== undefined && { proLineupSlots: body.proLineupSlots }),
-    ...(body.proBenchSize !== undefined && { proBenchSize: Number(body.proBenchSize) }),
-    ...(body.proIRSize !== undefined && { proIRSize: Number(body.proIRSize) }),
-    ...(body.startupDraftType !== undefined && { startupDraftType: String(body.startupDraftType) }),
-    ...(body.rookieDraftType !== undefined && { rookieDraftType: String(body.rookieDraftType) }),
-    ...(body.collegeDraftType !== undefined && { collegeDraftType: String(body.collegeDraftType) }),
-    ...(body.rookiePickOrderMethod !== undefined && { rookiePickOrderMethod: String(body.rookiePickOrderMethod) }),
-    ...(body.collegePickOrderMethod !== undefined && { collegePickOrderMethod: String(body.collegePickOrderMethod) }),
-    ...(body.hybridProWeight !== undefined && { hybridProWeight: Number(body.hybridProWeight) }),
-    ...(body.hybridPlayoffQualification !== undefined && { hybridPlayoffQualification: String(body.hybridPlayoffQualification) }),
-    ...(body.hybridChampionshipTieBreaker !== undefined && { hybridChampionshipTieBreaker: String(body.hybridChampionshipTieBreaker) }),
-    ...(body.collegeFAEnabled !== undefined && { collegeFAEnabled: Boolean(body.collegeFAEnabled) }),
-    ...(body.collegeFAABSeparate !== undefined && { collegeFAABSeparate: Boolean(body.collegeFAABSeparate) }),
-    ...(body.collegeFAABBudget !== undefined && { collegeFAABBudget: body.collegeFAABBudget === null ? null : Number(body.collegeFAABBudget) }),
-  })
+  // Gated like every other specialty write: commish or co-commish with AF Commish or a token unlock.
+  const refusal = await specialtySettingsEditRefusal(leagueId, userId)
+  if (refusal) return refusal
+
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'A settings object is required.' }, { status: 400 })
+  }
+  // Typed, ranged and enum-checked (lib/merged-devy-c2c/c2cConfigPatch.ts): this used to coerce, so
+  // 'abc' became NaN and failed the Int column, and 'false' saved as true.
+  const parsed = parseC2CConfigPatch(body as Record<string, unknown>)
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+  const updated = await upsertC2CConfig(leagueId, parsed.patch as Parameters<typeof upsertC2CConfig>[1])
   if (!updated) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
   return NextResponse.json({ ok: true, config: updated })
 }

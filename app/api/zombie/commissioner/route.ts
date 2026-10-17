@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getZombieRulesForLeague } from '@/lib/zombie/zombieRules'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -127,6 +128,17 @@ export async function POST(req: Request) {
       where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
     })
     if (!team) return NextResponse.json({ error: 'Zombie team row missing' }, { status: 400 })
+
+    // The league's serum cap (Specialty tab), enforced where serums are granted.
+    if (itemType.toLowerCase().includes('serum')) {
+      const { serumMaxHold } = await getZombieRulesForLeague(leagueId, z.sport)
+      const held = await prisma.zombieTeamItem.count({
+        where: { teamStatusId: team.id, itemType: { contains: 'serum' }, isUsed: false },
+      })
+      if (held >= serumMaxHold) {
+        return NextResponse.json({ error: `This team already holds the league's limit of ${serumMaxHold} serums.` }, { status: 409 })
+      }
+    }
 
     await prisma.zombieTeamItem.create({
       data: {

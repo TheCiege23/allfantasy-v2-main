@@ -56,14 +56,23 @@ export function addPlayerToRosterData(playerData: unknown, playerId: string): un
   return syncLineupSections(next, { addPlayerId: playerId })
 }
 
+/**
+ * ⚠ Also scrubs the flat `starters` / `reserve` (IR) / `taxi` / `devy` arrays on the AllFantasy shape. This used to clean
+ * only `players` and `lineup_sections`, so a dropped or traded-away player could stay listed in the
+ * old team's `playerData.starters` — on no roster by `players`, yet still in a lineup array.
+ */
 export function removePlayerFromRosterData(playerData: unknown, playerId: string): unknown {
   const ids = getRosterPlayerIds(playerData).filter((id) => id !== playerId)
   if (Array.isArray(playerData)) return ids
-  const source = (playerData && typeof playerData === 'object' ? playerData : {}) as Record<string, unknown>
-  const starters = Array.isArray(source.starters)
-    ? source.starters.filter((row: unknown) => (typeof row === 'string' ? row : (row as { id?: string; player_id?: string } | null)?.id ?? (row as { player_id?: string } | null)?.player_id) !== playerId)
-    : source.starters
-  const next = { ...source, players: ids, ...(Array.isArray(source.starters) ? { starters } : {}) }
+  const next: Record<string, unknown> = { ...(playerData as object), players: ids }
+  // Only on the AllFantasy shape, where these are compact copies of `lineup_sections`
+  // (buildPersistedRosterDataFromRosterState). A raw Sleeper `starters` is POSITIONAL — one entry per
+  // slot — so filtering it would slide every later starter into the wrong slot.
+  if (next.lineup_sections && typeof next.lineup_sections === 'object') {
+    for (const key of ['starters', 'reserve', 'taxi', 'devy'] as const) {
+      if (Array.isArray(next[key])) next[key] = (next[key] as LineupSectionRow[]).filter((row) => sectionRowId(row) !== playerId)
+    }
+  }
   return syncLineupSections(next, { removePlayerId: playerId })
 }
 

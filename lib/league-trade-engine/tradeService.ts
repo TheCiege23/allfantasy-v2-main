@@ -9,6 +9,7 @@ import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
+import { tradePositionLimitRefusal } from '@/lib/league/positionLimitsServer'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
   captureGenericRosterState,
@@ -524,6 +525,8 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
   })
   if (!v.ok) throw new Error(v.message)
+  const positionRefusal = await tradePositionLimitRefusal(input.leagueId, participants, input.assets)
+  if (positionRefusal) throw new Error(positionRefusal)
 
   const expiresHours = input.expiresInHours ?? 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)
@@ -1021,6 +1024,18 @@ export async function finalizeAfLeagueTradeProcessing(input: {
     faabAmount: i.faabAmount,
     metadata: (i.metadata as Record<string, unknown>) ?? {},
   }))
+
+  // Position limits, re-checked at processing: rosters can change between offer and execution.
+  const positionRefusal = await tradePositionLimitRefusal(
+    trade.leagueId,
+    () =>
+      prisma.roster.findMany({
+        where: { id: { in: participantRosterIds }, leagueId: trade.leagueId },
+        select: { id: true, playerData: true },
+      }),
+    assets,
+  )
+  if (positionRefusal) throw new Error(positionRefusal)
 
   await prisma.$transaction(async (tx) => {
     // 🛑 CLAIM FIRST, AND CONDITIONALLY. This was a bare `update({ where: { id } })` sitting

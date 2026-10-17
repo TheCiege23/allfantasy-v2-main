@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradeProposalValidation'
+import { redraftTradePositionLimitRefusal } from '@/lib/league/positionLimitsServer'
 import {
   REDRAFT_TRADE_GOVERNANCE_REFUSAL,
   prohibitedRedraftGovernanceFields,
@@ -285,6 +286,14 @@ export async function POST(req: NextRequest) {
   })
   if (!validation.ok) {
     return NextResponse.json({ error: validation.message, code: validation.code }, { status: 400 })
+  }
+  const positionRefusal = await redraftTradePositionLimitRefusal({
+    leagueId,
+    rosterIds: [proposerRosterId, receiverRosterId],
+    assets: assets.map((a) => ({ assetType: a.assetType, playerId: a.playerId, fromRosterId: a.fromRosterId!, toRosterId: a.toRosterId! })),
+  })
+  if (positionRefusal) {
+    return NextResponse.json({ error: positionRefusal, code: 'POSITION_LIMIT' }, { status: 400 })
   }
 
   const created = await prisma.$transaction(async (tx: any) => {

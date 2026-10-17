@@ -16,6 +16,7 @@ import {
   type WaiverDayKey,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { HubToggle } from './hubFields'
 
 /** Option labels are dictionary keys, resolved at render. */
 const WAIVER_TYPES = [
@@ -76,6 +77,7 @@ export function WaiversSection({
     waiverBudget: numOr(savedOr(leagueId, 'waiverBudget', ctx.league.waiverBudget ?? 100), 100),
     waiverMinBid: numOr(savedOr(leagueId, 'waiverMinBid', ctx.league.waiverMinBid ?? 0), 0),
     waiverHours: numOr(savedOr(leagueId, 'waiverHours', ctx.league.waiverHours ?? 24), 24),
+    clearAfterGames: Boolean(savedOr(leagueId, 'waiverClearAfterGames', ctx.league.waiverClearAfterGames ?? true)),
     schedule:
       (savedOr<DailyWaiverSchedule | null>(
         leagueId,
@@ -89,6 +91,7 @@ export function WaiversSection({
   const [waiverMinBid, setWaiverMinBid] = useState(() => seed().waiverMinBid)
   const [waiverHours, setWaiverHours] = useState(() => seed().waiverHours)
   const [schedule, setSchedule] = useState<DailyWaiverSchedule>(() => seed().schedule)
+  const [clearAfterGames, setClearAfterGames] = useState(() => seed().clearAfterGames)
 
   useEffect(() => {
     const s = seed()
@@ -97,8 +100,9 @@ export function WaiversSection({
     setWaiverMinBid(s.waiverMinBid)
     setWaiverHours(s.waiverHours)
     setSchedule(s.schedule)
+    setClearAfterGames(s.clearAfterGames)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.league.waiverType, ctx.league.waiverBudget, ctx.league.waiverMinBid, ctx.league.waiverHours, ctx.league.settings])
+  }, [ctx.league.waiverType, ctx.league.waiverBudget, ctx.league.waiverMinBid, ctx.league.waiverHours, ctx.league.waiverClearAfterGames, ctx.league.settings])
 
   // The schedule is stored in league-local time and derived into UTC server-side, so a timezone
   // change re-sends it (with the new zone) to keep the processing days right.
@@ -280,6 +284,17 @@ export function WaiversSection({
           ) : null}
         </div>
       </div>
+
+      <HubToggle
+        label={t('lsHub.wv.clearAfterGames')}
+        hint={t('lsHub.wv.clearAfterGamesHint')}
+        checked={clearAfterGames}
+        disabled={!canEdit}
+        onChange={(v) => {
+          setClearAfterGames(v)
+          queuePatch({ waiverClearAfterGames: v })
+        }}
+      />
     </section>
   )
 }

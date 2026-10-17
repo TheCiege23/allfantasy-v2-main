@@ -35,15 +35,16 @@ const NAMING_ONLY = [
 ]
 
 describe('TOKEN_PURCHASABLE_RULES', () => {
-  it('every listed action is a priced rule, and there are 13 of the table’s 64', () => {
+  it('every listed action is a priced rule, and there are 14 of the table’s 65', () => {
     for (const r of TOKEN_PURCHASABLE_RULES) {
       const entry = getTokenSpendRuleMatrixEntry(r.code)
       expect(entry, r.code).not.toBeNull()
       expect(entry!.tokenCost, r.code).toBeGreaterThan(0)
     }
-    expect(TOKEN_PURCHASABLE_RULES).toHaveLength(13)
-    expect(new Set(TOKEN_PURCHASABLE_RULES.map((r) => r.code)).size).toBe(13)
-    expect(listTokenSpendRuleMatrix().length).toBe(64)
+    // +1 on 2026-10-13: the Specialty tab's one-season league unlock (priced AND sold by a screen).
+    expect(TOKEN_PURCHASABLE_RULES).toHaveLength(14)
+    expect(new Set(TOKEN_PURCHASABLE_RULES.map((r) => r.code)).size).toBe(14)
+    expect(listTokenSpendRuleMatrix().length).toBe(65)
   }, 60_000)
 
   it('🛑 every listed action is charged by something outside the price table (the half a machine can check)', () => {

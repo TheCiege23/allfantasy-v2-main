@@ -53,6 +53,7 @@ vi.mock('@/components/league-settings/CoOwnerSettingsPanel', () => stub('CoOwner
 vi.mock('@/components/league-settings/DivisionSettingsCommissionerPanel', () => stub('DivisionSettingsCommissionerPanel'))
 vi.mock('@/components/league-settings/LeagueDuesTrackerPanel', () => stub('LeagueDuesTrackerPanel'))
 vi.mock('@/components/league-settings/LeagueHistoryPanel', () => stub('LeagueHistoryPanel'))
+vi.mock('@/app/league/[leagueId]/components/LeagueSettingsSubPanels', () => stub('SettingsSubPanelBody'))
 
 import { LeagueSettingsControlCenter } from '@/components/league-settings/LeagueSettingsControlCenter'
 import { DuplicateManagerWarningsSection } from '@/components/league-settings/DuplicateManagerWarningsSection'
@@ -62,15 +63,16 @@ const ROOT = resolve(__dirname, '..')
 const FILES = [
   'components/league-settings/LeagueSettingsControlCenter.tsx', 'components/league-settings/DuplicateManagerWarningsSection.tsx',
   'app/league/[leagueId]/components/DeleteLeagueFromAfPanel.tsx',
-  ...['GeneralTab', 'WaiversTab', 'AISettingsTab', 'ConceptRulesTab', 'TradesTab', 'PlayoffsTab', 'ScoringTab', 'RostersTab', 'CommissionerTab'].map((f) => `components/league-settings/tabs/${f}.tsx`),
+  ...['GeneralTab', 'WaiversTab', 'AISettingsTab', 'TradesTab', 'PlayoffsTab', 'ScoringTab', 'RostersTab', 'MembersTab', 'CommissionerTab', 'MyTeamTab', 'LeagueLegend', 'CommishTools',
+    'specialty/SpecialtyTab', 'specialty/GuillotineSettingsForm', 'specialty/SpecialtyFormatSections'].map((f) => `components/league-settings/tabs/${f}.tsx`),
 ]
-const TAB_IDS = ['general', 'draft', 'roster', 'scoring', 'trades', 'playoffs', 'members', 'notifications', 'permissions', 'commissioner', 'conceptRules', 'ai']
+const TAB_IDS = ['general', 'myTeam', 'draft', 'roster', 'scoring', 'playoffs', 'members', 'commissioner', 'specialty', 'ai']
 
 describe('every key the hub names exists in BOTH languages', () => {
   const keys = [...new Set(FILES.flatMap((f) => [...readFileSync(resolve(ROOT, f), 'utf8').matchAll(/['"`]((?:lsHub|lsModal)\.[A-Za-z0-9_.]+)['"`]/g)].map((m) => m[1]!)))]
   it('🛑 read from the files', () => {
     expect(keys.length).toBeGreaterThanOrEqual(70) // the scan must see the real keys
-    expect(keys).toEqual(expect.arrayContaining(['lsHub.ai.intro', 'lsHub.del.body1', 'lsHub.dup.title', 'lsHub.cr.note']))
+    expect(keys).toEqual(expect.arrayContaining(['lsHub.ai.intro', 'lsHub.del.body1', 'lsHub.dup.title', 'lsHub.sp.lockedBody', 'lsHub.sp.g.endgame']))
     expect(keys.filter((k) => !translations.en[k])).toEqual([])
     expect(keys.filter((k) => !translations.es[k])).toEqual([])
   })
@@ -128,15 +130,19 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
   afterEach(() => { lang.language = 'en'; vi.unstubAllGlobals(); cleanup() })
 
   it.each([
-    // Waivers is a section of General now (2026-10-14), not its own tab. FAAB fields show only when FAAB is in use.
-    ['general', ['Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Reclamos y agentes libres', 'Tipo de reclamos', 'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario']],
-    ['trades', ['Permitir trades de picks del draft', 'Ventana de revisión (horas)', 'Límite de trades (n.º de semana)']],
-    ['playoffs', ['Calendario rápido', 'Equipos en playoffs', 'Inicio de playoffs (semana)', 'Fases y brackets']],
+    // League carries waivers and trades as sections since the 2026-10-13 consolidation; FAAB fields show only
+    // when FAAB is in use, and the daily schedule replaced the custom-daily-claims switch (2026-10-14).
+    ['general', ['Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Formato', 'Equipos', 'Reglas principales',
+      'Partido extra cada semana contra la mediana de la liga', 'Reclamos y agentes libres', 'Tipo de reclamos',
+      'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario',
+      'Permitir trades de picks del draft', 'Ventana de revisión (horas)', 'Límite de trades (n.º de semana)']],
+    ['myTeam', ['Mi equipo', 'Notificaciones', 'Leyenda de la liga', 'Estado del jugador', 'Es muy probable que juegue', 'En alza', 'En baja']],
+    ['playoffs', ['Calendario rápido', 'Equipos en playoffs', 'Inicio de playoffs (semana)', 'Rondas de playoffs por semana', 'Siembra de playoffs', 'Bracket inferior', 'Consolación', 'Fases y brackets']],
     ['scoring', []],
-    ['roster', []],
-    ['notifications', ['Las notificaciones básicas de la liga están en los ajustes de la cuenta.']],
+    ['roster', ['Los puestos y plantillas de roster se guardan', 'Reserva de lesionados', 'Puestos de IR']],
+    ['members', ['Las notificaciones básicas de la liga están en los ajustes de la cuenta.']],
     ['commissioner', ['Registro de auditoría', 'El registro de auditoría está listo', 'Quitar de AllFantasy', 'es solo para el comisionado principal.']],
-    ['conceptRules', ['Resumen del formato', 'Guillotina: Activado', 'Survivor: Desactivado', 'Best ball: Activado', 'Variante: —', 'Ajustes de Best Ball', 'Notas del comisionado sobre el formato (fusión JSON)']],
+    ['specialty', ['Formato especial', 'Reglas del formato especial de esta liga', 'Ajustes de Best Ball', 'Best Ball es un formato estándar']],
     ['ai', ['Controla los ajustes del Asistente de la liga.', 'Asistente de la liga', 'Lista de seguimiento de agentes libres', 'Salud de trades', 'Participación de los managers', 'Preparación para el draft']],
   ])('%s', (tab, expected) => {
     lang.language = 'es'
@@ -145,7 +151,7 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
     const text = r.container.textContent ?? ''
     for (const s of expected) expect(text, s).toContain(s)
     // The tab bar itself, in both its forms.
-    for (const s of ['Inteligencia del comisionado', 'Reglas avanzadas', 'Comisionado', 'Alertas', 'Permisos', 'Plantilla', 'Puntuación', 'Miembros']) expect(text, s).toContain(s)
+    for (const s of ['Herramientas del comisionado', 'Formatos especiales', 'Especiales', 'Comisionado', 'Liga', 'Plantilla', 'Puntuación', 'Miembros']) expect(text, s).toContain(s)
     expect(englishIn(r.container)).toEqual([])
   })
 
@@ -185,12 +191,12 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
 
   it('…and the hub still reads English in English, byte for byte where it is pinned', () => {
     const r = render(<LeagueSettingsControlCenter ctx={ctx()} />)
-    for (const s of ['Commissioner Intelligence', 'Advanced Rule Support', 'League Helper', 'Commish', 'Alerts', 'Perms', 'Basics', 'Auto-save']) {
+    for (const s of ['Commish Tools', 'Specialty', 'League Helper', 'Commish', 'League', 'Basics', 'Auto-save']) {
       expect(r.container.textContent, s).toContain(s)
     }
     fireEvent.click(r.getAllByTestId('league-settings-hub-tab-commissioner')[0]!)
     expect(r.container.textContent).toContain(
-      'Remove from AllFantasy is limited to the head commissioner. Co-commissioners can manage members and settings but cannot start league removal here.',
+      'Remove from AllFantasy is limited to the head commish. Co-commishes can manage members and settings but cannot start league removal here.',
     )
     cleanup()
     const d = render(<DeleteLeagueFromAfPanel leagueId="l1" currentUserId="u1" leagueOwnerUserId="u1" />)

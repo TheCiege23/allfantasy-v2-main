@@ -1,4 +1,5 @@
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
+import { normalizePositionForStarterEligibility } from '@/lib/roster/LineupTemplateValidation'
 
 export type ExpandedStarterSlot = {
   index: number
@@ -29,4 +30,16 @@ export function expandStarterSlots(template: RosterTemplateDto): ExpandedStarter
     }
   }
   return out
+}
+
+/**
+ * Can a player with this position fill this starting slot? An unknown position is not blocked here — the
+ * lineup engine's template check has the final say — so a missing position never strands a player.
+ */
+export function fitsSlot(slot: Pick<ExpandedStarterSlot, 'allowedPositions'>, position: string | null): boolean {
+  const allowed = slot.allowedPositions.map((p) => normalizePositionForStarterEligibility(String(p)))
+  if (allowed.length === 0 || allowed.includes('*')) return true
+  const pos = normalizePositionForStarterEligibility(String(position ?? ''))
+  if (!pos || pos === 'UTIL' || pos === 'UNK') return true
+  return allowed.includes(pos)
 }

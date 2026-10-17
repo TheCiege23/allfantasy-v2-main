@@ -55,6 +55,9 @@ export type SubscriptionFeatureId =
   | 'commissioner_idp_analysis'
   | 'commissioner_cap_advice'
   | 'commissioner_c2c_scouting'
+  /** Commish + co-commish editing of specialty format rules (Guillotine, Survivor, Zombie, Big Brother,
+   *  Salary Cap, Devy, C2C, Tournament). AF Commish / AF Supreme, or a one-time per-league token unlock. */
+  | 'commissioner_specialty_settings'
   | 'commissioner_weather_projections'
   | 'commissioner_dispersal_draft'
   | 'commissioner_integrity_monitoring'

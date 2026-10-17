@@ -63,7 +63,7 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
 
   // ── What a human told us about the league ─────────────────────────────────
   'leagueTypeConfirmation', // lib/career/leagueTypeConfirmation.ts — the only verified league type
-  'concept_rules_overlay', // ConceptRulesTab settingsMerge — an AF overlay ON TOP of platform rules
+  'concept_rules_overlay', // former ConceptRulesTab settingsMerge (editor retired 2026-10-13; data kept) — an AF overlay ON TOP of platform rules
   'devy_league_config', // execute-league-settings-patch — devy has no platform counterpart
   'c2cImport', // lib/league-import/c2cMultiSourceCommit.ts — links the college + pro sources
   'c2cTaxiLockMode', // /api/c2c/settings
@@ -90,6 +90,8 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'draft_lottery_last_result', // ditto
   'dispersalDraftLastCompletion', // lib/dispersal-draft/DispersalDraftEngine.ts
   'audit', // lib/league-settings-engine/UnifiedLeagueSettingsService.ts change log
+  'stat_overrides', // lib/redraft/leagueStatOverrides.ts — this league's commish stat corrections
+  'zombie_rules', // Specialty tab Zombie rules editor (lib/zombie/zombieLeagueRules.ts)
 
   // ── Import bookkeeping AllFantasy stamps AFTER the payload is written ─────
   'historicalBackfillStatus', // ImportedLeagueCommitService, backfill sweeper, retry route

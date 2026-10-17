@@ -1,6 +1,7 @@
 import { accumulateTeamTotals, getCategoryPresetDefinitions, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { readStatOverrides, type StatOverrideEntry } from './leagueStatOverrides'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
@@ -23,6 +24,7 @@ import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupVal
 import { importedNcaafScoring } from './importedNcaafScoring'
 import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { recordWeekRoster, rosterPlayersForWeek } from './rosterWeekHistory'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -303,6 +305,12 @@ export type RosterScoreSummary = {
   statTotals?: TeamStatTotals
   /** Best ball only: the lineup the system started this week, and any seat nobody could fill. */
   bestBall?: { assignments: OptimalSlotAssignment[]; unfilledSlots: { slot: string; seat: number }[] }
+  /**
+   * Every scored player's points, as this league scored them. Kept in the matchup snapshot so a later
+   * stat-correction check can say WHICH player's line moved, per league — the stat row itself is
+   * shared, so once any league refreshes it the old numbers are gone (lib/redraft/statCorrections.ts).
+   */
+  players?: Array<{ playerId: string; points: number }>
 }
 
 type BestBallScoringContext = { sport: string; slots: LineupSlotSpec[] }
@@ -316,6 +324,12 @@ export type MatchupScoreUpdateSummary = {
   missingPlayerIds: string[]
 }
 
+/** This league's commish-corrected stat lines for the week (lib/redraft/leagueStatOverrides.ts). */
+async function loadStatOverrides(leagueId: string, seasonYear: number, week: number): Promise<Map<string, StatOverrideEntry>> {
+  const league = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true } })
+  return readStatOverrides(league?.settings ?? null, seasonYear, week)
+}
+
 async function scoreRosterStarters(args: {
   leagueId: string
   rosterId: string
@@ -323,8 +337,13 @@ async function scoreRosterStarters(args: {
   seasonYear: number
   useDevyEngine: boolean
   bestBall?: BestBallScoringContext | null
+  /** Passed by a caller that already holds the league's settings; loaded otherwise. */
+  statOverrides?: Map<string, StatOverrideEntry>
 }): Promise<RosterScoreSummary> {
-  if (args.bestBall && !args.useDevyEngine) return scoreRosterBestBall({ ...args, bestBall: args.bestBall })
+  if (args.bestBall && !args.useDevyEngine) {
+    const statOverrides = args.statOverrides ?? (await loadStatOverrides(args.leagueId, args.seasonYear, args.week))
+    return scoreRosterBestBall({ ...args, bestBall: args.bestBall, statOverrides })
+  }
   if (args.useDevyEngine) {
     const r = await calculateOfficialTeamScore(args.leagueId, args.rosterId, args.week, args.seasonYear)
     return {
@@ -337,12 +356,8 @@ async function scoreRosterStarters(args: {
     }
   }
 
-  const starters = await prisma.redraftRosterPlayer.findMany({
-    where: {
-      rosterId: args.rosterId,
-      droppedAt: null,
-    },
-  })
+  // A sealed week scores the roster it was played with, not today's — see `rosterWeekHistory.ts`.
+  const { players: starters } = await rosterPlayersForWeek(args.rosterId, args.week)
   // The lineup saved for THIS week, not the current one — see `weekLineupSlots.ts`.
   const weekLineups = await loadWeekLineups(prisma, {
     redraftRosterIds: [args.rosterId],
@@ -352,39 +367,41 @@ async function scoreRosterStarters(args: {
   const activeStarters = starters.filter((p: (typeof starters)[number]) =>
     isScoringStarterSlot(weekSlotType(p, weekLineups)),
   )
+  const overrides = args.statOverrides ?? (await loadStatOverrides(args.leagueId, args.seasonYear, args.week))
 
   let pts = 0
   const statMaps: TeamStatTotals[] = []
   let scoredStarterCount = 0
   let allFinal = true
   const missingPlayerIds: string[] = []
+  const players: Array<{ playerId: string; points: number }> = []
 
   for (const p of activeStarters) {
-    const row = await prisma.playerWeeklyScore.findUnique({
-      where: {
-        playerId_week_season_sport: {
-          playerId: p.playerId,
-          week: args.week,
-          season: args.seasonYear,
-          sport: p.sport,
-        },
-      },
-    })
-    if (!row) {
+    const override = overrides.get(p.playerId)
+    const row = override
+      ? null
+      : await prisma.playerWeeklyScore.findUnique({
+          where: {
+            playerId_week_season_sport: {
+              playerId: p.playerId,
+              week: args.week,
+              season: args.seasonYear,
+              sport: p.sport,
+            },
+          },
+        })
+    if (!row && !override) {
       missingPlayerIds.push(p.playerId)
       allFinal = false
       continue
     }
-    statMaps.push(row.stats as TeamStatTotals)
-    pts += await calculateScoreFromSportConfig(
-      args.leagueId,
-      p.playerId,
-      args.week,
-      row.stats as Record<string, number>,
-      p.position,
-    )
+    const stats = (override ? override.stats : row!.stats) as Record<string, number>
+    statMaps.push(stats as TeamStatTotals)
+    const points = await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position)
+    pts += points
+    players.push({ playerId: p.playerId, points: Math.round(points * 100) / 100 })
     scoredStarterCount += 1
-    if (!row.isFinalized) allFinal = false
+    if (override ? !override.final : !row!.isFinalized) allFinal = false
   }
 
   return {
@@ -395,6 +412,7 @@ async function scoreRosterStarters(args: {
     statTotals: accumulateTeamTotals(statMaps),
     missingPlayerIds,
     allFinal,
+    players,
   }
 }
 
@@ -410,10 +428,9 @@ async function scoreRosterBestBall(args: {
   week: number
   seasonYear: number
   bestBall: BestBallScoringContext
+  statOverrides: Map<string, StatOverrideEntry>
 }): Promise<RosterScoreSummary> {
-  const players = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId: args.rosterId, droppedAt: null },
-  })
+  const { players } = await rosterPlayersForWeek(args.rosterId, args.week)
   // Best ball still excludes whoever was on IR / taxi / devy in THIS week's saved lineup.
   const weekLineups = await loadWeekLineups(prisma, {
     redraftRosterIds: [args.rosterId],
@@ -429,12 +446,15 @@ async function scoreRosterBestBall(args: {
   const missingPlayerIds: string[] = []
   const inputs: { playerId: string; positions: string[]; points: number; playerName: string | null }[] = []
   for (const p of candidates) {
-    const row = await prisma.playerWeeklyScore.findUnique({
-      where: {
-        playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport },
-      },
-    })
-    if (!row) {
+    const override = args.statOverrides.get(p.playerId)
+    const row = override
+      ? null
+      : await prisma.playerWeeklyScore.findUnique({
+          where: {
+            playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport },
+          },
+        })
+    if (!row && !override) {
       missingPlayerIds.push(p.playerId)
       allFinal = false
       continue
@@ -443,12 +463,12 @@ async function scoreRosterBestBall(args: {
       args.leagueId,
       p.playerId,
       args.week,
-      row.stats as Record<string, number>,
+      (override ? override.stats : row!.stats) as Record<string, number>,
       p.position,
     )
     inputs.push({ playerId: p.playerId, positions: playerPositions(p.position), points, playerName: p.playerName ?? null })
     scored += 1
-    if (!row.isFinalized) allFinal = false
+    if (override ? !override.final : !row!.isFinalized) allFinal = false
   }
 
   const lineup = computeOptimalLineup({ players: inputs, slots: args.bestBall.slots })
@@ -460,6 +480,7 @@ async function scoreRosterBestBall(args: {
     missingPlayerIds,
     allFinal,
     bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots },
+    players: inputs.map((i) => ({ playerId: i.playerId, points: Math.round(i.points * 100) / 100 })),
   }
 }
 
@@ -487,6 +508,17 @@ export async function scoreRosterForWeek(args: {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
   return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+}
+
+/** Snapshot the roster a scoring pass just used for (roster, week), unless that week is already frozen. */
+export async function recordScoredWeekRoster(input: { rosterId: string; seasonId: string; week: number; freeze: boolean }) {
+  try {
+    const { players, frozen } = await rosterPlayersForWeek(input.rosterId, input.week)
+    if (frozen) return
+    await recordWeekRoster({ ...input, players })
+  } catch {
+    // Recording is a by-product of scoring; it must never fail a scoring pass.
+  }
 }
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
@@ -522,6 +554,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (scoringMode !== 'points' && !categories) throw new Error('Category scoring requires a supported native category preset.')
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
+  const statOverrides = readStatOverrides(scoringSettings, seasonYear, week)
 
   const home = await scoreRosterStarters({
     leagueId,
@@ -530,6 +563,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     seasonYear,
     useDevyEngine,
     bestBall,
+    statOverrides,
   })
   const away = await scoreRosterStarters({
     leagueId,
@@ -538,6 +572,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     seasonYear,
     useDevyEngine,
     bestBall,
+    statOverrides,
   })
   const categoryMatchup = categories ? resolveCategoryMatchup(home.statTotals ?? {}, away.statTotals ?? {}, categories) : null
   if (categoryMatchup) {
@@ -573,6 +608,13 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     } catch {
       isFinal = existingFinal // fail open — existing authority final
     }
+  }
+
+  // Record who each side was scored with; the pass that makes the matchup final freezes it. The devy
+  // engine scores from its own tables, so its rosters are not recorded here.
+  if (!useDevyEngine) {
+    await recordScoredWeekRoster({ rosterId: homeRosterId, seasonId: seasonRowId, week, freeze: isFinal })
+    await recordScoredWeekRoster({ rosterId: awayRosterId, seasonId: seasonRowId, week, freeze: isFinal })
   }
 
   await prisma.redraftMatchup.update({

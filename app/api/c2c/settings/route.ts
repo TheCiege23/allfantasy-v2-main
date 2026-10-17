@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
+import { specialtySettingsEditRefusal } from '@/lib/league/specialty-settings-access'
 import { isTaxiLockMode } from '@/lib/c2c/taxiLockResolver'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,8 @@ export async function PATCH(req: NextRequest) {
 
   const gate = await assertLeagueCommissioner(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const refusal = await specialtySettingsEditRefusal(leagueId, userId)
+  if (refusal) return refusal
 
   const data: Record<string, unknown> = {}
   if (typeof body?.devyScoringEnabled === 'boolean') {

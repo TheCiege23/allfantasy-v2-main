@@ -1,25 +1,36 @@
 'use client'
 
 import { CommissionerControlPanel } from '@/components/league-settings/CommissionerControlPanel'
-import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
-import { CoOwnerSettingsPanel } from '@/components/league-settings/CoOwnerSettingsPanel'
-import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { LeagueDuesTrackerPanel } from '@/components/league-settings/LeagueDuesTrackerPanel'
 import { LeagueHistoryPanel } from '@/components/league-settings/LeagueHistoryPanel'
 import { DeleteLeagueFromAfPanel } from '@/app/league/[leagueId]/components/DeleteLeagueFromAfPanel'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { SettingsSubPanelBody } from '@/app/league/[leagueId]/components/LeagueSettingsSubPanels'
+import { HubCard } from './hubFields'
+import { EditLineupCard, EditMatchupScoresCard, EditPlayoffBracketCard, EditRostersCard, EditWaiversCard, ResetLeagueCard, TransferCommishCard } from './CommishTools'
 
+/** Commish Tools tab: league controls, commish note, edit waivers, transfer, dues, history, draft results,
+ * audit, reset and removing the league. Transfer and reset are head-commish only, matching their routes. Members live in MembersTab. */
 export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   return (
     <div className="space-y-10">
       <CommissionerControlPanel leagueId={ctx.league.id} />
-      <MemberSettingsCommissionerPanel leagueId={ctx.league.id} />
-      <CoOwnerSettingsPanel leagueId={ctx.league.id} />
-      <DivisionSettingsCommissionerPanel leagueId={ctx.league.id} />
+      <HubCard title={t('lsModal.card.commishNote')} testId="league-settings-commish-note">
+        <SettingsSubPanelBody panelId="commish-note" ctx={ctx} />
+      </HubCard>
+      <EditRostersCard leagueId={ctx.league.id} />
+      <EditLineupCard leagueId={ctx.league.id} />
+      <EditMatchupScoresCard leagueId={ctx.league.id} />
+      <EditPlayoffBracketCard leagueId={ctx.league.id} />
+      <EditWaiversCard leagueId={ctx.league.id} />
+      {ctx.isHeadCommissioner ? <TransferCommishCard leagueId={ctx.league.id} /> : null}
       <LeagueDuesTrackerPanel leagueId={ctx.league.id} />
       <LeagueHistoryPanel leagueId={ctx.league.id} />
+      <HubCard title={t('lsModal.card.draftResults')} testId="league-settings-draft-results">
+        <SettingsSubPanelBody panelId="draft-results-commish" ctx={ctx} />
+      </HubCard>
 
       <section
         data-testid="settings-audit-log-panel"
@@ -28,6 +39,8 @@ export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
         <p className="mb-2 text-[14px] font-semibold text-white/85">{t('lsModal.card.auditLog')}</p>
         <p>{t('lsHub.audit.body')}</p>
       </section>
+
+      {ctx.isHeadCommissioner ? <ResetLeagueCard leagueId={ctx.league.id} leagueName={ctx.displayLeague.name} /> : null}
 
       {ctx.isHeadCommissioner ? (
         <DeleteLeagueFromAfPanel

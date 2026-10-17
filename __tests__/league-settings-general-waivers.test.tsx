@@ -10,7 +10,9 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 vi.mock('@/components/i18n/LanguageProviderClient', async () => {
   const { translations: dict } = await import('@/lib/i18n/translations')
   const t = (k: string) => dict.en[k] ?? k
-  return { useLanguage: () => ({ language: 'en', t, setLanguage: () => {} }) }
+  const lang = () => ({ language: 'en', t, setLanguage: () => {} })
+  // General also renders the league-type card, which uses the optional hook.
+  return { useLanguage: lang, useOptionalLanguage: lang }
 })
 
 const patches = vi.hoisted(() => ({ general: [] as Record<string, unknown>[], waivers: [] as Record<string, unknown>[] }))

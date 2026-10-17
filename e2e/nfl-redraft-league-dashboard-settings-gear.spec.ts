@@ -104,7 +104,7 @@ test.describe('@nfl-redraft @league-shell settings-gear consolidation', () => {
     await expect(auditLog).toBeVisible()
     await expect(auditLog).toContainText('Audit Log')
     await expect(auditLog).toContainText('Audit logging is ready to be wired')
-    await expect(auditLog).toContainText(/Commissioner actions will appear[\s\S]+?here once backend logging is enabled/)
+    await expect(auditLog).toContainText(/Commish actions will appear[\s\S]+?here once backend logging is enabled/)
 
     // 7 — Commissioner controls + history are reachable from this hub tab —
     //     they share the CommissionerTab body with the audit-log panel.

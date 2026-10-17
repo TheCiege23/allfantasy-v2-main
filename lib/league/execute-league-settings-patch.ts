@@ -7,6 +7,9 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { MAX_POSITION_LIMIT, POSITION_LIMITS_SETTINGS_KEY, parsePositionLimits } from '@/lib/league/positionLimits'
+import { MAX_STAT_CORRECTION_DAYS, STAT_CORRECTION_DAYS_KEY, parseStatCorrectionDays } from '@/lib/redraft/statCorrections'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
@@ -24,6 +27,12 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import {
+  SPECIALTY_GATED_PATCH_KEYS,
+  SPECIALTY_GATED_SETTINGS_MERGE_KEYS,
+  SPECIALTY_UNLOCK_SETTINGS_KEY,
+  specialtySettingsEditRefusal,
+} from '@/lib/league/specialty-settings-access'
 import {
   DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
   DAILY_WAIVER_SCHEDULE_SETTINGS_KEY,
@@ -290,10 +299,44 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  // Position limits are validated here, before any write: a bad map is refused whole.
+  const positionLimits = body.positionLimits !== undefined ? parsePositionLimits(body.positionLimits) : undefined
+  if (positionLimits === null) {
+    return jsonError(`positionLimits must map positions to whole numbers from 1 to ${MAX_POSITION_LIMIT}`, 400)
+  }
+  if (positionLimits !== undefined && resolveWriteAuthority(league.platform) !== 'NATIVE') {
+    return jsonError('Position limits for an imported league are set on its host platform.', 409)
+  }
+  const statCorrectionDays = body.statCorrectionDays !== undefined ? parseStatCorrectionDays(body.statCorrectionDays) : undefined
+  if (statCorrectionDays === null) {
+    return jsonError(`statCorrectionDays must be a whole number from 0 to ${MAX_STAT_CORRECTION_DAYS}`, 400)
+  }
+  if (statCorrectionDays !== undefined && resolveWriteAuthority(league.platform) !== 'NATIVE') {
+    return jsonError('Stat corrections for an imported league follow its host platform.', 409)
+  }
+
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
+
+  // Specialty format rules are AF Commish (or a per-league token unlock) — enforced HERE, on every
+  // door into this patch, not by the settings tab. The unlock record itself is written only by
+  // /api/leagues/[leagueId]/specialty-settings after a charge; a merge must never forge it.
+  const mergeKeys =
+    body.settingsMerge && typeof body.settingsMerge === 'object' && !Array.isArray(body.settingsMerge)
+      ? Object.keys(body.settingsMerge as Record<string, unknown>)
+      : []
+  if (mergeKeys.includes(SPECIALTY_UNLOCK_SETTINGS_KEY)) {
+    return jsonError(`${SPECIALTY_UNLOCK_SETTINGS_KEY} cannot be written through league settings`, 400)
+  }
+  if (
+    Object.keys(body).some((k) => SPECIALTY_GATED_PATCH_KEYS.has(k)) ||
+    mergeKeys.some((k) => SPECIALTY_GATED_SETTINGS_MERGE_KEYS.has(k))
+  ) {
+    const refusal = await specialtySettingsEditRefusal(leagueId, userId)
+    if (refusal) return refusal
+  }
 
   /*
    * Per-day waiver schedule (lib/waivers/dailyWaiverSchedule.ts). Stored in `League.settings`, and
@@ -449,6 +492,28 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('settingsMerge')
+  }
+
+  /** `League.settings.position_limits`, replaced whole. Read fresh: a settingsMerge above may have just written. */
+  if (positionLimits !== undefined) {
+    const fresh = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const prev = (fresh?.settings as Record<string, unknown> | null) ?? {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [POSITION_LIMITS_SETTINGS_KEY]: positionLimits } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push('positionLimits')
+  }
+
+  /** `League.settings.stat_correction_days` — 0 turns official stat corrections off for this league. */
+  if (statCorrectionDays !== undefined) {
+    const fresh = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const prev = (fresh?.settings as Record<string, unknown> | null) ?? {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [STAT_CORRECTION_DAYS_KEY]: statCorrectionDays } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push('statCorrectionDays')
   }
 
   if (dailyWaiverScheduleToStore) {

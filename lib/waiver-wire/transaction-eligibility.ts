@@ -19,6 +19,7 @@ import { normalizeWaiverTypeForEngine, parseWaiverEngineConfig } from './waiver-
 import { assertWeeklyDropLimit } from './waiver-validation'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
+import { positionLimitRefusal } from '@/lib/league/positionLimitsServer'
 
 export const WAIVER_TX_RESULT_CODES = [
   'won',
@@ -187,6 +188,12 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   if (getRosterSize(projected) > rosterSizeLimit) {
     throw new Error('You cannot add this player because your roster would be over the limit.')
   }
+
+  // Position limits (League.settings.position_limits) — the same rule the claim run and trades apply.
+  const positionRefusal = await positionLimitRefusal(leagueId, [
+    { rosterId, before: currentIds, after: getRosterPlayerIds(projected), teamLabel: 'Your team' },
+  ])
+  if (positionRefusal) throw new Error(positionRefusal)
 
   const ev = await evaluateLegalityForProjectedRoster({ id: roster.id, leagueId, playerData: roster.playerData }, projected)
   if (ev) {

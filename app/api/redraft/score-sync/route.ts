@@ -17,6 +17,7 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { REDRAFT_SEASON_STATUS, SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
+import { recheckStatCorrectionsForSeason } from '@/lib/redraft/statCorrections'
 import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
@@ -222,6 +223,8 @@ async function runRedraftReconciliation() {
   let weeksFinalized = 0
   let finalizeFailed = 0
   const finalizeRefusals: Record<string, number> = {}
+  let statCorrectionMatchups = 0
+  let statCorrectionFailed = 0
   let tournamentFailed = 0
   const tournamentOutcomes: Record<string, number> = {}
   let guillotineChops = 0
@@ -300,10 +303,11 @@ async function runRedraftReconciliation() {
        * later the sweep below sealed it all again. Measured on production 2026-09-29: from the 12:17
        * UTC seal onward, every five-minute run re-finalized week 3 for both native NFL leagues.
        *
-       * ⚠ THIS MEANS A STAT CORRECTION AFTER THE SEAL IS NOT APPLIED, AND THAT IS THE INTENT. The
-       * finalizer waits 12 hours after the last kickoff precisely so corrections land BEFORE results
-       * are sealed; after that the week's results, standings and the roller's advance stand.
-       * Re-opening a closed week is a commissioner decision, not something a cron does silently.
+       * ⚠ SO THE ROUTINE RECONCILE NEVER APPLIES A STAT CORRECTION AFTER THE SEAL. Corrections are a
+       * separate, bounded pass below (lib/redraft/statCorrections.ts): only for a league whose commish
+       * left them on (`stat_correction_days`), only inside that window after the week's last game, at
+       * most every six hours per week, and it re-finalizes the rows it touches instead of leaving the
+       * week open. That is what "a commissioner decision" became: a league setting, not a silent cron.
        */
       if (await isRedraftWeekSealed(prisma, season.id, resolved.fantasyWeek)) {
         skippedSealedWeek += 1
@@ -382,6 +386,28 @@ async function runRedraftReconciliation() {
     }
 
     /*
+     * Official stat corrections for weeks already sealed, inside the league's correction window.
+     * Its own try: a provider gap here must not cost the guillotine / tournament steps below.
+     */
+    try {
+      const corrections = await recheckStatCorrectionsForSeason(
+        { seasonId: season.id, currentWeek: resolved.fantasyWeek },
+        {
+          syncWeekStats: async ({ seasonId, week }) => {
+            const { rateLimitManager } = await import('@/lib/workers/rate-limit-manager')
+            const canCall = await rateLimitManager.canCall('sleeper', 'stats/nfl/week').catch(() => true)
+            if (!canCall) return { rateLimited: true }
+            await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:stat-corrections' })
+            return { rateLimited: false }
+          },
+        },
+      )
+      statCorrectionMatchups += corrections.matchupsChanged
+    } catch {
+      statCorrectionFailed += 1
+    }
+
+    /*
      * A native guillotine league chops its lowest team once each finished week. It runs after the
      * sweep for the same reason the sweep runs after the sync: an older week is still owed its chop
      * even when this tick's sync failed. One chop per week, guarded inside.
@@ -420,6 +446,8 @@ async function runRedraftReconciliation() {
     weeksFinalized,
     finalizeFailed,
     finalizeRefusals,
+    statCorrectionMatchups,
+    statCorrectionFailed,
     tournamentFailed,
     tournamentOutcomes,
     guillotineChops,

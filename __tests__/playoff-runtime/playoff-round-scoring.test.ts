@@ -216,6 +216,32 @@ describe('scoreActivePlayoffRound', () => {
     expect([...fin.calls[0].rosterIds].sort()).toEqual(['m1-away', 'm1-home', 'm2-away', 'm2-home'])
   })
 
+  it('a sealed round freezes each side\'s roster for every week of the round; a live one records nothing', async () => {
+    const rounds = [{ roundNumber: 1, status: 'active', matchups: [matchup('m1')] }]
+    const points = { 'm1-home': 50, 'm1-away': 40 }
+
+    const live = makeDb({ weeksPerRound: 2, rounds })
+    const liveRecord = vi.fn(async () => undefined)
+    await scoreActivePlayoffRound(
+      { seasonId: 's1', calendarWeek: 15 },
+      { prisma: live.db, finalizeWeek: finalizer([15]).fn, scoreRoster: scorer(points).fn, recordWeekRoster: liveRecord },
+    )
+    expect(liveRecord).not.toHaveBeenCalled()
+
+    const sealed = makeDb({ weeksPerRound: 2, rounds })
+    const record = vi.fn(async () => undefined)
+    await scoreActivePlayoffRound(
+      { seasonId: 's1', calendarWeek: 16 },
+      { prisma: sealed.db, finalizeWeek: finalizer([15, 16]).fn, scoreRoster: scorer(points).fn, recordWeekRoster: record },
+    )
+    expect(record.mock.calls.map(([a]) => a)).toEqual([
+      { rosterId: 'm1-home', seasonId: 's1', week: 15, freeze: true },
+      { rosterId: 'm1-away', seasonId: 's1', week: 15, freeze: true },
+      { rosterId: 'm1-home', seasonId: 's1', week: 16, freeze: true },
+      { rosterId: 'm1-away', seasonId: 's1', week: 16, freeze: true },
+    ])
+  })
+
   it('a two-week round sums both weeks, and is not final after the first', async () => {
     const rounds = [{ roundNumber: 1, status: 'active', matchups: [matchup('m1')] }]
     const points = { 'm1-home@15': 50, 'm1-home@16': 60, 'm1-away@15': 70, 'm1-away@16': 30 }

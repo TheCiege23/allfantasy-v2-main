@@ -50,7 +50,7 @@ describe('G32 NFL redraft league home contracts', () => {
     // created-league settings read Spanish too), so the customer-safe names are pinned where they
     // now live — and the "Decision OS" negative covers the dictionary values in BOTH languages.
     expect(settingsHub).toContain('labelKey: `lsHub.tab.${id}`')
-    expect(translations.en['lsHub.tab.commissioner']).toBe('Commissioner Intelligence')
+    expect(translations.en['lsHub.tab.commissioner']).toBe('Commish Tools')
     expect(translations.en['lsHub.tab.ai']).toBe('League Helper')
     expect(settingsNav).toContain("label: 'Commissioner Intelligence'")
     expect(settingsNav).toContain("label: '🤖 League Guide'")

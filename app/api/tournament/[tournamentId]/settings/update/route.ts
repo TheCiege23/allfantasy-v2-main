@@ -19,8 +19,8 @@ const NAME_MAX = 120
 const DESCRIPTION_MAX = 1500
 const FAAB_MAX = 10_000
 const BENCH_MAX = 20
-const ADV_MAX = 12
-const BUBBLE_SIZE_MAX = 64
+// The advance route clamps to 11; storing 12 would be shown as 12 and applied as 11.
+const ADV_MAX = 11
 
 // Mirror the validation surface of /api/tournament/create — only snake +
 // auction are runnable by TournamentRedraftService today. Allowing 3rd_reversal
@@ -28,12 +28,6 @@ const BUBBLE_SIZE_MAX = 64
 // silently downgrades back to snake on every round.
 const ALLOWED_DRAFT_TYPES = ['snake', 'auction'] as const
 type AllowedDraftType = (typeof ALLOWED_DRAFT_TYPES)[number]
-// Only `cumulative_points` is exposed for now: head_to_head and mini_bracket
-// would need real sub-bracket pairings (not yet shipped) — bubbleEngine falls
-// through to the same cumulative-window scoring for them, so blocking here
-// keeps the commissioner from picking a mode whose UI isn't implemented.
-const ALLOWED_BUBBLE_MODES = ['cumulative_points'] as const
-type AllowedBubbleMode = (typeof ALLOWED_BUBBLE_MODES)[number]
 
 function clampInt(v: unknown, min: number, max: number): number | null {
   const n = typeof v === 'number' ? v : Number(v)
@@ -104,11 +98,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ to
       changed.push('benchSpotsElimination')
     }
   }
-  if (body.advancementPerLeague != null) {
-    const v = clampInt(body.advancementPerLeague, 1, ADV_MAX)
-    if (v != null && v !== currentSettings.advancementPerLeague) {
-      settings.advancementPerLeague = v
-      changed.push('advancementPerLeague')
+  // ⚠ The engine reads `eliminationAdvancementPerLeague` (/api/tournament/[id]/advance, clamped to
+  // 11 there). This route used to write `advancementPerLeague`, which nothing reads — a save that
+  // changed nothing. The old body name is still accepted from older clients.
+  const advRaw = body.eliminationAdvancementPerLeague ?? body.advancementPerLeague
+  if (advRaw != null) {
+    const v = clampInt(advRaw, 1, ADV_MAX)
+    if (v != null && v !== currentSettings.eliminationAdvancementPerLeague) {
+      settings.eliminationAdvancementPerLeague = v
+      changed.push('eliminationAdvancementPerLeague')
     }
   }
   if (body.faabResetByRound != null) {
@@ -135,32 +133,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ to
   }
 
   // ---- Bubble config (safe to flip pre-elimination only) ----
-  if (body.bubbleEnabled != null) {
+  // ⚠ The engine reads `bubbleWeekEnabled` (TournamentStandingsService, TournamentProgressionService,
+  // the bracket route). This route used to write `bubbleEnabled`, which nothing reads. The old body
+  // name is still accepted from older clients.
+  const bubbleRaw = body.bubbleWeekEnabled ?? body.bubbleEnabled
+  if (bubbleRaw != null) {
     if (isLive) {
       return NextResponse.json({ error: 'Cannot toggle bubble after elimination has started' }, { status: 400 })
     }
-    const v = Boolean(body.bubbleEnabled)
-    if (v !== Boolean(currentSettings.bubbleEnabled)) {
-      settings.bubbleEnabled = v
-      changed.push('bubbleEnabled')
+    const v = Boolean(bubbleRaw)
+    if (v !== Boolean(currentSettings.bubbleWeekEnabled)) {
+      settings.bubbleWeekEnabled = v
+      changed.push('bubbleWeekEnabled')
     }
   }
-  if (body.bubbleSize != null) {
-    const v = clampInt(body.bubbleSize, 0, BUBBLE_SIZE_MAX)
-    if (v != null && v !== currentSettings.bubbleSize) {
-      settings.bubbleSize = v
-      changed.push('bubbleSize')
-    }
-  }
-  if (typeof body.bubbleScoringMode === 'string') {
-    const m = body.bubbleScoringMode as AllowedBubbleMode
-    if (!(ALLOWED_BUBBLE_MODES as readonly string[]).includes(m)) {
-      return NextResponse.json({ error: `bubbleScoringMode must be one of ${ALLOWED_BUBBLE_MODES.join(', ')}` }, { status: 400 })
-    }
-    if (m !== currentSettings.bubbleScoringMode) {
-      settings.bubbleScoringMode = m
-      changed.push('bubbleScoringMode')
-    }
+  // A legacy tournament's bubble has no size or scoring mode to set: the number of bubble spots
+  // follows the cut (getBubbleSlotsPerConference). Refuse rather than store a value nothing reads.
+  if (body.bubbleSize != null || body.bubbleScoringMode != null) {
+    return NextResponse.json(
+      { error: "This tournament's bubble size follows its cut and can't be set directly." },
+      { status: 400 },
+    )
   }
 
   if (changed.length === 0) {

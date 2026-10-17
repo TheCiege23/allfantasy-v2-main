@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { specialtySettingsEditRefusal } from '@/lib/league/specialty-settings-access'
 import {
   isZombieLeague,
   getZombieLeagueConfig,
@@ -46,8 +47,10 @@ export async function PUT(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const allowed = await canAccessLeagueDraft(leagueId, session.user.id)
-  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Writes are commish / co-commish only, and specialty settings are AF Commish (or a token unlock).
+  // This used to admit any league member via canAccessLeagueDraft — the READ rule, not a write rule.
+  const refusal = await specialtySettingsEditRefusal(leagueId, session.user.id)
+  if (refusal) return refusal
 
   const body = await req.json().catch(() => ({}))
   const config = await upsertZombieLeagueConfig(leagueId, body)

@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
   zombieLeagueTeam: { findUnique: vi.fn(), findMany: vi.fn() },
   zombieTeamItem: { create: vi.fn() },
   zombieRulesTemplate: { findUnique: vi.fn() },
+  // The engine reads the league's own overrides (League.settings.zombie_rules) over the sport's lines.
+  league: { findUnique: vi.fn() },
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: h }))
@@ -50,6 +52,7 @@ function arrange(sport: string, homeScore: number, awayScore: number) {
 beforeEach(() => {
   vi.clearAllMocks()
   h.zombieRulesTemplate.findUnique.mockResolvedValue(null)
+  h.league.findUnique.mockResolvedValue({ settings: {} })
   h.zombieTeamItem.create.mockResolvedValue({})
 })
 
@@ -68,6 +71,13 @@ describe('weapons on an NBA week', () => {
 
   it('a close win (by 60) earns no Axe', async () => {
     arrange('NBA', 960, 900)
+    await checkAndAwardWeapons('L1', 3, 'z1')
+    expect(awarded()).toEqual({ 'u-home': ['weapon_knife'], 'u-away': ['weapon_knife'] })
+  })
+
+  it('a league that sets its own Bow line (1,200) holds back the 1,100 Bow; the sport Knife still applies', async () => {
+    arrange('NBA', 1100, 1060)
+    h.league.findUnique.mockResolvedValue({ settings: { zombie_rules: { weaponAmbushThreshold: 1200 } } })
     await checkAndAwardWeapons('L1', 3, 'z1')
     expect(awarded()).toEqual({ 'u-home': ['weapon_knife'], 'u-away': ['weapon_knife'] })
   })
