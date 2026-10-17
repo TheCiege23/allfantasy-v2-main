@@ -13,12 +13,16 @@ const m = vi.hoisted(() => ({
   activate: vi.fn(),
   rankings: vi.fn(),
 }))
+vi.mock('@/lib/tournament/seasonDraftMutationGate', () => ({ isSeasonTournamentDraft: vi.fn().mockResolvedValue(false) }))
 vi.mock('@/lib/live-draft-engine/RosterAssignmentService', () => ({ finalizeRosterAssignments: m.finalizeRosterAssignments }))
 vi.mock('@/lib/redraft/finalizeDraftToRedraftSeason', () => ({ syncCompletedDraftToRedraftSeason: m.sync }))
 vi.mock('@/lib/bestball/nativeTournament', () => ({ ensureNativeTournamentEntries: m.tournament }))
 vi.mock('@/lib/guillotine/ensureGuillotineSeason', () => ({ ensureGuillotineSeason: m.ensureGuillotineSeason }))
 vi.mock('@/lib/zombie/activateNativeZombieLeague', () => ({ ensureZombieSeasonActivated: m.activate }))
 vi.mock('@/lib/post-draft-manager-ranking', () => ({ computeAndPersistDraftRankings: m.rankings }))
+vi.mock('@/lib/survivor/SurvivorDraftBootstrapService', () => ({
+  runSurvivorPostDraftBootstrap: vi.fn().mockResolvedValue({ isSurvivor: false, warnings: [] }),
+}))
 
 import { runPostDraftFinalizationArtifacts } from '@/lib/live-draft-engine/postDraftFinalizeArtifacts'
 

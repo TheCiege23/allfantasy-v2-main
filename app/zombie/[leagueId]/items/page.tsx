@@ -176,7 +176,7 @@ export default function ZombieItemsPage() {
               >
                 <div className="text-4xl">{iconForType(w.itemType)}</div>
                 <p className="mt-1 text-[11px] font-semibold text-white">{w.itemLabel}</p>
-                <p className="text-[10px] text-[var(--zombie-text-dim)]">{w.activationState ?? 'READY'}</p>
+                <p className="text-[11px] text-[var(--zombie-text-dim)]">{w.activationState ?? 'READY'}</p>
                 {!data.isCommissionerView && !zombieLocked ? (
                   <button
                     type="button"
@@ -187,7 +187,7 @@ export default function ZombieItemsPage() {
                     Use via @Chimmy
                   </button>
                 ) : (
-                  <p className="mt-2 text-[10px] text-[var(--zombie-text-dim)]" title={zombieLocked ? 'Zombies cannot activate most weapons' : ''}>
+                  <p className="mt-2 text-[11px] text-[var(--zombie-text-dim)]" title={zombieLocked ? 'Zombies cannot activate most weapons' : ''}>
                     {zombieLocked ? '🔒 Locked' : '—'}
                   </p>
                 )}

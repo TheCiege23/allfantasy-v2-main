@@ -127,7 +127,7 @@ export default function LegacyOverview() {
           { id: 'overview', label: 'Overview', icon: '🏠' },
           { id: 'trade', label: 'AI Trade Hub', icon: '⚖️' },
           { id: 'waiver', label: 'Waiver AI', icon: '📈' },
-          { id: 'chat', label: 'AI Chat', icon: '💬' },
+          { id: 'chat', label: 'Chimmy Chat', icon: '💬' },
           { id: 'mock-draft', label: 'Mock Draft AI', icon: '🧠' },
           { id: 'ideas', label: 'Submit Ideas', icon: '💡' },
           { id: 'transfer', label: 'Transfer', icon: '🔄' },
@@ -137,6 +137,8 @@ export default function LegacyOverview() {
           return (
             <button
               key={tab.id}
+              // The Transfer tab is only a "Coming soon" page — a placeholder, not in the iOS app (2.1).
+              data-hide-in-ios-app={tab.id === 'transfer' ? '' : undefined}
               onClick={() => {
                 if (!isDisabled) setActiveTab(tab.id as any);
               }}

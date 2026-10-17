@@ -6,11 +6,12 @@ import PodcastPlayerClient from "./PodcastPlayerClient"
 
 export const dynamic = "force-dynamic"
 
-export default async function PodcastEpisodePage({
-  params,
-}: {
-  params: { id: string }
-}) {
+export default async function PodcastEpisodePage(
+  props: {
+    params: Promise<{ id: string }>
+  }
+) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string }
   } | null

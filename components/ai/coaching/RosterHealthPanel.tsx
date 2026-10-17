@@ -44,7 +44,7 @@ export function RosterHealthPanel({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-bold text-white">{p.position}</span>
-              <span className={cn('text-[10px] font-bold uppercase tracking-wide', signalColor(p.outlook))}>
+              <span className={cn('text-[11px] font-bold uppercase tracking-wide', signalColor(p.outlook))}>
                 {p.outlook}
               </span>
             </div>
@@ -55,7 +55,7 @@ export function RosterHealthPanel({
                 { label: 'Age curve', v: p.ageScore ?? 50 },
               ].map((row) => (
                 <div key={row.label}>
-                  <div className="mb-0.5 flex justify-between text-[10px] text-white/45">
+                  <div className="mb-0.5 flex justify-between text-[11px] text-white/45">
                     <span>{row.label}</span>
                     <span className="tabular-nums text-white/60">{Math.round(row.v)}</span>
                   </div>

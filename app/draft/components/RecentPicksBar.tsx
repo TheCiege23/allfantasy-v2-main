@@ -38,12 +38,12 @@ export function RecentPicksBar({ picks }: { picks: RecentPick[] }) {
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12px] font-bold text-white">{p.playerName}</p>
-              <p className="text-[10px] text-white/50">
+              <p className="text-[11px] text-white/50">
                 {p.position}
                 {p.team ? ` · ${p.team}` : ''}
               </p>
               {p.managerName ? (
-                <p className="truncate text-[9px] text-white/30">by {p.managerName}</p>
+                <p className="truncate text-[11px] text-white/30">by {p.managerName}</p>
               ) : null}
             </div>
           </div>

@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { runLineupSetDecision } from '@/lib/decision-os/lineup'
-import { toTodayLineupCard, decisionRecommendedActions } from '@/lib/decision-os/lineup/todayCardAdapter'
 import { fakeWorldDeps, fakeValidate, fakePlayers, payload, action } from './lineupFakes'
 
 const baseInput = {
@@ -22,7 +21,7 @@ describe('runLineupSetDecision — DCO-driven, end to end', () => {
     })
     expect(decision.four_answers.what_happened).toMatch(/lineup is set/i)
     expect(decision.four_answers.what_to_do).toMatch(/caught up/i)
-    expect(toTodayLineupCard(decision).empty).toBe(true)
+    expect(decision.recommended_actions).toHaveLength(0)
     expect(decision.confidence).toBeGreaterThanOrEqual(50)
   })
 
@@ -34,10 +33,8 @@ describe('runLineupSetDecision — DCO-driven, end to end', () => {
     })
     expect(decision.four_answers.what_happened).toMatch(/need attention/i)
     expect(decision.four_answers.what_to_do).toBe('Set a starter for QB.')
-    expect(decisionRecommendedActions(decision)).toHaveLength(1)
-    const card = toTodayLineupCard(decision)
-    expect(card.severity).toBe('critical')
-    expect(card.count).toBe(1)
+    expect(decision.recommended_actions).toHaveLength(1)
+    expect(decision.recommended_actions[0]).toEqual(act)
   })
 
   it('only this league\'s actions are consumed (cross-league isolation)', async () => {
@@ -59,29 +56,5 @@ describe('runLineupSetDecision — DCO-driven, end to end', () => {
     expect(decision.data_completeness).toBeLessThanOrEqual(60)
     expect(decision.uncertainty_sources.length).toBeGreaterThan(0)
     expect(decision.four_answers.how_confident).toMatch(/confidence/i)
-  })
-})
-
-describe('Parity Gate (shadow vs legacy)', () => {
-  it('passes when the Decision OS path matches the legacy recommender', async () => {
-    const act = action('L1')
-    const recommend = vi.fn(async () => payload('L1', [act]))
-    const { parity } = await runLineupSetDecision(baseInput, {
-      world: fakeWorldDeps(false),
-      decision: { recommend, ruleDeps: { validateRedraft: fakeValidate() } },
-      shadow: { legacyRecommend: async () => payload('L1', [act]) }, // identical legacy output
-    })
-    expect(parity?.passed).toBe(true)
-    expect(parity?.diffs).toEqual([])
-  })
-
-  it('reports diffs when legacy and Decision OS disagree', async () => {
-    const { parity } = await runLineupSetDecision(baseInput, {
-      world: fakeWorldDeps(false),
-      decision: { recommend: async () => payload('L1', [action('L1', { recommendedAction: 'Start A.' })]), ruleDeps: { validateRedraft: fakeValidate() } },
-      shadow: { legacyRecommend: async () => payload('L1', [action('L1', { recommendedAction: 'Start B.' })]) },
-    })
-    expect(parity?.passed).toBe(false)
-    expect((parity?.diffs.length ?? 0)).toBeGreaterThan(0)
   })
 })

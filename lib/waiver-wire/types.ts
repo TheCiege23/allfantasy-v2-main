@@ -70,6 +70,7 @@ export type WaiverClaimOutcomeCode =
   | "invalid_due_to_roster"
   | "player_no_longer_available"
   | "blocked_by_lineup_lock"
+  | "blocked_by_roster_lock"
   | "blocked_by_ir_taxi_devy_violation"
   | "failed"
 

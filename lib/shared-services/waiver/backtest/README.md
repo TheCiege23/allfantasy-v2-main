@@ -31,7 +31,7 @@ Real terminal `WaiverClaim` rows (`status: 'processed'` = awarded, `status: 'fai
 
 Two consequences, both by design, not oversight:
 1. **`realOutcomeAlignment` is not a prediction-accuracy claim.** It reports how often the shadow's own top pick (computed against today's context) happens to match the player that was actually added/rejected historically — a rough, directional signal, not calibration.
-2. **Grader-to-grader parity (`byGrader`) is the backtest's primary real value** — both the shadow service and the one real comparison-only legacy engine (`generateWaiverRecommendations`) are evaluated against the *same* (current) context, so their agreement/disagreement rate is a fair, real comparison even though neither is being judged against a faithful historical snapshot.
+2. **Grader-to-grader parity (`byGrader`) is the backtest's primary real value** — both the shadow service and the one real comparison-only legacy engine (`generateWaiverRecommendations`) are evaluated against the *same* (current) context, so their agreement/disagreement rate is a fair, real comparison even though neither is being judged against a faithful historical snapshot. **Since 2026-09-30 that legacy engine is retired, so `byGrader` is empty until another independent grader is added.**
 
 ## What this does not do
 

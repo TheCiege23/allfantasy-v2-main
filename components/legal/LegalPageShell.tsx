@@ -2,28 +2,8 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import "./legal-page.css"
 
-/**
- * Per-route last-updated stamps. Privacy and Terms carry September 2026 for the
- * SMS program disclosures (A2P 10DLC resubmission; Privacy was August 2026 for the
- * Discord integration before that); the other routes are unchanged since March 2026.
- */
-const LEGAL_LAST_UPDATED_BY_PAGE = {
-  privacy: "September 2026",
-  terms: "September 2026",
-  disclaimer: "March 2026",
-  dataDeletion: "March 2026",
-  aiTransparency: "March 2026",
-  contact: "March 2026",
-  mission: "March 2026",
-  noGamblingPolicy: "March 2026",
-} as const
-
-type LegalPageKey = keyof typeof LEGAL_LAST_UPDATED_BY_PAGE
-
-/** The last-updated stamp for one legal route. */
-function legalLastUpdated(page: LegalPageKey): string {
-  return LEGAL_LAST_UPDATED_BY_PAGE[page]
-}
+// The stamps (and the versions users agree to) live in lib/legal/legalVersions — see there.
+import { legalLastUpdated, LEGAL_LAST_UPDATED_BY_PAGE, type LegalPageKey } from "@/lib/legal/legalVersions"
 
 /**
  * The one shell every legal route renders through — handoff 17a's build note
@@ -76,13 +56,18 @@ export default function LegalPageShell({
           ⚠ THE FOOTER NAV IS PART OF THE SHELL AND MUST STAY COMPLETE. Several of
           these routes are reachable from an app-store listing or a Stripe receipt
           rather than from inside the product, so this row is the only navigation
-          a reader has. 17a names all five destinations.
+          a reader has. 17a named five destinations; the 2026-10 document set adds the
+          SMS Terms and the Copyright Policy, and renames the Disclaimer to the
+          Fantasy Sports & State Notice it now holds.
         */}
         <nav className="af-legal-foot" aria-label="Legal">
-          <Link href="/disclaimer">Disclaimer</Link>
           <Link href="/terms">Terms of Service</Link>
           <Link href="/privacy">Privacy Policy</Link>
+          <Link href="/disclaimer">Fantasy Sports &amp; State Notice</Link>
+          <Link href="/sms-terms">SMS Terms</Link>
+          <Link href="/copyright">Copyright Policy</Link>
           <Link href="/data-deletion">Data Deletion</Link>
+          <Link href="/privacy/choices">Do Not Sell or Share My Personal Information</Link>
           <Link href="/" data-home="true">
             Home
           </Link>

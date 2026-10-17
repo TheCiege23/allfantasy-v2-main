@@ -9,6 +9,7 @@ import { SEOFields } from "@/components/blog/SEOFields";
 import { InternalLinkSuggestionPanel } from "@/components/blog/InternalLinkSuggestionPanel";
 import { BLOG_CATEGORY_LABELS } from "@/lib/automated-blog/types";
 import type { BlogCategory } from "@/lib/automated-blog/types";
+import { renderBlogBodyHtml } from "@/lib/automated-blog/renderBlogBody";
 import { toast } from "sonner";
 
 type Article = {
@@ -239,18 +240,7 @@ export default function BlogDraftEditorPage() {
   }
 
   const isDraft = article.publishStatus === "draft";
-  const bodyHtml =
-    (tab === "preview" ? body : article.body)
-      .split("\n")
-      .map((line: string) => {
-        if (/^###\s/.test(line)) return `<h3 class="text-lg font-semibold mt-6 mb-2">${line.slice(4)}</h3>`;
-        if (/^##\s/.test(line)) return `<h2 class="text-xl font-semibold mt-8 mb-2">${line.slice(3)}</h2>`;
-        if (/^#\s/.test(line)) return `<h1 class="text-2xl font-bold mt-6 mb-2">${line.slice(2)}</h1>`;
-        if (line.trim()) return `<p class="mb-3">${line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</p>`;
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n");
+  const bodyHtml = renderBlogBodyHtml(tab === "preview" ? body : article.body);
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">

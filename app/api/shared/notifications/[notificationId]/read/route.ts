@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { markPlatformNotificationRead } from '@/lib/platform/notification-service'
 
-export async function PATCH(
-  _req: Request,
-  { params }: { params: { notificationId: string } },
-) {
+export async function PATCH(_req: Request, props: { params: Promise<{ notificationId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

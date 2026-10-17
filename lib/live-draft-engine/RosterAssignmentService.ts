@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * Roster assignment: after a pick (or on draft complete), update roster state.
  * Draft picks are stored in DraftPick; this service appends to Roster.playerData or
@@ -45,6 +46,7 @@ export async function appendPickToRosterDraftSnapshot(
   rosterId: string,
   player: AssignedPlayer
 ): Promise<void> {
+  if (await isSeasonTournamentDraft(leagueId)) return
   const roster = await prisma.roster.findFirst({
     where: { leagueId, id: rosterId },
   })
@@ -87,6 +89,7 @@ export async function finalizeRosterAssignments(
   leagueId: string,
   draftId?: string,
 ): Promise<FinalizeRosterAssignmentsSummary> {
+  if (await isSeasonTournamentDraft(leagueId)) return EMPTY_FINALIZE_SUMMARY
   // A league can hold several drafts; without an order this took whichever row Postgres returned.
   const session = await prisma.draftSession.findFirst({
     where: { leagueId, ...(draftId ? { id: draftId } : {}) },

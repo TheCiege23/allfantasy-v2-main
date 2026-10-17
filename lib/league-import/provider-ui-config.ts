@@ -13,6 +13,8 @@
 
 import type { ImportProvider } from './types';
 
+export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB';
+
 export const IMPORT_PROVIDER_UI_OPTIONS: {
   provider: ImportProvider;
   label: string;
@@ -21,10 +23,10 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   /** True if the import UI can discover leagues from an account identifier. */
   supportsDiscovery?: boolean;
   /** Sports proven by the provider fetch/normalization source path. */
-  supportedSports: readonly ('NFL' | 'NCAAF')[];
+  supportedSports: readonly ImportSupportedSport[];
 }[] = [
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
-  { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
+  { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL', 'MLB'] },
   /*
    * yahoo: NOT AVAILABLE — switched back off 2026-09-13, the same day it was switched on (#795).
    *
@@ -59,11 +61,11 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * because the import UI can populate a pickable list from an identifier,
    * which is exactly what that flag gates.
    *
-   * NFL as well as NCAAF: the sport is measured by resolving the rosters
-   * against both player maps and keeping whichever names more, because
-   * getLeagueInfo does not report a sport and the two id spaces do not overlap.
+   * NFL, NCAAF and MLB: resolve roster IDs against the three player maps.
+   * A tied or empty result refuses to guess. Public MLB scoring/roster/player
+   * evidence is captured in tests/fixtures/fantrax/mlb-points-public.json.
    */
-  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF'] },
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB'] },
   /*
    * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
    * service, the pipeline entry and the storage column all existed; what did not
@@ -104,6 +106,24 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   { provider: 'fleaflicker', label: 'Fleaflicker', available: true, supportedSports: ['NFL'] },
 ];
 
+/** The shortest name a sentence can use for a platform (the option labels are for menus). */
+const SHORT_LABEL: Partial<Record<ImportProvider, string>> = { mfl: 'MFL' };
+
+/**
+ * "Sleeper, ESPN, Fantrax, MFL or Fleaflicker" — every platform a league can be imported from TODAY,
+ * read from `available` above.
+ *
+ * 🛑 ONE LIST, BECAUSE THE COPIES DISAGREED (2026-09-29 UI audit). The nav card and the read-only tip
+ * said "Sleeper, ESPN or Yahoo", the welcome tour named Yahoo too, and the home card named Fantrax,
+ * MFL and Fleaflicker instead — while Yahoo is unavailable ("Coming soon" on the importer). Every
+ * sentence that names platforms reads this, so flipping a platform's `available` updates them all.
+ */
+export function availableImportPlatformsPhrase(): string {
+  const names = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).map((o) => SHORT_LABEL[o.provider] ?? o.label);
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+}
+
 export function getImportProviderLabel(provider: ImportProvider): string {
   return IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.label ?? provider;
 }
@@ -118,6 +138,6 @@ export function supportsImportProviderDiscovery(provider: ImportProvider): boole
   );
 }
 
-export function getImportProviderSupportedSports(provider: ImportProvider): readonly ('NFL' | 'NCAAF')[] {
+export function getImportProviderSupportedSports(provider: ImportProvider): readonly ImportSupportedSport[] {
   return IMPORT_PROVIDER_UI_OPTIONS.find((option) => option.provider === provider)?.supportedSports ?? [];
 }

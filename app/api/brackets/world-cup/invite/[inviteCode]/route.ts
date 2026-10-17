@@ -8,8 +8,8 @@ import { requireWorldCupApiUser, worldCupInviteParamsSchema } from "../../_utils
 
 export const runtime = "nodejs"
 
-export async function GET(_request: Request, context: { params: { inviteCode: string } }) {
-  const params = worldCupInviteParamsSchema.safeParse(context.params)
+export async function GET(_request: Request, context: { params: Promise<{ inviteCode: string }> }) {
+  const params = worldCupInviteParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid invite code" }, { status: 400 })
   }
@@ -22,11 +22,11 @@ export async function GET(_request: Request, context: { params: { inviteCode: st
   return NextResponse.json({ invite })
 }
 
-export async function POST(request: Request, context: { params: { inviteCode: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ inviteCode: string }> }) {
   const auth = await requireWorldCupApiUser()
   if (!auth.ok) return auth.response
 
-  const params = worldCupInviteParamsSchema.safeParse(context.params)
+  const params = worldCupInviteParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid invite code" }, { status: 400 })
   }

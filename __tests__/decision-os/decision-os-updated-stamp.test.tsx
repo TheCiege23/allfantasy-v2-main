@@ -57,6 +57,17 @@ describe('formatDecisionOsUpdated', () => {
     const browser = inZone('America/Los_Angeles', () => formatDecisionOsUpdated(CROSSES_MIDNIGHT, true))
     expect(browser).toBe(server)
   })
+
+  it('pins the Spanish stamp to US Eastern too, with the zone named', () => {
+    expect(formatDecisionOsUpdated(CROSSES_MIDNIGHT, true, 'es')).toMatch(/^Actualizado 27 sep a las 21:00 (GMT-4|EDT)$/)
+    expect(formatDecisionOsUpdated(CROSSES_MIDNIGHT, false, 'es')).toBe('Actualizado 27 sep')
+  })
+
+  it('prints the same Spanish string whatever zone the runtime is in', () => {
+    const server = inZone('UTC', () => formatDecisionOsUpdated(CROSSES_MIDNIGHT, true, 'es'))
+    const browser = inZone('America/Los_Angeles', () => formatDecisionOsUpdated(CROSSES_MIDNIGHT, true, 'es'))
+    expect(browser).toBe(server)
+  })
 })
 
 describe('UserOsCard hydration', () => {

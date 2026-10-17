@@ -9,6 +9,7 @@ import type { WaiverResult } from './redraftWaiverEngine'
 import type { TradeAnalysis, TradeFinderResult } from './redraftTradeEngine'
 /** THE grade on trade-analyze (2026-09-28, lib/decision-os/trade/warRoomTradeGrade.ts). */
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 
 const base = (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/redraft-war-room`
 
@@ -44,7 +45,7 @@ export const fetchRedraftWarRoomLineup = (leagueId: string, rosterId?: string) =
 export const analyzeRedraftWarRoomTrade = (
   leagueId: string,
   input: { rosterId?: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[] },
-) => postAction<{ tradeAnalysis: TradeAnalysis; tradeGrade?: SuggestionGrade | null }>(leagueId, 'trade-analyze', input)
+) => postAction<{ tradeAnalysis: WarRoomTradeAnalysisView<TradeAnalysis>; tradeGrade?: SuggestionGrade | null }>(leagueId, 'trade-analyze', input)
 
 export const findRedraftWarRoomTrades = (leagueId: string, rosterId?: string) =>
   postAction<{ tradeFinder: TradeFinderResult }>(leagueId, 'trade-find', { rosterId })

@@ -10,11 +10,11 @@ const createEntrySchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
 })
 
-export async function GET(request: Request, context: { params: { challengeId: string } }) {
+export async function GET(request: Request, context: { params: Promise<{ challengeId: string }> }) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = playoffChallengeParamsSchema.safeParse(context.params)
+  const params = playoffChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 })
   }
@@ -31,11 +31,11 @@ export async function GET(request: Request, context: { params: { challengeId: st
   return NextResponse.json({ ok: true, view })
 }
 
-export async function POST(request: Request, context: { params: { challengeId: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ challengeId: string }> }) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = playoffChallengeParamsSchema.safeParse(context.params)
+  const params = playoffChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 })
   }

@@ -5,11 +5,12 @@ import CreateEntryChooser from "./ui"
 
 export const runtime = "nodejs"
 
-export default async function NewEntryPage({
-  params,
-}: {
-  params: { tournamentId: string }
-}) {
+export default async function NewEntryPage(
+  props: {
+    params: Promise<{ tournamentId: string }>
+  }
+) {
+  const params = await props.params
   const tournamentId = params.tournamentId
   const returnTo = `/bracket/${encodeURIComponent(tournamentId)}/entries/new`
   const { userId, emailVerified, profile } = await getSessionAndProfile()

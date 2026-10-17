@@ -12,10 +12,8 @@ import { prisma } from "@/lib/prisma"
 
 type SessionWithUser = { user?: { id?: string } } | null
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as SessionWithUser
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -44,10 +42,8 @@ export async function GET(
   return NextResponse.json({ ok: true, requests })
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as SessionWithUser
   const commissionerId = session?.user?.id
   if (!commissionerId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

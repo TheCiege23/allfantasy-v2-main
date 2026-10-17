@@ -15,6 +15,8 @@ export const NCAAF_TEAM_STADIUM: Record<string, StadiumCoords> = {
   ORE: { lat: 44.0582, lng: -123.0735, dome: false, label: 'Autzen Stadium' },
   UT: { lat: 35.9544, lng: -83.9249, dome: false, label: 'Neyland Stadium' },
   FSU: { lat: 30.4363, lng: -84.3044, dome: false, label: 'Doak Campbell Stadium' },
-  MIA: { lat: 25.7211, lng: -80.2795, dome: false, label: 'Hard Rock Stadium' },
+  // Hard Rock Stadium, Miami Gardens — the same point as NFL_VENUE_COORDS['Hard Rock Stadium'].
+  // This row said (25.7211, -80.2795), the Coral Gables campus about 16 miles south, under this label.
+  MIA: { lat: 25.958, lng: -80.2389, dome: false, label: 'Hard Rock Stadium' },
   ND: { lat: 41.7056, lng: -86.2353, dome: false, label: 'Notre Dame Stadium' },
 }

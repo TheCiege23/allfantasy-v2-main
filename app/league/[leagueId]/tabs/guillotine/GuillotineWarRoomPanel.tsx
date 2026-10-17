@@ -29,6 +29,9 @@ import type { GuillotineFaabPlanResult } from '@/lib/guillotine-war-room/guillot
 import type { GuillotineWaiverResult } from '@/lib/guillotine-war-room/guillotineWaiverEngine'
 import type { GuillotineDroppedPlayerResult } from '@/lib/guillotine-war-room/guillotineDroppedPlayerEngine'
 import type { GuillotineTradeAnalysis } from '@/lib/guillotine-war-room/guillotineTradeEngine'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
+import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'roster-risk' | 'lineup-safety' | 'faab-plan' | 'waivers' | 'dropped-players' | 'trade-analyze' | null
 
@@ -70,7 +73,8 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [faab, setFaab] = useState<GuillotineFaabPlanResult | null>(null)
   const [waivers, setWaivers] = useState<GuillotineWaiverResult | null>(null)
   const [dropped, setDropped] = useState<GuillotineDroppedPlayerResult | null>(null)
-  const [tradeAnalysis, setTradeAnalysis] = useState<GuillotineTradeAnalysis | null>(null)
+  const [tradeAnalysis, setTradeAnalysis] = useState<WarRoomTradeAnalysisView<GuillotineTradeAnalysis> | null>(null)
+  const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')
 
@@ -112,7 +116,9 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
           const fallback = own.find((p) => !p.isStarterSlot)?.playerId ?? own[0]?.playerId ?? ''
           const outgoing = (tradeOutgoingId || fallback).trim()
           const incoming = tradeIncomingIds.split(',').map((id) => id.trim()).filter(Boolean)
-          setTradeAnalysis((await analyzeGuillotineWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })).tradeAnalysis)
+          const analyzed = await analyzeGuillotineWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })
+          setTradeAnalysis(analyzed.tradeAnalysis)
+          setTradeGrade(analyzed.tradeGrade ?? null)
           if (!tradeOutgoingId && fallback) setTradeOutgoingId(fallback)
         }
       } catch (e) {
@@ -166,7 +172,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
       <div className="flex items-center gap-2">
         <Skull className="h-4 w-4 text-rose-300/80" />
         <h2 className="text-sm font-bold text-white">AF Legacy — Guillotine</h2>
-        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
           {context.sport} · W{context.currentWeek}
         </span>
       </div>
@@ -174,21 +180,21 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
       {/* Survival risk hero + rules */}
       <div className="grid gap-2 rounded-lg border border-white/[0.06] bg-[#07071a] p-3 sm:grid-cols-3" data-testid="guillotine-war-room-survival-card">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Survival risk</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Survival risk</p>
           <p className={`text-[14px] font-bold ${RISK_COLOR[survival?.riskLevel ?? 'limited']}`}>
             {(survival?.riskLevel ?? 'limited').replace('_', ' ')}
           </p>
-          <p className="text-[10px] text-white/45">
+          <p className="text-[11px] text-white/45">
             {survival?.safetyMargin != null ? `${survival.safetyMargin >= 0 ? '+' : ''}${survival.safetyMargin} vs chop` : 'no elimination line yet'}
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Field</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Field</p>
           <p className="text-[11px] text-white/70">{context.activeTeamCount} alive · {context.eliminatedTeamCount} chopped</p>
-          <p className="text-[10px] text-white/45">{context.guillotine.teamsPerChop}/period · margin {context.guillotine.dangerMarginPoints}</p>
+          <p className="text-[11px] text-white/45">{context.guillotine.teamsPerChop}/period · margin {context.guillotine.dangerMarginPoints}</p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Data</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
           <p className="text-[11px] text-white/60">
             line {context.availability.eliminationLine === 'available' ? '✓' : '—'} · scores{' '}
             {context.availability.periodScores === 'available' ? '✓' : '—'} · pool{' '}
@@ -220,7 +226,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
                 <span className="text-white/35">☠ {s.teamName ?? s.ownerName}{s.choppedInPeriod != null ? ` (P${s.choppedInPeriod})` : ''}</span>
               ) : (
                 <>
-                  <span className={`mr-1 rounded px-1 py-0.5 text-[9px] font-semibold ${TIER_BADGE[s.tier] ?? TIER_BADGE.unknown}`}>{s.tier.replace('_', ' ')}</span>
+                  <span className={`mr-1 rounded px-1 py-0.5 text-[11px] font-semibold ${TIER_BADGE[s.tier] ?? TIER_BADGE.unknown}`}>{s.tier.replace('_', ' ')}</span>
                   {s.teamName ?? s.ownerName}{s.isUserTeam ? ' (you)' : ''}
                   <span className="text-white/40"> · {s.seasonPointsCumul.toFixed(0)} PF{s.pointsFromChopZone != null ? ` · ${s.pointsFromChopZone >= 0 ? '+' : ''}${s.pointsFromChopZone.toFixed(0)}` : ''}</span>
                 </>
@@ -306,7 +312,8 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
               </div>
               {tradeAnalysis && (
                 <div className="mt-2 space-y-1" data-testid="guillotine-war-room-trade-analyze-result">
-                  <p className="font-semibold text-white/80">Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}{tradeAnalysis.valueDelta != null ? <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span> : null}</p>
+                  {/* 🛑 THE GRADE IS THE VERDICT (2026-09-29). The engine's own accept/reject/neutral is never shown. */}
+                  <WarRoomTradeGradeLine grade={tradeGrade} testId="guillotine-war-room-trade-grade" />
                   {tradeAnalysis.explanationFacts.map((f) => (<p key={f}>{f}</p>))}
                   {tradeAnalysis.riskFlags.length > 0 && <ul className="mt-2 space-y-1">{tradeAnalysis.riskFlags.map((f) => (<Flag key={f}>{f}</Flag>))}</ul>}
                 </div>

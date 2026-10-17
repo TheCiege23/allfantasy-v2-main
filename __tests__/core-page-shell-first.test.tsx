@@ -129,6 +129,21 @@ vi.mock('@/lib/core-app/weekBoard', () => ({
 }))
 vi.mock('@/lib/core-app/leagueHome', () => ({ getLeagueHomeData: (screens.leagueHome = vi.fn(async () => null)) }))
 vi.mock('@/lib/core-app/crossLeagueValueActions', () => ({ getCrossLeagueValueActions: vi.fn(async () => []) }))
+vi.mock('@/lib/core-app/devyLeagueTab', () => ({
+  loadDevyLeagueTab: (screens.devyLeague = vi.fn(async () => ({
+    slots: [{ id: 'devy-p1', player: { name: 'Jeremiah Smith', position: 'WR', school: 'Ohio State', headshotUrl: null, teamColor: null } }],
+    freeAgents: [{ id: 'fa1', name: 'Bryce Underwood', position: 'QB', school: 'Michigan', grade: 88, headshotUrl: null }],
+    draftRoundLabel: 'Best available by ADP',
+    draftCountdown: null,
+    draftBoard: [],
+    draftProspects: [],
+    draftBoardNote: null,
+    news: [],
+    tradeValues: [],
+    tradeValueNote: null,
+    emptyReasons: { news: 'No college news is on file yet.' },
+  }))),
+}))
 
 type AnyElement = ReactElement<Record<string, unknown>>
 
@@ -357,6 +372,31 @@ describe('/core renders the shell first', () => {
     expect(devy!.props.devySlotCount).toBe(2)
   })
 
+  /*
+   * The per-league Devy tab shipped with every section hard-coded empty. Its data now comes from
+   * `loadDevyLeagueTab`, called from the streamed body (never the page function — the first test
+   * above holds that for this spy too) and handed through untouched.
+   */
+  it('hands the per-league Devy tab its loader’s data, for a league with devy slots', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const AfCorePage = await loadPage()
+    shell.devyNav.mockImplementationOnce(async () => ({ devySlotCount: 2, devyFormat: true }))
+    const tree = await AfCorePage(pageArgs(['devy-league'], { league: 'L1' }))
+    expect(screens.devyLeague).not.toHaveBeenCalled()
+    const boundary = findElement(tree, (el) => el.type === Suspense && el.key === 'devy-league|L1')
+    const body = boundary!.props.children as AnyElement
+    const screen = await (body.type as (props: unknown) => Promise<ReactNode>)(body.props)
+
+    expect(screens.devyLeague).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1', devySlotCount: 2 })
+    const tab = findElement(screen, (el) => el.props?.emptyReasons !== undefined && Array.isArray(el.props?.freeAgents))
+    expect(tab, 'the Devy tab element').not.toBeNull()
+    expect(tab!.props.viewState).toBe('populated')
+    expect((tab!.props.freeAgents as Array<{ name: string }>).map((f) => f.name)).toEqual(['Bryce Underwood'])
+    expect((tab!.props.slots as Array<{ player: { name: string } | null }>)[0]!.player?.name).toBe('Jeremiah Smith')
+    expect(tab!.props.emptyReasons).toEqual({ news: 'No college news is on file yet.' })
+  })
+
   it('resets the error boundary on any URL change, but keeps the screen boundary across a same-screen query', { timeout: 180_000 }, async () => {
     h.gated = false
     h.osGate.resolve()
@@ -451,6 +491,38 @@ describe('/core with an unknown segment', () => {
     const AfCorePage = await loadPage()
     await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
     expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count' })
+  })
+})
+
+/*
+ * A failed league-list read is not "this league is not yours". It used to leave the list empty,
+ * fail the membership check, and redirect a valid ?league= to the bare screen — a transient DB
+ * error silently dropped the user onto the cross-league board.
+ */
+describe('/core when the league list cannot be read', () => {
+  it('fails into the error boundary for a requested league instead of redirecting', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    const AfCorePage = await loadPage()
+
+    vi.mocked(getDashboardLeagueListForUser).mockRejectedValueOnce(new Error('db down'))
+    const err = await AfCorePage(pageArgs(['my-team'], { league: 'L1' })).then(() => null, (e: unknown) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).not.toMatch(/^NEXT_REDIRECT/)
+    expect((err as Error).message).toContain('League list could not be read')
+
+    // Positive control: the same request with a readable list renders.
+    await expect(AfCorePage(pageArgs(['my-team'], { league: 'L1' }))).resolves.toBeTruthy()
+  })
+
+  it('still renders a screen with no league requested', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    const AfCorePage = await loadPage()
+    vi.mocked(getDashboardLeagueListForUser).mockRejectedValueOnce(new Error('db down'))
+    await expect(AfCorePage(pageArgs(['my-team'], {}))).resolves.toBeTruthy()
   })
 })
 

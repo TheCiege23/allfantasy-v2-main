@@ -10,7 +10,7 @@ export async function resolveLegacyUserKeyForCurrentSession(): Promise<string | 
 
   const appUserId = session?.user?.id ? String(session.user.id) : ''
   if (appUserId) {
-    const legacyCookie = getUserSessionFromCookie()
+    const legacyCookie = (await getUserSessionFromCookie())
     const identity = await resolveLegacyIdentityForAppUser({
       appUserId,
       fallbackSleeperUsername: legacyCookie?.sleeperUsername || null,
@@ -19,6 +19,6 @@ export async function resolveLegacyUserKeyForCurrentSession(): Promise<string | 
     if (identity?.recommendedUserId) return identity.recommendedUserId
   }
 
-  const legacyCookie = getUserSessionFromCookie()
+  const legacyCookie = (await getUserSessionFromCookie())
   return legacyCookie?.sleeperUsername || null
 }

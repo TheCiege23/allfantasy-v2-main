@@ -111,8 +111,8 @@ export function QueuePanel({ sessionId, queue, onQueueChange }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.08] bg-[#0d1117]">
       <div className="border-b border-white/[0.06] px-2 py-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">{t('draftRoom.queue.title')}</p>
-        {saving ? <p className="text-[9px] text-white/30">{t('draftRoom.queue.saving')}</p> : null}
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">{t('draftRoom.queue.title')}</p>
+        {saving ? <p className="text-[11px] text-white/30">{t('draftRoom.queue.saving')}</p> : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {queue.length === 0 ? (

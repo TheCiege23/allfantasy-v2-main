@@ -145,7 +145,7 @@ function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
       },
     ],
     considered: 40,
-    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0 },
+    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0, noUpgrade: 0 },
     marketLeagues: 120,
     at: { season: '2026', week: 3 },
     ...over,

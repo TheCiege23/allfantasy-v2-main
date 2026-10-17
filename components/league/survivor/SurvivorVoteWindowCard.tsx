@@ -1,6 +1,6 @@
 'use client'
 
-/** Compact status card for the current Tribal Council vote window. Presentational. */
+/** Compact status card for the current Elimination Council vote window. Presentational. */
 export function SurvivorVoteWindowCard({
   status,
   phase,
@@ -36,7 +36,7 @@ export function SurvivorVoteWindowCard({
     <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-950 p-3">
       <div>
         <div className="text-xs uppercase tracking-wide text-neutral-500">
-          Tribal Council{week != null ? ` · Week ${week}` : ''}{phase ? ` · ${phase === 'merge' ? 'Merge' : 'Pre-merge'}` : ''}
+          Elimination Council{week != null ? ` · Week ${week}` : ''}{phase ? ` · ${phase === 'merge' ? 'Merge' : 'Pre-merge'}` : ''}
         </div>
         <div className="mt-1 text-sm font-semibold text-white">{label}</div>
       </div>

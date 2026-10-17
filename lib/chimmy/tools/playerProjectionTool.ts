@@ -3,8 +3,9 @@ import 'server-only'
 import { findAfProjectionsByName } from '@/lib/af-projections/readAfProjections'
 import { prisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
-import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
 
 /**
  * What one player is projected for, for the model to read. Phase 7.2.
@@ -101,7 +102,11 @@ export async function buildPlayerProjectionContext(args: {
     const when = r.week != null ? `week ${r.week}` : 'season baseline'
     lines.push(
       `${r.playerName} (${r.position}, ${sport} ${season}, ${when}):`,
-      `- ${r.afProjection.toFixed(1)} points PER GAME. This is a per-game rate, not a season total.`,
+      /*
+       * Named as AllFantasy's own engine ("AF"), because the league lines below can also carry the
+       * PROVIDER's number ("API"), and two unlabelled figures get averaged or swapped by the model.
+       */
+      `- AF (AllFantasy's own projection engine): ${r.afProjection.toFixed(1)} points PER GAME, standard scoring. This is a per-game rate, not a season total.`,
     )
 
     if (r.rosProjection == null) {
@@ -111,7 +116,7 @@ export async function buildPlayerProjectionContext(args: {
     } else {
       const weeks = r.rosWeeksRemaining
       lines.push(
-        `- ${r.rosProjection.toFixed(1)} points REST OF SEASON${weeks != null ? `, over ${weeks} remaining week${weeks === 1 ? '' : 's'}` : ''}. This is a total, not a weekly number.`,
+        `- AF: ${r.rosProjection.toFixed(1)} points REST OF SEASON${weeks != null ? `, over ${weeks} remaining week${weeks === 1 ? '' : 's'}` : ''}. This is a total, not a weekly number.`,
       )
     }
 
@@ -195,9 +200,37 @@ export async function buildPlayerProjectionContext(args: {
           const componentStats = candidate ? projections.get(candidate.playerId)?.componentStats ?? null : null
           const leaguePoints = componentStats ? computeLeagueProjectedPoints(componentStats, scoring) : null
           if (leaguePoints) {
+            const leagueName = league.name ?? 'the selected league'
+            /*
+             * Named for who made it ("API" until 2026-10-03), so Chimmy says "Sleeper" back to the
+             * user. ⚠ A DEFENDER IN AN IDP LEAGUE IS NOT SLEEPER'S: the lookup above passes IDP
+             * enrichment, and Sleeper has no defensive line, so his component stats come from
+             * AllFantasy's IDP model — and the line says so rather than crediting Sleeper.
+             */
+            const idpModel = isIdpPosition(r.position) && hasIdpScoring(scoring)
             lines.push(
-              `- ${leaguePoints.points.toFixed(1)} points in ${league.name ?? 'the selected league'} for week ${targetWeek}, re-scored from the component projection under that league’s imported rules.`,
+              idpModel
+                ? `- AllFantasy IDP model (Sleeper publishes no defensive projection): ${leaguePoints.points.toFixed(1)} points in ${leagueName} for week ${targetWeek}, scored under that league’s imported IDP rules.`
+                : `- Sleeper projection: ${leaguePoints.points.toFixed(1)} points in ${leagueName} for week ${targetWeek}, re-scored from Sleeper's component projection under that league’s imported rules.`,
             )
+            /*
+             * AllFantasy's own engine for the same week and player, carried into the league's rules by
+             * the provider line — the same AF number My Team and the player card show for him. A
+             * failed read drops only this line; the provider figure above already stands.
+             */
+            const engine = await lookupAfEngineProjections([candidate!.playerId], { season: targetSeason, week: targetWeek })
+              .catch((): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map())
+            const afInLeague = afEngineForLeague(
+              engine.get(candidate!.playerId),
+              projections.get(candidate!.playerId)?.projectedPoints ?? null,
+              leaguePoints.points,
+              scoring,
+            )
+            if (afInLeague != null) {
+              lines.push(
+                `- AF in ${leagueName} for week ${targetWeek}: ${afInLeague.toFixed(1)} points — AllFantasy's own engine under the same rules. Give BOTH numbers when answering about this league, each with its label; do not average them.`,
+              )
+            }
           } else {
             lines.push(
               `- League-specific points: NOT COMPUTED for ${league.name ?? 'the selected league'} because no matching component projection could be scored. Do not present the standard number above as this league’s number.`,

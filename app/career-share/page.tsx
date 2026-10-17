@@ -574,7 +574,7 @@ export default function CareerSharePage() {
                 <div className="flex items-center gap-3">
                   <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-center">
                     <div className="text-lg font-black text-yellow-400">{rewards.unredeemedTokens}</div>
-                    <div className="text-[10px] uppercase tracking-wide text-yellow-400/60">Tokens</div>
+                    <div className="text-[11px] uppercase tracking-wide text-yellow-400/60">Tokens</div>
                   </div>
                   {!rewards.canShareToday ? <div className="text-[11px] text-white/30">✓ Token earned today</div> : null}
                 </div>
@@ -612,7 +612,7 @@ export default function CareerSharePage() {
             <div className="space-y-4">
               {leagues.length > 0 ? (
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-white/40">
+                  <label className="mb-2 block text-[11px] font-bold uppercase tracking-widest text-white/40">
                     League Context
                   </label>
                   <select
@@ -636,7 +636,7 @@ export default function CareerSharePage() {
               ) : null}
 
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                <label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-white/40">
+                <label className="mb-2 block text-[11px] font-bold uppercase tracking-widest text-white/40">
                   Sleeper Username
                 </label>
                 <input
@@ -652,7 +652,7 @@ export default function CareerSharePage() {
 
               {activeType === 'legacy' ? (
                 <div className="space-y-4 rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Career Data (optional)</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">Career Data (optional)</p>
                   <p className="text-[11px] leading-relaxed text-white/30">
                     Pull in your dynasty report and ranking snapshot. If you skip this, Chimmy still writes a general career-share caption.
                   </p>
@@ -694,10 +694,10 @@ export default function CareerSharePage() {
 
               {activeType === 'trade' ? (
                 <div className="space-y-4 rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Trade Details</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">Trade Details</p>
 
                   <div>
-                    <label className="mb-1.5 block text-[10px] text-white/40">You Give</label>
+                    <label className="mb-1.5 block text-[11px] text-white/40">You Give</label>
                     {tradeGiveList.map((value, index) => (
                       <input
                         key={`give-${index}`}
@@ -712,14 +712,14 @@ export default function CareerSharePage() {
                     <button
                       type="button"
                       onClick={() => setTradeGiveList((current) => [...current, ''])}
-                      className="text-[10px] text-white/30 hover:text-white/60"
+                      className="text-[11px] text-white/30 hover:text-white/60"
                     >
                       + Add player
                     </button>
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-[10px] text-white/40">You Get</label>
+                    <label className="mb-1.5 block text-[11px] text-white/40">You Get</label>
                     {tradeGetList.map((value, index) => (
                       <input
                         key={`get-${index}`}
@@ -734,7 +734,7 @@ export default function CareerSharePage() {
                     <button
                       type="button"
                       onClick={() => setTradeGetList((current) => [...current, ''])}
-                      className="text-[10px] text-white/30 hover:text-white/60"
+                      className="text-[11px] text-white/30 hover:text-white/60"
                     >
                       + Add player
                     </button>
@@ -742,7 +742,7 @@ export default function CareerSharePage() {
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">AI Grade</label>
+                      <label className="mb-1 block text-[11px] text-white/40">AI Grade</label>
                       <input
                         value={tradeGrade}
                         onChange={(event) => setTradeGrade(event.target.value)}
@@ -751,7 +751,7 @@ export default function CareerSharePage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">Format</label>
+                      <label className="mb-1 block text-[11px] text-white/40">Format</label>
                       <select
                         value={tradeFormat}
                         onChange={(event) => setTradeFormat(event.target.value)}
@@ -767,7 +767,7 @@ export default function CareerSharePage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-[10px] text-white/40">Verdict</label>
+                    <label className="mb-1 block text-[11px] text-white/40">Verdict</label>
                     <input
                       value={tradeVerdict}
                       onChange={(event) => setTradeVerdict(event.target.value)}
@@ -780,7 +780,7 @@ export default function CareerSharePage() {
 
               {activeType === 'rankings' ? (
                 <div className="space-y-3 rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">League Standing</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">League Standing</p>
                   <input
                     value={leagueName}
                     onChange={(event) => setLeagueName(event.target.value)}
@@ -789,7 +789,7 @@ export default function CareerSharePage() {
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">My Rank</label>
+                      <label className="mb-1 block text-[11px] text-white/40">My Rank</label>
                       <input
                         type="number"
                         min={1}
@@ -799,7 +799,7 @@ export default function CareerSharePage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">Total Teams</label>
+                      <label className="mb-1 block text-[11px] text-white/40">Total Teams</label>
                       <input
                         type="number"
                         min={2}
@@ -826,7 +826,7 @@ export default function CareerSharePage() {
 
               {activeType === 'exposure' ? (
                 <div className="space-y-3 rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Player Stock</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">Player Stock</p>
                   <input
                     value={playerName}
                     onChange={(event) => setPlayerName(event.target.value)}
@@ -835,7 +835,7 @@ export default function CareerSharePage() {
                   />
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">Owned %</label>
+                      <label className="mb-1 block text-[11px] text-white/40">Owned %</label>
                       <input
                         type="number"
                         min={0}
@@ -846,7 +846,7 @@ export default function CareerSharePage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">Owned in</label>
+                      <label className="mb-1 block text-[11px] text-white/40">Owned in</label>
                       <input
                         type="number"
                         min={0}
@@ -856,7 +856,7 @@ export default function CareerSharePage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">of</label>
+                      <label className="mb-1 block text-[11px] text-white/40">of</label>
                       <input
                         type="number"
                         min={1}
@@ -867,7 +867,7 @@ export default function CareerSharePage() {
                     </div>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-[10px] text-white/40">Signal</label>
+                    <label className="mb-1.5 block text-[11px] text-white/40">Signal</label>
                     <div className="flex flex-wrap gap-2">
                       {['Buy', 'Hold', 'Sell', 'Buy Low', 'Sell High'].map((option) => (
                         <button
@@ -888,7 +888,7 @@ export default function CareerSharePage() {
 
               {activeType === 'waiver' ? (
                 <div className="space-y-3 rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Waiver Pick</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">Waiver Pick</p>
                   <input
                     value={waiverPlayer}
                     onChange={(event) => setWaiverPlayer(event.target.value)}
@@ -897,7 +897,7 @@ export default function CareerSharePage() {
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">Action</label>
+                      <label className="mb-1 block text-[11px] text-white/40">Action</label>
                       <select
                         value={recommendation}
                         onChange={(event) => setRecommendation(event.target.value)}
@@ -911,7 +911,7 @@ export default function CareerSharePage() {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] text-white/40">FAAB %</label>
+                      <label className="mb-1 block text-[11px] text-white/40">FAAB %</label>
                       <input
                         type="number"
                         min={0}
@@ -933,7 +933,7 @@ export default function CareerSharePage() {
               ) : null}
 
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/40">Caption Style</p>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-white/40">Caption Style</p>
                 <div className="grid grid-cols-2 gap-2">
                   {STYLE_OPTIONS.map((option) => (
                     <button
@@ -953,7 +953,7 @@ export default function CareerSharePage() {
               </div>
 
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/40">Platform</p>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-white/40">Platform</p>
                 <div className="grid grid-cols-2 gap-2">
                   {PLATFORM_OPTIONS.map((option) => (
                     <button
@@ -967,7 +967,7 @@ export default function CareerSharePage() {
                       }`}
                     >
                       <div className="text-xs font-bold">{option.label}</div>
-                      <div className="mt-0.5 text-[9px] opacity-50">{option.limit}</div>
+                      <div className="mt-0.5 text-[11px] opacity-50">{option.limit}</div>
                     </button>
                   ))}
                 </div>
@@ -1020,7 +1020,7 @@ export default function CareerSharePage() {
                     className="flex w-full items-center justify-between gap-3 p-5 text-left"
                   >
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">🤖 Dynasty AI Report</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">🤖 Dynasty AI Report</p>
                       <p className="mt-1 text-xs text-white/35">
                         Loads separately from caption generation so your share flow stays fast.
                       </p>
@@ -1066,12 +1066,12 @@ export default function CareerSharePage() {
 
                           {report.topDynastyAssets.length > 0 ? (
                             <div>
-                              <p className="mb-2 text-[10px] uppercase tracking-widest text-white/30">Top Dynasty Assets</p>
+                              <p className="mb-2 text-[11px] uppercase tracking-widest text-white/30">Top Dynasty Assets</p>
                               <div className="space-y-2">
                                 {report.topDynastyAssets.slice(0, 3).map((asset) => (
                                   <div key={`${asset.name}-${asset.dynastyTier}`} className="rounded-xl bg-white/3 px-3 py-3">
                                     <div className="flex items-center gap-2">
-                                      <span className="rounded-lg bg-cyan-500/10 px-2 py-0.5 text-[10px] font-black uppercase text-cyan-300">
+                                      <span className="rounded-lg bg-cyan-500/10 px-2 py-0.5 text-[11px] font-black uppercase text-cyan-300">
                                         {asset.dynastyTier}
                                       </span>
                                       <span className="text-xs font-semibold text-white/85">{asset.name}</span>
@@ -1085,7 +1085,7 @@ export default function CareerSharePage() {
 
                           {report.keyRecommendations.length > 0 ? (
                             <div>
-                              <p className="mb-2 text-[10px] uppercase tracking-widest text-white/30">Key Moves</p>
+                              <p className="mb-2 text-[11px] uppercase tracking-widest text-white/30">Key Moves</p>
                               <div className="space-y-2">
                                 {report.keyRecommendations.map((recommendationItem, index) => (
                                   <div key={`${recommendationItem}-${index}`} className="flex gap-2 text-xs text-white/60">
@@ -1152,13 +1152,13 @@ export default function CareerSharePage() {
                     <div className="h-0.5 w-full bg-gradient-to-r from-violet-500 via-cyan-500 to-violet-500" />
                     <div className="p-6">
                       <div className="mb-4 flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Generated Caption</span>
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-violet-400">Generated Caption</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-white/30">
+                          <span className="text-[11px] text-white/30">
                             {activeCaption.length}/{platformMeta.limit}
                           </span>
                           {result.rate_limit.remaining > 0 ? (
-                            <span className="text-[10px] text-white/25">{result.rate_limit.remaining} left</span>
+                            <span className="text-[11px] text-white/25">{result.rate_limit.remaining} left</span>
                           ) : null}
                         </div>
                       </div>
@@ -1217,7 +1217,7 @@ export default function CareerSharePage() {
 
                   {result.alt_captions.length > 0 ? (
                     <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
-                      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/30">Alternate Captions</p>
+                      <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-white/30">Alternate Captions</p>
                       <div className="space-y-3">
                         {result.alt_captions.map((caption, index) => (
                           <button
@@ -1234,7 +1234,7 @@ export default function CareerSharePage() {
                           </button>
                         ))}
                       </div>
-                      <p className="mt-2 text-[10px] text-white/25">Click any caption to switch to it</p>
+                      <p className="mt-2 text-[11px] text-white/25">Click any caption to switch to it</p>
                     </div>
                   ) : null}
 
@@ -1242,12 +1242,12 @@ export default function CareerSharePage() {
                     <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-5">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-yellow-400">🎁 Share Tokens</p>
+                          <p className="mb-0.5 text-[11px] font-bold uppercase tracking-widest text-yellow-400">🎁 Share Tokens</p>
                           <p className="text-xs text-white/40">Copy or share your caption to earn 1 free AI token per day</p>
                         </div>
                         <div className="text-center">
                           <div className="text-2xl font-black text-yellow-400">{rewards.unredeemedTokens}</div>
-                          <div className="text-[10px] text-yellow-400/60">available</div>
+                          <div className="text-[11px] text-yellow-400/60">available</div>
                         </div>
                       </div>
                       {!rewards.canShareToday ? (
@@ -1264,12 +1264,12 @@ export default function CareerSharePage() {
                 <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-yellow-400">🎁 Share Tokens</p>
+                      <p className="mb-0.5 text-[11px] font-bold uppercase tracking-widest text-yellow-400">🎁 Share Tokens</p>
                       <p className="text-xs text-white/40">Generate and share a caption to add to your reward balance.</p>
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-black text-yellow-400">{rewards.unredeemedTokens}</div>
-                      <div className="text-[10px] text-yellow-400/60">available</div>
+                      <div className="text-[11px] text-yellow-400/60">available</div>
                     </div>
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-[11px] text-white/35">

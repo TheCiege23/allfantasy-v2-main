@@ -436,6 +436,49 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
 
+  /*
+   * 2026-09-29: a READY decision answer's history row stored grounding, cost and mode but not its
+   * chip, so a reload showed START / COUNTER on the live answer and nothing on the restored one. The
+   * row now stores exactly the verdict and keys the response's meta.decision carried.
+   */
+  it("stores a ready decision answer's chip and supersede keys in its history row, as the response sent them", async () => {
+    const { appendChatHistory } = await import("@/lib/ai-memory/chat-history-store")
+    const append = appendChatHistory as unknown as ReturnType<typeof vi.fn>
+    append.mockClear()
+    const verdict = { key: "start", source: "lineup_engine", detail: "Kyren Williams" }
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "lineup", decisionType: "manager.lineup.set", authority: "explanation_only",
+      status: "ready", leagueId: "league-1", answer: "Start Kyren Williams.", sources: ["lineup_engine"],
+      verdict, answerKeys: ["optimize_my_lineup:league-1"] })
+    const form = new FormData()
+    form.append("message", "Should I start Kyren Williams or Tank Bigsby?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const body = await (await POST(buildMultipartRequest(form) as any)).json()
+    expect(body.meta.decision.verdict).toEqual(verdict)
+    const row = append.mock.calls.map(([r]) => r).find((r) => r.role === "assistant")
+    expect(row.meta.display.verdict).toEqual(body.meta.decision.verdict)
+    expect(row.meta.display.answerKeys).toEqual(["optimize_my_lineup:league-1"])
+  })
+
+  it("a free partial (needs_data) stores no chip, whatever its text opens with", async () => {
+    const { appendChatHistory } = await import("@/lib/ai-memory/chat-history-store")
+    const append = appendChatHistory as unknown as ReturnType<typeof vi.fn>
+    append.mockClear()
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "trade", decisionType: "manager.trade.evaluate", authority: "explanation_only",
+      status: "needs_data", leagueId: "league-1", answer: "HOLD: name both sides of the trade.", sources: [],
+      verdict: { key: "hold", source: "trade_engine", detail: null } })
+    const form = new FormData()
+    form.append("message", "Should I trade this player?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    await POST(buildMultipartRequest(form) as any)
+    const row = append.mock.calls.map(([r]) => r).find((r) => r.role === "assistant")
+    expect(row).toBeTruthy()
+    expect(row.meta.display.verdict).toBeUndefined()
+  })
+
   it("returns a missing-evidence gap before spending tokens", async () => {
     prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "trade", decisionType: "manager.trade.evaluate", authority: "explanation_only",
       status: "needs_data", leagueId: null, answer: "Sync your roster before asking again.", sources: [], gap: { code: "roster_missing", remedy: "Sync your roster." } })

@@ -1,16 +1,20 @@
 'use client'
 
 import ThreadPanel from './ThreadPanel'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { LeagueScopePicker } from './LeagueScopePicker'
 import { Eye, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'lucide-react'
 import { LeagueConversation } from './LeagueConversation'
 import { DM_PRIVACY, HUDDLE_PRIVACY } from './privacyCopy'
 import { useCommsKeyboardInset } from './useCommsKeyboardInset'
+import { readCommsUi, writeCommsUi } from './commsUiMemory'
 import LeagueActivityFeed from './LeagueActivityFeed'
 import { ChimmyPanel, PUBLIC_ANSWER_NOTICE, type CommsLeague } from './ChimmyPanel'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOverlayContainment } from '../useOverlayContainment'
 import '@/components/core-app/af-comms.css'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -41,8 +45,9 @@ export type { CommsLeague } from './ChimmyPanel'
  * ⚠ THE COPY CONTRACTS, AND WHERE EACH LIVES. Every one is a trust disclosure,
  * not decoration, and none of them is conditional:
  *
- *   1. A LEAGUE-TAB ANSWER SAYS IT IS PUBLIC — `PUBLIC_ANSWER_NOTICE`, rendered
- *      on every @chimmy answer in the league tab. Everyone in the league sees it.
+ *   1. A LEAGUE-TAB ANSWER SAYS WHO SEES IT — `PUBLIC_ANSWER_NOTICE`, rendered
+ *      on every @chimmy answer in the league tab. It used to say "everyone in the
+ *      league" while nothing posted it; it now says only the asker sees it.
  *   2. HUDDLE SAYS IT CANNOT SEE ROSTERS — `HUDDLE_PRIVACY`, rendered on the
  *      panel every time it opens, not once on first visit.
  *   3. DMs SAY THEY ARE ALLFANTASY-ONLY — `DM_PRIVACY`. We do not read or mirror
@@ -72,6 +77,7 @@ export type { CommsLeague } from './ChimmyPanel'
 export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms' | 'discord'
 
 export type CommsDrawerProps = {
+  leagueDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
   /** Keys the saved Chimmy conversations, so one account's chat never loads for another. */
   userId?: string
   mode?: 'overlay' | 'docked'
@@ -109,6 +115,12 @@ export type CommsDrawerProps = {
    * left did nothing; `seq` changes every time. `leagueId` rescopes the drawer.
    */
   openRequest?: { seq: number; tab: CommsTab | null; leagueId: string | null } | null
+  /**
+   * Put the drawer back on the tab and league this user last had (see commsUiMemory.ts). Only the
+   * chat bubble asks for this: a drawer opened on a specific tab must open on THAT tab, not on
+   * wherever the user happened to be last.
+   */
+  rememberPlace?: boolean
 }
 
 /* PUBLIC_ANSWER_NOTICE lives in ./ChimmyPanel beside the answers that carry it; LeaguePanel below uses it too. */
@@ -151,6 +163,7 @@ const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
  * activity feed when no league is picked, and the public @chimmy mode.
  */
 function LeaguePanel({
+  leagueDraft,
   leagues,
   scopeId,
   onScope,
@@ -158,6 +171,7 @@ function LeaguePanel({
   chimmyPlanAllowance = null,
   userId,
 }: {
+  leagueDraft?: CommsDrawerProps['leagueDraft']
   leagues: CommsLeague[]
   scopeId: string | null
   onScope: (id: string | null) => void
@@ -166,6 +180,7 @@ function LeaguePanel({
   userId?: string
 }) {
   const [askChimmy, setAskChimmy] = useState(false)
+  useEffect(() => { if (leagueDraft) setAskChimmy(false) }, [leagueDraft?.id])
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -196,9 +211,9 @@ function LeaguePanel({
   }
 
   /*
-   * @chimmy in the league tab answers PUBLICLY. That is the whole reason the
-   * league tab and the Chimmy tab are different tabs, so the toggle is explicit
-   * and the disclosure is attached to every answer it produces.
+   * @chimmy in the league tab answers about THIS league, with no home signals.
+   * It was described as public, but no code posts the answer to league chat —
+   * the disclosure attached to every answer now says so.
    */
   if (askChimmy) {
     return (
@@ -232,6 +247,7 @@ function LeaguePanel({
 
   return (
     <LeagueConversation
+      reviewedDraft={leagueDraft?.leagueId === scopeId ? leagueDraft : undefined}
       leagueId={scopeId}
       leagueName={scope?.name ?? null}
       isCommissioner={Boolean(scope?.isCommissioner)}
@@ -244,7 +260,7 @@ function LeaguePanel({
           <span className="af-cm-scope-label">League</span>
           <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
           <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
-            @chimmy — ask the league&apos;s AI, publicly
+            @chimmy — ask Chimmy about this league
           </button>
         </>
       }
@@ -471,6 +487,7 @@ function DiscordPanel({
 // ── The drawer ─────────────────────────────────────────────────────────
 
 export function CommsDrawer({
+  leagueDraft,
   mode = 'overlay',
   open,
   onClose,
@@ -483,10 +500,13 @@ export function CommsDrawer({
   initialTab = 'chimmy',
   initialDraft = null,
   openRequest = null,
+  rememberPlace = false,
   userId,
 }: CommsDrawerProps) {
+  const { language } = useOptionalLanguage()
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
+  const [dismissedLeagueDraft, setDismissedLeagueDraft] = useState<string | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
   /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
   const scrimRef = useRef<HTMLButtonElement | null>(null)
@@ -501,8 +521,11 @@ export function CommsDrawer({
    * bubble and opening it again threw a hand-picked league away and put the
    * page's scope (often "All leagues") back (user report, 2026-09-16). It now
    * follows only an actual change of the page's league, compared against the
-   * last one it followed — the drawer stays mounted across navigations, so a
-   * change made while it is closed is still picked up.
+   * last one it followed.
+   *
+   * ⚠ IT DOES NOT STAY MOUNTED ACROSS A /core NAVIGATION, as this comment used to say:
+   * every screen change mounts a new shell, and a new drawer with it. Where the user was
+   * is restored from commsUiMemory.ts below instead.
    */
   const followedPageLeague = useRef(pageLeagueId)
   useEffect(() => {
@@ -521,6 +544,34 @@ export function CommsDrawer({
   useEffect(() => {
     setTab(initialTab)
   }, [initialTab])
+
+  /*
+   * Back where you were after a /core navigation — see commsUiMemory.ts for why the drawer does not
+   * survive one on its own. Declared AFTER the `initialTab` effect so, on mount, the remembered tab
+   * wins over the default. A remembered league comes back only on the same page league: moving to
+   * another league's page is the page changing, and the drawer follows the page (above).
+   */
+  const restoredFor = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!rememberPlace || !userId || restoredFor.current === userId) return
+    restoredFor.current = userId
+    const saved = readCommsUi(userId)
+    if (!saved) return
+    if (saved.tab && TABS.some((t) => t.id === saved.tab)) setTab(saved.tab)
+    if (
+      saved.pageLeagueId === pageLeagueId &&
+      saved.scopeId !== undefined &&
+      (saved.scopeId === null || leagues.some((l) => l.id === saved.scopeId))
+    ) {
+      setScopeId(saved.scopeId)
+    }
+    // Once per signed-in user, on mount — later changes are the user's own and are written below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+  useEffect(() => {
+    if (!rememberPlace || !userId || restoredFor.current !== userId) return
+    writeCommsUi(userId, { tab, scopeId, pageLeagueId })
+  }, [rememberPlace, userId, tab, scopeId, pageLeagueId])
 
   const openRequestSeq = openRequest?.seq ?? 0
   useEffect(() => {
@@ -602,7 +653,7 @@ export function CommsDrawer({
           type="button"
           ref={scrimRef}
           className="af-cm-scrim"
-          aria-label="Close communications"
+          aria-label={language === 'es' ? 'Cerrar mensajes' : 'Close communications'}
           onClick={onClose}
         />
       ) : null}
@@ -614,24 +665,41 @@ export function CommsDrawer({
         tabIndex={-1}
         role={mode === 'overlay' ? 'dialog' : 'complementary'}
         aria-modal={mode === 'overlay' ? true : undefined}
-        aria-label="Communications"
+        aria-label={coreUiCopy('Communications', language)}
       >
         <header className="af-cm-head">
           <div className="af-cm-headtop">
             <span className="af-cm-brand">
               <MessagesSquare size={15} aria-hidden />
-              <h2 className="af-cm-title">Communications</h2>
+              <h2 className="af-cm-title">{coreUiCopy('Communications', language)}</h2>
             </span>
             {/* Contract 4: current scope, always visible. */}
             <span className="af-cm-scopechip" data-global={scopeId == null}>
-              {scopeName ?? 'GLOBAL'}
+              {scopeName ?? (language === 'es' ? 'TODAS LAS LIGAS' : 'GLOBAL')}
             </span>
-            <button type="button" className="af-cm-close" onClick={onClose} aria-label="Close">
+            <button type="button" className="af-cm-close" onClick={onClose} aria-label={coreUiCopy('Close', language)}>
               <X size={16} aria-hidden />
             </button>
           </div>
 
-          <nav className="af-cm-tabs" role="tablist">
+          <nav
+            className="af-cm-tabs"
+            role="tablist"
+            aria-label={language === 'es' ? 'Canales de mensajes' : 'Message channels'}
+            onKeyDown={(event) => {
+              const current = TABS.findIndex((item) => item.id === tab)
+              const next = event.key === 'ArrowRight' ? (current + 1) % TABS.length
+                : event.key === 'ArrowLeft' ? (current - 1 + TABS.length) % TABS.length
+                : event.key === 'Home' ? 0
+                : event.key === 'End' ? TABS.length - 1
+                : -1
+              if (next < 0) return
+              event.preventDefault()
+              setTab(TABS[next].id)
+              const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+              buttons[next]?.focus()
+            }}
+          >
             {TABS.map((t) => {
               const Icon = TAB_ICONS[t.id]
               return (
@@ -640,13 +708,14 @@ export function CommsDrawer({
                   type="button"
                   role="tab"
                   aria-selected={tab === t.id}
+                  tabIndex={tab === t.id ? 0 : -1}
                   className="af-cm-tab"
                   data-on={tab === t.id}
                   onClick={() => setTab(t.id)}
-                  title={t.audience}
+                  title={coreUiCopy(t.audience, language)}
                 >
                   <Icon size={14} aria-hidden />
-                  <span>{t.label}</span>
+                  <span>{coreUiCopy(t.label, language)}</span>
                 </button>
               )
             })}
@@ -658,15 +727,16 @@ export function CommsDrawer({
           */}
           <p className="af-cm-audience">
             <Eye size={12} aria-hidden />
-            <span>Who sees this: {TABS.find((t) => t.id === tab)!.audience}</span>
+            <span>{coreUiCopy('Who sees this:', language)} {coreUiCopy(TABS.find((t) => t.id === tab)!.audience, language)}</span>
           </p>
         </header>
 
         {tab === 'league' ? (
           <LeaguePanel
+            leagueDraft={leagueDraft?.leagueId === scopeId && leagueDraft.id !== dismissedLeagueDraft ? leagueDraft : undefined}
             leagues={leagues}
             scopeId={scopeId}
-            onScope={setScopeId}
+            onScope={id => { setScopeId(id); if (leagueDraft) setDismissedLeagueDraft(leagueDraft.id) }}
             chimmyTokenCost={chimmyTokenCost}
             chimmyPlanAllowance={chimmyPlanAllowance}
             userId={userId}
@@ -703,14 +773,14 @@ export function CommsDrawer({
 
         <footer className="af-cm-foot">
           <Link href="/settings?tab=notifications" className="af-cm-footlink">
-            Notification settings
+            {coreUiCopy('Notification settings', language)}
           </Link>
           {/*
             V10: this said "Read-only · AllFantasy never writes to your platform" inside a chat you type
             into. What is true is narrower, and it is the part that matters: we never change your
             league on the platform it lives on.
           */}
-          <span className="af-cm-footnote">AllFantasy never changes your league on Sleeper, ESPN or Yahoo.</span>
+          <span className="af-cm-footnote">AllFantasy never changes your league on {availableImportPlatformsPhrase()}.</span>
         </footer>
       </aside>
     </>

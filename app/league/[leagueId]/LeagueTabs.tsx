@@ -35,6 +35,7 @@ const FOOTBALL_REDRAFT_COMPACT_TABS: TabDef[] = [
   { id: 'waivers', label: 'Waivers' },
   { id: 'trades', label: 'Trades' },
   { id: 'standings', label: 'Standings' },
+  { id: 'war_room', label: 'AF Legacy' },
   { id: 'league_chat', label: 'League Chat' },
   { id: 'commissioner', label: 'Commissioner' },
 ]
@@ -113,6 +114,18 @@ export function getLeagueTabs(sport: string): TabDef[] {
   const tabs = SPORT_TABS[resolved]
   if (tabs?.length) return tabs
   return SPORT_TABS.NFL ?? NFL_TABS
+}
+
+/** Common league tools appear for every sport, with commissioner access gated by role. */
+export function getLeagueTabsForViewer(sport: string, isCommissioner: boolean): TabDef[] {
+  const tabs = getLeagueTabs(sport).filter((tab) => tab.id !== 'commissioner')
+  if (!tabs.some((tab) => tab.id === 'league_chat')) {
+    tabs.push({ id: 'league_chat', label: 'League Chat' })
+  }
+  if (isCommissioner) {
+    tabs.push({ id: 'commissioner', label: 'Commissioner' })
+  }
+  return tabs
 }
 
 const LEAGUE_TAB_I18N_KEY: Record<string, string> = {

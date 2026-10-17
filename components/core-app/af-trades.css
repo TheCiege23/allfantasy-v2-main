@@ -153,7 +153,7 @@
 
 .af-tr-count-label {
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -351,7 +351,7 @@
   min-width: 0;
 }
 .af-tr-graderow-meta {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--faint);
@@ -460,7 +460,7 @@
 }
 
 .af-tr-offer-sub {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 

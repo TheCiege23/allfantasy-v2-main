@@ -3,18 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
 import type { ReportReason } from '@/lib/moderation/shared'
-import { ThreadListRow, type ThreadRowContext } from './ThreadListRow'
+import { TypingNote } from './TypingNote'
+import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
 import { HuddleMembersSheet, HuddleOptionsSheet, type HuddleMember } from './HuddleSheets'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { SeenBy } from './SeenBy'
+import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { useSession } from 'next-auth/react'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
 import { ChatSearch } from './ChatSearch'
+import { chatFailure } from './chatFailure'
 import { useTypingSignal } from './useTypingSignal'
 import { PeoplePicker } from './PeoplePicker'
 
@@ -64,12 +67,8 @@ export type PlatformThread = {
   context?: ThreadRowContext | null
 }
 
-/** A thrown Error the sheets can show as it is: the server's words when it gave any. */
-async function failure(res: Response, prefix: string, fallback: string): Promise<Error> {
-  const data = (await res.json().catch(() => ({}))) as { error?: unknown }
-  const said = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : null
-  return new Error(said ? `${prefix}: ${said.replace(/\.$/, '')}.` : fallback)
-}
+/** A thrown Error the sheets can show as it is — shared with league chat (./chatFailure). */
+const failure = chatFailure
 
 type PlatformMessage = {
   id: string
@@ -86,6 +85,8 @@ type PlatformMessage = {
   createdAt: string
   /** GIFs, media and polls. The endpoint returns it; dropping it hid them. */
   metadata?: Record<string, unknown> | null
+  /** The viewer's own send, shown before the server has it. */
+  pending?: boolean
 }
 
 function toListMessage(m: PlatformMessage): ChatListMessage {
@@ -99,6 +100,7 @@ function toListMessage(m: PlatformMessage): ChatListMessage {
     parentMessageId: m.parentMessageId ?? null,
     metadata: m.metadata ?? null,
     messageType: m.messageType ?? null,
+    ...(m.pending ? { pending: true } : {}),
   }
 }
 
@@ -128,6 +130,12 @@ export function ThreadPanel({
   const [threads, setThreads] = useState<PlatformThread[] | null>(null)
   const [openThread, setOpenThread] = useState<PlatformThread | null>(null)
   const [messages, setMessages] = useState<PlatformMessage[]>([])
+  /*
+   * The viewer's own sends the server has not returned yet: shown at once, in their own list so a
+   * poll that replaces `messages` mid-send cannot erase them. A send used to appear only after the
+   * POST and a reload — two round trips with nothing on screen.
+   */
+  const [pendingSends, setPendingSends] = useState<PlatformMessage[]>([])
   const [hiddenBlocked, setHiddenBlocked] = useState(0)
   /** Why the last attempt to START a conversation failed — shown under the picker, not the list. */
   const [startError, setStartError] = useState<string | null>(null)
@@ -176,7 +184,9 @@ export function ThreadPanel({
       setNow(new Date())
       setThreads((data.threads ?? []).filter((t) => t.threadType === kind))
     } catch (e) {
-      setThreads([])
+      // A failed REFRESH keeps the list on screen (as a failed message poll does); only a first
+      // load with nothing to show falls back to empty.
+      setThreads((prev) => prev ?? [])
       setError(e instanceof Error ? e.message : 'Could not load conversations.')
     }
   }, [kind])
@@ -184,6 +194,20 @@ export function ThreadPanel({
   useEffect(() => {
     void loadThreads()
   }, [loadThreads])
+
+  /*
+   * The list used to load once and never again while you looked at it, so a new DM, an unread count
+   * and who is active only changed when you navigated away and back. Every 30s while the list is on
+   * screen and the tab is visible — slower than a conversation's own poll, because the list read is
+   * heavier and nothing in it is a live exchange.
+   */
+  useEffect(() => {
+    if (openThread) return
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadThreads()
+    }, 30_000)
+    return () => window.clearInterval(id)
+  }, [openThread, loadThreads])
 
   const loadMessages = useCallback(async (thread: PlatformThread) => {
     if (activeThreadId.current !== thread.id) return
@@ -256,6 +280,7 @@ export function ThreadPanel({
       /* A reply target belongs to one thread; it must not follow you into another. */
       setReplyTo(null)
       setMessages([])
+      setPendingSends([])
       setReadFailed(false)
       setHiddenBlocked(0)
       setReactionOverride({})
@@ -334,6 +359,22 @@ export function ThreadPanel({
 
       setBusy(true)
       setError(null)
+      const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      setPendingSends((prev) => [
+        ...prev,
+        {
+          id: pendingId,
+          parentMessageId: replyTo?.id ?? null,
+          senderUserId: viewerId,
+          senderName: 'You',
+          messageType: payload.poll ? 'poll' : 'text',
+          body: displayText,
+          createdAt: new Date().toISOString(),
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
+          pending: true,
+        },
+      ])
+      const dropPending = () => setPendingSends((prev) => prev.filter((p) => p.id !== pendingId))
       try {
         const res = await fetch(
           `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages`,
@@ -367,7 +408,9 @@ export function ThreadPanel({
         /* Only once it actually sent — a failed reply keeps its target. */
         setReplyTo(null)
         await loadMessages(openThread)
+        dropPending()
       } catch (e) {
+        dropPending()
         setError(e instanceof Error ? e.message : 'Message not sent.')
         // ⚠ RETHROW so the composer restores the draft. The inline error alone is not
         // enough — the text is already gone from the box by the time we get here.
@@ -376,7 +419,7 @@ export function ThreadPanel({
         setBusy(false)
       }
     },
-    [openThread, busy, loadMessages, replyTo],
+    [openThread, busy, loadMessages, replyTo, viewerId],
   )
 
   /*
@@ -507,7 +550,7 @@ export function ThreadPanel({
     [people, viewerId],
   )
 
-  const listMessages = useMemo(() => messages.map(toListMessage), [messages])
+  const listMessages = useMemo(() => [...messages, ...pendingSends].map(toListMessage), [messages, pendingSends])
 
   const signalTyping = useTypingSignal(openThread?.id ?? null)
 
@@ -698,6 +741,15 @@ export function ThreadPanel({
           </button>
           <span className="af-cm-threadtitle">
             {openThread.title || `${openThread.memberCount} people`}
+            {kind === 'dm' && formatLastActive(openThread.context?.otherLastActiveAt, now) ? (
+              <span
+                className="af-cm-threadactive"
+                data-now={formatLastActive(openThread.context?.otherLastActiveAt, now) === 'Active now' || undefined}
+                title="When they last had a conversation open on AllFantasy"
+              >
+                {formatLastActive(openThread.context?.otherLastActiveAt, now)}
+              </span>
+            ) : null}
             <button
               type="button"
               className="af-cm-mute"
@@ -873,18 +925,19 @@ export function ThreadPanel({
         <SeenBy messages={messages} receipts={receipts} viewerUserId={viewerId} />
 
         {/*
+          "Get a ping when someone messages you" — the phone-alerts ask, in the one place its
+          reason is on screen: a conversation you are in. Shown only to someone who has never
+          answered (and not in the two weeks after "Not now"); all of that lives in the prompt.
+        */}
+        {messages.length > 0 ? <PushOptInPrompt variant="messages" className="af-cm-pushask" /> : null}
+
+        {/*
           ⚠ HONEST ABOUT BEING LATE. Chat refreshes every 4-8s, so this can
           appear after the message it was announcing. Durable now, so it works
           across servers at all — but genuinely live typing needs a transport
           this app does not have.
         */}
-        {typing.length > 0 ? (
-          <p className="af-cm-typing-note">
-            {typing.length === 1
-              ? `${typing[0].name} is typing…`
-              : `${typing.length} people are typing…`}
-          </p>
-        ) : null}
+        <TypingNote typing={typing} />
 
         {replyTo ? (
           <div className="af-cm-replybar">

@@ -87,7 +87,7 @@ export function WaiverImpactSequence({
         <>
           <p className="mb-3 text-[12px] font-semibold text-secondary">{model.headline}</p>
           <ExecutiveDecisionSequence items={items} testIdPrefix="waiver-step" />
-          <p className="mt-3 text-[10px] font-medium text-muted">
+          <p className="mt-3 text-[11px] font-medium text-muted">
             Ordered by priority, not by date — no waiver deadlines or processing windows are available.
           </p>
         </>

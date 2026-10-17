@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { getPlatformThreadById, updateThreadTitle } from '@/lib/platform/chat-service'
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { threadId: string } },
-) {
+export async function GET(_req: Request, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -20,10 +18,8 @@ export async function GET(
 }
 
 /** PATCH: rename thread (title). Body: { title: string } */
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { threadId: string } },
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

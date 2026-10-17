@@ -9,7 +9,6 @@ interface HeatCellTarget {
   ldiByPos: number
   meanPremiumPct: number
   nByPos: number
-  label: 'Overpayer' | 'Learning'
 }
 
 interface HeatCell {
@@ -173,7 +172,7 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
                   const b = tagBadge(cell.tag)
                   if (!b) return null
                   return (
-                    <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded border ${b.cls}`}>
+                    <span className={`px-1.5 py-0.5 text-[11px] font-semibold rounded border ${b.cls}`}>
                       {b.text}
                     </span>
                   )
@@ -189,14 +188,14 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
                     {trendArrow(cell.trend)}
                   </span>
                   {cell.trend !== 0 && (
-                    <span className={`text-[10px] font-medium ${trendColor(cell.trend)}`}>
+                    <span className={`text-[11px] font-medium ${trendColor(cell.trend)}`}>
                       {cell.trend > 0 ? '+' : ''}{cell.trend}
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="mt-1 text-[10px] text-gray-500">
+              <div className="mt-1 text-[11px] text-gray-500">
                 {cell.posSample} pos / {cell.leagueSample} league
               </div>
             </button>
@@ -218,7 +217,7 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
 
           <div className="px-4 py-4 space-y-4">
             <div>
-              <div className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-2">Evidence</div>
+              <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">Evidence</div>
               <div className="space-y-1">
                 {activeCell.evidence.map((e, i) => (
                   <div key={i} className="flex items-center justify-between text-sm bg-gray-800/40 rounded px-3 py-1.5">
@@ -231,19 +230,12 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
 
             {activeCell.topTargets.length > 0 && (
               <div>
-                <div className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-2">Top proposal targets</div>
+                <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">Average premium paid, by manager</div>
                 <div className="space-y-1.5">
                   {activeCell.topTargets.map((t, i) => (
                     <div key={i} className="flex items-center justify-between bg-gray-800/40 rounded-lg px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-white font-medium">{t.name}</span>
-                        <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded border ${
-                          t.label === 'Overpayer'
-                            ? 'bg-red-500/15 text-red-400 border-red-500/20'
-                            : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                        }`}>
-                          {t.label}
-                        </span>
                       </div>
                       <div className="flex items-center gap-3 text-xs">
                         <span className="text-gray-500">{t.nByPos} trades</span>
@@ -269,7 +261,7 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
             {activeCell.tag === 'LEARNING' && (
               <div className="px-3 py-2 bg-yellow-500/8 border border-yellow-500/15 rounded-lg">
                 <p className="text-[11px] text-yellow-400">
-                  Limited data for {activeCell.pos}. Target labels may change as more trades happen.
+                  Limited data for {activeCell.pos}. These premiums may shift as more trades happen.
                 </p>
               </div>
             )}
@@ -285,7 +277,7 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
                 href={`/af-legacy?tab=finder&leagueId=${data.leagueId}&pos=${encodeURIComponent(activeCell.pos)}`}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-colors border border-white/10"
               >
-                Find Overpayers
+                Find Trade Partners
               </a>
               <a
                 href={`/af-legacy?tab=trade&leagueId=${data.leagueId}`}

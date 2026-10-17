@@ -10,6 +10,12 @@ import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker
 import { lineupImpactDirection, lineupImpactLine, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
+import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
+import { TradeReaction, TradeReactionSettings, AcceptedTradeReaction } from './TradeReactions'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -87,6 +93,7 @@ type Offer = {
  * without a type error the moment the counter row tried to count them.
  */
 type NativeRow = {
+  impactRef?: ImpactNowRef
   sideALabel?: string
   sideBLabel?: string
   realizedGrade?: string | null
@@ -205,6 +212,13 @@ function whenLabel(iso: string | null): string | null {
   return `${days} days ago`
 }
 
+function localizedWhenLabel(iso: string | null, language: string): string | null {
+  const label = whenLabel(iso)
+  if (!label || language !== 'es') return label
+  const days = label.match(/^(\d+) days ago$/)
+  return days ? `hace ${days[1]} días` : coreUiCopy(label, language)
+}
+
 function assetLine(a: OfferAsset): string {
   if (a.faabAmount != null) return a.name
   if (a.isPick) return a.name
@@ -269,9 +283,13 @@ function assetGlyph(asset: TimelineAsset): string {
  * One side of a timeline row: face, name, and the league value THE grade priced it at. A value is
  * drawn only where the grade supplied one (`assetValues`) — no number is better than a guessed one
  * beside a real letter.
+ *
+ * ⚠ NO `title` ON THE NUMBER. It said "League value today", which was wrong for a completed trade
+ * (its grade's lines are the ones it was given, not today's), and a hover is invisible on a phone
+ * anyway. What the number is lives in the timeline's one "?" (`tradeTimeline`), at its heading.
  */
-function TimelineAssetList({ assets, values }: { assets: TimelineAsset[]; values: Array<number | null> }) {
-  if (assets.length === 0) return <b>Nothing</b>
+function TimelineAssetList({ assets, values, language }: { assets: TimelineAsset[]; values: Array<number | null>; language: string }) {
+  if (assets.length === 0) return <b>{coreUiCopy('Nothing', language)}</b>
   return (
     <ul className="af-tc-timeline-assetlist">
       {assets.map((asset, i) => {
@@ -287,7 +305,7 @@ function TimelineAssetList({ assets, values }: { assets: TimelineAsset[]; values
               <b>{asset.label}</b>
               {asset.sublabel ? <small>{asset.sublabel}</small> : null}
             </span>
-            {value != null ? <em className="af-num" title="League value today">{Math.round(value).toLocaleString()}</em> : null}
+            {value != null ? <em className="af-num">{Math.round(value).toLocaleString()}</em> : null}
           </li>
         )
       })}
@@ -369,6 +387,16 @@ export function TradeInbox(props: {
    */
   onEnterByHand?: () => void
   /**
+   * Reads a screenshot of the offer as Sleeper shows it into the builder (TradeCenter
+   * `readOfferScreenshot`). Absent: no builder, so no upload control.
+   */
+  onScreenshot?: (file: File) => void
+  screenshotBusy?: boolean
+  /** Why the last screenshot could not be loaded, in words the manager can act on. */
+  screenshotError?: string | null
+  /** What the last screenshot loaded — said here, beside the button, because the builder may be off screen. */
+  screenshotDone?: string | null
+  /**
    * Hands a NATIVE offer to the builder in counter mode. Absent means the screen
    * cannot counter, and no counter control is rendered — a button that cannot
    * finish what it starts is the thing this panel already refuses to draw.
@@ -399,6 +427,8 @@ export function TradeInbox(props: {
    */
   onNeedsYouCount?: (count: number | null) => void
 }) {
+  const language = useOptionalLanguage().language
+  const copy = useCallback((value: string) => coreUiCopy(value, language), [language])
   const [data, setData] = useState<PanelResponse | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
   const [countering, setCountering] = useState<{ id: string; state: 'loading' | 'failed' } | null>(null)
@@ -407,7 +437,7 @@ export function TradeInbox(props: {
   /** When the feed last answered — the freshness line under the Sleeper notice. */
   const [checkedAt, setCheckedAt] = useState<Date | null>(null)
 
-  const { leagueId, onLoad, onCounter, onEnterByHand, reloadToken = 0 } = props
+  const { leagueId, onLoad, onCounter, onEnterByHand, onScreenshot, reloadToken = 0 } = props
   useEffect(() => { setTimelineLimit(5) }, [leagueId, timelineFilter])
 
   const load = useCallback(async (opts?: { background?: boolean }) => {
@@ -478,11 +508,11 @@ export function TradeInbox(props: {
         g.picked,
         k.picked,
         dropped.length > 0
-          ? `Loaded without ${dropped.join(', ')} — that asset could not be rebuilt, so the verdict is short one piece.`
+          ? `${copy('Loaded without')} ${dropped.join(', ')} — ${copy('that asset could not be rebuilt, so the verdict is short one piece.')}`
           : null,
       )
     },
-    [onLoad],
+    [onLoad, copy],
   )
 
   /*
@@ -516,14 +546,14 @@ export function TradeInbox(props: {
           get,
           /* The viewer received this offer, so the counterparty is whoever proposed it. */
           partnerRosterId: trade.proposerRosterId,
-          label: t.partnerName ? `${t.partnerName}’s offer` : 'their offer',
+          label: t.partnerName ? `${t.partnerName}’s offer` : copy('their offer'),
         })
         setCountering(null)
       } catch {
         setCountering({ id: t.id, state: 'failed' })
       }
     },
-    [leagueId, onCounter],
+    [leagueId, onCounter, copy],
   )
 
   if (!leagueId) return null
@@ -567,7 +597,7 @@ export function TradeInbox(props: {
 
   const column = (title: string, rows: Offer[], emptyWhenScanned: string) => (
     <section className="af-tc-inbox-col">
-      <div className="af-label">{title}</div>
+      <div className="af-label">{copy(title)}</div>
 
       {/*
         ⚠ THE ORDER OF THESE BRANCHES IS THE WHOLE POINT. "Not scanned" is
@@ -576,21 +606,21 @@ export function TradeInbox(props: {
       */}
       {state === 'failed' ? (
         <p className="af-tc-row-sub">
-          We couldn&rsquo;t load this league&rsquo;s offers just now.
+          {copy('We couldn’t load this league’s offers just now.')}
         </p>
       ) : state === 'loading' && data == null ? (
-        <p className="af-tc-row-sub">Checking&hellip;</p>
+        <p className="af-tc-row-sub">{copy('Checking…')}</p>
       ) : pending && !pending.scanned ? (
         <p className="af-tc-row-sub">
-          {pending.reason ?? 'Pending offers have not been read for this league.'}
+          {copy(pending.reason ?? 'Pending offers have not been read for this league.')}
         </p>
       ) : rows.length === 0 ? (
         <p className="af-tc-row-sub">
           {pending?.platform === 'sleeper'
-            ? 'None we can see. Sleeper doesn’t share an offer until it’s accepted — see the note above.'
-            : emptyWhenScanned}
+            ? copy('None we can see. Sleeper doesn’t share an offer until it’s accepted — see the note above.')
+            : copy(emptyWhenScanned)}
           {pending && pending.weeksUnanswered > 0
-            ? ` Sleeper did not answer for ${pending.weeksUnanswered} of the weeks we asked about, so this is short of a full read.`
+            ? ` ${copy('Sleeper did not answer for')} ${pending.weeksUnanswered} ${copy('of the weeks we asked about, so this is short of a full read.')}`
             : ''}
         </p>
       ) : (
@@ -598,8 +628,8 @@ export function TradeInbox(props: {
           <article key={o.transactionId} className="af-tc-offer">
             <header className="af-tc-offer-head">
               <span className="af-tc-offer-partner">{o.partnerName}</span>
-              {whenLabel(o.proposedAt) ? (
-                <span className="af-tc-row-sub">{whenLabel(o.proposedAt)}</span>
+              {localizedWhenLabel(o.proposedAt, language) ? (
+                <span className="af-tc-row-sub">{localizedWhenLabel(o.proposedAt, language)}</span>
               ) : null}
             </header>
 
@@ -608,22 +638,22 @@ export function TradeInbox(props: {
                 <p className="af-tc-offer-grade" data-letter={o.leagueGrade.letter}>
                   <strong className="af-num">{o.leagueGrade.letter}</strong>
                   <span>
-                    {o.leagueGrade.label} · you get {o.leagueGrade.getValue.toLocaleString()} for{' '}
-                    {o.leagueGrade.giveValue.toLocaleString()} in league value
+                    {copy(o.leagueGrade.label)} · {copy('you get')} {o.leagueGrade.getValue.toLocaleString()} {language === 'es' ? 'por' : 'for'}{' '}
+                    {o.leagueGrade.giveValue.toLocaleString()} {copy('in league value')}
                   </span>
                 </p>
               ) : (
                 <p className="af-tc-offer-grade" data-letter="none">
-                  <span>Not graded: {o.leagueGrade.reason}</span>
+                  <span>{copy('Not graded:')} {copy(o.leagueGrade.reason)}</span>
                 </p>
               )
             ) : null}
 
             <div className="af-tc-offer-sides">
               <div>
-                <span className="af-tc-sends">You send</span>
+                <span className="af-tc-sends">{copy('You send')}</span>
                 {o.give.length === 0 ? (
-                  <p className="af-tc-row-sub">Nothing</p>
+                  <p className="af-tc-row-sub">{copy('Nothing')}</p>
                 ) : (
                   o.give.map((a, i) => (
                     <p key={`${o.transactionId}-g-${i}`} className="af-tc-offer-asset">
@@ -633,9 +663,9 @@ export function TradeInbox(props: {
                 )}
               </div>
               <div>
-                <span className="af-tc-sends">You get</span>
+                <span className="af-tc-sends">{copy('You get')}</span>
                 {o.get.length === 0 ? (
-                  <p className="af-tc-row-sub">Nothing</p>
+                  <p className="af-tc-row-sub">{copy('Nothing')}</p>
                 ) : (
                   o.get.map((a, i) => (
                     <p key={`${o.transactionId}-r-${i}`} className="af-tc-offer-asset">
@@ -648,7 +678,7 @@ export function TradeInbox(props: {
 
             <div className="af-tc-offer-actions">
               <button type="button" className="af-btn af-btn--ghost" onClick={() => loadOffer(o)}>
-                Load into builder
+                {copy('Load into builder')}
               </button>
               {/*
                 Not an accept button. The provider has no write endpoint, so the
@@ -661,7 +691,7 @@ export function TradeInbox(props: {
                   target="_blank"
                   rel="noreferrer noopener"
                 >
-                  Act on it in Sleeper
+                  {copy('Act on it in Sleeper')}
                 </a>
               ) : null}
             </div>
@@ -685,27 +715,53 @@ export function TradeInbox(props: {
       */}
       {pending?.platform === 'sleeper' ? (
         <div className="af-tc-scan-receipt af-tc-sleeper-offers" role="note">
-          <b>Offers waiting in Sleeper don&rsquo;t appear here</b>
-          Sleeper only shares a trade once it&rsquo;s accepted, so an offer still waiting for an answer
-          never reaches AllFantasy. Enter it yourself and it gets the same grade as any trade in this league.
+          <b>{copy('Offers waiting in Sleeper don’t appear here')}</b>
+          {copy('Sleeper only shares a trade once it’s accepted, so an offer still waiting for an answer never reaches AllFantasy. Screenshot it in Sleeper and upload it, or enter it yourself — either way it gets the same grade as any trade in this league.')}
           <span className="af-tc-offer-actions">
+            {onScreenshot ? (
+              <label className="af-btn af-btn--ghost" aria-disabled={props.screenshotBusy || undefined}>
+                {copy(props.screenshotBusy ? 'Reading screenshot…' : 'Upload a screenshot')}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={props.screenshotBusy}
+                  data-testid="trade-offer-screenshot-input"
+                  onChange={(e) => {
+                    const file = e.currentTarget.files?.[0]
+                    // Cleared so choosing the same file again still fires.
+                    e.currentTarget.value = ''
+                    if (file) onScreenshot(file)
+                  }}
+                />
+              </label>
+            ) : null}
             {onEnterByHand ? (
               <button type="button" className="af-btn af-btn--ghost" onClick={onEnterByHand}>
-                Grade a Sleeper offer
+                {copy('Grade a Sleeper offer')}
               </button>
             ) : null}
             {pending.leagueUrl ? (
               <a className="af-tc-offer-link" href={pending.leagueUrl} target="_blank" rel="noreferrer noopener">
-                Open Sleeper
+                {copy('Open Sleeper')}
               </a>
             ) : null}
           </span>
+          {props.screenshotError ? (
+            <span className="af-tc-row-sub" role="alert">
+              {props.screenshotError}
+            </span>
+          ) : props.screenshotDone ? (
+            <span className="af-tc-row-sub" role="status">
+              {props.screenshotDone}
+            </span>
+          ) : null}
           {pending.scanned && checkedAt ? (
             <span className="af-tc-row-sub">
-              Accepted trades last checked at{' '}
+              {copy('Accepted trades last checked at')}{' '}
               {checkedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
               {pending.weeksRequested
-                ? ` · Sleeper answered ${pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} of ${pending.weeksRequested} weeks`
+                ? ` · ${copy('Sleeper answered')} ${pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} ${copy('of')} ${pending.weeksRequested} ${copy('weeks')}`
                 : ''}
               .
             </span>
@@ -713,9 +769,9 @@ export function TradeInbox(props: {
         </div>
       ) : pending?.scanned && pending.weeksRequested ? (
         <p className="af-tc-scan-receipt">
-          <b>Public transaction feed check</b>
-          Sleeper answered {pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} of {pending.weeksRequested} transaction weeks.
-          Offers returned by that feed appear here. Sleeper may show additional live proposals in its app; accept, decline, or counter them there.
+          <b>{copy('Public transaction feed check')}</b>
+          {copy('Sleeper answered')} {pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} {copy('of')} {pending.weeksRequested} {copy('transaction weeks.')} {' '}
+          {copy('Offers returned by that feed appear here. Sleeper may show additional live proposals in its app; accept, decline, or counter them there.')}
         </p>
       ) : null}
       {column('Inbox', inbox, 'Nothing waiting on you right now.')}
@@ -729,22 +785,25 @@ export function TradeInbox(props: {
       */}
       {nativeIncoming.length > 0 && onCounter ? (
         <div className="af-tc-inbox-native">
-          <div className="af-label">Open AllFantasy offers</div>
+          <div className="af-label">{copy('Open AllFantasy offers')}</div>
           {nativeIncoming.map((t) => (
             <div key={t.id} className="af-tc-offer-actions af-tc-native-row">
               <span className="af-tc-row-sub">
                 {t.partnerName ?? 'A manager'} — {t.received.length} for {t.sent.length}
               </span>
+              <a className="af-tc-offer-link" href={`/league/${encodeURIComponent(leagueId)}?view=trades`}>
+                Accept or decline in league
+              </a>
               <button
                 type="button"
                 className="af-btn af-btn--ghost"
                 onClick={() => void counterOffer(t)}
                 disabled={countering?.id === t.id && countering.state === 'loading'}
               >
-                {countering?.id === t.id && countering.state === 'loading' ? 'Loading…' : 'Counter'}
+                {copy(countering?.id === t.id && countering.state === 'loading' ? 'Loading…' : 'Counter')}
               </button>
               {countering?.id === t.id && countering.state === 'failed' ? (
-                <span className="af-tc-nosignal">Could not load that offer to counter it.</span>
+                <span className="af-tc-nosignal">{copy('Could not load that offer to counter it.')}</span>
               ) : null}
             </div>
           ))}
@@ -753,8 +812,7 @@ export function TradeInbox(props: {
 
       {nativeOpen.length > nativeIncoming.length || (nativeOpen.length > 0 && !onCounter) ? (
         <p className="af-tc-row-sub af-tc-inbox-note">
-          {nativeOpen.length} open {nativeOpen.length === 1 ? 'proposal' : 'proposals'} made inside
-          AllFantasy — accept and reject live on the league page.
+          {nativeOpen.length} {copy(nativeOpen.length === 1 ? 'open proposal made inside AllFantasy — accept and reject live on the league page.' : 'open proposals made inside AllFantasy — accept and reject live on the league page.')}
         </p>
       ) : null}
 
@@ -764,11 +822,17 @@ export function TradeInbox(props: {
       <section className="af-tc-timeline" aria-labelledby="trade-timeline-title">
         <header className="af-tc-timeline-head">
           <div>
-            <div className="af-label">Unified trade timeline</div>
-            <h2 id="trade-timeline-title">Every offer, outcome and regrade</h2>
-            <p>Proposal-time grades stay beside today&rsquo;s value so you can measure how the decision aged.</p>
+            {/* The "?" sits beside the labelling <h2>, never inside it: it would join the region's name. */}
+            <div className="af-label">{copy('Unified trade timeline')} <TopicTip topic="tradeTimeline" /></div>
+            <h2 id="trade-timeline-title">{copy('Every offer, outcome and regrade')}</h2>
+            {/*
+              Conditional on purpose. "Then" is a proposal-time grade only where one was saved; without
+              one the trades-panel route repeats today's grade there (or leaves it empty), so "proposal-time
+              grades stay beside today's" promised a comparison many rows do not have.
+            */}
+            <p>{copy('Where a grade was saved when an offer was made, it stays beside today’s so you can see how the decision aged.')}</p>
           </div>
-          <div className="af-tc-timeline-filters" aria-label="Filter trade timeline">
+          <div className="af-tc-timeline-filters" aria-label={copy('Filter trade timeline')}>
             {([
               ['all', 'All'],
               ['needs_you', 'Needs you'],
@@ -777,16 +841,16 @@ export function TradeInbox(props: {
               ['closed', 'Declined & expired'],
             ] as Array<[TimelineFilter, string]>).map(([key, label]) => (
               <button key={key} type="button" data-on={timelineFilter === key} onClick={() => setTimelineFilter(key)}>
-                {label}
+                {copy(label)}
               </button>
             ))}
           </div>
         </header>
 
         {state === 'loading' && data == null ? (
-          <p className="af-tc-row-sub">Loading the timeline&hellip;</p>
+          <p className="af-tc-row-sub">{copy('Loading the timeline…')}</p>
         ) : timeline.length === 0 ? (
-          <p className="af-tc-timeline-empty">No trades match this view yet.</p>
+          <p className="af-tc-timeline-empty">{copy('No trades match this view yet.')}</p>
         ) : (
           <div className="af-tc-timeline-list">
             {timeline.slice(0, timelineLimit).map((trade) => {
@@ -813,10 +877,10 @@ export function TradeInbox(props: {
               const graded = grade?.graded ? grade : null
               const sentValues = graded ? assetValues(trade.sent, graded.lines, 'give') : []
               const receivedValues = graded ? assetValues(trade.received, graded.lines, 'get') : []
-              const sideAName = trade.sideAName ?? (trade.proposerName || 'You')
-              const sideBName = trade.sideBName ?? (trade.receiverName || trade.partnerName || 'Partner')
+              const sideAName = trade.sideAName ?? (trade.proposerName || copy('You'))
+              const sideBName = trade.sideBName ?? (trade.receiverName || trade.partnerName || copy('Partner'))
               const teamGrades = isCompleted && graded ? graded : null
-              const reasons = teamGrades ? gradeReasons(teamGrades, sideAName, sideBName) : []
+              const reasons = teamGrades ? gradeReasons(teamGrades, sideAName, sideBName).map((line) => tradeUiCopy(line, language)) : []
               const withheld = isCompleted && grade && !grade.graded ? grade.reason : null
               return (
                 <article key={trade.id} className="af-tc-timeline-row" data-status={isCompleted ? 'complete' : isClosedStatus(trade.status) ? 'closed' : 'open'}>
@@ -824,28 +888,48 @@ export function TradeInbox(props: {
                   <div className="af-tc-timeline-main">
                     <div className="af-tc-timeline-titleline">
                       <strong>{party}</strong>
-                      <span className="af-tc-timeline-status">{statusLabel(trade.status)}</span>
-                      <time>{whenLabel(trade.executedAt ?? trade.timestamp ?? null) ?? 'date unavailable'}</time>
+                      <span className="af-tc-timeline-status">{copy(statusLabel(trade.status))}</span>
+                      <time>{localizedWhenLabel(trade.executedAt ?? trade.timestamp ?? null, language) ?? copy('date unavailable')}</time>
                     </div>
+                    {/*
+                      🛑 A COMPLETED TRADE LISTS WHAT EACH TEAM RECEIVED, NOT WHAT IT SENT (2026-10-01).
+                      It used to read "<A> sent" over `sent`, so the A beside A's name sat above the
+                      assets A GAVE AWAY. Checked against KeepTradeCut — whose columns are "Team 1
+                      gets…" — every AF grade read as the opposite verdict, when the two agreed on
+                      both trades reported. Side A's column is now side A's `received`, under the
+                      same name and in the same order as the grade column, so a name, its assets and
+                      its letter line up. An open offer keeps "You send / You receive".
+                    */}
                     <div className="af-tc-timeline-assets">
-                      <div><span>{trade.sideALabel ?? (trade.proposerName ? `${trade.proposerName} sent` : trade.direction === 'complete' ? 'Side A sent' : 'You send')}</span><TimelineAssetList assets={trade.sent} values={sentValues} /></div>
-                      <div><span>{trade.sideBLabel ?? (trade.receiverName ? `${trade.receiverName} sent` : trade.direction === 'complete' ? 'Side B sent' : 'You receive')}</span><TimelineAssetList assets={trade.received} values={receivedValues} /></div>
+                      {isCompleted ? (
+                        <>
+                          <div><span>{trade.sideALabel ?? `${sideAName} ${copy('received')}`}</span><TimelineAssetList assets={trade.received} values={receivedValues} language={language} /></div>
+                          <div><span>{trade.sideBLabel ?? `${sideBName} ${copy('received')}`}</span><TimelineAssetList assets={trade.sent} values={sentValues} language={language} /></div>
+                        </>
+                      ) : (
+                        <>
+                          <div><span>{trade.sideALabel ?? (trade.proposerName ? `${trade.proposerName} ${copy('sent')}` : trade.direction === 'complete' ? copy('Side A sent') : copy('You send'))}</span><TimelineAssetList assets={trade.sent} values={sentValues} language={language} /></div>
+                          <div><span>{trade.sideBLabel ?? (trade.receiverName ? `${trade.receiverName} ${copy('sent')}` : trade.direction === 'complete' ? copy('Side B sent') : copy('You receive'))}</span><TimelineAssetList assets={trade.received} values={receivedValues} language={language} /></div>
+                        </>
+                      )}
                     </div>
                     {reasons.length > 0 ? (
-                      <ul className="af-tc-timeline-why" aria-label="Why it graded this way">
+                      <ul className="af-tc-timeline-why" aria-label={copy('Why it graded this way')}>
                         {reasons.map((line) => <li key={line}>{line}</li>)}
                       </ul>
                     ) : null}
-                    {withheld ? <p className="af-tc-timeline-gap">Not graded: {withheld}</p> : null}
+                    {withheld ? <p className="af-tc-timeline-gap">{copy('Not graded:')} {copy(withheld)}</p> : null}
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
-                    {trade.realizedGrade ? <p className="af-tc-timeline-advice">Realized outcome: {trade.realizedGrade}. {trade.realizedNote}</p> : null}
+                    {trade.realizedGrade ? <p className="af-tc-timeline-advice">{copy('Realized outcome:')} {trade.realizedGrade}. {trade.realizedNote}</p> : null}
+                    {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} original={grade} /> : null}
+                    {(isCompleted && trade.status !== 'reversed') || trade.status === 'accepted' || trade.status === 'scheduled' ? <><TradeReactionSettings /><AcceptedTradeReaction completed={isCompleted} /></> : null}
                     {lineupLine ? (
                       <p className="af-tc-timeline-lineup" data-direction={lineupImpactDirection(trade.rosterImpact)}>
                         {lineupLine}
                       </p>
                     ) : null}
                     {trade.currentUnresolvedAssets && trade.currentUnresolvedAssets.length > 0 ? (
-                      <p className="af-tc-timeline-gap">Current grade excludes: {trade.currentUnresolvedAssets.join(', ')}</p>
+                      <p className="af-tc-timeline-gap">{copy('Current grade excludes:')} {trade.currentUnresolvedAssets.join(', ')}</p>
                     ) : null}
                   </div>
                   {teamGrades ? (
@@ -862,39 +946,41 @@ export function TradeInbox(props: {
                     <div
                       className="af-tc-timeline-grades"
                       data-mode="teams"
-                      aria-label={`Grade for each team, on league value ${gradeMoment(teamGrades)}`}
+                      aria-label={`${copy('Grade for each team, on league value')} ${gradeMoment(teamGrades, language)}`}
                     >
                       <div data-letter={teamGrades.letter}>
                         <span title={sideAName}>{sideAName}</span>
                         <strong>{teamGrades.letter}</strong>
-                        <small>{teamGrades.getValue.toLocaleString()} for {teamGrades.giveValue.toLocaleString()}</small>
+                        <TradeReaction letter={teamGrades.letter} completed />
+                        <small>{teamGrades.getValue.toLocaleString()} {language === 'es' ? 'por' : 'for'} {teamGrades.giveValue.toLocaleString()}</small>
                         {teamGrades.current && teamGrades.current.letter !== teamGrades.letter
-                          ? <small>Today {teamGrades.current.letter}</small>
+                          ? <small>{copy('Today')} {teamGrades.current.letter}</small>
                           : null}
                       </div>
                       <div data-letter={teamGrades.partnerLetter}>
                         <span title={sideBName}>{sideBName}</span>
                         <strong>{teamGrades.partnerLetter}</strong>
-                        <small>{teamGrades.giveValue.toLocaleString()} for {teamGrades.getValue.toLocaleString()}</small>
+                        <TradeReaction letter={teamGrades.partnerLetter} completed />
+                        <small>{teamGrades.giveValue.toLocaleString()} {language === 'es' ? 'por' : 'for'} {teamGrades.getValue.toLocaleString()}</small>
                         {teamGrades.current && teamGrades.current.partnerLetter !== teamGrades.partnerLetter
-                          ? <small>Today {teamGrades.current.partnerLetter}</small>
+                          ? <small>{copy('Today')} {teamGrades.current.partnerLetter}</small>
                           : null}
                       </div>
                     </div>
                   ) : (
-                    <div className="af-tc-timeline-grades" aria-label="Trade grade then and now">
-                      <div><span>Then</span><strong>{trade.proposalGrade ?? '—'}</strong><small>{formatTradeValue(proposedNet)}</small></div>
+                    <div className="af-tc-timeline-grades" aria-label={copy('Trade grade then and now')}>
+                      <div><span>{copy('Then')}</span><strong>{trade.proposalGrade ?? '—'}</strong><small>{formatTradeValue(proposedNet)}</small></div>
                       <span className="af-tc-timeline-arrow" aria-hidden>→</span>
-                      <div><span>Now</span><strong>{trade.currentGrade ?? (isCompleted ? '—' : trade.proposalGrade ?? '—')}</strong><small>{formatTradeValue(currentNet ?? proposedNet)}</small></div>
+                      <div><span>{copy('Now')}</span><strong>{trade.currentGrade ?? (isCompleted ? '—' : trade.proposalGrade ?? '—')}</strong><small>{formatTradeValue(currentNet ?? proposedNet)}</small></div>
                     </div>
                   )}
                 </article>
               )
             })}
             <div className="af-tc-timeline-controls">
-              <p className="af-tc-row-sub" aria-live="polite">Showing {Math.min(timelineLimit, timeline.length)} of {timeline.length} trades</p>
-              {timelineLimit < timeline.length ? <button type="button" className="af-btn af-btn--ghost" onClick={() => setTimelineLimit((limit) => limit + 5)}>Show more trades</button> : null}
-              {timelineLimit > 5 ? <button type="button" className="af-btn af-btn--ghost" onClick={() => setTimelineLimit(5)}>Show fewer trades</button> : null}
+              <p className="af-tc-row-sub" aria-live="polite">{copy('Showing')} {Math.min(timelineLimit, timeline.length)} {copy('of')} {timeline.length} {copy('trades')}</p>
+              {timelineLimit < timeline.length ? <button type="button" className="af-btn af-btn--ghost" onClick={() => setTimelineLimit((limit) => limit + 5)}>{copy('Show more trades')}</button> : null}
+              {timelineLimit > 5 ? <button type="button" className="af-btn af-btn--ghost" onClick={() => setTimelineLimit(5)}>{copy('Show fewer trades')}</button> : null}
             </div>
           </div>
         )}

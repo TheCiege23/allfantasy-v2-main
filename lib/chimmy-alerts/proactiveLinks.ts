@@ -16,6 +16,9 @@ export const PROACTIVE_FROM = [
   'lineup_check_email',
   'waiver_check',
   'waiver_check_email',
+  /** The guillotine chop-release alert (chopRelease.ts). */
+  'chop_release',
+  'chop_release_email',
 ] as const
 
 export type ProactiveFrom = (typeof PROACTIVE_FROM)[number]
@@ -27,16 +30,25 @@ export function readProactiveFrom(value: unknown): ProactiveFrom | null {
 }
 
 /** Which check a tag belongs to, and through which channel it was opened. */
-export function describeProactiveFrom(from: ProactiveFrom): { alert: 'lineup_check' | 'waiver_check'; channel: 'email' | 'app' } {
+export function describeProactiveFrom(from: ProactiveFrom): {
+  alert: 'lineup_check' | 'waiver_check' | 'chop_release'
+  channel: 'email' | 'app'
+} {
   return {
-    alert: from.startsWith('waiver') ? 'waiver_check' : 'lineup_check',
+    alert: from.startsWith('waiver') ? 'waiver_check' : from.startsWith('chop_release') ? 'chop_release' : 'lineup_check',
     channel: from.endsWith('_email') ? 'email' : 'app',
   }
 }
 
 /** Opens Chimmy in that league with the question already typed — one tap to send — and the tag. */
-export function chimmyChatHref(args: { prompt: string; leagueId: string; from: ProactiveFrom }): string {
-  const q = new URLSearchParams({ prompt: args.prompt, leagueId: args.leagueId, sport: 'NFL', from: args.from })
+export function chimmyChatHref(args: {
+  prompt: string
+  leagueId: string
+  from: ProactiveFrom
+  /** The league's sport. Omitted means NFL — every weekly check before the other-sport waiver check. */
+  sport?: string
+}): string {
+  const q = new URLSearchParams({ prompt: args.prompt, leagueId: args.leagueId, sport: args.sport ?? 'NFL', from: args.from })
   return `/chimmy/chat?${q.toString()}`
 }
 

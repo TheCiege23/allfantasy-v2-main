@@ -48,7 +48,7 @@ export function TradeHistory({ leagueId }: { leagueId?: string }) {
       <header className="mb-1 flex items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-white">Trade History</p>
-          <p className="text-[10px] text-white/65">
+          <p className="text-[11px] text-white/65">
             Accepted, rejected, and pending offers (placeholder feed wired for API later).
           </p>
         </div>
@@ -83,9 +83,9 @@ function HistoryColumn({
     <div className="space-y-1.5 rounded-xl border border-white/12 bg-black/40 p-2.5">
       <p className="text-[11px] font-semibold text-white/80">{title}</p>
       {items.length === 0 ? (
-        <p className="text-[10px] text-white/50">No {title.toLowerCase()} trades yet.</p>
+        <p className="text-[11px] text-white/50">No {title.toLowerCase()} trades yet.</p>
       ) : (
-        <ul className="space-y-1.5 text-[10px]">
+        <ul className="space-y-1.5 text-[11px]">
           {items.map((i) => (
             <li
               key={i.id}

@@ -1,5 +1,6 @@
 import { toImageUrl } from '@/lib/media/imageUrl'
 import { buildHeadshotUrl, getTeamLogoUrl } from './player-media-urls'
+import { authoritativeRowsBySleeperId, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
 export type { SportKey } from './player-media-urls'
 export { sleeperHeadshotUrl, sleeperTeamLogoUrl, normalizeTeamAbbr } from './player-media-urls'
@@ -50,9 +51,40 @@ function buildMediaFromTemplate(playerId: string | null, teamAbbr: string | null
   }
 }
 
+/**
+ * 🛑 THE FRESHEST `SportsPlayer` ROW IS NOT THE PLAYER (2026-10-12). Every source stamps the same
+ * `sleeperId`, and TheSportsDB's rows got theirs by NAME — so "freshest first" served whichever
+ * feed ran last, and the trade evaluator, trade finder and recent-trades cards showed Elgton
+ * Jenkins' cutout and Cleveland for TE E.J. Jenkins (11304), Jackson Powers-Johnson's for DT P.J.
+ * Johnson (6273). The Sleeper row now speaks for the id; another row may only fill a gap, and only
+ * when it agrees on name and position group (`lib/player-match/authoritativePlayerRow.ts`).
+ */
+const SPORTS_PLAYER_ROW = {
+  sleeperId: true,
+  name: true,
+  position: true,
+  source: true,
+  fetchedAt: true,
+  imageUrl: true,
+  team: true,
+  sport: true,
+} as const
+
 async function getPrismaClient() {
   const mod = await import('@/lib/prisma')
   return mod.prisma
+}
+
+/**
+ * `SportsPlayer.imageUrl` holds the image cron's unvetted copies of pre-fix resolutions, so a
+ * row whose URL is detectably another person's photo is served as no image (the Sleeper template
+ * below takes over). Loaded lazily like the client above.
+ */
+async function scrubWrongHeadshots<T extends { name?: string | null; sport?: string | null; position?: string | null; team?: string | null; imageUrl?: string | null }>(
+  rows: T[],
+): Promise<T[]> {
+  const { withoutDetectablyWrongHeadshots } = await import('@/lib/player-assets/playerImageStore')
+  return withoutDetectablyWrongHeadshots(rows)
 }
 
 export function buildPlayerMedia(
@@ -108,11 +140,14 @@ export async function attachPlayerMedia(player: {
     }
 
     if (!dbImageUrl) {
-      const sportsPlayer = await prisma.sportsPlayer.findFirst({
+      // Every source's row for this Sleeper id, judged by its Sleeper row — see `SPORTS_PLAYER_ROW`.
+      // A detectably wrong photo is cleared first, so the pick below can never serve it.
+      const sportsPlayerRows = await scrubWrongHeadshots(await prisma.sportsPlayer.findMany({
         where: { sleeperId: player.playerId, sport: sport.toUpperCase() },
-        select: { imageUrl: true, team: true },
+        select: SPORTS_PLAYER_ROW,
         orderBy: { fetchedAt: 'desc' },
-      })
+      }))
+      const sportsPlayer = selectAuthoritativePlayerRow(sportsPlayerRows)?.row ?? null
       if (toImageUrl(sportsPlayer?.imageUrl)) {
         dbImageUrl = toImageUrl(sportsPlayer?.imageUrl)
         source = 'db'
@@ -225,15 +260,15 @@ export async function attachPlayerMediaBatch(
       if (id.sleeperId) identityMap.set(id.sleeperId, { currentTeam: id.currentTeam })
     }
 
-    const sportsPlayers = await prisma.sportsPlayer.findMany({
+    const sportsPlayers = await scrubWrongHeadshots(await prisma.sportsPlayer.findMany({
       where: { sleeperId: { in: sleeperIds } },
-      select: { sleeperId: true, imageUrl: true, team: true },
+      select: SPORTS_PLAYER_ROW,
       orderBy: { fetchedAt: 'desc' },
-    })
-    for (const sp of sportsPlayers) {
-      if (sp.sleeperId && !sportsPlayerMap.has(sp.sleeperId)) {
-        sportsPlayerMap.set(sp.sleeperId, { imageUrl: sp.imageUrl, team: sp.team })
-      }
+    }))
+    const authoritative = authoritativeRowsBySleeperId(sportsPlayers)
+    for (const id of sleeperIds) {
+      const sp = authoritative.get(id.trim().toLowerCase())
+      if (sp) sportsPlayerMap.set(id, { imageUrl: sp.imageUrl, team: sp.team })
     }
 
     const sportsPlayerRecords = await prisma.sportsPlayerRecord.findMany({

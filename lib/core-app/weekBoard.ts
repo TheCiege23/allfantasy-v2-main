@@ -1,13 +1,21 @@
 import 'server-only'
+import { weeklyRivalryPlans, type WeeklyRivalryPlan } from './weeklyRivalry'
 
 import { prisma } from '@/lib/prisma'
+import { historicalScoringSpread } from './historicalScoringSpread'
+import { nativeWeeklyLeague, weeklyScopeKey, weeklyFormat, type WeeklyFormat } from './weeklyCapabilities'
+import { readNativeWeeklyHistory } from './nativeWeeklyHistory'
 import { getFirstStatedKickoff } from './seasonPhase'
-import { isScored, resolveCurrentWeekFrom, resolveStatedWeek } from './currentWeek'
+import { isScored, resolveCurrentWeekFrom } from './currentWeek'
 import { realManagerName } from './managerName'
-import { leagueWeekProgress } from './leagueWeekProgress'
+import { currentScheduledLeagueWeek, leagueWeekProgress } from './leagueWeekProgress'
+import { leagueWeekFromSettings } from './seasonTimeline'
+import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
 import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
+import type { EliminationSettle } from './eliminationSettle'
+import { loadEliminationSettle } from './eliminationSettleLoader'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -16,12 +24,9 @@ import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
  * a loader. Splitting them would mean two passes over the same rows and, worse,
  * two chances for the two screens to disagree about who beat whom.
  *
- * ⚠ THE JOIN IS `League.platformLeagueId`, NOT `League.id`. WeeklyMatchup is
- * written from Sleeper's payload, so its `leagueId` holds the PLATFORM league id
- * and its `rosterId` holds Sleeper's numeric roster_id. `lib/core-app/weekAll.ts`
- * carries the measurement: joining on `League.id` matches 0 rows and returns an
- * empty set with no error. Same trap, same join, stated again because this file
- * is where somebody would next make the mistake.
+ * Legacy WeeklyMatchup rows hold raw provider IDs. Reads qualify those IDs by
+ * provider, join team ownership by canonical league ID, and quarantine ambiguous
+ * legacy rows. Canonical facts and native Redraft history fill supported gaps.
  *
  * ⚠ THE PROJECTION MODEL IS DEFINED HERE, IN FULL, AND IS DELIBERATELY SMALL.
  * The handoff asks for win probabilities and a "coin flip" grouping, and this
@@ -30,7 +35,7 @@ import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
  * only thing actually on file — each roster's own scored weeks:
  *
  *     µ  = mean pointsFor over that roster's COMPLETED weeks
- *     σ  = sample standard deviation of the same, floored (see SIGMA_FLOOR)
+ *     σ  = sample standard deviation of the same, floored relative to the scoring mean
  *     P(win) = Φ( (µ_you − µ_them) / √(σ_you² + σ_them²) )
  *
  * That is a heuristic, not a simulation, and every surface that renders it is
@@ -52,12 +57,6 @@ import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
  * for why a shared threshold cannot live in this `server-only` module.
  */
 
-/**
- * Floor on σ. A roster with two near-identical weeks produces a σ near zero,
- * which drives Φ to 0 or 1 and prints "99% to win" off a two-game sample. The
- * floor is roughly a typical week-to-week fantasy swing and keeps the tail sane.
- */
-const SIGMA_FLOOR = 12
 
 /*
  * The coin-flip threshold lives in `weekBoardRules.ts`, not here.
@@ -183,6 +182,7 @@ export type LeagueSideline = {
  * the other five games are half the story.
  */
 export type LeagueWeekBoard = {
+  format?: WeeklyFormat
   leagueId: string
   leagueName: string
   platform: string
@@ -200,8 +200,12 @@ export type LeagueWeekBoard = {
   rivalry: {
     wins: number
     losses: number
+    /** Meetings that finished level. Counted apart so a tie never reads as a loss. */
+    ties: number
     meetings: number
     averageMargin: number
+    winningStreak?: number
+    losingStreak?: number
   } | null
   /**
    * Current-season W-L by rosterId, from SCORED rows only.
@@ -211,7 +215,7 @@ export type LeagueWeekBoard = {
    * record yet — printing 0-0 beside a team name would state a fact that does
    * not exist. The screen renders nothing for an absent roster.
    */
-  records: Record<string, { wins: number; losses: number }>
+  records: Record<string, { wins: number; losses: number; ties?: number }>
   /** The user's roster in this league, for looking up their own record. */
   yourRosterId: string | null
   /** The team name the platform published, when it published one. */
@@ -221,9 +225,14 @@ export type LeagueWeekBoard = {
 }
 
 export type WeekBoard = {
+  rivalryPlans?: WeeklyRivalryPlan[]
+  /** Format-aware goals without an invented opponent or cut line. */
+  formatWeeks?: Array<{ leagueId: string; leagueName: string; season: number; week: number; format: WeeklyFormat; href: string }>
+  /** Optional reads failed; current data may still be usable. */
+  historyIncomplete?: boolean
   season: number | null
   week: number | null
-  /** Projected within COIN_FLIP_POINTS. Ordered closest-first. */
+  /** Historical win probability from 40% through 60%; closest-first. */
   coinFlips: WeekMatchup[]
   /** Already leaning one way. Ordered by how lopsided. */
   leaning: WeekMatchup[]
@@ -262,7 +271,8 @@ export type RivalryCard = {
   platform: string
   opponent: WeekOpponent
   /** All-time, across every synced season. */
-  series: { wins: number; losses: number; meetings: number }
+  /** `ties` is its own count: a meeting that finished level is neither a win nor a loss. */
+  series: { wins: number; losses: number; ties: number; meetings: number }
   /** Signed average margin across the series, from your side. */
   averageMargin: number
   closest: {
@@ -271,9 +281,11 @@ export type RivalryCard = {
     margin: number
     /** True when you won that one. */
     won: boolean
+    /** True when it finished level. `won` is false then, and it is NOT a loss. */
+    tied: boolean
   } | null
   /** This week's meeting, when they are on your schedule. */
-  thisWeek: { winProbability: number | null; projectedMargin: number | null } | null
+  thisWeek: { winProbability: number | null; projectedMargin: number | null; status?: 'scheduled' | 'live' | 'final' } | null
   /**
    * ⚠ A SINGLE MEETING IS NOT A RIVALRY, and the copy contract forbids calling
    * it one. Surfaces read this flag rather than re-deriving it from `meetings`,
@@ -283,6 +295,7 @@ export type RivalryCard = {
 }
 
 export type RivalryRadar = {
+  historyIncomplete?: boolean
   season: number | null
   week: number | null
   /** Series the opponent leads. */
@@ -302,6 +315,8 @@ export type RivalryRadar = {
    */
   firstKickoffAt: string | null
 }
+
+function hasScore(r: MatchupRow): boolean { return r.scored === true || isScored(r) }
 
 // ── Math ───────────────────────────────────────────────────────────────
 
@@ -334,16 +349,13 @@ function mean(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length
 }
 
-function stdev(values: number[]): number {
-  if (values.length < 2) return SIGMA_FLOOR
-  const m = mean(values)
-  const variance = values.reduce((acc, v) => acc + (v - m) ** 2, 0) / (values.length - 1)
-  return Math.max(SIGMA_FLOOR, Math.sqrt(variance))
-}
+function stdev(values: number[]): number { return historicalScoringSpread(values) }
 
 // ── Shared read ────────────────────────────────────────────────────────
 
-type LeagueInput = {
+export type LeagueInput = {
+  settings?: unknown
+  sport?: string | null
   id: string
   name?: string | null
   platform?: string | null
@@ -357,6 +369,7 @@ type LeagueInput = {
 
 export type MatchupRow = {
   finalized?: boolean
+  scored?: boolean
   leagueId: string
   seasonYear: number
   week: number
@@ -368,6 +381,10 @@ export type MatchupRow = {
 }
 
 type History = {
+  knownRosterIds: Map<string, Set<string>>
+  nativeRules: Map<string, { season: number; playoffStartWeek: number; medianGame: boolean }>
+  periodsByLeague: Map<string, { season: number; week: number }>
+  historyIncomplete: boolean
   /** Every row, all seasons, for leagues the user is in. */
   rows: MatchupRow[]
   /** platformLeagueId → league metadata. */
@@ -386,14 +403,26 @@ type LeagueMeta = {
   name: string
   platform: string
   elimination: boolean
+  format?: WeeklyFormat
+  platformLeagueId?: string | null
   imageUrl: string | null
 }
 
-async function readHistory(userId: string, leagues: LeagueInput[]): Promise<History | null> {
+export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], identityLeagues: LeagueInput[] = leagues): Promise<History | null> {
   const platformIds = leagues
     .map((l) => l.platformLeagueId)
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
-  if (platformIds.length === 0) return null
+  const nativeIds = leagues.filter(nativeWeeklyLeague).map(l => l.id)
+  if (platformIds.length === 0 && nativeIds.length === 0) return null
+  const scopesByPid = new Map<string, Set<string>>()
+  for (const l of identityLeagues) if (l.platformLeagueId && !nativeWeeklyLeague(l)) {
+    const scopes = scopesByPid.get(l.platformLeagueId) ?? new Set<string>()
+    scopes.add(weeklyScopeKey(l)); scopesByPid.set(l.platformLeagueId, scopes)
+  }
+  const uniqueScope = (pid: string | null | undefined) => {
+    const scopes = pid ? scopesByPid.get(pid) : null
+    return scopes?.size === 1 ? [...scopes][0] : null
+  }
 
   /*
    * Internal `League.id` → that league's CURRENT platform id. `MatchupFact` is keyed on the
@@ -402,12 +431,11 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
    */
   const platformIdByLeagueId = new Map<string, string>()
   for (const l of leagues) {
-    if (typeof l.platformLeagueId === 'string' && l.platformLeagueId.length > 0) {
-      platformIdByLeagueId.set(l.id, l.platformLeagueId)
-    }
+    platformIdByLeagueId.set(l.id, weeklyScopeKey(l))
   }
 
-  const [rows, teams, mine, priorFacts, periodMetadata] = await Promise.all([
+  let historyIncomplete = [...scopesByPid.values()].some(s => s.size > 1)
+  const [rawRows, teams, mine, priorFacts, periodMetadata] = await Promise.all([
     prisma.weeklyMatchup.findMany({
       where: { leagueId: { in: platformIds } },
       select: {
@@ -427,7 +455,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
      * against a number is not a rivalry.
      */
     prisma.leagueTeam.findMany({
-      where: { league: { platformLeagueId: { in: platformIds } } },
+      where: { leagueId: { in: leagues.map(l => l.id) } },
       select: {
         externalId: true,
         teamName: true,
@@ -438,18 +466,18 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
          * platform, hence `league.platform` beside it.
          */
         avatarUrl: true,
-        league: { select: { platformLeagueId: true, platform: true } },
+        league: { select: { id: true, platformLeagueId: true, platform: true } },
       },
     }),
     prisma.leagueTeam.findMany({
       where: {
-        league: { platformLeagueId: { in: platformIds } },
+        leagueId: { in: leagues.map(l => l.id) },
         claimedByUserId: userId,
       },
       select: {
         externalId: true,
         avatarUrl: true,
-        league: { select: { platformLeagueId: true, platform: true } },
+        league: { select: { id: true, platformLeagueId: true, platform: true } },
       },
     }),
     /*
@@ -483,6 +511,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
           },
         })
       } catch {
+        historyIncomplete = true
         return [] as Array<{
           leagueId: string
           season: number | null
@@ -494,35 +523,39 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
         }>
       }
     })(),
-    readLeagueWeekMetadata(leagues.map((l) => l.id)),
+    readLeagueWeekMetadata(leagues.map((l) => l.id), 'internal', () => { historyIncomplete = true }),
   ])
 
-  /*
-   * Which (league, season) pairs `WeeklyMatchup` already covers. A fact for one of these is
-   * DROPPED rather than added — see `priorSeasonRowsFromFacts`: double-counting a week would
-   * tighten sigma and inflate n at the same time, making a projection look better-evidenced
-   * than it is.
-   */
-  const seasonsAlreadyHeld = new Set<string>()
-  for (const r of rows) seasonsAlreadyHeld.add(`${r.leagueId}:${r.seasonYear}`)
+  // WeeklyMatchup has no provider column. Ambiguous external IDs are withheld,
+  // never assigned to either provider; canonical MatchupFact history remains usable.
+  const rows: MatchupRow[] = rawRows.flatMap(r => {
+    const scope = uniqueScope(r.leagueId)
+    return scope ? [{ ...r, leagueId: scope }] : []
+  })
 
-  const priorRows = priorSeasonRowsFromFacts(priorFacts, platformIdByLeagueId, seasonsAlreadyHeld)
+  const heldRows = new Set(rows.map(r => `${r.leagueId}|${r.seasonYear}|${r.week}|${r.rosterId}`))
+  const factRows = priorSeasonRowsFromFacts(priorFacts, platformIdByLeagueId, new Set())
+  let nextPair = rows.reduce((max, r) => Math.max(max, r.matchupId ?? 0), 0)
+  // Fill absent complete games, including gaps within a partially imported season.
+  // An orphan live row is preserved rather than overwritten by an older snapshot.
+  let priorRows = pairRows(factRows).flatMap(p => {
+    const key = (r: MatchupRow) => `${r.leagueId}|${r.seasonYear}|${r.week}|${r.rosterId}`
+    if (heldRows.has(key(p.a)) || heldRows.has(key(p.b))) return []
+    const matchupId = ++nextPair
+    return [{ ...p.a, matchupId }, { ...p.b, matchupId }]
+  })
 
-  /*
-   * ⚠ THE GUARD IS ON THE COMBINED SET, NOT ON `rows`. It used to return null when
-   * `WeeklyMatchup` was empty, which would now discard a league whose entire history is in
-   * `MatchupFact` — exactly the league this change exists to serve.
-   */
-  if (rows.length === 0 && priorRows.length === 0) return null
+  // Keep the metadata and partial-read status even when no matchup rows exist.
 
   const leagueByPlatformId = new Map<string, LeagueMeta>()
   for (const l of leagues) {
-    if (!l.platformLeagueId) continue
-    leagueByPlatformId.set(l.platformLeagueId, {
+    leagueByPlatformId.set(weeklyScopeKey(l), {
       id: l.id,
       name: l.name?.trim() || 'League',
       platform: String(l.platform ?? 'manual').toLowerCase(),
-      elimination: isEliminationFormat(l.leagueType),
+      elimination: weeklyFormat(l) === 'elimination',
+      format: weeklyFormat(l),
+      platformLeagueId: l.platformLeagueId ?? null,
       imageUrl: leagueArtUrl({ logoUrl: l.logoUrl, avatarUrl: l.avatarUrl, platform: l.platform }),
     })
   }
@@ -531,10 +564,15 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
   const platformOf = (t: { league?: { platform?: string | null } | null }, pid: string) =>
     t.league?.platform ?? leagueByPlatformId.get(pid)?.platform ?? null
 
+  const scopeForTeam = (t: { league?: { id?: string; platformLeagueId?: string | null; platform?: string | null } | null }) => {
+    const input = leagues.find(l => l.id === t.league?.id)
+    if (input) return weeklyScopeKey(input)
+    return uniqueScope(t.league?.platformLeagueId)
+  }
   const rosterNames = new Map<string, string>()
   const rosterAvatars = new Map<string, string>()
   for (const t of teams) {
-    const pid = t.league?.platformLeagueId
+    const pid = scopeForTeam(t)
     if (!pid || !t.externalId) continue
     // teamName is what shows in the platform's own UI; ownerName is the person.
     // Prefer the team, fall back to the person, never to a placeholder.
@@ -544,9 +582,16 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     if (avatar) rosterAvatars.set(`${pid}:${t.externalId}`, avatar)
   }
 
+  const knownRosterIds = new Map<string, Set<string>>()
+  for (const t of teams) {
+    const scope = scopeForTeam(t)
+    if (!scope || !t.externalId) continue
+    const ids = knownRosterIds.get(scope) ?? new Set<string>()
+    ids.add(t.externalId); knownRosterIds.set(scope, ids)
+  }
   const myRosters = new Map<string, string>()
   for (const t of mine) {
-    const pid = t.league?.platformLeagueId
+    const pid = scopeForTeam(t)
     if (!pid || !t.externalId) continue
     myRosters.set(`${pid}:${t.externalId}`, t.externalId)
     /*
@@ -558,72 +603,74 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     if (avatar) rosterAvatars.set(`${pid}:${t.externalId}`, avatar)
   }
 
-  /*
-   * ⚠ "THIS WEEK" IS THE EARLIEST UNPLAYED WEEK, NOT `max(week)`. This is the one
-   * that bit: the obvious reading — latest season, latest week on file — is what
-   * weekAll.ts does, and it is right there only because every row it sees is a
-   * COMPLETED 2025 week, so the last row on file is the last week played.
-   *
-   * Measured on production 2026-08-23, that assumption no longer holds:
-   *
-   *     season 2025: 298 rows, 204 scored, weeks to 17
-   *     season 2026: 9,354 rows, **0 scored**, weeks to 18
-   *
-   * A whole season of schedule is written before a single game is played. Taking
-   * the maximum week therefore selected 2026 week 18 — the last week of the
-   * regular season — and rendered it as "your week" in August. The screen was not
-   * empty and threw no error; it was confidently showing the wrong week.
-   *
-   * The rule that is right under both shapes: within the latest season on file,
-   * the current week is the EARLIEST week that still has an unscored row. When
-   * every week is scored the season is over, and the last one is the honest
-   * answer.
-   */
-  /*
-   * The rule above now lives in `lib/core-app/currentWeek.ts`. It was written
-   * here first and stayed here, which is exactly why matchup.ts, weekAll.ts and
-   * todayStrip.ts each kept their own `max(week)` version — the correct
-   * derivation was one function call away and not importable.
-   */
-  /*
-   * 🛑 RESOLVED FROM THE CURRENT-SEASON ROWS ONLY, NOT THE COMBINED SET.
-   *
-   * `latest` is the SLATE — which week the board is about — and it is global across every
-   * league the reader has. Prior seasons must inform the MODEL and never the slate: a single
-   * league carrying a stale or mislabelled `MatchupFact` season would otherwise move the week
-   * for all of them, and this screen has already shipped a bug of exactly that shape (see
-   * `resolveCurrentWeekFrom`'s header, which exists because a max(week) reading rendered a
-   * finished season as "your week" in August).
-   *
-   * The fallback is deliberate and narrow: with no `WeeklyMatchup` rows at all there is no
-   * slate to protect, and resolving from history is what keeps a league whose only scoring is
-   * imported from vanishing entirely.
-   */
-  const progressByLeague = new Map(periodMetadata.map((l) => [l.platformLeagueId, leagueWeekProgress(l)]))
-  const resolved = resolveCurrentWeekFrom(rows.length > 0 ? rows : priorRows)
-  const stated = resolveStatedWeek(periodMetadata.filter((league) => {
-    const progress = progressByLeague.get(league.platformLeagueId)
-    return progress?.currentWeek != null && rows.some((row) => row.leagueId === league.platformLeagueId && row.seasonYear === league.season && row.week === progress.currentWeek)
-  }))
-  const latest: { season: number; week: number } | null = stated ? { season: stated.seasonYear, week: stated.week } : (resolved
-    ? { season: resolved.season, week: resolved.week }
-    : null)
+  const native = nativeIds.length ? await readNativeWeeklyHistory(userId, nativeIds).catch(() => {
+    historyIncomplete = true
+    return null
+  }) : null
+  if (native) {
+    for (const key of native.names.keys()) {
+      const at = key.lastIndexOf(':')
+      const scope = key.slice(0, at), id = key.slice(at + 1)
+      const ids = knownRosterIds.get(scope) ?? new Set<string>()
+      ids.add(id); knownRosterIds.set(scope, ids)
+    }
+    const covered = new Set(native.rows.map(r => r.leagueId))
+    priorRows = priorRows.filter(r => !covered.has(r.leagueId))
+    rows.push(...native.rows)
+    for (const [k, v] of native.names) rosterNames.set(k, v)
+    for (const [k, v] of native.avatars) rosterAvatars.set(k, v)
+    for (const [k, v] of native.mine) myRosters.set(k, v)
+  }
+  const scopeForMetadata = (l: { id: string; platformLeagueId: string | null }) => {
+    const input = leagues.find(x => x.id === l.id)
+    return input ? weeklyScopeKey(input) : uniqueScope(l.platformLeagueId)
+  }
+  // Each league owns its scoring calendar; portfolio-wide period voting drops other sports.
+  const finishedNfl = await loadFinishedNflWeeks(
+    periodMetadata.flatMap((l) => {
+      const week = leagueWeekFromSettings(l.settings)
+      return String(l.sport ?? '').toUpperCase() === 'NFL' && l.season != null && week != null ? [{ season: l.season, week }] : []
+    }),
+  )
+  const progressByLeague = new Map(periodMetadata.map((l) => [scopeForMetadata(l), leagueWeekProgress(l, finishedNfl)]))
+  const metadataByLeague = new Map(periodMetadata.map((l) => [scopeForMetadata(l), l]))
+  const periodsByLeague = new Map<string, { season: number; week: number }>(native?.periods)
+  for (const pid of new Set(leagues.map(weeklyScopeKey))) {
+    if (periodsByLeague.has(pid)) continue
+    const metadata = metadataByLeague.get(pid)
+    const currentWeek = progressByLeague.get(pid)?.currentWeek
+    if (metadata?.season != null && currentWeek != null) {
+      // NFL's finished slate can precede the provider marker; require the next stored schedule.
+      const scheduledWeeks = rows.filter(r => r.leagueId === pid && r.seasonYear === metadata.season && r.matchupId != null).map(r => r.week)
+      const week = currentScheduledLeagueWeek(metadata, metadata.season, scheduledWeeks, finishedNfl) ?? currentWeek
+      periodsByLeague.set(pid, { season: metadata.season, week })
+      continue
+    }
+    const inLeagueSeason = (r: MatchupRow) =>
+      r.leagueId === pid && (metadata?.season == null || r.seasonYear === metadata.season)
+    const liveRows = rows.filter(inLeagueSeason)
+    const candidates = liveRows.length > 0 ? liveRows : priorRows.filter(inLeagueSeason)
+    const resolved = resolveCurrentWeekFrom(candidates)
+    if (resolved) periodsByLeague.set(pid, { season: resolved.season, week: resolved.week })
+  }
+  // Only print a portfolio period when all resolved leagues actually share it.
+  const periods = [...periodsByLeague.values()]
+  const latest = periods.length > 0 && periods.every((p) => p.season === periods[0].season && p.week === periods[0].week)
+    ? periods[0] : null
 
-  /*
-   * ⚠ THE COMBINED SET IS WHAT LEAVES, AND THE TWO CONSUMERS WANT DIFFERENT HALVES OF IT.
-   * `thisWeek` filters to `latest.season`/`latest.week`, so prior seasons fall out of the
-   * pairing on their own and no card can be built from them. `buildProfiles` takes every
-   * scored row regardless of season, which is precisely the point of this change.
-   */
   return {
+    knownRosterIds,
+    nativeRules: native?.rules ?? new Map(),
     rows: (priorRows.length > 0 ? [...rows, ...priorRows] : rows).map((r) => {
       const progress = progressByLeague.get(r.leagueId)
-      return { ...r, finalized: progress?.currentWeek != null ? progress.isFinal(r.seasonYear, r.week) : undefined }
+      return { ...r, finalized: r.finalized ?? (progress?.currentWeek != null ? progress.isFinal(r.seasonYear, r.week) : undefined) }
     }),
     leagueByPlatformId,
     myRosters,
     rosterNames,
     rosterAvatars,
+    periodsByLeague,
+    historyIncomplete,
     latest,
   }
 }
@@ -632,7 +679,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
 export function buildProfiles(rows: MatchupRow[]): Map<string, { mu: number; sigma: number; n: number }> {
   const buckets = new Map<string, number[]>()
   for (const r of rows) {
-    if (r.finalized === false || !isScored(r)) continue
+    if (r.finalized === false || !hasScore(r)) continue
     const key = `${r.leagueId}:${r.rosterId}`
     const list = buckets.get(key)
     if (list) list.push(r.pointsFor)
@@ -787,7 +834,7 @@ export function priorSeasonRowsFromFacts(
 export function buildFormProfiles(rows: MatchupRow[]): Map<string, { mu: number; n: number }> {
   const buckets = new Map<string, number[]>()
   for (const r of rows) {
-    if (r.finalized === false || !isScored(r)) continue
+    if (r.finalized === false || !hasScore(r)) continue
     const key = `${r.leagueId}:${r.rosterId}`
     const list = buckets.get(key)
     if (list) list.push(r.pointsFor)
@@ -862,6 +909,10 @@ export function pairRows(rows: MatchupRow[]): Pairing[] {
  */
 export type EliminationWeek = {
   leagueId: string
+  /** The platform's league id — what `WeeklyMatchup` and the per-player scores are keyed on. */
+  platformLeagueId: string
+  /** Your roster id in the platform's space, as `WeeklyMatchup.rosterId` carries it. */
+  yourRosterId: string
   leagueName: string
   platform: string
   leagueImageUrl: string | null
@@ -879,28 +930,21 @@ export type EliminationWeek = {
   margin: number | null
   /** True only when your score is the lowest of a field of at least two. */
   onTheBlock: boolean
-  /**
-   * Whether `League.leagueType` actually says guillotine/survivor.
-   *
-   * ⚠ IT IS NOT THE TRIGGER, AND MUST NOT BECOME ONE. This account's
-   * "🪓 Elimination Station 2" is stored as `redraft` while behaving exactly like the
-   * others — 18 groups of one, zero points against. Gating on the label would drop the
-   * league the label is wrong about, which is the one case a label check exists to catch.
-   * The SHAPE of the week decides; the label only informs the wording.
-   */
+  /** Explicit stored format supports the elimination treatment. */
   labelled: boolean
   href: string
+  /**
+   * Whether the week is already DECIDED for you, from whose games have finished
+   * (`eliminationSettle.ts`). Absent when it was not read (unscored, over the read cap), null
+   * when the read failed. A margin alone read "+41.2 clear" for a user who could not be chopped.
+   */
+  settle?: EliminationSettle | null
 }
 
-/**
- * Build the elimination cards for a week's rows.
- *
- * 🛑 THE TRIGGER IS "THIS LEAGUE PRODUCED NO PAIRS AT ALL", NEVER "your row did not pair".
- * A bye in an ordinary head-to-head league also leaves one roster unpaired, and reading
- * that as an elimination week would put a cut line on a league that has none. Requiring the
- * WHOLE league to be pairless separates the two, and it is also what makes double-emission
- * impossible: a league falls into exactly one of the two loops.
- */
+/** Elimination leagues on one board that get a settle read — four indexed queries each. */
+const MAX_SETTLE_READS = 10
+
+/** Build field cards only for an explicitly stated elimination format. */
 export function buildEliminationWeeks(args: {
   /** Already filtered to the latest season and week. */
   rows: MatchupRow[]
@@ -930,7 +974,7 @@ export function buildEliminationWeeks(args: {
 
   for (const [pid, rows] of byLeague) {
     const meta = args.leagueByPlatformId.get(pid)
-    if (!meta) continue
+    if (!meta || !meta.elimination) continue
 
     const yours = rows.find((r) => args.myRosters.has(`${pid}:${r.rosterId}`))
     if (!yours) continue
@@ -941,11 +985,11 @@ export function buildEliminationWeeks(args: {
      * permanent cut line of 0 under a league where nobody is near it — and would report a
      * field of 18 in a league with four teams left.
      */
-    const field = rows.filter((r) => isScored(r))
+    const field = rows.filter((r) => hasScore(r))
     const fieldSize = field.length
 
     const cutLine = fieldSize > 0 ? Math.min(...field.map((r) => r.pointsFor)) : null
-    const yourScore = isScored(yours) ? yours.pointsFor : null
+    const yourScore = hasScore(yours) ? yours.pointsFor : null
     const rank = yourScore == null ? null : 1 + field.filter((r) => r.pointsFor > yourScore).length
 
     /*
@@ -958,6 +1002,8 @@ export function buildEliminationWeeks(args: {
 
     out.push({
       leagueId: meta.id,
+      platformLeagueId: meta.platformLeagueId ?? pid,
+      yourRosterId: yours.rosterId,
       leagueName: meta.name,
       platform: meta.platform,
       leagueImageUrl: meta.imageUrl,
@@ -1007,7 +1053,7 @@ export async function getWeekBoard(
    * one cached findFirst — see lib/core-app/seasonPhase.ts.
    */
   const [history, firstKickoffAt] = await Promise.all([
-    readHistory(userId, leagues).catch(() => null),
+    readWeeklyHistory(userId, leagues),
     getFirstStatedKickoff(),
   ])
 
@@ -1024,9 +1070,10 @@ export async function getWeekBoard(
     leagueBoard: null,
   }
 
-  if (!history?.latest) return empty
+  if (!history) return empty
+  if (!history.periodsByLeague.size) return { ...empty, historyIncomplete: history.historyIncomplete }
 
-  const { latest, leagueByPlatformId, myRosters, rosterNames, rosterAvatars } = history
+  const { latest, periodsByLeague, leagueByPlatformId, myRosters, rosterNames, rosterAvatars } = history
   const profiles = buildProfiles(history.rows)
   /*
    * The rosters `buildProfiles` dropped for being under the threshold. See
@@ -1036,9 +1083,11 @@ export async function getWeekBoard(
   const formProfiles = buildFormProfiles(history.rows)
   const sampleSize = [...profiles.values()].reduce((acc, p) => acc + p.n, 0)
 
-  const thisWeek = pairRows(
-    history.rows.filter((r) => r.seasonYear === latest.season && r.week === latest.week),
-  )
+  const currentRows = history.rows.filter((r) => {
+    const period = periodsByLeague.get(r.leagueId)
+    return period != null && r.seasonYear === period.season && r.week === period.week
+  })
+  const thisWeek = pairRows(currentRows)
 
   const coinFlips: WeekMatchup[] = []
   const leaning: WeekMatchup[] = []
@@ -1047,7 +1096,7 @@ export async function getWeekBoard(
 
   for (const pair of thisWeek) {
     const meta = leagueByPlatformId.get(pair.leagueId)
-    if (!meta) continue
+    if (!meta || (meta.format && meta.format !== 'head-to-head')) continue
 
     // Which side is the user's?
     const aIsMine = myRosters.has(`${pair.leagueId}:${pair.a.rosterId}`)
@@ -1080,7 +1129,7 @@ export async function getWeekBoard(
       projection: null,
       form: null,
       yourSampleWeeks: mineProfile?.n ?? 0,
-      live: isScored(you)
+      live: hasScore(you)
         ? {
             you: you.pointsFor,
             them: them.pointsFor,
@@ -1132,7 +1181,7 @@ export async function getWeekBoard(
     }
 
     if (!card.projection) unprojected.push(card)
-    else if (Math.abs(card.projection.margin) <= COIN_FLIP_POINTS) coinFlips.push(card)
+    else if (Math.abs(card.projection.winProbability - .5) <= .1) coinFlips.push(card)
     else leaning.push(card)
   }
 
@@ -1142,13 +1191,30 @@ export async function getWeekBoard(
    * `pairedLeagueIds` is read off `thisWeek` rather than recomputed, so the two loops
    * cannot disagree about which leagues pair — a league is in exactly one of them.
    */
-  const pairedLeagueIds = new Set(thisWeek.map((p) => p.leagueId))
+  const pairedLeagueIds = new Set(thisWeek.filter(p => !leagueByPlatformId.get(p.leagueId)?.elimination).map((p) => p.leagueId))
   const eliminationWeeks = buildEliminationWeeks({
-    rows: history.rows.filter((r) => r.seasonYear === latest.season && r.week === latest.week),
+    rows: currentRows,
     pairedLeagueIds,
     leagueByPlatformId,
     myRosters,
   })
+  /*
+   * Decided or not, read once here so the board, Your Week and Chimmy all say the same thing.
+   * Only scored weeks, most urgent first (the build order), capped. The loader never throws.
+   */
+  await Promise.all(
+    eliminationWeeks
+      .filter((e) => e.yourScore != null && !e.platformLeagueId.startsWith('native:'))
+      .slice(0, MAX_SETTLE_READS)
+      .map(async (e) => {
+        e.settle = await loadEliminationSettle({
+          platformLeagueId: e.platformLeagueId,
+          season: e.season,
+          week: e.week,
+          yourRosterId: e.yourRosterId,
+        })
+      }),
+  )
 
   /*
    * 🛑 COUNT THESE AS SEEN, OR THE FIX REPORTS ITSELF AS THE BUG IT REMOVED.
@@ -1159,11 +1225,20 @@ export async function getWeekBoard(
    */
   for (const e of eliminationWeeks) leaguesSeen.add(e.leagueId)
 
+  const formatWeeks = [...leagueByPlatformId.entries()].flatMap(([scope, meta]) => {
+    const period = periodsByLeague.get(scope)
+    const ownsTeam = [...myRosters.keys()].some(k => k.startsWith(`${scope}:`))
+    if (!period || !ownsTeam || leaguesSeen.has(meta.id) || meta.elimination) return []
+    if (meta.format === 'head-to-head' && !currentRows.some(r => r.leagueId === scope && myRosters.has(`${scope}:${r.rosterId}`))) return []
+    leaguesSeen.add(meta.id)
+    return [{ leagueId: meta.id, leagueName: meta.name, ...period, format: meta.format ?? 'head-to-head', href: `/core/standings?league=${encodeURIComponent(meta.id)}` }]
+  })
+
   // Coin flips: closest first — the tightest game is the one that most needs a
   // decision. The rest: most lopsided first, so scanning down is scanning away
   // from anything that matters.
-  coinFlips.sort((a, b) => Math.abs(a.projection!.margin) - Math.abs(b.projection!.margin))
-  leaning.sort((a, b) => Math.abs(b.projection!.margin) - Math.abs(a.projection!.margin))
+  coinFlips.sort((a, b) => Math.abs(a.projection!.winProbability - .5) - Math.abs(b.projection!.winProbability - .5))
+  leaning.sort((a, b) => Math.abs(b.projection!.winProbability - .5) - Math.abs(a.projection!.winProbability - .5))
   /*
    * ⚠ `unprojected` IS ORDERED TOO NOW, AND IT WAS NOT BEFORE — it left here in
    * whatever order the schedule pairs happened to iterate in. That was harmless
@@ -1204,19 +1279,21 @@ export async function getWeekBoard(
   let leagueBoard: LeagueWeekBoard | null = null
 
   if (focusLeagueId) {
-    const pid = leagues.find((l) => l.id === focusLeagueId)?.platformLeagueId ?? null
+    const focusLeague = leagues.find((l) => l.id === focusLeagueId)
+    const pid = focusLeague ? weeklyScopeKey(focusLeague) : null
     const meta = pid ? leagueByPlatformId.get(pid) : null
 
-    if (pid && meta) {
+    const period = pid ? periodsByLeague.get(pid) : null
+    if (pid && meta && period) {
       const leaguePairs = thisWeek.filter((p) => p.leagueId === pid)
 
       const yours =
         [...coinFlips, ...leaning, ...unprojected].find((c) => c.leagueId === meta.id) ?? null
 
       const projectedOf = (rosterId: string): number | null =>
-        profiles.get(`${pid}:${rosterId}`)?.mu ?? null
+        meta.format === 'head-to-head' ? profiles.get(`${pid}:${rosterId}`)?.mu ?? null : null
 
-      const sidelines: LeagueSideline[] = leaguePairs
+      const sidelines: LeagueSideline[] = (meta.format === 'head-to-head' ? leaguePairs : [])
         .filter(
           (p) =>
             !myRosters.has(`${pid}:${p.a.rosterId}`) && !myRosters.has(`${pid}:${p.b.rosterId}`),
@@ -1259,8 +1336,10 @@ export async function getWeekBoard(
         const oppRosterId = yours.opponent.rosterId
         let wins = 0
         let losses = 0
+        let ties = 0
         let marginSum = 0
         let meetings = 0
+        const priorResults: Array<{ season: number; week: number; result: number }> = []
         for (const pair of pairRows(history.rows.filter((r) => r.leagueId === pid))) {
           const aMine = myRosters.has(`${pid}:${pair.a.rosterId}`)
           const bMine = myRosters.has(`${pid}:${pair.b.rosterId}`)
@@ -1270,14 +1349,25 @@ export async function getWeekBoard(
           if (them.rosterId !== oppRosterId) continue
           // Only games actually played count as meetings; a scheduled fixture is
           // not a head-to-head result.
-          if (you.finalized === false || them.finalized === false || (!isScored(you) && !isScored(them))) continue
+          if (you.finalized === false || them.finalized === false || (!hasScore(you) && !hasScore(them))) continue
+          if (you.seasonYear < yours.season || (you.seasonYear === yours.season && you.week < yours.week)) {
+            priorResults.push({ season: you.seasonYear, week: you.week, result: Math.sign(you.pointsFor - them.pointsFor) })
+          }
           meetings += 1
           marginSum += you.pointsFor - them.pointsFor
           if (you.pointsFor > them.pointsFor) wins += 1
-          else losses += 1
+          else if (you.pointsFor < them.pointsFor) losses += 1
+          // A meeting that finished level is a tie, never a loss.
+          else ties += 1
         }
         if (meetings > 0) {
-          rivalry = { wins, losses, meetings, averageMargin: marginSum / meetings }
+          priorResults.sort((a,b) => b.season - a.season || b.week - a.week)
+          const streak = (result: number) => {
+            let n = 0
+            for (const game of priorResults) { if (game.result !== result) break; n++ }
+            return n
+          }
+          rivalry = { wins, losses, ties, meetings, averageMargin: marginSum / meetings, winningStreak: streak(1), losingStreak: streak(-1) }
         }
       }
 
@@ -1296,11 +1386,12 @@ export async function getWeekBoard(
        * are counted, which is why a preseason league correctly shows nothing
        * here rather than a wall of zeros.
        */
-      const records: Record<string, { wins: number; losses: number }> = {}
+      const records: Record<string, { wins: number; losses: number; ties?: number }> = {}
       for (const pair of pairRows(
-        history.rows.filter((r) => r.leagueId === pid && r.seasonYear === latest.season),
+        history.rows.filter((r) => r.leagueId === pid && r.seasonYear === period.season),
       )) {
         const scored =
+          pair.a.scored === true || pair.b.scored === true ||
           pair.a.pointsFor > 0 ||
           pair.a.pointsAgainst > 0 ||
           pair.b.pointsFor > 0 ||
@@ -1308,14 +1399,15 @@ export async function getWeekBoard(
         if (!scored || pair.a.finalized === false || pair.b.finalized === false) continue
         // A tie advances neither column; it is rare and inventing a bucket for
         // it would misreport two teams rather than omit one game.
-        if (pair.a.pointsFor === pair.b.pointsFor) continue
+        const tied = pair.a.pointsFor === pair.b.pointsFor
         const aWon = pair.a.pointsFor > pair.b.pointsFor
         for (const [rid, won] of [
           [pair.a.rosterId, aWon],
           [pair.b.rosterId, !aWon],
         ] as Array<[string, boolean]>) {
           const rec = (records[rid] ??= { wins: 0, losses: 0 })
-          if (won) rec.wins += 1
+          if (tied) rec.ties = (rec.ties ?? 0) + 1
+          else if (won) rec.wins += 1
           else rec.losses += 1
         }
       }
@@ -1326,11 +1418,12 @@ export async function getWeekBoard(
         [...myRosters.entries()].find(([k]) => k.startsWith(`${pid}:`))?.[1] ?? null
 
       leagueBoard = {
+        format: meta.format,
         leagueId: meta.id,
         leagueName: meta.name,
         platform: meta.platform,
-        season: latest.season,
-        week: latest.week,
+        season: period.season,
+        week: period.week,
         yours,
         sidelines,
         rivalry,
@@ -1345,16 +1438,19 @@ export async function getWeekBoard(
   }
 
   return {
-    season: latest.season,
-    week: latest.week,
+    season: latest?.season ?? null,
+    week: latest?.week ?? null,
+    historyIncomplete: history.historyIncomplete,
+    rivalryPlans: weeklyRivalryPlans(pairRows(history.rows), myRosters, rosterNames, leagueByPlatformId, periodsByLeague),
     leagueBoard,
     coinFlips,
     leaning,
     unprojected,
     eliminationWeeks,
+    formatWeeks,
     model: {
       basis:
-        `Projected from each roster's own completed weeks in its own league's scoring — ` +
+        `Historical scoring estimate from each roster's own completed weeks in its own league's scoring — ` +
         `mean points, with the spread of those weeks as the uncertainty. ` +
         `A heuristic, not a simulation.`,
       sampleSize,
@@ -1371,7 +1467,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
    * Phase read beside the history read — same reasoning as getWeekBoard above.
    */
   const [history, firstKickoffAt] = await Promise.all([
-    readHistory(userId, leagues).catch(() => null),
+    readWeeklyHistory(userId, leagues),
     getFirstStatedKickoff(),
   ])
 
@@ -1386,9 +1482,10 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
     firstKickoffAt,
   }
 
-  if (!history?.latest) return empty
+  if (!history) return empty
+  if (!history.periodsByLeague.size) return { ...empty, historyIncomplete: history.historyIncomplete }
 
-  const { latest, leagueByPlatformId, myRosters, rosterNames, rosterAvatars } = history
+  const { latest, periodsByLeague, leagueByPlatformId, myRosters, rosterNames, rosterAvatars } = history
   const profiles = buildProfiles(history.rows)
   const pairs = pairRows(history.rows)
 
@@ -1399,6 +1496,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
     opponent: WeekOpponent
     wins: number
     losses: number
+    ties: number
     marginSum: number
     meetings: number
     closest: RivalryCard['closest']
@@ -1434,6 +1532,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
         },
         wins: 0,
         losses: 0,
+        ties: 0,
         marginSum: 0,
         meetings: 0,
         closest: null,
@@ -1442,35 +1541,45 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
       byOpponent.set(key, acc)
     }
 
-    const isThisWeek = pair.season === latest.season && pair.week === latest.week
+    const period = periodsByLeague.get(pair.leagueId)
+    const isThisWeek = pair.season === period?.season && pair.week === period?.week
 
-    if (you.finalized !== false && them.finalized !== false && (isScored(you) || isScored(them))) {
+    const explicitlyFinal = you.finalized === true && them.finalized === true
+    if (explicitlyFinal || (!isThisWeek && you.finalized !== false && them.finalized !== false && (hasScore(you) || hasScore(them)))) {
       // A completed meeting contributes to the series.
       const margin = you.pointsFor - them.pointsFor
       const won = margin > 0
+      /*
+       * ⚠ A LEVEL MEETING IS A TIE, NOT A LOSS. Counting "not won" as lost turned
+       * a 1-1-1 series into 1-2, filed it under "They own you", and printed a dead
+       * heat as "you lost by 0.0".
+       */
+      const tied = margin === 0
       acc.meetings += 1
       acc.marginSum += margin
       if (won) acc.wins += 1
+      else if (tied) acc.ties += 1
       else acc.losses += 1
       seasons.add(pair.season)
       platforms.add(meta.platform)
       meetings += 1
 
       if (!acc.closest || Math.abs(margin) < Math.abs(acc.closest.margin)) {
-        acc.closest = { season: pair.season, week: pair.week, margin, won }
+        acc.closest = { season: pair.season, week: pair.week, margin, won, tied }
       }
     }
 
-    if (isThisWeek && !isScored(you) && !isScored(them)) {
-      // Scheduled but not played — this is the live half of the card.
+    if (isThisWeek) {
+      // A matchup stays on this period's schedule after scoring begins.
+      const status = you.finalized === true && them.finalized === true ? 'final' : hasScore(you) || hasScore(them) ? 'live' : 'scheduled'
       const mineProfile = profiles.get(`${pair.leagueId}:${you.rosterId}`)
       const theirProfile = profiles.get(key)
-      if (mineProfile && theirProfile) {
+      if (status === 'scheduled' && mineProfile && theirProfile) {
         const margin = mineProfile.mu - theirProfile.mu
         const sigma = Math.sqrt(mineProfile.sigma ** 2 + theirProfile.sigma ** 2)
-        acc.thisWeek = { winProbability: normalCdf(margin / sigma), projectedMargin: margin }
+        acc.thisWeek = { winProbability: normalCdf(margin / sigma), projectedMargin: margin, status }
       } else {
-        acc.thisWeek = { winProbability: null, projectedMargin: null }
+        acc.thisWeek = { winProbability: null, projectedMargin: null, status }
       }
     }
   }
@@ -1482,7 +1591,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
       leagueName: a.leagueName,
       platform: a.platform,
       opponent: a.opponent,
-      series: { wins: a.wins, losses: a.losses, meetings: a.meetings },
+      series: { wins: a.wins, losses: a.losses, ties: a.ties, meetings: a.meetings },
       averageMargin: a.meetings > 0 ? a.marginSum / a.meetings : 0,
       closest: a.closest,
       thisWeek: a.thisWeek,
@@ -1541,8 +1650,9 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
   }
 
   return {
-    season: latest.season,
-    week: latest.week,
+    season: latest?.season ?? null,
+    week: latest?.week ?? null,
+    historyIncomplete: history.historyIncomplete,
     theyOwnYou,
     youOwnThem,
     even,

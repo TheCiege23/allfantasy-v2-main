@@ -220,7 +220,7 @@ export function BetaInvitePanel() {
     <div className="space-y-4">
       {/* ── Build marker (distinguish the deployed build without guessing) ──────────── */}
       {build && (
-        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
+        <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100">
           <span className="rounded-md border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5">
             build {build.commit} · {build.env}
           </span>
@@ -395,7 +395,7 @@ export function BetaInvitePanel() {
         <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/25">
           <table className="w-full min-w-[720px] text-left text-xs">
             <caption className="sr-only">Closed-beta invitations</caption>
-            <thead className="text-[10px] uppercase tracking-[0.16em] text-white/60">
+            <thead className="text-[11px] uppercase tracking-[0.16em] text-white/60">
               <tr>
                 <th scope="col" className="py-2 pl-4 pr-3">Email</th>
                 <th scope="col" className="py-2 pr-3">Status</th>
@@ -412,7 +412,7 @@ export function BetaInvitePanel() {
                   <tr key={row.id} className="align-top text-white/70">
                     <td className="py-3 pl-4 pr-3 font-black text-white">{row.invitedEmail}</td>
                     <td className="py-3 pr-3">
-                      <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${STATUS_CHIP[ds]}`}>
+                      <span className={`rounded-full border px-2 py-0.5 text-[11px] font-black uppercase ${STATUS_CHIP[ds]}`}>
                         {ds}
                       </span>
                     </td>

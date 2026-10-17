@@ -77,10 +77,8 @@ const RECOVERY_AUDIT_ACTIONS = [
  * drifts the first time someone edits the real one. Asking the exported validator about each enum
  * member costs ten calls and cannot disagree with the thing that actually enforces it.
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: { leagueId: string } },
-) {
+export async function GET(_request: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const gate = await requireAdmin()
   if (!gate.ok) return gate.res
 
@@ -157,10 +155,8 @@ const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('draft_pause'), confirm: z.literal(true) }),
 ])
 
-export async function POST(
-  request: Request,
-  { params }: { params: { leagueId: string } },
-) {
+export async function POST(request: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   // The gate runs FIRST and returns before anything is read, parsed, or dispatched.
   const gate = await requireAdmin()
   if (!gate.ok) return gate.res

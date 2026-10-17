@@ -310,7 +310,7 @@ function StoryCard({ leagueId, type, commissionerOnly }: { leagueId: string; typ
               <p className="whitespace-pre-line text-xs text-white/75">{s.body}</p>
             </div>
           ))}
-          <p className="text-[10px] italic text-white/30" data-testid={`story-safety-${type}`}>{r.data.safetyNote}</p>
+          <p className="text-[11px] italic text-white/30" data-testid={`story-safety-${type}`}>{r.data.safetyNote}</p>
         </div>
       )}
     </div>
@@ -511,7 +511,7 @@ export function CommissionerIntelligenceHub({ leagueId }: { leagueId: string }) 
               timeline — grounded in your league’s own recorded events.
             </p>
           </div>
-          <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-medium text-white/55 ring-1 ring-white/10">
+          <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white/55 ring-1 ring-white/10">
             Observations, not actions
           </span>
         </div>

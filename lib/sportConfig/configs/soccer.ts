@@ -20,6 +20,15 @@ export const SOCCER_CONFIG: SportConfigFull = {
     { key: 'own_goal', label: 'Own Goal', defaultPoints: -2, isToggleable: true, group: 'negative', sport: 'SOCCER' },
     { key: 'pen_miss', label: 'Penalty Miss', defaultPoints: -2, isToggleable: true, group: 'negative', sport: 'SOCCER' },
     { key: 'pen_save', label: 'Penalty Save (GK)', defaultPoints: 5, isToggleable: true, group: 'goalie', sport: 'SOCCER' },
+    // What the scoring panel offers and the box score carries (soccerStatNormalization.ts). Zero by
+    // default so a league on engine defaults scores exactly as before; the panel sets them.
+    { key: 'shots_on_target', label: 'Shots on Target', defaultPoints: 0, isToggleable: true, group: 'attack', sport: 'SOCCER' },
+    { key: 'shots', label: 'Shots', defaultPoints: 0, isToggleable: true, group: 'attack', sport: 'SOCCER' },
+    { key: 'minutes_played', label: 'Minutes Played', defaultPoints: 0, isToggleable: true, group: 'general', sport: 'SOCCER' },
+    { key: 'appearance', label: 'Appearance', defaultPoints: 0, isToggleable: true, group: 'general', sport: 'SOCCER' },
+    { key: 'gk_goals_against', label: 'Goals Against (GK)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'SOCCER' },
+    { key: 'fouls_committed', label: 'Fouls Committed', defaultPoints: 0, isToggleable: true, group: 'discipline', sport: 'SOCCER' },
+    { key: 'fouls_drawn', label: 'Fouls Drawn', defaultPoints: 0, isToggleable: true, group: 'general', sport: 'SOCCER' },
   ],
 
   scoringPresets: [{ name: 'FPL-style', categories: [] }],

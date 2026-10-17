@@ -961,7 +961,9 @@ describe('injury short-circuit', () => {
   it('dates every line and flags a stale claim', async () => {
     mockSportsInjuryFindMany.mockResolvedValue([
       { ...freshInjury(2), playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable' },
-      { ...freshInjury(24 * 5), playerName: 'Travis Kelce', team: 'KC', status: 'Out' },
+      // NFL claims go stale after one game week (`injuryStaleAfterHours`): a Friday "Out" still
+      // holds on Monday night, so the stale case has to be older than seven days.
+      { ...freshInjury(24 * 8), playerName: 'Travis Kelce', team: 'KC', status: 'Out' },
     ])
     const r = await tryDeterministicAnswerDetailed('Any Chiefs injuries?')
     const lines = (r?.text ?? '').split('\n').filter((l) => l.startsWith('- '))

@@ -152,7 +152,7 @@ function UserOsActionsBody({ data }: { data: RecommendationsApiResponse | null }
         {domainEntries.map(([domain, status]) => (
           <span
             key={domain}
-            className={`rounded-full border px-2 py-0.5 text-[10px] ${
+            className={`rounded-full border px-2 py-0.5 text-[11px] ${
               status === 'ok'
                 ? 'border-white/10 bg-white/5 text-white/60'
                 : 'border-white/10 bg-white/[0.03] text-white/30'

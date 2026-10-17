@@ -117,6 +117,31 @@ describe('cross-league analyst tools', () => {
   })
 })
 
+/*
+ * SAFE / OUT (2026-09-28): `get_my_matchup` hands the route the settle verdict it wrote its sentence
+ * from, through the tool context — the same channel `faabPlans` uses. The preview decides WHEN to
+ * report (single league only; pinned in matchup-preview-grounding.test.ts); this pins the plumbing.
+ */
+describe('get_my_matchup hands the settle verdict to the route as data', () => {
+  const SAFE = { verdict: 'safe', finishedBelow: 2, chops: 1 }
+
+  it('records what the preview reports, for the session league', async () => {
+    h.matchup.mockImplementation(async (args: { leagueId: string; onSettle?: (r: unknown) => void }) => {
+      args.onSettle?.({ leagueId: args.leagueId, settle: SAFE })
+      return 'BLOCK'
+    })
+    const ctx = { ...CTX, eliminationSettles: [] as unknown[] }
+    expect(await executeChimmyTool('get_my_matchup', { leagueId: 'SOMEONE-ELSES' }, ctx as never)).toBe('BLOCK')
+    expect(ctx.eliminationSettles).toEqual([{ leagueId: 'L1', settle: SAFE }])
+    expect(h.matchup).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', userId: 'u1' }))
+  })
+
+  it('collects nothing, and passes no collector, when the context does not ask', async () => {
+    await executeChimmyTool('get_my_matchup', {}, CTX)
+    expect(h.matchup).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1' })
+  })
+})
+
 describe('analyst tool specs', () => {
   it('declare no league or user parameter', () => {
     const analyst = CHIMMY_TOOL_SPECS.filter((s) =>

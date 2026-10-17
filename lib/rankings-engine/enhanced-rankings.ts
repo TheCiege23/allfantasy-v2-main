@@ -14,6 +14,7 @@ import {
   computeLeagueRankScore,
   computePositionalStrength,
   computeRosterProfile,
+  type TeamByeWeeks,
   type TeamFitScoreBreakdown,
   type GoalAlignmentScore,
   type RiskFitScore,
@@ -57,13 +58,15 @@ export function computeEnhancedRankings(
   view: EnhancedView,
   numTeams: number,
   adaptiveWeights?: ComponentWeights | null,
+  /** This season's byes (`resolveByeWeekMap`). Omitted → no bye opinion, never a past season's. */
+  byeWeeks: TeamByeWeeks = {},
 ): EnhancedRankingsOutput {
   const allPlayers = adaptiveOutput.players
   const userRoster = allPlayers.filter(p => p.isOnUserRoster)
   const weakestSlots = computeWeakestSlots(userRoster, allPlayers, numTeams)
 
   const enhanced: EnhancedPlayerRank[] = allPlayers.map(player => {
-    const tfsBreakdown = computeTeamFitScore(player, weakestSlots, userRoster, goal)
+    const tfsBreakdown = computeTeamFitScore(player, weakestSlots, userRoster, goal, byeWeeks)
     const goalDetails = computeGoalAlignment(player, goal)
     const riskDetails = computeRiskFit(player, goal)
     const leagueRS = computeLeagueRankScore(player)

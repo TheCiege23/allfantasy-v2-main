@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, BookOpen } from 'lucide-react'
+import { postWithTokenConfirm, responseErrorMessage } from '@/lib/tokens/clientTokenConfirm'
 
 interface DramaEventDetail {
   id: string
@@ -49,13 +50,17 @@ export default function DramaEventDetailPage() {
     if (!leagueId || !eventId) return
     setNarrative(null)
     setNarrativeLoading(true)
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId }),
-    })
-      .then((r) => r.json())
-      .then((data) => setNarrative(data?.narrative ?? 'No story available.'))
+    // Asks before any token is spent; a decline spends nothing and shows nothing.
+    postWithTokenConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, { eventId })
+      .then(async ({ response, declined }) => {
+        if (declined) return
+        if (!response.ok) {
+          setNarrative(await responseErrorMessage(response, 'Could not load story.'))
+          return
+        }
+        const data = await response.json().catch(() => ({}))
+        setNarrative(data?.narrative ?? 'No story available.')
+      })
       .catch(() => setNarrative('Could not load story.'))
       .finally(() => setNarrativeLoading(false))
   }
@@ -152,7 +157,7 @@ export default function DramaEventDetailPage() {
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-lg font-bold text-white">{event.headline}</h1>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 shrink-0">
+          <span className="text-[11px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 shrink-0">
             {event.dramaType}
           </span>
         </div>

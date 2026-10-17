@@ -46,6 +46,8 @@ export type RosterPlayer = {
   stockDelta?: number | null
   /** Why `value` is null, in the words the builder prints. Optional for the same rollout reason. */
   unpricedReason?: UnpricedReason | null
+  /** AllFantasy's own weekly projection under this league's scoring. Display only; optional for rollout. */
+  afProjection?: number | null
 }
 
 export type RosterPick = {
@@ -81,6 +83,11 @@ export type LeagueRoster = {
   /** `LeagueTeam.externalId` — what the analyzer means by opponent. */
   teamExternalId: string | null
   ownerName: string | null
+  /**
+   * Other names this manager goes by — the manager's own name where `ownerName` is the team name, and
+   * the account name. Optional: absent from a server that predates it.
+   */
+  ownerHandles?: string[]
   /** Manager avatar from the league, for the header above their asset list. */
   avatarUrl: string | null
   /** ⚠ 0-0-0 is a REAL record pre-season, not "unknown". Render it. */

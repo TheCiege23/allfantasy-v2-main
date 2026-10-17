@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateScoreFromSportConfig } from './scoringEngine'
 import { pickFreshestSourceRows } from '@/lib/sports-live-scores-service'
 import {
+  canonicalTeamDefenseId,
   findCachedWeekPayload,
   isTeamDefenseRow,
   normalizeNflTeamDefenseWeeklyStats,
@@ -25,10 +26,19 @@ import {
 } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import {
   knownDailySportSeasons,
-  resolveDailySportSeasonStart,
+  resolveDailySportWeekWindow,
 } from '@/lib/season-week/dailySportSeasonStarts'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
+import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
+import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
+import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/player-identity/verifiedNcaafReserves'
+import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
+import { teamDefenseSleeperId } from '@/lib/core-app/teamDefenseCrosswalk'
+import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -42,6 +52,20 @@ export type WeeklyScoreSyncSummary = {
   preseasonRowsSkipped?: number
   /** Daily sports: roster ids translated to game-log (PlayerIdentityMap) ids — see rosterGameLogIdBridge.ts. */
   gameLogIdsBridged?: number
+  /** NFL, foreign platform: roster ids translated to a Sleeper id through the crosswalk before any read or write. */
+  foreignIdsTranslated?: number
+  /** NFL, foreign platform: roster ids with no one-to-one Sleeper id — skipped, never read or written under. */
+  untranslatedForeignPlayerIds?: string[]
+  /** NCAAF: roster ids resolved to a CFBD athlete id (see ncaafGameLogIdBridge.ts), and those that could not be. */
+  cfbdIdsResolved?: number
+  unresolvedCfbdPlayerIds?: string[]
+  /**
+   * NCAAF starters with no CFBD row who scored a real 0 — a bye, or a final, ingested game in which
+   * they recorded nothing (see ncaafWeekParticipation.ts) — and why the rest with no row stayed missing.
+   */
+  ncaafZeroScored?: Array<{ playerId: string; reason: 'bye' | 'no_stat' }>
+  ncaafMissingByReason?: Partial<Record<'pending' | 'not_ingested' | 'unmatched' | 'no_team' | NcaafReserveAvailability, number>>
+  ncaafSeasonAvailability?: Array<{ playerId: string; status: NcaafReserveAvailability; reason: string; evidenceUrl: string }>
   scoresUpserted: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
@@ -187,8 +211,10 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * quietly persist zero scores.
    */
   const isDailySport = isDailyStatSport(sport)
-  if (sport !== 'NFL' && !isDailySport) {
-    throw new Error(`Weekly stat sync is wired for NFL, NBA and NHL; ${sport} is not available yet.`)
+  // `RedraftSeason.sport` stores `NCAAFB`, so this must not be a string compare against 'NCAAF'.
+  const isNcaaf = isNcaafSport(sport)
+  if (sport !== 'NFL' && !isDailySport && !isNcaaf) {
+    throw new Error(`Weekly stat sync is wired for NFL, NCAAF, NBA, NHL and NCAAB; ${sport} is not available yet.`)
   }
 
   const rosters = await prisma.redraftRoster.findMany({
@@ -196,12 +222,75 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     select: { id: true },
   })
   const rosterIds = rosters.map((r) => r.id)
-  const rosterPlayers = rosterIds.length
+  const ordinaryRosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
-        select: { playerId: true, sport: true, position: true, team: true },
+        select: { playerId: true, playerName: true, sport: true, position: true, team: true },
       })
     : []
+  // Exile lineups are separate from RedraftRosterPlayer. Score their saved weekly
+  // roster in the same ID space as native draft players, even after the manager
+  // has released the team for the following week.
+  const survivorLeague = await prisma.league.findUnique({
+    where: { id: season.leagueId },
+    select: { platform: true, survivorMode: true },
+  })
+  const exileEntries = survivorLeague?.survivorMode && isNativePlatform(survivorLeague.platform)
+    ? await prisma.exileWeeklyEntry.findMany({
+        where: { leagueId: season.leagueId, week },
+        select: { submittedLineup: true },
+      })
+    : []
+  const exileRosterPlayers = exileEntries.flatMap(entry =>
+    (readExileRoster(entry.submittedLineup)?.players ?? []).map(player => ({
+      playerId: player.id, sport, position: player.position, team: player.team,
+    })),
+  )
+  const storedRosterPlayers = [...ordinaryRosterPlayers, ...exileRosterPlayers]
+  const storedIds = Array.from(new Set(storedRosterPlayers.map((p: { playerId: string }) => p.playerId).filter(Boolean)))
+
+  /*
+   * 🛑 THE NFL BRANCH READS AND WRITES IN SLEEPER'S ID SPACE, AND AN IMPORTED ROSTER IS NOT IN IT.
+   * `playerGameLogCache`, Sleeper's week payload and `player_weekly_scores` (unique on playerId + week +
+   * season + sport, shared by every league) are all Sleeper-keyed. An ESPN / Fleaflicker roster holds that
+   * platform's ids, and the same digits are a different man: Fleaflicker 13761 (Josh Allen, QB) is a
+   * Sleeper DL, 12159 (Dak Prescott) is Hogan Hatten — so a sync would score the stranger's week and WRITE
+   * it under his id, over his own row. The cron is gated to native leagues; POST /api/redraft/score-sync
+   * with a leagueId is not. Each foreign id is translated through the crosswalk (as matchupProjections
+   * does) and everything below runs on the Sleeper id; one with no one-to-one Sleeper id is skipped and
+   * counted, never read or written under. Measured on production 2026-10-12: 456 of 541 distinct ESPN /
+   * Fleaflicker roster ids translate one-to-one, none ambiguously.
+   *
+   * NCAAF and the daily sports carry their own id bridges (see below) and are not touched here.
+   */
+  let rosterPlayers = storedRosterPlayers
+  let foreignIdsTranslated: number | undefined
+  let untranslatedForeignPlayerIds: string[] | undefined
+  if (!isDailySport && !isNcaaf) {
+    const sourceLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true } })
+    const platform = sourceLeague?.platform ?? null
+    if (rosterIdSpaceOf(platform) !== 'sleeper') {
+      /*
+       * A team defence has no player-crosswalk row, so it maps to Sleeper's team code from its row
+       * (teamDefenseCrosswalk.ts) — and is scored as one: `DEF` routes it to the team-defence branch below
+       * (an imported row reads `D/ST`, or `UNK`), and the club code is what points-allowed is matched on
+       * (a Fleaflicker row's team is the nickname, "Chiefs").
+       */
+      const crosswalk = withTeamDefenseIds(
+        platform,
+        await crosswalkToSleeperIds(String(platform ?? ''), sport, storedIds),
+        storedRosterPlayers,
+      )
+      untranslatedForeignPlayerIds = storedIds.filter((id) => sleeperLookupId(platform, id, crosswalk) == null)
+      foreignIdsTranslated = storedIds.length - untranslatedForeignPlayerIds.length
+      rosterPlayers = storedRosterPlayers.flatMap((p) => {
+        const sleeperId = sleeperLookupId(platform, p.playerId, crosswalk)
+        if (!sleeperId) return []
+        if (teamDefenseSleeperId(platform, p) === sleeperId) return [{ ...p, playerId: sleeperId, position: 'DEF', team: sleeperId }]
+        return [{ ...p, playerId: sleeperId }]
+      })
+    }
+  }
 
   const playerIds: string[] = Array.from(new Set(rosterPlayers.map((p: { playerId: string }) => p.playerId).filter(Boolean)))
   const summary: WeeklyScoreSyncSummary = {
@@ -210,7 +299,9 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     sport,
     season: seasonYear,
     week,
-    rosteredPlayers: playerIds.length,
+    rosteredPlayers: storedIds.length,
+    ...(foreignIdsTranslated !== undefined ? { foreignIdsTranslated } : {}),
+    ...(untranslatedForeignPlayerIds ? { untranslatedForeignPlayerIds } : {}),
     cacheRowsRead: 0,
     scoresUpserted: 0,
     missingCachePlayerIds: [],
@@ -220,17 +311,39 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     warnings: [],
   }
 
+  if (untranslatedForeignPlayerIds?.length) {
+    summary.warnings.push(
+      `${untranslatedForeignPlayerIds.length} roster id(s) are this league's platform ids with no one-to-one Sleeper id; ` +
+        `they were NOT scored rather than risk scoring, and writing over, whoever holds those digits in Sleeper's space: ` +
+        `${untranslatedForeignPlayerIds.slice(0, 5).join(', ')}.`,
+    )
+  }
+
   if (!playerIds.length) {
-    summary.warnings.push('No rostered players found for this redraft season.')
+    if (!storedIds.length) summary.warnings.push('No rostered players found for this redraft season.')
     await recordScoreSyncAudit(summary, params.actorId ?? 'system')
     return summary
   }
 
-  const cachedRows = isDailySport
+  /*
+   * A team defence's box score is cached under `nfl:def:<ABBR>` whichever id the roster holds — Sleeper's
+   * bare `KC` included (see `canonicalTeamDefenseId`). Read by the roster id alone, a Sleeper-format
+   * defence found no cache row and scored points-allowed only: its sacks, interceptions, fumbles and TDs
+   * were silently dropped. Both keys are asked for; the DEF branch below reads ONE of them, so a defence
+   * cached under both can never be counted twice.
+   */
+  const defenceCacheIdByPlayer = new Map<string, string>()
+  if (!isDailySport && !isNcaaf) {
+    for (const p of rosterPlayers as Array<{ playerId: string; position: string | null }>) {
+      const canonical = canonicalTeamDefenseId(p.playerId, p.position)
+      if (canonical) defenceCacheIdByPlayer.set(p.playerId, canonical)
+    }
+  }
+  const cachedRows = isDailySport || isNcaaf
     ? []
     : await prisma.playerGameLogCache.findMany({
         where: {
-          playerId: { in: playerIds },
+          playerId: { in: Array.from(new Set([...playerIds, ...defenceCacheIdByPlayer.values()])) },
           season: String(seasonYear),
           seasonType: 'regular',
           sport: { in: candidateSportKeys(sport) },
@@ -271,8 +384,11 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     // recorded regular-season openers. Anchoring on the OPENER rather than the
     // first game is what keeps preseason out: NHL preseason ran 19-27 Sep 2026
     // and those games are ingested like any other.
-    const seasonStartUtc = params.seasonStartUtc ?? resolveDailySportSeasonStart(sport, seasonYear)
-    const window = weekWindowFromSeasonStart(seasonStartUtc, week)
+    // Without an explicit anchor, the shared resolver — which is where a gameweek sport (soccer)
+    // differs from seven-day arithmetic. The finalizer reads the same function.
+    const window = params.seasonStartUtc
+      ? weekWindowFromSeasonStart(params.seasonStartUtc, week)
+      : resolveDailySportWeekWindow(sport, seasonYear, week)
     if (!window) {
       // Decline rather than run a query that cannot be right. Inventing a start
       // date would silently mis-assign every game to the wrong week, which is
@@ -333,6 +449,64 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     summary.cacheRowsRead = gameRows.length
   }
 
+  /**
+   * NCAAF: one `player_game_stats` row per player per game from the scheduled CFBD ingest
+   * (`import-stat-lines` -> `cfbdGameLogs.ts`), keyed on the CFBD athlete id, `sportType: 'NCAAF'`,
+   * `weekOrRound` = the real CFBD week. Selected BY WEEK, unlike the daily sports — college football
+   * carries a real week number, and `gameDate` is null whenever the CFBD schedule row is missing.
+   */
+  const ncaafRowsByPlayer = new Map<string, unknown[]>()
+  const ncaafResolvedRosterIds = new Set<string>()
+  let ncaafImported = false
+  let ncaafVerdictFor: ((team: string | null | undefined) => NcaafNoRowVerdict) | null = null
+  if (isNcaaf) {
+    const sourceLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true } })
+    ncaafImported = String(sourceLeague?.platform ?? '').toLowerCase() === 'fantrax'
+    const namespace = ncaafImported ? 'fantrax' : 'pool'
+    const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma as never, playerIds, namespace)
+    summary.cfbdIdsResolved = bridge.cfbdIds.length
+    summary.unresolvedCfbdPlayerIds = bridge.unresolved
+    if (bridge.ambiguous.length) {
+      summary.warnings.push(
+        `${bridge.ambiguous.length} NCAAF roster id(s) resolve to more than one CFBD athlete, or share one with another ` +
+          `rostered player; they were NOT scored rather than risk crediting the wrong player: ${bridge.ambiguous.slice(0, 5).join(', ')}.`,
+      )
+    }
+    if (bridge.unresolved.length) {
+      summary.warnings.push(
+        `${bridge.unresolved.length} NCAAF roster id(s) have no CFBD athlete link (not a CFBD pool player, and no ` +
+          `PlayerIdentityMap.cfbdId): ${bridge.unresolved.slice(0, 5).join(', ')}.`,
+      )
+    }
+    const gameRows = bridge.cfbdIds.length
+      ? await prisma.playerGameStat.findMany({
+          where: {
+            playerId: { in: bridge.cfbdIds },
+            sportType: { in: ['NCAAF', 'ncaaf'] },
+            season: seasonYear,
+            weekOrRound: week,
+          },
+          select: { playerId: true, normalizedStatMap: true },
+        })
+      : []
+    for (const row of gameRows) {
+      const rosterId = bridge.rosterIdFor(row.playerId)
+      if (!rosterId) continue
+      const rows = ncaafRowsByPlayer.get(rosterId) ?? []
+      rows.push(row.normalizedStatMap)
+      ncaafRowsByPlayer.set(rosterId, rows)
+    }
+    summary.cacheRowsRead = gameRows.length
+    // Only a roster id the bridge RESOLVED can be judged: an unlinked id is not known to be him.
+    for (const cfbdId of bridge.cfbdIds) {
+      const rosterId = bridge.rosterIdFor(cfbdId)
+      if (rosterId) ncaafResolvedRosterIds.add(rosterId)
+    }
+    if (playerIds.some((id) => ncaafResolvedRosterIds.has(id) && !ncaafRowsByPlayer.has(id))) {
+      ncaafVerdictFor = await loadNcaafWeekParticipation(prisma as never, { season: seasonYear, week })
+    }
+  }
+
   const cacheByPlayer = new Map<string, { payload: unknown }>(
     cachedRows.map((row: { playerId: string; payload: unknown }) => [row.playerId, row]),
   )
@@ -349,11 +523,27 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // final score. Pre-load this week's finished games keyed by team abbrev so a
   // DEF starter scores from data we have, even without a per-team box-score
   // provider feed. (Sacks/INT/etc. still require the box-score feed — see G8.)
-  const teamDefensePlayerIds = playerIds.filter((id) => isTeamDefenseRow(id, positionByPlayer.get(id) ?? null))
+  /*
+   * 🛑 ONLY NFL-SHAPED FOOTBALL HAS A TEAM DEFENSE. `isTeamDefenseRow` keys on the position `DEF`, and
+   * a soccer defender's position IS `DEF` — so every soccer defender was routed here, looked up as a
+   * team score, and scored nothing (found 2026-09-28 by scripts/smoke-soccer-gameweek-testdb.ts: 16 of
+   * 16 defenders unscored while keepers, midfielders and forwards scored). A daily sport is scored
+   * from its own box lines, player by player, whatever the position is called. NCAAF has no
+   * team-defense stat line either, and takes its own branch below.
+   */
+  const isTeamDefense = (id: string) =>
+    !isDailySport && !isNcaaf && isTeamDefenseRow(id, positionByPlayer.get(id) ?? null)
+  const teamDefensePlayerIds = playerIds.filter(isTeamDefense)
   const gameByTeam = new Map<string, { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }>()
   if (teamDefensePlayerIds.length > 0) {
     const rawGames = await prisma.sportsGame.findMany({
-      where: { sport: { in: candidateSportKeys(sport) }, season: seasonYear, week },
+      /*
+       * ⚠ REGULAR SEASON ONLY. `week` alone is ambiguous: production holds 2026 NFL preseason weeks
+       * 1-4 with final scores beside regular weeks 1-4, so an August exhibition's score could become a
+       * September defence's points allowed. The schedule resolver treats NFL season type as required
+       * for the same reason (`requiresExplicitSeasonType`).
+       */
+      where: { sport: { in: candidateSportKeys(sport) }, season: seasonYear, week, seasonType: 'regular' },
       select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, source: true, fetchedAt: true },
     })
     // A fixture can carry 3-4 rows here, one per provider feed. Without
@@ -367,6 +557,25 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const away = String(g.awayTeam ?? '').trim().toUpperCase()
       if (home) gameByTeam.set(home, g)
       if (away) gameByTeam.set(away, g)
+    }
+  }
+  /*
+   * 🛑 THE STORED LINE OUTRANKS A WEAKER REBUILD. A defence's full box score can reach
+   * `player_weekly_scores` without ever being cached — the live tick writes the provider's line
+   * straight there — and this branch rebuilt the row from the cache alone, so a week the cache
+   * did not hold became points-allowed only and REPLACED the box score. Measured on production
+   * 2026-10-13: week 2 of 2026 kept full lines for 24 clubs (live tick, 09-24 01:21Z) and points
+   * allowed alone for the 8 a native league rostered (this sync, 23:41Z; 6 already finalized).
+   * So with no cached week, the stored line is kept and only its points allowed is refreshed.
+   */
+  const storedDefenceStatsByPlayer = new Map<string, Record<string, number>>()
+  if (teamDefensePlayerIds.length > 0) {
+    const storedRows = await prisma.playerWeeklyScore.findMany({
+      where: { playerId: { in: teamDefensePlayerIds }, week, season: seasonYear, sport: { in: candidateSportKeys(sport) } },
+      select: { playerId: true, stats: true },
+    })
+    for (const row of storedRows as Array<{ playerId: string; stats: unknown }>) {
+      storedDefenceStatsByPlayer.set(row.playerId, normalizeNflTeamDefenseWeeklyStats(row.stats))
     }
   }
 
@@ -402,7 +611,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   if (!isDailySport && candidateSportKeys(sport).includes('NFL')) {
     const uncachedOffensiveIds = playerIds.filter(
       (id) =>
-        !isTeamDefenseRow(id, positionByPlayer.get(id) ?? null) &&
+        !isTeamDefense(id) &&
         Object.keys(cachedWeekStatsFor(id)).length === 0,
     )
     if (uncachedOffensiveIds.length > 0) {
@@ -423,15 +632,87 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     const position = positionByPlayer.get(playerId) ?? null
     const playerSport = sportByPlayer.get(playerId) ?? sport
 
-    if (isTeamDefenseRow(playerId, position)) {
-      const cached = cacheByPlayer.get(playerId)
-      const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
-      const stats: Record<string, number> = weekPayload ? normalizeNflTeamDefenseWeeklyStats(weekPayload) : {}
+    /**
+     * NCAAF runs BEFORE the NFL team-defense branch: a college `DEF` slot has no team stat line in
+     * any feed we ingest, so it is reported unscored here rather than sent looking for NFL box scores.
+     *
+     * A player who appeared and produced nothing scores a real 0 — `gamesCounted` counts appearances,
+     * not stat lines — so a quiet game is never confused with "no data".
+     */
+    if (isNcaaf) {
+      const rows = ncaafRowsByPlayer.get(playerId) ?? []
+      const reserve = ncaafImported ? ncaafReserveAvailability(playerId, seasonYear) : undefined
+      if (reserve && (rows.length === 0 || reserve.availability !== 'needs_verification')) {
+        // Current-season primary evidence takes priority over an old school/provider roster.
+        const byReason = (summary.ncaafMissingByReason ??= {})
+        byReason[reserve.availability] = (byReason[reserve.availability] ?? 0) + 1
+        ;(summary.ncaafSeasonAvailability ??= []).push({ playerId, status: reserve.availability, reason: reserve.reason, evidenceUrl: reserve.evidenceUrl })
+        if (rows.length) summary.warnings.push(`NCAAF season evidence conflicts with game rows for ${playerId}; scoring withheld pending review.`)
+        summary.missingCachePlayerIds.push(playerId)
+        continue
+      }
+      if (rows.length === 0) {
+        /*
+         * No CFBD row is not "no data": CFBD lists only players who recorded a stat. A resolved player
+         * whose school had a bye, or played a final game the ingest DID bring in, scored a real 0 —
+         * written, so the finalizer counts him as covered. Only a game that is unfinished, or final
+         * with no rows (a data gap), or a school we cannot place, leaves him missing.
+         */
+        const team = teamByPlayer.get(playerId) ?? null
+        const verdict = ncaafResolvedRosterIds.has(playerId) && ncaafVerdictFor && team ? ncaafVerdictFor(team) : null
+        if (verdict && NCAAF_ZERO_VERDICTS.has(verdict)) {
+          await prisma.playerWeeklyScore.upsert({
+            where: { playerId_week_season_sport: { playerId, week, season: seasonYear, sport: playerSport } },
+            update: { stats: {}, fantasyPts: 0, isFinalized: false },
+            create: { playerId, week, season: seasonYear, sport: playerSport, stats: {}, fantasyPts: 0, isFinalized: false },
+          })
+          summary.scoresUpserted += 1
+          ;(summary.ncaafZeroScored ??= []).push({ playerId, reason: verdict as 'bye' | 'no_stat' })
+          continue
+        }
+        if (ncaafResolvedRosterIds.has(playerId)) {
+          const reason = !team ? 'no_team' : ((verdict ?? 'unmatched') as 'pending' | 'not_ingested' | 'unmatched')
+          const byReason = (summary.ncaafMissingByReason ??= {})
+          byReason[reason] = (byReason[reason] ?? 0) + 1
+        }
+        summary.missingCachePlayerIds.push(playerId)
+        continue
+      }
+      const aggregate = aggregateNcaafWeek(rows)
+      for (const key of aggregate.unmappedKeys) unmappedStatKeys.add(key)
+      if (aggregate.gamesCounted === 0) {
+        summary.missingStatPlayerIds.push(playerId)
+        continue
+      }
+      const ncaafPts = await calculateScoreFromSportConfig(season.leagueId, playerId, week, aggregate.stats, position)
+      await prisma.playerWeeklyScore.upsert({
+        where: { playerId_week_season_sport: { playerId, week, season: seasonYear, sport: playerSport } },
+        update: { stats: aggregate.stats, fantasyPts: ncaafPts, isFinalized: false },
+        create: { playerId, week, season: seasonYear, sport: playerSport, stats: aggregate.stats, fantasyPts: ncaafPts, isFinalized: false },
+      })
+      summary.scoresUpserted += 1
+      continue
+    }
 
-      // Derive points allowed from the game result when the box-score feed did
-      // not already provide it.
-      if (stats.def_points_allowed === undefined) {
-        const team = teamAbbrevFromDefPlayerId(playerId) ?? String(teamByPlayer.get(playerId) ?? '').trim().toUpperCase()
+    if (isTeamDefense(playerId)) {
+      const defenceCacheId = defenceCacheIdByPlayer.get(playerId)
+      // The canonical key first; the roster's own id only for a defence with no canonical form.
+      const cached = (defenceCacheId ? cacheByPlayer.get(defenceCacheId) : undefined) ?? cacheByPlayer.get(playerId)
+      const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
+      const stored = storedDefenceStatsByPlayer.get(playerId)
+      // A stored line with more than points allowed is a box score, and nothing below may shrink it.
+      const keepStored = !weekPayload && !!stored && Object.keys(stored).some((key) => key !== 'def_points_allowed')
+      const stats: Record<string, number> = weekPayload
+        ? normalizeNflTeamDefenseWeeklyStats(weekPayload)
+        : keepStored
+          ? { ...stored }
+          : {}
+
+      // Derive points allowed from the game result when the box-score feed did not provide it —
+      // and, on a kept stored line, refresh it: that is the one number this branch can improve.
+      if (stats.def_points_allowed === undefined || keepStored) {
+        // From the canonical id: a Sleeper DEF row's team can read "Arizona Cardinals", which matches no game.
+        const team = teamAbbrevFromDefPlayerId(defenceCacheId ?? playerId) ?? String(teamByPlayer.get(playerId) ?? '').trim().toUpperCase()
         const game = team ? gameByTeam.get(team) : undefined
         if (game) {
           const pa = pointsAllowedFromGame(game, team)

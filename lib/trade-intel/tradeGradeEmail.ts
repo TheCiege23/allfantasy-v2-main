@@ -1,11 +1,14 @@
-import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+import { PROJECTED_EVEN_BAND, PROJECTED_STRONG_BAND, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type {
   GradedTrade,
   TradePickAsset,
   TradeSideGrade,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 // Type-only: the grade is computed by the caller, never here. This module renders.
-import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { TradeGradeLine, TradeGradeView, TradeRosterSpot } from '@/lib/decision-os/trade/tradeGrade'
+import { assetValues, type DisplayedAsset } from '@/lib/decision-os/trade/gradeLineValues'
+import { giveawaySide } from '@/lib/trade-intel/tradeGiveaway'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import {
   LEAGUE_TYPE_DECIDES_GRADES,
   LEAGUE_TYPE_GRADES_EXPLAINER,
@@ -154,17 +157,58 @@ function pickDetail(pick: TradePickAsset): string {
   return 'Draft pick'
 }
 
+function faabName(amount: number): string {
+  return `$${Math.round(amount).toLocaleString('en-US')} FAAB`
+}
+
 type Line = { name: string; detail: string | null; value: number | null }
 
-/** One side's received assets, in the order the grader priced them (players, then picks). */
-function receivedLines(side: TradeSideGrade, values: ReadonlyArray<number | null> | null): Line[] {
+/**
+ * The roster-spot credit as a table row, appended to the side whose total already includes it
+ * (`lib/trade-value/rosterSpotCharge.ts`), so the rows add up to the printed total. `table` is that side's
+ * column: 'received' for a completed trade (the side receiving fewer players gains the spot), 'viewer' for
+ * an offer's "you get" / "you give" columns.
+ */
+function withRosterSpot(lines: Line[], spot: TradeRosterSpot | null | undefined, side: 'give' | 'get', table: 'received' | 'viewer'): Line[] {
+  if (!spot || spot.side !== side) return lines
+  const name = spot.spots === 1 ? 'Open roster spot' : `${spot.spots} open roster spots`
+  const detail =
+    table === 'received' || side === 'get'
+      ? 'Fewer players received, so there is room to add one'
+      : 'More players received, so a full roster drops one'
+  return [...lines, { name, detail, value: spot.value }]
+}
+
+/**
+ * The value THE grade priced each displayed asset at, matched by name, then pick year + round, then
+ * place (`assetValues`) — and only when the counts agree; a mismatch prints names without values.
+ *
+ * 🛑 NOT BY PLACE ALONE (2026-10-01). A completed trade's letter is its FROZEN original, whose lines are
+ * in the order of whichever surface froze it, so pairing by place could print a 1st's value beside
+ * the 2nd it was traded with.
+ */
+function withGradeValues(lines: Line[], shown: DisplayedAsset[], gradeLines: ReadonlyArray<TradeGradeLine> | null, side: 'give' | 'get'): Line[] {
+  if (!gradeLines || gradeLines.filter((l) => l.side === side).length !== lines.length) return lines
+  const values = assetValues(shown, gradeLines, side)
+  lines.forEach((l, i) => (l.value = values[i] ?? null))
+  return lines
+}
+
+/** One side's received assets (players, then picks, then FAAB), each with the value the grade gave it. */
+function receivedLines(side: TradeSideGrade, gradeLines: ReadonlyArray<TradeGradeLine> | null, gradeSide: 'give' | 'get'): Line[] {
   const lines: Line[] = [
     ...side.playersIn.map((p) => ({ name: p.name, detail: p.position, value: null as number | null })),
     ...side.picksIn.map((p) => ({ name: pickName(p), detail: pickDetail(p), value: null as number | null })),
+    // Last, matching `completedTradeInputs`, which prices FAAB after players and picks.
+    ...(side.faabIn != null && side.faabIn > 0 ? [{ name: faabName(side.faabIn), detail: 'FAAB', value: null as number | null }] : []),
   ]
-  // Index-aligned only when the counts agree; a mismatch prints names without values, never shifted ones.
-  if (values && values.length === lines.length) lines.forEach((l, i) => (l.value = values[i] ?? null))
-  return lines
+  // A used pick was priced as the player drafted with it — match it under that name.
+  const shown: DisplayedAsset[] = [
+    ...side.playersIn.map((p) => ({ label: p.name })),
+    ...side.picksIn.map((p) => ({ label: pickName(p), gradedAs: p.resolved?.name?.trim() || null })),
+    ...(side.faabIn != null && side.faabIn > 0 ? [{ label: faabName(side.faabIn) }] : []),
+  ]
+  return withGradeValues(lines, shown, gradeLines, gradeSide)
 }
 
 function chip(letter: GradeLetter | null, size = 40): string {
@@ -210,14 +254,24 @@ type SideView = {
  * Each side's letter and received values, read off ONE grade taken from side one's view: side one
  * holds `letter` and receives the `get` lines; side two holds the mirror and receives `give`.
  */
+/**
+ * The letter side `index` of a completed two-team trade holds, under the rule above. Exported so the
+ * push card reads the SAME rule rather than a copy of it — a card and an email naming opposite
+ * winners for one trade is exactly what a second implementation would eventually produce.
+ */
+export function completedSideLetter(trade: GradedTrade, grade: TradeGradeView | null, index: number): GradeLetter | null {
+  const g = grade && grade.graded && trade.sides.length === 2 ? grade : null
+  if (!g) return null
+  return index === 0 ? g.letter : g.partnerLetter
+}
+
 function sideViews(trade: GradedTrade, grade: TradeGradeView | null, viewerOwnerId: string | null): SideView[] {
   const g = grade && grade.graded && trade.sides.length === 2 ? grade : null
-  const valuesOf = (side: 'give' | 'get') => (g ? g.lines.filter((l) => l.side === side).map((l) => l.leagueValue) : null)
   return trade.sides.map((side, i) => ({
     side,
-    letter: g ? (i === 0 ? g.letter : g.partnerLetter) : null,
+    letter: completedSideLetter(trade, grade, i),
     pct: g ? (i === 0 ? g.percentDiff : -g.percentDiff) : null,
-    lines: receivedLines(side, i === 0 ? valuesOf('get') : valuesOf('give')),
+    lines: withRosterSpot(receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give'), g?.rosterSpot, i === 0 ? 'get' : 'give', 'received'),
     total: g ? (i === 0 ? g.getValue : g.giveValue) : null,
     isViewer: Boolean(viewerOwnerId) && side.ownerId != null && String(side.ownerId) === String(viewerOwnerId),
   }))
@@ -264,6 +318,60 @@ function sidesCard(views: SideView[]): string {
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${CARD};border:1px solid ${BORDER};border-radius:16px;border-collapse:separate;overflow:hidden">${body}</table>`
 }
 
+function article(letter: GradeLetter): string {
+  return letter === 'A' || letter === 'F' ? 'an' : 'a'
+}
+
+/**
+ * Why each side holds its letter, in the deal's own numbers (Guap, 2026-09-29: "make the email
+ * explain why it's a C"). A bare C beside "−2%" read as a grader stuck on one letter.
+ *
+ * ⚠ THE BANDS ARE IMPORTED, NEVER RESTATED. `projectedLetterFor` draws the letter from
+ * `PROJECTED_EVEN_BAND` / `PROJECTED_STRONG_BAND`; a copy of "10%" or "25%" typed here would keep
+ * explaining the old scale the day those move, beside a letter drawn from the new one.
+ */
+function whyTheseLetters(views: SideView[]): { reason: string; scale: string } | null {
+  if (views.length !== 2) return null
+  const [a, b] = views as [SideView, SideView]
+  if (!a.letter || !b.letter || a.pct == null || a.total == null || b.total == null) return null
+  // "You" only opens a sentence; mid-sentence it is "you" — "Hibboisthebest got an A and you an F".
+  const name = (v: SideView, opensSentence = false) => (v.isViewer ? (opensSentence ? 'You' : 'you') : v.side.managerName)
+  const even = PROJECTED_EVEN_BAND
+  const strong = PROJECTED_STRONG_BAND
+  const scale = `The scale: a gap under ${even}% is a C for both sides · ${even}–${strong - 1}% is a B and a D · ${strong}% or more is an A and an F.`
+
+  if (a.letter === 'C') {
+    const gap = Math.abs(a.total - b.total)
+    const reason =
+      gap === 0
+        ? `Both sides got a C: each received ${fmtValue(a.total)} in this league’s values — dead even.`
+        : `Both sides got a C: ${name(a)} received ${fmtValue(a.total)} and ${name(b)} received ${fmtValue(b.total)} in this league’s values. ` +
+          `That is ${fmtValue(gap)} apart, ${Math.abs(a.pct)}% of the bigger side — under ${even}%, so the trade reads as even and neither side earns a B.`
+    return { reason, scale }
+  }
+
+  const [up, down] = a.pct > 0 ? [a, b] : [b, a]
+  const pct = Math.abs(a.pct)
+  const band =
+    up.letter === 'A'
+      ? `A gap of ${strong}% or more is an A for the side that gained and an F for the side that gave.`
+      : `A gap of ${even}–${strong - 1}% is a B for the side that gained and a D for the side that gave; ${strong}% or more would be an A and an F.`
+  const reason =
+    `${name(up, true)} got ${article(up.letter!)} ${up.letter} and ${name(down)} ${article(down.letter!)} ${down.letter}: ` +
+    `${name(up)} received ${fmtValue(up.total!)} in this league’s values for ${fmtValue(down.total!)}, ${pct}% more. ${band}`
+  return { reason, scale }
+}
+
+function whyCard(views: SideView[]): string {
+  const why = whyTheseLetters(views)
+  if (!why) return ''
+  return card(
+    `${eyebrow('Why these letters')}` +
+      `<div style="font-size:13px;line-height:1.6;color:${TEXT};margin-top:6px">${escapeHtml(why.reason)}</div>` +
+      `<div style="font-size:11.5px;line-height:1.5;color:${FAINT};margin-top:6px">${escapeHtml(why.scale)}</div>`,
+  )
+}
+
 function card(inner: string, accent: string | null = null): string {
   return (
     `<tr><td style="padding:14px 16px;background:${CARD};border:1px solid ${BORDER};` +
@@ -277,9 +385,10 @@ function rosterFitCard(grade: TradeGradeView | null): string {
   const fit = grade.rosterFit
   const moves = fit.moves.map(move =>
     `${move.name}: ${fmtValue(move.base)} base → ${fmtValue(move.leagueValue)} personal utility. ${move.reasons.join('; ')}.`)
-  return card(eyebrow('Your roster fit · separate from the trade-value grade') +
+  const yourTeam = grade.letterBasis === 'your_team'
+  return card(eyebrow(yourTeam ? 'Your roster fit · what your grade is taken on' : 'Your roster fit') +
     `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">` +
-    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received. This estimate does not change the headline letter or predict your chances of winning.`) +
+    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received.${yourTeam ? ' Your letter above is taken on these.' : ''} This is a roster-fit estimate, not a prediction of your chances of winning.`) +
     moves.map(move => `<div style="margin-top:6px">${escapeHtml(move)}</div>`).join('') + '</div>')
 }
 
@@ -385,6 +494,7 @@ function dealNames(trade: GradedTrade): string {
       if (!names.includes(n)) names.push(n)
     }
   }
+  for (const side of trade.sides) if (side.faabIn != null && side.faabIn > 0) names.push(faabName(side.faabIn))
   if (names.length === 0) return ''
   const shown = names.slice(0, 4)
   const extra = names.length - shown.length
@@ -446,7 +556,14 @@ export function buildTradeGradeEmail(params: {
     ? ordered.map((v) => `${v.isViewer ? 'you' : v.side.managerName} ${v.letter}`).join(', ')
     : 'not graded'
   const verb = params.status === 'pending' ? 'offered' : 'completed'
-  const subject = `Trade ${verb} in ${leagueName} — ${letters}${namePart}`
+  /*
+   * A Pirate steal is the league's steal rule, not a trade (`lib/trade-intel/pirateSteal.ts`) — the
+   * email says so in its subject and eyebrow instead of "Trade completed … not graded".
+   */
+  const steal = !!grade && !grade.graded && grade.kind === 'pirate_steal'
+  const subject = steal
+    ? `Pirate steal in ${leagueName}${namePart}`
+    : `Trade ${verb} in ${leagueName} — ${letters}${namePart}`
 
   const withheldReason = graded
     ? null
@@ -462,12 +579,16 @@ export function buildTradeGradeEmail(params: {
 
   const hasPicks = trade.sides.some((s) => s.picksIn.length > 0)
   const how = graded
-    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values at email time. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
+    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values ${gradeMoment(graded)}. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
       (hasPicks ? ' Unresolved future picks use the chart’s season-and-round value; a specific early, mid or late tier is used only when supplied to the evaluator.' : '')
-    : `${withheldReason} No letter is shown rather than one drawn from part of the deal.`
+    : steal || (grade && !grade.graded && giveawaySide(trade))
+      // A giveaway has no "part of the deal" a letter could be drawn from — the reason says it all.
+      ? `${withheldReason}`
+      : `${withheldReason} No letter is shown rather than one drawn from part of the deal.`
 
   const rows =
     `<tr><td>${sidesCard(ordered)}</td></tr><tr><td style="height:12px"></td></tr>` +
+    (graded ? whyCard(ordered) : '') +
     card(`${eyebrow(graded ? 'How this is graded' : 'Why there is no grade')}<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">${escapeHtml(how)}</div>`) +
     leagueTypeCard(leagueType, params.confirmUrl ?? null) +
     (params.receiptUrl ? cta(params.receiptUrl, 'View the original evaluation', 'The exact grade and values in this email, preserved for comparison.') : '') +
@@ -476,7 +597,7 @@ export function buildTradeGradeEmail(params: {
   const weekPart = Number.isFinite(trade.week) && trade.week > 0 ? ` · week ${trade.week}` : ''
   const html = shell({
     preheader: summary,
-    eyebrow: `Trade ${verb} · ${trade.season}${weekPart}`,
+    eyebrow: steal ? `Pirate steal · ${trade.season}${weekPart}` : `Trade ${verb} · ${trade.season}${weekPart}`,
     title: leagueName,
     sub: viewer && viewer.letter ? `Your side graded ${viewer.letter} — ${LETTER_WORDS[viewer.letter].toLowerCase()}.` : null,
     rows,
@@ -532,14 +653,12 @@ export function buildPendingTradeOfferEmail(params: {
   const subject = `Trade offer in ${leagueName} — ${g ? `${g.letter} for you: ` : ''}you get ${names(params.youGet)} for ${names(params.youGive)}`
 
   const linesOf = (assets: PendingTradeAsset[], side: 'give' | 'get'): Line[] => {
-    const values = g ? g.lines.filter((l) => l.side === side).map((l) => l.leagueValue) : null
     const lines = assets.map((a) => ({
       name: a.playerName,
       detail: a.isPick ? 'Draft pick' : a.faabAmount != null ? 'FAAB' : [a.position, a.team].filter((v) => v && v !== '—').join(' · ') || null,
       value: null as number | null,
     }))
-    if (values && values.length === lines.length) lines.forEach((l, i) => (l.value = values[i] ?? null))
-    return lines
+    return withRosterSpot(withGradeValues(lines, assets.map((a) => ({ label: a.playerName })), g ? g.lines : null, side), g?.rosterSpot, side, 'viewer')
   }
   const cell = (label: string, accent: string, lines: Line[], total: number | null, divider: boolean) =>
     `<td width="50%" valign="top" style="padding:16px;${divider ? `border-right:1px solid ${BORDER};` : ''}">${eyebrow(label, accent)}${assetTable(lines, total)}</td>`
@@ -552,8 +671,12 @@ export function buildPendingTradeOfferEmail(params: {
   const verdict = g
     ? `<tr><td style="padding:16px;background:${CARD};border:1px solid ${BORDER};border-radius:16px">` +
       `<table role="presentation" cellspacing="0" cellpadding="0"><tr><td valign="middle">${chip(g.letter, 48)}</td>` +
-      `<td valign="middle" style="padding-left:14px">${eyebrow('Our read, from your side')}` +
+      `<td valign="middle" style="padding-left:14px">${eyebrow(g.letterBasis === 'your_team' ? 'Our read, for your team' : 'Our read, from your side')}` +
       `<div style="font-size:17px;font-weight:800;color:${GRADE_COLORS[g.letter].fg};margin-top:3px">${escapeHtml(g.label)} · ${escapeHtml(gapText(g.percentDiff))}</div></td></tr></table>` +
+      // A your-team letter is shown with the deal's league-value letter, which is what the other manager sees.
+      (g.letterBasis === 'your_team' && g.market
+        ? `<div style="font-size:12px;line-height:1.5;color:${MUTED};margin-top:8px">${escapeHtml(`Market: ${g.market.letter} (${gapText(g.market.percentDiff)}) — the same deal on league value alone, which is what the other manager sees.`)}</div>`
+        : '') +
       `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:12px">${escapeHtml(g.recommendation)}</div>` +
       `<div style="font-size:11px;line-height:1.5;color:${FAINT};margin-top:6px">${escapeHtml(`On ${g.basis ? `${g.basis} ` : 'this league’s '}values as of today${g.needApplied ? ', counting how it fits your roster' : ''}; values at email time. The site uses the same evaluator with the latest data. Realized fantasy points after a completed trade are a separate result.`)}</div>` +
       `</td></tr><tr><td style="height:12px"></td></tr>`

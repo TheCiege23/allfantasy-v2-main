@@ -6,6 +6,8 @@ import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
 import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { lookupNcaafProjections } from './ncaafProjections'
+import { isIdpEligiblePosition } from '@/lib/af-projections/idpScoring'
+import type { StoredProjectionFactors } from '@/lib/af-projections/rescoreForLeague'
 
 /**
  * Weekly player projections, shared by My Team and Player Finder.
@@ -249,6 +251,117 @@ async function enrichWithIdpProjections(
   }
 }
 
+/**
+ * AllFantasy's own weekly projection — the AF engine's output, next to the provider feed.
+ *
+ * ⚠ TWO PROJECTIONS, TWO NAMES. `lookupProjections` above is the PROVIDER feed (Sleeper). This is
+ * the AF engine (`lib/af-projections`), mirrored into `fantasy_projections` under
+ * `source: 'allfantasy'` by `writeAfProjectionSnapshots` in the SAME Sleeper-id space and the SAME
+ * season/week keys — which is what lets a surface show both numbers from one id without a second
+ * identity join. Measured on production 2026-09-29: weeks 1–4 of 2026 are present in both, 1,699
+ * AF rows and 1,137 provider rows for week 4.
+ *
+ * ⚠ THE AF NUMBER IS A SCALAR UNDER GENERIC PPR. The mirror row says so itself — "no per-stat
+ * component line exists for this source" — so it cannot be re-scored the way the provider line is.
+ * (Defenders are the exception: their stored component amounts are read from the engine snapshot
+ * into `idpFactors` below, and rescored under the league's rules.)
+ * `afEngineForLeague` below carries it into a league's rules; a surface that renders
+ * `projectedPoints` raw is showing a PPR number in whatever league it sits in.
+ */
+export type AfEngineProjection = {
+  playerId: string
+  /** Per game, generic PPR. */
+  projectedPoints: number
+  /** How the engine built it — `sleeper_weekly_projection`, `weekly_actuals_recency`, … */
+  basis: string | null
+  confidence: string | null
+  /**
+   * The engine's own player key (`AFProjectionSnapshot.playerId`), which the mirror row records.
+   * The bridge from a Sleeper id to the engine's season-long rows. Optional: older mirror rows and
+   * hand-built fixtures may not carry it.
+   */
+  canonicalPlayerId?: string | null
+  /**
+   * The position the mirror row recorded. With `basis`, it is how `afEngineForLeague` knows a
+   * defender's number is IDP-scored rather than PPR. Optional for the same reason as above.
+   */
+  position?: string | null
+  /**
+   * For a defender: the engine snapshot's stored IDP block (`AFProjectionSnapshot.adjustmentFactors`),
+   * whose component AMOUNTS `afEngineForLeague` rescores under a league's own rules. The mirror row
+   * carries only the scalar, scored under the engine's canonical `balanced` preset — a
+   * balanced-league number in every league. Absent for offence, older rows, or a failed read.
+   */
+  idpFactors?: StoredProjectionFactors | null
+}
+
+export async function lookupAfEngineProjections(
+  playerIds: readonly string[],
+  at?: { season: string; week: number } | null,
+): Promise<Map<string, AfEngineProjection>> {
+  const ids = [...new Set(playerIds.filter((id) => typeof id === 'string' && id.length > 0 && !id.startsWith('name:')))]
+  if (ids.length === 0) return new Map()
+  const when = at ?? (await latestProjectionWeek())
+  if (!when) return new Map()
+
+  const rows = await prisma.fantasyProjection.findMany({
+    where: { playerId: { in: ids }, season: when.season, week: when.week, source: 'allfantasy' },
+    select: { playerId: true, projectedPoints: true, stats: true },
+  })
+  const out = new Map<string, AfEngineProjection>()
+  for (const r of rows) {
+    const points = Number(r.projectedPoints)
+    if (!Number.isFinite(points)) continue
+    const s = (r.stats ?? {}) as { basis?: unknown; confidenceLevel?: unknown; canonicalPlayerId?: unknown; position?: unknown }
+    out.set(r.playerId, {
+      playerId: r.playerId,
+      projectedPoints: points,
+      basis: typeof s.basis === 'string' ? s.basis : null,
+      confidence: typeof s.confidenceLevel === 'string' ? s.confidenceLevel : null,
+      canonicalPlayerId: typeof s.canonicalPlayerId === 'string' && s.canonicalPlayerId ? s.canonicalPlayerId : null,
+      position: typeof s.position === 'string' && s.position ? s.position : null,
+    })
+  }
+
+  /*
+   * ⚠ DEFENDERS ONLY, AND ONE QUERY. The stored component amounts live on the engine snapshot,
+   * not on the mirror row, keyed by the engine's own player id. Offence never needs them (its
+   * carry is the provider ratio), so a lineup with no defenders costs nothing extra. A failed read
+   * leaves `idpFactors` absent and the defender at the engine's preset — the previous behaviour.
+   */
+  const defenders = [...out.values()].filter(
+    (r) => r.canonicalPlayerId && (String(r.basis ?? '').includes('idp') || isIdpEligiblePosition(r.position)),
+  )
+  const season = Number(when.season)
+  if (defenders.length > 0 && Number.isFinite(season)) {
+    // Inside `.then` so a client without the delegate rejects into the catch instead of throwing.
+    const snaps = await Promise.resolve()
+      .then(() =>
+        prisma.aFProjectionSnapshot.findMany({
+          where: { playerId: { in: defenders.map((d) => d.canonicalPlayerId!) }, season, week: when.week },
+          orderBy: { computedAt: 'desc' },
+          select: { playerId: true, adjustmentFactors: true },
+        }),
+      )
+      .catch(() => [])
+    const newest = new Map<string, StoredProjectionFactors>()
+    for (const s of snaps) {
+      if (!newest.has(s.playerId) && s.adjustmentFactors && typeof s.adjustmentFactors === 'object') {
+        newest.set(s.playerId, s.adjustmentFactors as StoredProjectionFactors)
+      }
+    }
+    for (const d of defenders) {
+      const f = newest.get(d.canonicalPlayerId!)
+      if (f?.idp?.componentAmounts) d.idpFactors = f
+    }
+  }
+  return out
+}
+
+/** The AF engine's number carried into one league's scoring — see afEngineCarry.ts, its client-safe home. */
+import { afEngineForLeague } from './afEngineCarry'
+export { afEngineForLeague }
+
 export type PositionRank = {
   rank: number
   outOf: number
@@ -352,6 +465,38 @@ export function leagueScoredLineupTotal(
     const scored = scoringSettings && componentStats ? computeLeagueProjectedPoints(componentStats, scoringSettings) : null
     if (!scored) continue
     total += scored.points
+    from += 1
+  }
+  return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }
+}
+
+/**
+ * One lineup's AF-ENGINE total under this league's rules — the AllFantasy counterpart of
+ * `leagueScoredLineupTotal` above, over the same starters and the same provider rows.
+ *
+ * Each starter is `afEngineForLeague(engine, provider generic, provider league-scored)`: scaled
+ * by the provider line where one prices him, the engine's PPR number where none does. A starter
+ * the engine never wrote is skipped and not counted; null when the engine priced nobody.
+ */
+export function afEngineLineupTotal(
+  starterIds: readonly string[],
+  providers: ReadonlyMap<string, PlayerProjection>,
+  engine: ReadonlyMap<string, AfEngineProjection>,
+  scoringSettings: Record<string, unknown> | null,
+): { projected: number | null; projectedFrom: number } {
+  let total = 0
+  let from = 0
+  for (const id of starterIds) {
+    const row = engine.get(id)
+    if (!row) continue
+    const provider = providers.get(id)
+    const league =
+      scoringSettings && provider?.componentStats
+        ? computeLeagueProjectedPoints(provider.componentStats, scoringSettings)
+        : null
+    const v = afEngineForLeague(row, provider?.projectedPoints ?? null, league?.points ?? null, scoringSettings)
+    if (v == null) continue
+    total += v
     from += 1
   }
   return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }

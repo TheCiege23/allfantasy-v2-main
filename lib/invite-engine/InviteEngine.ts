@@ -29,6 +29,7 @@ import type {
   InviteType,
 } from './types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
 
 const MAX_ACTIVE_PER_USER_PER_DAY = 100
 const TOKEN_MAX_ATTEMPTS = 5
@@ -976,7 +977,7 @@ export async function acceptInvite(
       destinationHref?: string | null
       pendingReview?: boolean
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; divisionGate?: ReturnType<typeof divisionGateRefusal> }
 > {
   const token = normalizeToken(code)
   if (!token) return { ok: false, error: 'Invalid code' }
@@ -1227,6 +1228,17 @@ export async function acceptInvite(
 
   const fantasyValidation = await validateFantasyInviteCode(token, { userId })
   if (fantasyValidation.valid) {
+    // The same self-service credential as POST /api/leagues/join, so the same division gate
+    // (ADR F2.10a). Before 2026-10-01 this branch skipped the level gate that route applied.
+    const divisionGate = await evaluateJoinDivisionGate({
+      userId,
+      leagueId: fantasyValidation.preview.leagueId,
+      credential: { kind: 'league_code' },
+    })
+    if (divisionGate.outcome === 'deny') {
+      const refusal = divisionGateRefusal(divisionGate, fantasyValidation.preview.leagueId)
+      return { ok: false, error: refusal.error, divisionGate: refusal }
+    }
     const result = await createFantasyLeagueRoster(fantasyValidation.preview.leagueId, userId)
     if (!result.ok) return { ok: false, error: result.error }
     return {

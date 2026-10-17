@@ -11,7 +11,7 @@
     "errorPath": "offline.html"
   },
   "ios": {
-    "appendUserAgent": "AllFantasyiOS/1.0",
+    "appendUserAgent": "AllFantasyiOS/1.1 AFIAP/1",
     "contentInset": "never",
     "backgroundColor": "#020617",
     "limitsNavigationsToAppBoundDomains": false
@@ -26,6 +26,13 @@
       "style": "DARK",
       "backgroundColor": "#020617",
       "overlaysWebView": false
+    },
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     }
   }
 }

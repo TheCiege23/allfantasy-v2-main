@@ -49,9 +49,9 @@ export default function RankChangeDrivers({
   if (compact) {
     return (
       <div className="space-y-1">
-        {title && <div className="text-[10px] text-white/40 font-semibold uppercase tracking-wider">{title}</div>}
+        {title && <div className="text-[11px] text-white/40 font-semibold uppercase tracking-wider">{title}</div>}
         {significant.slice(0, 4).map((d) => (
-          <div key={d.id} className="flex items-center gap-1.5 text-[10px]">
+          <div key={d.id} className="flex items-center gap-1.5 text-[11px]">
             <PolarityIcon polarity={d.polarity} />
             <span className="text-white/60">{d.label}</span>
             {d.delta != null && (
@@ -67,7 +67,7 @@ export default function RankChangeDrivers({
 
   return (
     <div className="rounded-xl bg-white/5 border border-white/10 p-3">
-      <div className="text-[10px] text-white/40 font-semibold uppercase tracking-wider mb-2">
+      <div className="text-[11px] text-white/40 font-semibold uppercase tracking-wider mb-2">
         {title || 'Why this changed'}
       </div>
       <div className="space-y-1.5">
@@ -83,7 +83,7 @@ export default function RankChangeDrivers({
                   {formatDelta(d.delta, d.unit)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">
+              <span className="text-[11px] text-white/30">
                 {d.value.toFixed(1)}{d.unit === '%' ? '%' : ''}
               </span>
             </div>

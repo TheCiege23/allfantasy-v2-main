@@ -36,7 +36,14 @@ export function LaunchBanner({
   const day = formatLaunchDay(startsAt, lang)
 
   return (
-    <section className="af-launch-banner" aria-labelledby="af-launch-banner-title" data-testid="launch-banner">
+    // data-hide-in-ios-app: "paid plans start…" and founding pricing steer to a purchase the iOS
+    // app does not sell (App Store 3.1.1), so the whole banner stays out of the app.
+    <section
+      className="af-launch-banner"
+      aria-labelledby="af-launch-banner-title"
+      data-testid="launch-banner"
+      data-hide-in-ios-app
+    >
       <div className="af-launch-banner-copy">
         <span className="af-launch-kicker">
           <span className="af-launch-dot" aria-hidden="true" />

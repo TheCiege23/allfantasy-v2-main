@@ -87,6 +87,7 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
           `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}`,
           {
             cache: 'no-store',
+            signal: AbortSignal.timeout(15_000),
             headers: etagRef.current ? { 'If-None-Match': etagRef.current } : undefined,
           },
         )
@@ -99,6 +100,7 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
          * Checked before `res.ok`, which is false for 304 -- without this branch a
          * 304 falls into the failure path, indistinguishable from an outage.
          */
+        if (seq !== requestSeq.current) return
         if (res.status === 304) {
           // ⚠ A 304 IS A LANDING, NOT A MISS. The server answered; it simply had
           // nothing new. Counting it as a failure would put the badge into
@@ -139,6 +141,7 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
         setNow(at)
         setConsecutiveFailures(0)
       } catch {
+        if (seq !== requestSeq.current) return
         setConsecutiveFailures((n) => n + 1)
         // A failed poll leaves the last good data on screen. The freshness label
         // keeps counting up, which is exactly the honest signal: the numbers are
@@ -280,7 +283,7 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
           <ConnectionNotice state={connection} />
           <LockAlertBanner alerts={data.lockAlerts} now={now} />
           <p
-            className="live-mono text-[10px] font-bold uppercase tracking-widest"
+            className="live-mono text-[11px] font-bold uppercase tracking-widest"
             style={{ color: 'var(--muted2)' }}
           >
             {data.sport} · {scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
@@ -577,7 +580,7 @@ export function LockAlertBanner({
       aria-live="polite"
     >
       <h2
-        className="live-mono mb-2 text-[10px] font-bold uppercase tracking-widest"
+        className="live-mono mb-2 text-[11px] font-bold uppercase tracking-widest"
         style={{ color: 'var(--warn)' }}
       >
         {closing.length === 1

@@ -26,6 +26,12 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/decision-os/trade/warRoomTradeGrade.ts', entry: /gradeDeal\(/, what: 'War Room trade grading' },
   { file: 'app/api/leagues/[leagueId]/redraft-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the redraft War Room trade analyzer' },
   { file: 'app/api/leagues/[leagueId]/dynasty-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the dynasty War Room trade analyzer' },
+  /* 2026-09-29: the other three War Rooms, the same way. */
+  { file: 'app/api/leagues/[leagueId]/keeper-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the keeper War Room trade analyzer' },
+  { file: 'app/api/leagues/[leagueId]/guillotine-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the guillotine War Room trade analyzer' },
+  { file: 'app/api/leagues/[leagueId]/best-ball-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the best-ball War Room trade analyzer' },
+  /* 2026-09-29: the league settings "AI trade" panel, which prints this route's response as-is. */
+  { file: 'app/api/ai/trade-analysis/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the league settings AI trade panel' },
   /* 2026-09-27: the Trade Center's "Best trade partners" suggestions (see lib/trade-intel/partnerSuggestionGrades.ts). */
   { file: 'app/api/leagues/[leagueId]/trades/rosters/route.ts', entry: /gradeDeal\(/, what: 'the Trade Center partner suggestions' },
   /* 2026-09-28: the trade block's suggested offers (see lib/trade-block/tradeBlockOffers.ts). */
@@ -63,6 +69,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'app/api/dynasty-trade-analyzer/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the dynasty trade analyzer' },
   /* 2026-09-27: /trade-finder's candidates (see lib/trade-finder/candidateGrades.ts). */
   { file: 'app/api/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the /trade-finder page’s suggested trades' },
+  /* 2026-09-29: the /core Player Finder's "trade for him" card — it printed a second engine's verdict until then. */
+  { file: 'lib/core-app/playerTradeVisual.ts', entry: /gradeDeal\(/, what: 'the /core Player Finder “trade for him” card' },
 ]
 
 /* The private letters these surfaces used to print. Shapes, not words: a call, not a mention. */
@@ -228,11 +236,11 @@ describe('Trade OS — no screen keeps a private letter', () => {
     expect(PRIVATE_LETTERS[2]!.shape.test(code('components/core-app/screens/TradeCenter.tsx'))).toBe(false)
   })
 
-  it('the AI Tools trade modal prints the one grade, not the canonical memo second opinion', () => {
-    const src = code('components/ai-tools/modals/TradeValueModal.tsx')
-    expect(src).not.toMatch(/describeTradeCanonicalOpinion\(/)
-    expect(src).not.toMatch(/\bdecisionOs\b/)
-    expect(src).toMatch(/proposalGrade\.letter/)
+  it('the old AI Tools trade modal is gone for good', () => {
+    // Unmounted since 2026-07-06 and deleted 2026-10-06. A revival must come back through this list,
+    // not as a second grading surface nobody can see.
+    const f = 'components/ai-tools/modals/TradeValueModal.tsx'
+    expect(existsSync(resolve(process.cwd(), f)), f).toBe(false)
   })
 
   // `\??` on every hop: an optional-chained read (`valueSnapshot?.grade`) is the same letter.
@@ -278,6 +286,42 @@ describe('Trade OS — no screen keeps a private letter', () => {
       'proposalGrade: evaluations.get(trade.transactionId)?.grade ?? null,',
     )).toBe(true)
     expect(/realizedGradeDisplay\(/.test('const display = realizedGradeDisplay({')).toBe(true)
+  })
+})
+
+/*
+ * 2026-09-29: surfaces that printed a VERDICT of their own beside (or instead of) the letter — not a
+ * letter, so PRIVATE_LETTERS cannot see them. Each shape is the call or read the screen used to print.
+ */
+describe('no screen prints a second engine’s verdict beside the one grade', () => {
+  it.each([
+    'app/league/[leagueId]/tabs/keeper/KeeperWarRoomPanel.tsx',
+    'app/league/[leagueId]/tabs/guillotine/GuillotineWarRoomPanel.tsx',
+    'app/league/[leagueId]/tabs/best-ball/BestBallWarRoomPanel.tsx',
+  ])('%s shows the grade line and never the War Room engine’s accept/reject/neutral', (file) => {
+    const src = code(file)
+    expect(src).toMatch(/<WarRoomTradeGradeLine grade=\{tradeGrade\}/)
+    expect(src).not.toMatch(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/)
+  })
+
+  it('the AI trade panel’s route returns no Win / Loss / Fair verdict or fairness score', () => {
+    const src = code('app/api/ai/trade-analysis/route.ts')
+    expect(src).not.toMatch(/runTradeAnalysis\(/)
+    expect(src).not.toMatch(/\bverdict:|fairnessScore|fairnessConfidence/)
+    expect(src).toMatch(/tradeGrade = receiptGradeFields\(receipt\)/)
+  })
+
+  it('the dynasty trade analyzer names no winner but the letter’s', () => {
+    const src = code('components/DynastyTradeForm.tsx')
+    expect(src).not.toMatch(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/)
+    expect(src).toMatch(/winnerFromLeagueGrade\(tradeGrade,/)
+  })
+
+  it('positive controls: each shape matches the code it replaced', () => {
+    expect(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/.test("Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}")).toBe(true)
+    expect(/runTradeAnalysis\(/.test('engine = await runTradeAnalysis({')).toBe(true)
+    expect(/\bverdict:|fairnessScore|fairnessConfidence/.test('      verdict: deterministicVerdict,')).toBe(true)
+    expect(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/.test("winner: a.winner || 'Even',")).toBe(true)
   })
 })
 
@@ -452,5 +496,281 @@ describe('Nightly trade agent — suggests only what the one grade reads C for b
   it('rides the hourly housekeeping cron rather than taking a 61st cron slot', () => {
     expect(code('app/api/cron/reap-sync-runs/route.ts')).toMatch(/runTradeAgentPass\(\{/)
     expect(existsSync(resolve(process.cwd(), 'app/api/cron/trade-agent/route.ts'))).toBe(false)
+  })
+})
+
+describe('the /core Player Finder trade card — one verdict, the one grade (2026-09-29)', () => {
+  it('never asks the second trade engine', () => {
+    const src = code('lib/core-app/playerTradeVisual.ts')
+    expect(src).not.toMatch(/from '@\/lib\/engine\/trade'/)
+    expect(src).not.toMatch(/runTradeAnalysis\(/)
+  })
+
+  it('prints neither the finder’s band nor the old engine’s verdict, odds or starter points', () => {
+    const src = code('components/core-app/player-finder/TradeVisual.tsx')
+    expect(src).not.toMatch(/\{\s*(?:rec|p)\.fairness\s*\}/)
+    expect(src).not.toMatch(/Engine:|\.verdict\b|\.acceptance\b|starterDeltaPts/)
+    expect(src).toMatch(/grade\.data\.letter/)
+  })
+})
+
+/*
+ * 🛑 THE AF LEGACY PAGE'S TRADE TOOLS (2026-09-29) — sold as the AF Legacy plan, and each printed a
+ * verdict of its own beside (or instead of) the letter the full analyzer on the same page gives. Every
+ * one now reaches the one grader through `lib/legacy/legacyOneGrade.ts`; see
+ * `lib/legacy/legacyPackageGrade.ts` for the list of what each used to print.
+ *
+ * Kept as its own list at the END of the file so it merges beside other surfaces' entries untouched.
+ */
+const LEGACY_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
+  { file: 'lib/legacy/legacyOneGrade.ts', entry: /gradeDeal\(/, what: 'the AF Legacy door to the one grader' },
+  { file: 'server/api-route-modules/legacy/trade/quick-evaluate/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy Trade Hub live preview (quick evaluate)' },
+  // The league trade finder (league-analyze) is not listed: it was REMOVED on 2026-09-30 (a GPT-4o
+  // call per league select that nothing rendered) — see __tests__/legacy/league-analyze-removed.test.ts.
+  { file: 'server/api-route-modules/legacy/trade/proposal-generator/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy proposal generator' },
+  { file: 'server/api-route-modules/legacy/trade/goal-proposals/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy goal proposals' },
+  { file: 'server/api-route-modules/legacy/trade/analyze/route.ts', entry: /await gradeLegacyCounters\(/, what: 'the AF Legacy analyzer’s counter suggestions' },
+  { file: 'app/api/engine/trade/simulate-counter/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the AF Legacy counter “Apply & Simulate”' },
+]
+
+describe.each(LEGACY_SURFACES)('AF Legacy — $what', ({ file, entry }) => {
+  const src = code(file)
+
+  it('reaches the one grader', () => {
+    expect(entry.test(src)).toBe(true)
+  })
+
+  it.each(PRIVATE_LETTERS)('prints no private letter: $name', ({ shape }) => {
+    expect(shape.test(src)).toBe(false)
+  })
+})
+
+describe('AF Legacy — the page prints the one grade, never a verdict, fairness or acceptance number of its own', () => {
+  const PREVIEW_PRIVATE = /tradeHubLivePreview\.(?:acceptProbability|verdict|lean|fairnessDelta|marketDeltaPct|confidence|scores|sweeteners|acceptDrivers|riskFlags|lineupDelta)\b/
+
+  it('quick evaluate never asks the driver model or the acceptance model', () => {
+    const src = code('server/api-route-modules/legacy/trade/quick-evaluate/route.ts')
+    expect(src).not.toMatch(/computeTradeDrivers\(|computeAcceptProbability\(/)
+  })
+
+  it('the Trade Hub live preview reads the grade, and nothing the driver model printed', () => {
+    const page = code('app/af-legacy/page.tsx')
+    expect(page).toMatch(/<LegacyOneGrade grade=\{tradeHubLivePreview\.grade\} \/>/)
+    expect(PREVIEW_PRIVATE.test(page)).toBe(false)
+  })
+
+  it('positive controls: each shape matches the code it replaced', () => {
+    expect(/computeTradeDrivers\(|computeAcceptProbability\(/.test('const drivers = computeTradeDrivers(\n      giveAssets, receiveAssets,')).toBe(true)
+    expect(PREVIEW_PRIVATE.test('{tradeHubLivePreview.acceptProbability}%')).toBe(true)
+    expect(PREVIEW_PRIVATE.test("tradeHubLivePreview.verdict === 'FAIR' ? 'text-emerald-400' :")).toBe(true)
+    expect(PREVIEW_PRIVATE.test('{tradeHubLivePreview.sweeteners.map((s: any, i: number) => (')).toBe(true)
+    expect(PREVIEW_PRIVATE.test('<LegacyOneGrade grade={tradeHubLivePreview.grade} />')).toBe(false)
+  })
+
+  it('the league trade finder, which printed the LLM’s own letter, no longer exists to print one', () => {
+    expect(existsSync(resolve(process.cwd(), 'server/api-route-modules/legacy/trade/league-analyze/route.ts'))).toBe(false)
+    expect(existsSync(resolve(process.cwd(), 'app/api/ai/trade/league-analyze/route.ts'))).toBe(false)
+  })
+
+  const PROPOSAL_PRIVATE = /proposal\.(?:fairnessScore|acceptanceModel|fairnessNote|myTotal|theirTotal|acceptProb|acceptLabel|giveTotal|receiveTotal|counterPath|sweeteners|topDrivers)\b|<AcceptanceMeter\b/
+
+  it('the proposal generator scores nothing itself: no fairness /100, no acceptance model, no verdict labels', () => {
+    const src = code('server/api-route-modules/legacy/trade/proposal-generator/route.ts')
+    expect(src).not.toMatch(/computeTradeAcceptance\(|fairnessScore|bestAcceptanceIndex/)
+    expect(src).not.toMatch(/'Slight Edge'|'Fair & Balanced'|'Overpay'/)
+    expect(src).toMatch(/grade: grades\[i\]!/)
+  })
+
+  it('the page’s proposal cards print the grade and none of the generator’s own numbers', () => {
+    const page = code('app/af-legacy/page.tsx')
+    expect(page).toMatch(/<LegacyOneGrade grade=\{proposal\.grade\} \/>/)
+    expect(page).not.toMatch(/optimizeForAcceptance|Best Acceptance Chance/)
+  })
+
+  it('positive controls: the proposal shapes match the code they replaced', () => {
+    expect(/computeTradeAcceptance\(|fairnessScore|bestAcceptanceIndex/.test('const acceptance = computeTradeAcceptance(acceptanceInput);')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('<span className="text-white font-semibold">{proposal.fairnessScore}</span>')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('<AcceptanceMeter data={proposal.acceptanceModel as AcceptanceModelData} compact />')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('{proposal.acceptProb}%')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('<LegacyOneGrade grade={proposal.grade} />')).toBe(false)
+  })
+
+  it('goal proposals send the grade and none of the goal engine’s judging fields', () => {
+    const src = code('server/api-route-modules/legacy/trade/goal-proposals/route.ts')
+    expect(src).not.toMatch(/\.\.\.result\b/)
+    expect(src).toMatch(/await gradeOf\(gradeInputsFromEngineAssets\(p\.give\), gradeInputsFromEngineAssets\(p\.receive\)\)/)
+    expect(code('lib/trade-engine/goal-proposal-engine.ts')).not.toMatch(/Fair deal for both|values line up well|keeps things fair/)
+  })
+
+  it('neither proposal list on the page prints a generator’s own fairness, acceptance, drivers or totals', () => {
+    expect(PROPOSAL_PRIVATE.test(code('app/af-legacy/page.tsx'))).toBe(false)
+    expect(code('app/af-legacy/page.tsx').match(/<LegacyOneGrade grade=\{proposal\.grade\} \/>/g)?.length).toBe(2)
+  })
+
+  it('positive controls: the goal shapes match the code they replaced', () => {
+    expect(/\.\.\.result\b/.test('      success: true,\n      ...result,')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('{proposal.topDrivers.slice(0, 3).map((d: any, dIdx: number) => (')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('Total: {proposal.giveTotal?.toLocaleString()}')).toBe(true)
+    expect(/Fair deal for both|values line up well|keeps things fair/.test('in return. Fair deal for both of us.`,')).toBe(true)
+  })
+
+  const COUNTER_PRIVATE = /\b(?:c|simResult)\.(?:acceptProb|fairnessScore|fairness|acceptance|verdict)\b|Est\. Accept|animatedAccept/
+
+  it('counters: the analyzer sends graded counters, never the second engine’s whole analysis', () => {
+    const src = code('server/api-route-modules/legacy/trade/analyze/route.ts')
+    expect(src).not.toMatch(/\{\s*engineAnalysis,\s*engineRequest/)
+    expect(src).toMatch(/engineAnalysis: engineClientView/)
+    expect(code('app/api/engine/trade/simulate-counter/route.ts')).not.toMatch(/runTradeAnalysis\(/)
+    expect(COUNTER_PRIVATE.test(code('components/TradeCounterSuggestions.tsx'))).toBe(false)
+  })
+
+  it('positive controls: the counter shapes match the code they replaced', () => {
+    expect(/\{\s*engineAnalysis,\s*engineRequest/.test('...(engineAnalysis ? { engineAnalysis, engineRequest: engineReqSaved } : {}),')).toBe(true)
+    expect(COUNTER_PRIVATE.test('<>Est. Accept: {(c.acceptProb * 100).toFixed(0)}%</>')).toBe(true)
+    expect(COUNTER_PRIVATE.test('<span className="ml-2">Fairness: {c.fairnessScore}</span>')).toBe(true)
+    expect(COUNTER_PRIVATE.test('{simResult.verdict.toUpperCase()}')).toBe(true)
+  })
+
+  /*
+   * The market path is authoritative and `lib/dynasty-tiers` is not (owner's ruling). The analyzer fed a
+   * tier-system evaluation into its prompt as "MANDATORY … do NOT override the tier system verdict".
+   */
+  const TIER_VERDICT = /dynastyTierEvaluation\(|formatEvaluationForAI\(|TIER EVALUATION|tierEvaluation\b/
+
+  it('the legacy analyzer hands the model no dynasty-tiers verdict — only the receipt', () => {
+    const src = code('server/api-route-modules/legacy/trade/analyze/route.ts')
+    expect(TIER_VERDICT.test(src)).toBe(false)
+    expect(src).toMatch(/const canonicalGradeDirective = receiptPromptBlock\(evaluationReceipt\)/)
+  })
+
+  it('positive control: the tier shape matches the code it replaced', () => {
+    expect(TIER_VERDICT.test('      tierEvaluationStr = formatEvaluationForAI(tierEvaluation)')).toBe(true)
+    expect(TIER_VERDICT.test("tierEvaluation ? 'TIER EVALUATION (MANDATORY): The deterministic tier system'")).toBe(true)
+    expect(TIER_VERDICT.test('import { detectSFFromRosterPositions } from \'@/lib/dynasty-tiers\'')).toBe(false)
+  })
+})
+
+/*
+ * 2026-09-29: the /trade/[id] share page printed an old share's stored dual-brain winner, value delta,
+ * confidence, verdict and veto risk. It prints the stored one grade, or no verdict (behaviour pinned in
+ * __tests__/dynasty-trade/shared-trade-one-grade.test.tsx).
+ */
+describe('the /trade/[id] share page prints the stored one grade, never the stored dual-brain verdict', () => {
+  const SHARE_PRIVATE = /analysis\.(?:valueDelta|confidence|dynastyVerdict|vetoRisk)\b|share\.analysis as TradeAnalysis/
+
+  it('reads the share through readSharedTrade and draws DynastyLeagueGrade', () => {
+    const page = code('app/trade/[id]/page.tsx')
+    expect(page).toMatch(/const analysis = readSharedTrade\(share\.analysis\)/)
+    expect(page).toMatch(/<DynastyLeagueGrade/)
+    expect(SHARE_PRIVATE.test(page)).toBe(false)
+  })
+
+  it('positive control: the shape matches the lines the page printed', () => {
+    expect(SHARE_PRIVATE.test('<span className="ml-2 font-semibold text-cyan-300">{analysis.valueDelta}</span>')).toBe(true)
+    expect(SHARE_PRIVATE.test('<span className="text-sm text-white">{analysis.confidence}%</span>')).toBe(true)
+    expect(SHARE_PRIVATE.test('const analysis = share.analysis as TradeAnalysis;')).toBe(true)
+  })
+})
+
+/*
+ * 2026-09-29: the dynasty trade analyzer printed the dual-brain engine's confidence, net delta,
+ * acceptance %, side totals, veto risk, partner-fit score and "Ready to Send" call beside the one grade.
+ * The route sends an allowlisted view; behaviour in __tests__/dynasty-trade/dynasty-analyzer-no-private-verdict.test.ts.
+ */
+describe('the dynasty trade analyzer sends and prints no dual-brain verdict', () => {
+  const ROUTE_PRIVATE = /deterministicVerdict: detVerdict|dynastyVerdict:|aiVerdict:|winner: detVerdict|acceptanceProbability:|\bsections,\n/
+
+  it('the route sends the allowlisted sections and no verdict fields', () => {
+    const src = code('app/api/dynasty-trade-analyzer/route.ts')
+    expect(src).toMatch(/sections: dynastyAnalyzerSectionsForClient\(sections, gate\.filteredCounters\)/)
+    expect(ROUTE_PRIVATE.test(src)).toBe(false)
+  })
+
+  it('positive control: the shape matches the lines the route sent', () => {
+    expect(ROUTE_PRIVATE.test('      deterministicVerdict: detVerdict,')).toBe(true)
+    expect(ROUTE_PRIVATE.test('        dynastyVerdict: detVerdict.winnerLabel,')).toBe(true)
+    expect(ROUTE_PRIVATE.test('      sections,\n      deterministicVerdict')).toBe(true)
+  })
+})
+
+/*
+ * 2026-09-29: components/TradeFinderClient.tsx — unimported since 2026-04-02 (/trade-finder renders
+ * app/trade-finder/page.tsx) — carried a private letter (`computeTradeGrade`), an invented "+12%" win
+ * probability and a read of the analyzer's `dynastyVerdict`. Deleted rather than repointed.
+ */
+describe('/trade-finder has one client, and it is the graded one', () => {
+  it('the old client with its own letter is gone, and the page reads the graded candidates', () => {
+    expect(existsSync(resolve(process.cwd(), 'components/TradeFinderClient.tsx'))).toBe(false)
+    const page = code('app/trade-finder/page.tsx')
+    expect(page).toMatch(/toFinderTrades/)
+    expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict/)
+  })
+
+  /*
+   * 2026-09-30: TradeFinderClient was the only importer of components/PartnerMatchView.tsx, which was
+   * the only importer of ManagerStyleBadge (a null compatibility stub), ReputationBadge and
+   * LegacyScoreBadge. Censused in all four import forms, tests and mocks — nothing else named them.
+   * The API routes they fetched stay: /trade-finder still calls /api/trade-partner-match itself.
+   */
+  it.each([
+    'components/PartnerMatchView.tsx',
+    'components/ManagerStyleBadge.tsx',
+    'components/ReputationBadge.tsx',
+    'components/LegacyScoreBadge.tsx',
+  ])('the orphan %s went with it', (file) => {
+    expect(existsSync(resolve(process.cwd(), file))).toBe(false)
+  })
+})
+
+/*
+ * 2026-09-29: all five War Rooms' trade analyses printed "value in X vs out Y (delta …)" on their own
+ * scale, a pick "(tier 8.5)", and flags naming their private verdict ("verdict unavailable"). The one
+ * grade line is the verdict; behaviour pinned in each War Room engine suite (WAR_ROOM_PRIVATE_SCALE).
+ */
+describe.each([
+  'lib/redraft-war-room/redraftTradeEngine.ts',
+  'lib/dynasty-war-room/dynastyTradeEngine.ts',
+  'lib/keeper-war-room/keeperTradeEngine.ts',
+  'lib/guillotine-war-room/guillotineTradeEngine.ts',
+  'lib/best-ball-war-room/bestBallTradeEngine.ts',
+])('%s writes no private-scale line for users', (file) => {
+  const ENGINE_PRIVATE = /value in \$\{|vs (?:value )?out \$\{|\(delta \$\{|\(tier \$\{|verdict unavailable|verdict weighted|value delta\.'/
+
+  it('no value-in/out, delta, pick tier or verdict wording in a user-facing string', () => {
+    expect(ENGINE_PRIVATE.test(code(file))).toBe(false)
+  })
+
+  it('positive control: the shape matches the lines the engines wrote', () => {
+    expect(ENGINE_PRIVATE.test("facts.push(`Floor value in ${inSum.toFixed(1)} vs out ${outSum.toFixed(1)} (delta ${valueDelta >= 0 ? '+' : ''}${valueDelta}).`)")).toBe(true)
+    expect(ENGINE_PRIVATE.test("missingDataFlags.push('No value signal for the involved players — verdict unavailable.')")).toBe(true)
+    expect(ENGINE_PRIVATE.test('pickImpact.push(`Acquiring ${pickLabel(pk)} pick${pk.estValue != null ? ` (tier ${pk.estValue.toFixed(1)})` : \'\'}.`)')).toBe(true)
+  })
+})
+
+/*
+ * 2026-09-29: the redraft and dynasty War Room panels fell back to the engine's "Verdict: accept ·
+ * value 9.4" when no grade came back. No War Room route sends the verdict any more, and no grade reads
+ * "Not graded" with the reason (WarRoomTradeGradeLine).
+ */
+describe.each(['redraft', 'dynasty', 'keeper', 'guillotine', 'best-ball'])('the %s War Room never shows its engine’s verdict', (kind) => {
+  it('the route sends the analysis through warRoomTradeAnalysisForClient', () => {
+    expect(code(`app/api/leagues/[leagueId]/${kind}-war-room/[action]/route.ts`)).toMatch(
+      /NextResponse\.json\(\{ tradeAnalysis: warRoomTradeAnalysisForClient\(analysis\), tradeGrade \}\)/,
+    )
+  })
+})
+
+describe('the War Room panels have no fallback verdict', () => {
+  it.each([
+    'app/league/[leagueId]/tabs/redraft/RedraftWarRoomPanel.tsx',
+    'app/league/[leagueId]/tabs/dynasty/DynastyWarRoomPanel.tsx',
+  ])('%s', (file) => {
+    const src = code(file)
+    expect(src).not.toMatch(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/)
+    expect(src).toMatch(/<WarRoomTradeGradeLine grade=\{tradeGrade\}/)
+  })
+
+  it('positive control: the shape matches the fallback the panels printed', () => {
+    expect(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/.test('<span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span>')).toBe(true)
   })
 })

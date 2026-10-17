@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Send, Image as ImageIcon, Loader2, X, RefreshCw, Volume2, History, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { type ChimmyVoicePreset } from '@/lib/chimmy-interface'
 import {
   getAIThreadStorageKey,
@@ -18,6 +19,7 @@ import { loadChimmyConversation } from '@/lib/chimmy-conversation-service'
 import ChimmyMessageBubble, { type ChimmyMessageMeta } from './ChimmyMessageBubble'
 import ChimmyConversationThread from './ChimmyConversationThread'
 import ChimmyIntentChips from './ChimmyIntentChips'
+import ChimmyStrategyCard from './ChimmyStrategyCard'
 import ChimmyToolContext from './ChimmyToolContext'
 import ChimmyProviderIndicator from './ChimmyProviderIndicator'
 import ChimmyVoiceReadyControls from './ChimmyVoiceReadyControls'
@@ -281,6 +283,24 @@ export default function ChimmyChatShell({
     return leagues.filter((l) => normalizeToSupportedSport(l.sport) === scopeSport)
   }, [leagues, scopeSport])
 
+  /*
+   * The option text, told apart by the app's one rule (lib/core-app/leagueNameCollision.ts) when two
+   * options would otherwise read the same — measured 2026-09-28, one account had four leagues named
+   * "…12-Team NFL Redraft League (manual)". The rule runs on the TEXT THE OPTION SHOWS (name cut to
+   * 48, plus sport), so the suffix is never the part the cut removes, and two names that only differ
+   * past character 48 are separated too. Once over exactly the options rendered.
+   */
+  const leagueOptionLabels = useMemo(
+    () =>
+      distinctLeagueLabels(
+        filteredLeagues.map((l) => ({
+          id: l.id,
+          name: `${(l.name || 'League').slice(0, 48)} (${normalizeToSupportedSport(l.sport)})`,
+        })),
+      ),
+    [filteredLeagues],
+  )
+
   useEffect(() => {
     if (scopeLeagueId === 'all') return
     const ok = filteredLeagues.some((l) => l.id === scopeLeagueId)
@@ -531,7 +551,7 @@ export default function ChimmyChatShell({
 
   const handleVoiceToggle = useCallback(() => {
     if (ttsUnavailable) {
-      toast.warning('Voice unavailable — check ElevenLabs API key in settings')
+      toast.warning("Voice unavailable right now.")
       return
     }
     const nextEnabled = !voiceConfig.enabled
@@ -544,7 +564,7 @@ export default function ChimmyChatShell({
   const handlePlayVoice = useCallback(
     async (text: string, messageId: string) => {
       if (ttsUnavailable) {
-        const message = 'Voice unavailable — check ElevenLabs API key in settings.'
+        const message = "Voice unavailable right now."
         setInlineError(message)
         toast.error(message)
         return
@@ -1010,7 +1030,7 @@ export default function ChimmyChatShell({
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold text-white truncate">Chimmy</h2>
-            <p className="text-[10px] sm:text-xs text-white/50 truncate">
+            <p className="text-[11px] sm:text-xs text-white/50 truncate">
               Calm, evidence-based fantasy assistant
             </p>
           </div>
@@ -1082,7 +1102,7 @@ export default function ChimmyChatShell({
           onChange={handleAssistantModeChange}
         />
         <label className="flex flex-col gap-1 min-w-[120px] flex-1 sm:flex-none">
-          <span className="text-[10px] uppercase tracking-wide text-white/45">Sport</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/45">Sport</span>
           <select
             data-testid="chimmy-scope-sport"
             className="rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1105,7 +1125,7 @@ export default function ChimmyChatShell({
           </select>
         </label>
         <label className="flex flex-col gap-1 min-w-[160px] flex-[2] sm:flex-none sm:min-w-[220px]">
-          <span className="text-[10px] uppercase tracking-wide text-white/45">League</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/45">League</span>
           <select
             data-testid="chimmy-scope-league"
             className="max-w-full rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1122,7 +1142,7 @@ export default function ChimmyChatShell({
             <option value="all">All leagues</option>
             {filteredLeagues.map((l) => (
               <option key={l.id} value={l.id}>
-                {(l.name || 'League').slice(0, 48)} ({normalizeToSupportedSport(l.sport)})
+                {leagueOptionLabels.get(l.id)}
               </option>
             ))}
           </select>
@@ -1164,6 +1184,7 @@ export default function ChimmyChatShell({
           />
         )}
 
+        {requestContext.leagueId && <ChimmyStrategyCard leagueId={requestContext.leagueId} />}
         <ChimmyIntentChips
           enabled={chimmyFeatureFlags.intentChips}
           hasUserMessage={hasUserMessage}
@@ -1287,7 +1308,7 @@ export default function ChimmyChatShell({
           </button>
         </div>
 
-        <div className="flex items-center justify-between text-[10px] text-white/40 flex-wrap gap-2">
+        <div className="flex items-center justify-between text-[11px] text-white/40 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             {startSitDecisionHref ? (
               <Link

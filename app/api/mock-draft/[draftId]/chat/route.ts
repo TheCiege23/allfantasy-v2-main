@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessMockDraft } from '@/lib/mock-draft-engine/MockDraftSessionService'
+import { BlockListUnavailableError, getBlockedSenderSetForRead } from '@/lib/moderation/BlockUserService'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -23,19 +24,29 @@ export async function GET(
   const allowed = await canAccessMockDraft(draftId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  /* Blocked senders hidden; a failed block-list read is a 503, never an unfiltered list (guideline 1.2). */
+  let blocked: Set<string>
+  try {
+    blocked = await getBlockedSenderSetForRead(userId)
+  } catch (err) {
+    if (!(err instanceof BlockListUnavailableError)) throw err
+    return NextResponse.json({ error: 'Messages are temporarily unavailable. Try again in a moment.' }, { status: 503 })
+  }
+
   const messages = await prisma.mockDraftChat.findMany({
     where: { mockDraftId: draftId },
     orderBy: { createdAt: 'asc' },
     take: 200,
   })
-  const list = messages.map((m) => ({
+  const list = messages.filter((m) => !m.userId || !blocked.has(m.userId)).map((m) => ({
     id: m.id,
     userId: m.userId,
     displayName: m.displayName,
     content: m.content,
     createdAt: m.createdAt.toISOString(),
   }))
-  return NextResponse.json({ draftId, messages: list })
+  /* `viewerUserId`: the panel offers Report and Block on every message but the viewer's own. */
+  return NextResponse.json({ draftId, messages: list, viewerUserId: userId })
 }
 
 export async function POST(

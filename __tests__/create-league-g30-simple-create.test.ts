@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_V2_STATE, type CreateLeagueV2State } from '@/lib/create-league-v2/state'
+import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
 import {
   IMPORT_LEAGUE_PROVIDERS,
   UNIVERSAL_CREATE_TEAM_COUNTS,
@@ -50,11 +51,7 @@ describe('G30 simple universal create helpers', () => {
 
   it('keeps import provider states explicit', () => {
     expect(IMPORT_LEAGUE_PROVIDERS.map((provider) => provider.id)).toEqual([
-      'sleeper',
-      'espn',
-      'fantrax',
-      'yahoo',
-      'mfl',
+      ...IMPORT_PROVIDER_UI_OPTIONS.map((option) => option.provider),
       'manual',
     ])
     expect(IMPORT_LEAGUE_PROVIDERS.find((provider) => provider.id === 'sleeper')).toMatchObject({

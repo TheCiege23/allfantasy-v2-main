@@ -23,6 +23,7 @@ function world(rows = [contract('p', 'a', 30), contract('q', 'b', 50)]) {
     rosters: ['a', 'b', 'c'].map(id => ({ id, leagueId: 'L', faabRemaining: 100,
       playerData: { players: rows.filter(c => c.rosterId === id && c.status !== 'cut').map(c => c.playerId) } })) }
   const db = {
+    league: { findUnique: vi.fn(async () => ({ settings: {} })) },
     playerContract: {
       findMany: vi.fn(async () => structuredClone(state.contracts)),
       updateMany: vi.fn(async ({ where, data }) => {

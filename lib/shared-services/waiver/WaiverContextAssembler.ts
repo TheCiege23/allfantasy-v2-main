@@ -50,7 +50,13 @@ import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedWaiverIntegrationService, type CertifiedScheduleDescription } from '@/lib/sports-evidence/waiverIntegration'
 import { extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 
-/** Same conservative flat fallback used by tradeLearningCapture.ts's live capture — not a new invention. */
+/**
+ * Conservative flat value for a player FantasyCalc does not know. This was copied from
+ * tradeLearningCapture.ts's live capture, which no longer has one (it refuses unpriced assets since
+ * 2026-09-30, #1710, because a guess in a LEARNING sample is worse than no sample). Here the value
+ * only orders an AI prompt's roster context and `matched: false` travels with it, so the guess is
+ * labelled rather than laundered — a different job, and this stands on its own now.
+ */
 const UNMATCHED_PLAYER_FALLBACK_VALUE = 200
 
 const SECTION_TO_SLOT: Record<RosterSectionKey, WaiverRosterPlayer['slot']> = {

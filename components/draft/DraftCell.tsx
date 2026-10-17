@@ -19,17 +19,17 @@ export function DraftCell({
     >
       {pick ? (
         <div className="space-y-1">
-          <p className="text-[10px] uppercase tracking-wide text-white/40">{label}</p>
+          <p className="text-[11px] uppercase tracking-wide text-white/40">{label}</p>
           <p className="line-clamp-2 text-sm font-semibold text-white">{pick.playerName}</p>
           <p className="text-xs text-white/65">
             {pick.position}
             {pick.team ? ` • ${pick.team}` : ''}
           </p>
-          <p className="text-[10px] text-white/35">{pick.displayName ?? 'Manager'}</p>
+          <p className="text-[11px] text-white/35">{pick.displayName ?? 'Manager'}</p>
         </div>
       ) : (
         <div className="space-y-1">
-          <p className="text-[10px] uppercase tracking-wide text-white/35">{label}</p>
+          <p className="text-[11px] uppercase tracking-wide text-white/35">{label}</p>
           <div className="rounded-lg border border-dashed border-white/10 px-2 py-4 text-center text-[11px] text-white/25">
             Empty
           </div>

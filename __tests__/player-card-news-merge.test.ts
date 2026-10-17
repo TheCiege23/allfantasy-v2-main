@@ -64,7 +64,7 @@ describe('loadPlayerBlurbs — per-player news from the attributed feed', () => 
       },
     ])
     const loadPlayerBlurbs = await subject()
-    const out = await loadPlayerBlurbs('9221', 'Rome Odunze', 'NFL')
+    const out = await loadPlayerBlurbs('Rome Odunze', 'NFL')
     expect(out).toHaveLength(1)
     expect(out[0].title).toContain('right leg injury')
     expect(out[0].url).toBeNull()
@@ -82,7 +82,7 @@ describe('loadPlayerBlurbs — per-player news from the attributed feed', () => 
       { description: 'questionable', status: 'Questionable', date: iso(1), updatedAt: iso(1), source: 'espn' },
     ])
     const loadPlayerBlurbs = await subject()
-    expect(await loadPlayerBlurbs('9221', 'Jahmyr Gibbs', 'NFL')).toHaveLength(0)
+    expect(await loadPlayerBlurbs('Jahmyr Gibbs', 'NFL')).toHaveLength(0)
   })
 
   it('drops a blurb too short to be a sentence', async () => {
@@ -90,7 +90,7 @@ describe('loadPlayerBlurbs — per-player news from the attributed feed', () => 
       { description: 'IR.', status: 'IR', date: iso(1), updatedAt: iso(1), source: 'espn' },
     ])
     const loadPlayerBlurbs = await subject()
-    expect(await loadPlayerBlurbs('9221', 'Jahmyr Gibbs', 'NFL')).toHaveLength(0)
+    expect(await loadPlayerBlurbs('Jahmyr Gibbs', 'NFL')).toHaveLength(0)
   })
 
   /*
@@ -101,7 +101,7 @@ describe('loadPlayerBlurbs — per-player news from the attributed feed', () => 
   it('asks for a 14-day window', async () => {
     const before = Date.now()
     const loadPlayerBlurbs = await subject()
-    await loadPlayerBlurbs('9221', 'Jahmyr Gibbs', 'NFL')
+    await loadPlayerBlurbs('Jahmyr Gibbs', 'NFL')
     const json = JSON.stringify(injuryFindMany.mock.calls[0][0].where)
     const gte = json.match(/"gte":"([^"]+)"/)?.[1]
     expect(gte).toBeTruthy()
@@ -110,12 +110,27 @@ describe('loadPlayerBlurbs — per-player news from the attributed feed', () => 
     expect(days).toBeLessThan(14.01)
   })
 
-  it('matches on the sleeper id AND the name', async () => {
+  /*
+   * 🛑 NOT BY `playerId`. That column is each provider's OWN number, and Rolling Insights 8394 is
+   * Rome Odunze while Sleeper 8394 is Percy Butler — an id arm put one player's notes on another's
+   * card. The name is the key, and a row naming another club is a namesake.
+   */
+  it('matches by name only — never a provider id that may be somebody else', async () => {
     const loadPlayerBlurbs = await subject()
-    await loadPlayerBlurbs('9221', 'Jahmyr Gibbs', 'NFL')
+    await loadPlayerBlurbs('Jahmyr Gibbs', 'NFL', 'DET')
     const json = JSON.stringify(injuryFindMany.mock.calls[0][0].where)
-    expect(json).toContain('9221')
+    expect(json).not.toContain('playerId')
     expect(json).toContain('Jahmyr Gibbs')
+  })
+
+  it("skips a namesake's blurb from another club", async () => {
+    injuryFindMany.mockResolvedValue([
+      { description: 'Jefferson (hamstring) did not practice Wednesday for the Browns.', status: 'Questionable', date: iso(1), updatedAt: iso(1), source: 'espn', team: 'Cleveland Browns' },
+      { description: 'Jefferson (ankle) was a full participant at practice Thursday.', status: 'Active', date: iso(1), updatedAt: iso(1), source: 'espn', team: 'Minnesota Vikings' },
+    ])
+    const loadPlayerBlurbs = await subject()
+    const out = await loadPlayerBlurbs('Justin Jefferson', 'NFL', 'MIN')
+    expect(out.map((n) => n.title)).toEqual(['Jefferson (ankle) was a full participant at practice Thursday.'])
   })
 
   it('de-duplicates identical sentences repeated across sources', async () => {
@@ -125,13 +140,13 @@ describe('loadPlayerBlurbs — per-player news from the attributed feed', () => 
       { description: same, status: 'Out', date: iso(2), updatedAt: iso(2), source: 'rolling_insights' },
     ])
     const loadPlayerBlurbs = await subject()
-    expect(await loadPlayerBlurbs('9221', 'Zach Charbonnet', 'NFL')).toHaveLength(1)
+    expect(await loadPlayerBlurbs('Zach Charbonnet', 'NFL')).toHaveLength(1)
   })
 
   it('returns nothing rather than throwing when the query fails', async () => {
     injuryFindMany.mockRejectedValue(new Error('db down'))
     const loadPlayerBlurbs = await subject()
-    expect(await loadPlayerBlurbs('9221', 'Jahmyr Gibbs', 'NFL')).toEqual([])
+    expect(await loadPlayerBlurbs('Jahmyr Gibbs', 'NFL')).toEqual([])
   })
 })
 

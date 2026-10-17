@@ -13,86 +13,23 @@
  *   1. exact name / short name / "city name" (all pro leagues);
  *   2. the same after dropping "University of", "University", "College", "FC" and punctuation
  *      (college and soccer naming differs by source);
- *   3. soccer's numeric id → that club's name on its Rolling Insights team row → 1 or 2.
+ *   3. soccer's numeric id → that club's name on its Rolling Insights team row → 1 or 2;
+ *   4. for a college name that still missed, CFBD's spelling and then the logo-only spellings
+ *      (`collegeLogoNameCandidates`) — tried after 1–3, so they fill blanks and never move a crest.
+ *      Measured 2026-10-01 on the test DB: 1,065 college football and 2,368 college basketball
+ *      players had no crest; every school with a stored crest under any spelling is now reached.
  * No prefix or fuzzy matching: "Miami University" is not "Miami", and a wrong crest is worse than
  * the placeholder.
  */
 import { prisma } from '@/lib/prisma'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
+import { collegeLogoNameCandidates, exactKey, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
+
+// Re-exported: callers imported it from here before the crosswalk moved to its own module.
+export { looseTeamKey }
 
 /** Sources whose logos are real crests, best first. */
 const LOGO_SOURCE_ORDER = ['thesportsdb', 'api_football', 'cfbd', 'api_sports', 'rolling_insights']
-
-function exactKey(value: string | null | undefined): string {
-  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-/**
- * Rolling Insights' formal college names that no suffix rule can reach, mapped to the name the
- * logo sources use. Checked on the EXACT name, before the loose rule — which is what makes
- * "Miami University" (Ohio) safe: loosely it is "miami", which is the Florida school.
- */
-const COLLEGE_NAME_ALIASES: Record<string, string> = {
-  'miami university': 'Miami (OH)',
-  'united states naval academy': 'Navy',
-  'united states military academy': 'Army',
-  'united states air force academy': 'Air Force',
-  'university of colorado boulder': 'Colorado',
-  'university of north carolina at charlotte': 'Charlotte',
-  'university of north carolina at chapel hill': 'North Carolina',
-  'university of nebraska-lincoln': 'Nebraska',
-  'university of southern mississippi': 'Southern Miss',
-  'university of louisiana at monroe': 'Louisiana-Monroe',
-  'university of louisiana at lafayette': 'Louisiana',
-  'louisiana state university': 'LSU',
-  'texas christian university': 'TCU',
-  'university of central florida': 'UCF',
-  'georgia institute of technology': 'Georgia Tech',
-  'university of alabama at birmingham': 'UAB',
-  'north carolina state university': 'NC State',
-  'university of southern california': 'USC',
-  'university of california, los angeles': 'UCLA',
-  'university of california, berkeley': 'California',
-  'university of california, davis': 'UC Davis',
-  'the state university of new york at buffalo': 'Buffalo',
-  'university at albany': 'UAlbany',
-  'university of texas at el paso': 'UTEP',
-  'university of texas at san antonio': 'UTSA',
-  'university of texas at austin': 'Texas',
-  'pennsylvania state university': 'Penn State',
-  'university of nevada, las vegas': 'UNLV',
-  'university of nevada, reno': 'Nevada',
-  'university of illinois': 'Illinois',
-  'university of wisconsin-madison': 'Wisconsin',
-  'university of hawaii at manoa': "Hawai'i",
-  'bowling green state university': 'Bowling Green',
-  'middle tennessee state university': 'Middle Tennessee',
-  'california state university, fresno': 'Fresno State',
-  'california state university, sacramento': 'Sacramento State',
-  'california polytechnic state university': 'Cal Poly',
-  'brigham young university': 'BYU',
-  'university of massachusetts': 'UMass',
-  'university of connecticut': 'UConn',
-  'university of mississippi': 'Ole Miss',
-  'north carolina agricultural and technical state university': 'North Carolina A&T',
-  'alabama agricultural and mechanical university': 'Alabama A&M',
-  'virginia commonwealth university': 'VCU',
-}
-
-export function looseTeamKey(value: string | null | undefined): string {
-  return exactKey(value)
-    .replace(/&/g, ' and ')
-    .replace(/[.'’]/g, '')
-    .replace(/[(),–-]/g, ' ')
-    .replace(/^the /, '')
-    .replace(/^university of /, '')
-    .replace(/ university$/, '')
-    .replace(/ college$/, '')
-    .replace(/^(afc|fc|cf|ac) /, '')
-    .replace(/ (afc|fc|cf|sc)$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 type TeamRow = {
   externalId: string
@@ -150,12 +87,16 @@ export function buildTeamLogoResolver(rows: readonly TeamRow[]): (team: string |
   return (team) => {
     const raw = String(team ?? '').trim()
     if (!raw) return null
-    const value = COLLEGE_NAME_ALIASES[exactKey(raw)] ?? raw
+    const [value, ...fallbacks] = collegeLogoNameCandidates(raw)
     const direct = byName(value)
     if (direct) return direct
     if (/^\d+$/.test(value)) {
       const name = nameByRiId.get(value)
       return name ? byName(name) : null
+    }
+    for (const name of fallbacks) {
+      const hit = byName(name)
+      if (hit) return hit
     }
     return null
   }

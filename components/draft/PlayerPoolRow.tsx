@@ -24,17 +24,17 @@ export function PlayerPoolRow({
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-cyan-200">ADP {player.adp ?? '-'}</span>
           {isCollege ? (
-            <span className="rounded-full bg-[#FFB800]/85 px-2 py-0.5 text-[10px] font-semibold text-[#1d1300]">
+            <span className="rounded-full bg-[#FFB800]/85 px-2 py-0.5 text-[11px] font-semibold text-[#1d1300]">
               COL
             </span>
           ) : null}
           {recommended ? (
-            <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
+            <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
               RECOMMENDED
             </span>
           ) : null}
           {player.draftGrade ? (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
               {player.draftGrade}
             </span>
           ) : null}

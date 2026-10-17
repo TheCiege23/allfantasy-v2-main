@@ -108,7 +108,10 @@ describe("Recommendations Center live.ts — active-league resolution", () => {
     withActiveLeague("lg live/one")
     callDecisionOSMock.mockResolvedValue({ data: { data: { recommendations: [] } }, error: null })
     await liveRecommendationsClient.getQueue()
-    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }))
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [
+      { userId: "user-1" },
+      { teams: { some: { claimedByUserId: "user-1", role: { not: "viewer" }, OR: [{ isCommissioner: true }, { isCoCommissioner: true }] } } },
+    ] } }))
     expect(callDecisionOSMock).toHaveBeenCalledWith("recommendations", `/api/v1/intelligence/league?leagueId=${encodeURIComponent("lg live/one")}`)
   })
 })

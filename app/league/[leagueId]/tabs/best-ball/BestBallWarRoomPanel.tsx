@@ -29,6 +29,9 @@ import type { BestBallStackResult } from '@/lib/best-ball-war-room/bestBallStack
 import type { BestBallRiskResult } from '@/lib/best-ball-war-room/bestBallRiskEngine'
 import type { BestBallWaiverResult } from '@/lib/best-ball-war-room/bestBallWaiverEngine'
 import type { BestBallTradeAnalysis, BestBallTradeFinderResult } from '@/lib/best-ball-war-room/bestBallTradeEngine'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
+import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'upside' | 'draft-plan' | 'stacks' | 'risk' | 'waivers' | 'trade-analyze' | 'trade-find' | null
 
@@ -57,7 +60,8 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [stacks, setStacks] = useState<BestBallStackResult | null>(null)
   const [risk, setRisk] = useState<BestBallRiskResult | null>(null)
   const [waivers, setWaivers] = useState<BestBallWaiverResult | null>(null)
-  const [tradeAnalysis, setTradeAnalysis] = useState<BestBallTradeAnalysis | null>(null)
+  const [tradeAnalysis, setTradeAnalysis] = useState<WarRoomTradeAnalysisView<BestBallTradeAnalysis> | null>(null)
+  const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<BestBallTradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')
@@ -100,7 +104,9 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
           const fallback = own[own.length - 1]?.playerId ?? ''
           const outgoing = (tradeOutgoingId || fallback).trim()
           const incoming = tradeIncomingIds.split(',').map((id) => id.trim()).filter(Boolean)
-          setTradeAnalysis((await analyzeBestBallWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })).tradeAnalysis)
+          const analyzed = await analyzeBestBallWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })
+          setTradeAnalysis(analyzed.tradeAnalysis)
+          setTradeGrade(analyzed.tradeGrade ?? null)
           if (!tradeOutgoingId && fallback) setTradeOutgoingId(fallback)
         } else if (which === 'trade-find') setTradeFinder((await findBestBallWarRoomTrades(leagueId)).tradeFinder)
       } catch (e) {
@@ -154,7 +160,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-violet-300" />
         <h2 className="text-sm font-bold text-white">AF Legacy — Best Ball</h2>
-        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
           {context.sport} · {context.bestBall.mode}
         </span>
       </div>
@@ -172,18 +178,18 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
       {/* Rules + construction grade + data status */}
       <div className="grid gap-2 rounded-lg border border-white/[0.06] bg-[#07071a] p-3 sm:grid-cols-3" data-testid="best-ball-war-room-rules-card">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Build grade</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Build grade</p>
           <p className="text-[14px] font-bold text-violet-100">{construction?.grade ?? '—'}</p>
-          <p className="text-[10px] text-white/45">roster {construction?.rosterSize ?? 0}/{context.roster.recommendedRosterSize}</p>
+          <p className="text-[11px] text-white/45">roster {construction?.rosterSize ?? 0}/{context.roster.recommendedRosterSize}</p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Rules</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Rules</p>
           <p className="text-[11px] text-white/70">
             {context.roster.startingSlots} auto-start · waivers {waiversEnabled ? 'on' : 'off'} · trades {tradesEnabled ? 'on' : 'off'}
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Data</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
           <p className="text-[11px] text-white/60">
             ADP {context.availability.playerValues === 'available' ? '✓' : '—'} · scores{' '}
             {context.availability.weeklyScores === 'available' ? '✓' : '—'} · team{' '}
@@ -299,7 +305,8 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
               </div>
               {tradeAnalysis && (
                 <div className="mt-2 space-y-1" data-testid="best-ball-war-room-trade-analyze-result">
-                  <p className="font-semibold text-white/80">Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}{tradeAnalysis.valueDelta != null ? <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span> : null}</p>
+                  {/* 🛑 THE GRADE IS THE VERDICT (2026-09-29). The engine's own accept/reject/neutral is never shown. */}
+                  <WarRoomTradeGradeLine grade={tradeGrade} testId="best-ball-war-room-trade-grade" />
                   {tradeAnalysis.explanationFacts.map((f) => (<p key={f}>{f}</p>))}
                   {tradeAnalysis.riskFlags.length > 0 && <ul className="mt-2 space-y-1">{tradeAnalysis.riskFlags.map((f) => (<Flag key={f}>{f}</Flag>))}</ul>}
                 </div>

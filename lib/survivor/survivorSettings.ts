@@ -1,19 +1,24 @@
+import { readTribeSlots, type SurvivorTribeSlot } from './survivorTribeIdentity'
 export type SurvivorTribeAssignmentMode = 'random' | 'commissioner_manual' | 'draft_pattern'
 export type SurvivorCommissionerParticipationMode = 'non_participating_host' | 'participating_player'
 export type SurvivorCoCommissionerMode = 'disabled' | 'non_participating_host' | 'same_privacy_as_commissioner'
 export type SurvivorMergeTriggerType = 'week' | 'active_player_count'
 export type SurvivorVoteChangePolicy = 'first_valid_locks' | 'allow_until_close'
+export type SurvivorTieRule = 'revote_then_season_points' | 'season_points_only'
 export type SurvivorEliminationOutcome = 'removed_to_waivers' | 'exile_island'
 export type SurvivorScreenshotsPolicy = 'host_dm_private' | 'allowed_except_host_ai_dms'
 export type SurvivorConductPolicy = 'game_deception_allowed_platform_abuse_banned'
+export type SurvivorNbaWeeklyScoringMode = 'all_games' | 'one_game_per_player'
 
 export interface SurvivorFoundationSettings {
   tribeCount: number
+  survivorTribeSlots: SurvivorTribeSlot[]
   defaultTeamCount: number
   minTeamCount: number
   maxTeamCount: number
   tribeAssignmentMode: SurvivorTribeAssignmentMode
   commissionerParticipationMode: SurvivorCommissionerParticipationMode
+  hideIdolsFromCommissioner: boolean
   coCommissionerMode: SurvivorCoCommissionerMode
   mergeTriggerType: SurvivorMergeTriggerType
   mergeWeek: number
@@ -26,16 +31,22 @@ export interface SurvivorFoundationSettings {
   lateVotesAllowed: boolean
   selfVotesAllowed: boolean
   voteChangePolicy: SurvivorVoteChangePolicy
+  tieRule: SurvivorTieRule
+  autoReveal: boolean
   eliminationOutcome: SurvivorEliminationOutcome
   sitOutsEnabled: boolean
   noConsecutiveSitOuts: boolean
+  nbaWeeklyScoringMode: SurvivorNbaWeeklyScoringMode
   idolExpiryRemainingPlayers: number
   idolInvalidRemainingPlayers: number
+  idolCount: number
   idolsEnabled: boolean
   powerupsEnabled: boolean
   tribeChatsEnabled: boolean
   privateDMVotesEnabled: boolean
   exileIslandEnabled: boolean
+  exileReturnWeek: number
+  exileReturnTokens: number
   juryEnabled: boolean
   finaleVotingEnabled: boolean
   survivorIntroVideoEnabled: boolean
@@ -61,11 +72,13 @@ export const SURVIVOR_CANONICAL_DRAFT_TYPE_IDS = [
 
 export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = {
   tribeCount: 4,
+  survivorTribeSlots: readTribeSlots({}, 20, 4),
   defaultTeamCount: 20,
   minTeamCount: 16,
   maxTeamCount: 20,
   tribeAssignmentMode: 'random',
   commissionerParticipationMode: 'non_participating_host',
+  hideIdolsFromCommissioner: false,
   coCommissionerMode: 'disabled',
   mergeTriggerType: 'active_player_count',
   mergeWeek: 7,
@@ -78,16 +91,22 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   lateVotesAllowed: false,
   selfVotesAllowed: false,
   voteChangePolicy: 'first_valid_locks',
+  tieRule: 'revote_then_season_points',
+  autoReveal: true,
   eliminationOutcome: 'removed_to_waivers',
   sitOutsEnabled: true,
   noConsecutiveSitOuts: true,
+  nbaWeeklyScoringMode: 'all_games',
   idolExpiryRemainingPlayers: 5,
   idolInvalidRemainingPlayers: 4,
+  idolCount: 7,
   idolsEnabled: true,
   powerupsEnabled: true,
   tribeChatsEnabled: true,
   privateDMVotesEnabled: true,
-  exileIslandEnabled: false,
+  exileIslandEnabled: true,
+  exileReturnWeek: 10,
+  exileReturnTokens: 4,
   juryEnabled: true,
   finaleVotingEnabled: true,
   survivorIntroVideoEnabled: true,
@@ -209,6 +228,7 @@ export function normalizeSurvivorFoundationSettings(
 
   return {
     tribeCount,
+    survivorTribeSlots: readTribeSlots(s, defaultTeamCount, tribeCount),
     defaultTeamCount,
     minTeamCount,
     maxTeamCount,
@@ -223,11 +243,12 @@ export function normalizeSurvivorFoundationSettings(
       ),
       commissionerHint,
     ),
+    hideIdolsFromCommissioner: readBoolean(s, ['hideIdolsFromCommissioner'], base.hideIdolsFromCommissioner),
     coCommissionerMode: normalizeCoCommissionerMode(readString(s, ['coCommissionerMode'], base.coCommissionerMode)),
     mergeTriggerType: normalizeMergeTrigger(
       readString(s, ['mergeTriggerType', 'merge_trigger_type', 'survivorMergeTrigger'], base.mergeTriggerType),
     ),
-    mergeWeek: clampInt(readNumber(s, ['mergeWeek', 'survivorMergeWeek'], base.mergeWeek), 1, 18),
+    mergeWeek: clampInt(readNumber(s, ['mergeWeek', 'survivorMergeWeek'], base.mergeWeek), 1, 52),
     mergeActivePlayerCount,
     juryThresholdPercent: clampInt(readNumber(s, ['juryThresholdPercent'], base.juryThresholdPercent), 1, 100),
     tribalCouncilDay: readString(s, ['tribalCouncilDay'], base.tribalCouncilDay),
@@ -237,9 +258,12 @@ export function normalizeSurvivorFoundationSettings(
     lateVotesAllowed: readBoolean(s, ['lateVotesAllowed'], base.lateVotesAllowed),
     selfVotesAllowed: readBoolean(s, ['selfVotesAllowed', 'survivorSelfVoteAllowed'], base.selfVotesAllowed),
     voteChangePolicy: normalizeVoteChangePolicy(readString(s, ['voteChangePolicy'], base.voteChangePolicy)),
-    eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], base.eliminationOutcome)),
+    tieRule: readString(s, ['tieRule'], base.tieRule) === 'season_points_only' ? 'season_points_only' : 'revote_then_season_points',
+    autoReveal: readBoolean(s, ['autoReveal'], base.autoReveal),
+    eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),
     noConsecutiveSitOuts: readBoolean(s, ['noConsecutiveSitOuts'], base.noConsecutiveSitOuts),
+    nbaWeeklyScoringMode: readString(s, ['nbaWeeklyScoringMode'], base.nbaWeeklyScoringMode) === 'one_game_per_player' ? 'one_game_per_player' : 'all_games',
     idolExpiryRemainingPlayers: clampInt(
       readNumber(s, ['idolExpiryRemainingPlayers'], base.idolExpiryRemainingPlayers),
       2,
@@ -250,11 +274,14 @@ export function normalizeSurvivorFoundationSettings(
       1,
       defaultTeamCount,
     ),
+    idolCount: clampInt(readNumber(s, ['idolCount', 'survivorIdolCount'], Math.ceil(defaultTeamCount / 3)), 1, 40),
     idolsEnabled: readBoolean(s, ['idolsEnabled', 'survivorIdolsEnabled'], base.idolsEnabled),
     powerupsEnabled: readBoolean(s, ['powerupsEnabled'], base.powerupsEnabled),
     tribeChatsEnabled: readBoolean(s, ['tribeChatsEnabled'], base.tribeChatsEnabled),
     privateDMVotesEnabled: readBoolean(s, ['privateDMVotesEnabled'], base.privateDMVotesEnabled),
-    exileIslandEnabled: readBoolean(s, ['exileIslandEnabled', 'survivorExileEnabled'], base.exileIslandEnabled),
+    exileIslandEnabled: readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled),
+    exileReturnWeek: clampInt(readNumber(s, ['exileReturnWeek', 'survivorExileReturnWeek'], base.exileReturnWeek), 2, 51),
+    exileReturnTokens: clampInt(readNumber(s, ['exileReturnTokens'], base.exileReturnTokens), 1, 1000),
     juryEnabled: readBoolean(s, ['juryEnabled'], base.juryEnabled),
     finaleVotingEnabled: readBoolean(s, ['finaleVotingEnabled'], base.finaleVotingEnabled),
     survivorIntroVideoEnabled: readBoolean(s, ['survivorIntroVideoEnabled'], base.survivorIntroVideoEnabled),
@@ -271,7 +298,10 @@ export function buildSurvivorSettingsSnapshotPatch(
   return {
     survivorFoundationSettingsVersion: SURVIVOR_FOUNDATION_SETTINGS_VERSION,
     survivorFoundationSettings: normalized,
+    defaultTeamCount: normalized.defaultTeamCount,
+    tribeCount: normalized.tribeCount,
     commissionerParticipationMode: normalized.commissionerParticipationMode,
+    hideIdolsFromCommissioner: normalized.hideIdolsFromCommissioner,
     coCommissionerMode: normalized.coCommissionerMode,
     tribeAssignmentMode: normalized.tribeAssignmentMode,
     mergeTriggerType: normalized.mergeTriggerType,
@@ -279,6 +309,9 @@ export function buildSurvivorSettingsSnapshotPatch(
     teams: normalized.defaultTeamCount,
     cast_size: normalized.defaultTeamCount,
     tribe_count: normalized.tribeCount,
+    survivorTribeSlots: normalized.survivorTribeSlots,
+    survivorIdolCount: normalized.idolCount,
+    nbaWeeklyScoringMode: normalized.nbaWeeklyScoringMode,
     tribe_assignment_mode: normalized.tribeAssignmentMode,
     merge_at_count: normalized.mergeActivePlayerCount,
     jury_threshold_percent: normalized.juryThresholdPercent,
@@ -304,8 +337,10 @@ export function buildSurvivorLeagueColumnPatch(settings: SurvivorFoundationSetti
     survivorMergeWeek: settings.mergeWeek,
     survivorMergeAtCount: settings.mergeActivePlayerCount,
     survivorSelfVoteAllowed: settings.selfVotesAllowed,
-    survivorIdolCount: settings.defaultTeamCount + settings.tribeCount,
+    survivorIdolCount: settings.idolCount,
     survivorIdolsEnabled: settings.idolsEnabled,
     survivorExileEnabled: settings.exileIslandEnabled,
+    survivorExileReturnWeek: settings.exileReturnWeek,
+    survivorExileReturnTrigger: settings.exileIslandEnabled ? 'token_leader' : 'manual',
   }
 }

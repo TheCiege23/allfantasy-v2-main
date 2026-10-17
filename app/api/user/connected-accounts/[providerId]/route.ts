@@ -1,3 +1,4 @@
+import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -68,7 +69,7 @@ async function resolveProviderStatuses(userId: string) {
 
 export async function DELETE(
   _req: Request,
-  ctx: { params: { providerId?: string } }
+  ctx: { params: Promise<{ providerId?: string }> }
 ) {
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string }
@@ -78,7 +79,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const providerParam = String(ctx?.params?.providerId ?? "").trim().toLowerCase()
+  const providerParam = String((await ctx?.params)?.providerId ?? "").trim().toLowerCase()
   const providerId = normalizeProviderForSettings(providerParam)
   if (!providerId) {
     return NextResponse.json({ error: "INVALID_PROVIDER" }, { status: 400 })
@@ -98,7 +99,7 @@ export async function DELETE(
           : id === "spotify"
             ? !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET)
           : id === "apple"
-            ? !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
+            ? hasAppleSignInCredentials()
             : false,
         linked,
         disconnectable,
@@ -142,7 +143,7 @@ export async function DELETE(
         : id === "spotify"
           ? !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET)
         : id === "apple"
-          ? !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
+          ? hasAppleSignInCredentials()
           : false,
       linked,
       disconnectable,

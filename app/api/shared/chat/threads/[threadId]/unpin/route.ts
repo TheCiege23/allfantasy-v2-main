@@ -10,10 +10,8 @@ import { prisma } from "@/lib/prisma"
  * Body: { pinMessageId: string }
  * Removes the pin (deletes the pin-type message).
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { threadId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

@@ -2,9 +2,9 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { hasScoringRules } from '@/lib/projections/leagueScoring'
-import { leagueProjectionGap, leagueScoredLineupTotal, lookupProjections } from './playerProjections'
+import { afEngineLineupTotal, leagueProjectionGap, leagueScoredLineupTotal, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { buildRosterIdMap } from './rosterIdMatch'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { sleeperReadableRosters } from './rosterIdSpace'
 
 /**
  * Every game in the league this week, not just yours.
@@ -36,6 +36,8 @@ export type ScoreboardTeam = {
   projected: number | null
   /** Starters the projection was built from, of how many. */
   projectedFrom: number
+  /** AllFantasy's own engine total for the same lineup, under this league's rules. Null when none priced. */
+  afProjected?: number | null
   starterCount: number
   /** True for the viewer's own team, so the row can be marked. */
   isYou: boolean
@@ -193,9 +195,14 @@ export async function getLeagueScoreboard(args: {
    */
   const teamBy = buildRosterIdMap(teams, (t) => t.externalId)
 
-  const rosters = await prisma.roster
-    .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, league: { select: { platform: true } } } })
-    .catch(() => [])
+  // In Sleeper ids: ESPN translated, any other foreign platform emptied (see rosterIdSpace.ts).
+  const rosters = await sleeperReadableRosters(
+    await prisma.roster
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, league: { select: { platform: true, sport: true } } } })
+      .catch(() => []),
+    (r) => r.league?.platform,
+    (r) => r.league?.sport,
+  )
   const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
 
   /**
@@ -229,7 +236,7 @@ export async function getLeagueScoreboard(args: {
     const roster = t ? rosterFor(t) : null
     // A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id and would be
     // projected as a stranger; such a lineup reads empty, so the board shows no projection.
-    const pd = (sleeperReadablePlayerData(roster?.league?.platform, roster?.playerData) ?? {}) as Record<string, unknown>
+    const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     startersBy.set(
       r.rosterId,
       asIds(pd.starters).filter((s) => s !== EMPTY_SLOT),
@@ -250,6 +257,12 @@ export async function getLeagueScoreboard(args: {
         scoringSettings: args.scoringSettings,
       }).catch(() => new Map())
     : new Map()
+  /* AllFantasy's own engine for the same starters and week — the second total on every row. */
+  const afEngine = everyStarter.length
+    ? await lookupAfEngineProjections(everyStarter, args.projectionWeek).catch(
+        (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+      )
+    : new Map()
 
   function build(rosterId: string, points: number | null): ScoreboardTeam {
     const t = teamBy.get(String(rosterId))
@@ -261,6 +274,7 @@ export async function getLeagueScoreboard(args: {
     const { projected, projectedFrom } = anyScored
       ? { projected: null, projectedFrom: 0 }
       : leagueScoredLineupTotal(starters, projections, args.scoringSettings)
+    const afProjected = anyScored ? null : afEngineLineupTotal(starters, projections, afEngine, args.scoringSettings).projected
 
     return {
       rosterId,
@@ -270,6 +284,7 @@ export async function getLeagueScoreboard(args: {
       points,
       projected,
       projectedFrom,
+      afProjected,
       starterCount: starters.length,
       isYou: args.yourRosterId != null && rosterId === args.yourRosterId,
     }

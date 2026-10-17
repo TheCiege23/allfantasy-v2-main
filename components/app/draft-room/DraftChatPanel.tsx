@@ -12,6 +12,8 @@ import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/compon
 import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
+import { chatFailure } from '@/components/core-app/comms/chatFailure'
+import type { ReportReason } from '@/lib/moderation/shared'
 import '@/components/core-app/af-comms.css'
 
 /**
@@ -162,7 +164,19 @@ export function DraftChatPanel({
     for (const m of messages) map.set(m.id, m)
     return map
   }, [messages])
-  const listMessages = useMemo(() => messages.map(toListMessage), [messages])
+  /*
+   * People blocked from THIS panel, hidden at once. The server drops blocked senders from the
+   * next read (draftRoomChatWireLoad), but the room MERGES each read into what it already holds
+   * (mergeDraftChatWire), so without this their earlier messages would stay until a reload.
+   */
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
+  const listMessages = useMemo(
+    () =>
+      messages
+        .filter((m) => !m.senderUserId || !blockedAuthors.has(m.senderUserId))
+        .map(toListMessage),
+    [messages, blockedAuthors],
+  )
 
   const nameForUserId = useCallback(
     (id: string): string | null => messages.find((m) => m.senderUserId === id)?.from ?? null,
@@ -253,6 +267,44 @@ export function DraftChatPanel({
   )
 
   /*
+   * ── Report and Block (App Store guideline 1.2) ────────────────────────────────────
+   * The draft view had neither, while league chat and DMs had both. Every draft message is a
+   * LeagueChatMessage in `league:<id>`, so these are league chat's own calls on the same room:
+   * ReportSubmissionService checks the reporter can read the league and the message is really in
+   * it. Pick announcements and copilot notes carry no author (toListMessage), so ChatMessageList
+   * offers neither action on them. Both THROW on a non-OK answer so the sheet stays open and says why.
+   */
+  const reportMessage = useCallback(
+    async (m: ChatListMessage, reason: ReportReason) => {
+      if (!room) throw new Error('Report not sent: this chat has no league.')
+      const res = await fetch('/api/shared/chat/report/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: m.id, threadId: room, reason }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Report not sent', 'Report not sent. Try again in a moment.')
+    },
+    [room],
+  )
+
+  const blockAuthor = useCallback(
+    async (m: ChatListMessage) => {
+      const blockedUserId = m.authorId
+      if (!blockedUserId) throw new Error('There is nobody to block on that message.')
+      const res = await fetch('/api/shared/chat/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockedUserId }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Not blocked', 'Not blocked. Try again in a moment.')
+      setBlockedAuthors((prev) => new Set(prev).add(blockedUserId))
+      setReplyTo((r) => (r && r.senderUserId === blockedUserId ? null : r))
+      refresh?.()
+    },
+    [refresh],
+  )
+
+  /*
    * The composer's payload, in league chat's metadata shape — the same mapping
    * `LeagueConversation` makes, so one row renders the same in both rooms.
    */
@@ -330,10 +382,10 @@ export function DraftChatPanel({
             data-ai-manager={isAi ? 'true' : 'false'}
           >
             <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200/95">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200/95">
                 Pick{meta?.pickLabel ? ` ${meta.pickLabel}` : ''}
               </span>
-              <span className="text-[10px] text-white/55 tabular-nums">
+              <span className="text-[11px] text-white/55 tabular-nums">
                 {when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
               </span>
             </div>
@@ -364,7 +416,7 @@ export function DraftChatPanel({
                   <span className="font-medium">{meta?.rosterDisplayName ?? 'Team'}</span>
                   {isAi ? (
                     <span
-                      className="ml-1.5 inline-flex items-center rounded-full border border-violet-400/35 bg-violet-500/15 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-100"
+                      className="ml-1.5 inline-flex items-center rounded-full border border-violet-400/35 bg-violet-500/15 px-1.5 py-[1px] text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-100"
                       data-testid="draft-chat-pick-ai-badge"
                     >
                       AI
@@ -372,7 +424,7 @@ export function DraftChatPanel({
                   ) : null}
                 </p>
                 {(meta?.overall != null || meta?.round != null) && (
-                  <p className="mt-1 text-[10px] text-white/45">
+                  <p className="mt-1 text-[11px] text-white/45">
                     {meta?.round != null && meta?.roundSlot != null ? (
                       <>
                         Round {meta.round} · Pick {meta.roundSlot}
@@ -401,7 +453,7 @@ export function DraftChatPanel({
           >
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <span className="font-semibold text-cyan-100">{m.from}</span>
-              <span className="rounded-full border border-cyan-400/25 bg-black/25 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100/90">
+              <span className="rounded-full border border-cyan-400/25 bg-black/25 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-100/90">
                 {m.messageType === 'copilot_prepare'
                   ? 'Prep'
                   : m.messageType === 'queue_conflict'
@@ -410,7 +462,7 @@ export function DraftChatPanel({
                       ? 'Live'
                       : 'Chimmy'}
               </span>
-              {isCopilotLocal(m) ? <span className="text-[9px] text-white/50">Only you see this</span> : null}
+              {isCopilotLocal(m) ? <span className="text-[11px] text-white/50">Only you see this</span> : null}
             </div>
             {m.playerContext ? (
               <div className="mt-2 flex gap-2 rounded-lg border border-white/12 bg-black/30 p-2">
@@ -434,10 +486,10 @@ export function DraftChatPanel({
                     ) : null}
                   </p>
                   {m.playerContext.statSummary ? (
-                    <p className="truncate text-[10px] text-emerald-200/85">{m.playerContext.statSummary}</p>
+                    <p className="truncate text-[11px] text-emerald-200/85">{m.playerContext.statSummary}</p>
                   ) : null}
                   {(m.playerContext.injuryStatus || m.playerContext.headlineSnippet) && (
-                    <p className="truncate text-[10px] leading-snug text-amber-100/80">
+                    <p className="truncate text-[11px] leading-snug text-amber-100/80">
                       {[m.playerContext.injuryStatus, m.playerContext.headlineSnippet].filter(Boolean).join(' · ')}
                     </p>
                   )}
@@ -446,12 +498,12 @@ export function DraftChatPanel({
             ) : null}
             <p className="mt-1.5 text-white/92">{censorProfanity(m.text)}</p>
             {m.aiMetadata?.rationale ? (
-              <p className="mt-2 border-l-2 border-cyan-400/35 pl-2 text-[10px] leading-snug text-white/72">
+              <p className="mt-2 border-l-2 border-cyan-400/35 pl-2 text-[11px] leading-snug text-white/72">
                 {m.aiMetadata.rationale}
               </p>
             ) : null}
             {m.aiMetadata?.confidence != null && Number.isFinite(m.aiMetadata.confidence) ? (
-              <p className="mt-1 text-[9px] text-cyan-100/75">
+              <p className="mt-1 text-[11px] text-cyan-100/75">
                 Confidence{' '}
                 {m.aiMetadata.confidence <= 1
                   ? `${Math.round(m.aiMetadata.confidence * 100)}%`
@@ -459,7 +511,7 @@ export function DraftChatPanel({
               </p>
             ) : null}
             {m.aiMetadata?.actions?.length ? (
-              <ul className="mt-2 space-y-1 text-[10px] text-cyan-100/85">
+              <ul className="mt-2 space-y-1 text-[11px] text-cyan-100/85">
                 {m.aiMetadata.actions.map((a, i) => (
                   <li key={`${m.id}-ai-act-${i}`}>• {a.label}</li>
                 ))}
@@ -537,7 +589,7 @@ export function DraftChatPanel({
           </span>
           {leagueChatSync ? (
             <span
-              className="shrink-0 rounded border border-cyan-300/30 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] text-cyan-100"
+              className="shrink-0 rounded border border-cyan-300/30 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100"
               data-testid="draft-chat-sync-badge"
               title={subtitle}
             >
@@ -619,7 +671,7 @@ export function DraftChatPanel({
         </div>
       </div>
       <p
-        className={`${popped ? '' : 'md:hidden'} border-b px-3 py-1 text-[10px] leading-snug ${
+        className={`${popped ? '' : 'md:hidden'} border-b px-3 py-1 text-[11px] leading-snug ${
           rs ? 'border-cyan-500/10 text-cyan-200/55' : 'border-white/8 text-white/50'
         }`}
         data-testid="draft-chat-subtitle"
@@ -671,6 +723,8 @@ export function DraftChatPanel({
               onReply={(m) => setReplyTo(byId.get(m.id) ?? null)}
               onEdit={room ? editMessage : undefined}
               onDelete={room ? deleteMessage : undefined}
+              onReport={room ? reportMessage : undefined}
+              onBlock={room ? blockAuthor : undefined}
               nameForUserId={nameForUserId}
               renderSystem={renderSystem}
               tagFor={tagFor}

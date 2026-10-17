@@ -269,7 +269,7 @@ function SurvivorAppShellInner({
             key={item.href}
             href={item.href}
             className={clsx(
-              'flex min-h-[52px] flex-1 flex-col items-center justify-center rounded-lg text-[10px] text-white/70',
+              'flex min-h-[52px] flex-1 flex-col items-center justify-center rounded-lg text-[11px] text-white/70',
               pathActive(pathname, item.href, item.href === base) && 'bg-white/[0.06] text-sky-200',
             )}
           >
@@ -284,7 +284,7 @@ function SurvivorAppShellInner({
         ))}
         <button
           type="button"
-          className="flex min-h-[52px] flex-1 flex-col items-center justify-center rounded-lg text-[10px] text-white/70"
+          className="flex min-h-[52px] flex-1 flex-col items-center justify-center rounded-lg text-[11px] text-white/70"
           onClick={() => setMoreOpen(true)}
         >
           <span className="text-lg">⋯</span>
@@ -374,7 +374,7 @@ function SurvivorAppShellInner({
             </div>
           </div>
           {ctx.isCommissioner ? (
-            <span className="hidden text-[9px] font-bold uppercase text-amber-300 lg:inline">ADM</span>
+            <span className="hidden text-[11px] font-bold uppercase text-amber-300 lg:inline">ADM</span>
           ) : null}
         </div>
       </div>

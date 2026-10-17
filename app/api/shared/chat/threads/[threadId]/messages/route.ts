@@ -26,6 +26,8 @@ import type { SurvivorCommandIntent } from '@/lib/survivor/types'
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { isMergeTriggered } from '@/lib/survivor/SurvivorMergeEngine'
 import { prisma } from '@/lib/prisma'
+import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { getBlockedUserIdsForRead } from '@/lib/moderation'
 import { filterMessagesByBlocked } from '@/lib/moderation'
 import { filterBbReadableMessages, resolveBbWriteChannel } from '@/lib/big-brother/bbChatChannelAccess'
@@ -36,6 +38,7 @@ import {
   sanitizeClientMessageType,
 } from '@/lib/chat-core/clientMessageInput'
 import { publishDraftIntelState } from '@/lib/draft-intelligence'
+import { chatRateLimitResponse } from '@/lib/chat-core/chatRateLimits'
 import { DETERMINISTIC_SOURCE, tryDeterministicAnswer } from '@/lib/ai/deterministic'
 import {
   queueDirectMessageNotifications,
@@ -125,10 +128,8 @@ async function resolveDraftIntelThreadState(threadId: string): Promise<{
   return { isDraftIntel: false, archived: false, leagueId: null }
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { threadId: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -229,14 +230,14 @@ export async function GET(
   })
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { threadId: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const limited = chatRateLimitResponse(user.appUserId, 'message_send')
+  if (limited) return limited
 
   const threadId = decodeURIComponent(params.threadId)
   const body = await req.json().catch(() => ({}))
@@ -334,11 +335,25 @@ export async function POST(
         'confirm_minigame',
       ])
       const chimmyCommandText = isChimmyPrompt ? message.replace(/^@chimmy\b\s*/i, '').trim() : ''
+      const sgPowerCommand = isChimmyPrompt && /^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)
+      let sgPowerReply: string | null = null
+      if (sgPowerCommand) {
+        try { sgPowerReply = (await activateSGLivePower(leagueId, user.appUserId, message))?.reply ?? null }
+        catch (error) { sgPowerReply = error instanceof Error ? error.message : 'Power activation failed.' }
+      }
+      const survivorIntent = chimmyCommandText ? parseSurvivorCommand(chimmyCommandText).intent : null
+      const voteAttempt = /^vote(?:\s|$)/i.test(chimmyCommandText)
+      // Votes entered in a league or tribe composer are submitted through the private
+      // ballot authority. The original text and Chimmy's answer are visible only to the voter.
+      const privateVote = voteAttempt || (survivorIntent === 'vote' && (
+        looksLikeOfficialCommand(chimmyCommandText) || /^@(?:[A-Za-z0-9_.-]+|<@[A-Za-z0-9_-]+>)/.test(chimmyCommandText)
+      ))
       const survivorChimmyCommand =
+        !sgPowerCommand &&
         chimmyCommandText &&
-        looksLikeOfficialCommand(chimmyCommandText) &&
-        SURVIVOR_CHIMMY_COMMAND_INTENTS.has(parseSurvivorCommand(chimmyCommandText).intent)
-          ? await processSurvivorOfficialCommand({ leagueId, userId: user.appUserId, command: message, source })
+        (privateVote || looksLikeOfficialCommand(chimmyCommandText)) &&
+        ((survivorIntent && SURVIVOR_CHIMMY_COMMAND_INTENTS.has(survivorIntent)) || voteAttempt)
+          ? await processSurvivorOfficialCommand({ leagueId, userId: user.appUserId, command: message, source: privateVote ? 'private_chimmy' : source })
           : null
       if (isChimmyPrompt && !survivorChimmyCommand?.handled) {
         const chimmyBody = message.replace(/^@chimmy\b\s*/i, '').trim()
@@ -356,9 +371,9 @@ export async function POST(
           visibleToUserId: user.appUserId,
           messageSubtype: 'chimmy_prompt',
         })
-        const replyText =
-          await tryDeterministicAnswer(chimmyBody || 'help', req.cookies?.get?.('af_lang')?.value)
-            .catch(() => null) ??
+        const replyText = sgPowerReply ??
+          (await tryDeterministicAnswer(chimmyBody || 'help', req.cookies?.get?.('af_lang')?.value)
+            .catch(() => null)) ??
           "I don't have reliable data for that yet. I can answer cached scores, schedules, news, weather, FantasyCalc values, and league context when those data sources are available."
         const reply = await createLeagueChatMessage(leagueId, user.appUserId, replyText, {
           type: 'text',
@@ -395,6 +410,21 @@ export async function POST(
           source,
         }))
       if (commandResult.handled && !commandResult.ok) {
+        if (privateVote) {
+          const prompt = await createLeagueChatMessage(leagueId, user.appUserId, message, {
+            type: 'text', source, isPrivate: true, visibleToUserId: user.appUserId,
+            messageSubtype: 'survivor_private_ballot',
+          })
+          const reply = await createLeagueChatMessage(leagueId, user.appUserId,
+            `${commandResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`, {
+              type: 'text', source, isPrivate: true, visibleToUserId: user.appUserId,
+              parentMessageId: prompt?.id ?? undefined,
+              messageSubtype: 'chimmy_private_response',
+              metadata: { chimmyResponse: true, discordAuthorName: 'Chimmy' },
+            })
+          return NextResponse.json({ status: 'ok', message: prompt, aiReply: reply, messages: [prompt, reply].filter(Boolean),
+            commandResult: { ok: false, intent: 'vote', message: commandResult.error ?? 'Vote was not recorded.' } })
+        }
         return NextResponse.json({ error: commandResult.error ?? 'Survivor command failed' }, { status: commandResult.status ?? 400 })
       }
       // A recorded ballot is private. Posting the raw "vote Team Alpha" to the tribe or league chat
@@ -414,6 +444,17 @@ export async function POST(
           ? { isPrivate: true, visibleToUserId: user.appUserId, messageSubtype: 'survivor_private_ballot' }
           : {}),
       })
+      if (isRecordedBallot) {
+        const reply = await createLeagueChatMessage(leagueId, user.appUserId,
+          commandResult.message ?? 'Your vote was recorded privately.', {
+            type: 'text', source, isPrivate: true, visibleToUserId: user.appUserId,
+            parentMessageId: created?.id ?? undefined,
+            messageSubtype: 'chimmy_private_response',
+            metadata: { chimmyResponse: true, discordAuthorName: 'Chimmy' },
+          })
+        return NextResponse.json({ status: 'ok', message: created, aiReply: reply, messages: [created, reply].filter(Boolean),
+          commandResult: { ok: true, intent: 'vote', message: commandResult.message } })
+      }
       // The communications drawer writes league chat through this route. Keep the
       // Discord relay inside the request: an unawaited task can be stopped when a
       // serverless response ends, leaving a message visible here but absent there.
@@ -571,7 +612,17 @@ export async function POST(
      * is missing the data is the one that fills the gap in confidently.
      */
     let decision: ReturnType<typeof decisionAnswerMeta> | undefined
-    const replyText = await generateChimmyPrivateReply(message, {
+    let sgReply: string | null = null
+    if (/^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
+      const leagueId = typeof metadata?.leagueId === 'string' ? metadata.leagueId : null
+      if (!leagueId || !(await resolveLeagueAccess(leagueId, user.appUserId))) {
+        sgReply = 'Open this power from your league so Chimmy can verify league access.'
+      } else {
+        try { sgReply = (await activateSGLivePower(leagueId, user.appUserId, message))?.reply ?? 'This power is unavailable in that league.' }
+        catch (error) { sgReply = error instanceof Error ? error.message : 'Power activation failed.' }
+      }
+    }
+    const replyText = sgReply ?? await generateChimmyPrivateReply(message, {
       leagueId: draftIntelThread.leagueId ?? null,
       userId: user.appUserId,
       onDecision: result => { decision = decisionAnswerMeta(result) },

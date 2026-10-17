@@ -260,7 +260,7 @@ export const nflPlugin: SportPlugin<NflContext, NflProviderData, NflInsights> = 
         // orphaned when the cron moved to sports_injuries and froze at
         // 2026-04-28 — measured 108 days stale, and fed to the NFL engine as
         // current. Stale rows are dropped rather than passed on.
-        listInjuryFacts({ sport: "NFL", limit: 100 })
+        listInjuryFacts({ sport: "NFL", limit: 100, designationsOnly: true })
           .then((list) =>
             (list.facts ?? [])
               .filter((f) => !f.stale)

@@ -92,7 +92,7 @@ function ScoreRing({ score, label, size = 'md' }: { score: number; label: string
       <div className={`${sizeClasses} rounded-full border-2 border-current flex items-center justify-center font-bold ${color}`}>
         {score}
       </div>
-      <span className="text-[10px] text-zinc-500 uppercase tracking-wide">{label}</span>
+      <span className="text-[11px] text-zinc-500 uppercase tracking-wide">{label}</span>
     </div>
   )
 }
@@ -136,19 +136,19 @@ function TeamDiagnosisCard({ data, callouts }: { data: WaiverResponseV2['teamDia
       {/* Callout chips */}
       <div className="flex flex-wrap gap-1.5 pt-1 border-t border-zinc-800">
         {callouts.bestAddForPoints && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400">Best for Points: {callouts.bestAddForPoints}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400">Best for Points: {callouts.bestAddForPoints}</span>
         )}
         {callouts.bestAddForUpside && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400">Best Upside: {callouts.bestAddForUpside}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400">Best Upside: {callouts.bestAddForUpside}</span>
         )}
         {callouts.safestAdd && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">Safest: {callouts.safestAdd}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">Safest: {callouts.safestAdd}</span>
         )}
         {callouts.bestDropCandidate && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">Best Drop: {callouts.bestDropCandidate}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">Best Drop: {callouts.bestDropCandidate}</span>
         )}
         {callouts.holdFAABRecommendation && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">Hold FAAB this week</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">Hold FAAB this week</span>
         )}
       </div>
     </div>
@@ -263,7 +263,7 @@ function SuggestionCard({ suggestion, expanded, onToggle }: {
           {s.factualEvidence.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {s.factualEvidence.map((e, i) => (
-                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
                   {e.source}: {e.metric} = {e.value}
                 </span>
               ))}

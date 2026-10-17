@@ -5,7 +5,7 @@
  * 1. Week 1: No idols played. Establish baseline.
  * 2. Weeks 2-3: First idol clue or tribe power appears.
  * 3. Week 4: First tribe swap window.
- * 4. Weeks 5-6: Idol-relevant tribal council. First disadvantage appears.
+ * 4. Weeks 5-6: Idol-relevant elimination council. First disadvantage appears.
  * 5. Week 7: Merge trigger window. Public reveal twist eligible.
  * 6. Weeks 8-9: Individual immunity. Advantage management peaks.
  * 7. Weeks 10-11: Exile return. Jury questions prep.

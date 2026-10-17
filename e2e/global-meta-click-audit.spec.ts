@@ -190,9 +190,9 @@ test.describe('@meta global meta click audit', () => {
 
     // AI explain button opens, loads, then closes.
     await page.getByRole('button', { name: 'Explain this trend' }).click()
-    await expect(page.getByRole('dialog', { name: 'AI trend explanation' })).toContainText('AI summary for SOCCER (30d)')
+    await expect(page.getByRole('dialog', { name: "Chimmy's trend explanation" })).toContainText('AI summary for SOCCER (30d)')
     await page.getByRole('button', { name: 'Explain this trend' }).click()
-    await expect(page.getByRole('dialog', { name: 'AI trend explanation' })).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: "Chimmy's trend explanation" })).toHaveCount(0)
 
     // Link entry points remain wired.
     await expect(page.getByRole('link', { name: 'Leagues' })).toHaveAttribute('href', '/leagues')

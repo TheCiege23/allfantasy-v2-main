@@ -41,7 +41,8 @@ const FEATURE_CARDS = [
   {
     titleKey: 'landing.tools.matchupSimulator.title',
     descriptionKey: 'landing.tools.matchupSimulator.description',
-    href: '/matchup-simulator',
+    // /matchup-simulator is a 308 to /core/matchup since 2026-09-29 — link the destination.
+    href: '/core/matchup',
     icon: Target,
   },
   {

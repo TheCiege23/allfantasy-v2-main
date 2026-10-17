@@ -63,8 +63,10 @@ export interface CommissionerResult {
    * `leagueEngagementScore` in `lib/decision-os/behavioral/league-intelligence.ts`, which measures
    * participation and floors at 0.
    *
-   * This lineage is ISOLATED — one consumer, `app/api/commissioner-assistant/route.ts` — and,
-   * measured, it never appears in the same file as the commissioner-hub lineage. That is why it
+   * This lineage is ISOLATED — its one runtime consumer, `app/api/commissioner-assistant/route.ts`,
+   * was deleted as dead code on 2026-09-29 (nothing called it). What remains is the scorer
+   * divergence probe (`scripts/probe-league-health-scorer-divergence.ts`) and the shared-formula
+   * test, and it never appears in the same file as the commissioner-hub lineage. That is why it
    * was left out of any rename: nothing here can be confused with anything at a call site.
    */
   engagementScore: number

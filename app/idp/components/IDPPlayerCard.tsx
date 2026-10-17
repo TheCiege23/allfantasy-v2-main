@@ -146,7 +146,7 @@ export function IDPPlayerCard({
       className="relative rounded-lg border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-2 shadow-sm transition hover:border-red-500/25"
       data-testid={`idp-card-${playerId}`}
     >
-      <span className="absolute right-2 top-2 rounded border border-[color:var(--idp-defense)]/45 bg-[color:var(--idp-defense)]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-100">
+      <span className="absolute right-2 top-2 rounded border border-[color:var(--idp-defense)]/45 bg-[color:var(--idp-defense)]/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-red-100">
         IDP
       </span>
       <div className="flex gap-2 pr-12">
@@ -166,7 +166,7 @@ export function IDPPlayerCard({
           <p className="truncate text-[12px] font-semibold text-white" title={name}>
             {name.length > 16 ? `${name.slice(0, 16)}…` : name}
           </p>
-          <p className="text-[10px] text-white/45">
+          <p className="text-[11px] text-white/45">
             {team ?? '—'} · {position}
           </p>
           {/*
@@ -176,13 +176,13 @@ export function IDPPlayerCard({
             and nothing at all when we do not.
           */}
           {snapSharePct != null ? (
-            <p className="text-[9px] text-white/35">{Math.round(snapSharePct)}% of snaps</p>
+            <p className="text-[11px] text-white/35">{Math.round(snapSharePct)}% of snaps</p>
           ) : null}
           <div className="mt-1 flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
             {displayPills.map((pill) => (
               <span
                 key={pill.label}
-                className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] font-semibold ${
                   PILL_STYLES[pill.label] ?? 'border-white/15 bg-white/10 text-white/70'
                 }`}
               >
@@ -193,11 +193,11 @@ export function IDPPlayerCard({
           </div>
           {salaryM != null && yearsRemaining != null ? (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] text-white/55">
+              <span className="text-[11px] text-white/55">
                 💰 ${salaryM.toFixed(1)}M · {yearsRemaining}yr
               </span>
               <span
-                className={`rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${chipStyles[contractChip]}`}
+                className={`rounded-full border px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${chipStyles[contractChip]}`}
               >
                 {contractChip === 'TAGGED'
                   ? 'TAGGED'
@@ -214,12 +214,12 @@ export function IDPPlayerCard({
           <p className="text-lg font-bold text-[color:var(--idp-defense)]">
             {points != null ? points.toFixed(1) : <span className="text-white/25">—</span>}
           </p>
-          <div className="text-[10px] text-white/35 inline-flex justify-end">
+          <div className="text-[11px] text-white/35 inline-flex justify-end">
             <span className="mr-0.5">proj</span>
             <ProjectionDisplay
               projection={projection ?? undefined}
               suffix=""
-              pointsClassName="text-[10px] text-white/35"
+              pointsClassName="text-[11px] text-white/35"
               afCrestProps={{
                 playerId,
                 playerName: name,
@@ -234,19 +234,19 @@ export function IDPPlayerCard({
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1">
         {injuryStatus ? (
-          <span className="rounded bg-red-950/50 px-1.5 py-0.5 text-[9px] text-red-200">
+          <span className="rounded bg-red-950/50 px-1.5 py-0.5 text-[11px] text-red-200">
             🔴 {injuryStatus}
           </span>
         ) : null}
-        {onBye ? <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-white/50">⚫ BYE</span> : null}
+        {onBye ? <span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-white/50">⚫ BYE</span> : null}
         {lowSnap ? (
-          <span className="rounded bg-amber-950/40 px-1.5 py-0.5 text-[9px] text-amber-200">⚠ LOW SNAP</span>
+          <span className="rounded bg-amber-950/40 px-1.5 py-0.5 text-[11px] text-amber-200">⚠ LOW SNAP</span>
         ) : null}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
-          className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${
+          className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
             isStarter
               ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-100'
               : 'border-white/15 bg-white/5 text-white/60'

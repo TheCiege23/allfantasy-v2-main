@@ -253,7 +253,7 @@ function DisagreementBadge({ data, codes }: { data: DisagreementData; codes?: st
           {codes && codes.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
               {codes.map(code => (
-                <Badge key={code} variant="outline" className="text-[10px] px-1.5 py-0">
+                <Badge key={code} variant="outline" className="text-[11px] px-1.5 py-0">
                   {code.replace(/_/g, ' ')}
                 </Badge>
               ))}

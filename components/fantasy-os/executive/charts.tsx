@@ -44,7 +44,7 @@ export function ExecutiveChartCard({
       ) : (
         <div className="min-w-0 overflow-x-auto">{children}</div>
       )}
-      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted">
+      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
         Units: {unit} · Source window {sourceWindow}
       </p>
     </figure>
@@ -75,8 +75,8 @@ export function YearBarChart({ series, colorClass = 'text-brand-primary' }: { se
       <title>{series.label} by year</title>
       <line x1={PAD.left} y1={PAD.top} x2={PAD.left} y2={H - PAD.bottom} className="stroke-line-strong" strokeWidth={1} />
       <line x1={PAD.left} y1={H - PAD.bottom} x2={W - PAD.right} y2={H - PAD.bottom} className="stroke-line-strong" strokeWidth={1} />
-      <text x={PAD.left - 6} y={PAD.top + 4} textAnchor="end" className="fill-muted text-[9px]">{fmt(max)}</text>
-      <text x={PAD.left - 6} y={H - PAD.bottom} textAnchor="end" className="fill-muted text-[9px]">0</text>
+      <text x={PAD.left - 6} y={PAD.top + 4} textAnchor="end" className="fill-muted text-[11px]">{fmt(max)}</text>
+      <text x={PAD.left - 6} y={H - PAD.bottom} textAnchor="end" className="fill-muted text-[11px]">0</text>
       <g className={colorClass}>
         {pts.map((p, i) => {
           const h = (p.value / max) * innerH
@@ -87,8 +87,8 @@ export function YearBarChart({ series, colorClass = 'text-brand-primary' }: { se
               <rect x={x} y={y} width={bw * 0.64} height={Math.max(0, h)} rx={2} fill="currentColor">
                 <title>{`${p.season}: ${fmt(p.value)} ${series.unit}`}</title>
               </rect>
-              <text x={x + bw * 0.32} y={y - 3} textAnchor="middle" className="fill-secondary text-[8px] font-semibold">{p.value ? fmt(p.value) : ''}</text>
-              <text x={x + bw * 0.32} y={H - PAD.bottom + 12} textAnchor="middle" className="fill-muted text-[9px]">{p.season}</text>
+              <text x={x + bw * 0.32} y={y - 3} textAnchor="middle" className="fill-secondary text-[11px] font-semibold">{p.value ? fmt(p.value) : ''}</text>
+              <text x={x + bw * 0.32} y={H - PAD.bottom + 12} textAnchor="middle" className="fill-muted text-[11px]">{p.season}</text>
             </g>
           )
         })}
@@ -115,7 +115,7 @@ export function GroupedYearChart({
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[440px]" role="img" aria-label="Activity composition by year">
       <title>Activity composition by year</title>
       <line x1={PAD.left} y1={H - PAD.bottom} x2={W - PAD.right} y2={H - PAD.bottom} className="stroke-line-strong" strokeWidth={1} />
-      <text x={PAD.left - 6} y={PAD.top + 4} textAnchor="end" className="fill-muted text-[9px]">{fmt(max)}</text>
+      <text x={PAD.left - 6} y={PAD.top + 4} textAnchor="end" className="fill-muted text-[11px]">{fmt(max)}</text>
       {points.map((p, i) => (
         <g key={p.season}>
           {keys.map((k, j) => {
@@ -131,7 +131,7 @@ export function GroupedYearChart({
               </g>
             )
           })}
-          <text x={PAD.left + i * groupW + groupW * 0.5} y={H - PAD.bottom + 12} textAnchor="middle" className="fill-muted text-[9px]">{p.season}</text>
+          <text x={PAD.left + i * groupW + groupW * 0.5} y={H - PAD.bottom + 12} textAnchor="middle" className="fill-muted text-[11px]">{p.season}</text>
         </g>
       ))}
     </svg>

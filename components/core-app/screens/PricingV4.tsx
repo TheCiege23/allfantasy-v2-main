@@ -6,6 +6,7 @@ import { track } from '@/lib/analytics/dataLayer'
 import { resolvePlanTierFromSku } from '@/lib/monetization-analytics'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
+import { manageAppleSubscriptions, restoreApplePurchases, useAppleIapPrices } from '@/lib/monetization/apple-iap-client'
 import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/planIncludes'
 import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBanner'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
@@ -152,7 +153,12 @@ function Shield() {
  * actually stops the Stripe webhook crediting anything. Printing the discounts
  * would advertise a product that was deliberately withdrawn.
  */
-const FAQS: { q: string; a: string }[] = [
+/*
+ * ⚠ `appleA` IS THE ANSWER INSIDE THE iOS APP. A StoreKit subscription can only be
+ * cancelled through Apple, so "Settings → Billing" is wrong there and App Review
+ * reads this screen.
+ */
+const FAQS: { q: string; a: string; appleA?: string }[] = [
   {
     q: 'What stays free?',
     a: "Creating, importing and running your leagues — drafts, trades, waivers, live scoring, standings and the commissioner basics. League creation and imports are unlimited, with no trial clock.",
@@ -164,6 +170,8 @@ const FAQS: { q: string; a: string }[] = [
   {
     q: 'Can I cancel?',
     a: 'Any time, from Settings → Billing. Purchases follow the pricing shown at checkout and the applicable refund policy.',
+    appleA:
+      'Any time. Subscriptions bought in the iPhone app are managed by Apple: tap Manage Subscriptions below, or open iPhone Settings → your name → Subscriptions. Refunds for App Store purchases are handled by Apple.',
   },
   {
     q: 'Is this gambling?',
@@ -172,6 +180,7 @@ const FAQS: { q: string; a: string }[] = [
 ]
 
 export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
+  const { appleApp, prices: applePrices, needsUpdate } = useAppleIapPrices()
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -238,11 +247,26 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
       setPendingSku(null)
       return
     }
+    if ('completed' in result) {
+      window.location.reload()
+      return
+    }
     window.location.assign(result.url)
+  }
+
+  async function restorePurchases() {
+    setError(null)
+    try {
+      await restoreApplePurchases()
+      window.location.reload()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to restore purchases.')
+    }
   }
 
   return (
     <div className="af-core af-pr">
+      {needsUpdate && <p role="status">Update the AllFantasy iOS app to make purchases.</p>}
       {/*
         ⚠ THIS PAGE HAD NO NAVIGATION AT ALL. Measured on the live page: zero
         <nav> elements and zero links to "/". A visitor who arrived here could
@@ -308,7 +332,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
             "yearly = 2 months free". That was true of the old prices and is not of
             these. Deriving it means the chip cannot outlive the prices it describes.
           */}
-          {savingsHeadline ? <span className="af-pr-savechip">{savingsHeadline}</span> : null}
+          {!appleApp && savingsHeadline ? <span className="af-pr-savechip">{savingsHeadline}</span> : null}
         </div>
       </header>
 
@@ -361,14 +385,15 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           return (
             <section key={plan.planFamily} className="af-pr-card" data-best={best}>
               {best ? <span className="af-pr-tab">Best value</span> : null}
-              <h2 className="af-pr-name">{plan.name}</h2>
+              {/* Named per interval so the card matches the App Store product it sells. */}
+              <h2 className="af-pr-name">{plan.name} {interval === 'month' ? 'Monthly' : 'Yearly'}</h2>
               <p className="af-pr-desc">{plan.description}</p>
 
               <div className="af-pr-price">
                 {price == null ? (
                   <span className="af-pr-amount af-pr-amount--none">—</span>
                 ) : (
-                  <span className="af-pr-amount">{money(price)}</span>
+                  <span className="af-pr-amount">{appleApp ? (sku ? applePrices[sku] ?? 'Loading Apple price…' : '—') : money(price)}</span>
                 )}
               </div>
               <p className="af-pr-per">
@@ -385,7 +410,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 because .99 pricing makes "2 months free" a fudge in one direction
                 or the other.
               */}
-              {interval === 'year' && plan.savings ? (
+              {!appleApp && interval === 'year' && plan.savings ? (
                 <p className="af-pr-save">
                   {money(plan.savings.effectiveMonthly)}/mo · save {money(plan.savings.savedUsd)} (
                   {plan.savings.savedPct}%)
@@ -409,7 +434,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 type="button"
                 className="af-pr-cta"
                 data-testid={sku ? `pricing-subscription-cta-${sku}` : undefined}
-                disabled={!sku || blocked || pendingSku === sku}
+                disabled={!sku || blocked || pendingSku === sku || (appleApp && !applePrices[sku])}
                 onClick={() => sku && startCheckout(sku, 'subscription')}
               >
                 {pendingSku === sku ? 'Opening checkout…' : `Choose ${plan.name}`}
@@ -457,9 +482,9 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
             <div className="af-pr-yearly-grid">
               {yearlyLanes.map((plan) => (
                 <div key={plan.planFamily} className="af-pr-yearly-card">
-                  <span className="af-pr-yearly-name">{plan.name}</span>
-                  <span className="af-pr-yearly-price">{money(plan.yearlyPrice as number)}</span>
-                  {plan.savings ? (
+                  <span className="af-pr-yearly-name">{plan.name} Yearly</span>
+                  <span className="af-pr-yearly-price">{appleApp ? (plan.yearlySku ? applePrices[plan.yearlySku] ?? 'Loading Apple price…' : '—') : money(plan.yearlyPrice as number)}</span>
+                  {!appleApp && plan.savings ? (
                     <span className="af-pr-yearly-save af-num">
                       {money(plan.savings.effectiveMonthly)}/mo · save {plan.savings.savedPct}%
                     </span>
@@ -488,12 +513,12 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString() : '—'}
               </span>
               <span className="af-pr-pack-label">tokens</span>
-              <span className="af-pr-pack-price">{money(pack.amountUsd)}</span>
+              <span className="af-pr-pack-price">{appleApp ? (applePrices[pack.sku] ?? 'Loading Apple price…') : money(pack.amountUsd)}</span>
               <button
                 type="button"
                 className="af-pr-cta af-pr-cta--small"
                 data-testid={`pricing-token-cta-${pack.sku}`}
-                disabled={blocked || pendingSku === pack.sku}
+                disabled={blocked || pendingSku === pack.sku || (appleApp && !applePrices[pack.sku])}
                 onClick={() => startCheckout(pack.sku, 'token_pack')}
               >
                 {pendingSku === pack.sku ? 'Opening…' : 'Buy'}
@@ -513,7 +538,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           {FAQS.map((f) => (
             <article key={f.q} className="af-pr-faq-item">
               <h3 className="af-pr-faq-q">{f.q}</h3>
-              <p className="af-pr-faq-a">{f.a}</p>
+              <p className="af-pr-faq-a">{appleApp && f.appleA ? f.appleA : f.a}</p>
             </article>
           ))}
         </div>
@@ -525,10 +550,12 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         the part a hesitating buyer actually needs.
       */}
       <footer className="af-pr-foot">
-        <p>
+        {appleApp && <button type="button" onClick={restorePurchases} className="af-pr-foot-cta">Restore Purchases</button>}
+        {appleApp && <button type="button" onClick={() => void manageAppleSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))} className="af-pr-foot-cta">Manage Subscriptions</button>}
+        {!appleApp && <p>
           Checkout is handled by Stripe — we never see your card details. League dues and payouts
           are handled on FanCred, separately from your AllFantasy subscription.
-        </p>
+        </p>}
         <Link href="/signup" className="af-pr-foot-cta">
           Start free
         </Link>

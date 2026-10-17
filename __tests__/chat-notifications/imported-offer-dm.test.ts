@@ -57,7 +57,6 @@ vi.mock('@/lib/chat-notifications/tradeOfferSources', async (importOriginal) => 
 vi.mock('@/lib/chat-notifications/tradeOfferDm', () => ({ postTradeStatusToDm: h.postStatus }))
 vi.mock('@/lib/trade-intel/sleeperTradeGradeService', () => ({ getTradeGrades: async () => null }))
 vi.mock('@/lib/trade-intel/tradeExpectationLoader', () => ({ loadTradeExpectation: async () => null }))
-vi.mock('@/lib/trade-intel/tradePsychologyLoader', () => ({ loadTradePsychology: async () => null }))
 vi.mock('@/lib/access/canAccessForUser', () => ({ canAccessForUser: async () => ({ allowed: false }) }))
 vi.mock('@/lib/resend-client', () => ({ sendTemplatedEmail: h.sendEmail }))
 vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: vi.fn(async () => []) }))

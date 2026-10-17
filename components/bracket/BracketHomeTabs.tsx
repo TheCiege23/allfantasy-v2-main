@@ -15,8 +15,8 @@ export default function BracketHomeTabs({ poolCount }: { poolCount: number }) {
     { href: '/brackets/world-cup', label: 'FIFA World Cup Bracket', desc: 'Run a 2026 knockout bracket with invite links, picks, and leaderboard.', icon: Globe2 },
     { href: '/brackets/join', label: 'Join Pool', desc: 'Enter invite code and start competing quickly.', icon: Users },
     { href: '/brackets', label: 'My Pools', desc: `${poolCount} active pool${poolCount === 1 ? '' : 's'} in your account.`, icon: Trophy },
-    { href: '/messages', label: 'Pool Chat', desc: 'Jump into chat, polls, and AI discussion.', icon: MessageCircle },
-    { href: chimmyHref, label: 'AI Coach', desc: 'Get safe vs contrarian guidance instantly.', icon: Sparkles },
+    { href: '/messages', label: 'Pool Chat', desc: 'Jump into chat, polls, and talk with Chimmy.', icon: MessageCircle },
+    { href: chimmyHref, label: 'Ask Chimmy', desc: 'Get safe vs contrarian guidance instantly.', icon: Sparkles },
     { href: '/brackets', label: 'History', desc: 'Review prior entries and finishing trends.', icon: History },
   ]
 

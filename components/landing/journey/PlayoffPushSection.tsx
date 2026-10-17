@@ -29,9 +29,9 @@ export function PlayoffPushSection({ copy }: { copy: LandingCopy['journey']['pla
 
       <GlassCard className="relative p-5 sm:p-6" accentBorder="color-mix(in srgb, var(--accent-amber) 28%, var(--accent-purple) 12%)">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-purple)' }}>{copy.standingsLabel}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-purple)' }}>{copy.standingsLabel}</p>
           <span
-            className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em]"
+            className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em]"
             style={{ color: 'var(--accent-amber-strong)', background: 'color-mix(in srgb, var(--accent-amber) 16%, transparent)' }}
           >
             🔥 {copy.tensionTag}
@@ -61,7 +61,7 @@ export function PlayoffPushSection({ copy }: { copy: LandingCopy['journey']['pla
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="text-xs font-medium" style={{ color: 'var(--muted)' }}>{row.record}</span>
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={tone}>{row.status}</span>
+                  <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={tone}>{row.status}</span>
                 </div>
               </div>
             )

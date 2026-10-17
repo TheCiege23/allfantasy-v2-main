@@ -8,11 +8,17 @@ const WARN_MS = 4 * 60 * 1000 + 50 * 1000
 
 type VoiceRecorderProps = {
   leagueId: string
+  /**
+   * A DM or huddle has no league — its composer passes `leagueId=""` — so the upload names the
+   * thread instead, exactly as the composer's photo upload does. Without it every voice note in a DM
+   * was refused with "leagueId or threadId required".
+   */
+  threadId?: string | null
   onComplete: (payload: { url: string; duration: number; mimeType: string; name: string }) => void
   onCancel: () => void
 }
 
-export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderProps) {
+export function VoiceRecorder({ leagueId, threadId, onComplete, onCancel }: VoiceRecorderProps) {
   const [seconds, setSeconds] = useState(0)
   const [bars, setBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0])
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -111,7 +117,9 @@ export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderP
             const fd = new FormData()
             fd.append('file', blob, 'voice.webm')
             fd.append('type', 'voice')
-            fd.append('leagueId', leagueId)
+            // One of the two is always present; the endpoint authorises against whichever it gets.
+            if (leagueId) fd.append('leagueId', leagueId)
+            if (threadId) fd.append('threadId', threadId)
             const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
             const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
             if (!res.ok || !data.url) {
@@ -148,7 +156,7 @@ export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderP
         stopStreams()
       }
     }
-  }, [leagueId, onCancel, onComplete, stopStreams])
+  }, [leagueId, threadId, onCancel, onComplete, stopStreams])
 
   const stop = () => {
     cancelledRef.current = false
@@ -167,7 +175,7 @@ export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderP
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
         </span>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-300">Recording</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-rose-300">Recording</span>
         <span className="font-mono text-[11px] text-white/80">
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
         </span>
@@ -185,14 +193,14 @@ export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderP
         <button
           type="button"
           onClick={stop}
-          className="rounded-lg bg-rose-500/20 px-2 py-1 text-[10px] font-semibold text-rose-200"
+          className="rounded-lg bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-200"
         >
           ■ Stop
         </button>
         <button
           type="button"
           onClick={cancel}
-          className="rounded-lg px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.06] hover:text-white"
+          className="rounded-lg px-2 py-1 text-[11px] text-white/50 hover:bg-white/[0.06] hover:text-white"
         >
           × Cancel
         </button>

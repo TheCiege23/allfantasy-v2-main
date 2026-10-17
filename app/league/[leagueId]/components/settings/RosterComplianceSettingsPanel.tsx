@@ -146,7 +146,7 @@ export function RosterComplianceSettingsPanel({
               Standard football redraft defaults. Superflex is visible and starts at 0.
             </p>
           </div>
-          <span className="rounded-full border border-[#ff9ec0]/25 bg-[#ff3d81]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#ffd7e5]">
+          <span className="rounded-full border border-[#ff9ec0]/25 bg-[#ff3d81]/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#ffd7e5]">
             Redraft
           </span>
         </div>
@@ -154,7 +154,7 @@ export function RosterComplianceSettingsPanel({
         <div className="mt-4 space-y-4">
           {(['Starters', 'Bench', 'Reserve'] as const).map((group) => (
             <div key={group} className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">{group}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">{group}</p>
               <div className="grid gap-2">
                 {ROSTER_SLOT_ROWS.filter((row) => row.group === group).map((row) => {
                   const value = slotCounts[row.key] ?? row.defaultValue

@@ -21,7 +21,44 @@ const owners = [
   { sleeperId: '8138', name: 'James Cook' },
 ]
 
-const seed = (id: string, name: string, team = 'FA') => ({ id, name, team, position: 'FLEX', source: 'cache' })
+const seed = (id: string, name: string, team = 'FA', position = 'FLEX') => ({ id, name, team, position, source: 'cache' })
+
+describe('keySeedsToSleeperIdentity — a row on a Sleeper id carries Sleeper’s position', () => {
+  // Positions as Sleeper's own records hold them on production, 2026-09-28.
+  const withPositions = [
+    { sleeperId: '11563', name: 'Jaire Alexander', position: 'CB' },
+    { sleeperId: '12530', name: 'Travis Hunter', position: 'DB' },
+    { sleeperId: '7607', name: 'Michael Carter', position: 'RB' },
+    { sleeperId: '7835', name: 'Michael Carter', position: 'CB' },
+    { sleeperId: '9997', name: 'Zay Flowers', position: 'WR' },
+    { sleeperId: '4000', name: 'No Label', position: null },
+  ]
+
+  it('an injury seed (no position, written FLEX) moved onto a Sleeper id takes Sleeper’s position', () => {
+    const [out] = keySeedsToSleeperIdentity('NFL', [seed('NFL:inj-77', 'Jaire Alexander')], withPositions)
+    expect(out).toMatchObject({ id: 'NFL:11563', position: 'CB' })
+  })
+
+  it('a provider seed’s own label does not overwrite Sleeper’s', () => {
+    const [out] = keySeedsToSleeperIdentity('NFL', [seed('NFL:9001', 'Travis Hunter', 'JAX', 'WR')], withPositions)
+    expect(out).toMatchObject({ id: 'NFL:12530', position: 'DB' })
+  })
+
+  it('a seed already on its own Sleeper id takes Sleeper’s position, even under a shared name', () => {
+    const [out] = keySeedsToSleeperIdentity('NFL', [seed('NFL:7607', 'Michael Carter', 'TEN')], withPositions)
+    expect(out).toMatchObject({ id: 'NFL:7607', position: 'RB' })
+  })
+
+  it('a seed moved OFF a Sleeper id keeps its own position — it is not Sleeper’s player', () => {
+    const [out] = keySeedsToSleeperIdentity('NFL', [seed('NFL:9997', 'Dillon Bell', 'HOU', 'WR')], withPositions)
+    expect(out).toMatchObject({ id: 'NFL:dillon-bell:HOU', position: 'WR' })
+  })
+
+  it('keeps the seed’s label when Sleeper has none', () => {
+    const [out] = keySeedsToSleeperIdentity('NFL', [seed('NFL:1', 'No Label', 'FA', 'TE')], withPositions)
+    expect(out).toMatchObject({ id: 'NFL:4000', position: 'TE' })
+  })
+})
 
 describe('keySeedsToSleeperIdentity', () => {
   it('never writes another provider’s id onto a Sleeper id that belongs to somebody else', () => {

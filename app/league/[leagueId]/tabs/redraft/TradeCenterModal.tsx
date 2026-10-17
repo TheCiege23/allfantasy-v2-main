@@ -98,7 +98,7 @@ function PlayerCard({
     >
       <span className="min-w-0">
         <span className="block truncate font-semibold">{player.playerName}</span>
-        <span className="text-[10px] text-white/50">
+        <span className="text-[11px] text-white/50">
           {player.position}
           {player.team ? ` · ${player.team}` : ''}
           {player.byeWeek ? ` · BYE ${player.byeWeek}` : ''}
@@ -106,7 +106,7 @@ function PlayerCard({
           {player.isLocked ? ' · 🔒' : ''}
         </span>
       </span>
-      <span className="shrink-0 text-right text-[10px] text-white/55">
+      <span className="shrink-0 text-right text-[11px] text-white/55">
         {proj != null ? `${proj.toFixed(1)} pts` : '—'}
       </span>
     </button>
@@ -552,7 +552,7 @@ export function TradeCenterModal({
                   </label>
                 ) : null}
                 {settings?.draftPickTrading ? (
-                  <p className="rounded border border-sky-400/20 bg-sky-400/5 px-2 py-1 text-[10px] text-sky-200/70">
+                  <p className="rounded border border-sky-400/20 bg-sky-400/5 px-2 py-1 text-[11px] text-sky-200/70">
                     Draft picks can’t be offered here — a pick would be recorded without ever changing hands.
                     Dynasty leagues trade future picks in the Trade Center.
                   </p>
@@ -564,7 +564,7 @@ export function TradeCenterModal({
             <p className="text-[12px] font-semibold text-white">Trade summary</p>
             <SummarySide label={`${proposerName} sends`} players={selectedMinePlayers} faab={mineFaab} />
             <SummarySide label={`${receiverName} sends`} players={selectedTheirsPlayers} faab={theirsFaab} />
-            {faabOver ? <p className="text-[10px] text-rose-300">FAAB exceeds available balance.</p> : null}
+            {faabOver ? <p className="text-[11px] text-rose-300">FAAB exceeds available balance.</p> : null}
           </aside>
         </div>
       ) : (
@@ -626,13 +626,13 @@ export function TradeCenterModal({
                 * An unlabelled estimate is the version of this panel that misleads.
                 */}
               {previewIsEstimate ? (
-                <p className="text-[10px] text-amber-200/70" data-testid="trade-value-estimate-note">
+                <p className="text-[11px] text-amber-200/70" data-testid="trade-value-estimate-note">
                   ⚠ Rough estimate{previewPending ? ' — still loading the full valuation…' : ''}. Priced from
                   projections alone, without market values, defensive pricing or your league&apos;s scarcity
                   settings. The value recorded when you send this trade will differ.
                 </p>
               ) : (
-                <p className="text-[10px] text-white/40">
+                <p className="text-[11px] text-white/40">
                   Full valuation · your league&apos;s scoring, slots and team count · same engine that records
                   the trade · {new Date(valuePreview.context.capturedAt).toLocaleString()}
                 </p>
@@ -655,7 +655,7 @@ export function TradeCenterModal({
               className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-1.5 text-[12px] text-white placeholder:text-white/30"
             />
           </label>
-          <p className="text-[10px] text-white/40">
+          <p className="text-[11px] text-white/40">
             Review mode: {settings?.commissionerTradeReviewType ?? 'commissioner'} · expires in{' '}
             {settings?.tradeReviewHours ?? 48}h.
           </p>
@@ -703,7 +703,7 @@ function ReviewSide(props: { label: string; players: RedraftRosterPlayerClient[]
           {props.players.map((p) => (
             <li key={p.id} className="flex justify-between gap-2">
               <span>{p.playerName}</span>
-              <span className="text-[10px] text-white/45">
+              <span className="text-[11px] text-white/45">
                 {p.position}
                 {p.team ? ` · ${p.team}` : ''}
               </span>

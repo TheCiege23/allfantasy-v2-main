@@ -35,7 +35,7 @@ export function ThemeModeSelect(props: {
     <label
       className={
         props.className ??
-        `inline-flex items-center gap-1.5 ${size === "sm" ? "text-[10px]" : "text-xs"}`
+        `inline-flex items-center gap-1.5 ${size === "sm" ? "text-[11px]" : "text-xs"}`
       }
     >
       <span className="sr-only">{t("theme.selectorTitle")}</span>

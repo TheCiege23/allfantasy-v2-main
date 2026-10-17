@@ -50,11 +50,12 @@ type HomeSearchParams = { [key: string]: string | string[] | undefined }
  * `alternates.languages` declares the pair to crawlers, and English keeps the
  * bare `/` canonical so the two languages are never treated as duplicate content.
  */
-export async function generateMetadata({
-  searchParams,
-}: {
-  searchParams?: HomeSearchParams
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    searchParams?: Promise<HomeSearchParams>
+  }
+): Promise<Metadata> {
+  const searchParams = await props.searchParams
   const lang = resolveLandingLang(searchParams?.lang)
   // The metadata strings quote no price, but getLandingCopy now requires the
   // range so no caller can render the copy without the live catalog behind it.
@@ -80,7 +81,7 @@ export async function generateMetadata({
     openGraphDescription: copy.meta.ogDescription,
     twitterTitle: copy.meta.ogTitle,
     twitterDescription: copy.meta.ogDescription,
-    imagePath: '/af-crest.png',
+    imagePath: '/og-image.jpg',
     keywords: [
       'fantasy sports',
       'fantasy football',
@@ -103,23 +104,24 @@ export async function generateMetadata({
 const HOME_WEBPAGE_SCHEMA = getWebPageSchema({
   name: 'AllFantasy.ai',
   description:
-    'Commissioner-first fantasy sports platform for NFL, NBA, NHL, MLB, NCAA, and Soccer with league management, live drafts, trades, and waiver tools.',
+    'Create or connect fantasy leagues, manage teams, drafts, trades and waivers, and get AI help with decisions.',
   url: '/',
 })
 
 const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
   name: 'AllFantasy.ai',
   description:
-    'Commissioner-first fantasy sports platform for serious managers with league management, live drafts, trade tools, and waiver wire tracking.',
+    'Fantasy sports app for creating or connecting leagues, managing teams, and getting AI help with lineup, waiver and trade decisions.',
   url: 'https://allfantasy.ai/',
   applicationCategory: 'SportsApplication',
 })
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams?: HomeSearchParams
-}) {
+export default async function HomePage(
+  props: {
+    searchParams?: Promise<HomeSearchParams>
+  }
+) {
+  const searchParams = await props.searchParams
   const lang = resolveLandingLang(searchParams?.lang)
 
   /*

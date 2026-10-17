@@ -12,7 +12,7 @@ const AI_FEATURES: { id: AIFeatureId; label: string; description: string }[] = [
   { id: 'playerComparisonEnabled', label: 'Player Comparison', description: 'Head-to-head and context-aware player comparison' },
   { id: 'matchupSimulatorEnabled', label: 'Matchup Simulator', description: 'Matchup projections and win probability' },
   { id: 'fantasyCoachEnabled', label: 'Fantasy Coach', description: 'Lineup and strategy advice' },
-  { id: 'aiChatChimmyEnabled', label: 'AI Chat Chimmy', description: 'League context chat and quick answers' },
+  { id: 'aiChatChimmyEnabled', label: 'Chimmy Chat', description: 'League context chat and quick answers' },
   { id: 'aiDraftManagerOrphanEnabled', label: 'AI Draft Manager for orphan teams', description: 'Optional AI drafting for empty teams (with deterministic fallback when unavailable)' },
 ]
 

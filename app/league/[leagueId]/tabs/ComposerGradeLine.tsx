@@ -22,7 +22,7 @@ export function ComposerGradeLine({
   if (!grade) return null
   if (!grade.graded) {
     return (
-      <span data-testid={`${testId}-withheld`} className="mt-1 block text-[10.5px] leading-snug text-amber-200/80">
+      <span data-testid={`${testId}-withheld`} className="mt-1 block text-[11px] leading-snug text-amber-200/80">
         Not graded: {grade.reason}
       </span>
     )
@@ -30,7 +30,7 @@ export function ComposerGradeLine({
   const them = partnerName?.trim() || 'Them'
   return (
     <span data-testid={testId} className="mt-1 block">
-      <span className={compact ? 'text-[10.5px] font-semibold text-white/85' : 'text-[13px] font-bold text-white'}>
+      <span className={compact ? 'text-[11px] font-semibold text-white/85' : 'text-[13px] font-bold text-white'}>
         Grade: You {grade.letter} · {them} {grade.partnerLetter}
         {grade.label ? <span className="font-normal text-white/60"> — {grade.label}</span> : null}
       </span>

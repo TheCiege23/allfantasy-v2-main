@@ -13,6 +13,8 @@ import type { CreateLeagueErrorResponse, CreateLeagueSuccessResponse } from '@/l
 import { logLeagueCreated } from '@/server/services/auditService'
 import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
+import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
+import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -36,6 +38,7 @@ export type ExecuteCanonicalLeagueCreationResult =
 export async function executeCanonicalLeagueCreation(args: {
   appUserId: string
   body: ValidatedCreateLeagueBody
+  sourceLeagueId?: string
 }): Promise<ExecuteCanonicalLeagueCreationResult> {
   const { appUserId, body } = args
   const engineDraft = normalizeDraftTypeForEngine(body.draftType)
@@ -76,19 +79,37 @@ export async function executeCanonicalLeagueCreation(args: {
   try {
     const result = await prisma.$transaction(
       async (tx) => {
-        return createCanonicalLeagueInTransaction(
+        const created = await createCanonicalLeagueInTransaction(
           tx as Prisma.TransactionClient,
           appUserId,
           body,
           engine,
           (ev, payload) => log(ev, payload)
         )
+        if (args.sourceLeagueId) {
+          await carryOverImportedLeague(tx as Prisma.TransactionClient, {
+            sourceLeagueId: args.sourceLeagueId,
+            targetLeagueId: created.leagueId,
+            creatorUserId: appUserId,
+            sport: String(body.sport),
+            teamCount: body.teamCount,
+            acceptWeeklyLineups: body.conceptSetup?.acceptWeeklyLineups === true,
+          })
+        }
+        return created
       },
-      { maxWait: 20000, timeout: 25000 }
+      { maxWait: 20000, timeout: args.sourceLeagueId ? 60000 : 25000 }
     )
     createdLeagueId = result.leagueId
     homepageUrl = result.homepageUrl
   } catch (e) {
+    if (e instanceof ImportedLeagueCarryoverError) {
+      return {
+        ok: false,
+        status: 400,
+        response: { success: false, error: e.message, errors: [{ path: 'sourceLeagueId', message: e.message }] },
+      }
+    }
     const detail = prismaErrorDetail(e)
     console.error(`${LOG_PREFIX} transaction_failed`, detail)
     recordProductEvent(CREATE_LEAGUE.SERVER_FAIL, {
@@ -143,6 +164,48 @@ export async function executeCanonicalLeagueCreation(args: {
     console.warn(`${LOG_PREFIX} post_create_bootstrap_non_fatal`, e)
   }
 
+  // Post-create roster bootstrap can install a sport/format roster smaller than the generic
+  // draft preset (NHL guillotine was 18 rounds for a 14-slot roster). Reconcile the actual
+  // draft gate's template before returning a league whose first draft cannot finish.
+  if (!args.sourceLeagueId) {
+    try {
+      const capacity = (await getLeagueDraftTemplatePayload(createdLeagueId)).totalRosterSlots
+      if (capacity > 0) {
+        const session = await prisma.draftSession.findFirst({
+          where: { leagueId: createdLeagueId, status: 'pre_draft' },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, rounds: true },
+        })
+        if (session && session.rounds > capacity) {
+          await prisma.$transaction(async (tx) => {
+            const league = await tx.league.findUniqueOrThrow({ where: { id: createdLeagueId }, select: { settings: true } })
+            const settings = (league.settings ?? {}) as Record<string, unknown>
+            const draftSettings = (settings.draftSettings ?? {}) as Record<string, unknown>
+            const foundation = (settings.foundation_defaults ?? {}) as Record<string, unknown>
+            const foundationDraft = (foundation.draft ?? {}) as Record<string, unknown>
+            await tx.league.update({
+              where: { id: createdLeagueId },
+              data: {
+                rosterSize: capacity,
+                settings: {
+                  ...settings,
+                  draftSettings: { ...draftSettings, rounds: capacity },
+                  foundation_defaults: { ...foundation, draft: { ...foundationDraft, rounds: capacity } },
+                } as Prisma.InputJsonValue,
+              },
+            })
+            await tx.draftSession.update({ where: { id: session.id }, data: { rounds: capacity } })
+            await tx.leagueSettings.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: capacity } })
+            await tx.redraftLeagueDraftProfile.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: capacity } })
+          })
+          log('draft_rounds_fit_roster', { leagueId: createdLeagueId, requestedRounds: session.rounds, rounds: capacity })
+        }
+      }
+    } catch (e) {
+      console.error(`${LOG_PREFIX} draft_rounds_fit_roster_failed`, e)
+    }
+  }
+
   try {
     const { generateLeagueConstitutionArtifact } = await import('@/lib/league/format-artifact-service')
     await generateLeagueConstitutionArtifact(createdLeagueId)
@@ -153,21 +216,26 @@ export async function executeCanonicalLeagueCreation(args: {
   // Slice 7: auto-materialize the draft so every joined human is seated and
   // remaining slots are AI-managed orphans. Best-effort — commissioner can
   // always click "Fill empty slots" in the Pre-Draft Setup card if this fails.
-  try {
-    const { autoMaterializeDraftForLeague } = await import('@/lib/league-setup/autoMaterializeDraftForLeague')
-    const result = await autoMaterializeDraftForLeague(createdLeagueId)
-    if (result.ok) {
-      log('auto_materialize_success', {
-        leagueId: createdLeagueId,
-        slotOrderSeeded: result.slotOrderSeeded,
-        materializedCreated: result.materializedCreated,
-        materializedAlready: result.materializedAlready,
-      })
-    } else {
-      console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, result.reason)
+  // The create response must return after the transaction commits. A full imported
+  // roster can take longer to materialize than this request's runtime budget.
+  // The wizard invokes the commissioner-only finalizer in a separate retryable request.
+  if (!args.sourceLeagueId) {
+    try {
+      const { autoMaterializeDraftForLeague } = await import('@/lib/league-setup/autoMaterializeDraftForLeague')
+      const result = await autoMaterializeDraftForLeague(createdLeagueId)
+      if (result.ok) {
+        log('auto_materialize_success', {
+          leagueId: createdLeagueId,
+          slotOrderSeeded: result.slotOrderSeeded,
+          materializedCreated: result.materializedCreated,
+          materializedAlready: result.materializedAlready,
+        })
+      } else {
+        console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, result.reason)
+      }
+    } catch (e) {
+      console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, e)
     }
-  } catch (e) {
-    console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, e)
   }
 
   const resBody: CreateLeagueSuccessResponse = {
@@ -188,6 +256,16 @@ export async function executeCanonicalLeagueCreation(args: {
 
   if (engine.warnings.length > 0) {
     resBody.warnings = engine.warnings
+  }
+  if (args.sourceLeagueId) {
+    resBody.warnings = [
+      ...(resBody.warnings ?? []),
+      {
+        path: 'sourceLeagueId',
+        code: 'IMPORT_MATERIALIZATION_PENDING',
+        message: 'Imported teams and rosters were copied, but native season materialization is pending. League setup remains open.',
+      },
+    ]
   }
 
   log('success', { leagueId: createdLeagueId, homepageUrl })

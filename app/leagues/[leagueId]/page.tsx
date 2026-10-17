@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { MessageModerationMenu } from "@/components/moderation/MessageModerationMenu"
 import { SmartDataView } from "@/components/app/league/SmartDataView"
 import PlayerDetailModal from "@/components/PlayerDetailModal"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -101,6 +102,8 @@ type RosterResponse = {
 type ChatResponse = {
   messages?: Array<{
     id: string
+    /** The author (the bracket chat read returns it) — Report and Block need it. */
+    userId?: string | null
     message: string
     createdAt: string
     user?: { displayName?: string | null; email?: string | null }
@@ -144,7 +147,15 @@ export default function LeagueHomeShellPage() {
   const [chatMessages, setChatMessages] = useState<ChatResponse["messages"]>([])
   const [dataError, setDataError] = useState<string | null>(null)
   const [loadingLeagueData, setLoadingLeagueData] = useState<boolean>(true)
-  const [legacyIdentitySource, setLegacyIdentitySource] = useState<string>('session_fallback')
+  /*
+   * True only when the id names NO league at all — absent from the viewer's
+   * bracket leagues AND rejected by /api/league/roster with its exact
+   * "League not found" (a real fantasy league the viewer has no roster in
+   * answers "Roster not found" instead, and must still render). Without this,
+   * any typed URL — /leagues/explore, /leagues/anything — rendered a full
+   * "League Home" shell for a league that does not exist.
+   */
+  const [leagueMissing, setLeagueMissing] = useState<boolean>(false)
   const [resolvedLegacyUserId, setResolvedLegacyUserId] = useState<string>('')
 
   const [draftPick, setDraftPick] = useState<number>(7)
@@ -155,6 +166,16 @@ export default function LeagueHomeShellPage() {
   const trackedDiscoveryViewRef = useRef(false)
 
   const isAuthenticated = status === "authenticated"
+
+  /* The viewer's app user id — Report and Block are offered on everyone's chat messages but theirs. */
+  const viewerUserId = (session?.user as { id?: string } | undefined)?.id ?? null
+  /* Blocked from this page, hidden at once; the bracket chat read drops them from the next load. */
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
+  const shownChatMessages = useMemo(
+    () => (chatMessages ?? []).filter((m) => !m.userId || !blockedAuthors.has(m.userId)),
+    [chatMessages, blockedAuthors],
+  )
+  const onChatAuthorBlocked = useCallback((id: string) => setBlockedAuthors((prev) => new Set(prev).add(id)), [])
 
   const userLabel = useMemo(() => {
     if (!isAuthenticated) return "Guest"
@@ -238,7 +259,17 @@ export default function LeagueHomeShellPage() {
       const chatJson: ChatResponse = await chatRes.json().catch(() => ({}))
 
       const leagues = Array.isArray(myLeaguesJson?.leagues) ? (myLeaguesJson.leagues as LeagueSummary[]) : []
-      setLeagueSummary(leagues.find((l) => l.id === leagueId) || null)
+      const summary = leagues.find((l) => l.id === leagueId) || null
+      setLeagueSummary(summary)
+      // "Missing" needs BOTH sources to have actually answered: a failed bracket
+      // read, or any roster error other than the exact no-such-league one, must
+      // fall through to the normal page rather than claim the league is gone.
+      setLeagueMissing(
+        !summary &&
+          myLeaguesRes.ok &&
+          rosterRes.status === 404 &&
+          (rosterJson as { error?: unknown } | null)?.error === "League not found",
+      )
       setStandings(Array.isArray(standingsJson?.standings) ? standingsJson.standings : [])
       setEntries(Array.isArray(entriesJson?.entries) ? entriesJson.entries : [])
       setRosterData(rosterJson)
@@ -290,14 +321,13 @@ export default function LeagueHomeShellPage() {
         if (!mounted) return
 
         const recommendedUserId = data?.identity?.recommendedUserId
-        const source = data?.identity?.source
 
         if (typeof recommendedUserId === 'string' && recommendedUserId.trim()) {
           setResolvedLegacyUserId(recommendedUserId.trim())
         }
-        if (typeof source === 'string' && source.trim()) {
-          setLegacyIdentitySource(source.trim())
-        }
+        // `identity.source` was only ever rendered as a "Legacy Identity:
+        // session_fallback" chip — a resolver diagnostic shown to every visitor.
+        // The chip is gone, so the source is no longer read.
       } catch {
         // keep session fallback key
       }
@@ -319,6 +349,9 @@ export default function LeagueHomeShellPage() {
   useEffect(() => {
     if (trackedDiscoveryViewRef.current) return
     if (!leagueId || leagueId === "unknown" || loadingLeagueData) return
+    // A view of a league that does not exist is not a discovery signal — it
+    // was being recorded for any typed URL.
+    if (leagueMissing) return
     trackedDiscoveryViewRef.current = true
     trackDiscoveryLeagueView({
       leagueId,
@@ -326,15 +359,72 @@ export default function LeagueHomeShellPage() {
       leagueName: leagueSummary?.name ?? null,
       sport: leagueSummary?.sport ?? null,
     })
-  }, [leagueId, leagueSummary?.name, leagueSummary?.sport, loadingLeagueData])
+  }, [leagueId, leagueSummary?.name, leagueSummary?.sport, loadingLeagueData, leagueMissing])
+
+  /*
+   * Every fetch this page makes is session-gated, so a signed-out visitor used
+   * to get the full shell — "Guest", empty tabs, a refresh button that does
+   * nothing. Ask them to sign in instead, and send them back here afterwards.
+   * Same wall as /messages. Only on a SETTLED "unauthenticated", never while the
+   * session is still loading, so a signed-in user never sees it flash.
+   */
+  if (status === "unauthenticated") {
+    const back = `/leagues/${encodeURIComponent(leagueId)}`
+    return (
+      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 mode-readable">
+        <section className="mode-panel rounded-2xl p-8 text-center" data-testid="league-home-signin">
+          <h1 className="text-xl font-semibold mode-text">Sign in to open this league</h1>
+          <p className="mt-2 text-sm mode-muted">Your leagues, standings and league chat need an account.</p>
+          <div className="mt-4 flex justify-center gap-3">
+            <Link
+              href={`/login?callbackUrl=${encodeURIComponent(back)}`}
+              className="rounded-lg border px-4 py-2 text-sm"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Sign In
+            </Link>
+            <Link
+              href={`/signup?next=${encodeURIComponent(back)}`}
+              className="rounded-lg px-4 py-2 text-sm font-semibold"
+              style={{ background: "var(--accent-cyan-strong)", color: "var(--on-accent-bg)" }}
+            >
+              Sign Up
+            </Link>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (leagueMissing) {
+    return (
+      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 mode-readable">
+        <section className="mode-panel rounded-2xl p-8 text-center" data-testid="league-home-not-found">
+          <h1 className="text-xl font-semibold mode-text">We couldn&apos;t find that league</h1>
+          <p className="mt-2 text-sm mode-muted">
+            The link may be out of date, or the league was removed. Your leagues are all on one page.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <Link
+              href="/leagues"
+              className="rounded-lg px-4 py-2 text-sm font-semibold"
+              style={{ background: "var(--accent-cyan-strong)", color: "var(--on-accent-bg)" }}
+            >
+              Go to my leagues
+            </Link>
+          </div>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 space-y-4 mode-readable">
         <section className="mode-panel rounded-2xl p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
+              {/* No "League ID:" line: an internal key, and for a typed URL it just echoed the URL back. */}
               <h1 className="text-2xl font-semibold">{leagueSummary?.name || "League Home"}</h1>
-              <p className="mode-muted text-sm">League ID: {leagueId}</p>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Link href="/leagues" className="rounded-lg border border-white/15 px-3 py-2 text-center text-sm hover:bg-white/10">
@@ -352,7 +442,6 @@ export default function LeagueHomeShellPage() {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/70">
-            <span className="rounded-full border border-cyan-400/25 px-2 py-1 text-cyan-200">Legacy Identity: {legacyIdentitySource}</span>
             <span className="rounded-full border border-white/15 px-2 py-1">Members: {leagueSummary?._count?.members ?? "-"}</span>
             <span className="rounded-full border border-white/15 px-2 py-1">Entries: {leagueSummary?._count?.entries ?? entries?.length ?? 0}</span>
             {leagueSummary?.joinCode && <span className="rounded-full border border-white/15 px-2 py-1">Join Code: {leagueSummary.joinCode}</span>}
@@ -438,10 +527,20 @@ export default function LeagueHomeShellPage() {
                 <Card title="Recent Activity">
                   <InlineNote text="Latest trades, waivers, and chat highlights." />
                   <ul className="mt-2 space-y-1 text-xs text-white/70">
-                    {chatMessages && chatMessages.length > 0 ? (
-                      chatMessages.slice(-5).reverse().map((msg) => (
-                        <li key={msg.id}>
-                          <span className="font-semibold">{msg.user?.displayName || 'User'}:</span> {msg.message}
+                    {shownChatMessages.length > 0 ? (
+                      shownChatMessages.slice(-5).reverse().map((msg) => (
+                        <li key={msg.id} className="flex items-start gap-1">
+                          <span className="min-w-0 flex-1">
+                            <span className="font-semibold">{msg.user?.displayName || 'User'}:</span> {msg.message}
+                          </span>
+                          <MessageModerationMenu
+                            threadId={`league:${leagueId}`}
+                            messageId={msg.id}
+                            authorId={msg.userId}
+                            authorName={msg.user?.displayName}
+                            viewerId={viewerUserId}
+                            onBlocked={onChatAuthorBlocked}
+                          />
                         </li>
                       ))
                     ) : (
@@ -774,11 +873,22 @@ export default function LeagueHomeShellPage() {
 
             {activeTab === "Chat" && (
               <Card title="League Chat">
-                {chatMessages && chatMessages.length > 0 ? (
+                {shownChatMessages.length > 0 ? (
                   <ul className="space-y-2">
-                    {chatMessages.map((m) => (
+                    {shownChatMessages.map((m) => (
                       <li key={m.id} className="rounded-lg border border-white/10 p-3 text-sm">
-                        <div className="text-xs text-white/50">{m.user?.displayName || m.user?.email || "Manager"}</div>
+                        <div className="flex items-center justify-between gap-2 text-xs text-white/50">
+                          <span>{m.user?.displayName || "Manager"}</span>
+                          {/* Report / Block (App Store guideline 1.2): this is bracket league chat, the "league:<id>" room. */}
+                          <MessageModerationMenu
+                            threadId={`league:${leagueId}`}
+                            messageId={m.id}
+                            authorId={m.userId}
+                            authorName={m.user?.displayName}
+                            viewerId={viewerUserId}
+                            onBlocked={onChatAuthorBlocked}
+                          />
+                        </div>
                         <div className="text-white/90">{m.message}</div>
                       </li>
                     ))}

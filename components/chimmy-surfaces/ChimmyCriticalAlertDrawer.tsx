@@ -22,7 +22,7 @@ export default function ChimmyCriticalAlertDrawer({
   return (
     <ChimmyDrawer open={open} onClose={() => onAcknowledge(alert)} title="Critical Chimmy Alert" height="half">
       <div className="space-y-3">
-        <div className="inline-flex rounded-full border border-rose-300/45 bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-100">
+        <div className="inline-flex rounded-full border border-rose-300/45 bg-rose-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-rose-100">
           Immediate attention
         </div>
 

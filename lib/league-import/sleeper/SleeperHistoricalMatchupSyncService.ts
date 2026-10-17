@@ -20,6 +20,14 @@ import {
 } from './bracketPlacements'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
 import { mergeSeasonMetadata } from './seasonMetadata'
+import {
+  canonicalIdsForSeason,
+  compactRosterOwners,
+  currentSlotBySleeperOwner,
+  formerSleeperSlotKey,
+  readStoredRosterOwners,
+  sameCanonicalMap,
+} from './historicalTeamIdentity'
 
 const MAX_SLEEPER_MATCHUP_WEEKS = 18
 
@@ -45,6 +53,15 @@ export interface SleeperHistoricalMatchupSyncSummary {
   seasonsSkippedComplete?: number
   /** Completed seasons fetched once more because their stored row was written before they settled. */
   completedSeasonsRefreshed?: number
+  /**
+   * Settled seasons stored without their roster owners, so their team mapping had to be checked
+   * with one rosters call each. Seasons that carry owners are re-checked from the database alone.
+   */
+  seasonsIdentityChecked?: number
+  /** Settled seasons whose team mapping no longer matched today's league, rewritten in full. */
+  seasonsRemapped?: number
+  /** Seasons with matchups but no rosters (a failed fetch): left as stored rather than written unattributed. */
+  seasonsSkippedNoRosters?: number
   matchupFactsPersisted?: number
   playoffSeasonsWithBracket?: number
   weeksWithMatchups?: number
@@ -139,21 +156,6 @@ function getPlayoffSeedForRoster(
   return computePlayoffSeedFromBracket(roster.roster_id, winnersBracket)
 }
 
-/**
- * The current season's canonical team id for a roster, as stamped into `playerData`
- * by the import. Exported because the DRAFT sync needs the identical resolution —
- * it wrote raw historical roster ids for a long time, which attributed picks to
- * whoever happens to hold that roster slot today. One definition, not two that drift.
- */
-export function getSourceTeamIdFromPlayerData(playerData: unknown): string | null {
-  if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) {
-    return null
-  }
-
-  const sourceTeamId = (playerData as Record<string, unknown>).source_team_id
-  return typeof sourceTeamId === 'string' && sourceTeamId.trim() ? sourceTeamId.trim() : null
-}
-
 function buildSeasonMatchupFacts(args: {
   leagueId: string
   sport: string
@@ -196,11 +198,14 @@ function buildSeasonMatchupFacts(args: {
 
       const scoreA = typeof teamOne.points === 'number' ? teamOne.points : 0
       const scoreB = typeof teamTwo.points === 'number' ? teamTwo.points : 0
+      /* A roster missing from the map has no known owner: a key of its own, never the bare slot number. */
+      const canonical = (rosterId: number | string) =>
+        args.canonicalIdByHistoricalRosterId.get(String(rosterId)) ?? formerSleeperSlotKey(args.season, String(rosterId))
       const winnerTeamId =
         scoreA > scoreB
-          ? String(teamOne.roster_id)
+          ? canonical(teamOne.roster_id)
           : scoreB > scoreA
-            ? String(teamTwo.roster_id)
+            ? canonical(teamTwo.roster_id)
             : null
 
       const dedupeKey = `${args.season}:${weekMatchup.week}:${matchupId}:${teamOne.roster_id}:${teamTwo.roster_id}`
@@ -214,18 +219,11 @@ function buildSeasonMatchupFacts(args: {
         sport: args.sport,
         season: args.season,
         weekOrPeriod: weekMatchup.week,
-        teamA:
-          args.canonicalIdByHistoricalRosterId.get(String(teamOne.roster_id)) ??
-          String(teamOne.roster_id),
-        teamB:
-          args.canonicalIdByHistoricalRosterId.get(String(teamTwo.roster_id)) ??
-          String(teamTwo.roster_id),
+        teamA: canonical(teamOne.roster_id),
+        teamB: canonical(teamTwo.roster_id),
         scoreA,
         scoreB,
-        winnerTeamId:
-          winnerTeamId != null
-            ? args.canonicalIdByHistoricalRosterId.get(winnerTeamId) ?? winnerTeamId
-            : null,
+        winnerTeamId,
       })
     }
   }
@@ -262,6 +260,12 @@ export function isStoredSeasonSettled(metadata: unknown): boolean {
   const stored = metadata as Record<string, unknown>
   if (readStoredTitleGame(stored.playoffStructure) != null) return true
   return stored.seasonStatusAtSync === 'complete'
+}
+
+/** The roster owners a stored season was mapped from (`sleeperRosterOwners`), or null for rows written before they were kept. */
+export function storedSeasonRosterOwners(metadata: unknown) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
+  return readStoredRosterOwners((metadata as Record<string, unknown>).sleeperRosterOwners)
 }
 
 function buildMatchupMetadata(args: {
@@ -307,6 +311,8 @@ function buildMatchupMetadata(args: {
   return {
     /** Sleeper's status for the season when this row was written — read by `isStoredSeasonSettled`. */
     seasonStatusAtSync: args.league.status ?? null,
+    /** Who owned each roster that season — what the team mapping is re-derived from. See `historicalTeamIdentity.ts`. */
+    sleeperRosterOwners: compactRosterOwners(args.rosters),
     matchupHistory: {
       weeksWithMatchups: args.weekMatchups
         .filter((week) => week.matchups.length > 0)
@@ -390,18 +396,30 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
 
   try {
     const sport = normalizeSportForWarehouse(league.sport)
-    const currentRosters = await prisma.roster.findMany({
-      where: { leagueId: league.id },
-      select: {
-        platformUserId: true,
-        playerData: true,
-      },
-    })
-    const canonicalIdByManagerId = new Map<string, string>()
-    for (const roster of currentRosters) {
-      const sourceTeamId = getSourceTeamIdFromPlayerData(roster.playerData)
-      if (sourceTeamId) {
-        canonicalIdByManagerId.set(roster.platformUserId, sourceTeamId)
+    const [currentRosters, currentTeams] = await Promise.all([
+      prisma.roster.findMany({
+        where: { leagueId: league.id },
+        select: {
+          platformUserId: true,
+          playerData: true,
+        },
+      }),
+      prisma.leagueTeam.findMany({
+        where: { leagueId: league.id },
+        select: { externalId: true, platformUserId: true },
+      }),
+    ])
+    const currentSlotByOwner = currentSlotBySleeperOwner({ rosters: currentRosters, teams: currentTeams })
+    /*
+     * ⚠ NOBODY TO MAP ONTO, SO DO NOT MAP. With no current team on file every past manager would read
+     * as departed, and the identity re-check below would rewrite settled seasons that way.
+     */
+    if (currentSlotByOwner.size === 0) {
+      return {
+        attempted: false,
+        refreshed: false,
+        skipped: true,
+        reason: 'No current Sleeper managers on file to map history onto.',
       }
     }
 
@@ -426,6 +444,9 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
     let seasonsProcessed = 0
     let seasonsSkippedComplete = 0
     let completedSeasonsRefreshed = 0
+    let seasonsIdentityChecked = 0
+    let seasonsRemapped = 0
+    let seasonsSkippedNoRosters = 0
     let matchupFactsPersisted = 0
     let playoffSeasonsWithBracket = 0
     let weeksWithMatchups = 0
@@ -471,10 +492,49 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
         ])
         storedSeason = stored
         if (alreadyPersisted && isStoredSeasonSettled(stored?.metadata)) {
-          seasonsSkippedComplete += 1
-          continue
+          /*
+           * Settled — but the team mapping depends on who is in the league TODAY, so it is re-derived
+           * on every run and compared with what the season was stored under. A season that carries its
+           * roster owners costs nothing to check; one written before they were kept costs one rosters
+           * call, once, and is stamped with them. Only a season where someone's slot moved (a manager
+           * left, or one changed slots) is fetched and rewritten in full below.
+           */
+          const ownersOnFile = storedSeasonRosterOwners(stored?.metadata)
+          let seasonRosters: Array<{ roster_id: unknown; owner_id?: unknown; co_owners?: unknown }> | null = ownersOnFile
+          if (!seasonRosters) {
+            seasonsIdentityChecked += 1
+            const fetched = await getLeagueRosters(seasonState.externalLeagueId)
+            if (fetched.length === 0) {
+              seasonsSkippedNoRosters += 1
+              continue
+            }
+            seasonRosters = fetched
+          }
+          const remapped = canonicalIdsForSeason({
+            season: seasonState.season,
+            rosters: seasonRosters,
+            currentSlotByOwner,
+            isCurrentSeason: seasonState.externalLeagueId === league.platformLeagueId,
+          })
+          const storedMap = (stored?.metadata as { playoffStructure?: { canonicalRosterIdByHistoricalRosterId?: unknown } } | null)
+            ?.playoffStructure?.canonicalRosterIdByHistoricalRosterId
+          if (sameCanonicalMap(storedMap, remapped)) {
+            if (!ownersOnFile) {
+              await persistDynastySeason(
+                league.id,
+                seasonState.season,
+                seasonState.externalLeagueId,
+                'sleeper',
+                mergeSeasonMetadata(stored?.metadata, { sleeperRosterOwners: compactRosterOwners(seasonRosters) }),
+              )
+            }
+            seasonsSkippedComplete += 1
+            continue
+          }
+          seasonsRemapped += 1
+        } else if (alreadyPersisted) {
+          completedSeasonsRefreshed += 1
         }
-        if (alreadyPersisted) completedSeasonsRefreshed += 1
       }
 
       const [rosters, winnersBracket, losersBracket, weekMatchups, existingSeason] = await Promise.all([
@@ -485,14 +545,21 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
         storedSeason !== undefined ? Promise.resolve(storedSeason) : storedSeasonRead(),
       ])
 
-      const canonicalIdByHistoricalRosterId = new Map<string, string>()
-      for (const roster of rosters) {
-        const historicalRosterId = String(roster.roster_id)
-        const canonicalId =
-          (roster.owner_id ? canonicalIdByManagerId.get(roster.owner_id) : undefined) ??
-          historicalRosterId
-        canonicalIdByHistoricalRosterId.set(historicalRosterId, canonicalId)
+      /*
+       * ⚠ NO ROSTERS, NO WRITE. `getLeagueRosters` answers `[]` for a failed request, and without that
+       * season's owners every game would be stored unattributed — then deleted-and-replaced over a
+       * row that was right. Leave the season as it is; the next run tries again.
+       */
+      if (rosters.length === 0 && weekMatchups.some((week) => week.matchups.length > 0)) {
+        seasonsSkippedNoRosters += 1
+        continue
       }
+      const canonicalIdByHistoricalRosterId = canonicalIdsForSeason({
+        season: seasonState.season,
+        rosters,
+        currentSlotByOwner,
+        isCurrentSeason: seasonState.externalLeagueId === league.platformLeagueId,
+      })
 
       const matchupRows = buildSeasonMatchupFacts({
         leagueId: league.id,
@@ -555,6 +622,9 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
       seasonsProcessed,
       seasonsSkippedComplete,
       completedSeasonsRefreshed,
+      seasonsIdentityChecked,
+      seasonsRemapped,
+      seasonsSkippedNoRosters,
       matchupFactsPersisted,
       playoffSeasonsWithBracket,
       weeksWithMatchups,

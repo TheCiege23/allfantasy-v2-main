@@ -1,5 +1,12 @@
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import {
+  indexBySleeperId,
+  mayBeSleeperId,
+  nonSleeperExternalIdWhere,
+  sleeperIdWhere,
+} from '@/lib/player-identity/externalIdNamespace'
 
 function fallbackPlayerLabel(playerId: string): string {
   return `Player ${playerId.slice(0, 8)}`
@@ -26,132 +33,132 @@ export function normalizePlayerLookupToken(value: string | null | undefined): st
     .trim()
 }
 
+/**
+ * The `PlayerIdentityMap` column that holds a foreign platform's own ids. A platform with no column
+ * here (Yahoo, anything unrecognised) is named by nobody — its ids get the neutral fallback label.
+ */
+const FOREIGN_IDENTITY_COLUMN = {
+  espn: 'espnId',
+  mfl: 'mflId',
+  myfantasyleague: 'mflId',
+  fleaflicker: 'fleaflickerId',
+  fantrax: 'fantraxId',
+} as const
+type ForeignColumn = (typeof FOREIGN_IDENTITY_COLUMN)[keyof typeof FOREIGN_IDENTITY_COLUMN]
+
+/**
+ * Name the players a league's rosters refer to.
+ *
+ * 🛑 `platform` IS REQUIRED BECAUSE A PLAYER ID IS ONLY MEANINGFUL IN ITS LEAGUE'S ID SPACE. This
+ * used to take ids alone and ask every table and every provider column at once, keeping whichever
+ * name came back first. Sleeper, ESPN, Fleaflicker, MFL, Rolling Insights and the backfill all write
+ * small numbers, and the same number is a different person in each (Sleeper 9228 is Bryce Young;
+ * Rolling Insights 9228 is an offensive tackle). So a Sleeper id with no Sleeper row picked up a
+ * stranger's name from `SportsPlayer.externalId`, and an ESPN id was read as a Sleeper id by the
+ * canonical lookup. Now each league's ids are asked only of the places that speak that space:
+ *
+ *   - Sleeper league       every id is a Sleeper id — canonical players, the identity map's
+ *                          `sleeperId`, `SportsPlayer` by Sleeper id. Never `externalId`.
+ *   - native league        a bare number in NFL is a Sleeper id (handled as above). Anything else is
+ *                          self-describing (`name:Josh Allen:QB:BUF`, `tsdb_34415964`) or a provider
+ *                          id in a sport Sleeper does not cover (a native NHL roster holds Rolling
+ *                          Insights ids) — those are the ids `externalId` legitimately names.
+ *   - ESPN/MFL/Fleaflicker/Fantrax   only that platform's identity-map column.
+ *   - anything else        nothing; the neutral fallback label beats a stranger's name.
+ *
+ * Measured on production 2026-09-29, the native split loses no name that was right: of 186 native
+ * NFL roster ids, the 25 named only through `externalId` were 24 `name:` backfill ids and one
+ * `tsdb_` id; all 72 native NHL ids were Rolling Insights numbers.
+ */
 export async function resolvePlayerNamesForSport(
   playerIds: string[],
-  sport: LeagueSport | string | null | undefined
+  sport: LeagueSport | string | null | undefined,
+  platform: string | null | undefined,
 ): Promise<Map<string, string>> {
   const uniquePlayerIds = [...new Set(playerIds.map((id) => id?.trim()).filter((id): id is string => Boolean(id)))]
   const nameMap = new Map<string, string>()
   if (uniquePlayerIds.length === 0) return nameMap
 
   const normalizedSport = normalizeSport(sport)
+  const p = String(platform ?? '').trim().toLowerCase()
+  const native = isNativePlatform(p)
+  const foreignColumn: ForeignColumn | null =
+    (FOREIGN_IDENTITY_COLUMN as Record<string, ForeignColumn | undefined>)[p] ?? null
 
-  if (normalizedSport === 'NFL') {
+  const sleeperIds = p === 'sleeper'
+    ? uniquePlayerIds
+    : native
+      ? uniquePlayerIds.filter((id) => mayBeSleeperId(id, normalizedSport))
+      : []
+  const nativeOtherIds = native ? uniquePlayerIds.filter((id) => !sleeperIds.includes(id)) : []
+
+  if (sleeperIds.length > 0) {
+    if (normalizedSport === 'NFL') {
+      try {
+        // Canonical read path: a fixed 3 queries against `Player` + `PlayerProviderIdentity`, keyed
+        // by Sleeper id. Ids with no canonical player are simply absent, so the reads below still run.
+        const { getCanonicalPlayersBySleeperIds } = await import('@/lib/canonical/getCanonicalPlayer')
+        const canonical = await getCanonicalPlayersBySleeperIds(sleeperIds)
+        for (const playerId of sleeperIds) setNameIfPresent(nameMap, playerId, canonical.get(playerId)?.name)
+      } catch {
+        // Fall through to local database lookups.
+      }
+    }
+
     try {
-      // Phase 3: canonical read path. Was a live `getAllPlayers()` fetch of Sleeper's entire
-      // NFL universe to look up a handful of ids; now a fixed 3 queries against `Player` +
-      // `PlayerProviderIdentity`, keyed by the same Sleeper ids the caller already holds.
-      // Ids with no canonical player are simply absent, so the DB fallbacks below still run.
-      const { getCanonicalPlayersBySleeperIds } = await import('@/lib/canonical/getCanonicalPlayer')
-      const canonical = await getCanonicalPlayersBySleeperIds(uniquePlayerIds)
-      for (const playerId of uniquePlayerIds) {
-        setNameIfPresent(nameMap, playerId, canonical.get(playerId)?.name)
+      const rows = await prisma.playerIdentityMap.findMany({
+        where: { sport: normalizedSport, sleeperId: { in: sleeperIds } },
+        select: { canonicalName: true, sleeperId: true },
+      })
+      for (const row of rows) setNameIfPresent(nameMap, row.sleeperId, row.canonicalName)
+    } catch {
+      // Optional mapping layer; ignore lookup failures.
+    }
+
+    try {
+      const unnamed = sleeperIds.filter((id) => !nameMap.has(id))
+      if (unnamed.length > 0) {
+        const rows = await prisma.sportsPlayer.findMany({
+          where: sleeperIdWhere(unnamed, normalizedSport),
+          select: { sleeperId: true, source: true, name: true },
+        })
+        for (const [sleeperId, row] of indexBySleeperId(rows)) setNameIfPresent(nameMap, sleeperId, row.name)
       }
     } catch {
-      // Fall through to local database lookups.
+      // Optional lookup; ignore failures.
     }
   }
 
-  try {
-    const identityRows = await prisma.playerIdentityMap.findMany({
-      where: {
-        sport: normalizedSport,
-        OR: [
-          { sleeperId: { in: uniquePlayerIds } },
-          { espnId: { in: uniquePlayerIds } },
-          { mflId: { in: uniquePlayerIds } },
-          { fleaflickerId: { in: uniquePlayerIds } },
-          { apiSportsId: { in: uniquePlayerIds } },
-          { clearSportsId: { in: uniquePlayerIds } },
-          { fantasyCalcId: { in: uniquePlayerIds } },
-          { rollingInsightsId: { in: uniquePlayerIds } },
-          /*
-           * ⚠ FANTRAX WAS THE ONE PROVIDER COLUMN MISSING FROM THIS LIST, WHICH MADE EVERY
-           * COLLEGE ROSTER UNNAMEABLE HERE. `fantraxId` was added to `PlayerIdentityMap` on
-           * 2026-08-31 and is written weekly by `lib/devy/ingestFantraxPlayerIdentities.ts`;
-           * this OR clause was never extended, so the activity feeds, the survivor command
-           * service and tanking detection all fell through to the name-based fallbacks for a
-           * Fantrax league — the same shape of gap that left Chimmy's roster grounding blind.
-           *
-           * ⚠ SAFE BECAUSE IT WAS MEASURED, NOT BECAUSE IT LOOKS SAFE. This clause binds ONE
-           * name to EVERY id on the row it matches, so a token that is one player's Fantrax id
-           * and another player's Sleeper/ESPN/... id would attach the wrong name. Measured on
-           * the TEST database 2026-09-19 — production not readable from that session:
-           *
-           *     fantraxId populated       NCAAF only, 4,128 rows
-           *     distinct values           4,128  (no id held by two rows)
-           *     cross-column collisions   0      (no fantraxId equals another row's
-           *                                       sleeper/espn/mfl/fleaflicker/apiSports/
-           *                                       clearSports/fantasyCalc/rollingInsights id
-           *                                       within the same sport)
-           *
-           * So on that data this can only ADD matches. Re-measure before widening it further.
-           */
-          { fantraxId: { in: uniquePlayerIds } },
-        ],
-      },
-      select: {
-        canonicalName: true,
-        sleeperId: true,
-        espnId: true,
-        mflId: true,
-        fleaflickerId: true,
-        apiSportsId: true,
-        clearSportsId: true,
-        fantasyCalcId: true,
-        rollingInsightsId: true,
-        fantraxId: true,
-      },
-    })
-
-    for (const row of identityRows) {
-      setNameIfPresent(nameMap, row.sleeperId, row.canonicalName)
-      setNameIfPresent(nameMap, row.espnId, row.canonicalName)
-      setNameIfPresent(nameMap, row.mflId, row.canonicalName)
-      setNameIfPresent(nameMap, row.fleaflickerId, row.canonicalName)
-      setNameIfPresent(nameMap, row.apiSportsId, row.canonicalName)
-      setNameIfPresent(nameMap, row.clearSportsId, row.canonicalName)
-      setNameIfPresent(nameMap, row.fantasyCalcId, row.canonicalName)
-      setNameIfPresent(nameMap, row.rollingInsightsId, row.canonicalName)
-      setNameIfPresent(nameMap, row.fantraxId, row.canonicalName)
+  if (foreignColumn) {
+    /*
+     * ⚠ ONE COLUMN, NOT NINE. The old read matched every provider column and bound the row's name to
+     * all of them, so an ESPN id equal to some row's Fleaflicker or Sleeper id named that row's
+     * player. `fantraxId` was measured collision-free across columns on the TEST database
+     * (2026-09-19, 4,128 NCAAF rows) — that stays true, and now does not have to.
+     */
+    try {
+      const rows = await prisma.playerIdentityMap.findMany({
+        where: { sport: normalizedSport, [foreignColumn]: { in: uniquePlayerIds } },
+        select: { canonicalName: true, [foreignColumn]: true },
+      })
+      for (const row of rows as Array<Record<string, string | null>>) {
+        setNameIfPresent(nameMap, row[foreignColumn], row.canonicalName)
+      }
+    } catch {
+      // Optional mapping layer; ignore lookup failures.
     }
-  } catch {
-    // Optional mapping layer; ignore lookup failures.
   }
 
-  /*
-   * ⚠ TWO QUERIES, AUTHORITATIVE FIRST, BECAUSE THESE TOKENS ARE NOT ALL IN ONE ID SPACE.
-   *
-   * This was one query — `OR: [{ externalId: { in } }, { sleeperId: { in } }]` — binding the
-   * name to both columns of every row it found. `SportsPlayer.externalId` is 83% bare numerics
-   * written by Rolling Insights, CFBD and api_football, and 42,032 of those collide with a
-   * Sleeper id where 42,031 are a DIFFERENT PERSON. So a Sleeper token could match a Rolling
-   * Insights row and bind a stranger's name, and `setNameIfPresent` keeps the FIRST name it is
-   * given — so which name a player got depended on row order.
-   *
-   * The caller genuinely mixes spaces here (the identity-map hop above resolves FantasyCalc and
-   * Rolling Insights ids too), so the fix is not to pick one. It is to ask in order of
-   * authority: `sleeperId` is a real Sleeper id by definition and can never be a coincidence,
-   * so it is claimed first. Only tokens still unnamed are tried against `externalId`, where a
-   * bare numeric is a legitimate provider id rather than a collision.
-   */
-  try {
-    const bySleeperId = await prisma.sportsPlayer.findMany({
-      where: { sport: normalizedSport, sleeperId: { in: uniquePlayerIds } },
-      select: { sleeperId: true, name: true },
-    })
-    for (const player of bySleeperId) setNameIfPresent(nameMap, player.sleeperId, player.name)
-
-    const stillUnnamed = uniquePlayerIds.filter((id) => !nameMap.has(id))
-    if (stillUnnamed.length > 0) {
-      const byExternalId = await prisma.sportsPlayer.findMany({
-        where: { sport: normalizedSport, externalId: { in: stillUnnamed } },
+  if (nativeOtherIds.length > 0) {
+    try {
+      const rows = await prisma.sportsPlayer.findMany({
+        where: nonSleeperExternalIdWhere(nativeOtherIds, normalizedSport),
         select: { externalId: true, name: true },
       })
-      for (const player of byExternalId) setNameIfPresent(nameMap, player.externalId, player.name)
+      for (const row of rows) setNameIfPresent(nameMap, row.externalId, row.name)
+    } catch {
+      // Optional lookup; ignore failures.
     }
-  } catch {
-    // Optional lookup; ignore failures.
   }
 
   for (const playerId of uniquePlayerIds) {

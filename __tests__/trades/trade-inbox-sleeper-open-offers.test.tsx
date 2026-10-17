@@ -67,6 +67,30 @@ describe('TradeInbox — offers Sleeper does not publish', () => {
     expect(onEnterByHand).toHaveBeenCalledTimes(1)
   })
 
+  /*
+   * Sleeper sends offers as phone notifications only — no feed, no email — so a screenshot is the
+   * other way in (2026-09-30). The chosen file goes to the builder; a failure is said in words.
+   */
+  it('the screenshot upload hands the chosen file to the builder, and says why one failed', async () => {
+    fetchTradesPanel.mockResolvedValue(panel('sleeper'))
+    const onScreenshot = vi.fn()
+    const { rerender } = render(
+      <TradeInbox view="offers" leagueId="lg-sleeper-5" onLoad={() => {}} onEnterByHand={() => {}} onScreenshot={onScreenshot} />,
+    )
+    await screen.findByText('Upload a screenshot')
+    const input = screen.getByTestId('trade-offer-screenshot-input') as HTMLInputElement
+    const file = new File([new Uint8Array(4)], 'offer.png', { type: 'image/png' })
+    fireEvent.change(input, { target: { files: [file] } })
+    expect(onScreenshot).toHaveBeenCalledWith(file)
+
+    rerender(
+      <TradeInbox view="offers" leagueId="lg-sleeper-5" onLoad={() => {}} onEnterByHand={() => {}} onScreenshot={onScreenshot}
+        screenshotBusy screenshotError="That offer involves more than two teams." />,
+    )
+    expect(screen.getByText('Reading screenshot…')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toMatch(/more than two teams/)
+  })
+
   it('draws no manual-entry button on a screen without a builder', async () => {
     fetchTradesPanel.mockResolvedValue(panel('sleeper'))
     render(<TradeInbox view="offers" leagueId="lg-sleeper-3" onLoad={() => {}} />)

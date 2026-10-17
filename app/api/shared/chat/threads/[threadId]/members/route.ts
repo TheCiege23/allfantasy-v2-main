@@ -8,10 +8,8 @@ import { hasBlockBetween } from "@/lib/moderation"
  * GET /api/shared/chat/threads/[threadId]/members
  * Returns thread members for mention suggestions: { id, username, displayName }[].
  */
-export async function GET(
-  _req: Request,
-  { params }: { params: { threadId: string } }
-) {
+export async function GET(_req: Request, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -25,10 +23,8 @@ export async function GET(
  * Body: { usernames?: string[]; memberUserIds?: string[] }
  * Adds members to an existing group thread.
  */
-export async function POST(
-  req: Request,
-  { params }: { params: { threadId: string } }
-) {
+export async function POST(req: Request, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

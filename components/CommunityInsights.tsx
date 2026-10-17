@@ -161,7 +161,7 @@ export default function CommunityInsights() {
                 <span className="text-xs text-white">
                   {inj.playerName} <span className="text-white/40">({inj.team} {inj.position})</span>
                 </span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${statusColors[inj.status || ''] || 'text-white/50 bg-white/10'}`}>
+                <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${statusColors[inj.status || ''] || 'text-white/50 bg-white/10'}`}>
                   {inj.status}
                 </span>
               </div>
@@ -180,7 +180,7 @@ export default function CommunityInsights() {
             {news.slice(0, 5).map((article, i) => (
               <div key={i} className="py-1.5 px-2 rounded-lg bg-white/5">
                 <div className="text-xs text-white leading-relaxed">{article.title}</div>
-                <div className="text-[10px] text-white/30 mt-0.5">
+                <div className="text-[11px] text-white/30 mt-0.5">
                   {article.source} {article.team && `- ${article.team}`}
                 </div>
               </div>

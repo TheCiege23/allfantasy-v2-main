@@ -22,6 +22,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { rosterIdSpaceOf, type RosterIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { exposureKey } from './exposureKey'
 import type { ExposureSlotKind, UserPlayerExposure } from './types'
 
 const SECTION_TO_SLOT_KIND: Record<string, ExposureSlotKind> = {
@@ -128,7 +130,7 @@ export async function computeUserPlayerExposure(input: ComputeUserPlayerExposure
 
   const rosters = await prisma.roster.findMany({
     where: { platformUserId: { in: platformUserIds } },
-    select: { id: true, leagueId: true, playerData: true },
+    select: { id: true, leagueId: true, playerData: true, league: { select: { platform: true, sport: true } } },
   })
 
   const connectedLeagueIds = new Set(rosters.map((r) => r.leagueId))
@@ -137,6 +139,9 @@ export async function computeUserPlayerExposure(input: ComputeUserPlayerExposure
 
   interface Accum {
     playerId: string
+    sport: string
+    idSpace: RosterIdSpace
+    exposureKey: string
     playerName: string | null
     position: string | null
     leagueIds: Set<string>
@@ -149,14 +154,21 @@ export async function computeUserPlayerExposure(input: ComputeUserPlayerExposure
   const byPlayer = new Map<string, Accum>()
 
   for (const roster of rosters) {
+    const platform = roster.league?.platform ?? null
+    const sport = String(roster.league?.sport ?? 'NFL').toUpperCase()
+    const idSpace = rosterIdSpaceOf(platform)
     const sections = resolveExposureSections(roster.playerData)
     for (const [sectionKey, slotKind] of Object.entries(SECTION_TO_SLOT_KIND) as Array<[string, ExposureSlotKind]>) {
       const rows = sections[sectionKey as keyof typeof sections] ?? []
       for (const row of rows) {
         const playerId = row.id
         if (!playerId) continue
-        const existing = byPlayer.get(playerId) ?? {
+        const key = exposureKey(platform, sport, playerId)
+        const existing = byPlayer.get(key) ?? {
           playerId,
+          sport,
+          idSpace,
+          exposureKey: key,
           playerName: row.name,
           position: row.position,
           leagueIds: new Set<string>(),
@@ -176,13 +188,16 @@ export async function computeUserPlayerExposure(input: ComputeUserPlayerExposure
         if (slotKind === 'starter') existing.startingCount += 1
         else if (slotKind === 'bench') existing.benchCount += 1
         else existing.irTaxiCount += 1
-        byPlayer.set(playerId, existing)
+        byPlayer.set(key, existing)
       }
     }
   }
 
   const exposures: UserPlayerExposure[] = Array.from(byPlayer.values()).map((acc) => ({
     playerId: acc.playerId,
+    sport: acc.sport,
+    idSpace: acc.idSpace,
+    exposureKey: acc.exposureKey,
     playerName: acc.playerName,
     position: acc.position,
     leagueCount: acc.leagueIds.size,

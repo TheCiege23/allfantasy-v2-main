@@ -44,7 +44,7 @@ export function ProLeagueLink({
         aria-label={`Open ${leagueName} (PRO)`}
       >
         {label}
-        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[8px] text-amber-400">
+        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[11px] text-amber-400">
           PRO
         </span>
       </button>

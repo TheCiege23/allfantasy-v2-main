@@ -19,9 +19,13 @@ export type EntitlementDef = {
 export const ENTITLEMENTS = {
   manager_psychology: {
     key: 'manager_psychology',
-    label: 'Manager Psychology',
+    // 🛑 The KEY stays `manager_psychology` — it is the feature id gates and the plan matrix read.
+    // The copy describes what the plan actually opens today: Competitive Edge, the other managers'
+    // own recorded moves beside your decision. No profile, archetype or label (Milestone 32), and no
+    // "your own profile" — there is none to give away.
+    label: 'Competitive Edge',
     description:
-      'How the other managers in your league draft and trade, built only from behaviour actually recorded in that league. Your own profile is always free.',
+      "What the other managers in your league have actually done there — their trades, draft picks and waiver bids — shown beside your own trade, draft and waiver decisions.",
     // Pro and War Room both stand on their own here, and Supreme inherits both.
     // War Room is not a superset of Pro, so naming Pro alone would have locked
     // out every War Room subscriber for a feature that is squarely draft- and
@@ -29,7 +33,7 @@ export const ENTITLEMENTS = {
     requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
     // AF Pro: the broadest plan that includes it. `/pricing` was a grid with nothing picked out.
     upgradeUrl: '/pro',
-    upgradeLabel: 'Unlock Manager Psychology',
+    upgradeLabel: 'Unlock Competitive Edge',
     highlightParam: 'manager_psychology',
   },
   commissioner_ai_tools: {

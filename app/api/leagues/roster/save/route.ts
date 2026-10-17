@@ -1,3 +1,4 @@
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
@@ -10,6 +11,7 @@ import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolv
 import { prisma } from '@/lib/prisma'
 import { validateAiActionExecution } from '@/lib/ai/action-validation'
 import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
+import { applyStarterSwap } from '@/lib/roster/starterSwap'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import {
@@ -137,6 +139,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  if (seasonSetupBlocked(league.settings)) return NextResponse.json({ error: 'Tournament player moves remain locked until season activation.' }, { status: 409 })
+
   const chopped = await isRosterChopped(leagueId, targetRosterId)
   if (chopped) {
     return NextResponse.json(
@@ -163,9 +167,19 @@ export async function POST(req: NextRequest) {
   if (!currentRoster || currentRoster.leagueId !== leagueId) {
     return NextResponse.json({ error: 'Roster not found or does not belong to this league.' }, { status: 404 })
   }
+  if (Array.isArray(body.expectedStarters)) {
+    const current = currentRoster.playerData && typeof currentRoster.playerData === 'object' && !Array.isArray(currentRoster.playerData)
+      ? (currentRoster.playerData as Record<string, unknown>).starters : null
+    if (!Array.isArray(current) || JSON.stringify(current.map(String)) !== JSON.stringify(body.expectedStarters.map(String))) {
+      return NextResponse.json({ error: 'Your lineup changed since this screen loaded. Refresh and compare again.' }, { status: 409 })
+    }
+  }
 
   let nextPlayerData = currentRoster.playerData
-  if (rosterDataInput) {
+  if (body.starterSwap && typeof body.starterSwap === 'object') {
+    try { nextPlayerData = applyStarterSwap(currentRoster.playerData, Number(body.starterSwap.slotIndex), String(body.starterSwap.candidateId ?? '')) as Prisma.JsonObject }
+    catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'Invalid starter swap.' }, { status: 409 }) }
+  } else if (rosterDataInput) {
     nextPlayerData = {
       ...(currentRoster.playerData && typeof currentRoster.playerData === 'object' && !Array.isArray(currentRoster.playerData)
         ? (currentRoster.playerData as Record<string, unknown>)
@@ -228,6 +242,7 @@ export async function POST(req: NextRequest) {
     week: editingWeek,
     source: 'user_save',
     skipLockCheck: false,
+    expectedStarters: Array.isArray(body.expectedStarters) ? body.expectedStarters.map(String) : undefined,
   })
 
   if (!persisted.ok) {

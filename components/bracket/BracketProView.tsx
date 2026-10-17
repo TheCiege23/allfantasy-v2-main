@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useCallback, useRef, useEffect } from "react"
+import { useMemo, useState, useCallback, useRef, useEffect, type JSX } from "react"
 import { Timer, Trophy, Sparkles } from "lucide-react"
 import { useBracketLive } from "@/lib/hooks/useBracketLive"
 import { PickWizard } from "./PickWizard"
@@ -427,7 +427,7 @@ export function BracketProView({ tournamentId, leagueId, entryId, nodes, initial
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#fb923c' }}>{totalPicks}</div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>/ {totalGames}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>/ {totalGames}</div>
         </div>
       </div>
 
@@ -523,7 +523,7 @@ export function BracketProView({ tournamentId, leagueId, entryId, nodes, initial
             pointerEvents: 'none',
           }}>
             <Trophy style={{ width: 22, height: 22, color: 'rgba(251,146,60,0.6)' }} />
-            <img src="/af-crest.png" alt="AF" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.5 }} />
+            <img src="/af-crest.svg" alt="AF" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.5 }} />
           </div>
         </div>
 

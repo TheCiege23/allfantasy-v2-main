@@ -293,6 +293,52 @@ export async function getDevyTeamRosterFromDb(team: string, limit = 200): Promis
   return rows.map((row) => toDevyPlayerValue(row, board))
 }
 
+/*
+ * 🛑 A NAME IS NOT A PROSPECT WHEN TWO PROSPECTS SHARE IT (2026-10-12). The by-name reads below
+ * took the first row per normalized name, so the name bound to whichever school sorted first.
+ * Measured on production that day, 7 names carry 2 rows each — and they are TWO KINDS:
+ *
+ *     austin simmons     QB Missouri 5141684       TE Washington 5210429    two people
+ *     elijah brown       TE Kentucky 4715474       QB Washington 5079318    two people
+ *     jordan washington  TE N. Carolina 5146756    RB Washington 5219119    two people
+ *     michael johnson    WR Baylor 5295722         QB Utah 5209335          two people
+ *     james johnson      QB Middle Tenn 5386508    QB USC 5386508           ONE man, transferred
+ *
+ * So identity is CFBD's id, not the name: rows sharing a `cfbdId` are one player (a transfer, a
+ * position change) and the first row still wins; rows with different ids — or no id to prove
+ * otherwise — are namesakes, and the name resolves to NOTHING. These reads carry no school or
+ * position to verify against, so refusing is the only honest answer. The census reads the WHOLE
+ * pool, not the filtered rows: only QB Austin Simmons has a passing profile, so a passing-only
+ * index would call the name unique and hand his profile to the Washington tight end.
+ */
+function devyIdentity(row: { id?: string; cfbdId?: string | null; school: string; position: string }): string {
+  return row.cfbdId ? `cfbd:${row.cfbdId}` : `row:${row.id ?? `${row.school}|${row.position}`}`
+}
+
+/** Normalized names held by more than one person among `rows`. */
+function ambiguousDevyNames(
+  rows: ReadonlyArray<{ normalizedName: string; id?: string; cfbdId?: string | null; school: string; position: string }>,
+): Set<string> {
+  const identities = new Map<string, Set<string>>()
+  for (const row of rows) {
+    const set = identities.get(row.normalizedName) ?? new Set<string>()
+    set.add(devyIdentity(row))
+    identities.set(row.normalizedName, set)
+  }
+  return new Set([...identities].filter(([, ids]) => ids.size > 1).map(([name]) => name))
+}
+
+/** `ambiguousDevyNames` over every pool row carrying these names, whatever a caller filtered on. */
+async function ambiguousDevyNamesInPool(names: string[]): Promise<Set<string>> {
+  const lookup = [...new Set(names)]
+  if (lookup.length === 0) return new Set()
+  const rows = await prisma.devyPlayer.findMany({
+    where: { normalizedName: { in: lookup } },
+    select: { id: true, normalizedName: true, cfbdId: true, school: true, position: true },
+  })
+  return ambiguousDevyNames(rows)
+}
+
 /**
  * Devy values for a list of names, resolved in ONE query.
  *
@@ -315,10 +361,14 @@ export async function getDevyValuesForNamesFromDb(
     orderBy: DEVY_RANK_ORDER,
   })
 
-  // First row per normalized name wins — ordered by draft projection, so when the
-  // same name exists at two schools the better-projected prospect is returned.
+  // First row per normalized name wins — but only when every row under that name is ONE
+  // person (see `ambiguousDevyNames`). Two people sharing a name resolve to null.
+  const ambiguous = ambiguousDevyNames(rows)
   const byName = new Map<string, DevyRow>()
-  for (const row of rows) if (!byName.has(row.normalizedName)) byName.set(row.normalizedName, row)
+  for (const row of rows) {
+    if (ambiguous.has(row.normalizedName)) continue
+    if (!byName.has(row.normalizedName)) byName.set(row.normalizedName, row)
+  }
 
   const board = await getDevyBoardIndex()
   return normalized.map((n) => {
@@ -348,8 +398,10 @@ export async function getDevyStatsByNameFromDb(
     orderBy: { statSeason: 'desc' },
   })
 
+  const ambiguous = await ambiguousDevyNamesInPool(rows.map((r) => r.normalizedName))
   const byName = new Map<string, CFBPlayerStats>()
   for (const row of rows) {
+    if (ambiguous.has(row.normalizedName)) continue
     if (!byName.has(row.normalizedName)) byName.set(row.normalizedName, toCFBPlayerStats(row))
   }
   return byName
@@ -499,8 +551,10 @@ export async function getDevyPassingProfilesByNameFromDb(
     orderBy: { passingProfileSeason: 'desc' },
   })
 
+  const ambiguous = await ambiguousDevyNamesInPool(rows.map((r) => r.normalizedName))
   const byName = new Map<string, DevyPassingProfile>()
   for (const row of rows) {
+    if (ambiguous.has(row.normalizedName)) continue
     if (!byName.has(row.normalizedName)) byName.set(row.normalizedName, toPassingProfile(row))
   }
   return byName

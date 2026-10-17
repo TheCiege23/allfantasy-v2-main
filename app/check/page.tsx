@@ -24,7 +24,10 @@ export const metadata: Metadata = {
   },
 }
 
-export default function CheckPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+export default async function CheckPage(
+  props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }
+) {
+  const searchParams = await props.searchParams
   const u = searchParams?.u
   const raw = Array.isArray(u) ? u[0] : u
   return <SleeperCheck initialUsername={normalizeSleeperUsername(raw) ?? ''} />

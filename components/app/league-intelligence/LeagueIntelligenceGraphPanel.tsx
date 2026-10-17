@@ -147,7 +147,7 @@ export default function LeagueIntelligenceGraphPanel({
             onClick={() => setInsightDrawerOpen(true)}
             className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20"
           >
-            AI explain
+            Explain with Chimmy
           </button>
         </div>
       </div>

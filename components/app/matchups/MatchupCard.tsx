@@ -44,19 +44,19 @@ export function MatchupCard({
           <p className="truncate text-[11px] font-semibold text-white">
             {matchup.teamA} <span className="text-white/45">vs</span> {matchup.teamB}
           </p>
-          <p className="mt-0.5 text-[10px] text-white/60">
+          <p className="mt-0.5 text-[11px] text-white/60">
             Current:{" "}
             <span className="font-semibold text-emerald-200">
               {matchup.scoreA.toFixed(1)} – {matchup.scoreB.toFixed(1)}
             </span>
           </p>
-          <p className="text-[10px] text-white/55">
+          <p className="text-[11px] text-white/55">
             Projected: {matchup.projA.toFixed(1)} – {matchup.projB.toFixed(1)}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right">
-            <p className="text-[10px] text-white/60">
+            <p className="text-[11px] text-white/60">
               Win prob {favoredA ? "A" : "B"}
             </p>
             <p className="text-[11px] font-semibold text-emerald-300">
@@ -64,7 +64,7 @@ export function MatchupCard({
                 ? "99+%"
                 : `${((favoredA ? matchup.winProbA : 1 - matchup.winProbA) * 100).toFixed(0)}%`}
             </p>
-            <p className="mt-0.5 text-[10px] text-white/55">
+            <p className="mt-0.5 text-[11px] text-white/55">
               Rem: {matchup.remainingA} vs {matchup.remainingB}
             </p>
           </div>

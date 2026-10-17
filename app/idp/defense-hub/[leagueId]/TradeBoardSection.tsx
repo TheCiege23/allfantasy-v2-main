@@ -32,7 +32,7 @@ function Dash() {
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-2.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
+    <div className="mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
       {children}
     </div>
   )
@@ -185,7 +185,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
           aria-label="Filter the league trade board"
           className="min-w-[220px] flex-1 rounded-[9px] border border-[var(--line2)] bg-[var(--surface)] px-3 py-2 text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--faint)] focus:border-[var(--accent-line)]"
         />
-        <label className="flex cursor-pointer items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--muted)]">
+        <label className="flex cursor-pointer items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--muted)]">
           <input
             type="checkbox"
             checked={hideMine}
@@ -199,7 +199,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
       <div className="overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
         <table className="w-full min-w-[720px] text-left">
           <thead>
-            <tr className="border-b border-[var(--line)] font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
+            <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
               <th className="px-4 py-3">Player</th>
               <th className="px-2 py-3">Pos</th>
               <th className="px-2 py-3 text-right">Proj</th>
@@ -245,7 +245,7 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
     >
       <td className="px-4 py-3">
         <div className="text-[13px] font-extrabold">{row.name}</div>
-        <div className="font-mono text-[10px] text-[var(--faint)]">{row.team ?? '—'}</div>
+        <div className="font-mono text-[11px] text-[var(--faint)]">{row.team ?? '—'}</div>
       </td>
       <td className="px-2 py-3 font-mono text-[11px] text-[var(--text2)]">{row.position ?? <Dash />}</td>
       {/*
@@ -281,7 +281,7 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
             title="Floor price: below this league's meaningful board, not a measured value. Do not compare two floor-priced defenders."
           >
             {row.value.toLocaleString()}
-            <span className="ml-1 text-[10px]">floor</span>
+            <span className="ml-1 text-[11px]">floor</span>
           </span>
         ) : (
           row.value.toLocaleString()
@@ -291,7 +291,7 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
         <div className="text-[12px] font-semibold text-[var(--text2)]">
           {row.ownedBy.teamName ?? <Dash />}
         </div>
-        <div className="font-mono text-[10px] text-[var(--faint)]">
+        <div className="font-mono text-[11px] text-[var(--faint)]">
           {row.ownedBy.isMine ? 'you' : (row.ownedBy.ownerName ?? '—')}
         </div>
       </td>
@@ -330,7 +330,7 @@ function Kickers({ data }: { data: LeagueDefenderBoard }) {
           {data.kickers.map((k) => (
             <li key={k.sleeperId} className="text-[12px] text-[var(--text2)]">
               {k.name}
-              <span className="ml-1.5 font-mono text-[10px] text-[var(--faint)]">
+              <span className="ml-1.5 font-mono text-[11px] text-[var(--faint)]">
                 {k.ownedBy.isMine ? 'you' : (k.ownedBy.teamName ?? k.ownedBy.ownerName ?? '—')}
               </span>
             </li>

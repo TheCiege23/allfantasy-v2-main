@@ -6,7 +6,12 @@ import type { SectionState } from './leagueHome'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { readiness, type MoveTone } from './playerMoves'
 import { countShares, type RosterForShares } from './playerSharesRank'
+import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { resolveByeWeekMap } from './byeWeekMap'
+import { resolveStatedWeek } from './currentWeek'
+import { buildTeamSplit, type SplitStarter, type TeamSplit } from './teamSplit'
 
 /**
  * "Your shares" — the Player Finder home's second list (Phase 2, 2026-09-27): the players you roster
@@ -30,7 +35,8 @@ const MAX_LEAGUES = 250
 export const SHARES_LIMIT = 20
 
 export type ShareRow = {
-  player: { sport: string; externalId: string; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
+  /** `source` is the feed that minted `externalId`; the finder ref carries it (playerRef.ts). */
+  player: { sport: string; externalId: string; source?: string | null; sleeperId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }
   leagues: number
   starts: number
   ir: number
@@ -47,6 +53,8 @@ export type PlayerShares = {
   playersHeld: number
   /** Leagues on a platform whose player ids we cannot translate yet. */
   unsupportedLeagues: number
+  /** The clubs your starting slots belong to, and the worst bye ahead (teamSplit.ts). Null when nobody starts. */
+  teamSplit: TeamSplit | null
 }
 
 export async function loadPlayerShares(
@@ -74,21 +82,27 @@ export async function loadPlayerShares(
 
   const [leagues, rawRosters] = await Promise.all([
     prisma.league
-      .findMany({ where: { id: { in: claimed } }, select: { id: true, platform: true } })
-      .catch(() => [] as Array<{ id: string; platform: string | null }>),
+      .findMany({ where: { id: { in: claimed } }, select: { id: true, platform: true, sport: true, season: true, settings: true } })
+      .catch(() => [] as Array<{ id: string; platform: string | null; sport: string | null; season: number | null; settings: unknown }>),
     prisma.roster
       .findMany({ where: { leagueId: { in: claimed }, platformUserId: { in: candidates } }, select: { leagueId: true, platformUserId: true, playerData: true } })
       .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
   ])
   const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
-  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other').map((l) => l.id))
+  // Fleaflicker / MFL read through the identity bridge when most of the league translates (bridgedRosterIds.ts);
+  // an unbridged id is dropped, never read raw. Everything else in another id space stays unsupported.
+  const bridged = await loadBridgedLeagues(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other'))
+  const bridgeMap = (leagueId: string) => (bridged.get(leagueId)?.readable ? bridged.get(leagueId)!.map : null)
+  // A native league of another sport is unsupported too: its Rolling Insights ids are NFL strangers by Sleeper id.
+  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
 
   // Yours only: the roster whose platformUserId is one of THIS league's candidate ids, one per league.
   const mine = new Map<string, Record<string, unknown>>()
   for (const r of rawRosters) {
     if (mine.has(r.leagueId) || unsupported.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
-    mine.set(r.leagueId, (r.playerData ?? {}) as Record<string, unknown>)
+    const map = bridgeMap(r.leagueId)
+    mine.set(r.leagueId, map ? applyBridge(r.playerData, map) : ((r.playerData ?? {}) as Record<string, unknown>))
   }
   const espnLeagues = [...mine.keys()].filter((id) => rosterIdSpaceOf(platformOf.get(id)) === 'espn')
   const espnMap = await loadEspnToSleeperMap(collectRosterIds(espnLeagues.map((id) => mine.get(id))))
@@ -103,7 +117,8 @@ export async function loadPlayerShares(
     return { leagueId, starters: list(pd, 'starters', espn), reserve: list(pd, 'reserve', espn), taxi: list(pd, 'taxi', espn), players: list(pd, 'players', espn) }
   })
   const counts = countShares(rosters)
-  const base = { leaguesRead: rosters.length, playersHeld: counts.length, unsupportedLeagues: unsupported.size }
+  const teamSplit = await loadTeamSplit(counts, leagues.filter((l) => mine.has(l.id))).catch(() => null)
+  const base = { leaguesRead: rosters.length, playersHeld: counts.length, unsupportedLeagues: unsupported.size, teamSplit }
   if (counts.length === 0) return { available: true, data: { rows: [], ...base } }
 
   // Enrich a margin past the limit: a catalog miss drops a row, and the list should still be full.
@@ -111,9 +126,9 @@ export async function loadPlayerShares(
   const players = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: top.map((c) => c.sleeperId) } },
-      select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
+      select: { sleeperId: true, sport: true, externalId: true, source: true, name: true, position: true, team: true, imageUrl: true },
     })
-    .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
+    .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; source: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
   const bySleeper = new Map<string, (typeof players)[number]>()
   for (const p of players) {
     if (!p.sleeperId) continue
@@ -129,7 +144,7 @@ export async function loadPlayerShares(
     const inj = injuries.get(p.name.trim().toLowerCase()) ?? null
     const ready = readiness(inj?.status ?? null, Boolean(inj))
     return {
-      player: { sport: p.sport, externalId: p.externalId, sleeperId: c.sleeperId, name: p.name, position: p.position, team: p.team, imageUrl: asHeadshotUrl(p.imageUrl) },
+      player: { sport: p.sport, externalId: p.externalId, source: p.source, sleeperId: c.sleeperId, name: p.name, position: p.position, team: p.team, imageUrl: asHeadshotUrl(p.imageUrl) },
       leagues: c.leagues,
       starts: c.starts,
       ir: c.ir,
@@ -141,4 +156,37 @@ export async function loadPlayerShares(
   })
   rows.sort((a, b) => b.leagues - a.leagues || b.starts - a.starts || a.player.name.localeCompare(b.player.name))
   return { available: true, data: { rows, ...base } }
+}
+
+/**
+ * The club split over EVERY starter you have, not just the listed top shares — the same counts, one
+ * catalog read for their clubs. The week comes from your leagues' own stated week (resolveStatedWeek)
+ * and the byes from the schedule (resolveByeWeekMap, the one bye rule); either unreadable and the
+ * split still shows, without a bye call.
+ */
+async function loadTeamSplit(
+  counts: ReadonlyArray<{ sleeperId: string; starts: number }>,
+  leagues: ReadonlyArray<{ season: number | null; settings: unknown }>,
+): Promise<TeamSplit | null> {
+  const starting = counts.filter((c) => c.starts > 0)
+  if (starting.length === 0) return null
+  const stated = resolveStatedWeek([...leagues])
+  const [catalog, byes] = await Promise.all([
+    prisma.sportsPlayer
+      .findMany({ where: { sleeperId: { in: starting.map((c) => c.sleeperId) } }, select: { sleeperId: true, name: true, position: true, team: true } })
+      .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null }>),
+    stated ? resolveByeWeekMap(stated.seasonYear).catch(() => null) : Promise.resolve(null),
+  ])
+  // A player can have a row per provider; keep the one that knows his club.
+  const bySleeper = new Map<string, (typeof catalog)[number]>()
+  for (const r of catalog) {
+    if (!r.sleeperId) continue
+    const cur = bySleeper.get(r.sleeperId)
+    if (!cur || (!cur.team && r.team) || (!cur.position && r.position)) bySleeper.set(r.sleeperId, r)
+  }
+  const starters: SplitStarter[] = starting.map((c) => {
+    const p = bySleeper.get(c.sleeperId)
+    return { sleeperId: c.sleeperId, name: p?.name ?? c.sleeperId, team: p?.team ?? null, position: p?.position ?? null, starts: c.starts }
+  })
+  return buildTeamSplit({ starters, byes, currentWeek: stated?.week ?? null, fold: (t) => normalizeTeamAbbrev(t) })
 }

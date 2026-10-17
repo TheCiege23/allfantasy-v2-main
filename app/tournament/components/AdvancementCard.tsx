@@ -118,7 +118,7 @@ export function AdvancementOverlay({
           {tInterpolate('tournament.advancement.rankInConference', { rank: conferenceRank, conference: confName })}
         </p>
         <div className="my-4 h-px bg-[var(--tournament-border)]" />
-        <p className="text-center text-[10px] font-bold uppercase tracking-widest text-[var(--tournament-text-dim)]">
+        <p className="text-center text-[11px] font-bold uppercase tracking-widest text-[var(--tournament-text-dim)]">
           {t('tournament.advancement.yourNewLeague')}
         </p>
         <p className="mt-1 text-center text-[18px] font-bold text-white">{newLeagueName}</p>

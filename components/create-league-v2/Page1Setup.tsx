@@ -157,7 +157,7 @@ function SportPreviewVideo({ sport, label, accent }: { sport: string; label: str
           el.poster = media.fallback
         }}
       />
-      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
+      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
         {label}
       </div>
     </div>
@@ -275,6 +275,9 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
             )
           })}
         </div>
+        <a href="/survivor-guillotine/setup" className="mt-4 block rounded-xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-amber-100 hover:bg-amber-400/20">
+          <strong>Survivor Guillotine</strong> · Create an NFL or NBA league with tribe immunity, secret idols, and weekly chops →
+        </a>
 
         {/* League type hero video */}
         <LeagueTypeHeroVideo

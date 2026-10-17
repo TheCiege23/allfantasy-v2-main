@@ -15,6 +15,11 @@ const hm = vi.hoisted(() => ({
   appendPickToRosterDraftSnapshot: vi.fn(),
   invalidateLeagueDraftCaches: vi.fn(),
   buildSessionSnapshot: vi.fn(),
+  auctionTick: vi.fn(),
+}))
+
+vi.mock('@/lib/live-draft-engine/auction', () => ({
+  runAuctionAutomationTick: hm.auctionTick,
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -303,5 +308,69 @@ describe('processExpiredDraftPicks', () => {
     const summary = await processExpiredDraftPicks({ now, maxLeagues: 10 })
     expect(summary.skipped).toBe(1)
     expect(hm.tryQueueAutoPick).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * 🛑 AN AUCTION WITH NOBODY IN THE ROOM NEVER CLOSED A BID. The server tick skipped auctions
+ * (`auction_not_supported`), and the auction clock only advanced off a browser's poll. These pin the
+ * server running the room's own automation tick for an expired auction.
+ */
+describe('processExpiredDraftPicks — auctions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    hm.isLeagueRosterDraftReady.mockResolvedValue(true)
+  })
+
+  it('scans auction drafts alongside snake and linear', async () => {
+    hm.draftSessionFindMany.mockResolvedValue([])
+    const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
+    await processExpiredDraftPicks({ now, maxLeagues: 10 })
+    expect(hm.draftSessionFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ draftType: { in: ['snake', 'linear', 'auction'] }, sleeperDraftId: null }),
+    }))
+  })
+
+  it('🛑 an expired auction runs the room’s automation tick and counts as processed', async () => {
+    hm.draftSessionFindMany.mockResolvedValue([{ leagueId: 'league-a', draftType: 'auction' }])
+    hm.auctionTick.mockResolvedValue({ changed: true, actions: [{ type: 'auto_resolve', sold: true, winnerRosterId: 'r2', amount: 14 }] })
+    const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
+    const summary = await processExpiredDraftPicks({ now, maxLeagues: 10 })
+    expect(hm.auctionTick).toHaveBeenCalledWith('league-a')
+    expect(summary).toMatchObject({ scanned: 1, processed: 1, skipped: 0 })
+    expect(summary.details[0]).toEqual({ leagueId: 'league-a', outcome: 'processed_auction', actions: ['auto_resolve'] })
+    expect(hm.invalidateLeagueDraftCaches).toHaveBeenCalledWith('league-a')
+    // Never the snake/linear pick path.
+    expect(hm.tryQueueAutoPick).not.toHaveBeenCalled()
+    expect(hm.submitPick).not.toHaveBeenCalled()
+  })
+
+  it('closing a bid is the clock, not an autopick: it runs even when auto-pick is off', async () => {
+    hm.getDraftUISettingsForLeague.mockResolvedValue({ autoPickEnabled: false, timerMode: 'per_pick', slowDraftPauseWindow: null })
+    hm.draftSessionFindMany.mockResolvedValue([{ leagueId: 'league-a', draftType: 'auction' }])
+    hm.auctionTick.mockResolvedValue({ changed: true, actions: [{ type: 'auto_resolve', sold: false }] })
+    const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
+    expect((await processExpiredDraftPicks({ now, maxLeagues: 10 })).processed).toBe(1)
+  })
+
+  it('a tick with nothing to do is a skip; a throwing tick is an error, not a crash', async () => {
+    hm.draftSessionFindMany.mockResolvedValue([
+      { leagueId: 'league-a', draftType: 'auction' },
+      { leagueId: 'league-b', draftType: 'auction' },
+    ])
+    hm.auctionTick.mockResolvedValueOnce({ changed: false, actions: [] }).mockRejectedValueOnce(new Error('lock backend down'))
+    const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
+    const summary = await processExpiredDraftPicks({ now, maxLeagues: 10 })
+    expect(summary).toMatchObject({ scanned: 2, processed: 0, skipped: 1 })
+    expect(summary.errors).toEqual([{ leagueId: 'league-b', message: 'lock backend down' }])
+  })
+
+  it('an auction league whose rosters are not draft-ready is skipped before any tick', async () => {
+    hm.isLeagueRosterDraftReady.mockResolvedValue(false)
+    hm.draftSessionFindMany.mockResolvedValue([{ leagueId: 'league-a', draftType: 'auction' }])
+    const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
+    const summary = await processExpiredDraftPicks({ now, maxLeagues: 10 })
+    expect(hm.auctionTick).not.toHaveBeenCalled()
+    expect(summary.details[0]).toMatchObject({ outcome: 'skipped', reason: 'roster_configuration_incomplete' })
   })
 })

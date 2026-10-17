@@ -109,7 +109,7 @@ describe('computeRosterScoreForWeek', () => {
 describe('selectBestBallLineupForRoster', () => {
   it('refuses a daily sport without querying', async () => {
     const r = await selectBestBallLineupForRoster({
-      leagueId: 'L', leagueSport: 'NBA' as never, season: 2026, weekOrRound: 3, rosterPlayerIds: ['p1'],
+      leagueId: 'L', leagueSport: 'NBA' as never, season: 2026, weekOrRound: 3, rosterPlayerIds: ['p1'], platform: 'sleeper',
     })
     expect(r.status).toBe('UNAVAILABLE')
     expect(r.starterIds).toEqual([])

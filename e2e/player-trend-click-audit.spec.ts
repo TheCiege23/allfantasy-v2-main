@@ -240,13 +240,13 @@ test.describe('@player-trend full click audit', () => {
     await expect(page.getByRole('heading', { name: 'Player trend feed' })).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Sport' })).toHaveValue('NBA')
     await expect(page.getByRole('combobox', { name: 'Timeframe' })).toHaveValue('30d')
-    await page.getByRole('button', { name: 'Get AI insight' }).first().click()
+    await page.getByRole('button', { name: "Get Chimmy's insight" }).first().click()
     await expect(page.getByText('DeepSeek math validation')).toBeVisible()
     await expect(page.getByText('OpenAI explanation')).toBeVisible()
     await page.getByRole('combobox', { name: 'Sport' }).selectOption('SOCCER')
     await page.getByRole('combobox', { name: 'Timeframe' }).selectOption('24h')
     await page.getByRole('button', { name: 'Refresh' }).click()
-    await expect(page.getByRole('link', { name: 'Back to app home' })).toHaveAttribute('href', '/dashboard')
+    await expect(page.getByRole('link', { name: 'Back to app home' })).toHaveAttribute('href', '/core')
 
     /*
      * ⚠ SIGN IN FIRST — /waiver-ai IS NO LONGER A PUBLIC PAGE.

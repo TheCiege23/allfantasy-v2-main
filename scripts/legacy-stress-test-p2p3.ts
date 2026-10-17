@@ -99,13 +99,10 @@ async function main() {
     { name: "POST /api/analytics/track", method: "POST", path: "/api/analytics/track", body: { event: "stress_test", path: "/test", meta: { test: true } }, iterations: TOTAL },
     { name: "POST /api/trade-evaluator [AI]", method: "POST", path: "/api/trade-evaluator", body: { give: ["Patrick Mahomes"], get: ["Josh Allen"], leagueId: LEAGUE_IDS[0], leagueSize: 16, isDynasty: true, scoring: "ppr" }, iterations: 10, isAI: true },
     { name: "POST /api/waiver-ai [AI]", method: "POST", path: "/api/waiver-ai", body: { playerName: "Tank Dell", leagueId: LEAGUE_IDS[0], week: 5 }, iterations: 10, isAI: true },
-    { name: "POST /api/ai/chat [AI]", method: "POST", path: "/api/ai/chat", body: { message: "Trade value of Mahomes in dynasty?", sleeperUsername: USERNAME }, iterations: 10, isAI: true },
     { name: "POST /api/dynasty-trade-analyzer [AI]", method: "POST", path: "/api/dynasty-trade-analyzer", body: { give: ["Breece Hall"], get: ["Bijan Robinson"], leagueId: LEAGUE_IDS[1] }, iterations: 10, isAI: true },
     { name: "POST /api/trade-finder [AI]", method: "POST", path: "/api/trade-finder", body: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, iterations: 10, isAI: true },
     { name: "POST /api/rankings/manager-psych [AI]", method: "POST", path: "/api/rankings/manager-psychology", body: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, iterations: 10, isAI: true },
     { name: "POST /api/roster/analyze [AI]", method: "POST", path: "/api/roster/analyze", body: { leagueId: LEAGUE_IDS[0] }, iterations: 10, isAI: true },
-    { name: "POST /api/instant/trade [AI]", method: "POST", path: "/api/instant/trade", body: { give: ["CeeDee Lamb"], get: ["Ja'Marr Chase", "2026 2nd"], isDynasty: true, scoring: "ppr", leagueSize: 12 }, iterations: 10, isAI: true },
-    { name: "POST /api/redraft-trade [AI]", method: "POST", path: "/api/redraft-trade", body: { give: ["Tyreek Hill"], get: ["Amon-Ra St. Brown"], leagueSize: 12, scoring: "ppr" }, iterations: 10, isAI: true },
     { name: "POST /api/legacy/player-profile", method: "POST", path: "/api/legacy/player-profile", body: { playerName: "Patrick Mahomes" }, iterations: TOTAL },
     { name: "POST /api/legacy/player-stock", method: "POST", path: "/api/legacy/player-stock", body: { playerName: "Patrick Mahomes" }, iterations: TOTAL },
   ]

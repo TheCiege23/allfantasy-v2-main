@@ -138,6 +138,27 @@ describe('enterRedraftOffseason — the champion comes from the bracket', () => 
   })
 })
 
+describe('enterRedraftOffseason — a survival finish (guillotine)', () => {
+  it('ranks by the finish order it is given, not by wins, and names no regular-season winner', async () => {
+    m.season.playoffBracket = null
+    // D survived to the end with the fewest wins; A, the standings leader, was chopped first.
+    await enterRedraftOffseason('season-1', 'system:guillotine-season', { finishOrder: ['D', 'B', 'C', 'A'] })
+    const data = m.seasonCreate.mock.calls[0][0].data
+    expect(data.championName).toBe('Team D')
+    expect(data.runnerUpName).toBe('Team B')
+    expect(data.regularSeasonWinnerName).toBeNull()
+    expect(data.teamRecords.map((r: any) => [r.rosterId, r.rank])).toEqual([['D', 1], ['B', 2], ['C', 3], ['A', 4]])
+    const byRoster = new Map(m.franchiseUpsert.mock.calls.map((c) => [c[0].create.rosterId, c[0].create]))
+    expect(byRoster.get('D')).toMatchObject({ wonChampionship: true, finalRank: 1 })
+    expect(byRoster.get('A')).toMatchObject({ wonChampionship: false, finalRank: 4 })
+  })
+
+  it('a finished bracket still wins over a finish order', async () => {
+    await enterRedraftOffseason('season-1', 'system:week-roller', { finishOrder: ['D', 'B', 'C', 'A'] })
+    expect(m.seasonCreate.mock.calls[0][0].data.championName).toBe('Team C')
+  })
+})
+
 describe('readBracketResult', () => {
   it('is null for a bracket with no champion recorded', () => {
     expect(readBracketResult(null)).toBeNull()

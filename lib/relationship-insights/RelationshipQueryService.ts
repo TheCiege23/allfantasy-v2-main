@@ -4,6 +4,7 @@ import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehavi
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { buildBehaviorDramaContext } from './BehaviorDramaBridge'
 import { syncRivalryEdgesIntoGraph } from './GraphRivalryBridge'
+import { toPublicBehaviorDramaContext, toPublicProfileCoverage } from './publicView'
 import { normalizeOptionalSportForRelationship } from './SportRelationshipResolver'
 import { resolveUnifiedStorylines } from './UnifiedStorylineResolver'
 import type { UnifiedRelationshipInsights } from './types'
@@ -89,9 +90,10 @@ export async function getUnifiedRelationshipInsights(
     season: input.season ?? null,
     relationshipProfile,
     rivalries,
-    profiles,
+    // Served to the client and to LLM context: coverage and facts only (publicView.ts).
+    profiles: toPublicProfileCoverage(profiles),
     drama,
-    behaviorDramaContext,
+    behaviorDramaContext: toPublicBehaviorDramaContext(behaviorDramaContext),
     storylines,
   }
 }

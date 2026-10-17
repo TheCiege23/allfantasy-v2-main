@@ -101,7 +101,7 @@
 .af-lh-panel-help {
   margin-left: auto;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -451,7 +451,7 @@
   justify-content: center;
   background: var(--chip);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 .af-buzz-actor {
@@ -579,7 +579,7 @@
 .af-lh-mright { align-items: flex-end; text-align: right; }
 .af-lh-mlabel {
   color: var(--muted);
-  font: 800 9px/1 'JetBrains Mono', monospace;
+  font: 800 11px/1 'JetBrains Mono', monospace;
   letter-spacing: .14em;
 }
 .af-lh-mteam {
@@ -702,12 +702,12 @@
   /* The margin column lives outside the side grid, so it is added here. */
   margin-right: 90px;
 }
-.af-sb-cols .af-label { text-align: right; font-size: 9.5px; opacity: 0.7; }
+.af-sb-cols .af-label { text-align: right; font-size: 11px; opacity: 0.7; }
 
 /* Home / away. Quiet — it is an anchor for the eye, not a fact about scoring. */
 .af-sb-ha {
   font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
   text-align: center;
@@ -769,6 +769,14 @@
   color: var(--muted);
   font-weight: 600;
 }
+/* AllFantasy's own engine total, under the provider's projected total. */
+.af-sb-af {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
 
 /*
  * Coverage keeps its own column so it can be present or absent without moving
@@ -776,7 +784,7 @@
  */
 .af-sb-cov {
   text-align: right;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.2;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
@@ -847,7 +855,7 @@
   font-variant-numeric: tabular-nums;
 }
 .af-pb-move {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -885,9 +893,30 @@
 .af-pb-luck[data-dir='lucky'] { color: var(--warn); }
 .af-pb-luck[data-dir='unlucky'] { color: var(--accent); }
 
+/* AF beside API — this week's lineups, projected. Display only; the rank is all-play. */
+.af-pb-list[data-proj='true'] .af-pb-row {
+  grid-template-columns: 26px 34px 1fr 56px 64px 46px 60px 60px;
+}
+.af-pb-proj {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.af-pb-proj-af .af-pb-proj {
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-pb-proj-cov {
+  font-size: 11px;
+  color: var(--warn);
+}
+.af-pb-proj--none { color: var(--faint); }
+
 @media (max-width: 720px) {
   /* Head-to-head goes first: it is the number already visible in standings. */
   .af-pb-row { grid-template-columns: 24px 30px 1fr 64px 44px; }
+  .af-pb-list[data-proj='true'] .af-pb-row { grid-template-columns: 24px 30px 1fr 64px 44px 56px 56px; }
   .af-pb-rec { display: none; }
 }
 
@@ -1079,7 +1108,7 @@
   gap: 6px;
 }
 .af-weekpick-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1499,9 +1528,20 @@
 .af-hub-squad li { display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
 .af-hub-portrait { display:grid; place-items:center; flex:0 0 44px; height:44px; border-radius:12px; overflow:hidden; background:linear-gradient(140deg,rgba(34,211,238,.18),rgba(139,92,246,.16)); color:var(--accent); font-weight:700; }
 .af-hub-portrait img { width:100%; height:100%; object-fit:cover; }
-.af-hub-logo { display:grid; place-items:center; flex:0 0 28px; height:28px; color:var(--muted); font-size:10px; }
+.af-hub-logo { display:grid; place-items:center; flex:0 0 28px; height:28px; color:var(--muted); font-size:11px; }
 .af-hub-logo img { width:100%; height:100%; object-fit:contain; }
 .af-hub-player { flex:1; min-width:0; }
 .af-hub-player strong { display:block; font-size:14px; overflow-wrap:anywhere; }
 .af-hub-player span { display:block; margin-top:4px; font-size:12px; color:var(--muted); }
 .af-hub-empty { padding:18px; color:var(--muted); font-size:14px; line-height:1.6; }
+.af-lh-week-summary { padding:18px 22px; border:1px solid rgba(34,211,238,.35); }
+.af-lh-week-summary-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.af-lh-week-summary-head h2 { margin:4px 0 0; font-size:clamp(20px,2vw,26px); }
+.af-lh-week-summary-fresh { color:var(--muted); font-size:12px; }
+.af-lh-week-summary-fresh[data-stale='true'] { color:var(--warn); }
+.af-lh-week-summary-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.af-lh-week-summary-grid > a,.af-lh-week-summary-moves { display:flex; flex-direction:column; min-width:0; gap:7px; padding:13px; border:1px solid var(--line); border-radius:12px; text-decoration:none; }
+.af-lh-week-summary-grid strong { line-height:1.3; }
+.af-lh-week-summary-grid > a > span:last-child { color:var(--accent); font-size:12px; }
+.af-lh-week-summary-moves > span:last-child { display:flex; flex-wrap:wrap; gap:14px; }
+@media (max-width:800px) { .af-lh-week-summary-grid { grid-template-columns:1fr; } .af-lh-week-summary { padding:14px; } }

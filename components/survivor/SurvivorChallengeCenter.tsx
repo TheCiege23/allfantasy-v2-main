@@ -11,7 +11,13 @@ export interface SurvivorChallengeCenterProps {
   names: Record<string, string>
 }
 
-function getChallengeDetails(challenge: SurvivorSummaryChallenge, names: Record<string, string>) {
+function getChallengeDetails(challenge: SurvivorSummaryChallenge, names: Record<string, string>, tribeNames: Record<string, string>) {
+  if (challenge.submissionMode === 'automatic') {
+    const winnerLabel = challenge.scope === 'tribe'
+      ? challenge.winnerTribeId ? `Winning tribe: ${tribeNames[challenge.winnerTribeId] ?? 'Tribe'}` : 'Awaiting verified scores'
+      : challenge.winnerUserNames?.length ? `Winner: ${challenge.winnerUserNames.join(', ')}` : 'Awaiting verified scores'
+    return { scopeLabel: 'Scores automatically from finalized lineups', rewardLabel: 'Weekly slate result', winnerLabel }
+  }
   const definition = getMinigameDef(challenge.challengeType as any)
   const config =
     challenge.configJson && typeof challenge.configJson === 'object' && !Array.isArray(challenge.configJson)
@@ -64,6 +70,7 @@ function getChallengeDetails(challenge: SurvivorSummaryChallenge, names: Record<
 export function SurvivorChallengeCenter({ summary, names }: SurvivorChallengeCenterProps) {
   const { formatInTimezone } = useUserTimezone()
   const { challenges, currentWeek } = summary
+  const tribeNames = Object.fromEntries(summary.tribes.map(tribe => [tribe.id, tribe.name]))
   const weekChallenges = challenges.filter((challenge) => challenge.week === currentWeek)
   const locked = weekChallenges.filter((challenge) => challenge.lockAt && new Date(challenge.lockAt) < new Date())
   const open = weekChallenges.filter((challenge) => !challenge.resultJson && (!challenge.lockAt || new Date(challenge.lockAt) >= new Date()))
@@ -81,7 +88,7 @@ export function SurvivorChallengeCenter({ summary, names }: SurvivorChallengeCen
         ) : (
           <div className="space-y-3">
             {open.map((challenge) => {
-              const details = getChallengeDetails(challenge, names)
+              const details = getChallengeDetails(challenge, names, tribeNames)
               return (
                 <div
                   key={challenge.id}
@@ -90,10 +97,10 @@ export function SurvivorChallengeCenter({ summary, names }: SurvivorChallengeCen
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Unlock className="h-4 w-4 text-emerald-400" />
-                      <span className="font-medium text-white">{challenge.challengeType}</span>
+                      <span className="font-medium text-white">{challenge.title || challenge.challengeType}</span>
                     </div>
                     <span className="text-xs text-white/60">
-                      Submissions: {challenge.submissionCount} · Lock: {challenge.lockAt ? formatInTimezone(challenge.lockAt) : '—'}
+                      {challenge.submissionMode === 'automatic' ? 'Settles after all fantasy scores are final' : `Submissions: ${challenge.submissionCount} · Lock: ${challenge.lockAt ? formatInTimezone(challenge.lockAt) : '—'}`}
                     </span>
                   </div>
                   <div className="mt-2 text-xs text-white/60">
@@ -103,7 +110,7 @@ export function SurvivorChallengeCenter({ summary, names }: SurvivorChallengeCen
               )
             })}
             {locked.map((challenge) => {
-              const details = getChallengeDetails(challenge, names)
+              const details = getChallengeDetails(challenge, names, tribeNames)
               return (
                 <div
                   key={challenge.id}
@@ -112,9 +119,9 @@ export function SurvivorChallengeCenter({ summary, names }: SurvivorChallengeCen
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Lock className="h-4 w-4 text-white/50" />
-                      <span className="font-medium text-white/80">{challenge.challengeType}</span>
+                      <span className="font-medium text-white/80">{challenge.title || challenge.challengeType}</span>
                     </div>
-                    <span className="text-xs text-white/50">Locked · {challenge.submissionCount} submission(s)</span>
+                    <span className="text-xs text-white/50">{challenge.submissionMode === 'automatic' ? 'Awaiting verified scores' : `Locked · ${challenge.submissionCount} submission(s)`}</span>
                   </div>
                   <div className="mt-2 text-xs text-white/50">
                     {details.scopeLabel} · Reward: {details.rewardLabel}
@@ -136,13 +143,13 @@ export function SurvivorChallengeCenter({ summary, names }: SurvivorChallengeCen
         ) : (
           <ul className="space-y-2">
             {completed.slice(0, 20).map((challenge) => {
-              const details = getChallengeDetails(challenge, names)
+              const details = getChallengeDetails(challenge, names, tribeNames)
               return (
                 <li
                   key={challenge.id}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/5 px-3 py-2 text-sm"
                 >
-                  <span className="text-white/80">Week {challenge.week} · {challenge.challengeType}</span>
+                  <span className="text-white/80">Week {challenge.week} · {challenge.title || challenge.challengeType}</span>
                   <span className="text-white/50">{details.winnerLabel}</span>
                 </li>
               )

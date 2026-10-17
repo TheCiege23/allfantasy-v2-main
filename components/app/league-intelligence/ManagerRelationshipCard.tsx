@@ -113,7 +113,7 @@ export function ManagerRelationshipCard({
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Link
           href={`/app/league/${encodeURIComponent(leagueId)}/drama?${query.toString()}`}
-          className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+          className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
         >
           Open drama context
         </Link>
@@ -124,21 +124,21 @@ export function ManagerRelationshipCard({
             )}/psychological-profiles/compare?managerAId=${encodeURIComponent(
               managerId
             )}&managerBId=${encodeURIComponent(topRivalManagerId)}${sport ? `&sport=${encodeURIComponent(sport)}` : ""}`}
-            className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+            className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
           >
             Compare behavior profile
           </Link>
         ) : (
           <Link
             href={`/app/league/${encodeURIComponent(leagueId)}/psychological-profiles`}
-            className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+            className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
           >
             Open behavior profiles
           </Link>
         )}
         <Link
           href={`/league/${encodeURIComponent(leagueId)}?tab=Trades`}
-          className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+          className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
         >
           Trade context
         </Link>

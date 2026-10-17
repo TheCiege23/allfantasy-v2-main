@@ -17,9 +17,8 @@ import {
   measureKeeperCostRule,
   type KeeperDraftPick,
 } from '@/lib/keeper/importedKeeperCost'
-import { loadTradeKeeperCosts } from '@/lib/keeper/tradeKeeperCosts'
+import { loadTradeKeeperCosts, roundCostOnChart } from '@/lib/keeper/tradeKeeperCosts'
 import { keeperCostsViewFor } from '@/components/trade-evaluator/KeeperCostNote'
-import { buildLeagueShape } from '@/lib/trade-value/leagueShape'
 
 const pick = (playerId: string, season: number, round: number, isKeeper = false): KeeperDraftPick => ({ playerId, season, round, isKeeper })
 
@@ -84,43 +83,91 @@ describe('keeperCostsBySleeperId / draftedIdForName', () => {
   })
 })
 
+/** A chart, highest first: the 1st player 10,000, then 50 less per rank. */
+const CHART = Array.from({ length: 300 }, (_, i) => 10000 - 50 * i)
+
+describe('roundCostOnChart — what a keeper round buys, on the grade’s own chart', () => {
+  it('is the player at the round’s middle overall pick', () => {
+    // 12 teams, a 3rd: overall pick round(24 + 6.5) = 31 → the 31st player, 10,000 − 30×50.
+    expect(roundCostOnChart(3, 12, CHART)).toBe(8500)
+    expect(roundCostOnChart(1, 10, CHART)).toBe(CHART[5]) // round(5.5) = 6th player
+  })
+
+  it('has no price past the end of the chart, or without a round or a team count', () => {
+    expect(roundCostOnChart(30, 12, CHART)).toBeNull()
+    expect(roundCostOnChart(0, 12, CHART)).toBeNull()
+    expect(roundCostOnChart(3, 1, CHART)).toBeNull()
+  })
+})
+
 describe('loadTradeKeeperCosts', () => {
-  const shape = buildLeagueShape({ teams: 12, starterSlots: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX'] })
-  const deps = (leagueType: string | null, picks: KeeperDraftPick[]) => ({
-    loadLeague: vi.fn(async () => ({ settings: {}, leagueType })),
+  const deps = (leagueType: string | null, picks: KeeperDraftPick[], leagueSize: number | null = 12) => ({
+    loadLeague: vi.fn(async () => ({ settings: {}, leagueType, leagueSize })),
     loadPicks: vi.fn(async () => picks),
+    loadChartValues: vi.fn(async () => CHART),
   })
   const players = [
-    { name: 'Kept Receiver', value: 6000, position: 'WR', candidateIds: ['k0'] },
-    { name: 'Waiver Guy', value: 900, position: 'RB', candidateIds: ['nobody'] },
+    { name: 'Kept Receiver', value: 9000, candidateIds: ['k0'] },
+    { name: 'Waiver Guy', value: 900, candidateIds: ['nobody'] },
   ]
 
-  it('prices a keeper league’s players and words the surplus through the keeper model', async () => {
-    const out = await loadTradeKeeperCosts({ leagueId: 'L', players, shape }, deps('keeper', sameRoundLeague()))
+  it('prices the cost round on the grade’s chart and states the surplus in the same units', async () => {
+    const out = await loadTradeKeeperCosts({ leagueId: 'L', players }, deps('keeper', sameRoundLeague()))
     expect(out.applies).toBe(true)
     if (!out.applies) return
     expect(out.lines).toHaveLength(1)
-    expect(out.lines[0]).toMatchObject({ name: 'Kept Receiver', costRound: 3, keptThisSeason: true })
-    expect(out.lines[0]!.sentence).toMatch(/^Kept Receiver \(kept at a 3rd this season\): He keeps at a 3rd/)
-    expect(out.lines[0]!.surplusShare).toBeGreaterThanOrEqual(0)
+    expect(out.lines[0]).toMatchObject({ name: 'Kept Receiver', costRound: 3, keptThisSeason: true, costValue: 8500 })
+    expect(out.lines[0]!.surplusShare).toBeCloseTo(500 / 9000, 6)
+    expect(out.lines[0]!.sentence).toBe(
+      'Kept Receiver keeps at a 3rd next season (he was kept at a 3rd this season). He is worth 9,000; a 3rd here buys about 8,500 (the 31st player on the same chart), so keeping him is worth 500 more than the pick.',
+    )
     expect(out.notOnFile).toEqual(['Waiver Guy'])
+  })
+
+  /**
+   * 🛑 THE FIRST VERSION PRICED THE ROUND AS A DYNASTY ROOKIE PICK (a first at 950 units), so a
+   * 3rd cost a few hundred and nearly every keeper read as a bargain. A 3rd in a 12-team keeper
+   * league buys the ~31st player on the league's own chart.
+   */
+  it('never prices a keeper round as a rookie pick', async () => {
+    const out = await loadTradeKeeperCosts({ leagueId: 'L', players }, deps('keeper', sameRoundLeague()))
+    expect(out.applies && out.lines[0]!.costValue).toBeGreaterThan(5000)
+  })
+
+  it('says an underwater keeper costs more than he is worth — the share floors at 0', async () => {
+    const out = await loadTradeKeeperCosts({ leagueId: 'L', players: [{ name: 'Kept Receiver', value: 6000, candidateIds: ['k0'] }] }, deps('keeper', sameRoundLeague()))
+    expect(out.applies && out.lines[0]!.surplusShare).toBe(0)
+    expect(out.applies && out.lines[0]!.sentence).toMatch(/keeping him costs 2,500 more than he is worth\.$/)
+  })
+
+  it('states the round without a surplus when the grade has no value for him', async () => {
+    const out = await loadTradeKeeperCosts({ leagueId: 'L', players: [{ name: 'Kept Receiver', value: null, candidateIds: ['k0'] }] }, deps('keeper', sameRoundLeague()))
+    expect(out.applies && out.lines[0]!.sentence).toBe('Kept Receiver keeps at a 3rd next season (he was kept at a 3rd this season).')
+    expect(out.applies && out.lines[0]!.surplusShare).toBeNull()
+  })
+
+  it('does not read the chart without the league’s team count', async () => {
+    const d = deps('keeper', sameRoundLeague(), null)
+    const out = await loadTradeKeeperCosts({ leagueId: 'L', players }, d)
+    expect(d.loadChartValues).not.toHaveBeenCalled()
+    expect(out.applies && out.lines[0]!.costValue).toBeNull()
   })
 
   it('reads nothing past the league row outside a keeper league', async () => {
     const d = deps('redraft', sameRoundLeague())
-    expect(await loadTradeKeeperCosts({ leagueId: 'L', players, shape }, d)).toEqual({ applies: false })
+    expect(await loadTradeKeeperCosts({ leagueId: 'L', players }, d)).toEqual({ applies: false })
     expect(d.loadPicks).not.toHaveBeenCalled()
   })
 
   it('says why nothing is priced when the league’s rule is not measured', async () => {
-    const out = await loadTradeKeeperCosts({ leagueId: 'L', players, shape }, deps('keeper', sameRoundLeague(1)))
+    const out = await loadTradeKeeperCosts({ leagueId: 'L', players }, deps('keeper', sameRoundLeague(1)))
     expect(out.applies && out.note).toMatch(/^Keeper cost not priced: Only 1 flagged keeper/)
     expect(out.applies && out.lines).toEqual([])
   })
 
   it('never throws — an unreadable keeper note is absent, not an error on the grade', async () => {
-    const failing = { loadLeague: vi.fn(async () => { throw new Error('db down') }), loadPicks: vi.fn() }
-    expect(await loadTradeKeeperCosts({ leagueId: 'L', players, shape }, failing as never)).toEqual({ applies: false })
+    const failing = { loadLeague: vi.fn(async () => { throw new Error('db down') }), loadPicks: vi.fn(), loadChartValues: vi.fn() }
+    expect(await loadTradeKeeperCosts({ leagueId: 'L', players }, failing as never)).toEqual({ applies: false })
   })
 })
 
@@ -145,6 +192,13 @@ describe('the trade-evaluator route', () => {
     expect(route).toMatch(/keeperCosts: await keeperCostsPromise/)
     expect(route).toMatch(/loadTradeKeeperCosts\(\{\s*leagueId,/)
     expect(route).toMatch(/await evaluationLeagueIdPromise\.catch\(\(\) => null\) : null\s*\n\s*if \(!leagueId\) return \{ applies: false \}/)
+  })
+
+  /** Each player's value is the one grade's (its receipt), never the route's dynasty-chart first pass. */
+  it('values each player at the one grade’s number', () => {
+    expect(route).toMatch(/const receipt = await evaluationReceiptPromise\.catch\(\(\) => null\)/)
+    expect(route).toMatch(/value: gradeValueByName\.get\(p\.name\.toLowerCase\(\)\.trim\(\)\) \?\? null,/)
+    expect(route).not.toMatch(/loadTradeKeeperCosts\([\s\S]{0,400}value: p\.value/)
   })
 
   /** 🛑 Beside, not in: nothing keeper-related may reach the one grade's inputs. */

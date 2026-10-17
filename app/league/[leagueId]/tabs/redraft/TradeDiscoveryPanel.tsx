@@ -90,9 +90,9 @@ export function TradeDiscoveryPanel({
               <div key={p.rosterId} className="rounded border border-white/10 bg-black/20 p-2" data-testid="discovery-partner-card">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-white">{p.teamName}</span>
-                  <span className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[10px] text-[#ffd7e5]">Match {p.matchScore}</span>
+                  <span className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[11px] text-[#ffd7e5]">Match {p.matchScore}</span>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
+                <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
                   {p.partnerNeeds.map((n) => (
                     <span key={`n${n}`} className="rounded bg-amber-400/10 px-1.5 py-0.5 text-amber-200/80">needs {n}</span>
                   ))}
@@ -100,7 +100,7 @@ export function TradeDiscoveryPanel({
                     <span key={`s${s}`} className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-emerald-200/80">has {s}</span>
                   ))}
                 </div>
-                <ul className="mt-1 space-y-0.5 text-[10px] text-white/60">
+                <ul className="mt-1 space-y-0.5 text-[11px] text-white/60">
                   {p.matchReasons.slice(0, 2).map((r, i) => (
                     <li key={i}>• {r}</li>
                   ))}
@@ -110,7 +110,7 @@ export function TradeDiscoveryPanel({
                     type="button"
                     data-testid={`discovery-packages-${p.rosterId}`}
                     onClick={() => void loadPackages(p.rosterId)}
-                    className="rounded border border-white/20 px-2 py-1 text-[10px] text-white/80"
+                    className="rounded border border-white/20 px-2 py-1 text-[11px] text-white/80"
                   >
                     Package ideas
                   </button>
@@ -118,7 +118,7 @@ export function TradeDiscoveryPanel({
                     type="button"
                     data-testid={`discovery-build-${p.rosterId}`}
                     onClick={() => onBuildProposal(p.rosterId)}
-                    className="rounded bg-[#ff3d81]/85 px-2 py-1 text-[10px] font-semibold text-black"
+                    className="rounded bg-[#ff3d81]/85 px-2 py-1 text-[11px] font-semibold text-black"
                   >
                     Build proposal
                   </button>
@@ -130,7 +130,7 @@ export function TradeDiscoveryPanel({
                       <p className="text-white/45">Generating packages…</p>
                     ) : packages.length ? (
                       packages.map((pkg) => (
-                        <div key={pkg.packageId} className="mb-1 text-[10px] text-white/70">
+                        <div key={pkg.packageId} className="mb-1 text-[11px] text-white/70">
                           <span className="text-white/80">
                             {pkg.giveAssets.map((a) => (a.kind === 'faab' ? `$${a.faabAmount} FAAB` : a.playerName)).join(' + ')}
                             {' → '}
@@ -152,7 +152,7 @@ export function TradeDiscoveryPanel({
           ) : (
             <p className="text-white/45">No trade partners surfaced yet.</p>
           )}
-          <p className="text-[9px] text-white/35">Suggestions only. You always review and send the trade. No values are changed.</p>
+          <p className="text-[11px] text-white/35">Suggestions only. You always review and send the trade. No values are changed.</p>
         </div>
       ) : null}
     </div>

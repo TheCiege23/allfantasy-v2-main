@@ -28,7 +28,7 @@ import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 const WEEK = { season: '2026', week: 3 }
 
 /** What the port hands back for this league: both rosters present, and (here) empty. */
-const world = (provider: string, over: { sport?: string; slots?: string[] } = {}) =>
+const world = (provider: string, over: { sport?: string; slots?: string[]; mine?: string[] } = {}) =>
   ({
     league: {
       sport: over.sport ?? 'NFL',
@@ -43,7 +43,7 @@ const world = (provider: string, over: { sport?: string; slots?: string[] } = {}
       { teamId: 't2', managerUserId: 'rival-2', displayName: 'Rival', ownerName: 'Rival' },
     ],
     rosters: [
-      { rosterId: 'r1', teamId: 't1', playerIds: [], starterIds: [], reserveIds: [], taxiIds: [] },
+      { rosterId: 'r1', teamId: 't1', playerIds: over.mine ?? [], starterIds: [], reserveIds: [], taxiIds: [] },
       { rosterId: 'r2', teamId: 't2', playerIds: [], starterIds: [], reserveIds: [], taxiIds: [] },
     ],
     provenance: { sourceModels: ['Roster'], provider, sourceLeagueId: 'P1', assembledAt: '2026-09-28T00:00:00Z', freshness: { lastSyncedAt: null, isStale: true, staleReason: 'never_synced' } },
@@ -134,6 +134,34 @@ describe('NFL lineup optimizer', () => {
     const r = refusal(await optimize('sleeper'))
     expect(r.reason).toBe('no_league_projections')
     expect(r.detail).toMatch(/^No player on your roster has a week 3 projection/)
+  })
+
+  const optimizeMine = (provider: string, mine: string[]) =>
+    buildLineupOptimization({ leagueId: 'L1', userId: 'viewer-1' }, {
+      resolveWorld: async () => world(provider, { mine }),
+      loadPlayers: async () => new Map(),
+      latestWeek: async () => WEEK,
+      loadWeekLines: async () => new Map(),
+    } satisfies LineupOptimizerDeps)
+
+  it('a Fleaflicker/MFL roster the bridge fully identified is optimized like any other (no foreign refusal)', async () => {
+    for (const provider of ['fleaflicker', 'mfl']) {
+      const r = refusal(await optimizeMine(provider, ['s9999', 's7000']))
+      // It got past the id gate and reached the projections step — the next refusal in line.
+      expect(r.reason).toBe('no_league_projections')
+    }
+  })
+
+  it('🛑 one unidentified ACTIVE player refuses, with the count — a best lineup could leave him out', async () => {
+    const r = refusal(await optimizeMine('fleaflicker', ['s9999', 's7000', 'unbridged:7003']))
+    expect(r.reason).toBe('roster_ids_unreadable')
+    expect(r.detail).toBe('1 of 3 active players on your roster could not be identified, so a best lineup could leave one of them out.')
+  })
+
+  it('Fantrax / Yahoo have no bridge, so they still refuse even with ids present', async () => {
+    const r = refusal(await optimizeMine('yahoo', ['nfl.p.1']))
+    expect(r.reason).toBe('roster_ids_unreadable')
+    expect(r.detail).toContain(FOREIGN_IDS_UNREADABLE)
   })
 })
 

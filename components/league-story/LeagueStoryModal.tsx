@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { LeagueStoryCard, LEAGUE_STORY_CARD_ID } from './LeagueStoryCard'
+import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
 import type { LeagueStoryPayload, LeagueStoryType } from '@/lib/league-story-engine/types'
 import type {
   StoryOutput,
@@ -147,16 +148,17 @@ export function LeagueStoryModal({
     setFactGuardWarnings([])
     setFactGuardErrors([])
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/story/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Asks before any token is spent; a decline spends nothing and changes nothing.
+      const { response: res, declined } = await postWithTokenConfirm(
+        `/api/leagues/${encodeURIComponent(leagueId)}/story/create`,
+        {
           storyType: selectedStoryType,
           sport,
           season,
           style: selectedStyle,
-        }),
-      })
+        },
+      )
+      if (declined) return
       const data = (await res.json().catch(() => ({}))) as StoryCreateResponse & { error?: string }
       if (!res.ok) {
         const gateMessage =

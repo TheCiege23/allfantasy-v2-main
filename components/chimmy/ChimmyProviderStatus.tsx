@@ -31,7 +31,7 @@ export default function ChimmyProviderStatus({ lastMeta, className = '' }: Chimm
   if (error && !lastMeta) {
     return (
       <div className={`flex items-center gap-1.5 ${className}`}>
-        <span className="text-[10px] text-white/40">Status unavailable</span>
+        <span className="text-[11px] text-white/40">Status unavailable</span>
         <button
           type="button"
           onClick={() => refetch()}
@@ -49,7 +49,7 @@ export default function ChimmyProviderStatus({ lastMeta, className = '' }: Chimm
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
       {loading ? (
-        <span className="text-[10px] text-white/40">Checking…</span>
+        <span className="text-[11px] text-white/40">Checking…</span>
       ) : (
         display.map(({ name, ok }) => (
           <span

@@ -1,8 +1,8 @@
 /**
  * Integration test for lib/shared-services/waiver/WaiverShadowService.ts —
  * mocks the true external boundaries (buildWaiverDecisionContext,
- * runWaiverAIService, runLegacyWaiverGrader, getManagerBehaviorProfile), same
- * pattern as trade-shadow-service.test.ts.
+ * runWaiverAIService, getManagerBehaviorProfile), same pattern as
+ * trade-shadow-service.test.ts.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WaiverDecisionContext } from '@/lib/shared-services/waiver/WaiverContextAssembler'
@@ -11,12 +11,10 @@ import type { ScoredWaiverTarget } from '@/lib/waiver-engine/waiver-scoring'
 const {
   mockBuildWaiverDecisionContext,
   mockRunWaiverAIService,
-  mockRunLegacyWaiverGrader,
   mockGetManagerBehaviorProfile,
 } = vi.hoisted(() => ({
   mockBuildWaiverDecisionContext: vi.fn(),
   mockRunWaiverAIService: vi.fn(),
-  mockRunLegacyWaiverGrader: vi.fn(),
   mockGetManagerBehaviorProfile: vi.fn(),
 }))
 
@@ -24,7 +22,6 @@ vi.mock('@/lib/shared-services/waiver/WaiverContextAssembler', () => ({
   buildWaiverDecisionContext: mockBuildWaiverDecisionContext,
 }))
 vi.mock('@/lib/waiver-ai-engine', () => ({ runWaiverAIService: mockRunWaiverAIService }))
-vi.mock('@/lib/shared-services/waiver/WaiverRecommendationAdapter', () => ({ runLegacyWaiverGrader: mockRunLegacyWaiverGrader }))
 vi.mock('@/lib/shared-services/knowledge-graph/QueryService', () => ({ getManagerBehaviorProfile: mockGetManagerBehaviorProfile }))
 
 import { evaluateWaiverShadow } from '@/lib/shared-services/waiver/WaiverShadowService'
@@ -85,15 +82,6 @@ describe('evaluateWaiverShadow', () => {
     vi.clearAllMocks()
     resultStore = new InMemoryWaiverShadowResultStore()
     mockGetManagerBehaviorProfile.mockResolvedValue({ status: 'gated', reason: 'insufficient cohort' })
-    mockRunLegacyWaiverGrader.mockResolvedValue({
-      graderId: 'waiver_recommendation_service',
-      topAddPlayerId: 'p1',
-      topAddPlayerName: 'Player One',
-      faabBid: 15,
-      priority: 1,
-      confidence: 'medium',
-      error: null,
-    })
   })
 
   it('produces a real waiver evaluation reusing runWaiverAIService as the primary value', async () => {
@@ -121,7 +109,7 @@ describe('evaluateWaiverShadow', () => {
     expect(logged[0].evaluationId).toBe(evaluation.evaluationId)
   })
 
-  it('logs a real divergence entry when the shadow and legacy grader disagree on the top add', async () => {
+  it('logs no divergence — the one legacy grader was retired 2026-09-30', async () => {
     mockBuildWaiverDecisionContext.mockResolvedValue(makeContext())
     mockRunWaiverAIService.mockResolvedValue({
       sport: 'NFL',
@@ -131,32 +119,8 @@ describe('evaluateWaiverShadow', () => {
 
     const evaluation = await evaluateWaiverShadow({ leagueId: 'league-1', rosterId: 'roster-1', resultStore })
 
-    expect(evaluation.divergence).toHaveLength(1)
-    expect(evaluation.divergence[0].sameTopAdd).toBe(false)
-    expect(evaluation.divergence[0].notes).toContain('Legacy and shadow recommend different top adds.')
-  })
-
-  it('reports a null sameTopAdd (not false) when the legacy grader itself failed', async () => {
-    mockBuildWaiverDecisionContext.mockResolvedValue(makeContext())
-    mockRunWaiverAIService.mockResolvedValue({
-      sport: 'NFL',
-      deterministic: { suggestions: [makeTarget()], basedOn: ['available_players'] },
-      explanation: { source: 'deterministic', text: 'x' },
-    })
-    mockRunLegacyWaiverGrader.mockResolvedValue({
-      graderId: 'waiver_recommendation_service',
-      topAddPlayerId: null,
-      topAddPlayerName: null,
-      faabBid: null,
-      priority: null,
-      confidence: null,
-      error: 'legacy engine exploded',
-    })
-
-    const evaluation = await evaluateWaiverShadow({ leagueId: 'league-1', rosterId: 'roster-1', resultStore })
-
-    expect(evaluation.divergence[0].sameTopAdd).toBeNull()
-    expect(evaluation.divergence[0].notes).toContain('legacy engine exploded')
+    expect(evaluation.divergence).toEqual([])
+    expect(await resultStore.findDiverging()).toEqual([])
   })
 
   it('handles no qualifying candidate honestly — no fabricated recommendation', async () => {

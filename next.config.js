@@ -16,9 +16,18 @@ const isRailwayRuntime = !!(
   process.env.RAILWAY_GIT_COMMIT_SHA
 );
 
+// The dev sign-in bypass is refused unless DATABASE_URL is known to be safe: `.env.local` points at
+// production, and a bypass session there writes to it. Required only off production, so a build or
+// `next start` never loads it. See scripts/dev-auth-bypass-guard.cjs.
+if (!isProd) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('./scripts/dev-auth-bypass-guard.cjs').applyDevAuthBypassGuard(process.env);
+}
+
 const nextConfig = {
   reactStrictMode: true,
-    optimizeFonts: false,
+  // No `X-Powered-By: Next.js` banner: it tells a scanner which advisories to try.
+  poweredByHeader: false,
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
 
   // Skip in-build type-check and lint passes — they OOM in Vercel's build container
@@ -85,7 +94,38 @@ const nextConfig = {
       process.env.RAILWAY_DEPLOYMENT_ID ||
       process.env.RAILWAY_GIT_COMMIT_SHA
     );
-    if (!dev && (isRailwayBuild || process.platform === 'linux')) {
+    //
+    // ⚠ RE-ENABLED ON RAILWAY ONLY, AND ONLY THROUGH scripts/next-build.cjs (2026-10-01).
+    // That wrapper is the sole setter of AF_WEBPACK_CACHE_DIR. It hands each build a
+    // PRIVATE copy of the cache, runs scripts/lib/layout-css-gate.cjs on the output,
+    // publishes the cache back only from a build that passed, and on any failure
+    // rebuilds with the cache off — this branch, exactly as before. So a stale cache
+    // that drops the layout's CSS is caught before it ships and never re-published.
+    //   - cacheDirectory: Next puts it under <distDir>/cache, but Railpack mounts
+    //     /app/.next/cache whatever distDir is, and production's distDir is
+    //     .next-coldtest-0826 — the cache never reached the mount.
+    //   - snapshot hashes: judge "unchanged" by content, never by mtime, which an
+    //     unpacked build archive does not preserve meaningfully.
+    // Everywhere else (CI on Linux, a Railway build not run through the wrapper)
+    // AF_WEBPACK_CACHE_DIR is unset and the cache stays off.
+    const webpackCacheDir = process.env.AF_WEBPACK_CACHE_DIR;
+    if (
+      !dev &&
+      isRailwayBuild &&
+      webpackCacheDir &&
+      config.cache &&
+      typeof config.cache === 'object' &&
+      config.cache.type === 'filesystem'
+    ) {
+      config.cache.cacheDirectory = webpackCacheDir;
+      config.snapshot = {
+        ...config.snapshot,
+        module: { hash: true },
+        resolve: { hash: true },
+        buildDependencies: { hash: true },
+        resolveBuildDependencies: { hash: true },
+      };
+    } else if (!dev && (isRailwayBuild || process.platform === 'linux')) {
       config.cache = false;
     }
 
@@ -234,6 +274,11 @@ const nextConfig = {
     return config;
   },
 
+  // API routes read files under ./data at runtime; keep them in the traced output.
+  outputFileTracingIncludes: {
+    "/api/**": ["./data/**"],
+  },
+
   experimental: {
     // Next 14.2 compiles the client and server passes in parallel build workers.
     // On Railway (Linux) that build loses the root layout: app-build-manifest.json
@@ -250,10 +295,9 @@ const nextConfig = {
     //
     // Serialising the compilations costs build time and nothing else.
     webpackBuildWorker: false,
-    instrumentationHook: process.env.NODE_ENV === 'production' || process.env.AF_ENABLE_DEV_INSTRUMENTATION === '1',
-    outputFileTracingIncludes: {
-      "/api/**": ["./data/**"],
-    },
+    // (Next 15) `instrumentationHook` is gone — instrumentation is always on, and the
+    // dev-only gate moved into instrumentation.ts. `outputFileTracingIncludes` moved to
+    // the top level of this config.
     // Rewrites barrel imports (`import { Icon } from 'lucide-react'`) into direct
     // path imports so a route ships only the icons/helpers it actually uses
     // instead of the whole package. Only list packages this repo imports from —
@@ -276,15 +320,26 @@ const nextConfig = {
       { protocol: "https", hostname: "img.mlbstatic.com" },
       { protocol: "https", hostname: "ak-static.cms.nba.com" },
       // World Cup chat + media
-      { protocol: "https", hostname: "res.cloudinary.com" },
+      //
+      // ⚠ Hosts where ANYONE can upload a file are pinned to the paths we
+      // actually serve. `/_next/image` decodes whatever these patterns admit
+      // with sharp, and "any Cloudinary account" or "any Discord attachment"
+      // let an attacker hand the optimizer a hostile image (GHSA-2xp9-vwfh-vxw4:
+      // RCE via AVIF in the image optimizer). Our Cloudinary assets live under
+      // our own cloud name; Discord and Google are only ever profile avatars.
+      ...(process.env.CLOUDINARY_CLOUD_NAME
+        ? [{ protocol: "https", hostname: "res.cloudinary.com", pathname: `/${process.env.CLOUDINARY_CLOUD_NAME}/**` }]
+        : [{ protocol: "https", hostname: "res.cloudinary.com" }]),
       { protocol: "https", hostname: "media.giphy.com" },
       { protocol: "https", hostname: "i.giphy.com" },
       { protocol: "https", hostname: "media.tenor.com" },
       { protocol: "https", hostname: "c.tenor.com" },
       { protocol: "https", hostname: "media.api-sports.io" },
       { protocol: "https", hostname: "flagcdn.com" },
-      { protocol: "https", hostname: "lh3.googleusercontent.com" },
-      { protocol: "https", hostname: "cdn.discordapp.com" },
+      { protocol: "https", hostname: "lh3.googleusercontent.com", pathname: "/a/**" },
+      { protocol: "https", hostname: "lh3.googleusercontent.com", pathname: "/a-/**" },
+      { protocol: "https", hostname: "cdn.discordapp.com", pathname: "/avatars/**" },
+      { protocol: "https", hostname: "cdn.discordapp.com", pathname: "/embed/avatars/**" },
     ],
   },
 
@@ -302,6 +357,13 @@ const nextConfig = {
 
   async rewrites() {
     return [
+      // Which links open the iOS app. A route rather than a static file: it has no extension (a
+      // static file would not be served as JSON) and names the Apple Team ID from the server's own
+      // env at request time. See lib/platform/appSiteAssociation.ts.
+      {
+        source: '/.well-known/apple-app-site-association',
+        destination: '/api/ios/app-site-association',
+      },
       // PostHog ingestion proxy — avoids ad-blocker interference
       // Assets go through our own route, NOT straight to us-assets.i.posthog.com:
       // that host is behind Cloudflare, which 403s ("DNS points to prohibited IP")
@@ -402,6 +464,13 @@ const configWithSentry = hasSentryDsn
       widenClientFileUpload: true,
       // Strip source maps from the deployed bundle (they're in Sentry).
       hideSourceMaps: true,
+      // No auth token, no upload — so do not make the build generate maps at all. Unless
+      // `sourcemaps.disable` is set, the SDK forces `devtool: 'source-map'` on the server
+      // build, and every Railway build logged "No auth token provided. Will not upload
+      // source maps." (2026-10-01): minutes of map generation, then nothing used them.
+      // Error capture is unaffected; it hangs off the DSN, not this. Setting
+      // SENTRY_AUTH_TOKEN turns generation and upload back on together.
+      sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
       // Suppress the Sentry logger in the bundle (saves ~7 kB).
       disableLogger: true,
       // We manage Vercel Cron Monitors separately.

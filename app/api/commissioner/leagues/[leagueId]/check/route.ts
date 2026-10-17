@@ -3,10 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   const leagueId = params.leagueId

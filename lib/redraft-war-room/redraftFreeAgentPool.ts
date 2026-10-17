@@ -13,7 +13,7 @@
  * `waiverPool: 'missing'` (truthful provider-limited state).
  */
 import { prisma } from '@/lib/prisma'
-import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { buildPlayerKey, collapseStoredAdpRows } from '@/lib/adp/computeAllFantasyAdp'
 
 export interface RedraftFreeAgent {
   playerKey: string
@@ -65,7 +65,7 @@ export async function fetchRedraftFreeAgentPool(
   input: FetchFreeAgentPoolInput,
 ): Promise<RedraftFreeAgent[]> {
   const seasonStr = String(input.season)
-  const rows = await prisma.allFantasyAdpSnapshot
+  const storedRows = await prisma.allFantasyAdpSnapshot
     .findMany({
       where: {
         sport: { in: normSport(input.sport) },
@@ -77,11 +77,17 @@ export async function fetchRedraftFreeAgentPool(
         playerName: true,
         scoringFormat: true,
         averageOverallPick: true,
+        sampleSize: true,
+        contextHash: true,
+        draftMode: true,
       },
       orderBy: { averageOverallPick: 'asc' },
       take: 4000,
     })
     .catch(() => [])
+  // Stored keys predate the suffix-insensitive `buildPlayerKey`; re-key them so they meet
+  // `rosteredKeys` (built by the same function) — see computeAllFantasyAdp.buildPlayerKey.
+  const rows = collapseStoredAdpRows(storedRows)
 
   if (rows.length === 0) return []
 
@@ -148,14 +154,16 @@ export async function fetchAdpByPlayerKey(sport: string, season: number): Promis
   const rows = await prisma.allFantasyAdpSnapshot
     .findMany({
       where: { sport: { in: normSport(sport) }, leagueType: 'redraft', season: String(season) },
-      select: { playerKey: true, averageOverallPick: true },
+      select: { playerKey: true, averageOverallPick: true, sampleSize: true, contextHash: true, draftMode: true },
       orderBy: { averageOverallPick: 'asc' },
       take: 4000,
     })
     .catch(() => [])
+  // Best ADP across contexts, as before — after collapsing stored spelling variants per context.
   const map = new Map<string, number>()
-  for (const r of rows) {
-    if (r.playerKey && !map.has(r.playerKey)) map.set(r.playerKey, r.averageOverallPick)
+  for (const r of collapseStoredAdpRows(rows)) {
+    const prev = map.get(r.playerKey)
+    if (prev == null || r.averageOverallPick < prev) map.set(r.playerKey, r.averageOverallPick)
   }
   return map
 }

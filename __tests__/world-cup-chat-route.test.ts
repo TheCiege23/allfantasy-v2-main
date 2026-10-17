@@ -16,6 +16,7 @@ const createMessageMock = vi.hoisted(() => vi.fn())
 const updateMessageMock = vi.hoisted(() => vi.fn())
 const countMessagesMock = vi.hoisted(() => vi.fn())
 const findManyParticipantsMock = vi.hoisted(() => vi.fn())
+const blockedRowsMock = vi.hoisted(() => vi.fn(async () => [] as Array<{ blockedUserId: string }>))
 
 vi.mock("@/app/api/brackets/world-cup/_utils", () => ({
   requireWorldCupApiUser: requireUserMock,
@@ -68,6 +69,8 @@ vi.mock("@/lib/prisma", () => ({
     worldCupBracketParticipant: {
       findMany: findManyParticipantsMock,
     },
+    /* The chat GET now hides blocked senders and FAILS CLOSED (503) without a readable block list. */
+    platformBlockedUser: { findMany: blockedRowsMock },
     // Token fallback gate (prepareWorldCupAiTokenFallback -> TokenSpendService).
     // Seed sync + a zero balance, so a non-entitled user gets the 402 path.
     tokenPackage: { upsert: vi.fn().mockResolvedValue({}) },
@@ -184,6 +187,43 @@ describe("World Cup pool chat route", () => {
     expect(res.status).toBe(200)
     expect(json.messages).toHaveLength(1)
     expect(json.messages[0]).toMatchObject({ body: "hello pool", authorName: "User One" })
+  })
+
+  /* Chat names go to every member of the pool — an author with no display name or username must
+     never be named by the part of their email before the "@". */
+  it("never names a chat author by their email prefix", async () => {
+    findManyMessagesMock.mockResolvedValue([
+      dbMessage({ userId: "user-2", user: { displayName: null, username: null, email: "secret.person@example.com", avatarUrl: null } }),
+    ])
+    const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
+
+    const res = await GET(request(), { params: { challengeId: "c1" } })
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.messages[0].authorName).toBe("Pool member")
+    expect(JSON.stringify(json)).not.toContain("secret.person")
+    const select = findManyMessagesMock.mock.calls[0]?.[0]?.include?.user?.select ?? {}
+    expect(select).not.toHaveProperty("email")
+  })
+
+  it("never labels a pool member by their email prefix in the DM picker", async () => {
+    findManyParticipantsMock.mockResolvedValue([
+      {
+        userId: "user-2",
+        displayName: "",
+        joinedAt: new Date("2026-06-01T12:10:00.000Z"),
+        user: { id: "user-2", username: null, displayName: null, email: "secret.person@example.com", avatarUrl: null },
+      },
+    ])
+    const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
+
+    const res = await GET(new Request("http://localhost/api/brackets/world-cup/c1/chat?action=members"), { params: { challengeId: "c1" } })
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.members[0].displayName).toBe("Pool member")
+    expect(JSON.stringify(json)).not.toContain("secret.person")
   })
 
   it("rejects non-members from GET", async () => {
@@ -758,5 +798,50 @@ describe("World Cup pool chat route", () => {
       userId: "user-1",
       messageId: "chimmy-response-1",
     }))
+  })
+})
+
+/*
+ * App Store guideline 1.2: the pool chat read hides people the viewer blocked, and a failed
+ * block-list read is a 503 — never an unfiltered pool chat. The real BlockUserService runs here
+ * against the mocked `platformBlockedUser` table.
+ */
+describe("World Cup pool chat GET — blocked senders", () => {
+  beforeEach(() => {
+    requireUserMock.mockResolvedValue({ ok: true, user: { id: "user-1", email: "u1@example.com", name: "User One" } })
+    memberAccessMock.mockResolvedValue({ ok: true })
+    findManyMessagesMock.mockResolvedValue([
+      dbMessage({ id: "from-sam", userId: "user-sam", eventBody: "your bracket is trash" }),
+      dbMessage({ id: "from-me", userId: "user-1", eventBody: "we will see" }),
+    ])
+    blockedRowsMock.mockReset()
+    blockedRowsMock.mockImplementation(async () => [])
+  })
+
+  it("drops a blocked sender, keeps your own, and says who is reading", async () => {
+    blockedRowsMock.mockImplementation(async () => [{ blockedUserId: "user-sam" }])
+    const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
+    const res = await GET(request(), { params: { challengeId: "c1" } })
+    const json = await res.json()
+    expect(res.status).toBe(200)
+    expect(json.messages.map((m: { id: string }) => m.id)).toEqual(["from-me"])
+    expect(json.viewerUserId).toBe("user-1")
+  })
+
+  it("answers 503 — not an unfiltered list — when the block list cannot be read", async () => {
+    blockedRowsMock.mockImplementation(async () => {
+      throw new Error("db down")
+    })
+    const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
+    const res = await GET(request(), { params: { challengeId: "c1" } })
+    expect(res.status).toBe(503)
+    expect((await res.json()).messages).toBeUndefined()
+  })
+
+  it("[control] with nobody blocked, every message comes through", async () => {
+    const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
+    const res = await GET(request(), { params: { challengeId: "c1" } })
+    const json = await res.json()
+    expect(json.messages.map((m: { id: string }) => m.id).sort()).toEqual(["from-me", "from-sam"])
   })
 })

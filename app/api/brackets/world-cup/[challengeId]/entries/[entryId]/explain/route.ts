@@ -28,8 +28,9 @@ export const runtime = "nodejs"
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { challengeId: string; entryId: string } }
+  props: { params: Promise<{ challengeId: string; entryId: string }> }
 ) {
+  const params = await props.params
   const userResult = await requireWorldCupApiUser()
   if (!userResult.ok) return userResult.response
 
@@ -144,8 +145,9 @@ export async function POST(
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { challengeId: string; entryId: string } }
+  props: { params: Promise<{ challengeId: string; entryId: string }> }
 ) {
+  const params = await props.params
   const userResult = await requireWorldCupApiUser()
   if (!userResult.ok) return userResult.response
 

@@ -95,7 +95,7 @@ async function fillRequiredCreateFields(page: Page, teamCount: number, name: str
   await page.getByTestId('g30-privacy-private').click()
 
   await page.getByTestId('g30-step-draft').click()
-  await page.getByTestId('g30-draft-type').selectOption('snake')
+  await page.getByTestId('g31-draft-type-snake').click()
   await page.getByTestId('g30-draft-date').fill('2026-08-30')
   await page.getByTestId('g30-draft-time').fill('20:00')
   await page.getByTestId('g30-timezone').selectOption('America/New_York')
@@ -143,38 +143,43 @@ test('shows import provider states without broken unsupported actions', async ({
 
   await page.getByTestId('g30-import-league-button').click()
   await expect(page.getByTestId('g30-import-modal')).toBeVisible()
-  await expect(page.getByTestId('g30-import-provider-sleeper')).toContainText('Available')
-  await expect(page.getByTestId('g30-import-provider-espn')).toContainText('Limited beta')
-  await expect(page.getByTestId('g30-import-provider-fantrax')).toContainText('Limited beta')
-  await expect(page.getByTestId('g30-import-provider-yahoo')).toContainText('Limited beta')
-  await expect(page.getByTestId('g30-import-provider-mfl')).toContainText('Limited beta')
-  await expect(page.getByTestId('g30-import-provider-manual')).toContainText('Coming soon')
-  await expect(page.getByTestId('g30-import-provider-manual').getByRole('button')).toBeDisabled()
 
-  // Sleeper is the only provider with a working import path, so it is the only
-  // one allowed to hand the user a link — and it must go to the real route.
-  await expect(
-    page.getByTestId('g30-import-provider-sleeper').getByRole('link', { name: /start import/i })
-  ).toHaveAttribute('href', /\/import\?provider=sleeper/)
+  // The modal's provider list is IMPORT_LEAGUE_PROVIDERS, which since 169dbb37
+  // derives from IMPORT_PROVIDER_UI_OPTIONS (lib/league-import/provider-ui-config.ts):
+  // a provider is either `available` or `coming_soon`; there is no "limited beta"
+  // state any more. Keep these two lists in step with that catalog.
+  const availableProviders = ['sleeper', 'espn', 'fantrax', 'mfl', 'fleaflicker']
+  const comingSoonProviders = ['yahoo', 'manual']
 
-  // The modal tells the user a beta provider "cannot be launched from this flow
-  // yet". A beta provider quietly growing a live-looking link would contradict
-  // that in the one place the user is deciding whether to trust the import.
-  for (const provider of ['espn', 'fantrax', 'yahoo', 'mfl']) {
-    await expect(
-      page.getByTestId(`g30-import-provider-${provider}`).getByRole('link', { name: /start import/i })
-    ).toHaveCount(0)
+  // An available provider is the only kind allowed to hand the user a link —
+  // and it must go to the real import route for that provider.
+  for (const provider of availableProviders) {
+    const card = page.getByTestId(`g30-import-provider-${provider}`)
+    await expect(card).toContainText('Available')
+    await expect(card.getByRole('link', { name: /start import/i })).toHaveAttribute(
+      'href',
+      new RegExp(`/import\\?provider=${provider}`)
+    )
+  }
+
+  // A provider that cannot be launched from this flow says so, offers only a
+  // disabled button, and never grows a live-looking link.
+  for (const provider of comingSoonProviders) {
+    const card = page.getByTestId(`g30-import-provider-${provider}`)
+    await expect(card).toContainText('Coming soon')
+    await expect(card.getByRole('button')).toBeDisabled()
+    await expect(card.getByRole('link', { name: /start import/i })).toHaveCount(0)
   }
 
   await expect(
-    page.getByTestId('g30-import-provider-espn').getByText(/cannot be launched from this flow yet/i)
+    page.getByTestId('g30-import-provider-yahoo').getByText(/not available yet/i)
   ).toBeVisible()
 })
 
 test('locks advanced setup for non-commissioner and enables it for AF Commissioner', async ({ page }) => {
   await stubEntitlements(page, false)
   await openCreate(page)
-  await page.getByTestId('g30-step-summary').click()
+  await page.getByTestId('g30-step-review').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toBeVisible()
   await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeDisabled()
   // League formats are free and are no longer in the paid checklist at all.
@@ -183,7 +188,7 @@ test('locks advanced setup for non-commissioner and enables it for AF Commission
   await page.unroute('**/api/subscription/entitlements**')
   await stubEntitlements(page, true)
   await openCreate(page)
-  await page.getByTestId('g30-step-summary').click()
+  await page.getByTestId('g30-step-review').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toHaveCount(0)
   await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeEnabled()
   await page.getByTestId('g30-advanced-aiCommissionerTools').locator('input').check()

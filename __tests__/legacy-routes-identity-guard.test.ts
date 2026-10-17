@@ -32,11 +32,6 @@ const PUBLIC_ALLOWLIST: Record<string, string> = {
     'Entry point that CREATES the guest session. Requiring an identity here would make ' +
     'guest onboarding impossible — there is no session to require yet. Rate-limited, and ' +
     'it only ever writes rows for the username it was given.',
-  'email-preferences/route.ts':
-    'Email-capture / notification-preferences surface keyed on EMAIL, not on league data. ' +
-    'Requiring a session breaks signing up for alerts before having an account. Different ' +
-    'class from the roster/trade IDOR — but note it still allows lookup BY username, which ' +
-    'is a narrower enumeration worth closing separately.',
   'import/route.ts':
     'The CLAIM entry point. It must accept an arbitrary Sleeper handle — that is how a ' +
     'handle gets linked to an account in the first place — and it is already gated by ' +
@@ -60,8 +55,8 @@ const UNGATED_HANDLER_ALLOWANCE: Record<string, number> = {
   // GET reads and DELETE clears the caller's OWN cookie via getUserSessionFromCookie().
   // Neither accepts a username, and both are origin-checked.
   'session/route.ts': 2,
-  // GET is an admin listing gated on the `admin_session` cookie — a different, real gate.
-  'trade/feedback/route.ts': 1,
+  // (`trade/feedback/route.ts` — an admin-cookie-gated GET — was listed here until the route was
+  // deleted on 2026-09-30 with its last caller; see __tests__/legacy/trade-quiz-feedback-removed.test.ts.)
 }
 
 /**

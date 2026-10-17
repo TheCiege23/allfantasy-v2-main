@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import { TriangleAlert, ArrowRight } from "lucide-react"
 import { AuthStatusHeader, AuthStatusLoadingFallback, AuthStatusShell } from "@/components/auth/AuthStatusShell"
+import { ACCOUNT_SUSPENDED_MESSAGE } from "@/lib/auth/AuthErrorMessageResolver"
 
 const ERROR_MESSAGES: Record<string, string> = {
   Configuration: "There is a problem with the server configuration.",
@@ -29,6 +30,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     "That sign-in method didn't share an email address, so we can't create a new AllFantasy account from it. If you already have an account, sign in with your email and password first, then connect this method from Settings.",
   SOCIAL_EMAIL_UNVERIFIED:
     "That sign-in method's email isn't verified, so we can't safely connect it to an existing AllFantasy account. Verify your email with that provider, or sign in with your original method first and connect this one from Settings.",
+  ACCOUNT_SUSPENDED: ACCOUNT_SUSPENDED_MESSAGE,
   Default: "An error occurred during sign in.",
 }
 

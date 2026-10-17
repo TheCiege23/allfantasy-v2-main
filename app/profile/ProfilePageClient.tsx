@@ -576,7 +576,7 @@ function ProfileStatsSection() {
                 <span className="flex-1" style={{ color: a.earned ? "var(--text)" : "var(--muted)" }}>
                   {a.name}
                 </span>
-                {a.earned && <span className="shrink-0 text-[10px] font-bold text-emerald-400">✓</span>}
+                {a.earned && <span className="shrink-0 text-[11px] font-bold text-emerald-400">✓</span>}
               </li>
             ))}
             {achievements.length > 4 && <li>+{achievements.length - 4} more</li>}

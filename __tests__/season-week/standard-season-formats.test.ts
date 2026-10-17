@@ -76,11 +76,19 @@ describe('which leagues the weekly season covers', () => {
     ['NCAAB', 'dynasty', true],
     ['NBA', 'redraft', true],
     ['NBA', 'keeper', true],
+    // NCAAF joined 2026-09-28; the season row stores the config key NCAAFB, which must count too.
+    ['NCAAF', 'redraft', true],
+    ['NCAAFB', 'keeper', true],
+    ['NCAAF', 'best_ball', true],
+    ['NCAAF', 'guillotine', false],
     ['NBA', 'guillotine', false],
     ['NFL', 'guillotine', false],
     ['NFL', 'survivor', false],
     ['NFL', 'zombie', false],
-    ['MLB', 'redraft', false],
+    ['MLB', 'redraft', true],
+    ['MLB', 'dynasty', true],
+    ['MLB', 'keeper', true],
+    ['MLB', 'best_ball', true],
     ['SOCCER', 'redraft', false],
   ])('%s %s → %s', (sport, format, expected) => {
     expect(runsStandardWeeklySeason(sport, format)).toBe(expected)
@@ -97,6 +105,7 @@ describe('which leagues the weekly season covers', () => {
     ['NFL', 'best_ball'],
     ['NHL', 'redraft'],
     ['NBA', 'redraft'],
+    ['NCAAF', 'redraft'],
   ])('the schedule runtime resolves a %s %s season (it refused all of these)', async (sport, format) => {
     const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: 'season-1' }, { loadRules: async () => rules(sport, format) })
     expect(resolved.ok).toBe(true)
@@ -195,3 +204,6 @@ describe('score-sync reaches every season', () => {
     expect(rotatingBatch(ids.slice(0, 30), 50, 12345)).toHaveLength(30)
   })
 })
+
+// These native-season fixtures have no imported source history.
+vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ loadFantraxNativePresentation: vi.fn().mockResolvedValue(null) }))

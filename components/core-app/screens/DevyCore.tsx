@@ -19,6 +19,9 @@ import { useMemo, useState } from 'react'
  */
 import '../af-core.css'
 import '../af-devy.css'
+import type { DevyTrend } from '@/lib/devy/devyTrend'
+import DevyTrendMark from './DevyTrendMark'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Devy Core — the cross-league college-prospect hub.
@@ -42,7 +45,8 @@ import '../af-devy.css'
 
 export type DevyViewState = 'loading' | 'empty' | 'populated'
 export type DevyPosition = 'QB' | 'RB' | 'WR' | 'TE'
-export type DevyTrend = 'up' | 'down' | 'flat'
+/** Defined beside the one helper both devy screens ask — see `lib/devy/devyTrend.ts`. */
+export type { DevyTrend }
 
 export interface DevyProspectStat {
   label: string
@@ -58,7 +62,8 @@ export interface DevyProspect {
   classYear: string | null
   /** 0–100 scouting projection. Null when nothing has scored this player yet. */
   grade: number | null
-  trend: DevyTrend
+  /** Null when no trend is measured — today, always. See `lib/devy/devyTrend.ts`. */
+  trend: DevyTrend | null
   headshotUrl: string | null
   /** School colour for the badge overlay. Null renders no badge rather than a grey blob. */
   teamColor: string | null
@@ -137,16 +142,6 @@ function Grade({ grade }: { grade: number | null }) {
   return <span className={`af-devy-grade af-devy-grade--${gradeTone(grade)}`}>{Math.round(grade)}</span>
 }
 
-function Trend({ trend }: { trend: DevyTrend }) {
-  const glyph = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '—'
-  const label = trend === 'up' ? 'Trending up' : trend === 'down' ? 'Trending down' : 'Flat'
-  return (
-    <span className={`af-devy-trend af-devy-trend--${trend}`} title={label}>
-      <span aria-hidden="true">{glyph}</span>
-      <span className="af-sr-only"> {label}</span>
-    </span>
-  )
-}
 
 function initials(name: string): string {
   return name
@@ -232,7 +227,9 @@ export default function DevyCore({
       <header className="af-devy-head">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <div className="af-devy-eyebrow">Core · Devy</div>
-          <h1 className="af-devy-title">Devy</h1>
+          <h1 className="af-devy-title">
+            Devy <TopicTip topic="devy" />
+          </h1>
           <p className="af-devy-sub">
             College prospects tracked across every league you&apos;re in — rankings, exposure, and
             news, pulled from public college data feeds.
@@ -247,8 +244,13 @@ export default function DevyCore({
         <>
           <section className="af-devy-card" aria-labelledby="af-devy-top">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-top">
-                Top devy prospects
+              {/* Eyebrow and "?" grouped so the head's space-between does not split them; the tip
+                  sits beside the eyebrow, never inside it — the eyebrow names the section. */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <div className="af-devy-eyebrow" id="af-devy-top">
+                  Top devy prospects
+                </div>
+                <TopicTip topic="devyGrade" />
               </div>
             </div>
             {prospects.map((p) => (
@@ -257,7 +259,7 @@ export default function DevyCore({
                 <Avatar url={p.headshotUrl} name={p.name} color={p.teamColor} abbrev={p.teamAbbrev} />
                 <div style={{ minWidth: 0 }}>
                   <div className="af-devy-name">
-                    {p.name} <Trend trend={p.trend} />
+                    {p.name} <DevyTrendMark trend={p.trend} />
                   </div>
                   <div className="af-devy-meta">
                     {[p.position, p.school, p.classYear].filter(Boolean).join(' · ')}
@@ -282,8 +284,11 @@ export default function DevyCore({
 
           <section className="af-devy-card" aria-labelledby="af-devy-exp">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-exp">
-                Cross-league exposure
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <div className="af-devy-eyebrow" id="af-devy-exp">
+                  Cross-league exposure
+                </div>
+                <TopicTip topic="devyExposure" />
               </div>
             </div>
             <div className="af-devy-tablewrap">

@@ -1,0 +1,146 @@
+/* Bridge the league hub onto AF Core tokens. Immersive specialty leagues retain
+   their atmosphere. Collapse states remain owned by AppShell. */
+.af-league-workspace {
+  --panel: var(--surface);
+  --panel2: var(--surface2);
+  --border: var(--line);
+  color: var(--text);
+}
+
+@media (min-width: 768px) {
+  .af-league-workspace[data-af-layout-mode='balanced-three-panel'] {
+    grid-template-columns: 248px minmax(0, 1fr) 280px;
+  }
+  .af-league-workspace[data-af-left-collapsed='1'] {
+    grid-template-columns: 3rem minmax(0, 1fr) 280px;
+  }
+  .af-league-workspace[data-af-right-collapsed='1'] {
+    grid-template-columns: 248px minmax(0, 1fr) 3rem;
+  }
+  .af-league-workspace[data-af-left-collapsed='1'][data-af-right-collapsed='1'] {
+    grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+  }
+}
+/* Keep both rails reachable on tablets; their collapse controls still work. */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .af-league-workspace[data-af-layout-mode='balanced-three-panel'] {
+    grid-template-columns: 180px minmax(0, 1fr) 200px;
+  }
+  .af-league-workspace[data-af-left-collapsed='1'] {
+    grid-template-columns: 3rem minmax(0, 1fr) 200px;
+  }
+  .af-league-workspace[data-af-right-collapsed='1'] {
+    grid-template-columns: 180px minmax(0, 1fr) 3rem;
+  }
+  .af-league-workspace[data-af-left-collapsed='1'][data-af-right-collapsed='1'] {
+    grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+  }
+}
+
+.af-league-workspace [data-testid='league-command-center-surface'] {
+  background: var(--bg);
+  border-color: var(--line);
+}
+.af-league-workspace [data-testid='league-command-center-header'] {
+  background: var(--bg);
+  border-color: var(--line);
+  box-shadow: none;
+}
+.af-league-workspace [data-testid='league-command-center-tabs'] {
+  background: var(--surface2);
+  border-color: var(--line);
+}
+.af-league-workspace [data-testid='league-command-center-tabs'] button {
+  font-style: normal;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-league-workspace [data-testid='league-command-center-tabs'] button[aria-pressed='true'],
+.af-league-workspace [data-testid='league-command-center-tabs'] button[aria-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 -2px var(--accent);
+}
+.af-league-workspace [data-testid='league-command-center-tabs'] button svg { color: inherit; }
+.af-league-workspace :is(button, a):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.af-league-workspace .bdx {
+  --bdx-ground: var(--bg);
+  --bdx-panel: var(--surface);
+  --bdx-panel-deep: var(--surface2);
+  --bdx-border: var(--line);
+  --bdx-border-soft: var(--line);
+  --bdx-ink: var(--text);
+  --bdx-ink-mid: var(--text2);
+  --bdx-ink-dim: var(--muted);
+  --bdx-ink-faint: var(--faint);
+  --bdx-ink-ghost: var(--faint);
+  --bdx-grad: var(--accent);
+  background: var(--bg);
+}
+.af-league-workspace .bdx.bdx-rail { background: var(--surface2); padding: 24px 14px; }
+.af-league-workspace .bdx .bdx-disp { font-style: normal; text-transform: none; font-weight: 750; }
+.af-league-workspace .bdx .bdx-rail-sec { border-radius: 10px; padding: 14px 12px; }
+.af-league-workspace .bdx .bdx-rail-sec h3 {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-style: normal;
+  font-weight: 600;
+  color: var(--muted);
+}
+.af-league-workspace .bdx .bdx-chip { background: var(--surface); border-color: var(--line); }
+.af-league-workspace .bdx .bdx-chip.grad { background: var(--accent-soft); color: var(--accent); font-style: normal; }
+.af-league-workspace .bdx .bdx-btn.pri { background: var(--accent); color: var(--bg); font-style: normal; }
+
+.af-league-workspace .af-league-setup-guide {
+  background: var(--surface2);
+  border-color: var(--line);
+}
+.af-league-workspace .af-league-draft-card {
+  background: var(--surface);
+  border-color: var(--line2);
+  padding: clamp(20px, 3vw, 32px);
+  box-shadow: none;
+}
+.af-league-workspace .af-league-draft-glow { display: none; }
+.af-league-workspace .af-league-draft-card h2 { font-size: clamp(24px, 2.5vw, 32px); font-weight: 750; color: var(--text); }
+.af-league-workspace .af-league-draft-card p { color: var(--muted); }
+.af-league-workspace .af-league-draft-card .af-league-eyebrow { color: var(--accent); margin-bottom: 12px; }
+.af-league-workspace .af-league-draft-fill {
+  background: var(--accent-soft);
+  border-color: var(--line2);
+  box-shadow: none;
+  border-radius: 10px;
+}
+.af-league-workspace .af-league-draft-fill p:nth-child(2) { color: var(--accent); font-variant-numeric: tabular-nums; }
+.af-league-workspace .af-league-draft-facts > div { background: var(--surface2); border-color: var(--line); border-radius: 10px; }
+.af-league-workspace .af-league-draft-facts p:last-child { color: var(--text); }
+.af-league-workspace .af-league-draft-actions { margin-top: 24px; gap: 10px; }
+.af-league-workspace .af-league-draft-actions :is(a, button) {
+  background: var(--surface2);
+  border-color: var(--line2);
+  color: var(--text2);
+  border-radius: 8px;
+  min-height: 44px;
+  padding-inline: 16px;
+}
+.af-league-workspace .af-league-draft-actions [data-testid='predraft-open-draft-room'] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.af-league-workspace .af-league-draft-actions :is(a, button):hover { filter: brightness(1.1); }
+@media (max-width: 599px) {
+  .af-league-workspace .af-league-draft-facts { grid-template-columns: minmax(0, 1fr); }
+  .af-league-workspace .af-league-draft-actions :is(a, button) { flex: 1 1 100%; }
+}
+
+.af-workspace-navigation { padding: 16px; border-bottom: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.af-workspace-navigation-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-workspace-navigation.af-core .af-workspace-navigation-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line2); border-radius: 8px; color: var(--text); text-decoration: none; font-size: 13px; font-weight: 650; }
+.af-workspace-navigation.af-core .af-workspace-navigation-links a:hover { background: var(--accent-soft); color: var(--accent); }
+.af-workspace-navigation-mode { margin-top: 12px; }
+.af-workspace-navigation-mode > span { font-size: 12px; font-weight: 750; color: var(--accent); }
+.af-workspace-navigation-mode p { margin: 6px 0 0; max-width: 75ch; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.af-workspace-navigation :is(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { containsProfanity } from "@/lib/profanity"
+import { isOffensiveUsername } from "@/lib/moderation/offensiveName"
 import { validateUsername } from "@/lib/auth/username-validation"
 
 export const runtime = "nodejs"
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 
   const { normalized } = validation
 
-  if (containsProfanity(normalized)) {
+  if (isOffensiveUsername(normalized)) {
     return NextResponse.json({ ok: true, available: false, reason: "profanity" })
   }
 

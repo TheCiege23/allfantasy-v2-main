@@ -51,7 +51,7 @@ export function DevyLeagueSetupSection({ sport, value, onChange }: DevyLeagueSet
               'radial-gradient(800px 200px at 10% 0%, rgba(56,189,248,0.5), transparent 60%), radial-gradient(600px 180px at 90% 20%, rgba(167,139,250,0.35), transparent 55%)',
           }}
         />
-        <p className="relative text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-200/90">Devy league setup</p>
+        <p className="relative text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-200/90">Devy league setup</p>
         <h3 className="relative mt-1 text-base font-bold text-white">Long-term development format</h3>
         <p className="relative mt-1 text-[12px] leading-relaxed text-white/65">
           Devy slots and taxi slots are <span className="text-cyan-100/95">included by default</span> — this is a true
@@ -365,7 +365,7 @@ export function DevyLeagueSetupSection({ sport, value, onChange }: DevyLeagueSet
             </label>
           ))}
         </div>
-        <p className="mt-2 text-[10px] text-white/45">
+        <p className="mt-2 text-[11px] text-white/45">
           Chimmy can read devy rules, rosters, taxi/devy buckets, and pick assets for this league once saved.
         </p>
       </div>

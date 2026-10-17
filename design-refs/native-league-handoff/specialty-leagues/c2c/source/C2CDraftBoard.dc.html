@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>C2C merged draft board</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.c2-lu{flex:1 1 320px;display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:14px;background:#0b0d14;border:1px solid rgba(255,255,255,.07);min-width:0}
+.c2-sl{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:9px;background:#10131c}
+.c2-pos{width:40px;text-align:center;font:700 10.5px 'Archivo';letter-spacing:.06em;padding:3px 0;border-radius:5px}
+.c2-grid{display:grid;grid-template-columns:70px repeat(8,minmax(0,1fr));gap:6px}
+.c2-cell{display:flex;flex-direction:column;gap:2px;padding:7px 8px;border-radius:8px;min-height:58px;border:1px solid rgba(255,255,255,.06);transition:opacity .25s}
+.c2-cell b{font:700 12px 'Archivo';color:#e8eaf2}
+.c2-cell span{font-size:10.5px;color:#a3a9c2}
+.c2-rd{display:flex;flex-direction:column;justify-content:center;font:700 11px 'JetBrains Mono';color:#7d84a3}
+</style>
+</helmet>
+<div class="sp" style="--acc: #c9a24a; --acc2: #f1d58a; --accInk: #1a1204; --disp: Archivo; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="C2CHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Merged startup draft</h1><span class="sp-t2">Campus to Canton · 8 teams shown · college and pro rounds alternate</span></div>
+  <div class="sp-seg"><sc-for list="{{filters}}" as="f" hint-placeholder-count="3"><button aria-pressed="{{f.on}}" onClick="{{f.pick}}">{{f.label}}</button></sc-for></div>
+</header>
+<div style="padding: 22px 28px 32px; display: flex; flex-direction: column; gap: 14px">
+  <div style="display: flex; gap: 18px; font-size: 12px; color: #a3a9c2; flex-wrap: wrap"><span style="display: flex; gap: 6px; align-items: center"><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(232,112,30,.35)"></span>College round · NCAAF players only</span><span style="display: flex; gap: 6px; align-items: center"><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(201,162,74,.35)"></span>Pro round · NFL players only</span><span style="display: flex; gap: 6px; align-items: center"><span style="width: 12px; height: 12px; border-radius: 3px; border: 2px solid #7fb7e8"></span>Your picks</span></div>
+  <div class="c2-grid">
+    <span></span><sc-for list="{{teams}}" as="t" hint-placeholder-count="8"><span class="sp-lbl" style="text-align: center; color: {{t.c}}">{{t.name}}</span></sc-for>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+      <span class="c2-rd">{{r.label}}<span style="font: 600 10px 'Archivo'; color: {{r.tc}}">{{r.kind}}</span></span>
+      <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="8"><div class="c2-cell" style="background: {{c.bg}}; border-color: {{c.line}}; opacity: {{c.op}}"><b>{{c.name}}</b><span>{{c.meta}}</span></div></sc-for>
+    </sc-for>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":640}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { f: 'All' }; }
+  renderVals() {
+    const st = this.state;
+    const TEAMS = ['Open Team 1','Open Team 2','Open Team 3','You','Open Team 5','Open Team 6','Open Team 7','Open Team 8'];
+    const R = [['col', [['Jeremiah Smith','WR · Ohio St'],['Arch Manning','QB · Texas'],['Ryan Williams','WR · Alabama'],['Cam Coleman','WR · Auburn'],['Bryce Underwood','QB · Michigan'],['Isaac Brown','RB · Louisville'],['Dakorien Moore','WR · Oregon'],['Julian Sayin','QB · Ohio St']]],
+               ['pro', [['Ja’Marr Chase','WR · CIN'],['Bijan Robinson','RB · ATL'],['Justin Jefferson','WR · MIN'],['Puka Nacua','WR · LAR'],['Jahmyr Gibbs','RB · DET'],['CeeDee Lamb','WR · DAL'],['Saquon Barkley','RB · PHI'],['Malik Nabers','WR · NYG']]],
+               ['col', [['Malachi Toney','WR · Miami'],['Ahmad Hardy','RB · Missouri'],['Dante Moore','QB · Oregon'],['Justice Haynes','RB · Michigan'],['Nico Iamaleava','QB · UCLA'],['Zachariah Branch','WR · Georgia'],['Kewan Lacy','RB · Ole Miss'],['Evan Stewart','WR · Oregon']]],
+               ['pro', [['Brock Bowers','TE · LV'],['Jayden Daniels','QB · WAS'],['Nico Collins','WR · HOU'],['Drake London','WR · ATL'],['Ashton Jeanty','RB · LV'],['Josh Allen','QB · BUF'],['Trey McBride','TE · ARI'],['Brian Thomas Jr.','WR · JAX']]],
+               ['col', [['Eli Raridon','TE · Notre Dame'],['DJ Lagway','QB · Florida'],['Jordan Marshall','RB · Michigan'],['Antonio Williams','WR · Clemson'],['Nate Frazier','RB · Georgia'],['Max Klare','TE · Ohio St'],['Ryan Wingo','WR · Texas'],['Bear Bachmeier','QB · BYU']]],
+               ['pro', [['Garrett Wilson','WR · NYJ'],['Kyren Williams','RB · LAR'],['Tee Higgins','WR · CIN'],['Jaxon Smith-Njigba','WR · SEA'],['Lamar Jackson','QB · BAL'],['James Cook','RB · BUF'],['Sam LaPorta','TE · DET'],['Terry McLaurin','WR · WAS']]]];
+    const rows = R.map(([kind, picks], r) => { const order = r % 2 === 0 ? picks : picks.slice().reverse();
+      return { label: 'RD ' + (r + 1), kind: kind === 'col' ? 'College' : 'Pro', tc: kind === 'col' ? '#ffb36a' : '#f1d58a',
+        cells: order.map(([name, meta], i) => { const me = i === 3; const show = st.f === 'All' || (st.f === 'College') === (kind === 'col');
+          return { name, meta, bg: kind === 'col' ? 'rgba(232,112,30,.14)' : 'rgba(201,162,74,.13)', line: me ? '#7fb7e8' : 'rgba(255,255,255,.06)', op: show ? '1' : '.18' }; }) }; });
+    return { rows, teams: TEAMS.map(n => ({ name: n.replace('Open Team ', 'OT '), c: n === 'You' ? '#9fd0ff' : '#7d84a3' })),
+      filters: ['All', 'College', 'Pro'].map(l => ({ label: l, on: st.f === l ? 'true' : 'false', pick: () => this.setState({ f: l }) })) };
+  }
+}
+</script>
+</body>
+</html>

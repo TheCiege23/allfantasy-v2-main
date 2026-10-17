@@ -294,3 +294,21 @@ Outputs should:
 - Include actionable next steps whenever possible.
 
 Every major recommendation should be grounded in current industry research, real user pain points, and opportunities to make AllFantasy the definitive AI Sports Operating System.
+
+# Engineering rule: Prisma migrations against production
+
+Never run a bare `npx prisma migrate deploy` or `npx prisma migrate resolve` against the
+production database. Use the guarded commands. The full rationale is in `CLAUDE.md`, under
+"Running Prisma migrations against production".
+
+```
+ALLOW_PROD_MIGRATION=1 npm run db:migrate:deploy:prod
+ALLOW_PROD_MIGRATION=1 npm run db:resolve:prod -- --applied <migration>
+railway run node scripts/railway-prod-migrate.cjs                          # deploy
+railway run node scripts/railway-prod-migrate.cjs resolve --applied <name>  # resolve
+```
+
+They refuse a checkout whose `prisma/migrations/*/migration.sql` contains CRLF line endings.
+Prisma records the sha256 of the bytes on disk, so a Windows checkout writes checksums that no
+Linux checkout matches. Four production ledger rows were written that way on 2026-10-03,
+including one by a Codex session.

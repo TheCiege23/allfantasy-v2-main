@@ -103,9 +103,24 @@ describe('evaluateAiCostGate', () => {
     if (!out.ok) expect(out.reason).toBe('sign_in')
   })
 
-  it('a free feature keeps its anonymous allowance after launch', async () => {
-    const out = await evaluateAiCostGate(req(), 'instant_trade', null, { now: AFTER })
-    expect(out).toMatchObject({ ok: true, anonymous: true })
+  /*
+   * This used to assert "a free feature keeps its anonymous allowance after launch" against
+   * `instant_trade`, the one free-forever gate with a `dailyAnonymous`. That gate was removed with
+   * its dead route, and no remaining free gate grants an anonymous allowance — so a signed-out
+   * caller of a free feature is asked to sign in. ⚠ The "free + anonymous survives launch" branch
+   * of the rule now has no config exercising it; a gate that needs it should restore that test.
+   */
+  it('a free feature with no anonymous allowance asks a signed-out caller to sign in, after launch too', async () => {
+    const out = await evaluateAiCostGate(req(), 'share_copy', null, { now: AFTER })
+    expect(out.ok).toBe(false)
+    if (!out.ok) expect(out.reason).toBe('sign_in')
+  })
+
+  it('no free-forever gate currently grants a signed-out allowance', () => {
+    const anonFree = Object.entries(AI_COST_GATES).filter(
+      ([, cfg]) => !cfg.paidFromLaunch && 'dailyAnonymous' in cfg && (cfg as { dailyAnonymous?: number }).dailyAnonymous,
+    )
+    expect(anonFree.map(([k]) => k)).toEqual([])
   })
 
   it('BEFORE launch a free account still gets a paid feature, on the free daily cap', async () => {

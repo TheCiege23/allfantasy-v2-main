@@ -111,7 +111,7 @@ export function UniversalLeagueCard({ entry, isActive, onSelect }: UniversalLeag
           </p>
         </div>
         {entry.commissionerStatus.isCommissioner ? (
-          <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+          <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300">
             Commissioner
           </span>
         ) : null}
@@ -132,7 +132,7 @@ export function UniversalLeagueCard({ entry, isActive, onSelect }: UniversalLeag
         {entry.capabilities.map((badge) => (
           <span
             key={badge}
-            className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60"
+            className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/60"
           >
             {CAPABILITY_LABEL[badge]}
           </span>

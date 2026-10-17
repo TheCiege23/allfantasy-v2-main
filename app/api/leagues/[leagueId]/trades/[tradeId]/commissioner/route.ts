@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 /** A receipt id the client echoes back: kept only if it looks like one, never trusted as anything else. */
 function reviewIdFrom(value: unknown): string | null {
-  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null;
 }
 
 export async function POST(

@@ -139,7 +139,7 @@ export default function EtsyShop() {
             className="group relative bg-black/30 border border-white/10 rounded-xl overflow-hidden hover:border-cyan-400/30 transition-all hover:shadow-lg hover:shadow-cyan-500/10 hover:scale-[1.02]"
           >
             {product.featured && (
-              <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-[10px] font-bold text-white uppercase tracking-wider">
+              <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-[11px] font-bold text-white uppercase tracking-wider">
                 Featured
               </div>
             )}
@@ -159,9 +159,9 @@ export default function EtsyShop() {
               </h3>
               <div className="flex items-center justify-between">
                 <span className="text-sm sm:text-base font-bold text-cyan-400">{product.price}</span>
-                <span className="text-[10px] text-emerald-400/80 font-medium">FREE shipping</span>
+                <span className="text-[11px] text-emerald-400/80 font-medium">FREE shipping</span>
               </div>
-              <div className="mt-2 flex items-center gap-1 text-[10px] text-white/40 group-hover:text-cyan-300/60 transition-colors">
+              <div className="mt-2 flex items-center gap-1 text-[11px] text-white/40 group-hover:text-cyan-300/60 transition-colors">
                 <ExternalLink className="w-3 h-3" />
                 <span>View on Etsy</span>
               </div>

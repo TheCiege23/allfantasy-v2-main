@@ -75,6 +75,20 @@ describe('findMyRoster', () => {
     expect(await findMyRoster(prisma, LEAGUE, USER)).toEqual({ found: false, reason: 'no_roster' })
   })
 
+  it('names the Roster row it found, on both paths — roster-scoped tables are keyed by it', async () => {
+    /* DevyRights (and every table like it) is written under Roster.id; a caller that only gets the
+       blob back has to re-run this join to read them, which is the drift this helper exists to stop. */
+    const byOwner = fakePrisma({ platformUserId: 'sleeper-me', externalId: '7', claimedByUserId: USER }, [
+      { id: 'r-owner', platformUserId: 'sleeper-me', playerData: { players: ['a'] } },
+    ])
+    expect(await findMyRoster(byOwner.prisma, LEAGUE, USER)).toMatchObject({ found: true, rosterId: 'r-owner' })
+
+    const byTeamId = fakePrisma({ platformUserId: 'sleeper-me', externalId: '7', claimedByUserId: USER }, [
+      { id: 'r-team', platformUserId: 'orphan-sleeper-7', playerData: { source_team_id: '7', players: ['a'] } },
+    ])
+    expect(await findMyRoster(byTeamId.prisma, LEAGUE, USER)).toMatchObject({ found: true, rosterId: 'r-team' })
+  })
+
   it('survives a team row that carries no provider id at all', async () => {
     /* The manual-league shape: no externalId to resolve by, so the owner keys are all there is. */
     const { prisma } = fakePrisma({ platformUserId: null, externalId: null, claimedByUserId: USER }, [

@@ -500,7 +500,7 @@ export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId
                         <tr key={fl.tournamentLeagueId} className="border-b border-white/5">
                           <td className="py-2 pr-2">
                             <p className="font-medium text-white/90">{fl.name}</p>
-                            <p className="text-[10px] text-white/35">{fl.conferenceName}</p>
+                            <p className="text-[11px] text-white/35">{fl.conferenceName}</p>
                           </td>
                           <td className="py-2 text-white/70">
                             {fl.filledSlots}/{fl.capacity}
@@ -516,7 +516,7 @@ export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId
                                 {t('tournament.commissioner.shell.linkSet')}
                               </span>
                             ) : fl.inviteCode ? (
-                              <span className="font-mono text-[10px] text-white/50">{fl.inviteCode}</span>
+                              <span className="font-mono text-[11px] text-white/50">{fl.inviteCode}</span>
                             ) : (
                               <span className="text-amber-200/80">{t('tournament.commissioner.shell.addInSettings')}</span>
                             )}

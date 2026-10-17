@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Live draft board (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}
+@keyframes afpulse{0%,100%{box-shadow:0 0 0 0 rgba(34,211,238,.55)}50%{box-shadow:0 0 0 5px rgba(34,211,238,0)}}
+.oc{animation:afpulse 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.oc{animation:none}}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <header style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #0b0d14; border-bottom: 1px solid rgba(255,255,255,.07)">
+    <a class="iconbtn" href="Mobile.dc.html" aria-label="Back to Blah">‹</a>
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 16px; letter-spacing: -0.03em">Blah draft</span><span class="lbl" style="color: #fb5b78">● Live · Round 4</span></span>
+    <span class="chip chip-gold">Commish</span>
+  </header>
+
+  <section style="padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,.07); background: radial-gradient(300px 140px at 0% 0%, rgba(34,211,238,.14), transparent 70%)">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+      <span class="lbl" style="color: #22d3ee">On the clock · 4.03</span>
+      <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.03em">Open Team 10</span>
+      <span style="font-size: 12px; font-weight: 700; color: #22d3ee">You're next · queue: DK Metcalf</span>
+    </div>
+    <span class="num" style="font-size: 34px; font-weight: 600; color: #22d3ee">0:52</span>
+  </section>
+  <div class="bar" style="height: 3px; border-radius: 0"><div style="width: 58%; background: #22d3ee"></div></div>
+
+  <div style="padding: 10px 12px 4px"><div class="seg" role="tablist" aria-label="Draft view"><sc-for list="{{tabs}}" as="t" hint-placeholder-count="4"><button role="tab" class="{{t.cls}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div></div>
+
+  <div class="ph-scroll" style="padding: 8px 0 12px">
+    <div style="overflow-x: auto; padding: 0 12px">
+      <div style="display: grid; grid-template-columns: repeat(12, 78px); gap: 4px; width: max-content">
+        <sc-for list="{{teams}}" as="t" hint-placeholder-count="12">
+          <div style="padding: 6px; border-radius: 8px; background: {{t.bg}}; border: 1px solid {{t.line}}; display: flex; align-items: center; gap: 5px">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: {{t.status}}; flex: none"></span>
+            <span style="font-weight: 600; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{t.color}}">{{t.name}}</span>
+          </div>
+        </sc-for>
+        <sc-for list="{{cells}}" as="c" hint-placeholder-count="48">
+          <div class="{{c.cls}}" style="height: 54px; padding: 5px 6px; border-radius: 8px; background: {{c.bg}}; border: 1px solid {{c.line}}; display: flex; flex-direction: column; justify-content: space-between">
+            <span class="num" style="font-size: 8px; color: #7d84a8">{{c.label}}</span>
+            <span style="font-weight: 600; font-size: 10px; line-height: 1.15; color: {{c.nameColor}}">{{c.name}}</span>
+            <span class="num" style="font-size: 8px; font-weight: 700; color: {{c.posColor}}">{{c.meta}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="margin: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.28); font-size: 12px; line-height: 1.45; color: #c3c9e6"><strong style="color: #22d3ee">Chimmy</strong> If Metcalf goes at 4.03, take James Cook.</div>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 10px 12px 24px; border-top: 1px solid rgba(255,255,255,.07); background: #0b0d14">
+    <a class="btn btn-g" href="MobileDraftPool.dc.html" style="flex: 1">Players &amp; queue</a>
+    <button class="btn btn-p" style="flex: 2" disabled="{{ true }}">Draft (your turn next)</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: 'board' }; }
+  renderVals() {
+    const N = 12, ROUNDS = 4, ME = 8;
+    const P = ['B. Robinson|RB','J. Chase|WR','J. Gibbs|RB','J. Jefferson|WR','C. Lamb|WR','S. Barkley|RB','P. Nacua|WR','A. St. Brown|WR','M. Nabers|WR','C. McCaffrey|RB','B. Thomas|WR','N. Collins|WR',
+      'D. Achane|RB','A. Jeanty|RB','D. Henry|RB','K. Williams|RB','B. Bowers|TE','J. Jacobs|RB','D. London|WR','A.J. Brown|WR','J. Taylor|RB','L. McConkey|WR','B. Irving|RB','T. McBride|TE',
+      'G. Wilson|WR','J. Allen|QB','L. Jackson|QB','T. Higgins|WR','C. Brown|RB','J. Smith-Njigba|WR','K. Walker|RB','J. Daniels|QB','M. Evans|WR','D. Adams|WR','A. Kamara|RB','S. LaPorta|TE',
+      'J. Hurts|QB','T. McLaurin|WR'].map(s => s.split('|'));
+    const cur = P.length;
+    const names = ['OT 9','OT 5','OT 2','OT 11','OT 3','Scaries','OT 8','OT 12','You','OT 10','OT 6','OT 4'];
+    const stat = ['#34d399','#34d399','#fbbf24','#34d399','#2a2f4a','#34d399','#34d399','#fbbf24','#34d399','#34d399','#2a2f4a','#34d399'];
+    const slotOf = n => { const r = Math.floor(n / N), i = n % N; return r % 2 === 0 ? i : N - 1 - i; };
+    const cs = slotOf(cur);
+    const teams = names.map((name, i) => ({ name, status: stat[i], color: i === ME ? '#22d3ee' : '#eef0fa',
+      bg: i === cs ? 'rgba(34,211,238,.12)' : '#10131c', line: i === cs ? '#22d3ee' : 'rgba(255,255,255,.07)' }));
+    const PC = { QB: '#fb8aa0', RB: '#5ee6b0', WR: '#7fb7e8', TE: '#fbbf24' };
+    const PB = { QB: 'rgba(251,91,120,.10)', RB: 'rgba(52,211,153,.10)', WR: 'rgba(77,155,224,.12)', TE: 'rgba(251,191,36,.10)' };
+    const cells = [];
+    for (let r = 0; r < ROUNDS; r++) for (let s = 0; s < N; s++) {
+      const i = r % 2 === 0 ? s : N - 1 - s, n = r * N + i, p = P[n];
+      const label = (r + 1) + '.' + String(i + 1).padStart(2, '0');
+      if (p) cells.push({ label, name: p[0], meta: p[1], posColor: PC[p[1]], nameColor: '#eef0fa', bg: PB[p[1]], line: s === ME ? 'rgba(34,211,238,.45)' : 'rgba(255,255,255,.04)', cls: '' });
+      else if (n === cur) cells.push({ label, name: 'On clock', meta: '', posColor: '', nameColor: '#22d3ee', bg: 'rgba(34,211,238,.10)', line: '#22d3ee', cls: 'oc' });
+      else if (n === cur + 1) cells.push({ label, name: 'You next', meta: '', posColor: '', nameColor: '#22d3ee', bg: 'rgba(34,211,238,.05)', line: 'rgba(34,211,238,.45)', cls: '' });
+      else cells.push({ label, name: '', meta: '', posColor: '', nameColor: '', bg: 'transparent', line: 'rgba(255,255,255,.05)', cls: '' });
+    }
+    const tabs = [['board','Board'],['players','Players'],['team','My team'],['chat','Chat']].map(([id,label]) => ({ label, cls: 'sg' + (this.state.tab === id ? ' sg-on' : ''), pick: () => this.setState({ tab: id }) }));
+    return { teams, cells, tabs };
+  }
+}
+</script>
+</body>
+</html>

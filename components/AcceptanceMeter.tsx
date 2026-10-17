@@ -99,7 +99,7 @@ export default function AcceptanceMeter({
               />
             </svg>
             <span
-              className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold ${getMeterColor(data.score)}`}
+              className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold ${getMeterColor(data.score)}`}
             >
               {data.score}
             </span>
@@ -255,11 +255,11 @@ export default function AcceptanceMeter({
                       <div className="text-xs text-white/80">
                         {opt.description}
                       </div>
-                      <span className="text-[10px] text-emerald-400 whitespace-nowrap font-medium">
+                      <span className="text-[11px] text-emerald-400 whitespace-nowrap font-medium">
                         +{Math.round(opt.expectedImpact)}
                       </span>
                     </div>
-                    <div className="text-[10px] text-white/40 mt-1">
+                    <div className="text-[11px] text-white/40 mt-1">
                       Targets: {opt.targetFactor}
                     </div>
                   </div>

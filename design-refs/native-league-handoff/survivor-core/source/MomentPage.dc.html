@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Public moment page</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./kit/kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.mp-brand{display:flex;align-items:center;gap:10px;font:800 20px 'Archivo';color:#fff;letter-spacing:-.02em}
+.mp-brand i{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font:800 14px 'Archivo';font-style:normal;color:#1a1204;background:linear-gradient(135deg,#f1d58a,#d9b45a 55%,#a77c26)}
+.mp-more{display:flex;flex-direction:column;border-radius:12px;overflow:hidden;background:#0b0d14;border:1px solid rgba(255,255,255,.07);text-decoration:none;color:inherit}
+.mp-more div{position:relative;height:150px;display:grid;place-items:center;overflow:hidden}
+.mp-more div>img:first-child{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.75}
+.mp-more div>img:last-child{position:relative;height:120px;filter:drop-shadow(0 10px 14px rgba(0,0,0,.6))}
+@keyframes mpTorch{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; align-items: center; gap: 16px; padding: 14px 40px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <span class="mp-brand"><i>AF</i>AllFantasy</span>
+    <span class="k-sp"></span>
+    <a class="ex-btn" href="#" style="background: transparent">Sign in</a>
+    <a class="ex-btn ex-btn-gold" href="SurvivorOnboarding.dc.html">Start a league</a>
+  </header>
+
+  <section class="k-hero" style="margin: 24px 40px 0; min-height: 460px; border-radius: 18px">
+    <img class="k-bg" src="survivor/bg/night-football.svg" alt="">
+    <div class="k-veil"></div>
+    <div class="k-in" style="display: flex; align-items: center; gap: 40px; padding: 48px 56px; min-height: 460px; flex-wrap: wrap">
+      <div style="flex: 1 1 520px; display: flex; flex-direction: column; gap: 16px">
+        <div class="k-row"><img src="tribes/nfl/manta.svg" alt="" style="width: 44px"><span class="ex-t2" style="font-size: 14px">Blah Survivor · NFL 2026 · Week 6</span></div>
+        <span class="k-pill" style="align-self: flex-start; color: #ff9a3c; border-color: rgba(255,154,60,.5); height: 30px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase">Voted out</span>
+        <h1 style="margin: 0; font: 700 58px/1.05 'Cinzel', serif; color: #f3ead6">Open Team 8's torch is out</h1>
+        <span class="ex-t2" style="font-size: 17px; max-width: 560px">Voted out 2–1 at Tribal Council after six weeks in Tribe Vela. Open Team 8 heads to Exile Island to try to earn a way back.</span>
+        <div class="k-row" style="gap: 10px; flex-wrap: wrap">
+          <span class="k-pill" style="height: 30px">96.2 points this week</span><span class="k-pill" style="height: 30px">9 managers left</span><span class="k-pill" style="height: 30px">Tribe Vela · 3 left</span>
+        </div>
+        <div class="k-row" style="margin-top: 8px"><button class="ex-btn">Copy link</button><button class="ex-btn">Share</button></div>
+      </div>
+      <img src="weekly/torch-out.svg" alt="Snuffed tribal torch" style="flex: none; width: 260px; animation: mpTorch 5s ease-in-out infinite; filter: drop-shadow(0 30px 40px rgba(0,0,0,.6))">
+    </div>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 24px 40px">
+    <section class="ex-card" style="flex: 1 1 520px; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+      <span class="ex-lbl">The scroll</span>
+      <div class="sc-paper" style="padding: 22px 26px 26px; display: flex; flex-direction: column; gap: 10px; border-radius: 4px">
+        <span class="sc-sub">Tribal Council · Week 6</span>
+        <div class="sc-slip" style="animation: none"><span class="sc-ord">Vote 1</span><span class="sc-hand">Open Team 8</span></div>
+        <div class="sc-slip sc-x" style="animation: none"><span class="sc-ord">Vote 2</span><span class="sc-hand">Open Team 4</span><span class="sc-stamp">Idol played</span></div>
+        <div class="sc-slip" style="animation: none"><span class="sc-ord">Vote 3</span><span class="sc-hand">Open Team 8</span></div>
+        <div style="text-align: center; margin-top: 6px"><span class="sc-verdict">Voted out</span></div>
+      </div>
+      <span class="ex-t3" style="font-size: 12px">Who cast each vote stays secret. This page shows display names only.</span>
+    </section>
+    <aside style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 16px">
+      <div class="ex-card2" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <span class="ex-lbl">Still in the game</span>
+        <sc-for list="{{tribes}}" as="t" hint-placeholder-count="2">
+          <div class="k-row"><img src="{{t.crest}}" alt="" style="width: 38px"><div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font: 700 14px 'Cinzel', serif; letter-spacing: .08em; color: {{t.c}}">{{t.name}}</span><div style="display: flex; gap: 4px"><sc-for list="{{t.torches}}" as="x" hint-placeholder-count="5"><img src="{{x}}" alt="" style="width: 22px"></sc-for></div></div></div>
+        </sc-for>
+      </div>
+      <div class="ex-card" style="padding: 22px; display: flex; flex-direction: column; gap: 12px; border-color: rgba(217,180,90,.35); background: radial-gradient(ellipse at 80% 0%, rgba(217,180,90,.14), transparent 60%), #0b0d14">
+        <span style="font: 700 22px/1.2 'Cinzel', serif; color: #f1d58a">Run your own Survivor league</span>
+        <span class="ex-t2">Tribes, hidden idols, Tribal Council votes and Exile Island, on top of your fantasy team. Works for NFL, NBA, MLB, NHL, college and soccer.</span>
+        <a class="ex-btn ex-btn-gold" href="SurvivorOnboarding.dc.html" style="min-height: 46px">Start a Survivor league</a>
+      </div>
+    </aside>
+  </div>
+
+  <section style="padding: 4px 40px 40px; display: flex; flex-direction: column; gap: 12px">
+    <span class="ex-lbl">More from Blah Survivor</span>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px">
+      <sc-for list="{{more}}" as="m" hint-placeholder-count="3">
+        <a class="mp-more" href="#"><div><img src="{{m.bg}}" alt=""><img src="{{m.hero}}" alt=""></div><span style="padding: 12px 14px 2px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: {{m.c}}">{{m.kick}}</span><span style="padding: 0 14px 14px; font: 700 16px 'Cinzel', serif; color: #f3ead6">{{m.head}}</span></a>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const lit = 'weekly/torch-lit-icon.svg', out = 'weekly/torch-out-icon.svg';
+    return {
+      tribes: [{ name: 'Vela', crest: 'tribes/nfl/manta.svg', c: '#b8a8ff', torches: [lit, lit, lit, out, out, out] }, { name: 'Koa', crest: 'tribes/nfl/shark.svg', c: '#7fd3de', torches: [lit, lit, lit, lit, lit, lit] }],
+      more: [{ bg: 'survivor/bg/dusk-football.svg', hero: 'weekly/immunity-necklace.svg', kick: 'Immunity · Week 6', head: 'Open Team 5 is safe', c: '#f2c94c' },
+             { bg: 'survivor/bg/night-football.svg', hero: 'survivor/idols/immunity.svg', kick: 'Idol played · Week 6', head: 'Open Team 4 played an idol', c: '#7fe0c0' },
+             { bg: 'survivor/bg/exile-football.svg', hero: 'exile/token-coin-earned.svg', kick: 'Exile Island · Week 5', head: 'Open Team 11 earns a token', c: '#f2c94c' }]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -62,6 +62,13 @@ describe('Redraft sport adapter parity', () => {
       for (const key of adapterKeys) {
         expect(configKeys.has(key)).toBe(true)
         if (teamDefenseKeys.has(key)) continue
+        // Role evidence is optional; defaulting absent roles would suppress a legacy aggregate.
+        if (sport === 'NCAAF' && ['pass_2pt', 'rush_2pt', 'rec_2pt'].includes(key)) {
+          expect(parsed).not.toHaveProperty(key)
+          expect(adapter.parseRawStats({ [key]: 1 })[key]).toBe(1)
+          expect(adapter.parseRawStats({ [key]: 0 })[key]).toBe(0)
+          continue
+        }
         expect(Object.prototype.hasOwnProperty.call(parsed, key)).toBe(true)
         expect(typeof parsed[key]).toBe('number')
       }

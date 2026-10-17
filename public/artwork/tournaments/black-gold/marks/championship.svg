@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Championship, Black v Gold"><defs><linearGradient id="kbi-championship-M" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.45" stop-color="#e8b84a"/><stop offset="1" stop-color="#7a5214"/></linearGradient><linearGradient id="kbi-championship-S" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.4" stop-color="#b9c0cc"/><stop offset="1" stop-color="#4a515e"/></linearGradient><radialGradient id="kbi-championship-chglow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffd98aaa"/><stop offset="1" stop-color="#ffd98a00"/></radialGradient></defs><rect width="600" height="340" rx="24" fill="#07070a"/>
+<path d="M0,24 Q0,0 24,0 H300 V340 H24 Q0,340 0,316 Z" fill="#14161c"/><path d="M300,0 H576 Q600,0 600,24 V316 Q600,340 576,340 H300 Z" fill="#2a1f0a"/>
+<circle cx="300" cy="150" r="170" fill="url(#kbi-championship-chglow)" opacity=".6"/>
+<path d="M300,0 L272,170 L300,340 L328,170 Z" fill="#e8b84a" opacity=".18"/>
+<g transform="translate(150,120) scale(.55)"><path d="M58,62 C28,64 8,44 10,18 C22,38 40,44 62,44 Z" fill="url(#kbi-championship-S)" stroke="#0e0a08" stroke-width="5" stroke-linejoin="round"/>
+<path d="M142,62 C172,64 192,44 190,18 C178,38 160,44 138,44 Z" fill="url(#kbi-championship-S)" stroke="#0e0a08" stroke-width="5" stroke-linejoin="round"/>
+<path d="M44,70 L20,80 L42,92 Z M156,70 L180,80 L158,92 Z" fill="url(#kbi-championship-S)" stroke="#0e0a08" stroke-width="4.5" stroke-linejoin="round"/>
+<path d="M100,30 C140,30 160,52 158,84 C156,108 146,124 140,140 C134,166 122,186 100,190 C78,186 66,166 60,140 C54,124 44,108 42,84 C40,52 60,30 100,30 Z" fill="url(#kbi-championship-S)" stroke="#0e0a08" stroke-width="6"/>
+<path d="M60,48 C72,38 90,34 100,34 C110,34 128,38 140,48 C130,62 116,58 108,66 C104,58 96,58 92,66 C84,58 70,62 60,48 Z" fill="#0e0a08" opacity=".55"/>
+<path d="M66,92 L90,98 L86,106 L68,102 Z M134,92 L110,98 L114,106 L132,102 Z" fill="#ff5a3a" stroke="#0e0a08" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M76,140 Q100,124 124,140 Q122,170 100,174 Q78,170 76,140 Z" fill="#000" opacity=".3" stroke="#0e0a08" stroke-width="4"/>
+<ellipse cx="88" cy="150" rx="6" ry="8" fill="#0e0a08"/><ellipse cx="112" cy="150" rx="6" ry="8" fill="#0e0a08"/>
+<path d="M92,176 Q100,198 108,176" fill="url(#kbi-championship-S)" stroke="#0e0a08" stroke-width="4"/></g>
+<g transform="translate(450,120) scale(.55) scale(-1,1)"><path d="M58,62 C28,64 8,44 10,18 C22,38 40,44 62,44 Z" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="5" stroke-linejoin="round"/>
+<path d="M142,62 C172,64 192,44 190,18 C178,38 160,44 138,44 Z" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="5" stroke-linejoin="round"/>
+<path d="M44,70 L20,80 L42,92 Z M156,70 L180,80 L158,92 Z" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="4.5" stroke-linejoin="round"/>
+<path d="M100,30 C140,30 160,52 158,84 C156,108 146,124 140,140 C134,166 122,186 100,190 C78,186 66,166 60,140 C54,124 44,108 42,84 C40,52 60,30 100,30 Z" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="6"/>
+<path d="M60,48 C72,38 90,34 100,34 C110,34 128,38 140,48 C130,62 116,58 108,66 C104,58 96,58 92,66 C84,58 70,62 60,48 Z" fill="#0e0a08" opacity=".55"/>
+<path d="M66,92 L90,98 L86,106 L68,102 Z M134,92 L110,98 L114,106 L132,102 Z" fill="#ff5a3a" stroke="#0e0a08" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M76,140 Q100,124 124,140 Q122,170 100,174 Q78,170 76,140 Z" fill="#000" opacity=".3" stroke="#0e0a08" stroke-width="4"/>
+<ellipse cx="88" cy="150" rx="6" ry="8" fill="#0e0a08"/><ellipse cx="112" cy="150" rx="6" ry="8" fill="#0e0a08"/>
+<path d="M92,176 Q100,198 108,176" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="4"/></g>
+<g transform="translate(300,170) scale(1.25)"><path d="M-34,-56 C-62,-56 -64,-20 -30,-12 M34,-56 C62,-56 64,-20 30,-12" stroke="#0e0a08" stroke-width="9" fill="none"/><path d="M-34,-56 C-62,-56 -64,-20 -30,-12 M34,-56 C62,-56 64,-20 30,-12" stroke="url(#kbi-championship-M)" stroke-width="5" fill="none"/>
+<path d="M-40,-66 L40,-66 L36,-30 C32,-8 14,4 0,6 C-14,4 -32,-8 -36,-30 Z" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="4" stroke-linejoin="round"/>
+<rect x="-8" y="6" width="16" height="18" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="3.5"/><path d="M-26,24 L26,24 L30,40 L-30,40 Z" fill="#1a1408" stroke="#0e0a08" stroke-width="3.5"/><rect x="-34" y="40" width="68" height="10" rx="2" fill="url(#kbi-championship-M)" stroke="#0e0a08" stroke-width="3"/><path d="M0,-52 l4,9 10,1 -7,7 2,10 -9,-5 -9,5 2,-10 -7,-7 10,-1 Z" fill="#fff8dc" stroke="#0e0a08" stroke-width="1.6"/></g>
+<text x="150" y="296" text-anchor="middle" font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="30" letter-spacing="4" fill="#e8eaf2">BLACK</text>
+<text x="450" y="296" text-anchor="middle" font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="30" letter-spacing="4" fill="#ffd98a">GOLD</text>
+<text x="300" y="300" text-anchor="middle" font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="18" fill="#a3a9c2">V</text>
+<text x="300" y="36" text-anchor="middle" font-family="Archivo Black, Archivo, Arial Black, sans-serif" font-weight="900" font-size="15" letter-spacing="6" fill="#ffd98a">CHAMPIONSHIP</text>
+<text x="582" y="328" text-anchor="end" font-family="Caveat, cursive" font-weight="700" font-size="15" fill="#a3a9c2" opacity=".9">created by KB</text>
+<rect x="2" y="2" width="596" height="336" rx="23" fill="none" stroke="#e8b84a" stroke-opacity=".5" stroke-width="3"/></svg>

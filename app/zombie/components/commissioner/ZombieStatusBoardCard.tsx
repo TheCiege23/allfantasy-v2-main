@@ -66,7 +66,7 @@ export function ZombieStatusBoardCard({ leagueId }: { leagueId: string }) {
   return (
     <div className="space-y-4 rounded-xl border border-white/10 bg-[#0a1228]/70 p-4">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-200/85">Sport-aware cadence</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-200/85">Sport-aware cadence</p>
         <p className="mt-1 text-[12px] leading-relaxed text-white/65">
           <span className="text-white/85">{data.sport}</span> · scoring window:{' '}
           <span className="text-white/85">{c.scoringPeriod}</span>
@@ -91,7 +91,7 @@ export function ZombieStatusBoardCard({ leagueId }: { leagueId: string }) {
         </div>
       </div>
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">Recent weekly resolutions</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">Recent weekly resolutions</p>
         {data.recentResolutions.length === 0 ? (
           <p className="mt-1 text-[11px] text-white/40">No resolutions stored yet — they appear as weeks finalize.</p>
         ) : (

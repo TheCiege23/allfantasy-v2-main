@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * 🛑 A NON-NFL COMMISSIONER'S SCORING EDITS NEVER CHANGED A SCORE. The NHL / NBA / NCAAB / soccer
  * panels save their own key namespace; the scorer read only the engine's, bridging NFL alone.
  * These pin the bridge: its keys are real on both sides, the scorer applies it, the canonical store
- * still wins, NFL and MLB behave exactly as before, and NCAAF reception follows the manager's pick
+ * still wins, NFL behaves exactly as before, MLB scores its panel (default preset when unsaved), and NCAAF reception follows the manager's pick
  * until a commissioner saves the panel.
  */
 
@@ -20,6 +20,7 @@ import { buildFullNcaabScoringConfig } from '@/lib/ncaab-scoring/NcaabScoringPre
 import { buildFullSoccerScoringConfig } from '@/lib/soccer-scoring/SoccerScoringPresets'
 import { buildFullNcaafScoringConfig } from '@/lib/ncaaf-scoring/NcaafScoringPresets'
 import { applyDefaultNcaafScoringOnCreate, getLeagueNcaafScoringConfig } from '@/lib/ncaaf-scoring/NcaafScoringConfigService'
+import { buildFullMlbScoringConfig } from '@/lib/mlb-scoring/MlbScoringPresets'
 
 const UI_DEFAULTS: Record<string, Record<string, number>> = {
   NHL: buildFullNhlScoringConfig('af_default' as never),
@@ -27,6 +28,7 @@ const UI_DEFAULTS: Record<string, Record<string, number>> = {
   NCAAB: buildFullNcaabScoringConfig('af_default' as never),
   SOCCER: buildFullSoccerScoringConfig('af_default' as never),
   NCAAF: buildFullNcaafScoringConfig('af_default'),
+  MLB: buildFullMlbScoringConfig('af_default'),
 }
 
 function league(sport: string, settings: Record<string, unknown>) {
@@ -42,7 +44,7 @@ describe('the key maps are real on both sides', () => {
   for (const [sport, store] of Object.entries(UI_SCORING_STORES)) {
     it(`${sport}: every panel key exists in the panel's own config, every engine key is an engine category`, () => {
       const uiKeys = new Set(Object.keys(UI_DEFAULTS[sport]!))
-      const engineKeys = new Set(getScoringCategories(sport).map((c) => c.key))
+      const engineKeys = new Set(getScoringCategories(sport, ['IDP', 'TE_PREMIUM']).map((c) => c.key))
       const badUi = Object.keys(store.keyMap).filter((k) => !uiKeys.has(k))
       const badEngine = Object.values(store.keyMap).filter((k) => !engineKeys.has(k))
       expect({ badUi, badEngine }).toEqual({ badUi: [], badEngine: [] })
@@ -64,6 +66,12 @@ describe('the scorer applies each sport’s panel store', () => {
     league('NBA', { nba_scoring_config: { rules: UI_DEFAULTS.NBA } })
     // 20 pts x 0.5 + 2 threes x 0.5
     expect(await score({ pts: 20, threes: 2 })).toBe(11)
+  })
+
+  it('NBA: ESPN points subtract field-goal and free-throw attempts', async () => {
+    league('NBA', { nba_scoring_config: { rules: buildFullNbaScoringConfig('espn_default') } })
+    // ESPN: points 20 + made field goals 8*2 - attempts 16 + made FT 4 - attempts 5.
+    expect(await score({ pts: 20, fgm: 8, fga: 16, ftm: 4, fta: 5 })).toBe(19)
   })
 
   it('NCAAB: a steal at the panel’s 2', async () => {
@@ -104,8 +112,19 @@ describe('sports without a bridged store behave exactly as before', () => {
     expect(await score({ pass_td: 1 })).toBe(6)
   })
 
-  it('MLB is not bridged (the panel’s hit-by-type scoring has no engine categories)', () => {
-    expect(bridgeSportUiScoringStore('MLB', { mlb_scoring_config: { rules: { runs: 5 } } })).toBeNull()
+  it('MLB is bridged now that the engine has per-type hit categories — and a saved panel scores', async () => {
+    league('MLB', { mlb_scoring_config: { rules: { ...UI_DEFAULTS.MLB, doubles: 5 } } })
+    expect(await score({ double: 1 })).toBe(5)
+  })
+
+  it('MLB: an UNSAVED league scores the default preset its panel displays, not the engine’s own defaults', async () => {
+    league('MLB', {})
+    // Panel AF default: a single is 1 and total bases 0; the engine alone would score tb 0.5 and single 0.
+    expect(await score({ single: 1, tb: 1 })).toBe(1)
+  })
+
+  it('a sport with no panel store is still not bridged (soccer has one; a sport with none returns null)', () => {
+    expect(bridgeSportUiScoringStore('NOT_A_SPORT', { x: { rules: { runs: 5 } } })).toBeNull()
   })
 
 })
@@ -137,7 +156,7 @@ describe('NCAAF', () => {
     expect(await score({ pass_td: 2 })).toBe(12)
   })
 
-  it('a saved two-point value applies to the engine’s single two-point category', async () => {
+  it('a saved equal rushing/receiving value preserves legacy aggregate scoring', async () => {
     league('NCAAF', {
       ncaaf_scoring_config: {
         rules: { ...UI_DEFAULTS.NCAAF, passing_2pt: 3, rushing_2pt: 3, receiving_2pt: 3 },
@@ -165,4 +184,17 @@ describe('NCAAF', () => {
     })
     expect((await getLeagueNcaafScoringConfig('L1')).rules.reception).toBe(1)
   })
+})
+
+ it('college kicker commissioner settings score makes and verified misses', async () => {
+  league('NCAAF', { ncaaf_scoring_config: { rules: { fg_made: 4, pat_made: 2, fg_missed: -1, pat_missed: -2 }, lastUpdatedBy: 'commissioner' } })
+  expect(await score({ fg_made: 2, xp_made: 3, fg_miss: 1, xp_miss: 1 })).toBe(11)
+})
+
+ it('college IDP weights use verified defender stats only when IDP is enabled', async () => {
+  const rules = { idp_solo_tackle: 2, idp_sack: 4, idp_interception: 5 }
+  league('NCAAF', { sportConfig: { enableIDP: true }, ncaaf_scoring_config: { rules, lastUpdatedBy: 'commissioner' } })
+  expect(await score({ idp_solo: 3, idp_sack: 1, idp_int: 1 })).toBe(15)
+  league('NCAAF', { ncaaf_scoring_config: { rules, lastUpdatedBy: 'commissioner' } })
+  expect(await score({ idp_solo: 3, idp_sack: 1, idp_int: 1 })).toBe(0)
 })

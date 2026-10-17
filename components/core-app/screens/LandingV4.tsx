@@ -6,7 +6,11 @@ import {
   type LandingLang,
 } from '@/lib/i18n/landing-copy'
 import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
-import { getLandingConnectPlatforms } from '@/components/core-app/screens/landingConnectPlatforms'
+import {
+  getLandingConnectPlatforms,
+  getLandingCreateSports,
+  getLandingImportSports,
+} from '@/components/core-app/screens/landingConnectPlatforms'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
@@ -63,6 +67,15 @@ import '@/components/core-app/af-landing.css'
  * true before it is switched back on.
  */
 const PLATFORMS = getLandingConnectPlatforms()
+
+/* Both read from the config that decides them — see landingConnectPlatforms.ts. */
+const IMPORT_SPORTS = getLandingImportSports()
+const CREATE_SPORTS = getLandingCreateSports()
+
+/** League codes stay as codes (the strip is mono caps); only soccer has a word to translate. */
+function sportLabel(code: string, c: { connects: { soccer: string } }): string {
+  return code === 'SOCCER' ? c.connects.soccer : code
+}
 
 /*
  * The uplift figure in the hero card's summary strip.
@@ -208,7 +221,10 @@ export function LandingV4({
             Commissioner is a real tier with its own described feature list.
           */}
           <a href="#how">{c.nav.how}</a>
-          <a href="#pricing">{c.nav.pricing}</a>
+          {/* Out of the iOS app with the #pricing section it scrolls to. */}
+          <a href="#pricing" data-hide-in-ios-app>
+            {c.nav.pricing}
+          </a>
           <Link href="/pricing">{c.nav.forCommissioners}</Link>
         </div>
 
@@ -220,15 +236,6 @@ export function LandingV4({
               {c.nav.signIn}
             </Link>
           )}
-          {/* Partners points at the B2B screen, which is served by the
-              /core catch-all as the `partners` segment — no extra route. It was
-              previously an in-page #business anchor, which became a dead link
-              when the band moved off this page. */}
-          <span className="af-lp-nav-divider" aria-hidden />
-          <Link href="/core/partners" className="af-lp-partners">
-            {c.nav.partners}
-            <span className="af-lp-api-chip af-num">API</span>
-          </Link>
           <Link href={primaryCta.href} className="af-btn af-lp-cta" data-testid="landing-nav-primary">
             {primaryCta.label}
           </Link>
@@ -256,7 +263,9 @@ export function LandingV4({
             </summary>
             <div className="af-lp-mobile-panel">
               <a href="#how">{c.nav.how}</a>
-              <a href="#pricing">{c.nav.pricing}</a>
+              <a href="#pricing" data-hide-in-ios-app>
+                {c.nav.pricing}
+              </a>
               <Link href="/pricing">{c.nav.forCommissioners}</Link>
               <Link href="/core/partners" className="af-lp-partners">
                 {c.nav.partners}
@@ -273,14 +282,6 @@ export function LandingV4({
         </div>
       </nav>
 
-      {/*
-        ── Launch banner ──────────────────────────────────────────────
-        Above the hero because it is time-limited and the hero is not: "free until Oct 15" is the
-        one thing on this page that stops being true, so it goes where nobody scrolls past it.
-      */}
-      {launch ? (
-        <LaunchBanner startsAt={launch.startsAt} lang={lang} signedIn={signedIn} founding={launch.founding} />
-      ) : null}
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
       <header className="af-lp-hero">
@@ -320,7 +321,7 @@ export function LandingV4({
           of the product with example leagues — not a live reading — so it must
           not be mistaken for someone's actual data.
         */}
-        <aside className="af-lp-hero-card" aria-label="Example of the leagues view">
+        <aside className="af-lp-hero-card" aria-label={`${c.hero.cardTitle} · ${c.hero.cardWeek}`}>
           <div className="af-lp-card-head">
             <span className="af-lp-card-title">{c.hero.cardTitle}</span>
             <span className="af-lp-card-week af-num">{c.hero.cardWeek}</span>
@@ -374,12 +375,31 @@ export function LandingV4({
         </aside>
       </header>
 
+      {/*
+        ── Launch banner ──────────────────────────────────────────────
+        ⚠ BELOW THE HERO, NOT ABOVE IT — moved 2026-09-29. It sat above the hero "so nobody
+        scrolls past it", and on a 390px phone that meant its ~400px filled the top half of the
+        first screen: the first bold line a stranger read was "Pro analysis is free until Oct 15",
+        a pricing note about a product nobody had described yet, and the headline began ~510px
+        down. The hero now says what AllFantasy IS first; the countdown follows directly after the
+        hero's CTA, which is still well inside the first scroll on every width.
+      */}
+      {launch ? (
+        <LaunchBanner startsAt={launch.startsAt} lang={lang} signedIn={signedIn} founding={launch.founding} />
+      ) : null}
+
       {/* ── Connects to ─────────────────────────────────────────────── */}
       <section className="af-lp-connects">
         <span className="af-label">{c.connects.label}</span>
         <div className="af-lp-connect-row">
           {PLATFORMS.map((p) => (
-            <span key={p.name} className="af-lp-connect" data-state={p.state}>
+            <span
+              key={p.name}
+              className="af-lp-connect"
+              data-state={p.state}
+              /* A "soon" platform is a placeholder — not shown in the iOS app (App Store 2.1). */
+              data-hide-in-ios-app={p.state === 'soon' ? '' : undefined}
+            >
               {p.name}
               {p.state === 'soon' ? (
                 <span className="af-lp-soon af-num">{c.connects.soon}</span>
@@ -387,11 +407,78 @@ export function LandingV4({
             </span>
           ))}
         </div>
-        <span className="af-lp-sports af-num">{c.connects.sports}</span>
+        {/* Two labelled lists: imports are football today; a league created here runs every sport. */}
+        <span className="af-lp-sports af-num">
+          <span>
+            <span className="af-lp-sports-label">{c.connects.importLabel}</span> {IMPORT_SPORTS.map((s) => sportLabel(s, c)).join(' · ')}
+          </span>
+          <span>
+            <span className="af-lp-sports-label">{c.connects.createLabel}</span> {CREATE_SPORTS.map((s) => sportLabel(s, c)).join(' · ')}
+          </span>
+        </span>
+        {/* Why a "soon" chip is soon — only while the config still has that platform off. */}
+        {PLATFORMS.filter((p) => p.state === 'soon' && c.connects.soonNotes[p.provider]).map((p) => (
+          <span key={`${p.provider}-note`} className="af-lp-soon-note" data-provider={p.provider} data-hide-in-ios-app="">
+            {c.connects.soonNotes[p.provider]}
+          </span>
+        ))}
+      </section>
+
+      {/* ── How it works: what a new account actually does ─────────── */}
+      {/*
+        The nav's "How it works" used to land on the three-reasons section, which says why, not
+        how. A stranger deciding whether to sign up wants to know what happens next and how much
+        it asks of them — so the anchor now lands here.
+      */}
+      <section className="af-lp-reasons af-lp-steps" id="how">
+        <h2 className="af-lp-h2">{c.steps.h2}</h2>
+        <ol className="af-lp-reason-grid">
+          {c.steps.items.map((s) => (
+            <li key={s.n} className="af-lp-reason">
+              <span className="af-lp-reason-n af-num">{s.n}</span>
+              <h3 className="af-lp-reason-title">{s.title}</h3>
+              <p className="af-lp-reason-body">{s.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* ── Chimmy ──────────────────────────────────────────────────── */}
+      {/*
+        The product's assistant was named on this page only in passing ("Paid plans add Chimmy"),
+        so a stranger met the word before learning what it is. The exchange is an EXAMPLE and
+        labelled as one, over the same four example leagues as the hero card — it must never read
+        as somebody's real roster.
+      */}
+      <section className="af-lp-chimmy" aria-labelledby="af-lp-chimmy-h2">
+        <div className="af-lp-chimmy-copy">
+          <span className="af-label">{c.chimmy.label}</span>
+          <h2 className="af-lp-h2" id="af-lp-chimmy-h2">
+            {c.chimmy.h2}
+          </h2>
+          <p className="af-lp-chimmy-body">{c.chimmy.body}</p>
+          <p className="af-lp-chimmy-free">{c.chimmy.free}</p>
+        </div>
+        <figure className="af-lp-chimmy-chat" aria-label={c.chimmy.exampleLabel}>
+          <span className="af-lp-card-week af-num af-lp-chimmy-example">{c.chimmy.exampleLabel}</span>
+          <p className="af-lp-chimmy-q">{c.chimmy.question}</p>
+          <div className="af-lp-chimmy-a">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="af-lp-card-foot-avatar"
+              src="/images/chimmy-avatar.png"
+              alt=""
+              width={30}
+              height={30}
+              loading="lazy"
+            />
+            <p>{c.chimmy.answer}</p>
+          </div>
+        </figure>
       </section>
 
       {/* ── Three reasons ───────────────────────────────────────────── */}
-      <section className="af-lp-reasons" id="how">
+      <section className="af-lp-reasons">
         <h2 className="af-lp-h2">{c.reasons.h2}</h2>
         <div className="af-lp-reason-grid">
           {c.reasons.items.map((r) => (
@@ -409,7 +496,8 @@ export function LandingV4({
       </section>
 
       {/* ── Pricing line ────────────────────────────────────────────── */}
-      <section className="af-lp-pricing" id="pricing">
+      {/* Not in the iOS app: it quotes prices for a purchase the app does not sell (3.1.1). */}
+      <section className="af-lp-pricing" id="pricing" data-hide-in-ios-app>
         <div className="af-lp-pricing-inner">
           <div className="af-lp-pricing-copy">
             <h2 className="af-lp-h2">{c.pricing.h2}</h2>
@@ -440,7 +528,7 @@ export function LandingV4({
         */}
         <div className="af-lp-faq-grid">
           {c.faq.items.map((f) => (
-            <article key={f.q} className="af-lp-faq-item">
+            <article key={f.q} className="af-lp-faq-item" data-hide-in-ios-app={f.aboutPrice ? '' : undefined}>
               <h3 className="af-lp-faq-q">{f.q}</h3>
               <p className="af-lp-faq-a">{f.a}</p>
             </article>
@@ -448,55 +536,13 @@ export function LandingV4({
         </div>
       </section>
 
-      {/* ── Brown Pig network ───────────────────────────────────────── */}
-      <section className="af-lp-network">
-        {/*
-          The parent mark. public/brand/brown-pig-llc.png has been in the repo the
-          whole time and nothing referenced it — the section rendered its heading
-          and six cards with no logo at all, which is why the page had ZERO images
-          on it. Plain <img>, not next/image: this is a static local asset in a
-          server component and the optimiser buys nothing at this size.
-        */}
-        <div className="af-lp-network-head">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="af-lp-network-mark"
-            src="/brand/brown-pig-llc.png"
-            alt="Brown Pig LLC"
-            width={72}
-            height={72}
-            loading="lazy"
-          />
-          <div>
-            <span className="af-label">{c.network.label}</span>
-            <h2 className="af-lp-h2">{c.network.h2}</h2>
-            <p className="af-lp-network-body">{c.network.body}</p>
-          </div>
-        </div>
-        <div className="af-lp-network-grid">
-          {c.network.cards.map((n) => {
-            const href = NETWORK_HREFS[n.name]
-            if (!href) return null
-            return (
-              <a
-                key={n.name}
-                href={href}
-                className="af-lp-network-card"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span className="af-lp-network-name">{n.name}</span>
-                <span className="af-lp-network-desc">{n.body}</span>
-                <span className="af-lp-network-link af-num">
-                  {href.replace(/^https?:\/\//, '')} →
-                </span>
-              </a>
-            )
-          })}
-        </div>
-      </section>
-
       {/* ── Footer ──────────────────────────────────────────────────── */}
+      {/*
+        ⚠ THE BROWN PIG NETWORK IS A FOOTER LINE, NOT A SECTION — moved 2026-09-29. It was a full
+        ~485px band of six cards linking out to other products, placed right before the footer: on
+        desktop a fifth of the page, spent sending a visitor who has not signed up yet somewhere
+        else. The links stay (below, with each product's one-liner as its tooltip); the band goes.
+      */}
       <footer className="af-lp-footer">
         <div className="af-lp-footer-top">
           <span className="af-lp-brand">
@@ -506,9 +552,11 @@ export function LandingV4({
           <nav className="af-lp-footer-links" aria-label="Footer">
             <Link href="/core/players">{c.footer.playerFinder}</Link>
             <Link href="/core">{c.footer.dashboard}</Link>
+            <Link href="/core/partners">{c.nav.partners}</Link>
             <Link href="/privacy">{c.footer.privacy}</Link>
             <Link href="/terms">{c.footer.terms}</Link>
             <Link href="/data-deletion">{c.footer.dataDeletion}</Link>
+            <Link href="/privacy/choices">{c.footer.privacyChoices}</Link>
           </nav>
         </div>
         <div className="af-lp-footer-legal">
@@ -533,6 +581,18 @@ export function LandingV4({
           Jurisdiction copy is a compliance statement, not decoration — it stays
           in the footer verbatim.
         */}
+        <p className="af-lp-footer-network">
+          <span className="af-label">{c.network.label}</span>
+          {c.network.cards.map((n) => {
+            const href = NETWORK_HREFS[n.name]
+            if (!href) return null
+            return (
+              <a key={n.name} href={href} title={n.body} target="_blank" rel="noopener noreferrer">
+                {n.name}
+              </a>
+            )
+          })}
+        </p>
         <p className="af-lp-footer-compliance">{c.footer.compliance}</p>
       </footer>
     </div>

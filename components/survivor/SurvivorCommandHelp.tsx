@@ -7,7 +7,7 @@ export interface SurvivorCommandHelpProps {
 }
 
 /**
- * Official @Chimmy command help for Survivor leagues. Rendered in Tribal Council view and linked from AI panel.
+ * Official @Chimmy command help for Survivor leagues. Rendered in Elimination Council view and linked from AI panel.
  */
 export function SurvivorCommandHelp({ compact }: SurvivorCommandHelpProps) {
   const commands = [

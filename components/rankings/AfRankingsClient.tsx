@@ -105,6 +105,14 @@ interface RankResponse {
   stats?: RankResponse['careerStats']
 }
 
+
+/**
+ * Where this screen lives now: the "Career & legacy" panel of the rankings hub (2026-10-01).
+ * `/af-rankings` redirects here, keeping its query (`?jobId=` from the import flow and email),
+ * and every in-page "go back to the clean URL" lands here rather than on the old path.
+ */
+export const LEGACY_PANEL_HREF = '/core/rankings?scope=portfolio&panel=legacy'
+
 function rankLevelPayloadFromResponse(data: RankResponse): RankLevelApiPayload | null {
   const xp = data.xpTotal ?? (data.rank != null ? Number(data.rank.careerXp) : 0) ?? 0
   const lv = getLevelFromXp(xp)
@@ -468,7 +476,7 @@ function CareerStats({ rank }: { rank: PlayerRank }) {
           >
             <div className="mb-2 flex items-center gap-2 text-white/45">
               {item.icon}
-              <span className="text-[10px] font-bold uppercase tracking-wide">{item.label}</span>
+              <span className="text-[11px] font-bold uppercase tracking-wide">{item.label}</span>
             </div>
             <div
               className="text-[clamp(1.25rem,3.2vw,2rem)] font-extrabold tabular-nums leading-tight tracking-tight [overflow-wrap:anywhere] sm:text-[clamp(1.35rem,2.8vw,2.25rem)]"
@@ -587,7 +595,7 @@ function RankImportTimeoutState() {
         </p>
         <button
           type="button"
-          onClick={() => router.push('/af-rankings')}
+          onClick={() => router.push(LEGACY_PANEL_HREF)}
           className="mt-6 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-100 hover:border-cyan-400/50 hover:text-white"
         >
           Try importing again
@@ -616,7 +624,7 @@ function LevelJourneyStrip({
     <div className="mt-6 w-full min-w-0 overflow-visible pb-1">
       <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2">
         <p
-          className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${dark ? 'text-white/35' : 'text-[#0a0a12]/45'}`}
+          className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${dark ? 'text-white/35' : 'text-[#0a0a12]/45'}`}
         >
           Level journey
         </p>
@@ -640,7 +648,7 @@ function LevelJourneyStrip({
               role="listitem"
               title={`${row.level}. ${row.name}`}
               aria-current={active ? 'step' : undefined}
-              className={`relative flex min-h-[2.35rem] min-w-0 flex-1 flex-col items-center justify-center rounded-md border text-[9px] font-extrabold leading-none transition-all duration-200 sm:min-h-[2.75rem] sm:rounded-lg sm:text-[11px] ${
+              className={`relative flex min-h-[2.35rem] min-w-0 flex-1 flex-col items-center justify-center rounded-md border text-[11px] font-extrabold leading-none transition-all duration-200 sm:min-h-[2.75rem] sm:rounded-lg sm:text-[11px] ${
                 dark
                   ? active
                     ? 'z-[1] border-white/20 shadow-lg'
@@ -718,7 +726,7 @@ function RankingSystemOverview() {
                 >
                   <span className="font-mono text-white/50 w-6 shrink-0">{row.level}</span>
                   <span className="flex-1 text-white/80 truncate">{row.name}</span>
-                  <span className="text-[10px] text-white/35 shrink-0">{row.minXp.toLocaleString()} XP</span>
+                  <span className="text-[11px] text-white/35 shrink-0">{row.minXp.toLocaleString()} XP</span>
                 </li>
               ))}
             </ul>
@@ -1060,7 +1068,7 @@ function MyRankingsPageInner() {
         await loadRank({ silent: true })
       } finally {
         if (!cancelled) {
-          router.replace('/af-rankings', { scroll: false })
+          router.replace(LEGACY_PANEL_HREF, { scroll: false })
         }
       }
     })()
@@ -1135,7 +1143,7 @@ function MyRankingsPageInner() {
       totalSeasons: jobProgress.totalSeasons ?? 0,
       finalLevel: finalLv,
     })
-    router.replace('/af-rankings', { scroll: false })
+    router.replace(LEGACY_PANEL_HREF, { scroll: false })
     window.setTimeout(() => {
       void loadRank({ silent: false })
       if (
@@ -1239,7 +1247,7 @@ function MyRankingsPageInner() {
               type="button"
               onClick={() => {
                 setImportBannerDismissed(true)
-                router.replace('/af-rankings', { scroll: false })
+                router.replace(LEGACY_PANEL_HREF, { scroll: false })
               }}
               className={`shrink-0 text-xs font-semibold underline-offset-2 hover:underline ${
                 rankFetchError

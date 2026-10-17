@@ -9,6 +9,7 @@ import {
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { fetchGifs, gifSearchPlaceholder, type GifProvider } from "@/lib/rich-message/gifSearchClient"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"
+import { MessageModerationMenu } from "@/components/moderation/MessageModerationMenu"
 
 type ChatMember = {
   id: string
@@ -149,6 +150,12 @@ export function PoolChat({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
+  /** Blocked from here, hidden at once — the chat route drops them from the next read. */
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
+  const shownMessages = messages.filter((m) => {
+    const author = m.user?.id || m.userId
+    return !author || !blockedAuthors.has(author)
+  })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const lastSeenCount = useRef(0)
@@ -323,7 +330,7 @@ export function PoolChat({
         <div className="relative flex-shrink-0">
           <MessageCircle className="h-5 w-5 text-white" />
           {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: "#ef4444" }}>
+            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold text-white" style={{ background: "#ef4444" }}>
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
@@ -331,7 +338,7 @@ export function PoolChat({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-white">Chat</span>
-            <span className="flex items-center gap-1 text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+            <span className="flex items-center gap-1 text-[11px]" style={{ color: "rgba(255,255,255,0.25)" }}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e" }} />
               {onlineCount} online
             </span>
@@ -346,7 +353,7 @@ export function PoolChat({
           {members.slice(0, 3).map((m) => (
             <div
               key={m.id}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold"
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
               style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c", border: "2px solid #0d1117" }}
             >
               {getUserInitials(m.user)}
@@ -378,7 +385,7 @@ export function PoolChat({
         <div className="flex items-center gap-2">
           <MessageCircle className="h-4 w-4 text-white" />
           <span className="text-sm font-semibold text-white">Pool Chat</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" }}>
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" }}>
             {members.length} members
           </span>
         </div>
@@ -394,9 +401,9 @@ export function PoolChat({
             <p className="text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>No messages yet. Start the trash talk!</p>
           </div>
         )}
-        {messages.map((m, idx) => {
+        {shownMessages.map((m, idx) => {
           const isMe = m.user?.id === currentUserId || m.userId === currentUserId
-          const prevMsg = idx > 0 ? messages[idx - 1] : null
+          const prevMsg = idx > 0 ? shownMessages[idx - 1] : null
           const sameSender = prevMsg && (prevMsg.user?.id || prevMsg.userId) === (m.user?.id || m.userId)
           const timeDiff = prevMsg ? new Date(m.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() : Infinity
           const showHeader = !sameSender || timeDiff > 300000
@@ -454,7 +461,7 @@ export function PoolChat({
                       <span className="text-[11px] font-semibold" style={{ color: userColor }}>
                         {isMe ? "You" : getUserName(m.user)}
                       </span>
-                      <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>
+                      <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.2)" }}>
                         {formatChatTime(m.createdAt, formatDateInTimezone)}
                       </span>
                     </div>
@@ -462,7 +469,7 @@ export function PoolChat({
 
                   {m.replyTo && (
                     <div
-                      className={`rounded-lg px-2.5 py-1 mb-1 text-[10px] ${isMe ? "ml-auto" : ""}`}
+                      className={`rounded-lg px-2.5 py-1 mb-1 text-[11px] ${isMe ? "ml-auto" : ""}`}
                       style={{ background: "rgba(255,255,255,0.03)", borderLeft: `2px solid ${getUserColor(m.replyTo.user?.id || "")}` }}
                     >
                       <span className="font-semibold" style={{ color: getUserColor(m.replyTo.user?.id || "") }}>
@@ -530,7 +537,7 @@ export function PoolChat({
                             ))}
                             <button
                               onClick={() => setShowEmojiPicker(showEmojiPicker ? false : true)}
-                              className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition text-[10px]"
+                              className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition text-[11px]"
                               title="More emojis"
                             >
                               ＋
@@ -540,7 +547,7 @@ export function PoolChat({
                             <div className="pt-1 mt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", maxWidth: 260 }}>
                               {EXTENDED_EMOJIS.map((cat) => (
                                 <div key={cat.label} className="mb-1.5">
-                                  <div className="text-[9px] uppercase tracking-wider px-1 mb-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>{cat.label}</div>
+                                  <div className="text-[11px] uppercase tracking-wider px-1 mb-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>{cat.label}</div>
                                   <div className="flex flex-wrap gap-0.5">
                                     {cat.emojis.map((e, i) => (
                                       <button key={`${e}-${i}`} onClick={() => sendReaction(m.id, e)} className="w-7 h-7 rounded flex items-center justify-center hover:bg-white/10 transition text-sm hover:scale-125">
@@ -573,7 +580,7 @@ export function PoolChat({
                             title={data.users.join(", ")}
                           >
                             <span>{emoji}</span>
-                            <span style={{ color: iReacted ? "#fb923c" : "rgba(255,255,255,0.4)", fontWeight: 600, fontSize: 10 }}>{data.count}</span>
+                            <span style={{ color: iReacted ? "#fb923c" : "rgba(255,255,255,0.4)", fontWeight: 600, fontSize: 11 }}>{data.count}</span>
                           </button>
                         )
                       })}
@@ -581,11 +588,28 @@ export function PoolChat({
                   )}
 
                   {!showHeader && (
-                    <span className="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity mt-0.5" style={{ color: "rgba(255,255,255,0.15)" }}>
+                    <span className="text-[11px] opacity-0 group-hover:opacity-100 transition-opacity mt-0.5" style={{ color: "rgba(255,255,255,0.15)" }}>
                       {formatFullTime(m.createdAt, formatInTimezone)}
                     </span>
                   )}
                 </div>
+                {/*
+                  Report / Block (App Store guideline 1.2). Always visible, NOT in the hover row
+                  above: hover never happens on a phone, so a hover-only control is no control there.
+                  Bracket pool chat is the "league:<id>" room ReportSubmissionService already resolves.
+                */}
+                {!isMe ? (
+                  <div className="self-center">
+                    <MessageModerationMenu
+                      threadId={`league:${leagueId}`}
+                      messageId={m.id}
+                      authorId={m.user?.id || m.userId}
+                      authorName={getUserName(m.user)}
+                      viewerId={currentUserId}
+                      onBlocked={(id) => setBlockedAuthors((prev) => new Set(prev).add(id))}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           )
@@ -597,10 +621,10 @@ export function PoolChat({
         <div className="px-4 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
           <Reply className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#fb923c" }} />
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-semibold" style={{ color: "#fb923c" }}>
+            <span className="text-[11px] font-semibold" style={{ color: "#fb923c" }}>
               Replying to {getUserName(replyTo.user)}
             </span>
-            <p className="text-[10px] truncate" style={{ color: "rgba(255,255,255,0.3)" }}>
+            <p className="text-[11px] truncate" style={{ color: "rgba(255,255,255,0.3)" }}>
               {replyTo.type === "image" ? "📷 Photo" : replyTo.type === "gif" ? "GIF" : replyTo.message}
             </p>
           </div>
@@ -725,13 +749,13 @@ function PollBubble({
               <div className="relative flex items-center justify-between">
                 <span className="text-[12px]" style={{ color: isMyVote ? "#fb923c" : "rgba(255,255,255,0.7)" }}>{opt}</span>
                 {totalVotes > 0 && (
-                  <span className="text-[10px] font-semibold ml-2" style={{ color: "rgba(255,255,255,0.3)" }}>{pct}%</span>
+                  <span className="text-[11px] font-semibold ml-2" style={{ color: "rgba(255,255,255,0.3)" }}>{pct}%</span>
                 )}
               </div>
             </button>
           )
         })}
-        <p className="text-[10px] text-center pt-1" style={{ color: "rgba(255,255,255,0.2)" }}>
+        <p className="text-[11px] text-center pt-1" style={{ color: "rgba(255,255,255,0.2)" }}>
           {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
         </p>
       </div>
@@ -826,7 +850,7 @@ export function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => vo
           href={provider === "klipy" ? "https://klipy.com" : "https://giphy.com"}
           target="_blank"
           rel="noopener noreferrer"
-          className="block text-[9px] text-center mt-2 uppercase tracking-widest"
+          className="block text-[11px] text-center mt-2 uppercase tracking-widest"
           style={{ color: "rgba(255,255,255,0.3)" }}
         >
           {provider === "klipy" ? "Powered by KLIPY" : "Powered by GIPHY"}

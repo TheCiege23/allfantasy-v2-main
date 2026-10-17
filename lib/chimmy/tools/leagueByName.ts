@@ -39,6 +39,11 @@ export type NamedLeague = {
   platformLeagueId?: string | null
   /** Who imported this copy. Used only to prefer the user's own row. */
   ownerUserId?: string | null
+  /** 'sleeper' | 'espn' | … | 'manual' (a native AllFantasy league). */
+  platform?: string | null
+  /** Setup/draft state — read through `isLeagueNotStarted`, never compared ad hoc. */
+  status?: string | null
+  lifecycleState?: string | null
 }
 
 /**
@@ -193,6 +198,9 @@ export async function listMemberLeagues(userId: string): Promise<NamedLeague[]> 
             season: true,
             platformLeagueId: true,
             userId: true,
+            platform: true,
+            status: true,
+            lifecycleState: true,
           },
           orderBy: [{ season: 'desc' }, { createdAt: 'desc' }],
           take: MAX_LEAGUES,
@@ -210,6 +218,9 @@ export async function listMemberLeagues(userId: string): Promise<NamedLeague[]> 
         season: l.season,
         platformLeagueId: l.platformLeagueId ?? null,
         ownerUserId: l.userId ?? null,
+        platform: l.platform ?? null,
+        status: l.status ?? null,
+        lifecycleState: l.lifecycleState != null ? String(l.lifecycleState) : null,
       })),
     userId,
   )

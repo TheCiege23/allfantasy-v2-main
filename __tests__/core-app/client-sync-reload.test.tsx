@@ -4,11 +4,12 @@ import type { SyncPostResult } from '@/lib/core-app/syncRunLoop'
 
 const router = vi.hoisted(() => ({ refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => router }))
-const KEY = 'af-core-sync-continuation:v1'
+vi.mock('@/components/providers/ClientSyncAccountProvider', () => ({ useClientSyncAccount: () => 'U1' }))
+const KEY = 'af-core-sync-continuation:v2:U1'
 
 beforeEach(() => {
   vi.resetModules()
-  Reflect.deleteProperty(window, '__afCoreSyncJobV1')
+  Reflect.deleteProperty(window, '__afCoreSyncJobV2')
   window.sessionStorage.clear()
   router.refresh.mockClear()
 })
@@ -21,8 +22,19 @@ function seed(at = Date.now()) {
 }
 
 describe('sync continues across client module and page reloads', () => {
+  it('does not resume another account or a legacy checkpoint', async () => {
+    seed()
+    window.sessionStorage.setItem('af-core-sync-continuation:v1', window.sessionStorage.getItem(KEY)!)
+    const job = await import('@/lib/core-app/clientSyncJob')
+    job.bindClientSyncAccount('U2')
+    const post = vi.fn()
+    expect(job.resumeClientSync(post)).toBeNull()
+    expect(post).not.toHaveBeenCalled()
+    expect(window.sessionStorage.getItem('af-core-sync-continuation:v1')).toBeNull()
+  })
   it('shares the running job and completion feedback across client bundles', async () => {
     const first = await import('@/lib/core-app/clientSyncJob')
+    first.bindClientSyncAccount('U1')
     let finish!: (result: SyncPostResult) => void
     const post = vi.fn(() => new Promise<SyncPostResult>(resolve => { finish = resolve }))
     const job = first.startClientSync('sleeper:one', post)
@@ -54,7 +66,8 @@ describe('sync continues across client module and page reloads', () => {
 
   it('does not resume expired checkpoints', async () => {
     seed(Date.now() - 16 * 60 * 1000)
-    const { resumeClientSync } = await import('@/lib/core-app/clientSyncJob')
+    const { bindClientSyncAccount, resumeClientSync } = await import('@/lib/core-app/clientSyncJob')
+    bindClientSyncAccount('U1')
     const post = vi.fn()
     expect(resumeClientSync(post)).toBeNull()
     expect(post).not.toHaveBeenCalled()
@@ -62,6 +75,7 @@ describe('sync continues across client module and page reloads', () => {
 
   it('preserves confirmed remaining work when navigation aborts the next request', async () => {
     const first = await import('@/lib/core-app/clientSyncJob')
+    first.bindClientSyncAccount('U1')
     let abort!: (result: SyncPostResult) => void
     const post = vi.fn()
       .mockResolvedValueOnce({ httpOk: true, round: { ok: true, totalCandidates: 2, attempted: 1, synced: 1, remaining: ['sleeper:unfinished'] } })
@@ -72,9 +86,10 @@ describe('sync continues across client module and page reloads', () => {
     abort({ httpOk: false, round: { error: 'Request interrupted' } })
     await job
     expect(JSON.parse(window.sessionStorage.getItem(KEY)!).checkpoint.only).toEqual(['sleeper:unfinished'])
-    Reflect.deleteProperty(window, '__afCoreSyncJobV1')
+    Reflect.deleteProperty(window, '__afCoreSyncJobV2')
     vi.resetModules()
     const reloaded = await import('@/lib/core-app/clientSyncJob')
+    reloaded.bindClientSyncAccount('U1')
     const resume = vi.fn(async () => ({ httpOk: true, round: { ok: true, totalCandidates: 1, attempted: 1, synced: 1, remaining: [] } }))
     await reloaded.resumeClientSync(resume)
     expect(resume).toHaveBeenCalledWith(['sleeper:unfinished'])
@@ -84,7 +99,8 @@ describe('sync continues across client module and page reloads', () => {
 
   it('clears remaining work after an ordinary transport failure without auto-retry', async () => {
     seed()
-    const { resumeClientSync } = await import('@/lib/core-app/clientSyncJob')
+    const { bindClientSyncAccount, resumeClientSync } = await import('@/lib/core-app/clientSyncJob')
+    bindClientSyncAccount('U1')
     await resumeClientSync(async () => ({ httpOk: false, round: { error: 'Network unavailable' } }))
     expect(window.sessionStorage.getItem(KEY)).toBeNull()
   })

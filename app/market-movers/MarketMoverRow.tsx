@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 type Player = {
   name: string
@@ -65,14 +66,16 @@ export function MarketMoverRow({ player, rank }: { player: Player; rank: number 
       {/* Avatar */}
       <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#12192e]">
         {headshotUrl ? (
-          <img
+          /* The fallback is a React node: the old onError wrote innerHTML into a parent React owns. */
+          <FallbackImg
             src={headshotUrl}
             alt=""
             className="h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-              e.currentTarget.parentElement!.innerHTML = `<span class="text-[11px] font-bold text-white/15">${player.name.split(' ').map(w => w[0]).join('').slice(0, 2)}</span>`
-            }}
+            fallback={
+              <span className="text-[11px] font-bold text-white/15">
+                {player.name.split(' ').map((w) => w[0]).join('').slice(0, 2)}
+              </span>
+            }
           />
         ) : (
           <span className="text-[11px] font-bold text-white/15">
@@ -84,7 +87,7 @@ export function MarketMoverRow({ player, rank }: { player: Player; rank: number 
       {/* Name + meta */}
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-semibold text-white/85">{player.name}</p>
-        <p className="text-[10px] text-white/35">
+        <p className="text-[11px] text-white/35">
           <span className="font-semibold text-cyan-300/60">{player.position}</span>
           {' · '}
           {player.team}
@@ -103,7 +106,7 @@ export function MarketMoverRow({ player, rank }: { player: Player; rank: number 
       </div>
 
       {/* Tier */}
-      <span className={`w-10 rounded-md border px-1.5 py-0.5 text-center text-[10px] font-bold ${tierColor(player.tier)}`}>
+      <span className={`w-10 rounded-md border px-1.5 py-0.5 text-center text-[11px] font-bold ${tierColor(player.tier)}`}>
         {player.tier}
       </span>
     </Link>

@@ -9,10 +9,8 @@ function hasOwn(obj: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key)
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -33,10 +31,8 @@ export async function GET(
   return NextResponse.json(config)
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

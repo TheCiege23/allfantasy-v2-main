@@ -13,6 +13,7 @@ import {
 } from '@/lib/trade-engine/dual-brain-trade-analyzer';
 import { runQualityGate } from '@/lib/trade-engine/quality-gate';
 import { formatTradeResponse, computeDeterministicVerdict } from '@/lib/trade-engine/trade-response-formatter';
+import { dynastyAnalyzerSectionsForClient } from '@/lib/trade-engine/dynastyAnalyzerClientView';
 import type { TradeDecisionContextV1 } from '@/lib/trade-engine/trade-decision-context';
 import { buildTradeAnalyzerIntelPrompt } from '@/lib/trade-engine/trade-analyzer-intel';
 import { buildStableFallbackResponse, buildReliabilityMetadata } from '@/lib/ai-reliability';
@@ -224,13 +225,17 @@ export async function POST(req: Request) {
         deterministicFallback.confidence ?? null,
         tradeContext.valueDelta?.percentageDiff ?? null,
       )
+      /*
+       * 🛑 AI DOWN IS NOT A LICENCE FOR THE PRIVATE VERDICT (2026-09-29). This path sent the
+       * deterministic engine's winner, verdict, confidence and reasons — whose first line IS its
+       * verdict on the private scale ("Side A has a 12% value edge: 5,000 (A) vs 4,400 (B)"). The page
+       * shows the one grade (`tradeGrade`) and the data warnings; the engine's verdict stays on the
+       * server (the shadow above).
+       */
       const normalizedOutput = normalizeToContract(
         {
-          primaryAnswer: fallbackExplanation ?? detVerdictOnly,
-          verdict: deterministicFallback.verdict ?? detVerdictOnly,
-          confidencePct: deterministicFallback.confidence,
-          confidenceLabel: deterministicFallback.confidence >= 70 ? 'high' : deterministicFallback.confidence >= 45 ? 'medium' : 'low',
-          suggestedNextAction: 'Review the evidence above; re-run when AI is available for narrative.',
+          primaryAnswer: fallbackExplanation,
+          suggestedNextAction: 'Review the league grade above; re-run when AI is available for narrative.',
         },
         envelope,
         { includeTrace: includeTrace, traceProvider: 'deterministic_fallback' }
@@ -238,18 +243,14 @@ export async function POST(req: Request) {
       return NextResponse.json({
         tradeGrade: await tradeGradePayload(),
         sections: null,
-        deterministicVerdict: detVerdictOnly,
         analysis: {
-          winner: deterministicFallback.winner ?? 'Even',
-          valueDelta: `Data-only result (AI unavailable). Confidence: ${deterministicFallback.confidence}%.`,
-          factors: deterministicFallback.reasons,
-          confidence: deterministicFallback.confidence,
-          dynastyVerdict: deterministicFallback.verdict,
-          vetoRisk: null,
+          factors: [],
+          reasons: [],
+          counters: [],
+          warnings: deterministicFallback.warnings,
           agingConcerns: deterministicFallback.warnings,
           recommendations: [],
         },
-        deterministicFallback,
         fallbackExplanation,
         reliability,
         normalizedOutput,
@@ -275,11 +276,18 @@ export async function POST(req: Request) {
       detVerdict.netValueDeltaPct ?? tradeContext.valueDelta?.percentageDiff ?? null,
     )
 
-    const primaryAnswer = [detVerdict.winnerLabel, gate.filteredReasons?.slice(0, 2).join('; ')].filter(Boolean).join(' — ') || consensus.verdict;
+    /*
+     * 🛑 THE RESPONSE NAMES NO WINNER BUT THE ONE GRADE'S (2026-09-29). It carried the dual-brain
+     * engine's `winner`, `dynastyVerdict`, `deterministicVerdict` (winner label, fairness letter,
+     * confidence, acceptance %, veto risk, side totals, deltas), the AI's own verdict and confidence,
+     * and the private side totals in `stageA` — the page printed much of it beside the letter. The
+     * engine's verdict stays on the server (the shadow above); `sections` is the allowlisted client
+     * view (lib/trade-engine/dynastyAnalyzerClientView.ts). Its only consumer is DynastyTradeForm.
+     */
+    const primaryAnswer = gate.filteredReasons?.slice(0, 2).join('; ') || 'See the league grade and analysis.';
     const normalizedOutput = normalizeToContract(
       {
         primaryAnswer,
-        verdict: consensus.verdict ?? detVerdict.winnerLabel,
         keyEvidence: gate.filteredReasons,
         confidencePct: gate.adjustedConfidence,
         confidenceLabel: gate.adjustedConfidence >= 70 ? 'high' : gate.adjustedConfidence >= 45 ? 'medium' : 'low',
@@ -292,50 +300,16 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       tradeGrade: await tradeGradePayload(),
-      sections,
-      deterministicVerdict: detVerdict,
+      sections: dynastyAnalyzerSectionsForClient(sections, gate.filteredCounters),
       normalizedOutput,
       ...(includeTrace && { trace: normalizedOutput.trace }),
       analysis: {
-        winner: detVerdict.winner === 'Even' ? 'Even' : `Side ${detVerdict.winner}`,
-        verdict: detVerdict.winnerLabel,
-        confidence: detVerdict.confidence,
         factors: gate.filteredReasons,
         reasons: gate.filteredReasons,
         counters: gate.filteredCounters,
         warnings: gate.filteredWarnings,
-        valueDelta: `Side A total=${tradeContext.sideA.totalValue}, Side B total=${tradeContext.sideB.totalValue}, delta=${tradeContext.valueDelta.absoluteDiff} (${tradeContext.valueDelta.percentageDiff}%)`,
-        dynastyVerdict: detVerdict.winnerLabel,
-        vetoRisk: detVerdict.vetoRisk,
-        fairnessGrade: detVerdict.fairnessGrade,
-        fairnessScore: detVerdict.fairnessScore,
-        netValueDelta: detVerdict.netValueDelta,
-        netValueDeltaPct: detVerdict.netValueDeltaPct,
-        acceptanceProbability: detVerdict.acceptanceProbability,
-        acceptanceLikelihood: detVerdict.acceptanceLikelihood,
-        keyDrivers: detVerdict.keyDrivers,
         agingConcerns: gate.filteredWarnings.filter(w => w.toLowerCase().includes('age') || w.toLowerCase().includes('cliff') || w.toLowerCase().includes('declining')),
         recommendations: gate.filteredCounters.slice(0, 3),
-      },
-      aiCommentary: {
-        aiVerdict: consensus.verdict,
-        aiConfidence: gate.adjustedConfidence,
-        reasons: gate.filteredReasons,
-        counters: gate.filteredCounters,
-        warnings: gate.filteredWarnings,
-        consensusMethod: consensus.meta.consensusMethod,
-        source: 'ai-peer-review',
-      },
-      peerReview: {
-        verdict: consensus.verdict,
-        confidence: gate.adjustedConfidence,
-        deterministicConfidence: gate.deterministicConfidence,
-        originalLLMConfidence: gate.originalLLMConfidence,
-        reasons: gate.filteredReasons,
-        counters: gate.filteredCounters,
-        warnings: gate.filteredWarnings,
-        consensusMethod: consensus.meta.consensusMethod,
-        confidenceAdjustment: consensus.meta.confidenceAdjustment,
       },
       qualityGate: {
         passed: gate.passed,
@@ -354,9 +328,6 @@ export async function POST(req: Request) {
         contextId: tradeContext.contextId,
         version: tradeContext.version,
         assembledAt: tradeContext.assembledAt,
-        valueDelta: tradeContext.valueDelta,
-        sideATotalValue: tradeContext.sideA.totalValue,
-        sideBTotalValue: tradeContext.sideB.totalValue,
         dataQuality: tradeContext.dataQuality,
         missingData: tradeContext.missingData,
         tradeHistoryStats: tradeContext.tradeHistoryStats,

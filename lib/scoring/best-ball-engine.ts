@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { optimizeLineupDeterministic } from '@/lib/lineup-optimizer-engine/LineupOptimizerEngine'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
 import { weekKeyedStatsUnavailableReason } from '@/lib/multi-sport/MultiSportMatchupScoringService'
+import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
 export type BestBallDataStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE'
 
@@ -27,6 +28,11 @@ export async function selectBestBallLineupForRoster(input: {
   season: number
   weekOrRound: number
   rosterPlayerIds: string[]
+  /**
+   * `League.platform` — which id space `rosterPlayerIds` are in. Required because the player lookup
+   * cannot be answered without it (see `findSportsPlayersForLeague`); `null` names nobody.
+   */
+  platform: string | null
   formatType?: string | null
 }): Promise<BestBallLineupResult> {
   if (input.rosterPlayerIds.length === 0) {
@@ -60,22 +66,13 @@ export async function selectBestBallLineupForRoster(input: {
         fantasyPoints: true,
       },
     }),
-    prisma.sportsPlayer.findMany({
-      where: {
-        sport: input.leagueSport,
-        OR: [
-          { externalId: { in: input.rosterPlayerIds } },
-          { sleeperId: { in: input.rosterPlayerIds } },
-        ],
-      },
-      select: {
-        externalId: true,
-        sleeperId: true,
-        name: true,
-        position: true,
-        team: true,
-      },
-    }),
+    /*
+     * 🛑 NOT `externalId IN ids OR sleeperId IN ids`. A roster's ids are in ONE space, fixed by the
+     * platform, and `externalId` is several: a Sleeper id there finds Rolling Insights' player of the
+     * same number, a stranger (Sleeper 9228 is Bryce Young; RI 9228 is an offensive tackle). Here that
+     * stranger's POSITION decided slot eligibility, so a quarterback could be optimised as a lineman.
+     */
+    findSportsPlayersForLeague(input.leagueSport, input.platform, input.rosterPlayerIds),
   ])
 
   // Presence of a stat row is the availability signal: a row with fantasyPoints 0 is a REAL
@@ -102,11 +99,8 @@ export async function selectBestBallLineupForRoster(input: {
     }
   }
 
-  const playerIndex = new Map<string, (typeof players)[number]>()
-  for (const player of players) {
-    playerIndex.set(player.externalId, player)
-    if (player.sleeperId) playerIndex.set(player.sleeperId, player)
-  }
+  // Already keyed by the roster id that asked — never re-keyed by the row's own `externalId`.
+  const playerIndex = players
 
   // Optimize only over players with real statistics — a missing player must never enter the
   // lineup ranked as a legitimate 0.0.

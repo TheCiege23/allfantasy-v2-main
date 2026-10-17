@@ -77,5 +77,23 @@ export function weekVerdict(index: WeekFixtureIndex, club: string | null, week: 
    * So: finished only when a LATER labelled week exists and no earlier one does.
    */
   const weeks = [...index.byWeek.keys()]
-  return weeks.some((w) => w > week) && !weeks.some((w) => w < week) ? { verdict: 'done' } : { verdict: 'unknown' }
+  const later = weeks.filter((w) => w > week)
+  if (later.length === 0 || weeks.some((w) => w < week)) return { verdict: 'unknown' }
+  /*
+   * 🛑 A FINISHED WEEK DOES NOT SETTLE THE SLOT — THE LINEUP CARRIES INTO THE NEXT ONE. This
+   * returned `done` here until 2026-09-29, reasoning from the Monday case above. But Monday and
+   * Tuesday differ: on Monday the week is still being played and a club that played Sunday really
+   * is settled; once the whole week is over, Sleeper and ESPN carry the same starters into the
+   * next week, so an IR starter IS in next week's lineup until someone moves him.
+   *
+   * Measured on the App Review account that Tuesday: the home's Top decisions said "No … injured
+   * starters" above a "Starters in doubt" rail listing De'Von Achane (IR, starting, kickoff in 5d),
+   * while My Team said "1 ruled out · 5d". The commit that added this file set out to make the
+   * queue agree with My Team; on the day after a week it disagreed from the other side. So the
+   * verdict is read against the next scheduled week — `plays` with that kickoff, or `done` if the
+   * club is on bye there.
+   */
+  const next = index.byWeek.get(Math.min(...later))
+  const kickoff = next?.get(club)
+  return kickoff ? { verdict: 'plays', kickoff } : { verdict: 'done' }
 }

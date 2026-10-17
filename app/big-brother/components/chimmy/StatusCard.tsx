@@ -15,7 +15,7 @@ export function StatusCard({ leagueId }: { leagueId: string }) {
 
   return (
     <div className="flex-1 rounded-xl border border-white/10 bg-[#0a1228] p-3 text-[12px] text-white/85" data-testid="bb-status-card">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">@chimmy status</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">@chimmy status</p>
       <p className="mt-1 whitespace-pre-wrap">{text ?? '…'}</p>
     </div>
   )

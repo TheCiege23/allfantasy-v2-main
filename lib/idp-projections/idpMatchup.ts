@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters, sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
@@ -188,9 +188,15 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
     .catch(() => [])
   const teamByExternal = new Map(teams.map((t) => [t.externalId ?? '', t]))
 
-  const rosters = await args.prisma.roster
-    .findMany({ where: { leagueId: league.id }, select: { id: true, platformUserId: true, playerData: true } })
-    .catch(() => [] as Array<{ id: string; platformUserId: string | null; playerData: unknown }>)
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one, the
+  // scoreboard would name and score a stranger, so such rosters contribute no ids. An ESPN roster is
+  // translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech).
+  const rosters = await sleeperReadableRosters(
+    await args.prisma.roster
+      .findMany({ where: { leagueId: league.id }, select: { id: true, platformUserId: true, playerData: true } })
+      .catch(() => [] as Array<{ id: string; platformUserId: string | null; playerData: unknown }>),
+    league.platform,
+  )
 
   /*
    * Roster lookup for the OPPONENT cannot use the claimed-user candidate — that id belongs to
@@ -207,12 +213,9 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
    * and the read above already fetches the whole league, so this costs no extra query.
    */
   const rosterByTeam = resolveRostersForTeams(teams, rosters, (t) => [t.platformUserId, t.externalId])
-  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one, the
-  // scoreboard would name and score a stranger. Such rosters contribute no ids.
-  const readableIds = (playerData: unknown) => rosterPlayerIds(sleeperReadablePlayerData(league.platform, playerData))
   const idsFor = (rosterId: string): string[] => {
     const row = rosterByTeam.get(rosterId)
-    return row ? readableIds(row.playerData) : []
+    return row ? rosterPlayerIds(row.playerData) : []
   }
 
   /*
@@ -223,11 +226,14 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
    * the opponent resolved 44 players while my side resolved 0.
    */
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
-  const myIds = mine.found ? readableIds(mine.playerData) : idsFor(myTeam.externalId)
+  const myIds = mine.found
+    ? rosterPlayerIds(await sleeperReadablePlayerDataOf(league.platform, mine.playerData))
+    : idsFor(myTeam.externalId)
   const oppIds = idsFor(oppRosterId)
   const allIds = [...new Set([...myIds, ...oppIds])]
   if (allIds.length === 0) {
-    return isForeignIdSpace(league.platform)
+    // Not only foreign platforms: an ESPN roster with no translatable id reads empty for the same reason.
+    return rosterIdSpaceOf(league.platform) !== 'sleeper'
       ? EMPTY('ids_unreadable', [`${FOREIGN_IDS_UNREADABLE}, so the matchup cannot be scored here.`])
       : EMPTY('no_matchup', ['No rosters imported for this matchup.'])
   }

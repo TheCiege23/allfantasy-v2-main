@@ -480,3 +480,53 @@ describe('reported KBFL screenshot package', () => {
     expect(evaluate.mock.calls[0][0].assets).toHaveLength(5)
   })
 })
+
+/*
+ * The Sleeper DM card (AFC Dreaming!, 2026-09-30): "@TheCiege24 — 2028 2nd Rd (JeffersonTD)" and
+ * "@JeffersonTD — B. Allen RB-NYJ". Chimmy answered "a draft pick is mentioned but I could not tell
+ * which one": "Rd" was not a pick word, "B. Allen" matched nobody, and a trade where the viewer
+ * receives only a pick had no way to know whose pick it is — the bracket says.
+ */
+describe('the Sleeper DM card', () => {
+  const CARD_WORLD = {
+    league: { sport: 'NFL', season: 2026, isDynasty: true },
+    teams: [team('t1', 'viewer-1', 'TheCiege24'), team('t2', 'jeff-2', 'JeffersonTD'), team('t3', 'other-3', 'Third')],
+    rosters: [roster('r1', 't1', ['p-ballen', 'p-bijan']), roster('r2', 't2', ['p-puka']), roster('r3', 't3', ['p-lamb'])],
+  } as unknown as CanonicalWorld
+  beforeEach(() => {
+    resolveWorld.mockResolvedValue(CARD_WORLD)
+    loadPlayerNames.mockResolvedValue(new Map([
+      ['p-ballen', { name: 'Braelon Allen', position: 'RB' }],
+      ['p-bijan', { name: 'Bijan Robinson', position: 'RB' }],
+      ['p-puka', { name: 'Puka Nacua', position: 'WR' }],
+      ['p-lamb', { name: 'CeeDee Lamb', position: 'WR' }],
+    ]))
+  })
+
+  it('B. Allen for JeffersonTD’s 2028 2nd: the abbreviated name resolves and the bracket names the partner', async () => {
+    const s = await run('Should I trade B. Allen for 2028 2nd Rd (JeffersonTD)?')
+    expect(s?.status).toBe('ready')
+    if (s?.status !== 'ready') return
+    expect(s.give.map((p) => p.playerId)).toEqual(['p-ballen'])
+    expect(s.get.map((p) => p.name)).toEqual(['2028 2nd-round pick'])
+    expect(evaluate.mock.calls[0]![0].assets).toContainEqual(
+      expect.objectContaining({ assetType: 'draft_pick', pickSeason: 2028, pickRound: 2, fromRosterId: 'r2', toRosterId: 'r1' }),
+    )
+  })
+
+  it('still refuses when the bracket names nobody in the league, or no bracket is given', async () => {
+    expect(await run('Should I trade B. Allen for 2028 2nd Rd (Stranger)?')).toMatchObject({ status: 'unresolved', reason: 'pick_partner_unclear' })
+    expect(await run('Should I trade B. Allen for a 2028 2nd?')).toMatchObject({ status: 'unresolved', reason: 'pick_partner_unclear' })
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+
+  it('an initial that fits two players matches neither', async () => {
+    loadPlayerNames.mockResolvedValue(new Map([
+      ['p-ballen', { name: 'Braelon Allen', position: 'RB' }],
+      ['p-bijan', { name: 'Brandon Allen', position: 'QB' }],
+      ['p-puka', { name: 'Puka Nacua', position: 'WR' }],
+    ]))
+    const s = await run('Should I trade B. Allen for Puka Nacua?')
+    expect(s?.status).not.toBe('ready')
+  })
+})

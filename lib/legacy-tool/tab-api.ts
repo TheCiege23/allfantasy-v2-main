@@ -297,7 +297,6 @@ export async function loadLegacyTabContext(args: {
   const insights = (report?.insights as Record<string, unknown> | null) || null
   const reportSignal = {
     title: report?.title || undefined,
-    archetype: typeof insights?.archetype === 'string' ? insights.archetype : undefined,
     window_status: typeof insights?.window_status === 'string' ? insights.window_status : undefined,
     next_season_advice: typeof insights?.next_season_advice === 'string' ? insights.next_season_advice : undefined,
     insights: {

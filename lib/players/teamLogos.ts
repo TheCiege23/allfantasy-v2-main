@@ -6,6 +6,7 @@
  */
 
 import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
+import { isKnownDeadLogoGuess, liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
 import type { SportType } from '@/lib/sport-teams/types'
 
 /** NBA Stats API / cdn.nba.com numeric team ids */
@@ -87,23 +88,51 @@ export const SPORT_TO_ESPN_TEAMLOGO: Record<string, string> = {
   SOCCER: 'soccer',
 }
 
-const PGA_FALLBACK_LOGO = '/default-avatar.png'
-
-function toSportType(s: string): SportType {
+/**
+ * Our sport spellings, collapsed. `NCAAFB`/`NCAABB` are the Rolling Insights codes for the same two
+ * college sports, and used to fall through to NFL here, which asked the NFL CDN for a school.
+ */
+function toSportType(s: string): SportType | null {
   const u = String(s ?? '').trim().toUpperCase()
   if (u === 'NFL' || u === 'NBA' || u === 'MLB' || u === 'NHL' || u === 'NCAAF' || u === 'NCAAB' || u === 'SOCCER') {
     return u as SportType
   }
-  return 'NFL'
+  if (u === 'NCAAFB') return 'NCAAF'
+  if (u === 'NCAABB') return 'NCAAB'
+  if (u === 'EPL' || u === 'MLS') return 'SOCCER'
+  return null
 }
 
-export function getTeamLogoUrl(teamAbbr: string, sport: string): string {
-  if (!teamAbbr || teamAbbr === 'FA') return '/default-avatar.png'
-  const primaryFromRegistry = getPrimaryLogoUrlForTeam(toSportType(sport), teamAbbr.trim())
+/**
+ * College and soccer crests cannot be built from a team string: ESPN keys them by numeric id, so
+ * every guessed URL 404s (see `lib/sport-teams/knownDeadLogoGuess.ts`). For those sports the only
+ * real logo is one a caller passes in — stored server-side and handed to `TeamLogo` as `logoUrl`.
+ */
+function isGuessless(sport: SportType | null): boolean {
+  return sport === 'NCAAF' || sport === 'NCAAB' || sport === 'SOCCER'
+}
+
+/** "Not a team" — no crest exists for it, so nothing should be requested. */
+export function isNoTeam(teamAbbr: string | null | undefined): boolean {
+  const t = String(teamAbbr ?? '').trim().toUpperCase()
+  return !t || t === 'FA' || t === 'F/A' || t === 'FREE AGENT' || t === 'N/A' || t === '—' || t === '-'
+}
+
+/**
+ * Best GUESSED logo for a team string, or null when a guess cannot work. Never a placeholder
+ * image: a placeholder is a real image, so it hid `TeamLogo`'s initials fallback behind a generic
+ * avatar for every college and soccer team.
+ */
+export function getTeamLogoUrl(teamAbbr: string, sport: string): string | null {
+  if (isNoTeam(teamAbbr)) return null
+  const sportType = toSportType(sport)
+  if (!sportType || isGuessless(sportType)) return null
+  // The registry may return null for a non-team, and otherwise an ESPN-style guess.
+  const primaryFromRegistry = liveLogoOrNull(getPrimaryLogoUrlForTeam(sportType, teamAbbr.trim()))
   if (primaryFromRegistry) return primaryFromRegistry
 
   const abbr = teamAbbr.toUpperCase()
-  const s = sport?.toUpperCase() ?? 'NFL'
+  const s = sportType
 
   if (s === 'NFL') {
     return `https://a.espncdn.com/i/teamlogos/nfl/500/${teamAbbr.toLowerCase()}.png`
@@ -121,28 +150,24 @@ export function getTeamLogoUrl(teamAbbr: string, sport: string): string {
   if (s === 'NHL') {
     return `https://a.espncdn.com/i/teamlogos/nhl/500/${teamAbbr.toLowerCase()}.png`
   }
-  if (s === 'NCAAFB' || s === 'NCAABB') {
-    return '/default-avatar.png'
-  }
-  if (s === 'SOCCER' || s === 'EPL' || s === 'MLS') {
-    return `https://a.espncdn.com/i/teamlogos/soccer/500/${teamAbbr.toLowerCase()}.png`
-  }
-  if (s === 'PGA') {
-    return PGA_FALLBACK_LOGO
-  }
-  return '/default-avatar.png'
+  return null
 }
 
-/** Ordered URLs for `<img onError>` fallback chains. */
+/**
+ * Ordered GUESSED URLs for `<img onError>` fallback chains — possibly empty. An empty list means
+ * "no guess can work": `TeamLogo` then shows the caller's `logoUrl` if any, else initials.
+ */
 export function getTeamLogoCandidates(teamAbbr: string, sport: string): string[] {
-  if (!teamAbbr || teamAbbr === 'FA') return ['/default-avatar.png']
+  if (isNoTeam(teamAbbr)) return []
+  const sportType = toSportType(sport)
+  if (!sportType || isGuessless(sportType)) return []
   const primary = getTeamLogoUrl(teamAbbr, sport)
-  const s = sport?.toUpperCase() ?? 'NFL'
+  const s = sportType
   const lower = teamAbbr.toLowerCase()
   const extra: string[] = []
 
   const espnSeg = SPORT_TO_ESPN_TEAMLOGO[s]
-  if (espnSeg && s !== 'NCAAFB' && s !== 'NCAABB') {
+  if (espnSeg) {
     extra.push(`https://a.espncdn.com/i/teamlogos/${espnSeg}/500/${lower}.png`)
   }
   if (s === 'NFL') {
@@ -158,6 +183,6 @@ export function getTeamLogoCandidates(teamAbbr: string, sport: string): string[]
     }
   }
 
-  const merged = [primary, ...extra, '/default-avatar.png']
+  const merged = [primary, ...extra].filter((u): u is string => !!u && !isKnownDeadLogoGuess(u))
   return [...new Set(merged)]
 }

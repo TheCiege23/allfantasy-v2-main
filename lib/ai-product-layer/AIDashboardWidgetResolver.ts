@@ -39,14 +39,8 @@ const WIDGETS: Array<Omit<AIDashboardWidget, 'href'>> = [
     featureKey: 'draft_helper',
     sportAware: true,
   },
-  {
-    id: 'psychology',
-    label: 'Psychology AI',
-    description: 'Manager behavior and rivalry tendencies',
-    tabId: 'overview',
-    featureKey: 'psychological_profiles',
-    sportAware: true,
-  },
+  // 🛑 No "Psychology AI" widget (owner decision 2026-09-29, Milestone 32: manager
+  // characterisation is shown to nobody).
   {
     id: 'story',
     label: 'Story Creator',
@@ -75,8 +69,8 @@ const WIDGETS: Array<Omit<AIDashboardWidget, 'href'>> = [
 
 const WIDGETS_BY_SURFACE: Record<AIDashboardSurface, string[]> = {
   app: ['trade', 'waiver', 'rankings', 'mock-draft', 'chat', 'content'],
-  dashboard: ['trade', 'waiver', 'rankings', 'mock-draft', 'psychology', 'chat'],
-  league: ['trade', 'waiver', 'rankings', 'psychology', 'story', 'chat'],
+  dashboard: ['trade', 'waiver', 'rankings', 'mock-draft', 'chat'],
+  league: ['trade', 'waiver', 'rankings', 'story', 'chat'],
 };
 
 function resolveWidgetHref(widget: Omit<AIDashboardWidget, 'href'>, context?: AIProductContext): string {

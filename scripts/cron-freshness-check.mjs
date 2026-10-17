@@ -89,6 +89,20 @@ function toleranceForGap(gapMs) {
 const MIN_ALLOWANCE_MS = 20 * 60_000
 
 /**
+ * How old a probe's newest row may be before it reads STALE: the job's own cadence times its
+ * tolerance, never under the global floor, and never under the probe's own `minAllowanceMs`.
+ *
+ * `minAllowanceMs` exists for OUTPUT probes whose data has a natural quiet period longer than the
+ * job's cadence allows. The job can be firing every slot and still write nothing, because nothing
+ * happened upstream. It only RAISES the allowance, and only for the probe that declares it, with
+ * the measurement that justifies it written beside the declaration.
+ */
+export function allowanceFor(gapMs, probe = {}) {
+  const fromCadence = (gapMs ?? 3_600_000) * toleranceForGap(gapMs)
+  return Math.max(MIN_ALLOWANCE_MS, fromCadence, probe.minAllowanceMs ?? 0)
+}
+
+/**
  * cron path (exactly as declared in vercel.json) -> the table it must advance.
  *
  * `column` is optional: when omitted the script introspects information_schema and picks the first
@@ -219,21 +233,35 @@ export const PROBES = {
    * same as everything else. The job was never broken.
    *
    * THE GENERAL RULE: probe a WRITE-TIME column. `createdAt` is only a freshness signal on an
-   * append-only table (`adp_data` and `player_news` below are genuinely append-only, which is why
-   * they keep it). On anything that upserts it measures the wrong event entirely, and it fails in
-   * the direction that wastes the most time — a false alarm on a healthy job.
+   * append-only table (`player_news` below is genuinely append-only, which is why it keeps it). On
+   * anything that upserts it measures the wrong event entirely, and it fails in the direction that
+   * wastes the most time — a false alarm on a healthy job. Append-only is still not enough when a
+   * unique key makes most runs insert nothing: see `adp_data` under adp-refresh below.
    */
   '/api/cron/recompute-allfantasy-adp': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
-  // runAdpImporter writes prisma.adpDataRecord -> adp_data (82k rows). adp_refresh_runs holds 2
-  // rows, newest 118 days old, and is not the job's output.
-  '/api/cron/adp-refresh': { table: 'adp_data', column: 'created_at' },
+  /*
+   * ⚠ HEARTBEAT, NOT `adp_data.created_at`. That table is append-only, but it is unique per
+   * calendar WEEK, so only the first run of each week inserts and every later run writes zero rows
+   * by design. The table probe therefore read a healthy daily job as STALE from the second day
+   * after each week rolled over. Measured 2026-09-29: `providerRowsRead: 3550,
+   * providerRowsWritten: 0`, HTTP 200. The route records this heartbeat as FAILED when it reads
+   * nothing, so a feed outage still surfaces, as DEGRADED.
+   * (adp_refresh_runs is not the answer either: it belongs to runAdpRefreshService, which this
+   * cron does not call.)
+   */
+  '/api/cron/adp-refresh': { heartbeat: 'cron-adp-refresh' },
   '/api/weather/refresh-cron': { table: 'WeatherCache', column: 'fetchedAt' },
   '/api/cron/decision-os-activity-ingest?discover=1': { table: 'decision_os_imported_activity', column: 'updatedAt' },
   '/api/cron/decision-os-snapshot-capture?discover=1': { table: 'intelligence_league_snapshot', column: 'updatedAt' },
 
-  // Produces decision_parity_record rows; the `*/10` job whose 37-hour gap is how the whole
-  // scheduler outage was found in the first place.
-  '/api/cron/decision-os-intelligence-maintenance': { table: 'decision_parity_record', column: 'recordedAt' },
+  // The `*/10` job whose 37-hour gap is how the whole scheduler outage was found in the first
+  // place. ⚠ HEARTBEAT, NOT `decision_parity_record.recordedAt` ANY MORE. That table's steady
+  // writer was the lineup shadow sweep this route drove (9,340 of its 9,420 rows on 2026-09-04),
+  // and the sweep was retired on 2026-09-29. After that the route kept firing every ten minutes
+  // with HTTP 200 while the table probe read STALE hourly from 21:53Z, measuring user decision
+  // traffic rather than the job. A heartbeat still catches the scheduler outage it was kept for.
+  // (Line comments on purpose: the schedule string would close a block comment.)
+  '/api/cron/decision-os-intelligence-maintenance': { heartbeat: 'cron-decision-os-intelligence-maintenance' },
 
   // ── fast tier (stays on the host) ──
   // Monitored here on purpose. The whole reason the tiers are split is so that a host outage
@@ -255,7 +283,17 @@ export const PROBES = {
   // its own job_name or the ingest's heartbeat would report the drain healthy on a day it never
   // ran -- the shared-probe false green fixed for import-scores just above.
   // Every 6h, so 9h allows one missed fire before it goes red.
-  '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
+  /*
+   * Every 15 minutes, so the cadence allowance is 45 minutes. But news has a natural quiet period:
+   * measured on production 2026-10-06, the newest `player_news` row routinely sits 1.4-2.0h old
+   * between ~08:30 and ~10:40 UTC (early morning US Eastern). The longest gap in 35 days was 2.0h.
+   * So with only the cadence allowance, the probe went STALE on a working job most mornings
+   * (#1453: Oct 3, 4 and 6). Three hours clears the longest observed quiet period with an hour of
+   * margin. A feed that has really stopped still reads STALE within three hours.
+   * Stays a TABLE probe, never a heartbeat: see the note in the route on why (a feed that stopped
+   * advancing hid behind 200s for 107 days).
+   */
+  '/api/cron/import-news': { table: 'player_news', column: 'created_at', minAllowanceMs: 3 * 60 * 60_000 },
   /*
    * The X pass writes the same player_news.created_at as the base job above, which runs every 15
    * minutes against this one's six hours -- so a table probe here is satisfied on every check by
@@ -298,6 +336,9 @@ export const PROBES = {
    * is not done here.
    */
   '/api/cron/notification-outbox-relay': { heartbeat: 'cron-notification-outbox-relay' },
+  // Breaking-news and live-game-moment alerts (2026-10-15). A heartbeat: it correctly sends nothing
+  // on a quiet news day with no games, so an output probe would cry wolf.
+  '/api/cron/sports-alerts': { heartbeat: 'cron-sports-alerts' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
@@ -334,6 +375,13 @@ export const PROBES = {
   // (waivers, score-sync, draft-tick, legacy-import-drain) it will persist until the fast tier
   // has a scheduler again, exactly like the fast-tier output probes above.
   '/api/cron/waivers': { heartbeat: 'cron-waivers' },
+  /*
+   * The NFL game-window injury run (2026-09-27): every five minutes, real work only while an NFL
+   * kickoff is near. A HEARTBEAT, for both reasons above at once — it shares SportsInjury with the
+   * half-hourly run (a table probe would be satisfied by its sibling) and it correctly writes
+   * nothing for most of the week. The route writes the heartbeat on every fire, in window or not.
+   */
+  '/api/cron/import-injuries?sport=NFL&gameWindow=1': { heartbeat: 'cron-import-injuries-gamewindow' },
   '/api/redraft/score-sync': { heartbeat: 'cron-redraft-score-sync' },
   '/api/redraft/waiver-process': { heartbeat: 'cron-redraft-waiver-process' },
   /*
@@ -972,7 +1020,7 @@ async function main() {
       }
 
       const gap = maxGapMs(cron.schedule)
-      const allowanceMs = Math.max(MIN_ALLOWANCE_MS, (gap ?? 3_600_000) * toleranceForGap(gap))
+      const allowanceMs = allowanceFor(gap, probe)
       const base = {
         path: cron.path,
         schedule: cron.schedule,

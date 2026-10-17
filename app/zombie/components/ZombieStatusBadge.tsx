@@ -68,7 +68,7 @@ export function ZombieStatusBadge({
     <span className={clsx('inline-flex items-center gap-1.5', className)}>
       <span
         className={clsx(
-          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
           styles[key] ?? styles.survivor,
         )}
         aria-label={`Player status: ${label}`}
@@ -79,7 +79,7 @@ export function ZombieStatusBadge({
       </span>
       {dangerChip ? (
         <span
-          className={clsx('rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]', dangerChip)}
+          className={clsx('rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em]', dangerChip)}
           title={`Danger level: ${DANGER_LABEL[dangerLevel!]}`}
         >
           {DANGER_LABEL[dangerLevel!]}

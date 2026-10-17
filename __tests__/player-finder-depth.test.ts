@@ -118,6 +118,12 @@ describe('getPlayerDepth', () => {
     expect(mockGetMarketValues.mock.calls.length).toBeLessThan(3)
   })
 
+  it('carries the chart’s FAAB anchor with each league value when there is one — what the free-agent bid needs', async () => {
+    mockGetMarketValues.mockResolvedValue({ mode: 'redraft', numQbs: 1, bySleeperId: { '9509': { value: 5000 } }, faab: { anchorRank: 150, anchorValue: 3000, formula: 'x' } })
+    const d = await getPlayerDepth(detail())
+    expect(d.leagueValues?.L1).toMatchObject({ value: 5000, faabAnchor: 3000 })
+  })
+
   it('computes no per-league value for a viewer without AF Pro', async () => {
     const d = await getPlayerDepth(detail(), { includeValues: false })
     expect(d.leagueValues).toBeNull()

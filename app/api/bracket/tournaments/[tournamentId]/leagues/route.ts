@@ -4,10 +4,8 @@ import { getSessionAndProfile } from "@/lib/auth-guard"
 
 export const runtime = "nodejs"
 
-export async function GET(
-  req: Request,
-  { params }: { params: { tournamentId: string } }
-) {
+export async function GET(req: Request, props: { params: Promise<{ tournamentId: string }> }) {
+  const params = await props.params
   const { userId, emailVerified, profile } = await getSessionAndProfile()
   if (!userId) {
     return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 })

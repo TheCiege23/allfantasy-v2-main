@@ -102,9 +102,9 @@
 /* ── Trade sides ───────────────────────────────────────────────── */
 .bdx .bdx-trade { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; margin: 12px 0; }
 .bdx .bdx-side { border-radius: 10px; padding: 12px 14px; background: var(--bdx-panel-deep); border: 1px solid var(--bdx-border); }
-.bdx .bdx-side .dir { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic; }
+.bdx .bdx-side .dir { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic; }
 .bdx .bdx-asset { display: flex; align-items: center; gap: 9px; padding: 4px 0; font-size: 14px; font-weight: 600; }
-.bdx .bdx-pos { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 5px; letter-spacing: 0.05em; background: var(--bdx-border); color: var(--bdx-ink-mid); flex: none; }
+.bdx .bdx-pos { font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 5px; letter-spacing: 0.05em; background: var(--bdx-border); color: var(--bdx-ink-mid); flex: none; }
 .bdx .bdx-swap { align-self: center; font-size: 18px; opacity: 0.55; }
 
 /* ── Verdict line + confidence meter ───────────────────────────── */
@@ -220,7 +220,7 @@
 .bdx .bdx-rail-name { font-size: 17px; line-height: 1.15; letter-spacing: -0.02em; }
 .bdx .bdx-rail-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
 .bdx .bdx-chip {
-  font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 700;
+  font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 700;
   background: #181c44; border: 1px solid #2c3260; color: var(--bdx-ink-dim);
 }
 .bdx .bdx-chip.grad { background: var(--bdx-grad); border: 0; color: #fff; font-style: italic; text-transform: uppercase; }
@@ -246,7 +246,7 @@
 .bdx .bdx-rail-brand {
   display: flex; align-items: center; gap: 9px;
   margin-top: 14px; padding: 4px 2px 0;
-  font-size: 10.5px; line-height: 1.5; color: var(--bdx-ink-ghost);
+  font-size: 11px; line-height: 1.5; color: var(--bdx-ink-ghost);
 }
 .bdx .bdx-rail-brand img { width: 34px; height: 34px; border-radius: 9px; flex: none; }
 .bdx .bdx-rail-brand b { color: var(--bdx-ink-faint); }
@@ -258,13 +258,13 @@
   padding: 13px 16px; min-width: 165px; max-width: 240px;
 }
 .bdx .bdx-champ .yr {
-  font-size: 10.5px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic;
+  font-size: 11px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic;
   text-transform: uppercase; letter-spacing: 0.08em;
 }
 .bdx .bdx-champ .nm { font-size: 15px; font-weight: 800; margin-top: 5px; }
 .bdx .bdx-champ .rec { font-size: 11px; color: var(--bdx-ink-ghost); margin-top: 3px; font-variant-numeric: tabular-nums; }
 .bdx .bdx-stand th {
-  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--bdx-ink-faint); text-align: left; padding: 5px 4px;
   border-bottom: 1px solid var(--bdx-border); font-weight: 800;
 }
@@ -296,4 +296,90 @@
   --bdx-warn: var(--warn, #ffc53d);
   --bdx-crit: var(--bad, #ff6b8b);
   --bdx-info: var(--accent, #7fb3ff);
+}
+
+/* ── Waiver intelligence: targets beside the room's bid history ─────────────
+   Its own top-level blocks at end of file, so nothing can be carried into another query.
+   The wide variant out-ranks `.bdx .bdx-support` (one more class), so it needs its own phone
+   rule — the deck's 960px collapse alone would lose to it. */
+.bdx .bdx-support.bdx-support--wide { grid-template-columns: 1.4fr 1fr; }
+@media (max-width: 960px) {
+  .bdx .bdx-support.bdx-support--wide { grid-template-columns: minmax(0, 1fr); }
+}
+.bdx .bdx-reason {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--bdx-ink-faint);
+}
+
+/* ── Severity chips on the core page's LIGHT theme ──
+   The deck's chips hard-code a dark wash (#0c3326 …), which on /core's light theme left dark-green
+   text on a near-black chip. There, the wash is derived from the chip's own colour instead. Dark
+   theme and the Decide deck itself are untouched. */
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.ok { background: color-mix(in srgb, var(--bdx-ok) 14%, transparent); color: color-mix(in srgb, var(--bdx-ok) 72%, #000); }
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.warn { background: color-mix(in srgb, var(--bdx-warn) 16%, transparent); color: color-mix(in srgb, var(--bdx-warn) 72%, #000); }
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.crit { background: color-mix(in srgb, var(--bdx-crit) 14%, transparent); color: color-mix(in srgb, var(--bdx-crit) 72%, #000); }
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.info { background: color-mix(in srgb, var(--bdx-info) 14%, transparent); color: color-mix(in srgb, var(--bdx-info) 72%, #000); }
+
+/* ── This week: the four clocks at the top of the Decide home (ThisWeekStrip) ──
+   Own top-level blocks at end of file, so nothing can be carried into another query. */
+.bdx .bdx-week { margin: 0 0 22px; }
+/* auto-fit: three tiles fill the row instead of leaving a fourth column empty. */
+.bdx .bdx-week-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.bdx .bdx-week-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0;
+  padding: 13px 16px; border-radius: 12px; text-align: left; cursor: pointer;
+  background: var(--bdx-panel); border: 1px solid var(--bdx-border); border-top: 3px solid var(--bdx-info);
+  color: var(--bdx-ink); font: inherit;
+}
+.bdx .bdx-week-tile:hover { border-color: var(--bdx-ink-ghost); }
+.bdx .bdx-week-tile:focus-visible { outline: 2px solid var(--bdx-info); outline-offset: 2px; }
+.bdx .bdx-week-tile.t-ok { border-top-color: var(--bdx-ok); }
+.bdx .bdx-week-tile.t-warn { border-top-color: var(--bdx-warn); }
+.bdx .bdx-week-tile .l { font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--bdx-ink-faint); font-weight: 800; }
+.bdx .bdx-week-tile .v {
+  font-size: 19px; font-weight: 900; font-style: italic; letter-spacing: -0.02em; line-height: 1.15;
+  font-variant-numeric: tabular-nums; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bdx .bdx-week-tile .d { font-size: 12px; color: var(--bdx-ink-dim); max-width: 100%; overflow-wrap: anywhere; }
+/* ── The Decide home sizes itself by its OWN width, not the screen's ──
+   On a desktop the league page is three columns (league rail, this deck, My Leagues), so the deck is
+   ~370px wide at 1280 and ~590px at 1920 — narrower than a phone in landscape. The viewport rules
+   above (960px) never fire there: measured on the live page at 1280, the KPI row needed 420px in 320
+   and ran off the column, and Matchup Center's pairs held 154px columns. Container queries follow
+   the column wherever the shell puts it, phones included. Scoped to the Decide home root
+   (.bdx-home): .bdx is also embedded on /core, where inline-size containment could collapse a
+   content-sized embed. */
+.bdx.bdx-home { container: bdx-home / inline-size; }
+
+/* This week: two columns in a narrow deck, so four clocks cost two rows, not four; an odd last tile
+   takes the whole row rather than leaving a hole. */
+@container bdx-home (max-width: 560px) {
+  .bdx .bdx-week-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .bdx .bdx-week-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@container bdx-home (max-width: 360px) {
+  .bdx .bdx-week-tile { padding: 11px 12px; }
+  .bdx .bdx-week-tile .v { font-size: 16px; }
+  .bdx .bdx-week-tile .d { font-size: 11.5px; }
+}
+
+/* KPI row and support band: the same collapse the 960px viewport rule makes, at the deck's width. */
+@container bdx-home (max-width: 480px) {
+  .bdx .bdx-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bdx .bdx-support { grid-template-columns: minmax(0, 1fr); }
+}
+@container bdx-home (max-width: 560px) {
+  .bdx .bdx-support.bdx-support--wide { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Matchup Center pairs ──
+   Was an inline 1fr 1fr, which out-ranked every collapse and held each card at its content width:
+   at 375px the page scrolled sideways. minmax(0, 1fr) lets a card shrink; a pair needs ~360px, so
+   below 720px of deck they stack. */
+.bdx .bdx-support.bdx-support--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container bdx-home (max-width: 720px) {
+  .bdx .bdx-support.bdx-support--pair { grid-template-columns: minmax(0, 1fr); }
 }

@@ -1,5 +1,8 @@
 'use client'
 
+import '@/components/core-app/af-core.css'
+import '@/components/league/league-overview.css'
+
 import { useMemo, type ReactNode } from 'react'
 import Link from 'next/link'
 import { GitBranch } from 'lucide-react'
@@ -262,13 +265,13 @@ export function LeagueManagersStandingsSection({
                   </span>
                   <ManagerRoleBadge role={team.role} />
                   {showUnclaimed ? (
-                    <span className="rounded border border-[#ff3d81]/40 bg-[#ff3d81]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff9ec0]">
+                    <span className="rounded border border-[#ff3d81]/40 bg-[#ff3d81]/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[#ff9ec0]">
                       Unclaimed
                     </span>
                   ) : null}
                   {gBadge ? (
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide ${gBadge.className}`}
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${gBadge.className}`}
                     >
                       {gBadge.label}
                     </span>
@@ -289,9 +292,9 @@ export function LeagueManagersStandingsSection({
               ) : null}
             </div>
             {preDraft && sub ? (
-              <p className="mt-1.5 text-[10px] text-sky-200/45">{sub}</p>
+              <p className="mt-1.5 text-[11px] text-sky-200/45">{sub}</p>
             ) : !preDraft ? (
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium text-sky-200/55 sm:text-[11px]">
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-sky-200/55 sm:text-[11px]">
                 <span>PF {team.pointsFor > 0 ? team.pointsFor.toFixed(2) : '—'}</span>
                 <span>PA {team.pointsAgainst > 0 ? team.pointsAgainst.toFixed(2) : '—'}</span>
                 <span>
@@ -355,7 +358,7 @@ export function LeagueManagersStandingsSection({
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#11182b]"
+      className="af-core af-league-overview af-overview-standings-card overflow-hidden rounded-2xl border border-white/[0.06] bg-[#11182b]"
       aria-label={preDraft ? 'Teams' : 'Standings'}
       data-testid="league-managers-standings"
     >

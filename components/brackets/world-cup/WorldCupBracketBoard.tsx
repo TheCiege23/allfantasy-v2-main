@@ -95,7 +95,7 @@ export default function WorldCupBracketBoard({
 
 				<div className="relative z-10 mb-4 grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
 					<div className="rounded-2xl border border-white/10 bg-white/[0.045] px-3 py-2.5 lg:px-4 lg:py-3">
-						<div className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-100/55">{t("wc.matchup.bracketBoardChampionLabel")}</div>
+						<div className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-100/55">{t("wc.matchup.bracketBoardChampionLabel")}</div>
 						{/* champion?.selectedTeamName is a team name and should not be translated. */}
 						<div className="mt-1 max-w-full truncate text-lg font-black text-white lg:text-xl">{champion?.selectedTeamName ?? t("wc.matchup.bracketBoardChampionFallback")}</div>
 					</div>
@@ -127,7 +127,7 @@ export default function WorldCupBracketBoard({
 								className="mx-auto mb-2 h-20 w-16 rounded-2xl object-contain drop-shadow-[0_0_30px_rgba(250,204,21,0.34)] xl:h-24 xl:w-20"
 								aria-hidden="true"
 							/>
-							<div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/65">
+							<div className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-100/65">
 								{t("wc.round.final")}
 							</div>
 							<div className="mt-1 truncate text-xl font-black text-white drop-shadow-[0_0_18px_rgba(250,204,21,0.35)] xl:text-2xl">

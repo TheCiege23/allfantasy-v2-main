@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -213,6 +214,10 @@ test.describe('@dynasty full click audit', () => {
       })
     })
 
+    // /leagues/<id> shows a sign-in wall to a settled-unauthenticated session since
+    // 1f5105f6 (every fetch on that page is session-gated). The mocked league APIs
+    // still answer; the visitor just has to be signed in to reach the tab.
+    await signInAs(page, { id: 'e2e-dynasty-user' })
     await page.goto('/leagues/league_dyn_1?tab=Standings%2FPlayoffs')
     await page.getByRole('button', { name: 'Standings/Playoffs' }).click()
     await expect(page.getByRole('heading', { name: 'Dynasty projections' })).toBeVisible()
@@ -224,7 +229,7 @@ test.describe('@dynasty full click audit', () => {
     await page.getByLabel('Dynasty team selector').selectOption('teamB')
     await page.getByLabel('Dynasty comparison selector A').selectOption('teamA')
     await page.getByLabel('Dynasty comparison selector B').selectOption('teamC')
-    await page.getByRole('button', { name: 'Get AI dynasty advice' }).click()
+    await page.getByRole('button', { name: "Get Chimmy's dynasty advice" }).click()
     await expect(page.getByText(/Move one aging scorer/i)).toBeVisible()
     await expect(page.getByRole('link', { name: 'Open trade analyzer with dynasty context' })).toHaveAttribute(
       'href',
@@ -236,9 +241,9 @@ test.describe('@dynasty full click audit', () => {
     await page.goto('/app/dynasty-insights')
     await page.getByLabel('Dynasty insights sport filter').selectOption('SOCCER')
     await page.getByLabel('Dynasty insights position filter').selectOption('FWD')
-    await page.getByRole('button', { name: 'Get AI dynasty insights' }).click()
+    await page.getByRole('button', { name: "Get Chimmy's dynasty insights" }).click()
     await expect(page.getByText(/Age curve \(SOCCER FWD\)/i)).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'AI insight' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: "Chimmy's insight" })).toBeVisible()
 
     expect(dynastyProjectionGets.some((r) => r.sport === 'NCAAB')).toBe(true)
     expect(dynastyProjectionGets.some((r) => r.refresh === '1')).toBe(true)

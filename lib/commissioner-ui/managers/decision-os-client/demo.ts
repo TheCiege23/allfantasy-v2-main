@@ -8,7 +8,6 @@ export const demoManagerIntelligenceClient: ManagerIntelligenceClient = {
         {
           id: 'demo-mgr-1',
           managerName: 'Priya Natarajan',
-          archetype: 'Active Trader',
           tenureSeasons: 3,
           engagementTrend: 'rising',
           reliabilityScore: 96,
@@ -17,7 +16,6 @@ export const demoManagerIntelligenceClient: ManagerIntelligenceClient = {
         {
           id: 'demo-mgr-2',
           managerName: 'Sam Rivera',
-          archetype: 'Quiet Participant',
           tenureSeasons: 1,
           engagementTrend: 'declining',
           reliabilityScore: 61,
@@ -26,7 +24,6 @@ export const demoManagerIntelligenceClient: ManagerIntelligenceClient = {
         {
           id: 'demo-mgr-3',
           managerName: 'Marcus Webb',
-          archetype: 'Steady Operator',
           tenureSeasons: 4,
           engagementTrend: 'steady',
           reliabilityScore: 92,
@@ -35,7 +32,6 @@ export const demoManagerIntelligenceClient: ManagerIntelligenceClient = {
         {
           id: 'demo-mgr-4',
           managerName: 'Devon Okafor',
-          archetype: 'Connector',
           tenureSeasons: 1,
           engagementTrend: 'rising',
           reliabilityScore: 85,

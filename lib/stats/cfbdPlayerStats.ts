@@ -1,3 +1,4 @@
+import { syncRecentNcaafConversions } from '@/lib/stats/syncNcaafConversions'
 import 'server-only'
 import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
@@ -243,6 +244,7 @@ export type CfbdStatSyncResult = {
   skippedNoGames: number
   errors: string[]
   /** Per-game lines kept from the same `/games/players` responses. Absent when not attempted. */
+  conversions?: Awaited<ReturnType<typeof syncRecentNcaafConversions>>
   gameLogs?: CfbdGameLogReport
 }
 
@@ -469,6 +471,8 @@ export async function syncCfbdPlayerStatsToDb(opts?: {
 
   // After the season lines, so a slow game-log write can never cost the season import.
   if (collector) result.gameLogs = await collector.flush({ season })
+  try { result.conversions = await syncRecentNcaafConversions(season, now) }
+  catch { result.errors.push('NCAAF conversion enrichment unavailable; conversion coverage remains incomplete') }
 
   return result
 }

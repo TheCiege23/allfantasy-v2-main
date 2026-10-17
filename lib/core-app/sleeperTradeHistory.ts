@@ -80,8 +80,10 @@ export function toTradeRecord(
             teamLogoUrl: resolved?.media.teamLogoUrl ?? null,
           }
         }),
-        picks: s.picksIn.map((p) => p.label),
-        pickDrafted: s.picksIn.map((p) => p.resolved?.name?.trim() || null),
+        // FAAB rides at the end of `picks` (with a null `pickDrafted`): it is a non-player asset listed
+        // after the picks, in the order `completedTradeInputs` prices a side. Absent on an old payload.
+        picks: [...s.picksIn.map((p) => p.label), ...(s.faabIn != null && s.faabIn > 0 ? [`$${s.faabIn} FAAB`] : [])],
+        pickDrafted: [...s.picksIn.map((p) => p.resolved?.name?.trim() || null), ...(s.faabIn != null && s.faabIn > 0 ? [null] : [])],
         grade: provisional ? projected?.letter ?? null : s.currentGrade,
         gradeBasis: provisional ? 'Market' : 'Realized',
         gradeNote: provisional

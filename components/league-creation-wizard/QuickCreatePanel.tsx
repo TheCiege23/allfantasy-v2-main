@@ -215,7 +215,7 @@ export function QuickCreatePanel({
                 <span className="text-lg">{preset.emoji}</span>
                 <div>
                   <p className="text-[13px] font-semibold text-white">{preset.label}</p>
-                  <p className="text-[10px] text-white/50">{preset.description}</p>
+                  <p className="text-[11px] text-white/50">{preset.description}</p>
                 </div>
               </div>
             </button>

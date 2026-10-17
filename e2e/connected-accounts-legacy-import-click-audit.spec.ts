@@ -143,8 +143,9 @@ test.describe("@db @connected @legacy connected accounts + legacy import click a
     await expect(page.getByText("Facebook sign-in is planned. Follow updates for when it's available.")).toBeVisible()
 
     // Safe disconnect path
-    page.once("dialog", (dialog) => dialog.accept())
+    // In-app confirmation (ConfirmDialog), not window.confirm.
     await page.locator('li:has([data-provider="google"])').getByRole("button", { name: "Disconnect" }).click()
+    await page.getByTestId("settings-confirm-accept").click()
     await expect(page.getByText("Google disconnected.")).toBeVisible()
     await expect(page.locator('li:has([data-provider="apple"])').getByText("Connected (protected)")).toBeVisible()
 

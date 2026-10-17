@@ -187,7 +187,7 @@ export function CapRoomClient({ leagueId }: { leagueId: string }) {
                         }}
                       />
                     </div>
-                    <p className="text-[10px] text-white/45">
+                    <p className="text-[11px] text-white/45">
                       Committed ${p.committedSalary.toFixed(1)}M · Dead ${p.deadCapHits.toFixed(1)}M · Open $
                       {p.availableCap.toFixed(1)}M
                     </p>

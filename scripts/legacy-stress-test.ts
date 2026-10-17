@@ -514,10 +514,6 @@ async function phase3_apiTest() {
     { name: "POST /api/waiver-ai (AI)", method: "POST", path: "/api/waiver-ai", body: {
       playerName: "Tank Dell", leagueId: LEAGUE_IDS[0], week: 5,
     }, iterations: 10, isAI: true },
-    { name: "POST /api/ai/chat (AI)", method: "POST", path: "/api/ai/chat", body: {
-      message: "What is the trade value of Patrick Mahomes in dynasty?",
-      sleeperUsername: USERNAME,
-    }, iterations: 10, isAI: true },
     { name: "POST /api/dynasty-trade-analyzer (AI)", method: "POST", path: "/api/dynasty-trade-analyzer", body: {
       give: ["Breece Hall"], get: ["Bijan Robinson"], leagueId: LEAGUE_IDS[1],
     }, iterations: 10, isAI: true },
@@ -529,9 +525,6 @@ async function phase3_apiTest() {
     }, iterations: 10, isAI: true },
     { name: "POST /api/roster/analyze (AI)", method: "POST", path: "/api/roster/analyze", body: {
       leagueId: LEAGUE_IDS[0],
-    }, iterations: 10, isAI: true },
-    { name: "POST /api/instant/trade (AI)", method: "POST", path: "/api/instant/trade", body: {
-      give: ["CeeDee Lamb"], get: ["Ja'Marr Chase", "2026 2nd"], isDynasty: true, scoring: "ppr", leagueSize: 12,
     }, iterations: 10, isAI: true },
   ]
 

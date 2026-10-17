@@ -59,18 +59,18 @@ afterEach(() => {
 })
 
 describe('/pricing', () => {
-  it('🛑 a link naming a plan is sent to that plan’s checkout', () => {
-    expect(() => PricingPage({ searchParams: { plan: 'af-commissioner', feature: 'commissioner-waiver-ai' } })).toThrow(
+  it('🛑 a link naming a plan is sent to that plan’s checkout', async () => {
+    await expect(PricingPage({ searchParams: { plan: 'af-commissioner', feature: 'commissioner-waiver-ai' } })).rejects.toThrow(
       'NEXT_REDIRECT /upgrade?plan=commissioner&feature=commissioner-waiver-ai',
     )
-    expect(() => PricingPage({ searchParams: { highlight: 'af-pro', intent: 'world-cup' } })).toThrow(
+    await expect(PricingPage({ searchParams: { highlight: 'af-pro', intent: 'world-cup' } })).rejects.toThrow(
       'NEXT_REDIRECT /upgrade?plan=pro&highlight=af-pro&intent=world-cup',
     )
   })
 
-  it('a bare /pricing, or one with no plan in it, is still the grid', () => {
+  it('a bare /pricing, or one with no plan in it, is still the grid', async () => {
     for (const searchParams of [undefined, {}, { from: 'wc-chimmy' }, { msg: 'no_subscription' }, { checkout: 'success' }]) {
-      const el = PricingPage({ searchParams })
+      const el = await PricingPage({ searchParams })
       expect(el).toBeTruthy()
     }
     expect(nav.redirect).not.toHaveBeenCalled()
@@ -78,12 +78,12 @@ describe('/pricing', () => {
 })
 
 describe('/upgrade', () => {
-  it('reads the hyphenated spellings the World Cup and waiver locks use', () => {
-    expect(UpgradePage({ searchParams: { plan: 'af-pro' } }).props.focusPlanFamily).toBe('af_pro')
-    expect(UpgradePage({ searchParams: { plan: 'af-commissioner' } }).props.focusPlanFamily).toBe('af_commissioner')
-    expect(UpgradePage({ searchParams: { plan: 'war_room' } }).props.focusPlanFamily).toBe('af_war_room')
-    expect(UpgradePage({ searchParams: { plan: ['supreme'] } }).props.focusPlanFamily).toBe('af_supreme')
-    expect(UpgradePage({}).props.focusPlanFamily).toBeNull()
+  it('reads the hyphenated spellings the World Cup and waiver locks use', async () => {
+    expect((await UpgradePage({ searchParams: { plan: 'af-pro' } })).props.focusPlanFamily).toBe('af_pro')
+    expect((await UpgradePage({ searchParams: { plan: 'af-commissioner' } })).props.focusPlanFamily).toBe('af_commissioner')
+    expect((await UpgradePage({ searchParams: { plan: 'war_room' } })).props.focusPlanFamily).toBe('af_war_room')
+    expect((await UpgradePage({ searchParams: { plan: ['supreme'] } })).props.focusPlanFamily).toBe('af_supreme')
+    expect((await UpgradePage({})).props.focusPlanFamily).toBeNull()
   })
 
   it('🛑 a checkout started on a focused plan comes back to that plan, not to the bare page', async () => {
@@ -105,7 +105,7 @@ describe('/upgrade', () => {
     } catch {}
     nav.search = new URLSearchParams('plan=war_room&feature=draft_prep&checkout=cancelled')
 
-    render(UpgradePage({ searchParams: { plan: 'war_room' } }))
+    render(await UpgradePage({ searchParams: { plan: 'war_room' } }))
 
     const cta = await screen.findByTestId('pricing-subscription-cta-af_war_room_monthly')
     // The plan the link named is the first card.

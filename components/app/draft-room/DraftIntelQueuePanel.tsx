@@ -80,7 +80,7 @@ export function DraftIntelQueuePanel({
                       {entry.team ? ` · ${entry.team}` : ''}
                     </span>
                     {!entry.isTaken ? (
-                      <span className="rounded border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-cyan-100">
+                      <span className="rounded border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100">
                         Assistant guidance
                       </span>
                     ) : null}
@@ -99,12 +99,12 @@ export function DraftIntelQueuePanel({
                   >
                     {entry.isTaken ? 'Taken' : `${entry.availabilityProbability}%`}
                   </span>
-                  {!entry.isTaken ? <span className="text-[9px] text-white/45">availability signal</span> : null}
+                  {!entry.isTaken ? <span className="text-[11px] text-white/45">availability signal</span> : null}
                   {!entry.isTaken && onAddIntelSuggestion ? (
                     <button
                       type="button"
                       onClick={() => onAddIntelSuggestion(entry)}
-                      className="rounded-md border border-cyan-400/30 bg-cyan-500/12 px-2 py-0.5 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-500/22"
+                      className="rounded-md border border-cyan-400/30 bg-cyan-500/12 px-2 py-0.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/22"
                       data-testid={`draft-intel-add-queue-${entry.rank}`}
                     >
                       + Queue
@@ -141,7 +141,7 @@ export function DraftIntelQueuePanel({
           Draft {topAvailable.playerName}
         </button>
       ) : null}
-      <p className="mt-2 text-[10px] text-white/45">
+      <p className="mt-2 text-[11px] text-white/45">
         AI queue is advisory. Use your board context and league strategy before committing a pick.
       </p>
     </>
@@ -161,11 +161,11 @@ export function DraftIntelQueuePanel({
           <div className="rounded-lg border border-white/[0.06] bg-[#101a30]/90 p-2.5">
             <div className="mb-2.5 flex flex-wrap items-start justify-between gap-2 border-b border-white/[0.06] pb-2.5">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300/75">AI queue · lookahead</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/75">AI queue · lookahead</p>
                 <p className="mt-1 text-sm font-semibold text-white" data-testid="draft-intel-headline">
                   {headline || (loading ? 'Chimmy is building your queue…' : 'No active lookahead window yet.')}
                 </p>
-                <p className="mt-1 text-[10px] text-white/45">Assistant guidance, not deterministic pick lock.</p>
+                <p className="mt-1 text-[11px] text-white/45">Assistant guidance, not deterministic pick lock.</p>
               </div>
               <div
                 className="rounded-full border px-2.5 py-1 text-[11px] font-medium"
@@ -204,7 +204,7 @@ export function DraftIntelQueuePanel({
           <p className="mt-1 text-sm font-semibold text-white" data-testid="draft-intel-headline">
             {headline || (loading ? 'Chimmy is building your queue…' : 'No active lookahead window yet.')}
           </p>
-          <p className="mt-1 text-[10px] text-white/45">Assistant guidance, not deterministic pick lock.</p>
+          <p className="mt-1 text-[11px] text-white/45">Assistant guidance, not deterministic pick lock.</p>
         </div>
         <div
           className="rounded-full border px-2.5 py-1 text-[11px] font-medium"

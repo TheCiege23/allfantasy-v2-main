@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { updateDraft } from "@/lib/automated-blog"
+import { requireAdminOrBearer } from "@/lib/adminAuth"
 
 /** GET /api/blog/[articleId] — get one article by id. */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ articleId: string }> }
 ) {
+  // Returns the working draft body — an editor view, not the public article.
+  const gate = await requireAdminOrBearer(req)
+  if (!gate.ok) return gate.res
   try {
     const { articleId } = await params
     const article = await prisma.blogArticle.findUnique({
@@ -53,6 +57,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ articleId: string }> }
 ) {
+  const gate = await requireAdminOrBearer(req)
+  if (!gate.ok) return gate.res
   try {
     const { articleId } = await params
     const body = await req.json()

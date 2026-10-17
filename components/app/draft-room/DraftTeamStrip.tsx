@@ -106,16 +106,16 @@ export function DraftTeamStrip({
                   <button
                     type="button"
                     onClick={() => onClaimSlot(slot)}
-                    className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-400/80 bg-gradient-to-br from-cyan-500/50 to-cyan-600/30 text-[9px] font-black uppercase tracking-[0.14em] text-cyan-100 hover:from-cyan-400/60 hover:to-cyan-500/40 shadow-lg shadow-cyan-500/30 transition-all hover:shadow-xl hover:shadow-cyan-500/40"
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-400/80 bg-gradient-to-br from-cyan-500/50 to-cyan-600/30 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100 hover:from-cyan-400/60 hover:to-cyan-500/40 shadow-lg shadow-cyan-500/30 transition-all hover:shadow-xl hover:shadow-cyan-500/40"
                   >
                     CLAIM
                   </button>
                 ) : (
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/[0.08] text-[10px] font-semibold text-white/50">
+                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/[0.08] text-[11px] font-semibold text-white/50">
                     {slot}
                   </span>
                 )}
-                <span className="truncate text-[9px] text-white/50">Team {slot}</span>
+                <span className="truncate text-[11px] text-white/50">Team {slot}</span>
               </div>
             )
           }
@@ -158,7 +158,7 @@ export function DraftTeamStrip({
                 )}
                 {isOrphan && (
                   <span
-                    className="absolute -right-0.5 -top-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-amber-300/60 bg-amber-500 text-[8px] font-black text-black"
+                    className="absolute -right-0.5 -top-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-amber-300/60 bg-amber-500 text-[11px] font-black text-black"
                     title="Orphan roster"
                   >
                     !
@@ -166,7 +166,7 @@ export function DraftTeamStrip({
                 )}
               </div>
               <span
-                className={`w-full truncate text-[9px] ${
+                className={`w-full truncate text-[11px] ${
                   isUser ? 'font-bold text-cyan-200' : 'text-white/80'
                 }`}
                 title={displayName}
@@ -177,7 +177,7 @@ export function DraftTeamStrip({
                 <BotPersonalityBadge archetypeLabel={meta.aiArchetypeLabel} compact className="max-w-full" />
               ) : null}
               {isOnClock && (
-                <span className="rounded-full bg-amber-400/95 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-black">
+                <span className="rounded-full bg-amber-400/95 px-2 py-0.5 text-[11px] font-black uppercase tracking-[0.14em] text-black">
                   On clock
                 </span>
               )}

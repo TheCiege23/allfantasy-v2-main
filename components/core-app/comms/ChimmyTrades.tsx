@@ -5,7 +5,7 @@ import type { TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeServ
 import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { assetValues, gradeReasons, type importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
-import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { gradeMoment, type GradeMomentInput } from '@/lib/decision-os/trade/gradeMoment'
 
 type Proposal = { id: string; title: string; status: string; involvesYou: boolean; assets: string[]; grade: string | null; explanation: string }
 type History = { supported: boolean; grades?: TradeGradesPayload; ledger?: ImportedTradeLedgerPayload; viewerSleeperUserId?: string | null; sync?: { incomplete: boolean } }
@@ -25,7 +25,7 @@ type TradeCenter = {
 function gradeFact(
   aName: string,
   bName: string,
-  g: { letter: string; partnerLetter: string; getValue: number; giveValue: number; frozenAt?: string | null } | null,
+  g: ({ letter: string; partnerLetter: string; getValue: number; giveValue: number } & GradeMomentInput) | null,
 ): string {
   if (!g) return ''
   // A completed trade's letter is its frozen original — tell Chimmy WHEN, so it does not call it today's.
@@ -51,14 +51,23 @@ function TradeCenterCard({ trade, active, onAsk }: { trade: LeagueTradeHistoryIt
     <p>{trade.status || (active ? 'Open offer' : 'Recorded trade')} · {one
       ? `League grade: you ${one.letter} · ${trade.partnerName} ${one.partnerLetter}`
       : grade ? `Current ${active ? 'proposal' : 'market'} grade ${grade}` : 'Grade unavailable'}</p>
-    <p>{active && viewerIsParty ? 'You send' : 'Sent'}: {sent}</p>
-    <p>{active && viewerIsParty ? 'You receive' : 'Received'}: {received}</p>
+    {/*
+      A completed trade reads as what each team RECEIVED (2026-10-01): `sent` left the viewer's
+      roster, so it is what the partner got. An open offer keeps its send/receive wording.
+    */}
+    {active ? <>
+      <p>{viewerIsParty ? 'You send' : 'Sent'}: {sent}</p>
+      <p>{viewerIsParty ? 'You receive' : 'Received'}: {received}</p>
+    </> : <>
+      <p>You received: {received}</p>
+      <p>{trade.partnerName || 'Trade partner'} received: {sent}</p>
+    </>}
     <p>{active && trade.decisionRecommendation
       ? trade.decisionRecommendation
       : one ? `You got ${one.getValue.toLocaleString()} for ${one.giveValue.toLocaleString()} on this league's values ${gradeMoment(one)}.`
       : grade ? `Repriced using this league's current player values. This is not a realized-points grade.` : 'Verified valuation coverage is incomplete; no letter grade is shown.'}</p>
     {!active && trade.currentUnresolvedAssets?.length ? <p>Unpriced: {trade.currentUnresolvedAssets.join(', ')}</p> : null}
-    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain ${trade.status || 'recorded'} trade ${trade.id}: ${title}. Recorded sent assets: ${sent}. Recorded received assets: ${received}.${gradeFact('my side', trade.partnerName, one)} Verify which side is mine, then explain the grade and whether it fits my roster and this league's rules.`)}>Ask Chimmy</button>
+    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain ${trade.status || 'recorded'} trade ${trade.id}: ${title}. ${active ? `Recorded sent assets: ${sent}. Recorded received assets: ${received}.` : `I received: ${received}. ${trade.partnerName || 'My trade partner'} received: ${sent}.`}${gradeFact('my side', trade.partnerName, one)} Verify which side is mine, then explain the grade and whether it fits my roster and this league's rules.`)}>Ask Chimmy</button>
   </article>
 }
 
@@ -80,13 +89,14 @@ function GradedHistoryCard({ row, realized, onAsk }: { row: GradedHistoryRow; re
   return <article>
     <strong>{when} · {a} ↔ {b}</strong>
     <p>{g ? `League grade: ${a} ${g.letter} · ${b} ${g.partnerLetter}` : row.leagueGrade && !row.leagueGrade.graded ? `Not graded: ${row.leagueGrade.reason}` : 'Grade unavailable'}</p>
-    <p>{a} sent: {list(row.sent, sentValues)}</p>
-    <p>{b} sent: {list(row.received, receivedValues)}</p>
+    {/* What each team RECEIVED, under the name its letter is read against — as on the Trade Center card. */}
+    <p>{a} received: {list(row.received, receivedValues)}</p>
+    <p>{b} received: {list(row.sent, sentValues)}</p>
     {g ? gradeReasons(g, a, b).map(line => <p key={line}>{line}</p>) : null}
     {[row.sideAName, row.sideBName].some(name => net(name) != null) ? (
       <p>Realized so far: {[row.sideAName, row.sideBName].filter(name => net(name) != null).map(name => `${name} net ${net(name)!.toFixed(1)} fantasy points`).join(' · ')} while the assets were held.</p>
     ) : null}
-    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${row.id} (${when}): ${a} sent ${list(row.sent, sentValues)}; ${b} sent ${list(row.received, receivedValues)}.${gradeFact(a, b, g)} Explain why it graded that way and how it affects my team in this league.`)}>Ask Chimmy</button>
+    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${row.id} (${when}): ${a} received ${list(row.received, receivedValues)}; ${b} received ${list(row.sent, sentValues)}.${gradeFact(a, b, g)} Explain why it graded that way and how it affects my team in this league.`)}>Ask Chimmy</button>
   </article>
 }
 
@@ -187,7 +197,7 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
         </article>)}
         {!!tradeCenter?.historyTrades?.length && <>
           <h3>Recent league trade decisions</h3>
-          <p>Includes approved, processed and other recorded decisions available from the Trade Center, graded on this league&rsquo;s values today.</p>
+          <p>Includes approved, processed and other recorded decisions available from the Trade Center. Each card says when its grade was taken &mdash; a completed Sleeper trade keeps the grade it got the first time AllFantasy graded it on this league&rsquo;s values, the same grade as the Trade Center.</p>
           {tradeCenter.historyTrades.slice(0, visible).map(trade => <TradeCenterCard key={trade.id} trade={trade} active={false} onAsk={onAsk} />)}
         </>}
         <h3>Completed trade results</h3>
@@ -213,10 +223,10 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
             <strong>{t.season} · Week {t.week}</strong>
             {t.sides.map(s => <div key={s.rosterId}>
               <p><b>{s.teamName || s.managerName}{s.ownerId && s.ownerId === history?.viewerSleeperUserId ? ' (You)' : ''}</b> · League grade unavailable right now</p>
-              <p>Received: {[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label)].join(', ') || 'No recorded assets'}</p>
+              <p>Received: {[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label), ...(s.faabIn ? [`$${s.faabIn} FAAB`] : [])].join(', ') || 'No recorded assets'}</p>
               <p>{hasSignal ? `Realized so far: net ${s.cumulativeNet.toFixed(1)} fantasy points while assets were held.` : 'No realized scoring yet.'}</p>
             </div>)}
-            <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${t.id} (${t.season}, week ${t.week}): ${t.sides.map(s => `${s.teamName || s.managerName} received ${[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label)].join(', ')}`).join('; ')}. How does it affect my team in this league?`)}>Ask Chimmy</button>
+            <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${t.id} (${t.season}, week ${t.week}): ${t.sides.map(s => `${s.teamName || s.managerName} received ${[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label), ...(s.faabIn ? [`$${s.faabIn} FAAB`] : [])].join(', ')}`).join('; ')}. How does it affect my team in this league?`)}>Ask Chimmy</button>
           </article>
         })}
         {history?.ledger?.notes.map(note => <p key={note}>{note}</p>)}

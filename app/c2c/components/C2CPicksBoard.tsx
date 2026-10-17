@@ -42,7 +42,7 @@ export function C2CPicksBoard({
         <span className="uppercase text-white/55">{p.pickSide}</span>
         <span className="text-white/70">{teamLabel ? teamLabel(p.currentOwnerId) : p.currentOwnerId.slice(0, 8)}</span>
         <span className={p.isUsed ? 'text-emerald-300' : 'text-amber-200/80'}>{p.isUsed ? 'Used' : 'Available'}</span>
-        <button type="button" disabled className="text-[10px] text-cyan-300/50">
+        <button type="button" disabled className="text-[11px] text-cyan-300/50">
           Trade
         </button>
       </div>

@@ -19,11 +19,11 @@ export function WaiverWednesdaySection({ copy }: { copy: LandingCopy['journey'][
 
       <div className="grid gap-6 sm:grid-cols-2">
         <GlassCard className="p-5" accentBorder="color-mix(in srgb, var(--accent-cyan) 20%, var(--border))">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-cyan-strong)' }}>{copy.priorityLabel}</p>
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-cyan-strong)' }}>{copy.priorityLabel}</p>
           <div className="space-y-2">
             {copy.mockClaims.map((claim, i) => (
               <div key={claim.player} className="landing-fade-in-stagger flex items-center gap-2.5 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--panel2) 60%, transparent)', animationDelay: `${i * 120}ms` }}>
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: 'color-mix(in srgb, var(--accent-cyan) 16%, transparent)', color: 'var(--accent-cyan-strong)' }}>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: 'color-mix(in srgb, var(--accent-cyan) 16%, transparent)', color: 'var(--accent-cyan-strong)' }}>
                   {i + 1}
                 </span>
                 <span className="flex-1 truncate text-sm font-medium" style={{ color: 'var(--text)' }}>{claim.player}</span>

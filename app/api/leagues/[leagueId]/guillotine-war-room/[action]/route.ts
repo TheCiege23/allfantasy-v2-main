@@ -9,7 +9,7 @@
  *   - waivers          → survival-first add/drop
  *   - faab-plan        → conserve vs aggressive FAAB
  *   - dropped-players  → eliminated-team pool ranking
- *   - trade-analyze    → trade verdict (ONLY when trades enabled)
+ *   - trade-analyze    → trade facts + THE one trade grade (ONLY when trades enabled)
  *   - weekly-plan      → composed survival plan
  *   - ask              → grounded AI answer (AF War Room-gated)
  *
@@ -24,13 +24,15 @@ import { evaluateLineupSafety } from '@/lib/guillotine-war-room/guillotineLineup
 import { buildFaabPlan } from '@/lib/guillotine-war-room/guillotineFaabEngine'
 import { buildWaiverRecommendations } from '@/lib/guillotine-war-room/guillotineWaiverEngine'
 import { evaluateDroppedPlayers } from '@/lib/guillotine-war-room/guillotineDroppedPlayerEngine'
-import { analyzeGuillotineTrade } from '@/lib/guillotine-war-room/guillotineTradeEngine'
+import { guillotineTradeFacts } from '@/lib/guillotine-war-room/guillotineTradeEngine'
 import { buildWeeklyPlan } from '@/lib/guillotine-war-room/guillotineWeeklyPlanEngine'
 import { GUILLOTINE_WAR_ROOM_SYSTEM_RULES, buildGuillotineWarRoomPrompt } from '@/lib/guillotine-war-room/guillotineWarRoomPrompt'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { GuillotineWarRoomContext } from '@/lib/guillotine-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { warRoomTradeAnalysisForClient } from '@/lib/decision-os/trade/warRoomTradeView'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -106,7 +108,7 @@ export async function POST(
     case 'dropped-players':
       return NextResponse.json({ droppedPlayers: evaluateDroppedPlayers(context, rosterId) })
     case 'trade-analyze': {
-      const analysis = analyzeGuillotineTrade(context, {
+      const analysis = guillotineTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -120,9 +122,25 @@ export async function POST(
         rosterId,
         outgoingCount: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds.length : 0,
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
+        tradesEnabled: context.guillotine.tradesEnabled,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral/disabled is derived
+       * for the shadow above, inside Decision OS. The panel shows the grade and the facts.
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
+        tradesEnabled: context.guillotine.tradesEnabled,
+      })
+      // 🛑 The facts only — the engine's value and fit deltas stay on the server (2026-09-29).
+      return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
     case 'weekly-plan':
       return NextResponse.json({ weeklyPlan: buildWeeklyPlan(context, rosterId) })

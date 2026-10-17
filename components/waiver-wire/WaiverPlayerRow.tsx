@@ -71,7 +71,7 @@ function TeamLogoBadge({ logo, team, sport }: { logo: string; team: string; spor
   const label = team && team !== "FA" ? team.slice(0, 3).toUpperCase() : String(sport ?? "AF").slice(0, 3).toUpperCase()
   return (
     <div
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] text-[9px] font-black text-white/65"
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--line2)] bg-[var(--surface2)] text-[11px] font-black text-[var(--muted)]"
       data-testid={`waiver-player-team-logo-fallback-${team || "FA"}`}
       title={team && team !== "FA" ? `${team} badge` : "Team logo unavailable"}
     >
@@ -82,9 +82,9 @@ function TeamLogoBadge({ logo, team, sport }: { logo: string; team: string; spor
 
 function Metric({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.035] px-2 py-1" data-testid={testId}>
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40">{label}</div>
-      <div className="mt-0.5 text-xs font-semibold text-white/90">{value}</div>
+    <div className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2 py-1" data-testid={testId}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{label}</div>
+      <div className="mt-0.5 text-xs font-semibold text-[var(--muted)]">{value}</div>
     </div>
   )
 }
@@ -95,8 +95,8 @@ function SourcePill({ label, tone = "neutral" }: { label: string; tone?: "neutra
       ? "border-amber-400/30 bg-amber-500/10 text-amber-100"
       : tone === "good"
         ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
-        : "border-white/10 bg-white/[0.04] text-white/60"
-  return <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${cls}`}>{label}</span>
+        : "border-[var(--line2)] bg-[var(--surface2)] text-[var(--muted)]"
+  return <span className={`rounded-full border px-1.5 py-0.5 text-[11px] ${cls}`}>{label}</span>
 }
 
 export default function WaiverPlayerRow({
@@ -134,7 +134,7 @@ export default function WaiverPlayerRow({
 
   return (
     <li
-      className="group grid gap-3 rounded-xl border border-white/10 bg-[#070d1a]/90 px-3 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition hover:border-[#ff3d81]/35 hover:bg-[#0b1428] sm:grid-cols-[minmax(0,1fr)_auto] sm:px-4"
+      className="group grid gap-3 rounded-xl border border-[var(--line2)] bg-[var(--surface)] px-3 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition hover:border-[var(--line2)] hover:bg-[var(--surface2)] sm:grid-cols-[minmax(0,1fr)_auto] sm:px-4"
       data-testid={`waiver-player-row-${player.id}`}
       onClick={onRowClick}
     >
@@ -152,7 +152,7 @@ export default function WaiverPlayerRow({
             className="ring-1 ring-white/10"
           />
           <span
-            className="absolute -bottom-1 -right-1 rounded-full border border-black/70 px-1.5 py-0.5 text-[9px] font-black text-black"
+            className="absolute -bottom-1 -right-1 rounded-full border border-black/70 px-1.5 py-0.5 text-[11px] font-black text-[var(--bg)]"
             style={{ backgroundColor: posColor }}
             data-testid={`waiver-player-position-chip-${player.id}`}
           >
@@ -162,13 +162,13 @@ export default function WaiverPlayerRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold text-white">{player.name}</span>
+            <span className="truncate text-sm font-semibold text-[var(--text)]">{player.name}</span>
             <TeamLogoBadge logo={logo} team={team} sport={normalizedSport} />
-            <span className="rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[11px] text-white/65">
+            <span className="rounded-full border border-[var(--line2)] bg-[var(--surface2)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
               {team}
             </span>
             {player.injuryStatus ? (
-              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-100">
+              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-100">
                 {player.injuryStatus}
               </span>
             ) : null}
@@ -184,7 +184,7 @@ export default function WaiverPlayerRow({
             <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/55">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
             {player.experienceSummary ? <SourcePill label={player.experienceSummary} /> : null}
             {(player.seasonStatsSummary ?? []).map((stat) => (
               <SourcePill key={stat} label={stat} />
@@ -213,7 +213,7 @@ export default function WaiverPlayerRow({
           href={detailsHref}
           onClick={(e) => e.stopPropagation()}
           data-testid={`waiver-player-detail-link-${player.id}`}
-          className="rounded-lg border border-white/20 bg-black/40 px-2.5 py-1.5 text-center text-[11px] text-white/75 hover:text-white"
+          className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-2.5 py-1.5 text-center text-[11px] text-[var(--muted)] hover:text-[var(--text)]"
         >
           Compare
         </Link>
@@ -228,7 +228,7 @@ export default function WaiverPlayerRow({
             className={`rounded-lg border px-2.5 py-1.5 text-[11px] ${
               watchlisted
                 ? "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-100"
-                : "border-white/20 bg-black/40 text-white/70 hover:text-white"
+                : "border-[var(--line2)] bg-[var(--surface2)] text-[var(--muted)] hover:text-[var(--text)]"
             }`}
           >
             {watchlisted ? "Watching" : "Watch"}
@@ -261,7 +261,7 @@ export default function WaiverPlayerRow({
               onAddClick()
             }}
             data-testid={`waiver-claim-open-${player.id}`}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#ff3d81]/50 bg-[#ff3d81]/15 px-3 py-1.5 text-xs font-medium text-[#ffd7e5] hover:bg-[#ff3d81]/25 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--line2)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
           >
             {actionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Claim

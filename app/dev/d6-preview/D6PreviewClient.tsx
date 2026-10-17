@@ -61,7 +61,7 @@ export function D6PreviewClient() {
         className="shrink-0 border-b border-white/8 bg-[#050c1d] p-4 text-center text-white/35"
         style={{ minHeight: 'min(52vh, 640px)' }}
       >
-        <div className="text-[10px] uppercase tracking-[0.2em]">[mock] Draft board lives here (~52vh)</div>
+        <div className="text-[11px] uppercase tracking-[0.2em]">[mock] Draft board lives here (~52vh)</div>
       </div>
 
       {/* 4-column bottom dock — shown at xl+ widths. Below xl the page collapses
@@ -74,13 +74,13 @@ export function D6PreviewClient() {
           data-testid="d6-preview-pool"
           className="flex min-h-0 min-w-0 basis-0 flex-col overflow-hidden border-b border-white/8 xl:flex-[6] xl:border-b-0 xl:border-r"
         >
-          <div className="shrink-0 border-b border-white/8 bg-[#0a1228] px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/55">
+          <div className="shrink-0 border-b border-white/8 bg-[#0a1228] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
             Players (≈50%)
           </div>
           <div className="flex-1 overflow-auto p-3">
             <table className="w-full text-[11px]">
               <thead>
-                <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-white/55">
+                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-white/55">
                   <th className="px-2 py-1 text-right">RK</th>
                   <th className="px-2 py-1 text-left">PLAYER</th>
                   <th className="px-2 py-1 text-right">ADP</th>
@@ -101,7 +101,7 @@ export function D6PreviewClient() {
                     <td className="px-2 py-1.5 text-right text-white/55">{rk}</td>
                     <td className="px-2 py-1.5">
                       <div className="font-semibold text-white/95">{name}</div>
-                      <div className="text-[10px] text-white/45">{sub}</div>
+                      <div className="text-[11px] text-white/45">{sub}</div>
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{adp}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{aiAdp}</td>
@@ -132,7 +132,7 @@ export function D6PreviewClient() {
                     <span>{p}</span>
                     <button
                       type="button"
-                      className="rounded border border-cyan-400/35 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-100"
+                      className="rounded border border-cyan-400/35 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100"
                     >
                       Draft
                     </button>
@@ -172,13 +172,13 @@ export function D6PreviewClient() {
       <WarRoomPopup hasNewIntel triggerLabel="AF Legacy Draft Room">
         <div className="space-y-3 p-3 text-[12px] text-white/85">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-white/45">Team</div>
+            <div className="text-[11px] uppercase tracking-[0.2em] text-white/45">Team</div>
             <div className="text-[14px] font-semibold">TheCiege24</div>
-            <div className="text-[10px] text-white/55">12-Team NFL Redraft League · Slot 1</div>
+            <div className="text-[11px] text-white/55">12-Team NFL Redraft League · Slot 1</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-white/45">Starter balance</div>
-            <div className="mt-1 flex flex-wrap gap-1.5 text-[10px]">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-white/45">Starter balance</div>
+            <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
               <span className="rounded border border-cyan-400/35 bg-cyan-500/15 px-1.5 py-0.5">QB 1/1</span>
               <span className="rounded border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5">RB 1/2</span>
               <span className="rounded border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5">WR 1/2</span>
@@ -186,7 +186,7 @@ export function D6PreviewClient() {
             </div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-white/45">AI guidance</div>
+            <div className="text-[11px] uppercase tracking-[0.2em] text-white/45">AI guidance</div>
             <div className="mt-1 rounded border border-violet-400/30 bg-violet-500/10 p-2">
               <p className="text-[12px] font-semibold text-white">Tee Higgins (WR · CIN)</p>
               <p className="mt-1 text-[11px] text-white/70">

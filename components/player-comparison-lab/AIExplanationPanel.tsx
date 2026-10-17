@@ -37,7 +37,7 @@ export function AIExplanationPanel({
       const nextInsight = await onRetryAnalysis();
       setInsight(nextInsight);
     } catch {
-      setError('Failed to load AI analysis');
+      setError("Chimmy's analysis could not load");
     } finally {
       setLoading(false);
     }
@@ -49,18 +49,18 @@ export function AIExplanationPanel({
     insight?.finalRecommendationSource === 'deterministic'
       ? 'Final recommendation (deterministic)'
       : insight?.finalRecommendationSource === 'ai'
-        ? 'Final recommendation (AI)'
+        ? 'Final recommendation (Chimmy)'
         : 'Final recommendation (OpenAI)';
 
   return (
     <Card className="border-white/10 bg-white/5" data-audit="ai-explanation-panel">
       <CardHeader>
-        <CardTitle className="text-lg text-white">AI explanation</CardTitle>
+        <CardTitle className="text-lg text-white">Chimmy&apos;s explanation</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <FeatureGate
           featureId="player_comparison_explanations"
-          featureNameOverride="AI comparison explanations"
+          featureNameOverride="Chimmy's comparison explanations"
           className="mb-2"
         >
           <>
@@ -100,7 +100,7 @@ export function AIExplanationPanel({
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                Get AI insight
+                Get Chimmy&apos;s insight
               </Button>
             )}
           </>

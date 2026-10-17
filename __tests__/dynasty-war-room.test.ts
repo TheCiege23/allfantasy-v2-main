@@ -4,7 +4,14 @@ import { evaluateDynastyTeamDirection } from '@/lib/dynasty-war-room/dynastyTeam
 import { evaluateBuySellHold } from '@/lib/dynasty-war-room/dynastyBuySellHoldEngine'
 import { buildDynastyLineupRecommendation } from '@/lib/dynasty-war-room/dynastyLineupEngine'
 import { buildDynastyWaiverRecommendations } from '@/lib/dynasty-war-room/dynastyWaiverEngine'
-import { analyzeDynastyTrade, findDynastyTradeTargets } from '@/lib/dynasty-war-room/dynastyTradeEngine'
+import { dynastyTradeFacts, findDynastyTradeTargets } from '@/lib/dynasty-war-room/dynastyTradeEngine'
+import { warRoomLegacyVerdict } from '@/lib/decision-os/trade/warRoomLegacyVerdict'
+import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
+
+/** Every line the dynasty War Room panel prints from a trade analysis. */
+const dynastyShown = (r: ReturnType<typeof dynastyTradeFacts>): string[] => [
+  ...r.explanationFacts, ...r.ageImpact, ...r.pickImpact, ...(r.directionImpact ? [r.directionImpact] : []), ...r.riskFlags, ...r.missingDataFlags,
+]
 import { evaluateDynastyPickValue } from '@/lib/dynasty-war-room/dynastyPickValueEngine'
 import {
   DYNASTY_WAR_ROOM_SYSTEM_RULES,
@@ -321,14 +328,18 @@ describe('dynastyWaiverEngine', () => {
 describe('dynastyTradeEngine', () => {
   it('age-adjusts value: acquiring an ascending player for an aging one grades favorably', () => {
     const ctx = makeContext({ teams: [contenderRoster(), rebuilderRoster()] })
-    const res = analyzeDynastyTrade(ctx, {
+    const res = dynastyTradeFacts(ctx, {
       rosterId: 'r1',
       outgoingPlayerIds: ['rb2'], // age 29 RB (cliff)
       incomingPlayerIds: ['w2'], // age 22 WR (ascending), on r2
     })
-    expect(res.verdict).not.toBe('needs_more_data')
+    // 🛑 2026-09-30: facts, never a verdict — the retired rule reads these inputs, for the shadow only.
+    expect(res).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict(res)).not.toBe('needs_more_data')
     expect(res.valueDelta).not.toBeNull()
     expect(res.ageImpact.length).toBeGreaterThan(0)
+    // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
+    expect(dynastyShown(res).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('flags picks as unpriced and needs_more_data without value', () => {
@@ -336,14 +347,16 @@ describe('dynastyTradeEngine', () => {
       teams: [team({ rosterId: 'r1', isUserTeam: true, players: [player({ playerId: 'np', position: 'WR' })] })],
       availability: { playerValues: 'missing', playerAges: 'missing' },
     })
-    const res = analyzeDynastyTrade(ctx, {
+    const res = dynastyTradeFacts(ctx, {
       rosterId: 'r1',
       outgoingPlayerIds: ['np'],
       incomingPlayerIds: [],
       incomingPickIds: ['2027-1'],
     })
-    expect(res.verdict).toBe('needs_more_data')
+    expect(res).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict(res)).toBe('needs_more_data')
     expect(res.riskFlags.some((r) => r.toLowerCase().includes('pick'))).toBe(true)
+    expect(dynastyShown(res).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('matches a contender with a rebuilder in the trade finder', () => {
@@ -434,7 +447,7 @@ describe('dynasty pick capital integration', () => {
     const r = rebuilderRoster()
     r.picks = [pick({ id: 'rp1', season: 2027, round: 1, currentOwnerId: 'r2' })]
     const ctx = makeContext({ teams: [c, r], availability: { futurePicks: 'available' } })
-    const withPick = analyzeDynastyTrade(ctx, {
+    const withPick = dynastyTradeFacts(ctx, {
       rosterId: 'r1',
       outgoingPlayerIds: ['rb2'],
       incomingPlayerIds: [],
@@ -442,16 +455,18 @@ describe('dynasty pick capital integration', () => {
     })
     expect(withPick.pickImpact.some((s) => s.includes('2027 R1'))).toBe(true)
     expect(withPick.valueDelta).not.toBeNull()
+    expect(dynastyShown(withPick).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
 
     // Same pick id, but tracking unavailable → excluded + flagged, no crash.
     const ctxNoPicks = makeContext({ teams: [c, r], availability: { futurePicks: 'missing' } })
-    const noPick = analyzeDynastyTrade(ctxNoPicks, {
+    const noPick = dynastyTradeFacts(ctxNoPicks, {
       rosterId: 'r1',
       outgoingPlayerIds: ['rb2'],
       incomingPlayerIds: [],
       incomingPickIds: ['rp1'],
     })
     expect(noPick.riskFlags.some((s) => /not tracked/i.test(s))).toBe(true)
+    expect(dynastyShown(noPick).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('trade finder surfaces a pick angle between a contender and a pick-rich rebuilder', () => {

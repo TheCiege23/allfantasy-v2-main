@@ -1,5 +1,7 @@
 # AF Tier Entitlement + Billing Build Brief
 
+> ⚠ **SUPERSEDED 2026-09-29.** The prices and plan contents in this file no longer match `lib/monetization/catalog.ts` (e.g. AF Legacy is $9.99/$79.99 there, not $29.99/$299.99). For the Oct 15 paywall launch use [docs/PAYWALL_LAUNCH_CHECKLIST_2026-10-15.md](docs/PAYWALL_LAUNCH_CHECKLIST_2026-10-15.md). Kept for history.
+
 **Status:** ready to build · **Prepared:** Jul 15, 2026
 **For:** Claude Code, running in `F:\allfantasy-v2-main`
 **Goal:** Turn the locked tier matrix into a working paywall — a real entitlement engine, live Stripe checkout, and a token ledger — so users can subscribe to AF Pro / Commissioner / Supreme / War Room or buy token packs, and every gated surface unlocks correctly.

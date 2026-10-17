@@ -416,7 +416,7 @@ function DraftBoardInner({
               Draft board
             </span>
             <span
-              className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] shadow-sm ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] shadow-sm ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
             >
               {boardModeLabel}
             </span>
@@ -430,7 +430,7 @@ function DraftBoardInner({
               with no roster has no such cells, and naming a state that cannot appear is noise.
             */}
             <span
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] uppercase tracking-[0.12em] text-white/45"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45"
               data-testid="draft-board-legend"
             >
               <span className="inline-flex items-center gap-1">
@@ -454,21 +454,21 @@ function DraftBoardInner({
                   type="button"
                   onClick={onOpenTradeHistory}
                   data-testid="draft-board-open-trade-history"
-                  className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-500/12 px-2.5 py-1 text-[10px] font-medium text-amber-100/95 shadow-[0_0_16px_rgba(251,191,36,0.12)] transition duration-150 hover:bg-amber-500/22"
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-500/12 px-2.5 py-1 text-[11px] font-medium text-amber-100/95 shadow-[0_0_16px_rgba(251,191,36,0.12)] transition duration-150 hover:bg-amber-500/22"
                   title="View pick trade history"
                 >
                   <ArrowLeftRight className="h-3 w-3" />
                   {tradedPicks.length} traded {tradedPicks.length === 1 ? 'pick' : 'picks'}
                 </button>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-100/88">
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100/88">
                   <ArrowLeftRight className="h-3 w-3" />
                   {tradedPicks.length} traded {tradedPicks.length === 1 ? 'pick' : 'picks'}
                 </span>
               )
             ) : null}
             {draftType === 'auction' ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/12 px-2 py-1 text-[10px] font-medium text-cyan-100/90 shadow-[0_0_14px_rgba(34,211,238,0.12)]">
+              <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/12 px-2 py-1 text-[11px] font-medium text-cyan-100/90 shadow-[0_0_14px_rgba(34,211,238,0.12)]">
                 <Gavel className="h-3 w-3" />
                 {picks.length} sold
               </span>
@@ -482,7 +482,7 @@ function DraftBoardInner({
                 data-testid="draft-board-prev-round"
                 onClick={() => setSelectedRound((prev) => Math.max(1, prev - 1))}
                 disabled={!navigation.canGoPrev}
-                className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[10px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
+                className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[11px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
@@ -490,7 +490,7 @@ function DraftBoardInner({
                 value={navigation.round}
                 data-testid="draft-board-round-selector"
                 onChange={(event) => setSelectedRound(Math.max(1, Number(event.target.value) || 1))}
-                className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[10px] text-white shadow-inner"
+                className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white shadow-inner"
                 aria-label="Draft board round selector"
               >
                 {Array.from({ length: rounds }, (_, index) => index + 1).map((round) => (
@@ -504,7 +504,7 @@ function DraftBoardInner({
                 data-testid="draft-board-next-round"
                 onClick={() => setSelectedRound((prev) => Math.min(rounds, prev + 1))}
                 disabled={!navigation.canGoNext}
-                className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[10px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
+                className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[11px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
@@ -512,7 +512,7 @@ function DraftBoardInner({
                 type="button"
                 data-testid="draft-board-toggle-view-mode"
                 onClick={() => setViewMode((prev) => (prev === 'all' ? 'single' : 'all'))}
-                className="rounded-lg border border-cyan-400/40 bg-cyan-500/12 px-2.5 py-1 text-[10px] font-medium text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.1)] transition duration-150 hover:bg-cyan-500/22 active:scale-95"
+                className="rounded-lg border border-cyan-400/40 bg-cyan-500/12 px-2.5 py-1 text-[11px] font-medium text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.1)] transition duration-150 hover:bg-cyan-500/22 active:scale-95"
               >
                 {viewMode === 'all' ? 'Focus round' : 'All rounds'}
               </button>
@@ -525,7 +525,7 @@ function DraftBoardInner({
                     setSelectedRound(Math.min(rounds, Math.max(1, round)))
                     setViewMode('single')
                   }}
-                  className="rounded-lg border border-emerald-400/40 bg-emerald-500/12 px-2 py-1 text-[10px] font-medium text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.12)] transition duration-150 hover:bg-emerald-500/22"
+                  className="rounded-lg border border-emerald-400/40 bg-emerald-500/12 px-2 py-1 text-[11px] font-medium text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.12)] transition duration-150 hover:bg-emerald-500/22"
                 >
                   Current
                 </button>
@@ -536,7 +536,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-1 text-[10px] sm:px-4 ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'
@@ -567,7 +567,7 @@ function DraftBoardInner({
                   style={{ borderColor: withAlpha(column.tintHex, 0.18) }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/38">
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/38">
                       Slot {column.slot}
                     </span>
                     <span
@@ -586,7 +586,7 @@ function DraftBoardInner({
                       return (
                         <div
                           key={`${column.rosterId}-open-${index + 1}`}
-                          className="flex min-h-[60px] items-end rounded-lg border border-dashed border-white/[0.08] bg-[#0d1424]/90 px-2 py-1.5 text-[10px] text-white/30"
+                          className="flex min-h-[60px] items-end rounded-lg border border-dashed border-white/[0.08] bg-[#0d1424]/90 px-2 py-1.5 text-[11px] text-white/30"
                         >
                           Open slot {index + 1}
                         </div>
@@ -651,7 +651,7 @@ function DraftBoardInner({
               data-testid="draft-board-team-header"
             >
               <div
-                className={`flex h-10 items-center justify-center text-[9px] font-bold uppercase tracking-[0.16em] ${
+                className={`flex h-10 items-center justify-center text-[11px] font-bold uppercase tracking-[0.16em] ${
                   rs ? 'text-cyan-100/55' : 'text-white/45'
                 }`}
               >
@@ -665,7 +665,7 @@ function DraftBoardInner({
                   }`}
                 >
                   <span
-                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold uppercase tracking-[0.03em] shadow-sm ${
+                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
                       currentOwnerSlot === entry.slot
                         ? 'border-cyan-300/75 bg-cyan-500/20 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.40)]'
                         : 'border-white/15 bg-white/[0.05] text-white/85'
@@ -674,7 +674,7 @@ function DraftBoardInner({
                     {managerInitials(entry.displayName)}
                   </span>
                   <span
-                    className="w-full truncate text-center text-[8px] font-medium leading-none text-white/72"
+                    className="w-full truncate text-center text-[11px] font-medium leading-none text-white/72"
                     title={entry.displayName}
                   >
                     {entry.displayName}
@@ -698,7 +698,7 @@ function DraftBoardInner({
                       const isSnake = draftType === 'snake'
                       return (
                         <div
-                          className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[46px] ${
+                          className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[46px] ${
                             round === 1
                               ? 'border-amber-300/35 bg-gradient-to-br from-amber-500/18 via-[#1d2236] to-[#0a1228] text-amber-100/95'
                               : 'border-white/[0.1] bg-gradient-to-br from-[#0d1629] to-[#0a1228] text-white/75'

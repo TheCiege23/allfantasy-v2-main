@@ -184,7 +184,7 @@ export function QuickCreateModal({
                   key={p}
                   type="button"
                   onClick={() => setPreferences(p)}
-                  className="rounded-lg bg-white/[0.04] px-2 py-1 text-[10px] text-white/40 transition hover:bg-white/[0.08] hover:text-white/60"
+                  className="rounded-lg bg-white/[0.04] px-2 py-1 text-[11px] text-white/40 transition hover:bg-white/[0.08] hover:text-white/60"
                 >
                   {p}
                 </button>

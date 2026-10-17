@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tribal Council scroll</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Caveat:wght@500;600;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="SurvivorDraft.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Tribal Council · Week 6</h1>
+      <span class="ex-t2">Blah Survivor · Tribe Vela · 4 votes cast · voting closed Tue 8:00 PM</span>
+    </div>
+    <span class="ex-chip" style="color: #d9b45a; border-color: rgba(217,180,90,.35)">Results are in</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 28px; padding: 28px; align-items: flex-start; justify-content: center">
+    <!-- left: states + settings -->
+    <aside style="flex: 1 1 300px; max-width: 340px; display: flex; flex-direction: column; gap: 16px">
+      <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px; align-items: center">
+        <span class="ex-lbl" style="align-self: flex-start">1 · Sealed, before the reveal</span>
+        <img src="exile/scroll-sealed.svg" alt="Sealed Tribal Council scroll" style="width: 100%; display: block">
+        <span class="ex-t2" style="font-size: 12px; text-align: center">Shows in league home, the tribe channel and the push card once voting closes. Nobody sees a vote before the reveal.</span>
+      </div>
+      <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
+        <span class="ex-lbl">Reveal settings · commissioner</span>
+        <div class="ex-seg" role="radiogroup" aria-label="Reveal mode">
+          <sc-for list="{{modes}}" as="m" hint-placeholder-count="2"><button role="radio" aria-checked="{{m.on}}" class="{{m.cls}}" onClick="{{m.pick}}">{{m.label}}</button></sc-for>
+        </div>
+        <span class="ex-t2" style="font-size: 12px">{{modeNote}}</span>
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12.5px">
+          <div style="display: flex; justify-content: space-between"><span class="ex-t2">Votes shown as</span><span>Handwritten, anonymous</span></div>
+          <div style="display: flex; justify-content: space-between"><span class="ex-t2">Idol votes</span><span>Shown, stamped "does not count"</span></div>
+          <div style="display: flex; justify-content: space-between"><span class="ex-t2">Voted out goes to</span><span class="ex-gold">Exile Island</span></div>
+        </div>
+      </div>
+      <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px">
+        <span class="ex-lbl">Pieces</span>
+        <div style="display: flex; align-items: center; gap: 14px">
+          <img src="exile/wax-seal.svg" alt="" style="height: 64px">
+          <img src="exile/wax-seal-broken.svg" alt="" style="height: 64px">
+          <img src="exile/token-icon.svg" alt="" style="height: 36px">
+          <span class="ex-t2" style="font-size: 12px">Seal, broken seal, and the Exile token for the voted-out handoff.</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- center: the scroll -->
+    <section style="flex: 0 1 560px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 0 28px" aria-label="Tribal Council results">
+      <sc-if value="{{sealed}}" hint-placeholder-val="{{ false }}"><div style="display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 0; width: 100%"><img src="exile/scroll-sealed.svg" alt="Sealed Tribal Council scroll" style="width: 100%; display: block; animation: exPop .5s ease-out both"><span style="font: 700 13px 'Cinzel', serif; letter-spacing: .16em; color: #d9b45a">The votes are in</span></div></sc-if>
+<sc-if value="{{opened}}" hint-placeholder-val="{{ true }}"><div class="sc sc-open" style="width: 100%">
+        <img class="sc-roll" src="exile/scroll-roller.svg" alt="">
+        <div class="sc-body">
+          <div class="sc-paper" style="display: flex; flex-direction: column; gap: 18px">
+            <div class="sc-curl sc-curl-t"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px; align-items: center">
+              <span class="sc-sub">Week 6 · Tribe Vela</span>
+              <h2 class="sc-title">Tribal Council</h2>
+              <div class="sc-rule" style="width: 70%"><span style="font: 700 12px 'Cinzel', serif">✦</span></div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px; min-height: 60px">
+              <sc-for list="{{shown}}" as="v" hint-placeholder-count="2">
+                <div class="sc-slip {{v.cls}}" style="transform: rotate({{v.rot}})">
+                  <span class="sc-ord">{{v.ord}}</span>
+                  <span class="sc-hand" style="font-size: {{v.size}}">{{v.name}}</span>
+                  <sc-if value="{{v.void}}" hint-placeholder-val="{{ false }}"><span class="sc-stamp">Does not count</span></sc-if>
+                </div>
+              </sc-for>
+              <sc-if value="{{nothingYet}}" hint-placeholder-val="{{ false }}"><span style="text-align: center; font: 600 22px 'Caveat', cursive; color: #8a6330">I'll read the votes…</span></sc-if>
+            </div>
+
+            <sc-if value="{{hasIdol}}" hint-placeholder-val="{{ false }}">
+              <div style="text-align: center; font: 600 12px 'Cinzel', serif; letter-spacing: .1em; color: #a3241f">Immunity idol played by Open Team 4</div>
+            </sc-if>
+
+            <div class="sc-rule"><span style="font: 700 10px 'Cinzel', serif; letter-spacing: .16em">Tally</span></div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <sc-for list="{{tally}}" as="t" hint-placeholder-count="3">
+                <div style="display: flex; align-items: baseline; gap: 12px">
+                  <span style="flex: 1; font: 600 22px 'Caveat', cursive; color: #3a2810">{{t.name}}</span>
+                  <span class="sc-tally">{{t.marks}}</span>
+                  <span style="font: 700 12px 'Cinzel', serif; color: #7a5528; min-width: 18px; text-align: right">{{t.n}}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 6px; animation: exPop .6s ease-out both">
+                <span class="sc-verdict">Voted out</span>
+                <span class="sc-out">Open Team 8</span>
+                <span style="font: 600 12px 'Cinzel', serif; letter-spacing: .12em; color: #7a5528">2 votes to 1</span>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; font: 600 13px 'Archivo', sans-serif; color: #4a2e10">
+                  <img src="exile/token-icon.svg" alt="" style="height: 20px">Heads to Exile Island with 0 tokens
+                </div>
+              </div>
+            </sc-if>
+            <div style="display: flex; justify-content: center; margin-bottom: -10px"><img src="exile/wax-seal-broken.svg" alt="Broken wax seal" style="height: 78px"></div>
+            <div class="sc-curl sc-curl-b"></div>
+          </div>
+        </div>
+        <img class="sc-roll" src="exile/scroll-roller.svg" alt="">
+      </div></sc-if>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center">
+        <sc-if value="{{sealed}}" hint-placeholder-val="{{ false }}"><button class="ex-btn ex-btn-gold" onClick="{{breakSeal}}">Break the seal</button></sc-if>
+        <sc-if value="{{reading}}" hint-placeholder-val="{{ true }}"><button class="ex-btn ex-btn-gold" onClick="{{next}}">{{nextLabel}}</button></sc-if>
+        <button class="ex-btn" onClick="{{reset}}">Replay</button>
+      </div>
+    </section>
+
+    <!-- right: what happens -->
+    <aside style="flex: 1 1 280px; max-width: 320px; display: flex; flex-direction: column; gap: 12px">
+      <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
+        <span class="ex-lbl">Reveal sequence</span>
+        <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+          <div style="display: flex; gap: 10px; align-items: flex-start">
+            <span class="ex-num" style="width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 999px; font-size: 11px; background: {{s.bg}}; color: {{s.fg}}">{{s.n}}</span>
+            <span style="font-size: 12.5px; color: {{s.tc}}">{{s.text}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div class="ex-card" style="padding: 16px; display: flex; gap: 12px; align-items: center">
+        <img src="exile/wax-seal.svg" alt="" style="height: 52px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 600">Tribal Council results are in</span>
+          <span class="ex-t2" style="font-size: 12px">Push card · Week 6 · Tribe Vela</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { open: true, n: 4, mode: 'one' }; }
+  renderVals() {
+    const st = this.state;
+    const V = [
+      { name: 'Open Team 8', rot: '-1.2deg', size: '32px' },
+      { name: 'TheCiege26', rot: '0.8deg', size: '30px' },
+      { name: 'Open Team 4', rot: '-0.4deg', size: '31px', void: true },
+      { name: 'Open Team 8', rot: '1.4deg', size: '34px' }
+    ];
+    const ords = ['First vote', 'Second vote', 'Third vote', 'Last vote'];
+    const n = st.open ? (st.mode === 'all' ? V.length : st.n) : 0;
+    const shown = V.slice(0, n).map((v, i) => ({ ...v, ord: ords[i], void: !!v.void, cls: v.void ? 'sc-x' : '' }));
+    const counts = {};
+    shown.forEach(v => { if (!v.void) counts[v.name] = (counts[v.name] || 0) + 1; });
+    const names = ['Open Team 8', 'TheCiege26', 'Open Team 4'];
+    const tally = names.map(nm => ({ name: nm, n: String(counts[nm] || 0), marks: '|'.repeat(counts[nm] || 0) || '–' }));
+    const done = st.open && n >= V.length;
+    const modes = [['one', 'One vote at a time'], ['all', 'All at once']].map(([id, label]) => ({ label, on: st.mode === id ? 'true' : 'false',
+      cls: 'ex-sg' + (st.mode === id ? ' ex-sg-on' : ''), pick: () => this.setState({ mode: id }) }));
+    const S = ['Voting closes, the scroll is sealed', 'Manager breaks the seal and it unrolls', 'Votes are read one at a time, 2.5s apart', 'Idol votes get the "does not count" stamp', 'Verdict, then the voted-out manager goes to Exile Island'];
+    const stage = !st.open ? 0 : done ? 4 : n === 0 ? 1 : (shown.some(v => v.void) ? 3 : 2);
+    const steps = S.map((text, i) => ({ n: i + 1, text, bg: i <= stage ? '#d9b45a' : '#151926', fg: i <= stage ? '#1a1204' : '#6f7590', tc: i <= stage ? '#e8eaf2' : '#6f7590' }));
+    return {
+      modes, modeNote: st.mode === 'one' ? 'Builds suspense: each vote is read with a short pause, like the host reading the urn.' : 'Shows the full tally at once for leagues that prefer it fast.',
+      scCls: st.open ? 'sc-open' : '', shown, tally, done, hasIdol: shown.some(v => v.void), nothingYet: st.open && n === 0,
+      sealed: !st.open, opened: st.open, reading: st.open && !done && st.mode === 'one', nextLabel: n === 0 ? 'Read the first vote' : n === V.length - 1 ? 'Read the last vote' : 'Read the next vote',
+      breakSeal: () => this.setState({ open: true, n: 0 }), next: () => this.setState({ n: Math.min(V.length, st.n + 1) }),
+      reset: () => this.setState({ open: false, n: 0 }), steps
+    };
+  }
+}
+</script>
+</body>
+</html>

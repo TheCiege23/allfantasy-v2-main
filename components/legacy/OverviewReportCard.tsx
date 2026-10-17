@@ -32,7 +32,7 @@ function SubGradeCard({ subGrade }: { subGrade: SubGrade }) {
   return (
     <div className="text-center p-3 rounded-xl bg-black/20 border border-white/10">
       <div className={`text-2xl font-bold ${gradeColor(subGrade.grade)}`}>{subGrade.grade}</div>
-      <div className="text-[10px] text-white/40 mt-1">{subGrade.label}</div>
+      <div className="text-[11px] text-white/40 mt-1">{subGrade.label}</div>
     </div>
   )
 }
@@ -66,7 +66,7 @@ export default function OverviewReportCard({
               </button>
             </div>
             <div className="text-5xl sm:text-6xl font-black text-white">{profile.legacyScore}</div>
-            <div className="text-[10px] text-white/40 mt-1">out of 100</div>
+            <div className="text-[11px] text-white/40 mt-1">out of 100</div>
 
             {showTooltip && (
               <div className="absolute z-20 left-1/2 -translate-x-1/2 top-full mt-2 w-64 p-3 rounded-xl bg-slate-800 border border-white/15 shadow-xl text-left">
@@ -79,7 +79,7 @@ export default function OverviewReportCard({
                 <p className="text-[11px] text-white/60 leading-relaxed">
                   Your Legacy Score combines <span className="text-cyan-300">volume</span> (how many leagues you play) and <span className="text-purple-300">difficulty</span> (SF, TEP, large leagues). Higher difficulty leagues earn more credit. Win rate, playoff rate, and championships are all weighted and difficulty-adjusted.
                 </p>
-                <div className="mt-2 text-[10px] text-white/40 space-y-0.5">
+                <div className="mt-2 text-[11px] text-white/40 space-y-0.5">
                   <div>Win Rate: 30% weight</div>
                   <div>Playoff Rate: 25% weight</div>
                   <div>Championships: 25% weight</div>
@@ -110,7 +110,7 @@ export default function OverviewReportCard({
                 <span className="text-xs text-cyan-300/70">Difficulty-adjusted</span>
                 <span className="text-lg font-bold text-cyan-300">{profile.adjustedWinRate}%</span>
               </div>
-              <div className="text-[10px] text-white/30 mt-1">
+              <div className="text-[11px] text-white/30 mt-1">
                 Avg difficulty: {profile.difficultyMultiplier}x
               </div>
             </div>
@@ -122,9 +122,9 @@ export default function OverviewReportCard({
           <div className="grid grid-cols-3 gap-3">
             {profile.lanes.map((lane) => (
               <div key={lane.leagueClass} className="text-center">
-                <div className="text-[10px] text-white/50 mb-1">{lane.label.replace(' Career', '').replace(' Formats', '')}</div>
+                <div className="text-[11px] text-white/50 mb-1">{lane.label.replace(' Career', '').replace(' Formats', '')}</div>
                 <div className="text-lg font-bold text-cyan-200">{lane.adjustedWinRate}%</div>
-                <div className="text-[9px] text-white/30">
+                <div className="text-[11px] text-white/30">
                   raw {lane.winRate}% &middot; {lane.difficultyScore}x diff
                 </div>
               </div>

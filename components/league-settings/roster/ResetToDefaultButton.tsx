@@ -1,3 +1,5 @@
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+
 export function ResetToDefaultButton({
   onClick,
   disabled,
@@ -5,6 +7,7 @@ export function ResetToDefaultButton({
   onClick: () => void
   disabled?: boolean
 }) {
+  const { t } = useLanguage()
   return (
     <button
       type="button"
@@ -12,7 +15,7 @@ export function ResetToDefaultButton({
       disabled={disabled}
       className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 disabled:cursor-default disabled:opacity-40"
     >
-      Reset
+      {t('lsEd.ro.reset')}
     </button>
   )
 }

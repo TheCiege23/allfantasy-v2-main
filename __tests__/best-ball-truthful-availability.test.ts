@@ -32,6 +32,7 @@ const BASE_INPUT = {
   season: 2025,
   weekOrRound: 3,
   rosterPlayerIds: ['1001', '1002'],
+  platform: 'sleeper',
 }
 
 const PLAYERS = [

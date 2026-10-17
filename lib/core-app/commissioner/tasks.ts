@@ -31,6 +31,7 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { CalendarEvent } from './calendar'
 import type { HealthFlag } from './health'
 import { reviewSignalCards, type LeagueReviewSignals } from './signals'
+import { issueText } from '@/lib/core-app/decisionQueueCopy'
 
 export type TaskCard = {
   id: string
@@ -99,21 +100,27 @@ export function buildTaskCards(input: {
   /** Review work for this league — see ./signals.ts. Needs the league id for its links. */
   signals?: { leagueId: string; values: LeagueReviewSignals } | null
   limit?: number
+  /** The reader's language for the cards this builder writes; default English. */
+  language?: string
 }): TaskCardsResult {
+  const es = input.language === 'es'
   const limit = input.limit ?? 6
   const cards: Array<TaskCard & { sortAt: number }> = []
   // Finite on purpose: Infinity - Infinity is NaN, which makes the sort comparator lie.
   const far = Number.MAX_SAFE_INTEGER
 
   for (const i of input.issues) {
+    // The shell's issues carry the parts they were written from; `issueText` rebuilds them in Spanish,
+    // or keeps the whole English sentence when there are none — never half of one.
+    const text = issueText(i, input.language ?? 'en')
     cards.push({
       id: `issue:${i.id}`,
       severity: i.severity,
       source: 'issue',
-      title: i.title,
-      detail: i.meta,
+      title: text.title,
+      detail: text.meta,
       due: null,
-      action: i.action,
+      action: i.action && text.actionLabel ? { ...i.action, label: text.actionLabel } : i.action,
       sortAt: i.deadline ? i.deadline.getTime() : far,
     })
   }
@@ -126,10 +133,12 @@ export function buildTaskCards(input: {
       id: 'stale-sync',
       severity: days > 7 ? 'bad' : 'warn',
       source: 'issue',
-      title: `This league’s data is ${days} days old`,
-      detail: `AllFantasy hasn’t read it from ${platformLabel} since then, so activity, lineups and inactive managers can’t be checked.`,
+      title: es ? `Los datos de esta liga tienen ${days} días` : `This league’s data is ${days} days old`,
+      detail: es
+        ? `AllFantasy no los ha leído de ${platformLabel} desde entonces, así que no se puede revisar la actividad, las alineaciones ni los mánagers inactivos.`
+        : `AllFantasy hasn’t read it from ${platformLabel} since then, so activity, lineups and inactive managers can’t be checked.`,
       due: null,
-      action: { label: 'Re-sync', href, external: false },
+      action: { label: es ? 'Volver a sincronizar' : 'Re-sync', href, external: false },
       sortAt: 0,
     })
   }
@@ -174,13 +183,13 @@ export function buildTaskCards(input: {
       title: e.title,
       detail: e.detail,
       due: e.whenLabel,
-      action: { label: 'See calendar', href: '#ch-calendar', external: false },
+      action: { label: es ? 'Ver el calendario' : 'See calendar', href: '#ch-calendar', external: false },
       sortAt: e.at ? Date.parse(e.at) : far,
     })
   }
 
   if (input.signals) {
-    for (const card of reviewSignalCards(input.signals.leagueId, input.signals.values)) {
+    for (const card of reviewSignalCards(input.signals.leagueId, input.signals.values, input.language)) {
       cards.push({ ...card, sortAt: far })
     }
   }
@@ -196,7 +205,7 @@ export function buildTaskCards(input: {
       title: w.title,
       detail: w.description,
       due: null,
-      action: w.href ? { label: 'Open', href: w.href, external: false } : null,
+      action: w.href ? { label: es ? 'Abrir' : 'Open', href: w.href, external: false } : null,
       sortAt: w.dueAt ? w.dueAt.getTime() : far,
     })
   }

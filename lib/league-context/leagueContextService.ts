@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { keeperShareFromSettings } from '@/lib/core-app/valueBook'
 
 /**
  * leagueContextService — slice 5: the LeagueContext envelope.
@@ -97,6 +98,10 @@ export type LeagueContextEnvelope = {
     superflex: boolean
     dynasty: boolean
     keeper: boolean
+    /** Share of the roster a keeper league carries over, or null — see `pricesOnDynastyChart`. */
+    keeperShare?: number | null
+    /** The league's own keeper count, kept so a cached envelope rebuilds the same share. */
+    maxKeepers?: number | null
     bestBall: boolean
   }
   roster: {
@@ -227,11 +232,14 @@ function buildEnvelope(
   const idpPresent = positions.some((p) => IDP_SLOTS.has(p))
   const superflex = positions.includes('SUPER_FLEX')
   const type = league.settings?.type ?? 0
+  const maxKeepers = type === 1 && typeof league.settings?.max_keepers === 'number' ? league.settings.max_keepers : null
   const variant = {
     idp: idpPresent,
     superflex,
     dynasty: type === 2,
     keeper: type === 1,
+    keeperShare: type === 1 ? keeperShareFromSettings({ max_keepers: maxKeepers, roster_positions: positions }) : null,
+    maxKeepers,
     bestBall: (league.settings?.best_ball ?? 0) === 1,
   }
 
@@ -327,6 +335,7 @@ export async function getLeagueContext(sleeperLeagueId: string): Promise<LeagueC
         settings: {
           type: cachedPayload.variant.dynasty ? 2 : cachedPayload.variant.keeper ? 1 : 0,
           best_ball: cachedPayload.variant.bestBall ? 1 : 0,
+          max_keepers: cachedPayload.variant.maxKeepers ?? undefined,
         },
       },
       declared,
@@ -347,6 +356,7 @@ export async function getLeagueContext(sleeperLeagueId: string): Promise<LeagueC
         settings: {
           type: cachedPayload.variant.dynasty ? 2 : cachedPayload.variant.keeper ? 1 : 0,
           best_ball: cachedPayload.variant.bestBall ? 1 : 0,
+          max_keepers: cachedPayload.variant.maxKeepers ?? undefined,
         },
       },
       declared,

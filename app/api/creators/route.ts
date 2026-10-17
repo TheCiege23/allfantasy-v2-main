@@ -1,3 +1,4 @@
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -20,9 +21,7 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Number(searchParams?.get('limit')) || 24, 48)
     const sort = searchParams?.get('sort') as 'members' | 'leagues' | null
     const cursor = searchParams?.get('cursor') || undefined
-    const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost:3000'
-    const proto = req.headers.get('x-forwarded-proto') || 'http'
-    const baseUrl = `${proto}://${host}`
+    const baseUrl = getServedOrigin(req)
 
     if (sort === 'members' || sort === 'leagues') {
       const creators = await getCreatorsLeaderboard({

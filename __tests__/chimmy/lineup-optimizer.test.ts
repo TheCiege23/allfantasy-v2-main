@@ -5,7 +5,9 @@ vi.mock('server-only', () => ({}))
 import {
   buildLineupOptimization,
   buildLineupOptimizerContext,
+  isEarlyKickoff,
   isOutDesignation,
+  kickoffLabel,
   renderLineupOptimizationBlock,
   singleSwapCall,
   type LineupOptimizerDeps,
@@ -311,4 +313,174 @@ it('reports unknown locks when the schedule read fails', async () => {
   if (r.status !== 'ready') return
   expect(r.unverifiedLocks?.length).toBe(MINE.length-1)
   expect(renderLineupOptimizationBlock(r)).toContain('Kickoff locks could not be verified')
+})
+
+/*
+ * AllFantasy's own engine as a second opinion (2026-09-30). It rides on every player, carried into
+ * the league's rules by the provider line — and it must never move the lineup, a total or a swap.
+ */
+describe('buildLineupOptimization — AF beside the provider number', () => {
+  const withAf = (): LineupOptimizerDeps => ({
+    ...deps,
+    loadAfWeek: async () => ({
+      // Allen: 30 engine x (22 league / 20 generic) = 33. Lamb AF far BELOW Wilson's, on purpose.
+      engine: new Map([['qb1', 30], ['wr1', 5], ['wr2', 40], ['rb-ir', 25]]),
+      generic: new Map([['qb1', 20], ['wr1', 17], ['wr2', 11]]),
+    }),
+  })
+
+  it('attaches AF under the league rules and changes nothing the maths decided', async () => {
+    const plain = await run()
+    const r = await buildLineupOptimization({ leagueId: 'L1', userId: 'viewer-1' }, withAf())
+    if (r.status !== 'ready' || plain.status !== 'ready') throw new Error('not ready')
+    // Same lineup, same total, same swaps as without AF — AF is display only.
+    expect(r.best.points).toBe(plain.best.points)
+    expect(r.best.slots.map((s) => s.player.playerId)).toEqual(plain.best.slots.map((s) => s.player.playerId))
+    expect(r.startInstead.map((p) => p.playerId)).toEqual(plain.startInstead.map((p) => p.playerId))
+    expect(r.gain).toBe(plain.gain)
+    const byId = new Map(r.best.slots.map((s) => [s.player.playerId, s.player]))
+    expect(byId.get('qb1')?.af).toBe(33)
+    expect(byId.get('wr1')?.af).toBe(5)
+    // A player the engine never wrote carries no AF key at all.
+    expect(byId.get('rb1') && 'af' in byId.get('rb1')!).toBe(false)
+  })
+
+  it('without the AF read the players carry no AF, exactly as before', async () => {
+    const r = await run()
+    if (r.status !== 'ready') throw new Error('not ready')
+    expect(r.best.slots.some((s) => 'af' in s.player)).toBe(false)
+  })
+
+  it('a failed AF read leaves the optimization intact', async () => {
+    const r = await buildLineupOptimization(
+      { leagueId: 'L1', userId: 'viewer-1' },
+      { ...deps, loadAfWeek: async () => { throw new Error('db down') } },
+    )
+    if (r.status !== 'ready') throw new Error('not ready')
+    expect(r.best.points).toBe(106)
+    expect(r.best.slots.some((s) => 'af' in s.player)).toBe(false)
+  })
+})
+
+/*
+ * Production 2026-10-11, HailShiva: Bhayshul Tuten (12.7) out-projected a starter, but Jacksonville
+ * had kicked off in London, and the only trace was a generic "known started games" line. A started
+ * bench player who would make the best lineup is now named, with what the lock costs.
+ */
+describe('a started bench player who would have made the lineup', () => {
+  it('is named as already locked, with the cost, and never as a swap', async () => {
+    // Reed (12) on the bench has kicked off; without the lock he would take a WR spot from Wilson (11).
+    deps.checkLocks = async () => ({ started: new Map([['rb3', 'started'], ['wr3', 'started']]), unverified: [] })
+    const r = await run()
+    expect(r.status).toBe('ready')
+    if (r.status !== 'ready') return
+    expect(r.lockedOut).toEqual({ players: [expect.objectContaining({ playerId: 'wr3', points: 12 })], cost: 1 })
+    expect(r.startInstead.some((p) => p.playerId === 'wr3')).toBe(false)
+    const block = renderLineupOptimizationBlock(r)
+    expect(block).toContain('- 🔒 ALREADY LOCKED: Jayden Reed (WR, GB) (12.0 pts) would be in the best lineup, but his game has already started, so he can no longer be moved in (1.0 projected pts the lock costs).')
+    expect(block).toContain('never recommend starting him')
+  })
+
+  it('says nothing when the started bench player would not have started anyway', async () => {
+    // The best lineup is already set; Bigsby (7) has kicked off from the bench and would not start anyway.
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr3', 'te1', 'wr2']
+    deps.checkLocks = async () => ({ started: new Map([['rb3', 'started']]), unverified: [] })
+    const r = await run()
+    expect(r.status).toBe('ready')
+    if (r.status !== 'ready') return
+    expect(r.lockedOut).toBeNull()
+    expect(renderLineupOptimizationBlock(r)).not.toContain('ALREADY LOCKED')
+    // Control: the same lineup with nobody started has no lock to report either.
+    deps.checkLocks = async () => ({ started: new Map(), unverified: [] })
+    const open = await run()
+    expect(open.status === 'ready' && open.lockedOut).toBeNull()
+  })
+
+  it('names every locked player and the joint cost when more than one is lost', async () => {
+    // Reed (12) and Wilson (11) both kicked off from the bench: the WR spots fall to nobody better.
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'te1', 'rb3']
+    deps.checkLocks = async () => ({ started: new Map([['wr2', 'started'], ['wr3', 'started']]), unverified: [] })
+    const r = await run()
+    expect(r.status).toBe('ready')
+    if (r.status !== 'ready' || !r.lockedOut) throw new Error('expected a lock cost')
+    expect(r.lockedOut.players.map((p) => p.playerId)).toEqual(['wr3', 'wr2'])
+    expect(r.lockedOut.cost).toBeGreaterThan(0)
+    expect(renderLineupOptimizationBlock(r)).toMatch(/their games have already started, so they can no longer be moved in/)
+  })
+})
+
+/*
+ * Production 2026-10-11: Jacksonville played in London at 9:30 AM ET, three and a half hours before the
+ * slate a lineup is usually set for. Every swap touching a player is refused once his game starts, so
+ * the earliest kickoff among the moved players is the deadline for the whole set of changes.
+ */
+describe('the kickoff deadline for the swaps', () => {
+  const at = (iso: string) => new Date(iso)
+  // The default platform lineup moves four players: Reed and Wilson in, Nacua and Bigsby out.
+  const kickoffs = (m: Record<string, string>) => new Map(Object.entries(m).map(([id, iso]) => [id, at(iso)]))
+
+  it('leads with an early kickoff among the moved players, naming the time in Eastern', async () => {
+    deps.checkLocks = async () => ({
+      started: new Map(),
+      unverified: [],
+      kickoffs: kickoffs({ rb3: '2026-10-11T13:30:00Z', wr3: '2026-10-11T17:00:00Z', wr2: '2026-10-11T20:25:00Z', qb1: '2026-10-11T12:00:00Z' }),
+    })
+    const r = await run()
+    if (r.status !== 'ready') throw new Error('not ready')
+    // Allen (QB) kicks off earlier still, but he is not being moved, so he sets no deadline.
+    expect(r.deadline).toEqual({ player: expect.objectContaining({ playerId: 'rb3' }), at: '2026-10-11T13:30:00.000Z', early: true })
+    const block = renderLineupOptimizationBlock(r)
+    expect(block).toContain("- ⏰ EARLY KICKOFF: set these changes before Sun 9:30 AM ET — Tank Bigsby's game, the first of them to start.")
+    expect(block).toContain('lead with the time')
+  })
+
+  it('states a main-slate deadline plainly, without the early warning', async () => {
+    deps.checkLocks = async () => ({ started: new Map(), unverified: [], kickoffs: kickoffs({ rb3: '2026-10-11T17:00:00Z', wr3: '2026-10-11T20:25:00Z' }) })
+    const r = await run()
+    if (r.status !== 'ready') throw new Error('not ready')
+    expect(r.deadline?.early).toBe(false)
+    const block = renderLineupOptimizationBlock(r)
+    expect(block).toContain("- ⏰ The first of these changes locks at Sun 1:00 PM ET, when Tank Bigsby's game starts.")
+    expect(block).not.toContain('EARLY KICKOFF')
+  })
+
+  it('says nothing when there is nothing to change, or no moved player has a known kickoff', async () => {
+    deps.checkLocks = async () => ({ started: new Map(), unverified: [], kickoffs: kickoffs({ qb1: '2026-10-11T13:30:00Z' }) })
+    const none = await run()
+    if (none.status !== 'ready') throw new Error('not ready')
+    expect(none.deadline).toBeNull()
+    expect(renderLineupOptimizationBlock(none)).not.toContain('⏰')
+
+    // Already optimal: an early kickoff on the roster is no deadline for changes nobody needs.
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr3', 'te1', 'wr2']
+    deps.checkLocks = async () => ({ started: new Map(), unverified: [], kickoffs: kickoffs({ wr3: '2026-10-11T13:30:00Z' }) })
+    const set = await run()
+    if (set.status !== 'ready') throw new Error('not ready')
+    expect(set.deadline).toBeNull()
+    expect(renderLineupOptimizationBlock(set)).not.toContain('⏰')
+
+    // A lock check that reports no kickoffs at all (older doubles, a failed read) keeps the old block.
+    deps.checkLocks = async () => ({ started: new Map(), unverified: [] })
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr-bye', 'te1', 'rb3']
+    const old = await run()
+    expect(old.status === 'ready' && old.deadline).toBeNull()
+  })
+})
+
+describe('isEarlyKickoff / kickoffLabel', () => {
+  it('flags everything before the 1:00 PM ET Sunday slate, in a Tuesday → Monday week', () => {
+    expect(isEarlyKickoff(new Date('2026-10-09T00:15:00Z'))).toBe(true) // Thu 8:15 PM ET
+    expect(isEarlyKickoff(new Date('2026-12-19T21:30:00Z'))).toBe(true) // Sat 4:30 PM ET
+    expect(isEarlyKickoff(new Date('2026-10-11T13:30:00Z'))).toBe(true) // Sun 9:30 AM ET, London
+    expect(isEarlyKickoff(new Date('2026-10-11T17:00:00Z'))).toBe(false) // Sun 1:00 PM ET
+    expect(isEarlyKickoff(new Date('2026-10-11T20:25:00Z'))).toBe(false) // Sun 4:25 PM ET
+    expect(isEarlyKickoff(new Date('2026-10-12T00:20:00Z'))).toBe(false) // Sun 8:20 PM ET (UTC Monday)
+    expect(isEarlyKickoff(new Date('2026-10-13T00:15:00Z'))).toBe(false) // Mon 8:15 PM ET (UTC Tuesday)
+  })
+
+  it('labels in Eastern time, across the daylight-saving change', () => {
+    expect(kickoffLabel(new Date('2026-10-11T13:30:00Z'))).toBe('Sun 9:30 AM ET')
+    expect(kickoffLabel(new Date('2026-11-08T18:00:00Z'))).toBe('Sun 1:00 PM ET') // EST, UTC-5
+    expect(isEarlyKickoff(new Date('2026-11-08T17:00:00Z'))).toBe(true) // Sun 12:00 PM EST
+  })
 })

@@ -211,7 +211,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
         {loadedAt ? (
           <span
             className={cn(
-              'text-[10px]',
+              'text-[11px]',
               nowMs - loadedAt < 90_000
                 ? 'text-white/30'
                 : nowMs - loadedAt < 300_000

@@ -13,7 +13,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 
 const ents = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  // SettingsChrome reads ?returnTo= (2026-10-02).
+  useSearchParams: () => new URLSearchParams(),
+}))
 vi.mock('@/hooks/useEntitlements', () => ({ useEntitlements: () => ents.value }))
 vi.mock('@/components/i18n/LanguageProviderClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/components/i18n/LanguageProviderClient')>()
@@ -165,5 +169,56 @@ describe('Settings hub', () => {
     expect(screen.getByText('profile section')).toBeTruthy()
     fireEvent.click(screen.getByTestId('settings-show-hub'))
     expect(onShowHub).toHaveBeenCalled()
+  })
+})
+
+describe('settings hub groups (2026-10-02 layout pass)', () => {
+  beforeEach(() => {
+    ents.value = FREE
+  })
+
+  it('puts every tab in exactly one group, under four headings', () => {
+    hub()
+    const groups = screen.getAllByRole('region').filter((r) => r.className.includes('ns-hub-group'))
+    expect(groups).toHaveLength(4)
+    const seen = groups.flatMap((g) =>
+      within(g).getAllByTestId(/^settings-hub-card-/).map((c) => c.dataset.testid),
+    )
+    expect(seen.sort()).toEqual(SETTINGS_NAV.map((n) => `settings-hub-card-${n.id}`).sort())
+    expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('drops a group with no match while searching', () => {
+    hub()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'password' } })
+    const groups = screen.getAllByRole('region').filter((r) => r.className.includes('ns-hub-group'))
+    expect(groups).toHaveLength(1)
+  })
+
+  it('the sidebar search on a tab also matches descriptions', () => {
+    render(
+      <SettingsChrome activeTab="profile" onTabChange={vi.fn()} onShowHub={vi.fn()} profile={profile()}>
+        <p>profile section</p>
+      </SettingsChrome>,
+    )
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'password' } })
+    const nav = screen.getByRole('navigation', { name: /./ })
+    const items = within(nav).getAllByRole('button').map((b) => b.textContent)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatch(/security/i)
+  })
+
+  // 2026-10-03: the empty-result line once referenced a `tInterpolate` that was not in scope —
+  // a ReferenceError the moment a search matched nothing, which no test reached.
+  it('the sidebar search says when nothing matches, instead of crashing', () => {
+    render(
+      <SettingsChrome activeTab="profile" onTabChange={vi.fn()} onShowHub={vi.fn()} profile={profile()}>
+        <p>profile section</p>
+      </SettingsChrome>,
+    )
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzqqxx' } })
+    const nav = screen.getByRole('navigation', { name: /./ })
+    expect(within(nav).queryAllByRole('button')).toHaveLength(0)
+    expect(nav.textContent).toMatch(/No settings match “zzqqxx”/)
   })
 })

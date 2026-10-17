@@ -41,7 +41,7 @@ export function OnTheClockPanel({
             <span className="text-3xl font-black tabular-nums text-cyan-100/80 drop-shadow-md sm:text-4xl">—</span>
           </div>
           <div className="w-full space-y-1">
-            <p className="flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-200/80">
+            <p className="flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-200/80">
               <span className="relative flex h-2 w-2">
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-300/70" />
               </span>
@@ -104,7 +104,7 @@ export function OnTheClockPanel({
         </div>
 
         <div className="w-full space-y-1">
-          <p className="flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-amber-200/90">
+          <p className="flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-[0.28em] text-amber-200/90">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300/50 opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />

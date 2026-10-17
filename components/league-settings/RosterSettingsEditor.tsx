@@ -1,35 +1,32 @@
 'use client'
 
 /**
- * [NEW] components/league-settings/RosterSettingsEditor.tsx
- * Editable roster settings panel matching the screenshot design.
- * Shows position rows with plus/minus controls, colored dots, and read-only mode for non-commissioners.
- * Supports NFL sections: Offense, Flex, K/DST, IDP, Bench/Reserve, and C2C College.
+ * components/league-settings/RosterSettingsEditor.tsx
+ * Commissioner roster settings: template select + apply, compact per-slot steppers, save / reset.
+ * Read-only for non-commissioners.
+ *
+ * 🛑 SPORT-CORRECT BY CONSTRUCTION. Rows, grouping and order come from the `slotDefs` the roster
+ * API serves for the league's sport (`lib/roster-engine` registry: NFL, NCAAF, NBA, NCAAB, MLB,
+ * NHL, SOCCER). The football helpers below run ONLY for NFL/NCAAF. When the API refuses a sport
+ * it does not support, the editor says "not available for this sport" — it never falls back to
+ * NFL slots. A stored slot map that belongs to another sport is flagged, not rendered as-is.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DualTrackRosterRenderer } from './roster/DualTrackRosterRenderer'
 import { ResetToDefaultButton } from './roster/ResetToDefaultButton'
 import { RosterSettingsModalShell } from './roster/RosterSettingsModalShell'
+import { RosterSectionRenderer } from './roster/RosterSectionRenderer'
 import { RosterValidationBanner } from './roster/RosterValidationBanner'
+import { alignSlotsToSport, buildRosterGroups, isFootballSport } from './roster/buildRosterGroups'
 import type { RosterConfig, SlotDef, UnifiedRosterSection } from './roster/types'
 import { emitLeagueDraftRoomRevalidate } from '@/lib/draft-room/emitLeagueDraftRoomRevalidate'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 interface RosterTemplateOption {
   key: string
   label: string
   description?: string
   slots: Record<string, number>
-}
-
-interface ImportPreviewResult {
-  mappedSlots: Record<string, number>
-  unmappedSlots: string[]
-  validation: {
-    valid: boolean
-    warnings: string[]
-    errors: string[]
-  }
 }
 
 function flattenSections(sections: UnifiedRosterSection[] | undefined): Record<string, number> {
@@ -66,6 +63,7 @@ function isFootballRosterSport(value: unknown): boolean {
   return normalized === 'NFL' || normalized === 'NCAAF'
 }
 
+/** Football only: SF/DST aliases and the always-visible core slots. A no-op for every other sport. */
 function normalizeFootballSlots(slots: Record<string, number>, sport: unknown): Record<string, number> {
   if (!isFootballRosterSport(sport)) return slots
   const next = { ...slots }
@@ -81,81 +79,102 @@ function normalizeFootballSlots(slots: Record<string, number>, sport: unknown): 
   return next
 }
 
-function buildSectionsFromSlots(slots: Record<string, number>): UnifiedRosterSection[] {
-  const hasC2C = Object.keys(slots).some((k) => k.startsWith('C2C_'))
-  if (!hasC2C) {
-    const ordered: Record<string, number> = {}
-    for (const key of FOOTBALL_SLOT_ORDER) {
-      if (Object.prototype.hasOwnProperty.call(slots, key)) ordered[key] = slots[key] ?? 0
-    }
-    for (const [key, value] of Object.entries(slots)) {
-      if (!Object.prototype.hasOwnProperty.call(ordered, key)) ordered[key] = value
-    }
-    return [{ key: 'primary', label: 'Primary', slots: ordered }]
+/** Football defs in the canonical football order; every other sport keeps its registry order. */
+function orderDefsForSport(defs: SlotDef[], sport: unknown): SlotDef[] {
+  if (!isFootballRosterSport(sport)) return defs
+  const rank = (k: string) => {
+    const i = FOOTBALL_SLOT_ORDER.indexOf(k)
+    return i === -1 ? FOOTBALL_SLOT_ORDER.length : i
   }
-
-  const primary: Record<string, number> = {}
-  const c2c: Record<string, number> = {}
-  for (const [key, value] of Object.entries(slots)) {
-    if (key.startsWith('C2C_')) c2c[key] = value
-    else primary[key] = value
-  }
-  return [
-    { key: 'primary', label: 'Primary', slots: primary },
-    { key: 'c2c', label: 'C2C / Dual Track', slots: c2c },
-  ]
+  return defs
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => rank(a.d.key) - rank(b.d.key) || a.i - b.i)
+    .map(({ d }) => d)
 }
 
-export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
+/** Stored slots → this sport's slot map. Football gets its normaliser; nobody gets football slots. */
+function slotsForSport(raw: Record<string, number>, defs: SlotDef[], sport: unknown) {
+  const normalized = normalizeFootballSlots(raw, sport)
+  return alignSlotsToSport(normalized, defs)
+}
+
+function sportLabel(sport: string | null | undefined): string {
+  return String(sport ?? '').trim().toUpperCase() || '—'
+}
+
+export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueId: string; sport?: string | null }) {
+  const { t } = useLanguage()
   const [slotDefs, setSlotDefs] = useState<SlotDef[]>([])
   const [config, setConfig] = useState<RosterConfig | null>(null)
+  const [baselineSlots, setBaselineSlots] = useState<Record<string, number>>({})
   const [templates, setTemplates] = useState<RosterTemplateOption[]>([])
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<string>('custom')
   const [warnings, setWarnings] = useState<string[]>([])
   const [matchesTemplate, setMatchesTemplate] = useState(true)
   const [readOnlyMode, setReadOnlyMode] = useState(false)
   const [defaultTemplateKey, setDefaultTemplateKey] = useState<string | null>(null)
-  const [rosterSport, setRosterSport] = useState<string | null>(null)
+  const [rosterSport, setRosterSport] = useState<string | null>(leagueSport ?? null)
   const [isCommissioner, setIsCommissioner] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [unavailable, setUnavailable] = useState(false)
+  const [foreignRoster, setForeignRoster] = useState(false)
   const [success, setSuccess] = useState(false)
   const [pendingSlots, setPendingSlots] = useState<Record<string, number>>({})
-  const [importSourcePlatform, setImportSourcePlatform] = useState('yahoo')
-  const [importPayloadText, setImportPayloadText] = useState(`{
-  "QB": 1,
-  "RB": 2,
-  "WR": 2,
-  "TE": 1,
-  "BN": 6
-}`)
-  const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null)
-  const [importing, setImporting] = useState(false)
+
+  /** Apply a roster-settings payload (GET, PUT or reset) to state, sport-correctly. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped API payload, read defensively
+  const applyPayload = useCallback((data: Record<string, any>, defsOverride?: SlotDef[]) => {
+    const defs: SlotDef[] = defsOverride ?? (Array.isArray(data.slotDefs) ? data.slotDefs : [])
+    const sport: string | null = typeof data.sport === 'string' ? data.sport : (leagueSport ?? null)
+    const fromUnified = flattenSections(data.unifiedConfig?.rosterConfig?.sections)
+    const raw = Object.keys(fromUnified).length > 0 ? fromUnified : (data.config?.slots ?? {})
+    const aligned = slotsForSport(raw, defs, sport)
+    const tpls: RosterTemplateOption[] = Array.isArray(data.templates) ? data.templates : []
+    const defaultKey: string | null = (data.defaultTemplateKey as string | undefined) ?? null
+    setRosterSport(sport)
+    setBaselineSlots(aligned.slots)
+    setForeignRoster(aligned.foreign)
+    if (aligned.foreign) {
+      // A roster saved for a different sport: start from this sport's default template so the
+      // commissioner sees real positions and can save the fix in one click.
+      const fallback = tpls.find((tp) => tp.key === defaultKey) ?? tpls[0]
+      setPendingSlots(fallback ? alignSlotsToSport(fallback.slots, defs).slots : aligned.slots)
+      setSelectedTemplateKey(fallback?.key ?? 'custom')
+    } else {
+      setPendingSlots(aligned.slots)
+      setSelectedTemplateKey(data.config?.templateKey ?? 'custom')
+    }
+  }, [leagueSport])
 
   useEffect(() => {
     let active = true
     fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => {
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}))
         if (!active) return
-        setSlotDefs(data.slotDefs ?? [])
+        if (!r.ok) {
+          // 400 = the roster engine has no service for this sport. Say so; never show NFL slots.
+          if (r.status === 400) setUnavailable(true)
+          else setError(data?.error ?? t('lsEd.loadFailed'))
+          return
+        }
+        const defs: SlotDef[] = Array.isArray(data.slotDefs) ? data.slotDefs : []
+        if (defs.length === 0) { setUnavailable(true); return }
+        const sport = typeof data.sport === 'string' ? data.sport : null
+        const ordered = orderDefsForSport(defs, sport)
+        setSlotDefs(ordered)
         setConfig(data.config ?? null)
         setTemplates(data.templates ?? [])
         setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
         setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
         setReadOnlyMode(Boolean(data.roleAwareReadOnlyMode))
         setDefaultTemplateKey((data.defaultTemplateKey as string | undefined) ?? null)
-        setRosterSport(typeof data.sport === 'string' ? data.sport : null)
         setIsCommissioner(data.isCommissioner ?? false)
-        setSelectedTemplateKey(data.config?.templateKey ?? 'custom')
-        const fromUnified = flattenSections(data.unifiedConfig?.rosterConfig?.sections)
-        setPendingSlots(normalizeFootballSlots(
-          Object.keys(fromUnified).length > 0 ? fromUnified : (data.config?.slots ?? {}),
-          data.sport,
-        ))
+        applyPayload(data, ordered)
       })
-      .catch(() => { if (active) setError('Failed to load') })
+      .catch(() => { if (active) setError(t('lsEd.loadFailed')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -169,144 +188,43 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
       const next = Math.max(def.minCount, Math.min(def.maxCount, current + delta))
       return { ...prev, [key]: next }
     })
+    setSuccess(false)
   }, [isCommissioner, slotDefs])
 
   const save = useCallback(async () => {
     setSaving(true); setError(null); setSuccess(false)
     try {
+      // Only this sport's keys are ever sent.
+      const slots = alignSlotsToSport(pendingSlots, slotDefs).slots
       const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slots: pendingSlots, templateKey: selectedTemplateKey }),
+        body: JSON.stringify({ slots, templateKey: selectedTemplateKey }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
       setConfig(data.config)
-      setSelectedTemplateKey(data.config?.templateKey ?? selectedTemplateKey)
       setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
+      applyPayload({ ...data, sport: rosterSport }, slotDefs)
       setSuccess(true)
       emitLeagueDraftRoomRevalidate(leagueId)
-    } catch { setError('Request failed') }
+    } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
-  }, [leagueId, pendingSlots, selectedTemplateKey])
+  }, [applyPayload, leagueId, pendingSlots, rosterSport, selectedTemplateKey, slotDefs])
 
-  const resetToDefault = useCallback(() => {
-    if (config) {
-      setPendingSlots(config.slots)
-      setSelectedTemplateKey(config.templateKey)
-    }
-  }, [config])
+  const resetToSaved = useCallback(() => {
+    setPendingSlots(baselineSlots)
+    if (config) setSelectedTemplateKey(config.templateKey)
+    setSuccess(false)
+  }, [baselineSlots, config])
 
   const applySelectedTemplate = useCallback(() => {
-    const template = templates.find((t) => t.key === selectedTemplateKey)
+    const template = templates.find((tp) => tp.key === selectedTemplateKey)
     if (!template) return
-    setPendingSlots(template.slots)
+    setPendingSlots(alignSlotsToSport(template.slots, slotDefs).slots)
     setSuccess(false)
     setError(null)
-  }, [selectedTemplateKey, templates])
-
-  const parseImportConfig = useCallback((): Record<string, number> | null => {
-    try {
-      const parsed = JSON.parse(importPayloadText) as Record<string, unknown>
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setError('Import payload must be a JSON object')
-        return null
-      }
-
-      const config: Record<string, number> = {}
-      for (const [key, value] of Object.entries(parsed)) {
-        const numeric = Number(value)
-        if (!Number.isFinite(numeric)) {
-          setError(`Import slot ${key} must be numeric`)
-          return null
-        }
-        config[key] = numeric
-      }
-
-      return config
-    } catch {
-      setError('Invalid JSON import payload')
-      return null
-    }
-  }, [importPayloadText])
-
-  const previewImport = useCallback(async () => {
-    if (!isCommissioner) return
-    const importedConfig = parseImportConfig()
-    if (!importedConfig) return
-
-    setImporting(true)
-    setError(null)
-    setSuccess(false)
-    try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'preview',
-          sourcePlatform: importSourcePlatform,
-          importedConfig,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error ?? 'Import preview failed')
-        return
-      }
-
-      setImportPreview({
-        mappedSlots: data.mappedSlots ?? {},
-        unmappedSlots: data.unmappedSlots ?? [],
-        validation: data.validation ?? { valid: true, warnings: [], errors: [] },
-      })
-    } catch {
-      setError('Import preview request failed')
-    } finally {
-      setImporting(false)
-    }
-  }, [importSourcePlatform, isCommissioner, leagueId, parseImportConfig])
-
-  const applyImport = useCallback(async () => {
-    if (!isCommissioner) return
-    const importedConfig = parseImportConfig()
-    if (!importedConfig) return
-
-    setImporting(true)
-    setError(null)
-    setSuccess(false)
-    try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'apply',
-          sourcePlatform: importSourcePlatform,
-          importedConfig,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error ?? 'Import apply failed')
-        return
-      }
-
-      const unified = data.unifiedConfig
-      if (unified?.rosterConfig?.sections) {
-        const merged = flattenSections(unified.rosterConfig.sections)
-        setPendingSlots(normalizeFootballSlots(merged, rosterSport))
-      }
-      setSelectedTemplateKey('custom')
-      setWarnings(unified?.rosterWarnings ?? [])
-      setMatchesTemplate(Boolean(unified?.rosterMatchesTemplate))
-      setImportPreview(null)
-      setSuccess(true)
-      emitLeagueDraftRoomRevalidate(leagueId)
-    } catch {
-      setError('Import apply request failed')
-    } finally {
-      setImporting(false)
-    }
-  }, [importSourcePlatform, isCommissioner, leagueId, parseImportConfig, rosterSport])
+  }, [selectedTemplateKey, slotDefs, templates])
 
   const resetToLeagueDefault = useCallback(async () => {
     if (!isCommissioner) return
@@ -318,188 +236,141 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
         method: 'POST',
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Reset failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsEd.ro.resetFailed')); return }
       setConfig(data.config)
-      setSelectedTemplateKey(data.config?.templateKey ?? defaultTemplateKey ?? 'custom')
       setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
-      if (typeof data.sport === 'string') setRosterSport(data.sport)
-      const fromUnified = flattenSections(data.unifiedConfig?.rosterConfig?.sections)
-      setPendingSlots(normalizeFootballSlots(
-        Object.keys(fromUnified).length > 0 ? fromUnified : (data.config?.slots ?? {}),
-        data.sport,
-      ))
+      applyPayload({ ...data, sport: data.sport ?? rosterSport, templates }, slotDefs)
+      if (!data.config?.templateKey) setSelectedTemplateKey(defaultTemplateKey ?? 'custom')
       setSuccess(true)
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch {
-      setError('Reset request failed')
+      setError(t('lsEd.ro.resetRequestFailed'))
     } finally {
       setSaving(false)
     }
-  }, [defaultTemplateKey, isCommissioner, leagueId])
+  }, [applyPayload, defaultTemplateKey, isCommissioner, leagueId, rosterSport, slotDefs, templates])
 
-  const rosterTotals = useMemo(() => {
-    let starters = 0
-    let bench = 0
-    for (const [key, count] of Object.entries(pendingSlots)) {
-      const def = slotDefs.find((s) => s.key === key)
-      if (!def || count <= 0) continue
-      if (def.category === 'bench' || def.category === 'reserve' || def.category === 'college') bench += count
-      else starters += count
-    }
-    return { starters, bench, total: starters + bench }
-  }, [pendingSlots, slotDefs])
+  const groups = useMemo(
+    () => buildRosterGroups(slotDefs, pendingSlots, { isCommissioner, sport: rosterSport }),
+    [slotDefs, pendingSlots, isCommissioner, rosterSport],
+  )
 
-  const activeSections = useMemo(() => buildSectionsFromSlots(pendingSlots), [pendingSlots])
+  if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.ro.loading')}</div>
 
-  if (loading) return <div className="py-8 text-center text-sm text-white/50">Loading roster settings...</div>
+  const sportName = sportLabel(rosterSport ?? leagueSport)
 
-  const hasChanges = config && JSON.stringify(pendingSlots) !== JSON.stringify(config.slots)
+  if (unavailable) {
+    return (
+      <RosterSettingsModalShell title={t('lsEd.ro.title')} subtitle={t('lsEd.ro.subtitle')}>
+        <div className="af-ls-card text-[13px] text-white/70" data-testid="roster-settings-unavailable">
+          {t('lsEd.ro2.unavailable').replace('{{sport}}', sportName)}
+        </div>
+      </RosterSettingsModalShell>
+    )
+  }
+
+  const hasChanges = Boolean(config) && JSON.stringify(pendingSlots) !== JSON.stringify(baselineSlots)
+  const canEdit = isCommissioner && !readOnlyMode
+  const badge = (
+    <>
+      <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/70">
+        {sportName}
+      </span>
+      {!isCommissioner || readOnlyMode ? (
+        <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold text-white/60">
+          {t('lsEd.ro.readOnly')}
+        </span>
+      ) : null}
+    </>
+  )
 
   return (
-    <RosterSettingsModalShell title="Roster Settings" subtitle="Set lineup slots and reserve structure">
+    <RosterSettingsModalShell title={t('lsEd.ro.title')} subtitle={t('lsEd.ro.subtitle')} badge={badge}>
       <RosterValidationBanner warnings={warnings} errors={error ? [error] : []} />
 
-      <div className="flex gap-4 text-[11px] text-white/50">
-        <span>Starters: <span className="font-mono text-white/80">{rosterTotals.starters}</span></span>
-        <span>Bench/Reserve: <span className="font-mono text-white/80">{rosterTotals.bench}</span></span>
-        <span>Total: <span className="font-mono text-white/80">{rosterTotals.total}</span></span>
-      </div>
-
-      {!matchesTemplate && (
-        <div className="rounded-lg border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
-          Current roster no longer matches the league default template.
+      {foreignRoster && (
+        <div className="break-words rounded-xl border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-xs text-amber-200" data-testid="roster-sport-mismatch">
+          {t('lsEd.ro2.sportMismatch').split('{{sport}}').join(sportName)}
         </div>
       )}
 
-      {isCommissioner && templates.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Template</p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      {!foreignRoster && !matchesTemplate && (
+        <div className="break-words rounded-xl border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+          {t('lsEd.ro.noMatch')}
+        </div>
+      )}
+
+      {canEdit && templates.length > 0 && (
+        <div className="af-ls-card space-y-2">
+          <label htmlFor={`roster-template-${leagueId}`} className="af-ls-eyebrow block">{t('lsEd.ro.template')}</label>
+          <div className="flex min-w-0 gap-2">
             <select
+              id={`roster-template-${leagueId}`}
               value={selectedTemplateKey}
               onChange={(event) => setSelectedTemplateKey(event.target.value)}
-              aria-label="Roster template"
-              title="Roster template"
-              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50"
+              aria-label={t('lsEd.ro.templateAria')}
+              title={t('lsEd.ro.templateAria')}
+              className="min-w-0 flex-1 truncate rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-500/50"
             >
               {templates.map((template) => (
                 <option key={template.key} value={template.key}>
                   {template.label}
                 </option>
               ))}
-              <option value="custom">Custom</option>
+              <option value="custom">{t('lsEd.ro.custom')}</option>
             </select>
             <button
               type="button"
               onClick={applySelectedTemplate}
               disabled={selectedTemplateKey === 'custom' || saving}
-              className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/70 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-40"
+              className="shrink-0 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-[12px] font-semibold text-white/80 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-40"
             >
-              Apply Template
+              {t('lsEd.ro.applyTemplate')}
             </button>
           </div>
         </div>
       )}
 
-      {isCommissioner && (
-        <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Import Mapping</p>
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] text-white/50" htmlFor="roster-import-source">Source platform</label>
-            <select
-              id="roster-import-source"
-              value={importSourcePlatform}
-              onChange={(event) => setImportSourcePlatform(event.target.value)}
-              className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50"
-              aria-label="Import source platform"
-              title="Import source platform"
-            >
-              <option value="yahoo">Yahoo</option>
-              <option value="fpl">FPL</option>
-              <option value="espn">ESPN</option>
-              <option value="sleeper">Sleeper</option>
-            </select>
-
-            <label className="text-[10px] text-white/50" htmlFor="roster-import-json">Imported slot JSON</label>
-            <textarea
-              id="roster-import-json"
-              value={importPayloadText}
-              onChange={(event) => setImportPayloadText(event.target.value)}
-              rows={7}
-              className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 font-mono text-xs text-white outline-none focus:border-cyan-500/50"
-            />
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={previewImport}
-                disabled={importing || saving}
-                className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/70 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-40"
-              >
-                Preview Import
-              </button>
-              <button
-                type="button"
-                onClick={applyImport}
-                disabled={importing || saving}
-                className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-200 transition hover:bg-cyan-900/25 disabled:cursor-default disabled:opacity-40"
-              >
-                Apply Import
-              </button>
-            </div>
-          </div>
-
-          {importPreview && (
-            <div className="space-y-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70">
-              <p>Mapped slots: {Object.keys(importPreview.mappedSlots).length}</p>
-              <p>Unmapped slots: {importPreview.unmappedSlots.join(', ') || 'None'}</p>
-              {!importPreview.validation.valid && (
-                <p className="text-red-300">Validation errors: {importPreview.validation.errors.join('; ')}</p>
-              )}
-              {importPreview.validation.warnings.length > 0 && (
-                <p className="text-amber-200">Validation warnings: {importPreview.validation.warnings.join('; ')}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {(readOnlyMode || !isCommissioner) && (
-        <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-          Only commissioners can edit roster settings.
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-[12px] text-white/60">
+          {t('lsEd.ro.commishOnly')}
         </div>
       )}
 
-      <DualTrackRosterRenderer
-        slotDefs={slotDefs}
+      <RosterSectionRenderer
+        groups={groups}
         pendingSlots={pendingSlots}
-        sections={activeSections}
-        isCommissioner={isCommissioner}
+        isCommissioner={canEdit}
+        football={isFootballSport(rosterSport)}
         onAdjust={(key, delta) => {
           setSelectedTemplateKey('custom')
           adjust(key, delta)
         }}
       />
 
-      {isCommissioner && (
+      {canEdit && (
         <div className="space-y-2 border-t border-white/10 pt-3">
-          {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">Roster settings saved.</div>}
-          <div className="flex gap-2">
-            <button type="button" disabled={saving || !hasChanges} onClick={save}
-              className="flex-1 rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50">
-              {saving ? 'Saving...' : 'Save'}
-            </button>
+          {success && <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{t('lsEd.ro.saved')}</div>}
+          <button
+            type="button"
+            disabled={saving || !hasChanges}
+            onClick={save}
+            className="w-full rounded-xl bg-cyan-600/80 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
+          >
+            {saving ? t('lsEd.saving') : t('lsEd.save')}
+          </button>
+          <div className="flex min-w-0 flex-wrap gap-2">
             <button
               type="button"
               onClick={resetToLeagueDefault}
-              disabled={saving || (matchesTemplate && selectedTemplateKey === (defaultTemplateKey ?? selectedTemplateKey))}
-              className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-200 transition hover:bg-amber-900/25 disabled:cursor-default disabled:opacity-40"
+              disabled={saving || (matchesTemplate && !foreignRoster && selectedTemplateKey === (defaultTemplateKey ?? selectedTemplateKey))}
+              className="min-w-0 flex-1 rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-[12px] font-semibold text-amber-200 transition hover:bg-amber-900/25 disabled:cursor-default disabled:opacity-40"
             >
-              Reset to League Default
+              {t('lsEd.ro.resetLeague')}
             </button>
             {hasChanges && (
-              <ResetToDefaultButton onClick={resetToDefault} disabled={saving} />
+              <ResetToDefaultButton onClick={resetToSaved} disabled={saving} />
             )}
           </div>
         </div>

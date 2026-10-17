@@ -27,13 +27,13 @@ function safeReturnPath(raw: unknown): string {
   return path.startsWith("/vpn-blocked") ? "/" : path
 }
 
-export default async function VpnBlockedPage({
-  searchParams,
-}: {
-  searchParams?:
-    | Promise<{ from?: string; why?: string; scope?: string }>
-    | { from?: string; why?: string; scope?: string }
-}) {
+export default async function VpnBlockedPage(
+  props: {
+    searchParams?: Promise<| Promise<{ from?: string; why?: string; scope?: string }>
+    | { from?: string; why?: string; scope?: string }>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const retry = safeReturnPath(sp.from)
   // `why` is set by the middleware from the verdict that sent the person here.
@@ -46,7 +46,7 @@ export default async function VpnBlockedPage({
   return (
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
       <div className="mx-auto max-w-xl text-center">
-        <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
+        <img src="/af-crest.svg" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
         <h1 className="mb-2 text-2xl font-black sm:text-3xl">
           {detected?.title ?? "Turn off your VPN to use AllFantasy.ai"}
         </h1>

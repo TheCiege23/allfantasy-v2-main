@@ -80,7 +80,7 @@ export const EXECUTIVE_VIZ_TYPOGRAPHY = {
   seriesLabel: 'text-[13px] font-bold text-primary',
   valueLabel: 'text-[12px] font-semibold text-secondary',
   legend: 'text-[11px] font-medium text-secondary',
-  metaLabel: 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted',
+  metaLabel: 'text-[11px] font-bold uppercase tracking-[0.14em] text-muted',
 } as const
 
 /** Motion tokens. Durations/easing live here so every executive chart animates identically, and every

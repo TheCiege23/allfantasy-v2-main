@@ -42,7 +42,7 @@ export function StartVsComparisonModal({ open, onOpenChange, data }: StartVsComp
                   {data.coach_lens.dimensions_used.map((d) => (
                     <span
                       key={d}
-                      className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] text-white/55"
+                      className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] text-white/55"
                     >
                       {d.replace(/_/g, ' ')}
                     </span>

@@ -170,7 +170,7 @@ export default function MatchupsTab({ leagueId }: LeagueTabProps) {
                   setSelectionCleared(true)
                 }}
                 data-testid="matchup-clear-selection"
-                className="md:hidden mb-2 text-[10px] text-white/50 hover:text-white/80"
+                className="md:hidden mb-2 text-[11px] text-white/50 hover:text-white/80"
               >
                 Clear selection
               </button>

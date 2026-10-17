@@ -605,7 +605,7 @@ export function PostDraftView({
                     </li>
                   ))}
               </ul>
-              <p className="mt-2 text-[10px] text-white/50">Full value/reach vs ADP in Draft Grades.</p>
+              <p className="mt-2 text-[11px] text-white/50">Full value/reach vs ADP in Draft Grades.</p>
               <Link
                 href={`/league/${leagueId}/draft-results`}
                 className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-cyan-600/20 px-3 py-2 text-xs font-medium text-cyan-300 hover:bg-cyan-600/30"
@@ -707,13 +707,13 @@ export function PostDraftView({
                     <span className="font-medium text-white/90">
                       {p.playerName}
                       {c2cCollegeRounds.length > 0 && c2cCollegeRounds.includes(p.round) ? (
-                        <span className="ml-1 rounded bg-violet-500/20 px-1 py-0.5 text-[9px] font-medium text-violet-100">College</span>
+                        <span className="ml-1 rounded bg-violet-500/20 px-1 py-0.5 text-[11px] font-medium text-violet-100">College</span>
                       ) : c2cCollegeRounds.length > 0 ? (
-                        <span className="ml-1 rounded bg-cyan-500/20 px-1 py-0.5 text-[9px] font-medium text-cyan-100">Pro</span>
+                        <span className="ml-1 rounded bg-cyan-500/20 px-1 py-0.5 text-[11px] font-medium text-cyan-100">Pro</span>
                       ) : null}
                     </span>
                     <span className="text-xs text-white/50">{p.position}{p.team ? ` · ${p.team}` : ''}</span>
-                    <span className="text-[10px] text-white/40">#{p.overall}</span>
+                    <span className="text-[11px] text-white/40">#{p.overall}</span>
                   </li>
                 ))}
               </ul>
@@ -834,26 +834,26 @@ export function PostDraftView({
             )}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-narrative">
-                <p className="text-[10px] uppercase tracking-wider text-white/50">League narrative recap</p>
+                <p className="text-[11px] uppercase tracking-wider text-white/50">League narrative recap</p>
                 <p className="mt-1.5 text-sm text-white/90">{activeRecapSections.leagueNarrativeRecap}</p>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-strategy">
-                <p className="text-[10px] uppercase tracking-wider text-white/50">Strategy recap</p>
+                <p className="text-[11px] uppercase tracking-wider text-white/50">Strategy recap</p>
                 <p className="mt-1.5 text-sm text-white/90">{activeRecapSections.strategyRecap}</p>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-value">
-                <p className="text-[10px] uppercase tracking-wider text-white/50">Best / worst value</p>
+                <p className="text-[11px] uppercase tracking-wider text-white/50">Best / worst value</p>
                 <p className="mt-1.5 text-sm text-white/90">{activeRecapSections.bestWorstValueExplanation}</p>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-chimmy">
-                <p className="text-[10px] uppercase tracking-wider text-white/50">Chimmy debrief</p>
+                <p className="text-[11px] uppercase tracking-wider text-white/50">Chimmy debrief</p>
                 <p className="mt-1.5 text-sm text-cyan-100">{activeRecapSections.chimmyDraftDebrief}</p>
               </div>
             </div>
             <div data-testid="post-draft-recap-card-team-grades" className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#0a1228]/80 to-[#070d1c]/90 p-4">
               <div className="mb-3 flex items-baseline justify-between">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Team Grades</p>
-                <p className="text-[10px] uppercase tracking-wider text-white/35">
+                <p className="text-[11px] uppercase tracking-wider text-white/35">
                   {activeRecapSections.teamGradeExplanations.length} {activeRecapSections.teamGradeExplanations.length === 1 ? 'team' : 'teams'}
                 </p>
               </div>
@@ -875,7 +875,7 @@ export function PostDraftView({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2">
-                            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">
                               #{entry.rank}
                             </span>
                             <span className="truncate text-sm font-bold text-white">{entry.displayName}</span>
@@ -916,7 +916,7 @@ export function PostDraftView({
               </div>
             )}
             {recapExecutionMode && (
-              <p className="text-[10px] text-white/60" data-testid="post-draft-ai-recap-execution">
+              <p className="text-[11px] text-white/60" data-testid="post-draft-ai-recap-execution">
                 {recapExecutionMode === 'ai_explained'
                   ? 'Execution: deterministic recap + AI narrative layer'
                   : 'Execution: deterministic recap only'}

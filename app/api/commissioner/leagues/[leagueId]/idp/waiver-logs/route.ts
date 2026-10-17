@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { isIdpLeague } from '@/lib/idp'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { isIdpPosition } from '@/lib/idp-kicker-values'
 import { prisma } from '@/lib/prisma'
 
@@ -77,17 +78,17 @@ export async function GET(
   const playerPositions = new Map<string, string>()
   const idList = Array.from(allPlayerIds)
   if (idList.length > 0) {
+    /*
+     * 🛑 By Sleeper id only — never a bare id against `externalId`, where Rolling Insights keeps its
+     * own numbers: an RI defensive back sharing a Sleeper receiver's number would put that receiver's
+     * claim in this IDP log (and hide a real defender's). externalIdNamespace.ts.
+     */
     const players = await prisma.sportsPlayer.findMany({
-      where: {
-        OR: [{ sleeperId: { in: idList } }, { externalId: { in: idList } }],
-        sport: 'NFL',
-      },
-      select: { sleeperId: true, externalId: true, position: true },
+      where: sleeperIdWhere(idList, 'NFL'),
+      select: { sleeperId: true, source: true, position: true },
     })
-    for (const p of players) {
-      const pos = p.position ?? ''
-      if (p.sleeperId) playerPositions.set(p.sleeperId, pos)
-      if (p.externalId) playerPositions.set(p.externalId, pos)
+    for (const [sleeperId, p] of indexBySleeperId(players)) {
+      playerPositions.set(sleeperId, p.position ?? '')
     }
   }
 

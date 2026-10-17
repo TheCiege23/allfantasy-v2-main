@@ -39,7 +39,7 @@ export function C2CAssetBadge({ type, className }: { type: C2CBadgeType; classNa
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide border',
+        'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide border',
         BADGE_STYLES[type],
         className
       )}

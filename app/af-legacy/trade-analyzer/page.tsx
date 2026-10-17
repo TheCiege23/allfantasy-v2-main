@@ -308,7 +308,7 @@ function Chip({ label, onRemove, asset }: { label: string; onRemove: () => void;
       ) : (
         <span className="truncate max-w-[140px] sm:max-w-[200px] md:max-w-[260px]">
           {label}
-          {isGenericPick && <span className="ml-1 text-[10px] text-amber-400/70">mid</span>}
+          {isGenericPick && <span className="ml-1 text-[11px] text-amber-400/70">mid</span>}
         </span>
       )}
       <button onClick={onRemove} className="flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full bg-white/5 text-white/50 hover:text-white hover:bg-white/10 transition text-base sm:text-lg leading-none active:scale-90" title="Remove">
@@ -447,8 +447,8 @@ function RosterPickerPanel({
               onClick={() => setCollapsed(prev => ({ ...prev, [slot]: !prev[slot] }))}
               className="flex items-center gap-2 w-full text-left py-1"
             >
-              <span className="text-[10px] uppercase tracking-wider text-white/40 font-semibold">{SLOT_LABELS[slot]} ({players.length})</span>
-              <span className="text-white/30 text-[10px]">{isCollapsed ? '+ Show' : '- Hide'}</span>
+              <span className="text-[11px] uppercase tracking-wider text-white/40 font-semibold">{SLOT_LABELS[slot]} ({players.length})</span>
+              <span className="text-white/30 text-[11px]">{isCollapsed ? '+ Show' : '- Hide'}</span>
             </button>
             {!isCollapsed && (
               <div className="grid grid-cols-1 gap-1">
@@ -474,8 +474,8 @@ function RosterPickerPanel({
                         size="sm"
                         showSlot={false}
                       />
-                      {!added && <span className={cx('ml-auto text-[10px] font-medium', addColor)}>+ Add</span>}
-                      {added && <span className="ml-auto text-[10px] text-white/30">Added</span>}
+                      {!added && <span className={cx('ml-auto text-[11px] font-medium', addColor)}>+ Add</span>}
+                      {added && <span className="ml-auto text-[11px] text-white/30">Added</span>}
                     </button>
                   )
                 })}
@@ -1437,7 +1437,7 @@ export default function LegacyTradeAnalyzerPage() {
             ].map((t) => (
               <span
                 key={t}
-                className="px-2 sm:px-3 py-1 rounded-full bg-black/20 border border-white/10 text-[10px] sm:text-xs text-white/70"
+                className="px-2 sm:px-3 py-1 rounded-full bg-black/20 border border-white/10 text-[11px] sm:text-xs text-white/70"
               >
                 {t}
               </span>
@@ -1473,7 +1473,7 @@ export default function LegacyTradeAnalyzerPage() {
                 >
                   <div className="text-lg mb-1">{goal.icon}</div>
                   <div className="text-sm font-semibold text-white">{goal.label}</div>
-                  <div className="text-[10px] text-white/50 mt-0.5">{goal.description}</div>
+                  <div className="text-[11px] text-white/50 mt-0.5">{goal.description}</div>
                 </button>
               ))}
             </div>

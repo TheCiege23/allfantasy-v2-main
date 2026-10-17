@@ -24,7 +24,7 @@ describe("import status query service", () => {
         providerId: "sleeper",
         status: { linked: false, available: true, importStatus: null },
       })
-    ).toEqual({ label: "Connect first", href: "/dashboard" })
+    ).toEqual({ label: "Connect first", href: "/settings/connect/sleeper" })
 
     expect(
       getLegacyProviderPrimaryAction({

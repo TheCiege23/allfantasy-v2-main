@@ -12,10 +12,8 @@ import { prisma } from "@/lib/prisma"
  * Returns messages that are pin-type (messageType === 'pin') for the thread.
  * Pinned refs are stored as typed messages with body JSON { messageId }.
  */
-export async function GET(
-  _req: Request,
-  { params }: { params: { threadId: string } }
-) {
+export async function GET(_req: Request, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

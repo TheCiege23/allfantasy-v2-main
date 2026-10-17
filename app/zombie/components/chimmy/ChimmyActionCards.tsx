@@ -49,7 +49,7 @@ export function SerumUseActionCard({
           Action denied. Check serum count and timing rules.
         </p>
       )}
-      {timestamp && <p className="mt-1 text-[10px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
+      {timestamp && <p className="mt-1 text-[11px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
     </div>
   )
 }
@@ -82,7 +82,7 @@ export function BombUseActionCard({
           Awaiting confirmation. Type DETONATE to confirm.
         </p>
       )}
-      {timestamp && <p className="mt-1 text-[10px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
+      {timestamp && <p className="mt-1 text-[11px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
     </div>
   )
 }
@@ -119,7 +119,7 @@ export function AmbushActionCard({
           Matchup remap active. New pairings take effect at next lock.
         </p>
       )}
-      {timestamp && <p className="mt-1 text-[10px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
+      {timestamp && <p className="mt-1 text-[11px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
     </div>
   )
 }
@@ -169,7 +169,7 @@ export function BashingDecisionCard({
             : 'Mercy shown. No additional penalty.'}
         </p>
       )}
-      {timestamp && <p className="mt-1 text-[10px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
+      {timestamp && <p className="mt-1 text-[11px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
     </div>
   )
 }
@@ -189,7 +189,7 @@ export function RevivalNotificationCard({
           </p>
         </div>
       </div>
-      {timestamp && <p className="mt-1 text-[10px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
+      {timestamp && <p className="mt-1 text-[11px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
     </div>
   )
 }
@@ -212,7 +212,7 @@ export function InfectionNotificationCard({
           </p>
         </div>
       </div>
-      {timestamp && <p className="mt-1 text-[10px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
+      {timestamp && <p className="mt-1 text-[11px] text-[var(--zombie-text-dim)]">{timestamp}</p>}
     </div>
   )
 }
@@ -227,7 +227,7 @@ function StatusChip({ status }: { status: string }) {
 
   return (
     <span className={clsx(
-      'ml-auto rounded px-2 py-0.5 text-[9px] font-bold uppercase',
+      'ml-auto rounded px-2 py-0.5 text-[11px] font-bold uppercase',
       styles[status] ?? styles.pending,
     )}>
       {status}

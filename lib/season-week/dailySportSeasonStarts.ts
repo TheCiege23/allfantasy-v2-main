@@ -1,5 +1,5 @@
 /**
- * Day-level regular-season start dates for the DAILY sports (NBA, NHL).
+ * Day-level regular-season start dates for the DAILY sports.
  *
  * ── Why this file exists rather than a table ────────────────────────────────
  *
@@ -37,6 +37,7 @@
  *
  * The gap-then-resume shape matched the published opener for both sports.
  */
+import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 
 /** Keyed by the calendar year the season BEGINS — a 2026-27 season is `2026`. */
 const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, string>>>> = {
@@ -46,11 +47,145 @@ const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, 
   NBA: {
     2026: '2026-10-20T00:00:00.000Z',
   },
-  // The first 2026-27 NCAAB game in SportsGame (espn_live; measured 2026-09-24). Opening day is
-  // the first Monday of November. Weeks run Monday-to-Sunday from here.
-  NCAAB: {
-    2026: '2026-11-02T00:00:00.000Z',
+  // MLB's published 2026 Opening Night was March 25 (US Eastern). Production SportsGame has
+  // one game on that Eastern day, followed by the March 26 slate. The March 25–31 player stats
+  // were backfilled in production. MLB announced March 24 as 2027 Opening Night; the matchup
+  // is still TBD, so the current game feed starts March 25. Anchor on the announced opener so
+  // the eventual Opening Night game lands in week 1 when the feed publishes it.
+  MLB: {
+    2026: '2026-03-25T00:00:00.000Z',
+    2027: '2027-03-24T00:00:00.000Z',
   },
+  // The 2026-27 regular season opens in Rome on November 1 (Notre Dame v Villanova),
+  // one day before the domestic slate. The official announcement and current RI cache agree.
+  // Evidence: docs/readiness/multisport-blockers-2026-10-05.md. Shared seven-day windows
+  // must include that opener; starting November 2 silently excluded it from scoring.
+  NCAAB: {
+    2026: '2026-11-01T00:00:00.000Z',
+  },
+  // SOCCER (EPL + La Liga + Serie A, one pool): the Friday of the first weekend — La Liga opened Sat
+  // 15 Aug 2026, the Premier League Fri 21 Aug, Serie A Sat 22 Aug (Rolling Insights season schedules,
+  // fixtures/schedule-season.SOCCER.*.json; TheSportsDB's EPL rows in SportsGame agree on the 21st).
+  // Soccer does not use seven-day arithmetic from here — see SOCCER_GAMEWEEK_STARTS below.
+  SOCCER: {
+    2026: '2026-08-14T00:00:00.000Z',
+  },
+}
+
+/**
+ * 🛑 SOCCER WEEKS ARE GAMEWEEKS: ONLY THE SEVEN-DAY WINDOWS THAT HOLD A GAME.
+ *
+ * Every other daily sport plays every week, so "week N" is the Nth seven days from the opener. Soccer
+ * stops for international breaks — in 2026-27 four Friday-to-Thursday windows hold no game in any of
+ * the three leagues (25 Sep – 8 Oct, 13–19 Nov, 26 Mar – 1 Apr). The finalizer refuses an empty slate
+ * (`no_games_on_slate`), so an arithmetic week there could never seal and every soccer league would
+ * sit on it for good.
+ *
+ * So gameweek N is the Nth window below. Each runs Friday to Thursday on US Eastern days, which keeps
+ * a weekend round (Friday to Monday) whole and folds the following midweek round into it — a double
+ * gameweek, as FPL does it. Derived from the Rolling Insights season schedules for all three leagues
+ * (1,140 fixtures, 38 non-empty windows — the leagues' own 38 rounds). A fixture later moved INTO an
+ * empty window belongs to no gameweek and is not scored; re-derive this list if that happens.
+ */
+const GAMEWEEK_STARTS: Readonly<Record<string, Readonly<Record<number, readonly string[]>>>> = {
+  SOCCER: {
+    2026: [
+      '2026-08-14', '2026-08-21', '2026-08-28', '2026-09-04', '2026-09-11', '2026-09-18', '2026-10-09',
+      '2026-10-16', '2026-10-23', '2026-10-30', '2026-11-06', '2026-11-20', '2026-11-27', '2026-12-04',
+      '2026-12-11', '2026-12-18', '2026-12-25', '2027-01-01', '2027-01-08', '2027-01-15', '2027-01-22',
+      '2027-01-29', '2027-02-05', '2027-02-12', '2027-02-19', '2027-02-26', '2027-03-05', '2027-03-12',
+      '2027-03-19', '2027-04-02', '2027-04-09', '2027-04-16', '2027-04-23', '2027-04-30', '2027-05-07',
+      '2027-05-14', '2027-05-21', '2027-05-28',
+    ],
+  },
+}
+
+const DAY_MS = 86_400_000
+
+// NBA fantasy periods follow Eastern calendar days. A fixed seven-day UTC offset
+// moves the boundary by an hour when daylight saving time changes in November.
+function nbaEasternWeekDay(season: number, week: number): Date | null {
+  const opener = REGULAR_SEASON_START_UTC.NBA[season]
+  if (!opener) return null
+  const day = new Date(Date.parse(opener) + (week - 1) * 7 * DAY_MS)
+  const noon = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 12))
+  const zone = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset' })
+    .formatToParts(noon).find(part => part.type === 'timeZoneName')?.value ?? ''
+  const offsetHours = Number(zone.match(/^GMT([+-]\d+)$/)?.[1])
+  if (!Number.isFinite(offsetHours)) return null
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()) - offsetHours * 3_600_000)
+}
+
+function gameweekStarts(sport: string | null | undefined, season: number | null | undefined): readonly string[] | null {
+  const key = String(sport ?? '').trim().toUpperCase()
+  const year = Number(season)
+  if (!Number.isFinite(year)) return null
+  return GAMEWEEK_STARTS[key]?.[year] ?? null
+}
+
+/**
+ * The `[start, end)` window of week `week` for a daily sport — the ONE place a week number becomes
+ * dates, for the stat sync and the finalizer alike. A gameweek sport reads its list; every other sport
+ * is seven-day arithmetic from its recorded opener. `null` means "cannot tell" and callers decline.
+ */
+export function resolveDailySportWeekWindow(
+  sport: string | null | undefined,
+  season: number | null | undefined,
+  week: number,
+): { start: Date; end: Date } | null {
+  if (!Number.isInteger(week) || week < 1) return null
+  // These bounds are UTC-midnight DATE keys for game_date and easternCalendarDay,
+  // not instants. The inverse below uses actual Eastern-midnight instants to
+  // classify a kickoff, including the daylight-saving transition.
+  const starts = gameweekStarts(sport, season)
+  if (starts) {
+    const day = starts[week - 1]
+    if (!day) return null
+    const start = new Date(`${day}T00:00:00.000Z`)
+    return { start, end: new Date(start.getTime() + 7 * DAY_MS) }
+  }
+  return weekWindowFromSeasonStart(resolveDailySportSeasonStart(sport, season), week)
+}
+
+/**
+ * The week an instant falls in, for relabelling a schedule (the week roller) — the inverse of
+ * {@link resolveDailySportWeekWindow}. `null` = before the opener, or inside a gameweek gap.
+ */
+export function dailySportWeekForInstant(
+  sport: string | null | undefined,
+  season: number | null | undefined,
+  instant: Date,
+): number | null {
+  const t = instant.getTime()
+  if (Number.isNaN(t)) return null
+  if (String(sport ?? '').toUpperCase() === 'NBA' && Number.isInteger(Number(season))) {
+    const anchor = nbaEasternWeekDay(Number(season), 1)
+    if (anchor) {
+      if (t < anchor.getTime()) return null
+      const approximate = Math.floor((t - anchor.getTime()) / (7 * DAY_MS)) + 1
+      // DST can move the true edge an hour relative to elapsed UTC time.
+      for (const week of [approximate - 1, approximate, approximate + 1]) {
+        if (week < 1) continue
+        const start = nbaEasternWeekDay(Number(season), week)
+        const end = nbaEasternWeekDay(Number(season), week + 1)
+        if (start && end && t >= start.getTime() && t < end.getTime()) return week
+      }
+      return null
+    }
+  }
+  const starts = gameweekStarts(sport, season)
+  if (starts) {
+    for (let i = 0; i < starts.length; i++) {
+      const s = Date.parse(`${starts[i]}T00:00:00.000Z`)
+      if (t >= s && t < s + 7 * DAY_MS) return i + 1
+    }
+    return null
+  }
+  const opener = resolveDailySportSeasonStart(sport, season)
+  if (!opener) return null
+  const anchor = Date.parse(opener)
+  if (t < anchor) return null
+  return Math.floor((t - anchor) / (7 * DAY_MS)) + 1
 }
 
 /**

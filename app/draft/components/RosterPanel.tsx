@@ -26,7 +26,7 @@ export function RosterPanel({ myPicks, label = 'Your roster' }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.08] bg-[#0d1117]">
       <div className="border-b border-white/[0.06] px-2 py-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">{label}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">{label}</p>
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
         {DEFAULT_SLOTS.map((slot, i) => {
@@ -36,7 +36,7 @@ export function RosterPanel({ myPicks, label = 'Your roster' }: Props) {
             <div
               key={`${slot}-${i}`}
               className={cn(
-                'flex min-h-[36px] items-center rounded border px-2 text-[10px]',
+                'flex min-h-[36px] items-center rounded border px-2 text-[11px]',
                 pick ? base : 'border-dashed border-white/15 bg-transparent text-white/35',
               )}
             >

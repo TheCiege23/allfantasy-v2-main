@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * PATCH: Set keeper config (maxKeepers, deadline, maxKeepersPerPosition). Commissioner only.
  */
@@ -29,6 +30,8 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
   const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })

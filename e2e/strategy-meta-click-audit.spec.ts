@@ -164,7 +164,7 @@ test.describe('@strategy-meta click audit', () => {
       '/app/strategy-meta?sport=SOCCER&timeframe=30d'
     )
     await page.getByRole('button', { name: 'Explain this trend' }).click()
-    await expect(page.getByRole('dialog', { name: 'AI trend explanation' })).toContainText(
+    await expect(page.getByRole('dialog', { name: "Chimmy's trend explanation" })).toContainText(
       'Strategy AI summary for SOCCER (30d)'
     )
 

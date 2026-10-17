@@ -31,12 +31,28 @@ export type FantraxScoringResult = {
  * Fantrax category code -> the stat key(s) it means here.
  *
  * ⚠ SOME ARE ONE-TO-MANY, AND THAT IS NOT A ROUNDING ERROR. Fantrax keeps a
- * single bucket where this codebase keeps three: one "two point conversions"
- * category against pass/rush/rec, and one "return touchdowns" against kick and
+ * single bucket where this codebase keeps distinct roles: one "two point conversions scored"
+ * category against rush/rec; passing conversions are a separate category, and one "return touchdowns" against kick and
  * punt returns. Fanning the value out to each is the only reading that scores a
  * player correctly; picking one would silently zero the other two.
  */
 const CATEGORY_KEYS: Record<string, string[]> = {
+  INDIVIDUAL_DOUBLES: ['double'],
+  INDIVIDUAL_HIT_BY_PITCHES: ['hbp'],
+  INDIVIDUAL_HOME_RUNS: ['hr'],
+  INDIVIDUAL_RBIS: ['rbi'],
+  INDIVIDUAL_RUNS_SCORED: ['r'],
+  INDIVIDUAL_SINGLES: ['single'],
+  INDIVIDUAL_STOLEN_BASES: ['sb'],
+  INDIVIDUAL_TRIPLES: ['triple'],
+  INDIVIDUAL_WALKS: ['bb'],
+  INDIVIDUAL_EARNED_RUNS_ALLOWED: ['er'],
+  INDIVIDUAL_INNINGS_PITCHED: ['ip'],
+  INDIVIDUAL_LOSSES: ['l'],
+  INDIVIDUAL_QUALITY_STARTS: ['qs'],
+  INDIVIDUAL_SAVES: ['sv'],
+  INDIVIDUAL_STRIKE_OUTS_PITCHED: ['so'],
+  INDIVIDUAL_WINS: ['w'],
   INDIVIDUAL_PASSING_YARDS: ['pass_yd'],
   INDIVIDUAL_PASSING_TOUCHDOWNS: ['pass_td'],
   INDIVIDUAL_RUSHING_YARDS: ['rush_yd'],
@@ -45,7 +61,8 @@ const CATEGORY_KEYS: Record<string, string[]> = {
   INDIVIDUAL_RECEIVING_TOUCHDOWNS: ['rec_td'],
   INDIVIDUAL_RECEPTIONS: ['rec'],
   INDIVIDUAL_FUMBLES_RECOVERED_TOUCHDOWNS_OFFENSE: ['fum_rec_td'],
-  INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES: ['pass_2pt', 'rush_2pt', 'rec_2pt'],
+  INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES: ['rush_2pt', 'rec_2pt'],
+  INDIVIDUAL_TWO_POINT_CONVERSIONS_PASSES: ['pass_2pt'],
   INDIVIDUAL_RETURN_TOUCHDOWNS: ['kr_td', 'pr_td'],
 }
 
@@ -81,6 +98,10 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
   const configs = readConfigs(info)
   const rules: FantraxScoringRule[] = []
   const gaps: string[] = []
+  const systemType = (info.scoringSystem as { type?: string } | undefined)?.type
+  if (systemType && !systemType.includes('POINTS_BASED')) {
+    return { rules: [], gaps: [`${systemType} is a category scoring format; native points scoring cannot reproduce it`] }
+  }
 
   const defaultReception = configs.find(
     (c) =>
@@ -92,7 +113,11 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
   for (const config of configs) {
     const code = config.scoringCategory?.code
     const points = Number(config.points)
-    if (!code || !Number.isFinite(points)) continue
+    if (!code) continue
+    if (config.points == null || !Number.isFinite(points)) {
+      gaps.push(`${config.scoringCategory?.name ?? code} has no verified points weight`)
+      continue
+    }
 
     const position = config.position?.shortName ?? config.position?.code
     if (!isDefaultPosition(position)) {

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { signInAs } from "./helpers/session-cookie";
 
 test.describe.configure({ timeout: 180_000 });
 
@@ -185,11 +186,19 @@ test.describe("@graph league intelligence click audit", () => {
       });
     });
 
+    // /leagues/<id> shows a sign-in wall to a settled-unauthenticated session since
+    // 1f5105f6 (every fetch on that page is session-gated). The mocked league APIs
+    // still answer; the visitor just has to be signed in to reach the tab.
+    await signInAs(page, { id: "e2e-graph-user" });
     await page.goto("/leagues/league_graph_1?tab=Intelligence");
     await expect(page.getByRole("heading", { name: "League Intelligence Graph" }).first()).toBeVisible();
 
     await page.getByTitle("Filter graph by sport").selectOption("NBA");
-    await page.getByRole("button", { name: "Refresh" }).first().click();
+    // The graph panel's own refresh (title "Refresh graph data"). Signed in, the shell's
+    // "Refresh League Data" button is live and is the first button whose name contains
+    // "Refresh"; clicking it reloads the league and remounts this panel with its sport
+    // filter reset, so the later relationship-map request would lose sport=NBA.
+    await page.getByTitle("Refresh graph data").click();
     await page.getByRole("button", { name: "Rebuild graph" }).first().click();
 
     await page.getByRole("button", { name: "graph", exact: true }).click();
@@ -204,8 +213,8 @@ test.describe("@graph league intelligence click audit", () => {
     await expect(page.getByRole("heading", { name: "Node detail" })).toBeVisible();
     await page.getByRole("button", { name: "Back" }).first().click();
 
-    await page.getByRole("button", { name: "AI explain" }).click();
-    await expect(page.getByRole("dialog", { name: "Graph AI insight" })).toBeVisible();
+    await page.getByRole("button", { name: "Explain with Chimmy" }).click();
+    await expect(page.getByRole("dialog", { name: "Chimmy's graph insight" })).toBeVisible();
     await expect(page.getByText(/Graph summary for this league is healthy/i)).toBeVisible();
     await page.getByRole("button", { name: "Regenerate" }).click();
     await page.getByRole("button", { name: "Close" }).click();

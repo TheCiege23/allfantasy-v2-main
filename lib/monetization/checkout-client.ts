@@ -1,5 +1,6 @@
 import type { MetaEventPayload } from "@/lib/meta-events"
 import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
+import { isAppleApp, purchaseWithApple } from "@/lib/monetization/apple-iap-client"
 
 export type MonetizationCheckoutProductType = "subscription" | "token_pack"
 
@@ -16,6 +17,7 @@ export type MonetizationCheckoutRequest = {
 export type MonetizationCheckoutResult =
   /** `signIn`: `url` is the sign-in page, returning here — not Stripe. Callers navigate to it the same way. */
   | { ok: true; url: string; metaEvent?: MetaEventPayload; signIn?: true }
+  | { ok: true; completed: true }
   | { ok: false; error: string }
 
 const CHECKOUT_TIMEOUT_MS = 12_000
@@ -39,6 +41,17 @@ export async function resolveCheckoutUrl(
   const sku = String(request.sku ?? "").trim()
   if (!sku) {
     return { ok: false, error: "Missing checkout sku." }
+  }
+
+  if (isAppleApp()) {
+    try {
+      const purchase = await purchaseWithApple(sku)
+      return purchase.cancelled
+        ? { ok: false, error: "Purchase cancelled." }
+        : { ok: true, completed: true }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unable to complete Apple purchase." }
+    }
   }
 
   /*

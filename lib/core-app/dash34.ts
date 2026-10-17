@@ -1,8 +1,9 @@
+import { teamLoadTiming } from '@/lib/observability/teamLoadTiming'
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
-import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { lineupActionability } from './lineupActionability'
 import { getByeWeeks } from './byeWeeks'
 import { isRuledOut } from './injuryStatus'
@@ -11,12 +12,22 @@ import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
-import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
+import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
 import { composePlayerIdentities } from './playerIdentityCompose'
-import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { getTeamInfo } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import { selectKickoffLeague } from './kickoffContext'
+import { isBestBallLeagueRow } from './leagueBestBall'
+import { isTop25Sport, pollIsKnown, showCollegeGame } from '@/lib/live/collegeTop25'
+import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
+import { bestBallDepthAlerts, type DepthAlert } from './bestBallDepth'
 import { clubKey, indexFixturesByWeek, weekVerdict } from './lineupWeekFixtures'
+import { coverOptions, type CoverCandidate, type CoverOptions } from './lineupCover'
+import { lookupProjections } from './playerProjections'
+import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
+import { lineupFixLink } from './platformLinks'
+import { recordAdvice } from '@/lib/chimmy-advice/adviceStore'
+import { AF_TIP_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
 import type {
   Dash34Brief,
   Dash34Data,
@@ -121,7 +132,19 @@ export type Dash34LeagueRow = {
   hasUnifiedRecord?: boolean | null
 }
 
+/** One best ball position worth a glance, in one league. */
+export type Dash34DepthAlert = DepthAlert & {
+  leagueId: string
+  leagueName: string
+  platform: string
+  href: string
+  /** Null where the league has waivers switched off. */
+  waiversHref: string | null
+}
+
 export type Dash34Result = Dash34Data & {
+  /** Best ball depth checks — positions where the healthy room has thinned. Empty most weeks. */
+  depthAlerts?: Dash34DepthAlert[]
   injuryCheckedAt?: string | null
   /** Rows excluded from the list because they are historical, not played. */
   legacyCount: number
@@ -372,7 +395,12 @@ const readNextGamesCached = unstable_cache(
       .findMany({
         where: { sport: { in: sports }, startTime: { gte: new Date() } },
         orderBy: { startTime: 'asc' },
-        take: 40,
+        /*
+         * 200, not 40: college games outside the Top 25 are filtered out below (readNextGames), and a
+         * Saturday NCAAF slate alone is 50+ fixtures — 40 could all be unranked and leave the first
+         * kickoff with nothing to name. Shared by every user for 60s, so the wider read is cheap.
+         */
+        take: 200,
         select: {
           sport: true,
           startTime: true,
@@ -403,11 +431,33 @@ const readNextGamesCached = unstable_cache(
   { revalidate: 60 },
 )
 
-async function readNextGames(sports: string[], now: Date, options: Dash34Options = {}) {
+async function readNextGames(sports: string[], now: Date, options: Dash34Options = {}, userId: string | null = null) {
   const rows = await readNextGamesCached([...sports].sort()).catch(fellBack(options, 'next-games', []))
+  /*
+   * ⚠ COLLEGE: THE TOP 25 PLUS YOUR TEAMS (founder, 2026-10-08). "First kickoff" and the next-24h
+   * list named Sam Houston at Liberty over Bucs–Cowboys because an unranked Thursday game kicked off
+   * first. Same rule and rank book as /core/live (lib/live/collegeTop25.ts); fails open with no poll.
+   */
+  const top25 = new Map(
+    await Promise.all(
+      sports.filter((s) => isTop25Sport(s)).map(async (s) => {
+        const [book, follows] = await Promise.all([
+          readRankBook(s).catch(() => null),
+          readFollowedTeams(userId, s).catch(() => []),
+        ])
+        return [s.toUpperCase(), { book, follows, known: pollIsKnown(book, []) }] as const
+      }),
+    ),
+  )
   return rows
     .map((g) => ({ ...g, startTime: g.startTime ? new Date(g.startTime) : null }))
     .filter((g) => g.startTime != null && g.startTime.getTime() >= now.getTime())
+    .filter((g) => {
+      const t = top25.get(String(g.sport ?? '').toUpperCase())
+      if (!t) return true
+      const side = (team: string | null) => ({ abbrev: team, name: team, rank: null })
+      return showCollegeGame({ home: side(g.homeTeam), away: side(g.awayTeam) }, t.book, t.follows, t.known)
+    })
 }
 
 /**
@@ -604,6 +654,21 @@ export async function getDash34Data(
   now: Date = new Date(),
   options: Dash34Options = {},
 ): Promise<Dash34Result> {
+  const timing = teamLoadTiming('core-summary')
+  try {
+    return await loadDash34Data(userId, leagueRows, now, options, timing)
+  } finally {
+    timing.finish()
+  }
+}
+
+async function loadDash34Data(
+  userId: string,
+  leagueRows: Dash34LeagueRow[],
+  now: Date,
+  options: Dash34Options,
+  timing: ReturnType<typeof teamLoadTiming>,
+): Promise<Dash34Result> {
   /*
    * Historical board rows out of the list first, before anything expensive keys
    * off them. These are the 543-row tail; fanning roster and injury reads across
@@ -631,44 +696,36 @@ export async function getDash34Data(
   const activeIds = active.map((l) => l.id)
   const sports = [...new Set(active.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
 
-  const [teams, nextGames, injuryChecks] = await Promise.all([
-    prisma.leagueTeam
-      .findMany({
-        where: { claimedByUserId: userId, leagueId: { in: activeIds } },
-        select: {
-          leagueId: true,
-          id: true,
-          teamName: true,
-          ownerName: true,
-          platformUserId: true,
-          externalId: true,
-          isCommissioner: true,
-          isCoCommissioner: true,
-        },
-      })
-      .catch(fellBack(options, 'teams', [])),
-    /*
-     * Enough future games to cover the next-24-hours feed as well as the single
-     * next kickoff, in one read. Ordered by start time so the first row IS the
-     * countdown target. Global — shared through the 60s cache above.
-     */
-    readNextGames(sports, now, options),
+  // These reads do not depend on a claimed team or a provider response.
+  // Start the shared feeds now, keeping their existing fallback and cache rules.
+  const injuryRowsPromise = timing.read('injuries', () => readInjuryFeed(sports, options))
+  const nflFixturesPromise = timing.read('schedule', () =>
+    sports.includes('NFL') ? readNflFixtures(now, options) : Promise.resolve([]))
+  const [teams, nextGames, injuryChecks, formatRows, chopped] = await Promise.all([
+    timing.read('league', () => prisma.leagueTeam.findMany({
+      where: { claimedByUserId: userId, leagueId: { in: activeIds } },
+      select: {
+        leagueId: true, id: true, teamName: true, ownerName: true,
+        platformUserId: true, externalId: true, isCommissioner: true, isCoCommissioner: true,
+      },
+    }).catch(fellBack(options, 'teams', []))),
+    readNextGames(sports, now, options, userId),
     Promise.all(sports.filter(s => s !== 'SOCCER').map(s => readInjurySyncFreshness(s))),
+    timing.read('format', () => prisma.league.findMany({
+      where: { id: { in: activeIds } },
+      select: { id: true, platform: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true },
+    }).catch(() => [])),
+    prisma.guillotineRosterState.findMany({
+      where: { leagueId: { in: activeIds }, choppedAt: { not: null } },
+      select: { leagueId: true, rosterId: true },
+    }).catch(() => []),
   ])
-
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
-  const formatRows = await prisma.league.findMany({ where: { id: { in: activeIds } },
-    select: { id: true, platform: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true } }).catch(() => [])
   const formatByLeague = new Map(formatRows.map(l => [l.id, l]))
   const platformByLeague = new Map(active.map((l) => [l.id, formatByLeague.get(l.id)?.platform ?? l.platform]))
-  const chopped = await prisma.guillotineRosterState.findMany({ where: { leagueId: { in: activeIds }, choppedAt: { not: null } },
-    select: { leagueId: true, rosterId: true } }).catch(() => [])
+  // A native league of another sport holds Rolling Insights ids, never Sleeper ids (rosterIdSpace.ts).
+  const sportByLeague = new Map(active.map((l) => [l.id, l.sport]))
   const choppedTeams = new Set(chopped.map(r => `${r.leagueId}:${r.rosterId}`))
-  const eliminatedRows = await prisma.guillotineElimination.findMany({
-    where: { leagueId: { in: activeIds }, eliminatedOwnerId: { in: [userId, ...teams.map(t => t.platformUserId).filter((id): id is string => Boolean(id))] } },
-    select: { leagueId: true, season: { select: { season: true } } },
-  }).catch(() => [])
-
   /*
    * ⚠ ROSTERS ARE MATCHED PER LEAGUE, NOT AGAINST ONE GLOBAL CANDIDATE LIST.
    * `LeagueTeam.externalId` holds values like "4" — a global `platformUserId IN
@@ -687,31 +744,42 @@ export async function getDash34Data(
     },
   }))
 
-  const storedRosters = rosterOr.length
-    ? await prisma.roster
-        .findMany({
+  const sleeperLeagues = active.filter((l) => String(l.platform).toLowerCase() === 'sleeper')
+  const [storedRosters, eliminatedRows, liveRosters] = await Promise.all([
+    timing.read('roster', () => rosterOr.length
+      ? prisma.roster.findMany({
           where: { OR: rosterOr },
           select: { id: true, leagueId: true, playerData: true },
-        })
-        .catch(fellBack(options, 'rosters', []))
-    : []
-
-  const liveRosters: Array<{ leagueId: string; playerData: unknown }> = []
-  const sleeperLeagues = active.filter((l) => String(l.platform).toLowerCase() === 'sleeper')
-  // Bound concurrent requests. A failed provider read cannot promote a stale
-  // imported starter assignment into an urgent current alert.
-  for (let i = 0; i < sleeperLeagues.length; i += 8) {
-    const batch = await Promise.all(sleeperLeagues.slice(i, i + 8).map(async (l) => {
-      const team = teamByLeague.get(l.id)
-      const sourceId = l.platformLeagueId ?? l.sleeperLeagueId
-      if (!team || !sourceId) return null
-      const playerData = await currentSleeperRoster(sourceId, team)
-      return playerData ? { leagueId: l.id, playerData } : null
-    }))
-    for (const row of batch) if (row) liveRosters.push(row)
-  }
+        }).catch(fellBack(options, 'rosters', []))
+      : Promise.resolve([])),
+    timing.read('elimination', () => prisma.guillotineElimination.findMany({
+      where: { leagueId: { in: activeIds }, eliminatedOwnerId: { in: [userId, ...teams.map(t => t.platformUserId).filter((id): id is string => Boolean(id))] } },
+      select: { leagueId: true, season: { select: { season: true } } },
+    }).catch(() => [])),
+    timing.read('provider', async () => {
+      const rows: Array<{ leagueId: string; playerData: unknown }> = []
+      // Keep the eight-league bound and authoritative current lineup checks.
+      for (let i = 0; i < sleeperLeagues.length; i += 8) {
+        const batch = await Promise.all(sleeperLeagues.slice(i, i + 8).map(async (l) => {
+          const team = teamByLeague.get(l.id)
+          const sourceId = l.platformLeagueId ?? l.sleeperLeagueId
+          if (!team || !sourceId) return null
+          const playerData = await currentSleeperRoster(sourceId, team)
+          return playerData ? { leagueId: l.id, playerData } : null
+        }))
+        for (const row of batch) if (row) rows.push(row)
+      }
+      return rows
+    }),
+  ])
   const sleeperIds = new Set(sleeperLeagues.map((l) => l.id))
-  const rosters = [...storedRosters.filter((r) => !sleeperIds.has(r.leagueId)), ...liveRosters]
+  // In Sleeper ids: an ESPN roster translated (ESPN 12483 is Stafford, Sleeper 12483 Jack Bech), any
+  // other foreign one emptied. One read covers every ESPN league.
+  const rosters = await timing.read('identities', () => sleeperReadableRosters(
+    [...storedRosters.filter((r) => !sleeperIds.has(r.leagueId)), ...liveRosters],
+    (r) => platformByLeague.get(r.leagueId),
+    (r) => sportByLeague.get(r.leagueId),
+  ))
 
   /**
    * leagueId → the roster, split by slot.
@@ -742,7 +810,7 @@ export async function getDash34Data(
   const everyPlayerId = new Set<string>()
   for (const r of rosters) {
     // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster names nobody.
-    const pd = (sleeperReadablePlayerData(platformByLeague.get(r.leagueId), r.playerData) ?? {}) as Record<string, unknown>
+    const pd = (r.playerData ?? {}) as Record<string, unknown>
     const starters = asIds(pd.starters)
     const reserve = asIds(pd.reserve)
     const taxi = asIds(pd.taxi)
@@ -770,7 +838,7 @@ export async function getDash34Data(
   const playerIds = [...everyPlayerId]
 
   const [playerRows, injuryRows, nflFixtures] = await Promise.all([
-    playerIds.length
+    timing.read('players', () => playerIds.length
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: playerIds } },
@@ -788,17 +856,20 @@ export async function getDash34Data(
               team: true,
               sport: true,
               imageUrl: true,
+              // Identify the authoritative Sleeper row; see `composePlayerIdentities`.
+              source: true,
+              fetchedAt: true,
             },
           })
           .catch(fellBack(options, 'players', []))
-      : Promise.resolve([]),
+      : Promise.resolve([])),
     /*
      * The injury feed — filtered to unexpired rows in SQL and shared through
      * the 60s cache above. The 45-day report-age gate is applied below in the
      * loader, where the brief, the chips, the urgent counts and the book all
      * inherit it at once.
      */
-    readInjuryFeed(sports, options),
+    injuryRowsPromise,
     /*
      * Next kickoff per NFL club, for "when does this player actually play".
      *
@@ -810,7 +881,7 @@ export async function getDash34Data(
      * of distinct games by about half and the map takes first-seen per club.
      * Global — shared through the 60s cache above.
      */
-    sports.includes('NFL') ? readNflFixtures(now, options) : Promise.resolve([]),
+    nflFixturesPromise,
   ])
 
   /**
@@ -942,45 +1013,54 @@ export async function getDash34Data(
    * upper-cased, which is exactly what the matcher's own `normalizeToken` was
    * going to do to them anyway.
    */
-  const injuryIndex = buildNameIndex(
-    injuryRows
-      .filter((i) => Boolean(i.status))
-      .map((i) => ({
-        name: i.playerName,
-        position: i.position ?? null,
-        team: normalizeTeamAbbrev(i.team) ?? null,
-        row: i,
-      })),
+  /*
+   * 🛑 ONE CANDIDATE PER (NAME, TEAM), NOT ONE PER ROW — AND THE STATUS COMES FROM THAT CANDIDATE.
+   * Measured 2026-10-11, two defects in the read this replaced:
+   *  - The index held every ROW, so one athlete reported by several feeds (ESPN writes a row per
+   *    news item, plus RI and the live Sleeper fold) was several candidates. When two of them shared
+   *    his position the matcher could not narrow to one and REFUSED — 77 live NFL names, among them
+   *    DeVonta Smith (Out). A refusal reads as "no designation", so an Out starter looked healthy.
+   *  - After verifying the athlete, the status was read from a map keyed by NAME alone, first row
+   *    wins — so a verified Vikings WR Justin Jefferson could still be handed a Browns LB's status.
+   * `createInjuryRowMatcher` collapses rows to one candidate per (name, team) with NFL teams folded
+   * to codes (the vocabulary fold described above), and hands back that athlete's own rows.
+   *
+   * ⚠ AND THE NEWEST ROW DECIDES, HEALTHY INCLUDED. Rows arrive newest `fetchedAt` first. A healthy
+   * newest row used to be skipped, so an older "Out" from another feed survived after the player was
+   * cleared — the founder-reported false "Out" (2026-10-11) had exactly that shape available to it.
+   */
+  const matchInjury = createInjuryRowMatcher(
+    injuryRows.filter((i) => Boolean(i.status)),
+    'NFL',
   )
   const ambiguousInjuryNames = new Set<string>()
 
-  const injuryByName = new Map<
-    string,
-    { status: string; description: string | null; reportedAt: Date | null }
-  >()
-  for (const i of injuryRows) {
-    if (!i.status) continue
-    const key = i.playerName.trim().toLowerCase()
-    if (injuryByName.has(key)) continue
-    if (HEALTHY.has(i.status.trim().toLowerCase())) continue
-    /*
-     * ⚠ THE FRESHNESS GATE LIVES HERE, IN THE LOADER, so the brief, the triage
-     * chips, the urgent counts and the book all inherit it at once. A dated
-     * report older than 45 days is last season's news unless the status itself
-     * spans a season (IR, PUP, NFI, suspension — `isSeasonScoped`). A row with
-     * no `date` cannot be judged stale and is kept: it already passed the
-     * writer's own `expiresAt`, and dropping it would hide a designation on
-     * the strength of a missing timestamp rather than a stale one. Kept rows
-     * still carry `reportedAt`, so "reported 3w ago" renders exactly as before.
-     */
-    if (
-      i.date != null &&
-      now.getTime() - i.date.getTime() > STALE_REPORT_MS &&
-      !isSeasonScoped(i.status)
-    ) {
-      continue
+  function currentDesignation(
+    rows: ReadonlyArray<(typeof injuryRows)[number]>,
+  ): { status: string; description: string | null; reportedAt: Date | null } | null {
+    for (const i of rows) {
+      if (!i.status) continue
+      if (HEALTHY.has(i.status.trim().toLowerCase())) return null
+      /*
+       * ⚠ THE FRESHNESS GATE LIVES HERE, IN THE LOADER, so the brief, the triage
+       * chips, the urgent counts and the book all inherit it at once. A dated
+       * report older than 45 days is last season's news unless the status itself
+       * spans a season (IR, PUP, NFI, suspension — `isSeasonScoped`). A row with
+       * no `date` cannot be judged stale and is kept: it already passed the
+       * writer's own `expiresAt`, and dropping it would hide a designation on
+       * the strength of a missing timestamp rather than a stale one. Kept rows
+       * still carry `reportedAt`, so "reported 3w ago" renders exactly as before.
+       */
+      if (
+        i.date != null &&
+        now.getTime() - i.date.getTime() > STALE_REPORT_MS &&
+        !isSeasonScoped(i.status)
+      ) {
+        continue
+      }
+      return { status: i.status, description: i.description, reportedAt: i.date }
     }
-    injuryByName.set(key, { status: i.status, description: i.description, reportedAt: i.date })
+    return null
   }
 
   /** Designation for a roster id, or null when we hold none. Never "healthy". */
@@ -1001,18 +1081,14 @@ export async function getDash34Data(
      * Verified identity first. A refusal is recorded and treated as "we hold
      * nothing" — which is the honest answer, and never "healthy".
      */
-    const verified = resolveVerifiedMatch(injuryIndex, {
-      name: p.name,
-      position: p.position,
-      team: p.team,
-    })
-    if (verified.reason === 'ambiguous') {
+    const hit = matchInjury({ name: p.name, position: p.position, team: p.team })
+    if (hit && 'ambiguous' in hit) {
       ambiguousInjuryNames.add(p.name)
       return null
     }
-    if (!verified.match) return null
+    if (!hit) return null
 
-    const inj = injuryByName.get(verified.match.row.playerName.trim().toLowerCase())
+    const inj = currentDesignation(hit.rows)
     if (!inj) return null
     return {
       name: p.name,
@@ -1044,6 +1120,8 @@ export async function getDash34Data(
     benchIn: number
     irIn: number
     taxiIn: number
+    /** Rostered (not IR/taxi) in a best ball league, where the platform sets the lineup. */
+    bestBallIn: number
     /** leagueId → the slot this player occupies there. */
     slotByLeague: Map<string, 'starter' | 'bench' | 'ir' | 'taxi'>
   }
@@ -1082,7 +1160,32 @@ export async function getDash34Data(
     }
   >()
 
+  /*
+   * ⚠ BEST BALL IS DECIDED BEFORE THE BOOK, NOT AFTER IT. Sleeper fills `starters` in a best ball
+   * league with the platform's auto lineup, and the book used to count those as "starting" — so a
+   * best ball league put players in "Starters in doubt" that nobody can bench (founder-reported
+   * 2026-10-08). The provider's live flag is one signal; `isBestBallLeagueRow` reads the column,
+   * `leagueType` and the `settings.best_ball` flag imports actually carry.
+   */
+  const leagueRowById = new Map(active.map((l) => [l.id, l]))
+  const bestBallLeagues = new Set(
+    [...rosterByLeague.keys()].filter((id) => {
+      const f = formatByLeague.get(id)
+      return rosterByLeague.get(id)?.bestBall === true || isBestBallLeagueRow({
+        bestBallMode: f?.bestBallMode ?? null,
+        leagueVariant: f?.leagueVariant ?? null,
+        leagueType: leagueRowById.get(id)?.leagueType ?? null,
+        settings: f?.settings,
+      })
+    }),
+  )
+  for (const id of bestBallLeagues) {
+    const r = rosterByLeague.get(id)
+    if (r) r.bestBall = true
+  }
+
   for (const [leagueId, roster] of rosterByLeague) {
+    const bestBallHere = bestBallLeagues.has(leagueId)
     let total = 0
     let starting = 0
     let unavailable = 0
@@ -1092,7 +1195,8 @@ export async function getDash34Data(
       const d = designationOf(pid)
       if (!d) continue
       total++
-      const isStarter = roster.starters.has(pid)
+      // In best ball the platform sets the lineup after the games; nobody there is "starting".
+      const isStarter = !bestBallHere && roster.starters.has(pid)
       if (isStarter) starting++
       if (isUnavailable(d.status)) {
         unavailable++
@@ -1121,11 +1225,17 @@ export async function getDash34Data(
             : 'bench'
 
       const key = d.name.trim().toLowerCase()
+      /*
+       * A best ball league's active players sit in no chosen slot, so the chip says nothing rather
+       * than "bench": the count goes to `bestBallIn` instead. IR and taxi stay what they are.
+       */
+      const autoLineup = bestBallHere && slot === 'bench'
       const entry = book.get(key)
       if (entry) {
         entry.leagues.add(leagueId)
-        entry.slotByLeague.set(leagueId, slot)
-        if (slot === 'starter') entry.startingIn++
+        if (!autoLineup) entry.slotByLeague.set(leagueId, slot)
+        if (autoLineup) entry.bestBallIn++
+        else if (slot === 'starter') entry.startingIn++
         else if (slot === 'ir') entry.irIn++
         else if (slot === 'taxi') entry.taxiIn++
         else entry.benchIn++
@@ -1142,10 +1252,11 @@ export async function getDash34Data(
           leagues: new Set([leagueId]),
           sleeperId: pid,
           startingIn: slot === 'starter' ? 1 : 0,
-          benchIn: slot === 'bench' ? 1 : 0,
+          benchIn: slot === 'bench' && !autoLineup ? 1 : 0,
           irIn: slot === 'ir' ? 1 : 0,
           taxiIn: slot === 'taxi' ? 1 : 0,
-          slotByLeague: new Map([[leagueId, slot]]),
+          bestBallIn: autoLineup ? 1 : 0,
+          slotByLeague: autoLineup ? new Map() : new Map([[leagueId, slot]]),
         })
       }
     }
@@ -1167,11 +1278,14 @@ export async function getDash34Data(
   }
 
   const currentWeek = [...rosterByLeague.values()].find(r => r.verification?.week != null)?.verification?.week
-  const byeInfo = currentWeek ? await getByeWeeks({ sport: 'NFL', season: Number(active.find(l => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')?.season ?? now.getUTCFullYear()),
-    fromWeek: currentWeek, horizon: 0, playerTeams: new Map([...playerById].map(([id, p]) => [id, p.team])) }).catch(() => null) : null
+  const byeInfo = currentWeek ? await timing.read('bye', () => getByeWeeks({ sport: 'NFL', season: Number(active.find(l => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')?.season ?? now.getUTCFullYear()),
+    fromWeek: currentWeek, horizon: 0, playerTeams: new Map([...playerById].map(([id, p]) => [id, p.team])) }).catch(() => null)) : null
   const byePlayers = new Set(currentWeek ? byeInfo?.byWeek.get(currentWeek) ?? [] : [])
 
   /* ── The league list ───────────────────────────────────────────────────── */
+
+  /** Best ball positions worth a glance, across every league — see bestBallDepth.ts. */
+  const depthAlerts: Dash34DepthAlert[] = []
 
   const leagues: Dash34League[] = active.map((row) => {
     const team = teamByLeague.get(row.id) ?? null
@@ -1179,13 +1293,18 @@ export async function getDash34Data(
     const roster = rosterByLeague.get(row.id)
     const stage = roster?.leagueStatus ?? stageOf(row)
     const format = formatByLeague.get(row.id)
-    const bestBall = roster?.bestBall || format?.bestBallMode === true || format?.leagueVariant === 'best_ball'
-    if (roster) roster.bestBall = Boolean(bestBall)
+    const bestBall = Boolean(roster?.bestBall) || isBestBallLeagueRow({
+      bestBallMode: format?.bestBallMode ?? null,
+      leagueVariant: format?.leagueVariant ?? null,
+      leagueType: row.leagueType ?? null,
+      settings: format?.settings,
+    })
+    if (roster) roster.bestBall = bestBall
     const storedRosterId = storedRosters.find(r => r.leagueId === row.id)?.id
     const eliminated = roster?.eliminated || [team?.externalId, team?.id, storedRosterId].some(id => id && choppedTeams.has(`${row.id}:${id}`))
       || eliminatedRows.some(r => r.leagueId === row.id && r.season.season === Number(row.season))
     const eliminationRosterEmpty = (format?.guillotineMode === true || String(row.leagueType).toLowerCase() === 'guillotine' || format?.leagueVariant === 'guillotine') && roster != null && roster.all.length === 0
-      && !isForeignIdSpace(platformByLeague.get(row.id)) // a foreign roster reads empty because it was stripped, not chopped
+      && !isForeignIdSpace(platformByLeague.get(row.id), sportByLeague.get(row.id)) // a foreign roster reads empty because it was stripped, not chopped
     const eligibility = lineupActionability({
       stage: stage ?? 'unknown', eliminated: eliminated || eliminationRosterEmpty, bestBall,
       waiversEnabled: roster?.waiversEnabled, slots: roster?.verification?.slots,
@@ -1195,6 +1314,31 @@ export async function getDash34Data(
       emptyStarters: roster?.emptyStarters ?? 0, hurtStarters: hurt.startingUnavailable,
     })
     hurt.startingUnavailable = eligibility.hurtStarters
+    if (bestBall && roster && !eliminated && !eliminationRosterEmpty
+      && !['pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason'].includes(String(stage ?? ''))) {
+      const settingsSlots = (format?.settings as { roster_positions?: unknown } | null | undefined)?.roster_positions
+      const slots = roster.verification?.slots
+        ?? (Array.isArray(settingsSlots) ? settingsSlots.map(String) : null)
+      for (const alert of bestBallDepthAlerts(slots, roster.all.map((id) => {
+        const d = designationOf(id)
+        return {
+          name: d?.name ?? playerById.get(id)?.name ?? id,
+          position: playerById.get(id)?.position ?? null,
+          status: d?.status ?? null,
+          unavailable: Boolean(d && isUnavailable(d.status)),
+          inactive: roster.reserve.has(id) || roster.taxi.has(id),
+        }
+      }))) {
+        depthAlerts.push({
+          ...alert,
+          leagueId: row.id,
+          leagueName: leagueDisplayName(row.name),
+          platform: String(row.platform ?? 'manual').toLowerCase(),
+          href: `/core/my-team?league=${encodeURIComponent(row.id)}`,
+          waiversHref: roster.waiversEnabled === false ? null : `/core/waivers?league=${encodeURIComponent(row.id)}`,
+        })
+      }
+    }
     if (bestBall || eliminated || eliminationRosterEmpty || eligibility.emptyStarters === 0 && eligibility.hurtStarters === 0 && stage !== 'in_season') hurt.starting = 0
     const platform = String(row.platform ?? 'manual').toLowerCase()
     const commish = Boolean(row.isCommissioner || team?.isCommissioner || team?.isCoCommissioner)
@@ -1283,6 +1427,7 @@ export async function getDash34Data(
        */
       usernameInLeague: identityOf(team),
       chips,
+      isCommissioner: commish,
       // No `LeagueTeam` row on production carries a result, so there is no score
       // to show and no projection to show it against.
       score: null,
@@ -1431,6 +1576,18 @@ export async function getDash34Data(
           ? `/core/my-team?league=${encodeURIComponent(kickoffLeague.id)}`
           : '/core/players',
         openLabel: kickoffLeague ? `Check ${kickoffLeague.name}` : 'Open Player Finder',
+        /*
+         * What the three English strings above were built from — the /core home says them in Spanish
+         * at render (lib/core-app/homeBandsCopy.ts). The English is unchanged.
+         */
+        parts: {
+          sport: nextGame.sport ?? null,
+          slate: nextGameSlate === 'pre' ? ('pre' as const) : nextGameSlate === 'post' ? ('post' as const) : null,
+          week: nextGameWeek,
+          away: nextGame.awayTeam ?? null,
+          home: nextGame.homeTeam ?? null,
+          leagueName: kickoffLeague ? kickoffLeague.name : null,
+        },
       }
     : null
 
@@ -1454,60 +1611,71 @@ export async function getDash34Data(
    * difference, so it is a constant rather than two code paths.
    */
   /**
-   * Who on YOUR OWN BENCH could take the slot, in a given league.
+   * Who on YOUR OWN ROSTER could take the slot, in a given league — see `lineupCover.ts` for the
+   * rules (the league's own slot template, flex and superflex chains, nobody whose game is over).
    *
-   * ⚠ ZERO ADDITIONAL QUERIES, AND THAT IS WHY IT IS BENCH-ONLY. Every roster
-   * is already in memory from the single read above, every position is already
-   * resolved, and the market prices were already fetched for the ordering — so
-   * this is a filter, not a fetch. Free agents are a different matter:
-   * answering "who is available in this league" needs that league's full
-   * player pool plus a rostered-elsewhere exclusion, which is a per-league
-   * scan. Doing that across 61 leagues on a page render is the exact fan-out
-   * that took production Postgres down once already, so it stays behind a
-   * click.
+   * ⚠ ZERO ADDITIONAL QUERIES, AND THAT IS WHY IT IS ROSTER-ONLY. Every roster is already in memory
+   * from the single read above, every position is already resolved, the week's fixtures are already
+   * indexed, and the market prices are fetched in the one values read below — so this is a filter,
+   * not a fetch. Free agents are a different matter: answering "who is available in this league"
+   * needs that league's full player pool plus a rostered-elsewhere exclusion, which is a per-league
+   * scan. Doing that across 61 leagues on a page render is the exact fan-out that took production
+   * Postgres down once already, so it stays behind a click — and a chain that only a free agent can
+   * finish says so rather than naming one.
    *
-   * Same position only. A flex swap depends on the league's slot template,
-   * which this loader does not read, and offering a tight end for a running
-   * back because both are "flex somewhere" would be a guess dressed as advice.
-   *
-   * Ordered by the same market rank the book is ordered by, so the first name
-   * offered is the best asset available rather than the first one iterated.
-   * A bench player who is himself flagged is not a replacement.
+   * 🛑 A PLAYER WHOSE WEEK IS OVER IS NOT COVER. Reported 2026-10-17: "swap in J.K. Dobbins" on a
+   * Friday, with Dobbins's Thursday game already played — his slot was locked and the advice could
+   * not be followed. `starterWeek(...) === 'done'` (already played, in progress, or on bye) removes
+   * him; `unknown` keeps him, the same fail-open the injured-starter alerts use.
    */
-  function benchAlternativesFor(
-    leagueId: string,
-    injuredId: string,
-    position: string | null,
-  ): Array<{ name: string; position: string | null }> {
-    if (!position) return []
+  function coverFor(leagueId: string, injuredId: string, position: string | null): CoverOptions {
+    const none: CoverOptions = { direct: [], chain: null }
     const roster = rosterByLeague.get(leagueId)
-    if (!roster) return []
+    if (!roster) return none
+    const week = roster.verification?.week
+    const injured = playerById.get(injuredId)
+    // His own slot already settled: nothing to swap, whatever the bench holds.
+    if (injured && starterWeek(injured.sport, injured.team, week).verdict === 'done') return none
 
-    const out: Array<{ name: string; position: string | null; rank: number | null }> = []
-    for (const pid of roster.all) {
-      if (pid === injuredId) continue
-      if (roster.starters.has(pid)) continue
-      if (roster.reserve.has(pid) || roster.taxi.has(pid)) continue
+    const candidate = (pid: string, canPlay: (p: { sport: string | null; team: string | null }) => boolean): CoverCandidate | null => {
       const p = playerById.get(pid)
-      if (!p || !p.position) continue
-      if (p.position.toUpperCase() !== position.toUpperCase()) continue
-      if (designationOf(pid)) continue
-      out.push({
+      if (!p || !p.position) return null
+      return {
+        id: pid,
         name: p.name,
         position: p.position,
         rank: valueBySleeperId.get(pid)?.overallRank ?? null,
-      })
+        points: pointsIn(leagueId, pid),
+        canPlay: canPlay(p) && starterWeek(p.sport, p.team, week).verdict !== 'done',
+      }
     }
 
-    out.sort((x, y) => {
-      if (x.rank !== y.rank) {
-        if (x.rank == null) return 1
-        if (y.rank == null) return -1
-        return x.rank - y.rank
+    const bench: CoverCandidate[] = []
+    const starters = new Map<string, CoverCandidate>()
+    for (const pid of roster.all) {
+      if (pid === injuredId || roster.reserve.has(pid) || roster.taxi.has(pid)) continue
+      if (roster.starters.has(pid)) {
+        // A starter can slide over unless he is ruled out himself; a mild flag does not pin him.
+        const c = candidate(pid, () => {
+          const d = designationOf(pid)
+          return !(d && isUnavailable(d.status))
+        })
+        if (c) starters.set(pid, c)
+      } else {
+        // A bench player who is himself flagged is not a replacement.
+        const c = candidate(pid, () => !designationOf(pid))
+        if (c) bench.push(c)
       }
-      return x.name.localeCompare(y.name)
+    }
+
+    return coverOptions({
+      slots: roster.verification?.slots ?? null,
+      orderedStarters: roster.orderedStarters,
+      injuredId,
+      injuredPosition: position,
+      bench,
+      starters,
     })
-    return out.slice(0, 2).map((o) => ({ name: o.name, position: o.position }))
   }
 
   const BOOK_LIMIT = 40
@@ -1526,12 +1694,78 @@ export async function getDash34Data(
   const valueFormat: 'DYNASTY' | 'REDRAFT' =
     dynastyCount * 2 >= totalActive ? 'DYNASTY' : 'REDRAFT'
   const bookEntries = [...book.values()]
-  const valueBySleeperId = await readPlayerValues(
-    bookEntries.map((b) => b.sleeperId).filter(Boolean),
+  /*
+   * The cover candidates are priced in the SAME read. They were not, and since a flagged player is
+   * never cover, the healthy bench players being ordered were never in the book — so "best asset
+   * first" silently fell back to alphabetical.
+   */
+  const coverIds = new Set<string>()
+  for (const b of bookEntries) {
+    for (const [leagueId, slot] of b.slotByLeague) {
+      if (slot !== 'starter') continue
+      const r = rosterByLeague.get(leagueId)
+      if (!r || r.bestBall) continue
+      for (const pid of r.all) if (!r.starters.has(pid) && !r.reserve.has(pid) && !r.taxi.has(pid)) coverIds.add(pid)
+    }
+  }
+  const valueBySleeperId = await timing.read('values', () => readPlayerValues(
+    [...new Set([...bookEntries.map((b) => b.sleeperId), ...coverIds])].filter(Boolean),
     valueFormat,
     'ONE_QB',
     options,
-  )
+  ))
+  /*
+   * This week's projections for the same cover candidates, in ONE batched read. Ranking cover by a
+   * dynasty price answered "who is worth more" when the card asks "who do I start Sunday". Scored
+   * under each league's own rules where the league carries them; the generic PPR line otherwise.
+   * A failed read leaves every candidate at `points: null`, which falls back to the market order.
+   */
+  const projectionById = coverIds.size > 0
+    ? await timing.read('projections', () => lookupProjections([...coverIds]).catch(() => new Map()))
+    : new Map()
+  const scoringByLeague = new Map<string, Record<string, unknown> | null>()
+  function pointsIn(leagueId: string, pid: string): number | null {
+    const proj = projectionById.get(pid)
+    if (!proj) return null
+    if (!scoringByLeague.has(leagueId)) {
+      const sc = extractScoringSettings(formatByLeague.get(leagueId)?.settings)
+      scoringByLeague.set(leagueId, sc && hasScoringRules(sc) ? sc : null)
+    }
+    const scoring = scoringByLeague.get(leagueId)
+    const scored = scoring ? computeLeagueProjectedPoints(proj.componentStats, scoring)?.points : null
+    const pts = scored ?? proj.projectedPoints
+    return typeof pts === 'number' && Number.isFinite(pts) ? Math.round(pts * 10) / 10 : null
+  }
+
+  /*
+   * The card's top "swap in X" for a RULED-OUT starter, written as a tip so the Receipts card can
+   * later say how it turned out ("AF tip: start Allgeier over Love · 14.2 vs 0"). Sleeper only —
+   * receipts resolve against Sleeper's weekly scores and lineups. Fire-and-forget and idempotent:
+   * the store upserts one row per (user, league, week, pair), so a re-render refreshes the row
+   * rather than adding one, and a failed write never touches the page. Never for a Questionable
+   * starter — "keep the pivot ready" is not "start X", and a receipt grades only what was said.
+   */
+  function noteTip(row: Dash34LeagueRow, b: BookEntry, pick: { id?: string; name: string } | undefined): void {
+    if (!pick?.id || !b.sleeperId || !isUnavailable(b.status)) return
+    if (String(row.platform ?? '').toLowerCase() !== 'sleeper') return
+    const week = rosterByLeague.get(row.id)?.verification?.week
+    const season = Number(row.season)
+    if (week == null || !Number.isFinite(season)) return
+    void recordAdvice({
+      userId,
+      leagueId: row.id,
+      sport: String(row.sport ?? 'NFL'),
+      season,
+      week,
+      adviceType: 'start_sit',
+      surface: AF_TIP_SURFACE,
+      rec: { key: pick.id, name: pick.name },
+      alt: { key: b.sleeperId, name: b.name },
+      slot: null,
+      confidencePct: null,
+    }).catch(() => undefined)
+  }
+
   const rankOf = (b: BookEntry): number | null =>
     valueBySleeperId.get(b.sleeperId)?.overallRank ?? null
 
@@ -1563,6 +1797,8 @@ export async function getDash34Data(
       const kickoff = kickoffFor(b.sport, b.team)
       return {
         initials: initialsOf(b.name),
+        /* For the card's on-demand "top add" (TriageBestAdd), which prices this player at zero. */
+        sleeperId: b.sleeperId,
         name: b.name,
         imageUrl: b.imageUrl,
         /*
@@ -1592,10 +1828,26 @@ export async function getDash34Data(
                    * needs no replacement, and offering one there is noise on a
                    * card whose whole job is picking out the decisions.
                    */
-                  bench:
-                    !rosterByLeague.get(id)?.bestBall && b.slotByLeague.get(id) === 'starter'
-                      ? benchAlternativesFor(id, b.sleeperId, b.position)
-                      : [],
+                  /*
+                   * Where to make the move: the platform's verified lineup screen (Sleeper, ESPN,
+                   * Yahoo), or a native league's team tab. None of those platforms accept a lineup
+                   * write from us, so "fix it" is a precise hand-off, never a pretend apply.
+                   */
+                  fixHref: b.slotByLeague.get(id) === 'starter'
+                    ? lineupFixLink({
+                        id,
+                        platform: row.platform,
+                        platformLeagueId: row.platformLeagueId ?? row.sleeperLeagueId ?? null,
+                        season: row.season ?? null,
+                        teamId: teamByLeague.get(id)?.externalId ?? null,
+                      })?.href ?? null
+                    : null,
+                  ...(!rosterByLeague.get(id)?.bestBall && b.slotByLeague.get(id) === 'starter'
+                    ? (({ direct, chain }) => {
+                        noteTip(row, b, direct[0])
+                        return { bench: direct, cover: chain }
+                      })(coverFor(id, b.sleeperId, b.position))
+                    : { bench: [], cover: null }),
                 }
               : null
           })
@@ -1608,7 +1860,9 @@ export async function getDash34Data(
               platform: string
               imageUrl: string | null
               slot: 'starter' | 'bench' | 'ir' | 'taxi' | null
-              bench: Array<{ name: string; position: string | null }>
+              bench: CoverOptions['direct']
+              cover: CoverOptions['chain']
+              fixHref: string | null
             } => x !== null,
           )
           .sort((a, b2) => a.name.localeCompare(b2.name)),
@@ -1642,6 +1896,7 @@ export async function getDash34Data(
         benchIn: b.benchIn,
         irIn: b.irIn,
         taxiIn: b.taxiIn,
+        bestBallIn: b.bestBallIn,
         /*
          * What the feed actually said, e.g. "Ruled out — ankle. Did not
          * practice Friday." It was selected, stored and carried this far, then
@@ -1742,6 +1997,15 @@ export async function getDash34Data(
         `${topRow.name}${topRow.position ? ` (${topRow.position})` : ''} is ` +
         `${topRow.status.toLowerCase()} in ${topRow.exposureCount} of your ` +
         `${totalActive} leagues${startingClause}.`,
+      parts: {
+        kind: 'concentration',
+        name: topRow.name,
+        position: topRow.position ?? null,
+        status: topRow.status,
+        exposureCount: topRow.exposureCount,
+        totalActive,
+        startingIn: topRow.startingIn,
+      },
     })
   }
 
@@ -1756,6 +2020,7 @@ export async function getDash34Data(
       tone: 'plain',
       text: `${topRow.name} plays next at`,
       atIso: topRow.nextKickoffAt,
+      parts: { kind: 'kickoff', name: topRow.name },
     })
   }
 
@@ -1785,6 +2050,13 @@ export async function getDash34Data(
         `${leaguesWithEmptySlots.length} ${leaguesWithEmptySlots.length === 1 ? 'league' : 'leagues'}: ` +
         `${leaguesWithEmptySlots.slice(0, 3).map((l) => leagueDisplayName(l.name)).join(', ')}` +
         `${leaguesWithEmptySlots.length > 3 ? ` and ${leaguesWithEmptySlots.length - 3} more` : ''}.`,
+      parts: {
+        kind: 'empty-slots',
+        totalEmpty,
+        leagueCount: leaguesWithEmptySlots.length,
+        names: leaguesWithEmptySlots.slice(0, 3).map((l) => leagueDisplayName(l.name)),
+        more: Math.max(0, leaguesWithEmptySlots.length - 3),
+      },
     })
   }
 
@@ -1813,6 +2085,7 @@ export async function getDash34Data(
       key: 'flagged',
       tone: 'warn',
       text: `${onlyFlagged} more ${onlyFlagged === 1 ? 'league carries' : 'leagues carry'} a flagged player who can still play.`,
+      parts: { kind: 'flagged', count: onlyFlagged },
     })
   }
 
@@ -1828,6 +2101,15 @@ export async function getDash34Data(
         : flaggedLeagues.length > 0
           ? `${flaggedLeagues.length} ${flaggedLeagues.length === 1 ? 'league has' : 'leagues have'} a player worth a look`
           : 'Nothing is waiting on you'
+  // What the headline was built from, for the /core home's Spanish (lib/core-app/homeBandsCopy.ts).
+  const briefHeadlineParts: Dash34Brief['headlineParts'] =
+    urgentLeagues.length > 0
+      ? { kind: 'urgent', count: urgentLeagues.length }
+      : draftingLeagues.length > 0
+        ? { kind: 'drafting', count: draftingLeagues.length }
+        : flaggedLeagues.length > 0
+          ? { kind: 'flagged', count: flaggedLeagues.length }
+          : { kind: 'quiet' }
 
   /*
    * ⚠ THE CARD SHOWS UP EVEN WHEN THERE IS NOTHING TO SAY, AND THAT IS THE POINT.
@@ -1845,6 +2127,7 @@ export async function getDash34Data(
      */
     label: "CHIMMY'S BRIEF",
     headline: briefHeadline,
+    headlineParts: briefHeadlineParts,
     lines: briefLines,
     countdown:
       firstLock && firstLock.countdownTo
@@ -1863,6 +2146,7 @@ export async function getDash34Data(
     caveat: everSynced
       ? 'Built from the injury feed and the fixture list. Live scores, projections and standings are not part of it.'
       : `Built from the injury feed and the fixture list — not from your leagues. No sync has ever run against ${totalActive === 1 ? 'your league' : `any of your ${totalActive} leagues`}, so there are no scores, records or lineups behind this.`,
+    caveatParts: { everSynced, totalActive },
     askLabel: 'Ask Chimmy',
     /*
      * The second action goes to the full ranked list, which is on this same page —
@@ -1899,6 +2183,9 @@ export async function getDash34Data(
     brief: null,
     chimmyBrief,
     book: bookRows.length > 0 ? bookRows : null,
+    depthAlerts: depthAlerts
+      .sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'bad' ? -1 : 1))
+      .slice(0, 8),
     /*
      * What the prices on those rows actually are, so the card can say it
      * instead of implying a number tuned to a league it never saw.
@@ -1919,6 +2206,7 @@ export async function getDash34Data(
               : `All ${totalActive} of your leagues are imported, but a sync has never run against any of them — so there are no scores, records or lineups behind this screen yet.`,
           href: '/import',
           label: 'Check your connections',
+          parts: { totalActive },
         },
     coverage: [
       { label: 'Live scores', reason: 'no weekly scoring is ingested for imported leagues' },
@@ -1957,6 +2245,11 @@ export async function getDash34Data(
                 ambiguousInjuryNames.size > 3 ? ` and ${ambiguousInjuryNames.size - 3} more` : ''
               }`,
               reason: 'more than one player shares that name and we will not guess which',
+              parts: {
+                kind: 'ambiguous-injury' as const,
+                names: [...ambiguousInjuryNames].slice(0, 3),
+                more: Math.max(0, ambiguousInjuryNames.size - 3),
+              },
             },
           ]
         : []),

@@ -84,7 +84,7 @@ beforeEach(() => vi.clearAllMocks())
  * schedules are incomplete (thesportsdb stops at a 3,000-game cap).
  */
 const NCAAB_SEASON = { id: 'season-cbb', leagueId: 'league-cbb', sport: 'NCAAB', season: 2026 }
-/** Week 1 runs Monday 2026-11-02 -> 2026-11-09 (Eastern days). */
+/** Week 1 runs Sunday 2026-11-01 -> 2026-11-08 (Eastern days). */
 const CBB_AFTER_GRACE = new Date('2026-11-09T14:00:00.000Z')
 
 function makeNcaabPrisma(schedule: Record<string, unknown> | null, scored: string[] = ['p1', 'p2']) {
@@ -137,10 +137,10 @@ describe('finalizeRedraftWeek — NCAAB reads the Rolling Insights schedule', ()
     const { prisma } = makeNcaabPrisma({
       'NCAAB:rischedule:2026:meta': { games: 3 },
       'NCAAB:rischedule:2026:2026-11-02': { games: [cbbGame('20261102-1-2', '2026-11-02', 'final', '2026-11-02T23:00:00.000Z')] },
-      'NCAAB:rischedule:2026:2026-11-08': {
+      'NCAAB:rischedule:2026:2026-11-07': {
         games: [
-          cbbGame('20261108-3-4', '2026-11-08', 'completed', '2026-11-08T23:00:00.000Z'),
-          cbbGame('20261108-5-6', '2026-11-08', 'replaced', '2026-11-08T20:00:00.000Z'),
+          cbbGame('20261107-3-4', '2026-11-07', 'completed', '2026-11-07T23:00:00.000Z'),
+          cbbGame('20261107-5-6', '2026-11-07', 'replaced', '2026-11-07T20:00:00.000Z'),
         ],
       },
     })
@@ -152,10 +152,21 @@ describe('finalizeRedraftWeek — NCAAB reads the Rolling Insights schedule', ()
     expect(['games_not_final', 'no_games_on_slate', 'season_start_unknown']).not.toContain(result.refusal)
   })
 
+  it('includes the Rome opener: an unfinished November 1 game prevents sealing week 1', async () => {
+    const { prisma } = makeNcaabPrisma({
+      'NCAAB:rischedule:2026:meta': { games: 2 },
+      'NCAAB:rischedule:2026:2026-11-01': { games: [cbbGame('20261101-44-76', '2026-11-01', 'scheduled', '2026-11-01T16:30:00.000Z')] },
+      'NCAAB:rischedule:2026:2026-11-02': { games: [cbbGame('20261102-1-2', '2026-11-02', 'final', '2026-11-02T23:00:00.000Z')] },
+    })
+    const result = await finalizeRedraftWeek({ seasonId: 'season-cbb', week: 1, dryRun: true }, { prisma, now: () => CBB_AFTER_GRACE })
+    expect(result.refusal).toBe('games_not_final')
+    expect(result.slate).toMatchObject({games: 2, unfinished: 1})
+  })
+
   it('holds the week open for a game still scheduled', async () => {
     const { prisma } = makeNcaabPrisma({
       'NCAAB:rischedule:2026:meta': { games: 1 },
-      'NCAAB:rischedule:2026:2026-11-08': { games: [cbbGame('20261108-3-4', '2026-11-08', 'scheduled', '2026-11-08T23:00:00.000Z')] },
+      'NCAAB:rischedule:2026:2026-11-07': { games: [cbbGame('20261107-3-4', '2026-11-07', 'scheduled', '2026-11-07T23:00:00.000Z')] },
     })
     const result = await finalizeRedraftWeek(
       { seasonId: 'season-cbb', week: 1, dryRun: true },
@@ -166,6 +177,31 @@ describe('finalizeRedraftWeek — NCAAB reads the Rolling Insights schedule', ()
 })
 
 describe('finalizeRedraftWeek — a daily sport', () => {
+  it('waits for the Exile rollover to close a saved lineup before sealing the week', async () => {
+    const { prisma } = makePrisma([game('final', LAST_PUCK, 500)])
+    prisma.league.findFirst.mockResolvedValue({ survivorMode: true, platform: 'allfantasy', bestBallMode: false, leagueType: 'survivor', leagueVariant: 'survivor' })
+    prisma.exileWeeklyEntry = { findMany: vi.fn(async () => [{ submittedLineup: {
+      version: 1, anchorId: 'exile-goalie', team: 'BOS', closedAt: null, lockedAt: null,
+      players: [{ id: 'exile-goalie', name: 'Goalie', position: 'G', team: 'BOS', slot: 'G' }],
+    } }]) }
+    const result = await finalizeRedraftWeek({ seasonId: NHL_SEASON.id, week: 1, dryRun: true }, { prisma, now: () => AFTER_GRACE })
+    expect(result.refusal).toBe('exile_roster_open')
+    expect(prisma.playerWeeklyScore.createMany).not.toHaveBeenCalled()
+  })
+
+  it('never fabricates a zero for a missing closed Exile starter despite high main-roster coverage', async () => {
+    const { prisma } = makePrisma([game('final', LAST_PUCK, 500)])
+    prisma.league.findFirst.mockResolvedValue({ survivorMode: true, platform: 'allfantasy', bestBallMode: false, leagueType: 'survivor', leagueVariant: 'survivor' })
+    prisma.exileWeeklyEntry = { findMany: vi.fn(async () => [{ submittedLineup: {
+      version: 1, anchorId: 'exile-goalie', team: 'BOS', closedAt: '2026-10-06T04:00:00Z', lockedAt: null,
+      players: [{ id: 'exile-goalie', name: 'Goalie', position: 'G', team: 'BOS', slot: 'G' }],
+    } }]) }
+    const result = await finalizeRedraftWeek({ seasonId: NHL_SEASON.id, week: 1, dryRun: true, coverageFloor: 0.5 }, { prisma, now: () => AFTER_GRACE })
+    expect(result.refusal).toBe('exile_stat_missing')
+    expect(result.zeroRowsWritten).toBe(0)
+    expect(prisma.playerWeeklyScore.createMany).not.toHaveBeenCalled()
+  })
+
   it('lists NHL as date-windowed, not week-keyed', () => {
     expect(WEEK_KEYED_SPORTS).not.toContain('NHL')
     expect(DATE_WINDOWED_SPORTS).toContain('NHL')
@@ -300,7 +336,9 @@ describe('finalizeRedraftWeek — a daily sport', () => {
 
   it('still refuses a sport it cannot close at all', async () => {
     const { prisma } = makePrisma([])
-    prisma.redraftSeason.findFirst = vi.fn(async () => ({ ...NHL_SEASON, sport: 'MLB' }))
+    // Was MLB, then SOCCER, until each joined DATE_WINDOWED_SPORTS (2026-09-28). Every offered sport
+    // now closes, so the control is one no league can be created in.
+    prisma.redraftSeason.findFirst = vi.fn(async () => ({ ...NHL_SEASON, sport: 'CRICKET' }))
 
     const result = await finalizeRedraftWeek(
       { seasonId: 'season-nhl', week: 1, dryRun: true },
@@ -456,4 +494,12 @@ describe('finalizeCompletedWeeksForSeason — a daily-sport week is refreshed on
     expect(out.finalized).toBe(0)
     expect(out.refusals.games_not_final).toBe(1)
   })
+})
+
+ it('never seals an NHL week while its Eastern date window remains open, even if a partial slate is all final', async () => {
+  const { prisma } = makePrisma([game('FT', '2026-09-29T23:00:00Z', 500)])
+  const r = await finalizeRedraftWeek({ seasonId: NHL_SEASON.id, week: 1 }, { prisma, now: () => new Date('2026-10-02T15:00:00Z') })
+  expect(r.refusal).toBe('week_window_open')
+  expect(prisma.playerWeeklyScore.updateMany).not.toHaveBeenCalled()
+  expect(prisma.playerWeeklyScore.createMany).not.toHaveBeenCalled()
 })

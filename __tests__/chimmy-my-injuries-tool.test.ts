@@ -153,8 +153,9 @@ describe('buildMyRosterInjuriesContext', () => {
     /* Most serious first, and one line for McCaffrey even though he is on two rosters. */
     expect(lines[0]).toContain('Christian McCaffrey')
     expect(lines[0]).toContain('Out')
-    expect(lines[0]).toContain('KBFL (STARTING)')
-    expect(lines[0]).toContain('Work League (STARTING)')
+    /* Every starting slot carries its kickoff; this mock has no schedule, so it is unverified. */
+    expect(lines[0]).toContain('KBFL (STARTING — KICKOFF UNVERIFIED)')
+    expect(lines[0]).toContain('Work League (STARTING — KICKOFF UNVERIFIED)')
     expect(lines[0]).toMatch(/reported \d{4}-\d{2}-\d{2}\]/)
     expect(lines[1]).toContain('Justin Jefferson')
     expect(lines[1]).toContain('MAY BE OUT OF DATE')

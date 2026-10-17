@@ -9,12 +9,16 @@ import {
   LEGACY_PROVIDER_IDS,
   getLegacyProviderName,
   getImportStatusLabel,
+  getImportStatusLabelKey,
   getProviderStatus,
   getLegacyProviderPrimaryAction,
+  getLegacyPrimaryActionLabelKey,
+  SLEEPER_CONNECT_HREF,
   getLegacyProviderHelpHref,
   isImportStatusActive,
   type LegacyImportStatusResponse,
 } from "@/lib/legacy-import-settings"
+import { tOr } from "@/lib/i18n/tInterpolate"
 import { EmptyStateRenderer } from "@/components/ui-states"
 import { resolveNoResultsState } from "@/lib/ui-state"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
@@ -90,7 +94,7 @@ export function LegacyImportSettingsSection() {
 
       <ImportedLeaguesPanel />
 
-      <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>Import sources</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>{t("settings.legacy.importSources")}</p>
       <div className="rounded-xl border p-4 text-sm" style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--muted)" }}>
         <p className="font-medium" style={{ color: "var(--text)" }}>{t("settings.legacy.rankingsLevel")}</p>
         <p className="mt-1">{t("settings.legacy.rankingsBody")}</p>
@@ -129,14 +133,22 @@ export function LegacyImportSettingsSection() {
               const isSleeper = providerId === "sleeper"
               const name = getLegacyProviderName(providerId)
               const linked = status?.linked ?? false
-              const importStatusLabel = status?.importStatus ? getImportStatusLabel(status.importStatus) : "—"
+              const importStatusLabel = status?.importStatus
+                ? tOr(t, getImportStatusLabelKey(status.importStatus), getImportStatusLabel(status.importStatus))
+                : "—"
               const available = status?.available ?? false
               const primaryAction = getLegacyProviderPrimaryAction({ providerId, status })
               const helpHref = getLegacyProviderHelpHref(providerId)
               const showReconnect = isSleeper && linked
 
               return (
-                <li key={providerId} className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 last:border-0 last:pb-0" style={{ borderColor: "var(--border)" }}>
+                <li
+                  key={providerId}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 last:border-0 last:pb-0"
+                  style={{ borderColor: "var(--border)" }}
+                  /* An unavailable provider reads "Coming soon" twice — a placeholder, not in the iOS app (2.1). */
+                  data-hide-in-ios-app={legacyStatus && !available ? "" : undefined}
+                >
                   <div>
                     <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{name}</p>
                     <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
@@ -157,7 +169,7 @@ export function LegacyImportSettingsSection() {
                         className="rounded-lg border px-3 py-2 text-sm font-medium"
                         style={{ borderColor: primaryAction.label.includes("Retry") ? "var(--accent-red)" : "var(--accent-cyan)", color: "var(--text)" }}
                       >
-                        {primaryAction.label}
+                        {tOr(t, getLegacyPrimaryActionLabelKey(primaryAction.label), primaryAction.label)}
                       </Link>
                     ) : (
                       !available && (
@@ -168,7 +180,7 @@ export function LegacyImportSettingsSection() {
                     )}
                     {showReconnect && (
                       <Link
-                        href="/core"
+                        href={SLEEPER_CONNECT_HREF}
                         className="rounded-lg border px-3 py-2 text-sm font-medium"
                         style={{ borderColor: "var(--border)", color: "var(--text)" }}
                       >
@@ -214,7 +226,7 @@ export function LegacyImportSettingsSection() {
           {t("settings.legacy.openApp")}
         </Link>
         <Link
-          href="/core"
+          href={SLEEPER_CONNECT_HREF}
           className="rounded-lg border px-3 py-2 text-sm font-medium"
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
         >

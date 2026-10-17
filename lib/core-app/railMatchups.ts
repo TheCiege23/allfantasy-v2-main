@@ -1,15 +1,15 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { resolveCurrentWeekFrom } from './currentWeek'
+import { resolveCurrentWeekFrom, type WeekScoreRow } from './currentWeek'
+import { readLeagueWeekMetadata } from './leagueWeekMetadata'
+import { leagueWeekFromSettings } from './seasonTimeline'
 import { managerArtUrl } from './leagueArt'
-import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { realManagerName, rosterLabel } from './managerName'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
-import { isRuledOut } from './injuryStatus'
-import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
-import { composePlayerIdentities } from './playerIdentityCompose'
-import { getByeWeeks } from './byeWeeks'
-import { resolveRailMatchupMode } from './railMatchupMode'
+import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
+import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
 
 /**
@@ -111,6 +111,16 @@ export type RailSideProjection = {
    * turn it into a confident 0.00.
    */
   afProjected: number | null
+  /**
+   * The AF ENGINE's total for the same starters — AllFantasy's own projection, not the provider's —
+   * carried into this league's rules by `afEngineForLeague`. Null when no starter has an AF row.
+   *
+   * ⚠ DESPITE THE NAME, `afProjected` ABOVE IS THE PROVIDER LINE RE-SCORED. That name predates the
+   * engine's weekly output reaching /core; this field is the one that is actually AllFantasy's.
+   */
+  afEngine?: number | null
+  /** Starters the AF engine priced, of `starterCount`. */
+  afEngineFrom?: number
   /** Starters we could price, of starters in the lineup. Never hidden. */
   pricedFrom: number
   starterCount: number
@@ -137,10 +147,10 @@ export type RailStanding = {
    */
   overCut: number | null
   /**
-   * What the rank was computed from. Before a snap has been played every real
-   * score is 0, so ranking on points would order the league arbitrarily — the
-   * projection is the only thing that separates the teams, and the UI must say
-   * which one it drew.
+   * What the rank was computed from. Until most of the field has played, a team
+   * that has not kicked off sits at 0, so ranking on points would put it at the
+   * cut line — the projection separates the teams in that window, and the UI must
+   * say which one it drew. See `standingIn`.
    */
   basis: 'points' | 'projected'
   /** Number of ranking places between this team and the weekly cut position. */
@@ -160,7 +170,21 @@ export type RailStanding = {
    * never consulted: it is a dynasty league with an axe in its title.
    */
   elimination: boolean
+  /**
+   * The live teams "on the bubble" this week — the bottom `BUBBLE_SIZE` of the same ordering the rank
+   * comes from (projection until most have played, then points), plus anyone tied with the last of
+   * them. Roster ids. Everyone else in the live field is safe this week.
+   *
+   * ⚠ WHY THIS EXISTS: an elimination league has no playoffs, but Scout's cards labelled every team
+   * from the season table's playoff zones — "Bye spot", "Outside the playoffs" — in a guillotine
+   * league (owner's report, 2026-10-03). The week's cut is what a card should speak to.
+   * Optional so callers that build a standing by hand need not carry it.
+   */
+  bubble?: string[]
 }
+
+/** How many teams from the bottom of an elimination week's field count as "on the bubble". */
+export const BUBBLE_SIZE = 3
 
 export type RailMatchup = {
   leagueId: string
@@ -181,6 +205,12 @@ export type RailMatchup = {
   unpaired: boolean
   /** Present only when `unpaired`, and only when the league could be ranked. */
   standing: RailStanding | null
+  /**
+   * Elimination leagues: YOUR team has been chopped (see `choppedBefore`). The standing is null then —
+   * you are not in the live field — and a surface says "you were chopped", not "no head-to-head".
+   * Optional so the many callers that build a RailMatchup by hand need not carry it.
+   */
+  eliminated?: boolean
   /** False when the fixture exists but has not been played. */
   scored: boolean
   /** Newest provider-written row used by this card. Drives the visible freshness label. */
@@ -294,40 +324,153 @@ export async function getRailMatchups(
     seasonRows.flatMap((row) => row._max.seasonYear == null ? [] : [[row.leagueId, row._max.seasonYear] as const]),
   )
   const seasons = [...new Set(seasonByLeague.values())]
-  const seasonCandidates: MatchupRow[] = await prisma.weeklyMatchup
-    .findMany({
-      where: { leagueId: { in: platformIds }, seasonYear: { in: seasons } },
-      select: {
-        leagueId: true,
-        seasonYear: true,
-        week: true,
-        rosterId: true,
-        matchupId: true,
-        pointsFor: true,
-        pointsAgainst: true,
-        updatedAt: true,
-      },
-    })
-    .then((rows) => rows.map((row) => ({ ...row, source: 'live_cache' as const })))
-    .catch((): MatchupRow[] => [])
 
-  const rowsByCandidateLeague = new Map<string, MatchupRow[]>()
-  for (const row of seasonCandidates) {
-    if (seasonByLeague.get(row.leagueId) !== row.seasonYear) continue
-    const list = rowsByCandidateLeague.get(row.leagueId)
-    if (list) list.push(row)
-    else rowsByCandidateLeague.set(row.leagueId, [row])
+  /*
+   * 🛑 A SUMMARY PER LEAGUE-WEEK, NOT THE WHOLE SEASON'S ROWS. This read every `WeeklyMatchup` row of
+   * the season for every played league — every team, every week, ~13k rows on a 65-league account —
+   * on every `/core` page, to keep one week of them. Timed read-only against production 2026-10-03:
+   * ~510–580 ms, the rail's largest database step.
+   *
+   * ⚠ THE WEEK RULE NEEDS TWO FACTS PER WEEK, NOT A MAXIMUM. `resolveCurrentWeekFrom` takes the
+   * earliest week holding ANY row in which neither side has scored. A `_max` of points (the board's
+   * summary) calls a week played the moment one game has a point — by Saturday that is next week,
+   * the jump `fc12c9e1c` fixed. So: which weeks have a scored row, and which have an unscored one —
+   * two grouped reads under `isScored`'s exact condition. Rebuilt as one marker row per fact, they
+   * give `resolveCurrentWeekFrom` the same season, earliest unplayed week, last week and scored-week
+   * count as the rows did, and the stated-week check the same "does this week exist".
+   *
+   * The rows themselves are then read for the resolved week only — and, for an elimination league,
+   * for its whole season, because `choppedBefore` replays every past week to find who is out.
+   */
+  type WeekFlagRow = { leagueId: string; seasonYear: number; week: number }
+  const seasonWeeks = { leagueId: { in: platformIds }, seasonYear: { in: seasons } }
+  const [scoredWeeks, unscoredWeeks]: [WeekFlagRow[], WeekFlagRow[]] = seasons.length
+    ? await Promise.all([
+        prisma.weeklyMatchup
+          .groupBy({
+            by: ['leagueId', 'seasonYear', 'week'],
+            where: { ...seasonWeeks, OR: [{ pointsFor: { gt: 0 } }, { pointsAgainst: { gt: 0 } }] },
+          })
+          .catch((): WeekFlagRow[] => []),
+        prisma.weeklyMatchup
+          .groupBy({
+            by: ['leagueId', 'seasonYear', 'week'],
+            where: { ...seasonWeeks, pointsFor: { lte: 0 }, pointsAgainst: { lte: 0 } },
+          })
+          .catch((): WeekFlagRow[] => []),
+      ])
+    : [[], []]
+
+  const weekSummaryByLeague = new Map<string, WeekScoreRow[]>()
+  const addMarker = (r: WeekFlagRow, scored: boolean) => {
+    if (seasonByLeague.get(r.leagueId) !== r.seasonYear) return
+    const marker: WeekScoreRow = { seasonYear: r.seasonYear, week: r.week, pointsFor: scored ? 1 : 0, pointsAgainst: 0 }
+    const list = weekSummaryByLeague.get(r.leagueId)
+    if (list) list.push(marker)
+    else weekSummaryByLeague.set(r.leagueId, [marker])
+  }
+  for (const r of scoredWeeks) addMarker(r, true)
+  for (const r of unscoredWeeks) addMarker(r, false)
+
+  /*
+   * 🛑 A GUILLOTINE LEAGUE NEVER LEAVES WEEK 2 UNDER THE ROW RULE. `resolveCurrentWeekFrom` takes the
+   * earliest week that still has a 0–0 row — and a chopped team keeps a 0–0 row in every week after
+   * its chop. Measured 2026-10-03 on all six of one account's guillotine leagues: week 2 holds the
+   * week-1 casualty at 0–0, so the rail sat on week 2 while the provider was on week 4. Scout, Your
+   * Week's cut line and the War Room strip all drew last-but-one week's race.
+   *
+   * 🛑 AND THE ROW RULE FAILS HEAD-TO-HEAD LEAGUES TOO, MID-WEEK — EVERY ONE OF THEM, BY SUNDAY. Once
+   * every matchup in a week has any points on the board (Thursday's game, the early slate), no 0–0 row
+   * is left and the rule calls the week finished: it jumps to NEXT week's empty, unstarted fixture
+   * while this week's games are still being played. Measured the next morning (Saturday, week 4): four
+   * small leagues already on "week 5" with all week-4 rows scored and the provider saying 4. Larger
+   * leagues reach the same state by Sunday afternoon and stay there until the provider rolls over.
+   * (The guillotine-only first version of this fix — #1915 — said head-to-head was "right for them".
+   * It is not; that was an assumption, and the measurement disproved it.)
+   *
+   * So EVERY league takes the provider's own stated period first — the rule `resolveCurrentWeek`
+   * has always applied ("Prefer the saved provider period") and the rail did not — when the
+   * season's rows carry that week. Measured before widening it, 2026-10-03: 493 of 494 in-season
+   * Sleeper NFL leagues and 8 of 8 ESPN state week 4, synced within the hour; leagues with no stated
+   * week, or one their rows do not carry, keep the row rule exactly as before.
+   */
+  const eliminationIds = [...new Set(leagues.filter((l) => l.elimination && l.platformLeagueId).map((l) => l.platformLeagueId!))]
+  const statedByLeague = new Map<string, { seasonYear: number; week: number }>()
+  if (platformIds.length > 0) {
+    const meta = await readLeagueWeekMetadata([...new Set(platformIds)], 'platform').catch(() => [])
+    for (const m of meta) {
+      const week = leagueWeekFromSettings(m.settings)
+      if (!m.platformLeagueId || m.season == null || week == null) continue
+      /*
+       * ⚠ ONE SLEEPER LEAGUE CAN BE SEVERAL `leagues` ROWS (one per importer), and an importer whose row
+       * has not synced lately still carries an older period. The furthest-along statement wins — the
+       * provider never moves backwards, so the newest season and highest week is the current one.
+       */
+      const held = statedByLeague.get(m.platformLeagueId)
+      if (!held || m.season > held.seasonYear || (m.season === held.seasonYear && week > held.week)) {
+        statedByLeague.set(m.platformLeagueId, { seasonYear: m.season, week })
+      }
+    }
   }
 
   const currentByLeague = new Map<string, { seasonYear: number; week: number }>()
-  for (const [leagueId, rows] of rowsByCandidateLeague) {
+  for (const [leagueId, rows] of weekSummaryByLeague) {
+    const stated = statedByLeague.get(leagueId)
+    if (stated && rows.some((r) => r.seasonYear === stated.seasonYear && r.week === stated.week)) {
+      currentByLeague.set(leagueId, stated)
+      continue
+    }
     const current = resolveCurrentWeekFrom(rows)
     if (current) currentByLeague.set(leagueId, { seasonYear: current.season, week: current.week })
   }
-  let matchups = seasonCandidates.filter((row) => {
-    const current = currentByLeague.get(row.leagueId)
-    return current?.seasonYear === row.seasonYear && current.week === row.week
-  })
+
+  /* The rows themselves: the resolved week of every league, and an elimination league's whole season. */
+  const rowSelect = {
+    leagueId: true,
+    seasonYear: true,
+    week: true,
+    rosterId: true,
+    matchupId: true,
+    pointsFor: true,
+    pointsAgainst: true,
+    updatedAt: true,
+  } as const
+  const eliminationWithSeason = eliminationIds.filter((id) => currentByLeague.has(id))
+  const toRows = (rows: Array<Omit<MatchupRow, 'source'>>): MatchupRow[] =>
+    rows.map((row) => ({ ...row, source: 'live_cache' as const }))
+  const [weekRows, eliminationSeasonRows]: [MatchupRow[], MatchupRow[]] = await Promise.all([
+    currentByLeague.size
+      ? prisma.weeklyMatchup
+          .findMany({
+            where: { OR: [...currentByLeague].map(([leagueId, w]) => ({ leagueId, seasonYear: w.seasonYear, week: w.week })) },
+            select: rowSelect,
+          })
+          .then(toRows)
+          .catch((): MatchupRow[] => [])
+      : Promise.resolve([] as MatchupRow[]),
+    eliminationWithSeason.length
+      ? prisma.weeklyMatchup
+          .findMany({
+            where: { OR: eliminationWithSeason.map((leagueId) => ({ leagueId, seasonYear: currentByLeague.get(leagueId)!.seasonYear })) },
+            select: rowSelect,
+          })
+          .then(toRows)
+          .catch((): MatchupRow[] => [])
+      : Promise.resolve([] as MatchupRow[]),
+  ])
+
+  /*
+   * And the teams already out, so the standing ranks the LIVE field. Without this a chopped team's 0
+   * was the field's lowest score — the cut line — so "95.7 over the cut" measured you against a team
+   * that was already gone, and "#13 of 18" counted three of them.
+   */
+  const outByLeague = new Map<string, Set<string>>()
+  for (const leagueId of eliminationWithSeason) {
+    const rows = eliminationSeasonRows.filter((r) => r.leagueId === leagueId)
+    const current = currentByLeague.get(leagueId)
+    if (rows.length && current) outByLeague.set(leagueId, choppedBefore(rows, current.week))
+  }
+  let matchups = weekRows
 
   /* Some importers historically materialized their schedule in MatchupFact
      before WeeklyMatchup parity existed. Use that canonical history only when
@@ -447,8 +590,12 @@ export async function getRailMatchups(
        * ⚠ THE TEAM NAME, THEN THE OWNER'S — never the league's own name as a
        * stand-in. A roster the platform never named stays unnamed; borrowing the
        * league name would put "Dynasty Dragons vs Dynasty Dragons" in the rail.
+       *
+       * ⚠ AND THE IMPORTER'S "Unknown" IS NOT A NAME (managerName.ts). Every unowned Sleeper roster is
+       * stored as teamName "Unknown" / ownerName "Unknown", and the rail printed it verbatim — in both
+       * languages (live sweep, 2026-10-05). A placeholder falls through like a missing name.
        */
-      name: t.teamName?.trim() || t.ownerName?.trim() || null,
+      name: realManagerName(t.teamName) || realManagerName(t.ownerName) || null,
       avatarUrl: managerArtUrl({ avatarUrl: t.avatarUrl, platform: t.league?.platform ?? null }),
       isYours: t.claimedByUserId === userId,
     }
@@ -534,7 +681,8 @@ export async function getRailMatchups(
       row: m,
       unpaired,
       elimination,
-      field: unpaired ? (rowsByLeague.get(m.leagueId) ?? []) : [],
+      // The live field only: a chopped team's 0 is not a cut line (see `choppedBefore`).
+      field: unpaired ? (rowsByLeague.get(m.leagueId) ?? []).filter((r) => !outByLeague.get(m.leagueId)?.has(String(r.rosterId))) : [],
     })
   }
 
@@ -572,7 +720,8 @@ export async function getRailMatchups(
       yourAvatarUrl: you.avatarUrl,
       yourScore: row.pointsFor,
       yourProjection: priced?.sides.get(you.externalId) ?? null,
-      opponentTeam: opponent?.name ?? null,
+      /* The platform's own "Team N" for an unnamed roster, as Matchup and the home already print (rosterLabel). */
+      opponentTeam: opponent ? rosterLabel([opponent.name], opponent.externalId) : null,
       opponentAvatarUrl: opponent?.avatarUrl ?? null,
       opponentScore: row.pointsAgainst,
       opponentProjection: opponent ? (priced?.sides.get(opponent.externalId) ?? null) : null,
@@ -582,16 +731,35 @@ export async function getRailMatchups(
             field: f.field,
             yourRosterId: String(row.rosterId),
             sides: priced?.sides ?? new Map(),
-            scored,
             elimination: f.elimination || priced?.elimination === true,
           })
         : null,
+      eliminated: outByLeague.get(row.leagueId)?.has(String(row.rosterId)) === true,
       scored,
       freshAt: row.updatedAt?.toISOString?.() ?? null,
       source: row.source,
       season: row.seasonYear,
       week: row.week,
     }
+  }
+
+  /*
+   * 🛑 ONE SLEEPER LEAGUE IS SEVERAL AF LEAGUE ROWS, AND THE RAIL ASKS BY THE ROW IT DREW.
+   * `teamByKey` is keyed on the PLATFORM league, so when three importers each wrote their own
+   * `leagues` row for the same Sleeper league, `you.leagueId` is whichever of the three was read
+   * last — and the rail, which looks each card up by its own `l.id`, found nothing for the other
+   * two. With a live score overlaid the card still drew `0.0`, so the only visible symptom was
+   * `PROJ —` on every duplicated league. Measured 2026-09-29 on `🪓 Guillotine League 26`: three
+   * AF rows, one Sleeper id, projections present for all ten starters in both feeds.
+   *
+   * Every row the caller asked about now gets the fixture of the Sleeper league it belongs to.
+   */
+  const fixtureLeagueByPlatformId = new Map(fixtures.map((f) => [f.row.leagueId, f.you.leagueId]))
+  for (const league of leagues) {
+    if (!league.platformLeagueId || byLeague[league.id]) continue
+    const source = fixtureLeagueByPlatformId.get(league.platformLeagueId)
+    const entry = source ? byLeague[source] : undefined
+    if (entry) byLeague[league.id] = { ...entry, leagueId: league.id }
   }
 
   return {
@@ -712,7 +880,7 @@ export async function loadRailProjections(args: {
    * so it priced a stranger into the side's total and rank. Its starters are emptied: the side still
    * renders, as `PROJ —`, which is the true statement (isForeignIdSpace, rosterIdSpace.ts).
    */
-  const foreignLeagues = new Set(leagueMeta.filter((m) => isForeignIdSpace(m.platform)).map((m) => m.id))
+  const foreignLeagues = new Set(leagueMeta.filter((m) => isForeignIdSpace(m.platform, m.sport)).map((m) => m.id))
   for (const r of starterRows) {
     if (!r.platformUserId) continue
     startersByKey.set(`${r.leagueId}:${r.platformUserId}`, foreignLeagues.has(r.leagueId) ? [] : startersOf(r.starters))
@@ -766,28 +934,23 @@ export async function loadRailProjections(args: {
     if (feed.size === 0) return NO_PROJECTIONS
     projectionWeek = fallback
   }
+  /* The AF engine's week is the week the provider numbers came from, so the two columns never
+     describe different weeks. A failed read leaves the provider columns exactly as they were. */
+  const afEngineRows = await lookupAfEngineProjections(wanted, projectionWeek).catch(
+    (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+  )
 
   // A current injury cannot be applied to a fallback projection from another week.
   // All roster ids share one identity read and one availability read per sport.
-  const unavailableBySport = new Map<string, Set<string>>()
+  // `loadUnavailableBySport` is shared with the all-leagues matchup board.
+  let unavailableBySport = new Map<string, Set<string>>()
   if (projectionWeek?.season === asked.season && projectionWeek.week === asked.week) {
-    const sports = [...new Set(leagueMeta.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
-    const playerRows = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: wanted }, sport: { in: sports } },
-      select: { sleeperId: true, name: true, team: true, sport: true },
-    }).catch(() => [])
-    await Promise.all(sports.map(async (sport) => {
-      const players = playerRows.filter((p) => String(p.sport).toUpperCase() === sport)
-      const teams = new Map([...composePlayerIdentities(players)].map(([id, p]) => [id, p.team]))
-      const [statuses, byes] = await Promise.all([
-        readInjuryStatusById(sport, namesBySleeperId(players), teams),
-        getByeWeeks({ sport, season: args.season, playerTeams: teams, fromWeek: args.week, horizon: 0 }).catch(() => null),
-      ])
-      unavailableBySport.set(sport, new Set([
-        ...[...statuses].filter(([, status]) => isRuledOut(status)).map(([id]) => id),
-        ...(byes?.byWeek.get(args.week) ?? []),
-      ]))
-    }))
+    unavailableBySport = await loadUnavailableBySport({
+      sleeperIds: wanted,
+      sports: leagueMeta.map((l) => String(l.sport ?? 'NFL')),
+      season: args.season,
+      week: args.week,
+    })
   }
   const sportByLeague = new Map(leagueMeta.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
@@ -801,16 +964,20 @@ export async function loadRailProjections(args: {
         yahoo_settings: l.yahoo_settings,
       }),
     )
-    const type = (l.confirmedType ?? l.leagueType ?? '').toLowerCase()
     /*
      * ⚠ `survivor_guillotine` IS AN ELIMINATION FORMAT TOO. The confirmation is read
      * first, and a confirmed Survivor Guillotine league's confirmation says
      * `survivor_guillotine` (only its column says `guillotine`), so matching the
-     * one word alone would drop its elimination flag.
+     * one word alone would drop its elimination flag. The rule lives in
+     * `eliminationFormat` so the matchup screens cannot read it differently.
      */
     eliminationByLeague.set(
       l.id,
-      Boolean(l.guillotineMode) || type === 'guillotine' || type === 'survivor_guillotine',
+      eliminationFormat({
+        confirmedType: l.confirmedType,
+        leagueType: l.leagueType,
+        guillotineMode: l.guillotineMode,
+      }) != null,
     )
   }
 
@@ -822,16 +989,33 @@ export async function loadRailProjections(args: {
     let af = 0
     let vendorFrom = 0
     let afFrom = 0
+    let engine = 0
+    let engineFrom = 0
+    /* Starters the engine actually wrote a row for. Known absences add a priced zero to
+       `engineFrom`, but a side whose only "AF" figures are those zeros has no AF projection at
+       all — it must render `—`, not a confident 0.0. */
+    let engineRows = 0
     for (const id of side.starters) {
       if (!isPriceableId(id)) continue
       if (unavailableBySport.get(sportByLeague.get(side.dbLeagueId) ?? 'NFL')?.has(id)) {
         // Known absence is a priced zero, even when that player has no feed projection.
         vendorFrom += 1
         if (hasScoringRules(scoring)) afFrom += 1
+        engineFrom += 1
         continue
       }
       const p = feed.get(id)
-      if (!p) continue
+      const engineRow = afEngineRows.get(id)
+      if (!p) {
+        // No provider row, so no ratio to carry the AF number into this league: it stands as PPR.
+        const raw = afEngineForLeague(engineRow?.projectedPoints, null, null)
+        if (raw != null) {
+          engine += raw
+          engineFrom += 1
+          engineRows += 1
+        }
+        continue
+      }
       if (Number.isFinite(p.projectedPoints)) {
         vendor += p.projectedPoints
         vendorFrom += 1
@@ -846,6 +1030,12 @@ export async function loadRailProjections(args: {
         af += league.points
         afFrom += 1
       }
+      const engineHere = afEngineForLeague(engineRow, p.projectedPoints, league?.points ?? null, scoring)
+      if (engineHere != null) {
+        engine += engineHere
+        engineFrom += 1
+        engineRows += 1
+      }
     }
 
     const entry = byLeague.get(side.dbLeagueId) ?? {
@@ -855,6 +1045,8 @@ export async function loadRailProjections(args: {
     entry.sides.set(side.externalId, {
       projected: vendorFrom > 0 ? Math.round(vendor * 100) / 100 : null,
       afProjected: afFrom > 0 ? Math.round(af * 100) / 100 : null,
+      afEngine: engineRows > 0 ? Math.round(engine * 100) / 100 : null,
+      afEngineFrom: engineFrom,
       /*
        * The VENDOR count, because it is the one that gates whether a number is
        * shown at all. The AF count can be lower in an IDP league — the defenders
@@ -870,49 +1062,65 @@ export async function loadRailProjections(args: {
   return { byLeague, projectionWeek }
 }
 
+/** "Most teams have played": strictly more than half of the field has points on the board. */
+export function mostHavePlayed(played: number, fieldSize: number): boolean {
+  return played * 2 > fieldSize
+}
+
 /**
  * Where you sit in a league with no head-to-head.
  *
- * ⚠ THE BASIS SWITCHES ON WHETHER ANYTHING HAS BEEN PLAYED, AND IT HAS TO.
- * Before kickoff every `pointsFor` in the league is 0, so ranking on points
- * would sort eighteen identical numbers into whatever order the rows arrived in
- * and print a confident "14th of 18". The projection is the only thing that
- * separates the teams in that window; once a point is scored, the score is the
- * answer and the projection stops being consulted.
+ * ⚠ THE BASIS IS THE PROJECTION UNTIL MOST OF THE FIELD HAS PLAYED, AND IT HAS TO BE.
+ * Before kickoff every `pointsFor` in the league is 0, so ranking on points would sort eighteen
+ * identical numbers into whatever order the rows arrived in and print a confident "14th of 18".
+ * The same is true, less visibly, all of Sunday morning: a team whose players have not kicked off
+ * sits at 0, so a points ranking puts every one of them at the cut line and tells a manager who is
+ * comfortably clear on projection that they are "at the cut". User's ruling 2026-10-03: rank on the
+ * projection until MORE THAN HALF of the field has points on the board (`mostHavePlayed`), then on
+ * points. The projection is the pre-game number — nothing here re-projects a game in progress.
  *
- * ⚠ AND IT REFUSES RATHER THAN RANKS A HALF-MEASURED FIELD. A league where only
- * some lineups priced would rank the priced ones above the rest by construction,
- * which is an artefact of coverage and not of the teams — the same stance
- * `leagueScoreboard.ts` takes before it draws a margin. Null here renders as no
- * rank at all, which is the honest rendering of "we cannot say".
+ * ⚠ AND IT NEVER RANKS A HALF-PRICED FIELD ON PROJECTION. A league where only some lineups priced
+ * would rank the priced ones above the rest by construction, which is an artefact of coverage and
+ * not of the teams — the same stance `leagueScoreboard.ts` takes before it draws a margin. When the
+ * field cannot all be priced it falls back to points if anything has been played (the reading this
+ * had before the ruling, labelled 'points' so the UI never calls it a projection), and to null
+ * before any snap, which renders as no rank at all — the honest rendering of "we cannot say".
+ *
+ * Pure; exported for the test.
  */
-function standingIn(args: {
+export function standingIn(args: {
   field: Array<{ rosterId: string; pointsFor: number }>
   yourRosterId: string
   sides: Map<string, RailSideProjection>
-  scored: boolean
   elimination: boolean
 }): RailStanding | null {
   const { field, yourRosterId } = args
   if (field.length < 2) return null
 
-  const basis: 'points' | 'projected' = args.scored ? 'points' : 'projected'
+  const played = field.filter((r) => r.pointsFor !== 0).length
 
-  const valued: Array<{ rosterId: string; value: number }> = []
+  /* Prefer this league's own rules; the vendor number is the fallback, and a side with neither is
+     not measured and cannot be placed. */
+  const projected: Array<{ rosterId: string; value: number }> = []
   for (const r of field) {
-    const id = String(r.rosterId)
-    if (basis === 'points') {
-      valued.push({ rosterId: id, value: r.pointsFor })
-      continue
-    }
-    const side = args.sides.get(id)
-    /* Prefer this league's own rules; the vendor number is the fallback, and a
-       side with neither is not measured and cannot be placed. */
+    const side = args.sides.get(String(r.rosterId))
     const value = side?.afProjected ?? side?.projected ?? null
-    if (value == null) return null
-    valued.push({ rosterId: id, value })
+    if (value == null) break
+    projected.push({ rosterId: String(r.rosterId), value })
   }
-  if (valued.length !== field.length) return null
+  const fullyPriced = projected.length === field.length
+
+  let basis: 'points' | 'projected'
+  let valued: Array<{ rosterId: string; value: number }>
+  if (!mostHavePlayed(played, field.length) && fullyPriced) {
+    basis = 'projected'
+    valued = projected
+  } else if (played > 0) {
+    basis = 'points'
+    valued = field.map((r) => ({ rosterId: String(r.rosterId), value: r.pointsFor }))
+  } else {
+    return null
+  }
 
   valued.sort((a, b) => b.value - a.value)
   const index = valued.findIndex((v) => v.rosterId === yourRosterId)
@@ -921,6 +1129,9 @@ function standingIn(args: {
   const lowest = valued[valued.length - 1]!
   const yours = valued[index]!
   const isLowest = yours.value === lowest.value
+  /* The bottom BUBBLE_SIZE (valued is sorted high → low), widened to include ties with the last of them. */
+  const edge = valued[Math.max(0, valued.length - BUBBLE_SIZE)]!.value
+  const bubble = valued.filter((team) => team.value <= edge).map((team) => team.rosterId)
 
   return {
     rank: 1 + valued.filter(team => team.value > yours.value).length,
@@ -930,5 +1141,40 @@ function standingIn(args: {
     placesAboveCut: valued.filter(team => team.value < yours.value).length,
     cutLine: Math.round(lowest.value * 100) / 100,
     elimination: args.elimination,
+    bubble,
   }
+}
+
+/**
+ * The rosters a guillotine league has already chopped before `currentWeek`, from its own score rows.
+ *
+ * Two facts, applied week by week in order over the teams still alive:
+ *   - a team at 0–0 in a week the rest of the field played is out (a chopped team keeps scoring 0);
+ *   - the single lowest scorer of each COMPLETED week is chopped after it — the guillotine rule.
+ *     Verified on production 2026-10-03 before it was written: across six leagues and three completed
+ *     weeks each, every week's lowest scorer was 0–0 the following week, 18 of 18, no ties.
+ *
+ * ⚠ A TIE AT THE BOTTOM CHOPS NOBODY HERE. The provider's tiebreak is not on file, so guessing would
+ * remove a live team; leaving both in costs one extra row in the field until the next week's 0–0
+ * says which one went.
+ *
+ * Pure; exported for the test.
+ */
+export function choppedBefore(
+  rows: ReadonlyArray<{ week: number; rosterId: string | number; pointsFor: number }>,
+  currentWeek: number,
+): Set<string> {
+  const out = new Set<string>()
+  const weeks = [...new Set(rows.map((r) => r.week))].filter((w) => w < currentWeek).sort((a, b) => a - b)
+  for (const week of weeks) {
+    const live = rows.filter((r) => r.week === week && !out.has(String(r.rosterId)))
+    const scored = live.filter((r) => r.pointsFor > 0)
+    // A week nobody scored in says nothing about who is out.
+    if (scored.length === 0) continue
+    for (const r of live) if (r.pointsFor <= 0) out.add(String(r.rosterId))
+    const low = Math.min(...scored.map((r) => r.pointsFor))
+    const lowest = scored.filter((r) => r.pointsFor === low)
+    if (lowest.length === 1) out.add(String(lowest[0]!.rosterId))
+  }
+  return out
 }

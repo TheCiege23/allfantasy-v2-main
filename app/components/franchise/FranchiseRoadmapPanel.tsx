@@ -34,7 +34,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
   const color = score >= 70 ? 'bg-emerald-500' : score >= 45 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="space-y-0.5">
-      <div className="flex justify-between text-[10px]">
+      <div className="flex justify-between text-[11px]">
         <span className="text-zinc-500">{label}</span>
         <span className="text-zinc-400">{score}</span>
       </div>
@@ -60,14 +60,14 @@ function HeroSection({ roadmap: r }: { roadmap: FranchiseRoadmap }) {
         <span className={`text-xs font-medium px-2 py-0.5 rounded border ${phaseColor(r.currentPhase)}`}>
           {r.currentPhase.replace(/_/g, ' ')}
         </span>
-        <span className="text-[10px] text-zinc-500">{r.confidencePct}% confidence | {r.horizonYears}-year plan</span>
+        <span className="text-[11px] text-zinc-500">{r.confidencePct}% confidence | {r.horizonYears}-year plan</span>
       </div>
 
       {/* Championship Window */}
       {r.championshipWindow.startYear && (
         <div className="bg-zinc-800/50 rounded-lg p-3 flex items-center justify-between">
           <div>
-            <span className="text-[10px] text-zinc-500 uppercase block">Championship Window</span>
+            <span className="text-[11px] text-zinc-500 uppercase block">Championship Window</span>
             <span className={`text-lg font-bold ${windowColor(r.championshipWindow.windowStrength)}`}>
               {r.championshipWindow.startYear}–{r.championshipWindow.endYear ?? '?'}
             </span>
@@ -83,14 +83,14 @@ function HeroSection({ roadmap: r }: { roadmap: FranchiseRoadmap }) {
       )}
       {!r.championshipWindow.startYear && (
         <div className="bg-zinc-800/50 rounded-lg p-3">
-          <span className="text-[10px] text-zinc-500 uppercase block">Championship Window</span>
+          <span className="text-[11px] text-zinc-500 uppercase block">Championship Window</span>
           <span className="text-sm text-red-400">No current window — focus on building</span>
         </div>
       )}
 
       {/* Strategy summary */}
       <div>
-        <span className="text-[10px] text-zinc-500 uppercase block mb-0.5">Strategy</span>
+        <span className="text-[11px] text-zinc-500 uppercase block mb-0.5">Strategy</span>
         <p className="text-sm text-zinc-300 leading-relaxed">{r.overallStrategy}</p>
       </div>
 
@@ -108,7 +108,7 @@ function StrengthWeakness({ strengths, weaknesses }: { strengths: string[]; weak
   return (
     <div className="grid grid-cols-2 gap-2">
       <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-lg p-3">
-        <h4 className="text-[10px] text-emerald-500 uppercase font-medium mb-1">Strengths</h4>
+        <h4 className="text-[11px] text-emerald-500 uppercase font-medium mb-1">Strengths</h4>
         {strengths.length > 0 ? (
           <ul className="text-xs text-zinc-400 space-y-0.5">
             {strengths.map((s, i) => <li key={i}>✓ {s}</li>)}
@@ -116,7 +116,7 @@ function StrengthWeakness({ strengths, weaknesses }: { strengths: string[]; weak
         ) : <p className="text-xs text-zinc-500">None identified</p>}
       </div>
       <div className="bg-red-500/5 border border-red-500/15 rounded-lg p-3">
-        <h4 className="text-[10px] text-red-500 uppercase font-medium mb-1">Weaknesses</h4>
+        <h4 className="text-[11px] text-red-500 uppercase font-medium mb-1">Weaknesses</h4>
         {weaknesses.length > 0 ? (
           <ul className="text-xs text-zinc-400 space-y-0.5">
             {weaknesses.map((w, i) => <li key={i}>✗ {w}</li>)}
@@ -135,7 +135,7 @@ function ActionList({ title, items, color, icon }: { title: string; items: strin
   if (items.length === 0) return null
   return (
     <div className={`rounded-lg p-3 border ${color}`}>
-      <h4 className="text-[10px] uppercase font-medium mb-1 opacity-80">{icon} {title}</h4>
+      <h4 className="text-[11px] uppercase font-medium mb-1 opacity-80">{icon} {title}</h4>
       <ul className="text-xs text-zinc-400 space-y-0.5">
         {items.map((item, i) => <li key={i}>• {item}</li>)}
       </ul>
@@ -158,7 +158,7 @@ function AssetStrategySection({ strategy }: { strategy: FranchiseRoadmap['assetS
     <div className="grid grid-cols-2 gap-2">
       {cards.map(c => (
         <div key={c.label} className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
-          <span className="text-[10px] text-zinc-500 uppercase">{c.icon} {c.label}</span>
+          <span className="text-[11px] text-zinc-500 uppercase">{c.icon} {c.label}</span>
           <p className="text-xs text-zinc-400 mt-0.5">{c.text}</p>
         </div>
       ))}
@@ -182,34 +182,34 @@ function YearPlanCard({ plan, expanded, onToggle }: { plan: YearPlan; expanded: 
               <span className="text-xs font-bold text-white">{plan.year}</span>
               <span className="text-xs text-zinc-500 ml-2">{plan.label}</span>
             </div>
-            <span className="text-[10px] text-zinc-600">{expanded ? '▲' : '▼'}</span>
+            <span className="text-[11px] text-zinc-600">{expanded ? '▲' : '▼'}</span>
           </div>
           <p className="text-xs text-zinc-400 mt-0.5">{plan.objective}</p>
         </button>
         {expanded && (
           <div className="px-3 pb-3 pt-0 border-t border-zinc-800 space-y-2">
             <div>
-              <span className="text-[10px] text-zinc-500 uppercase">Priorities</span>
+              <span className="text-[11px] text-zinc-500 uppercase">Priorities</span>
               <ul className="text-xs text-zinc-400 space-y-0.5">
                 {plan.priorities.map((p, i) => <li key={i}>• {p}</li>)}
               </ul>
             </div>
             <div>
-              <span className="text-[10px] text-zinc-500 uppercase">Recommended Moves</span>
+              <span className="text-[11px] text-zinc-500 uppercase">Recommended Moves</span>
               <ul className="text-xs text-zinc-400 space-y-0.5">
                 {plan.recommendedMoves.map((m, i) => <li key={i}>→ {m}</li>)}
               </ul>
             </div>
             {plan.riskWatch.length > 0 && (
               <div>
-                <span className="text-[10px] text-red-400 uppercase">Risk Watch</span>
+                <span className="text-[11px] text-red-400 uppercase">Risk Watch</span>
                 <ul className="text-xs text-zinc-400 space-y-0.5">
                   {plan.riskWatch.map((r, i) => <li key={i}>⚠ {r}</li>)}
                 </ul>
               </div>
             )}
             <div className="bg-zinc-800/50 rounded px-2 py-1">
-              <span className="text-[10px] text-zinc-500">Milestone: </span>
+              <span className="text-[11px] text-zinc-500">Milestone: </span>
               <span className="text-xs text-zinc-300">{plan.milestoneToReach}</span>
             </div>
           </div>
@@ -239,7 +239,7 @@ function DynastyPanel({ ext }: { ext: DynastyRoadmapExtension }) {
         <ActionList title="Young Core Foundation" items={ext.youngCoreFoundation} color="bg-emerald-500/5 border-emerald-500/15 text-emerald-400" icon="🌱" />
       )}
       <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
-        <span className="text-[10px] text-zinc-500 uppercase">Pick Leverage</span>
+        <span className="text-[11px] text-zinc-500 uppercase">Pick Leverage</span>
         <p className="text-xs text-zinc-400 mt-0.5">{ext.pickLeverageAdvice}</p>
       </div>
     </div>
@@ -252,7 +252,7 @@ function DevyPanel({ ext }: { ext: DevyRoadmapExtension }) {
       <h4 className="text-xs font-semibold text-white">Devy Pipeline</h4>
       <ScoreBar score={ext.pipelineStrengthScore} label="Pipeline Strength" />
       <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
-        <span className="text-[10px] text-zinc-500 uppercase">Timeline Health</span>
+        <span className="text-[11px] text-zinc-500 uppercase">Timeline Health</span>
         <p className="text-xs text-zinc-400 mt-0.5">{ext.devyTimelineHealth}</p>
       </div>
       {ext.stashPriorityTargets.length > 0 && <ActionList title="Stash" items={ext.stashPriorityTargets} color="bg-purple-500/5 border-purple-500/15 text-purple-400" icon="📦" />}
@@ -261,7 +261,7 @@ function DevyPanel({ ext }: { ext: DevyRoadmapExtension }) {
       {ext.classBalanceNotes.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
           {ext.classBalanceNotes.map((n, i) => (
-            <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">{n}</span>
+            <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">{n}</span>
           ))}
         </div>
       )}
@@ -276,29 +276,29 @@ function C2CPanel({ ext }: { ext: C2CRoadmapExtension }) {
       <div className="grid grid-cols-3 gap-2">
         <div className="text-center">
           <div className={`text-lg font-bold ${ext.collegeWindowScore >= 60 ? 'text-emerald-400' : ext.collegeWindowScore >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{ext.collegeWindowScore}</div>
-          <div className="text-[9px] text-zinc-500 uppercase">College</div>
+          <div className="text-[11px] text-zinc-500 uppercase">College</div>
         </div>
         <div className="text-center">
           <div className={`text-lg font-bold ${ext.alignmentScore >= 60 ? 'text-emerald-400' : ext.alignmentScore >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{ext.alignmentScore}</div>
-          <div className="text-[9px] text-zinc-500 uppercase">Alignment</div>
+          <div className="text-[11px] text-zinc-500 uppercase">Alignment</div>
         </div>
         <div className="text-center">
           <div className={`text-lg font-bold ${ext.proWindowScore >= 60 ? 'text-emerald-400' : ext.proWindowScore >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{ext.proWindowScore}</div>
-          <div className="text-[9px] text-zinc-500 uppercase">Pro</div>
+          <div className="text-[11px] text-zinc-500 uppercase">Pro</div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-blue-500/5 border border-blue-500/15 rounded-lg p-2">
-          <span className="text-[10px] text-blue-400 uppercase font-medium">College Strategy</span>
+          <span className="text-[11px] text-blue-400 uppercase font-medium">College Strategy</span>
           <p className="text-xs text-zinc-400 mt-0.5">{ext.collegeSideStrategy}</p>
         </div>
         <div className="bg-purple-500/5 border border-purple-500/15 rounded-lg p-2">
-          <span className="text-[10px] text-purple-400 uppercase font-medium">Pro Strategy</span>
+          <span className="text-[11px] text-purple-400 uppercase font-medium">Pro Strategy</span>
           <p className="text-xs text-zinc-400 mt-0.5">{ext.proSideStrategy}</p>
         </div>
       </div>
       <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
-        <span className="text-[10px] text-zinc-500 uppercase">Pipeline Health</span>
+        <span className="text-[11px] text-zinc-500 uppercase">Pipeline Health</span>
         <p className="text-xs text-zinc-400 mt-0.5">{ext.promotionPipelineHealth}</p>
       </div>
       {ext.dualWindowWarnings.length > 0 && (
@@ -360,7 +360,7 @@ export default function FranchiseRoadmapPanel({ roadmap }: { roadmap: FranchiseR
       {/* Expand: Risk, Trade Strategy, Draft, AI Notes */}
       <button
         onClick={() => setShowDetails(!showDetails)}
-        className="w-full text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors py-1"
+        className="w-full text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors py-1"
       >
         {showDetails ? '▲ Hide details' : '▼ Risk factors, trade strategy, draft advice, AI notes'}
       </button>
@@ -370,18 +370,18 @@ export default function FranchiseRoadmapPanel({ roadmap }: { roadmap: FranchiseR
           {r.riskFactors.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {r.riskFactors.map((f, i) => (
-                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{f}</span>
+                <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{f}</span>
               ))}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
-              <span className="text-[10px] text-zinc-500 uppercase">Trade Strategy</span>
+              <span className="text-[11px] text-zinc-500 uppercase">Trade Strategy</span>
               <p className="text-xs text-zinc-400 mt-0.5">{r.tradeStrategy}</p>
             </div>
             <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
-              <span className="text-[10px] text-zinc-500 uppercase">Draft Capital</span>
+              <span className="text-[11px] text-zinc-500 uppercase">Draft Capital</span>
               <p className="text-xs text-zinc-400 mt-0.5">{r.draftCapitalAdvice}</p>
             </div>
           </div>
@@ -391,13 +391,13 @@ export default function FranchiseRoadmapPanel({ roadmap }: { roadmap: FranchiseR
           )}
 
           <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
-            <span className="text-[10px] text-zinc-500 uppercase">Timeline Summary</span>
+            <span className="text-[11px] text-zinc-500 uppercase">Timeline Summary</span>
             <p className="text-xs text-zinc-400 mt-0.5">{r.timelineSummary}</p>
           </div>
 
           {r.aiNotes.length > 0 && (
             <div>
-              <span className="text-[10px] text-zinc-500 uppercase">AI Notes</span>
+              <span className="text-[11px] text-zinc-500 uppercase">AI Notes</span>
               {r.aiNotes.map((n, i) => <p key={i} className="text-xs text-zinc-400">{n}</p>)}
             </div>
           )}

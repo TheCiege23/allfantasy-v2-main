@@ -192,6 +192,7 @@ async function finalizeAcceptedTrade(
         receiverOffers,
       )
       const settlement = await settleRedraftTradeAssets(tx, {
+        leagueId: proposal.leagueId,
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
         assets: proposal.assets ?? [],

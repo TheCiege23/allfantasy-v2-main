@@ -173,7 +173,7 @@ export function ZombieUniverseStandingsClient({ universeId, season }: ZombieUniv
             <article key={`${row.leagueId}-${row.rosterId}`} className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{row.levelName}</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{row.levelName}</p>
                   <h3 className="truncate text-lg font-black text-white">{row.displayName ?? row.rosterId}</h3>
                   <p className="mt-1 text-xs text-white/50">{row.leagueName ?? row.leagueId}</p>
                 </div>
@@ -181,19 +181,19 @@ export function ZombieUniverseStandingsClient({ universeId, season }: ZombieUniv
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-2xl border border-white/8 bg-black/20 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Points</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Points</p>
                   <p className="mt-2 font-bold text-white">{row.totalPoints.toFixed(1)}</p>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-black/20 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Winnings</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Winnings</p>
                   <p className="mt-2 font-bold text-white">{row.winnings.toFixed(1)}</p>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-black/20 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Items</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Items</p>
                   <p className="mt-2 font-bold text-white">{row.serums} serums | {row.weapons} weapons</p>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-black/20 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Week killed</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Week killed</p>
                   <p className="mt-2 font-bold text-white">{row.weekKilled ?? '-'}</p>
                 </div>
               </div>

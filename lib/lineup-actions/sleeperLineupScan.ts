@@ -1,10 +1,12 @@
 import type { LeagueSport } from '@prisma/client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import type { LineupsActionThresholds } from '@/lib/lineup-actions/thresholds'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import { isSleeperBestBallLeague } from '@/lib/lineup-actions/sleeperLeagueMeta'
 import { isSleeperPlayerLegalInSlot, sleeperStarterSlotLabels } from '@/lib/lineup-actions/sleeperSlotUtils'
+import { designationSeverity, resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: Sleeper public API base
 
@@ -54,10 +56,15 @@ async function fetchSleeperStateWeek(sportSlug: string): Promise<number> {
 }
 
 type ResolvedPlayer = {
-  externalId: string
+  sleeperId: string
   name: string | null
   position: string | null
-  status: string | null
+  team: string | null
+  /**
+   * Sleeper's ROSTER status ("Active", "Injured Reserve") — only from Sleeper's own row, and never an
+   * injury designation. Those come from the injury feed (`resolveCurrentInjuryDesignations`).
+   */
+  rosterStatus: string | null
 }
 
 async function loadSleeperPlayersForSport(
@@ -67,31 +74,31 @@ async function loadSleeperPlayersForSport(
   const ids = Array.from(new Set(playerIds.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 80)
   if (ids.length === 0) return new Map()
 
+  /*
+   * 🛑 SLEEPER IDS, LOOKED UP BY SLEEPER ID — never against `externalId`, where Rolling Insights
+   * keeps its OWN numbers for different people (Sleeper 9228 is Bryce Young; RI 9228 is Michael
+   * Tarquin, an OT). This read matched both columns and keyed its map by both, newest row first, so
+   * the OLDEST row of either person won — and the name, position and injury status this scan alerts
+   * on could be a stranger's. 8,122 Sleeper NFL players share their id with such a row
+   * (2026-09-29). See externalIdNamespace.ts.
+   */
   const rows = await prisma.sportsPlayer.findMany({
-    where: {
-      sport,
-      OR: [{ externalId: { in: ids } }, { sleeperId: { in: ids } }],
-    },
+    where: sleeperIdWhere(ids, sport),
     orderBy: { fetchedAt: 'desc' },
-    select: { externalId: true, sleeperId: true, name: true, position: true, status: true },
+    select: { sleeperId: true, source: true, name: true, position: true, team: true, status: true },
   })
 
   const by = new Map<string, ResolvedPlayer>()
-  for (const r of rows) {
-    const entry: ResolvedPlayer = {
-      externalId: r.externalId,
+  for (const [sleeperId, r] of indexBySleeperId(rows)) {
+    by.set(sleeperId, {
+      sleeperId,
       name: r.name,
       position: r.position,
-      status: r.status,
-    }
-    by.set(r.externalId, entry)
-    if (r.sleeperId) by.set(r.sleeperId, entry)
+      team: r.team ?? null,
+      rosterStatus: r.source === 'sleeper' ? r.status ?? null : null,
+    })
   }
   return by
-}
-
-function normalizeStatus(st: string | null | undefined): string {
-  return (st ?? '').trim().toUpperCase()
 }
 
 export type SleeperLineupScanArgs = {
@@ -214,6 +221,19 @@ export async function scanSleeperLeagueLineup(args: SleeperLineupScanArgs): Prom
 
     const filledIds = starterIds.filter((x) => x.length > 0)
     const byPlayer = await loadSleeperPlayersForSport(dbSport, filledIds)
+    /*
+     * 🛑 THE INJURY DESIGNATION IS THE INJURY FEED'S, BY VERIFIED NAME (2026-10-11). This read
+     * `SportsPlayer.status`, which on Sleeper's row is Sleeper's ROSTER status — "Active" for a
+     * starter who is Out, Doubtful or Questionable — so the scan only ever fired for IR. A roster
+     * absence ("Injured Reserve") still counts when no fresh feed fact says otherwise.
+     */
+    const designations = await resolveCurrentInjuryDesignations({
+      sport: dbSport,
+      players: filledIds.map((id) => {
+        const p = byPlayer.get(id)
+        return { key: id, name: p?.name ?? null, team: p?.team ?? null, position: p?.position ?? null, rosterStatus: p?.rosterStatus ?? null }
+      }),
+    })
 
     for (let i = 0; i < starterSlots.length; i++) {
       const pid = starterIds[i]
@@ -222,7 +242,8 @@ export async function scanSleeperLeagueLineup(args: SleeperLineupScanArgs): Prom
       const p = byPlayer.get(pid)
       const name = p?.name ?? null
       const pos = p?.position ?? null
-      const stRaw = normalizeStatus(p?.status)
+      const designation = designations.get(pid)?.status ?? null
+      const severity = designationSeverity(designation)
 
       if (!isSleeperPlayerLegalInSlot(slotLabel, pos)) {
         actions.push({
@@ -250,7 +271,7 @@ export async function scanSleeperLeagueLineup(args: SleeperLineupScanArgs): Prom
         continue
       }
 
-      if (stRaw === 'OUT' || stRaw === 'IR' || stRaw === 'INJURED RESERVE' || stRaw === 'OFS' || stRaw === 'SUSPENDED') {
+      if (severity === 'unavailable') {
         actions.push({
           leagueId,
           leagueName,
@@ -270,13 +291,13 @@ export async function scanSleeperLeagueLineup(args: SleeperLineupScanArgs): Prom
           confidence: null,
           expectedGain: null,
           sourceModule: 'lineup_scan',
-          message: `${name ?? 'Starter'} is ${p?.status ?? stRaw}`,
+          message: `${name ?? 'Starter'} is ${designation}`,
           severity: 'critical',
         })
         continue
       }
 
-      if (stRaw === 'DOUBTFUL' && thresholds.countDoubtfulAsAction) {
+      if (severity === 'doubtful' && thresholds.countDoubtfulAsAction) {
         actions.push({
           leagueId,
           leagueName,
@@ -302,7 +323,7 @@ export async function scanSleeperLeagueLineup(args: SleeperLineupScanArgs): Prom
         continue
       }
 
-      if (stRaw === 'QUESTIONABLE' && thresholds.countQuestionableAsAction) {
+      if (severity === 'questionable' && thresholds.countQuestionableAsAction) {
         actions.push({
           leagueId,
           leagueName,

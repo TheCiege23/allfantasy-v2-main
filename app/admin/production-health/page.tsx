@@ -99,7 +99,7 @@ export default async function ProductionHealthPage() {
                       <span className="text-[11px] font-semibold capitalize text-white/70">{dt.dataType}</span>
                       <span aria-hidden>{TRAFFIC_LIGHT_EMOJI[dt.trafficLight]}</span>
                     </div>
-                    <div className="mt-1 text-[10px] text-white/35">
+                    <div className="mt-1 text-[11px] text-white/35">
                       {dt.count != null ? `${dt.count.toLocaleString()} rows · ` : ""}
                       {dt.freshness}
                     </div>
@@ -128,7 +128,7 @@ export default async function ProductionHealthPage() {
 
         {/* Crons */}
         <Card title="Scheduled Jobs (runtime)" light={health.crons.trafficLight}>
-          <div className="mb-3 flex flex-wrap gap-2 text-[10px]">
+          <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
             <span className="text-white/40">
               {health.crons.totalDeclared} declared · {health.crons.coveragePct}% instrumented
             </span>
@@ -149,15 +149,15 @@ export default async function ProductionHealthPage() {
                 <div className="min-w-0">
                   <span aria-hidden className="mr-2">{TRAFFIC_LIGHT_EMOJI[entry.trafficLight]}</span>
                   <span className="text-[12px] font-semibold text-white/80">{entry.pathname}</span>
-                  <span className="ml-2 rounded border border-white/10 px-1 text-[9px] uppercase text-white/40">
+                  <span className="ml-2 rounded border border-white/10 px-1 text-[11px] uppercase text-white/40">
                     {CRON_STATE_LABEL[entry.state] ?? entry.state}
                   </span>
                   {entry.duplicate && (
-                    <span className="ml-1 rounded border border-amber-500/25 px-1 text-[9px] uppercase text-amber-300/70">dup</span>
+                    <span className="ml-1 rounded border border-amber-500/25 px-1 text-[11px] uppercase text-amber-300/70">dup</span>
                   )}
-                  <span className="ml-2 text-[10px] text-white/35">{entry.message}</span>
+                  <span className="ml-2 text-[11px] text-white/35">{entry.message}</span>
                 </div>
-                <span className="text-[10px] text-white/30">
+                <span className="text-[11px] text-white/30">
                   {entry.lastSuccessAt ? `ok ${new Date(entry.lastSuccessAt).toLocaleString()}` : entry.schedule}
                 </span>
               </div>
@@ -190,7 +190,7 @@ export default async function ProductionHealthPage() {
                     <span aria-hidden className="mr-2">{TRAFFIC_LIGHT_EMOJI[p.trafficLight]}</span>
                     {p.provider}
                   </span>
-                  <span className="truncate text-[10px] text-white/35">{p.message}</span>
+                  <span className="truncate text-[11px] text-white/35">{p.message}</span>
                 </div>
               ))}
             </div>
@@ -219,7 +219,7 @@ export default async function ProductionHealthPage() {
             </p>
             <div className="mt-2 max-h-44 space-y-1 overflow-auto">
               {health.imports.recent.slice(0, 12).map((r, i) => (
-                <div key={`${r.jobName}-${i}`} className="flex items-center justify-between gap-2 text-[10px] text-white/40">
+                <div key={`${r.jobName}-${i}`} className="flex items-center justify-between gap-2 text-[11px] text-white/40">
                   <span className="truncate">{r.jobName}{r.scope ? ` (${r.scope})` : ""}</span>
                   <span>{r.status}{r.rowsWritten ? ` · ${r.rowsWritten} rows` : ""}</span>
                 </div>

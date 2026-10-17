@@ -34,7 +34,7 @@ export default function ConfidenceDisplay({
   const label = confidenceLabel
   const style = LABEL_STYLES[label] ?? LABEL_STYLES.medium
 
-  const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-xs'
+  const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-3 py-1 text-xs'
 
   return (
     <div className={`inline-flex flex-col items-start gap-1 ${className}`}>

@@ -21,8 +21,13 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}))
-  const currentPassword = String(body?.currentPassword ?? "").trim()
-  const newPassword = String(body?.newPassword ?? "").trim()
+  /*
+   * ⚠ NO .trim(). Sign-in (lib/auth.ts), signup and password reset all keep a password exactly as
+   * typed; this route alone trimmed, so a new password with an edge space was stored without it and
+   * then failed at login typed the way it was chosen. One rule everywhere: bytes as typed.
+   */
+  const currentPassword = String(body?.currentPassword ?? "")
+  const newPassword = String(body?.newPassword ?? "")
 
   if (!currentPassword || !newPassword) {
     return NextResponse.json(

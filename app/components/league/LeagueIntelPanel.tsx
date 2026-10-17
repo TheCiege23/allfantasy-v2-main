@@ -54,7 +54,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
   const color = score >= 70 ? 'bg-emerald-500' : score >= 45 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="space-y-0.5">
-      <div className="flex justify-between text-[10px]">
+      <div className="flex justify-between text-[11px]">
         <span className="text-zinc-500">{label}</span>
         <span className="text-zinc-400">{score}</span>
       </div>
@@ -74,9 +74,9 @@ function InsightCallout({ label, teamName, reason, color }: {
 }) {
   return (
     <div className={`rounded-lg border px-3 py-2 ${color}`}>
-      <div className="text-[10px] uppercase font-medium opacity-70">{label}</div>
+      <div className="text-[11px] uppercase font-medium opacity-70">{label}</div>
       <div className="text-xs font-semibold text-white mt-0.5">{teamName}</div>
-      <div className="text-[10px] text-zinc-400 mt-0.5">{reason}</div>
+      <div className="text-[11px] text-zinc-400 mt-0.5">{reason}</div>
     </div>
   )
 }
@@ -139,10 +139,10 @@ function TeamCard({ card, expanded, onToggle }: {
             <div className="min-w-0">
               <div className="text-sm font-semibold text-white truncate">{card.teamName}</div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${categoryColor(card.category)}`}>
+                <span className={`text-[11px] px-1.5 py-0.5 rounded border ${categoryColor(card.category)}`}>
                   {categoryLabel(card.category)}
                 </span>
-                <span className="text-[10px] text-zinc-500">{trendIcon(card.trend)} {card.trend}</span>
+                <span className="text-[11px] text-zinc-500">{trendIcon(card.trend)} {card.trend}</span>
               </div>
             </div>
           </div>
@@ -153,19 +153,19 @@ function TeamCard({ card, expanded, onToggle }: {
               <div className={`text-lg font-bold ${card.powerScore >= 70 ? 'text-emerald-400' : card.powerScore >= 45 ? 'text-amber-400' : 'text-red-400'}`}>
                 {card.powerScore}
               </div>
-              <div className="text-[9px] text-zinc-500 uppercase">Power</div>
+              <div className="text-[11px] text-zinc-500 uppercase">Power</div>
             </div>
             <div className="text-right">
               <div className={`text-sm font-medium ${card.luckScore >= 60 ? 'text-emerald-400' : card.luckScore <= 40 ? 'text-red-400' : 'text-zinc-400'}`}>
                 {card.luckScore >= 60 ? '🍀' : card.luckScore <= 40 ? '😤' : '⚖️'} {card.luckScore}
               </div>
-              <div className="text-[9px] text-zinc-500 uppercase">Luck</div>
+              <div className="text-[11px] text-zinc-500 uppercase">Luck</div>
             </div>
           </div>
         </div>
 
         {/* Quick summary */}
-        <div className="flex gap-3 mt-2 text-[10px] text-zinc-500">
+        <div className="flex gap-3 mt-2 text-[11px] text-zinc-500">
           <span>Strength: {card.biggestStrength}</span>
           <span>•</span>
           <span>Weakness: {card.biggestWeakness}</span>
@@ -185,14 +185,14 @@ function TeamCard({ card, expanded, onToggle }: {
 
           {/* Recommendation */}
           <div className="bg-zinc-800/50 rounded-lg p-2.5">
-            <span className="text-[10px] text-zinc-500 uppercase block mb-0.5">Recommended Action</span>
+            <span className="text-[11px] text-zinc-500 uppercase block mb-0.5">Recommended Action</span>
             <p className="text-xs text-white font-medium">{card.recommendedAction.replace(/_/g, ' ')}</p>
             <p className="text-xs text-zinc-400 mt-0.5">{card.recommendationExplanation}</p>
           </div>
 
           {/* Future outlook */}
           <div>
-            <span className="text-[10px] text-zinc-500 uppercase">Outlook</span>
+            <span className="text-[11px] text-zinc-500 uppercase">Outlook</span>
             <p className="text-xs text-zinc-400">{card.futureOutlook}</p>
           </div>
 
@@ -200,20 +200,20 @@ function TeamCard({ card, expanded, onToggle }: {
           <div className="flex gap-3">
             {card.needs.length > 0 && (
               <div>
-                <span className="text-[10px] text-red-400 uppercase">Needs</span>
+                <span className="text-[11px] text-red-400 uppercase">Needs</span>
                 <div className="flex gap-1 mt-0.5 flex-wrap">
                   {card.needs.map(n => (
-                    <span key={n} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{n}</span>
+                    <span key={n} className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{n}</span>
                   ))}
                 </div>
               </div>
             )}
             {card.surplus.length > 0 && (
               <div>
-                <span className="text-[10px] text-emerald-400 uppercase">Surplus</span>
+                <span className="text-[11px] text-emerald-400 uppercase">Surplus</span>
                 <div className="flex gap-1 mt-0.5 flex-wrap">
                   {card.surplus.map(s => (
-                    <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{s}</span>
+                    <span key={s} className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{s}</span>
                   ))}
                 </div>
               </div>
@@ -221,7 +221,7 @@ function TeamCard({ card, expanded, onToggle }: {
           </div>
 
           {/* Values */}
-          <div className="flex gap-3 text-[10px] text-zinc-500">
+          <div className="flex gap-3 text-[11px] text-zinc-500">
             <span>Starters: {card.starterValue.toLocaleString()}</span>
             <span>Bench: {card.benchValue.toLocaleString()}</span>
             <span>Picks: {card.pickValue.toLocaleString()}</span>
@@ -231,7 +231,7 @@ function TeamCard({ card, expanded, onToggle }: {
           {card.riskFlags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {card.riskFlags.map(f => (
-                <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+                <span key={f} className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
                   {f.replace(/_/g, ' ')}
                 </span>
               ))}
@@ -277,7 +277,7 @@ export default function LeagueIntelPanel({ data }: { data: LeagueIntelResult }) 
           <span className="text-emerald-400">{leagueInsights.contenderCount} contender{leagueInsights.contenderCount !== 1 ? 's' : ''}</span>
           <span className="text-red-400">{leagueInsights.rebuilderCount} rebuilder{leagueInsights.rebuilderCount !== 1 ? 's' : ''}</span>
         </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded ${
+        <span className={`text-[11px] px-2 py-0.5 rounded ${
           leagueInsights.leagueCompetitiveness === 'tight' ? 'bg-emerald-500/10 text-emerald-400' :
           leagueInsights.leagueCompetitiveness === 'lopsided' ? 'bg-red-500/10 text-red-400' :
           'bg-amber-500/10 text-amber-400'

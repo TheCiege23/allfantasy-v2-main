@@ -59,7 +59,7 @@ export function ChatSenderAvatar({
 
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full border border-white/[0.12] bg-gradient-to-br from-indigo-500 to-cyan-500 text-[9px] font-bold uppercase text-white ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full border border-white/[0.12] bg-gradient-to-br from-indigo-500 to-cyan-500 text-[11px] font-bold uppercase text-white ${className}`}
       style={{ width: size, height: size }}
       aria-hidden
     >

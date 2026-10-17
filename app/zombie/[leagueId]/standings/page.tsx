@@ -126,7 +126,7 @@ export default function ZombieStandingsPage() {
       <div className="overflow-x-auto rounded-xl border border-[var(--zombie-border)]">
         <table className="w-full min-w-[420px] border-collapse">
           <thead>
-            <tr className="border-b border-[var(--zombie-border)] text-left text-[10px] uppercase tracking-wide text-[var(--zombie-text-dim)]">
+            <tr className="border-b border-[var(--zombie-border)] text-left text-[11px] uppercase tracking-wide text-[var(--zombie-text-dim)]">
               <th className="p-2.5 w-8">#</th>
               <th className="p-2.5">Team</th>
               <th className="p-2.5 w-10">Status</th>
@@ -159,7 +159,7 @@ export default function ZombieStandingsPage() {
                         {t.fantasyTeamName || t.displayName || t.rosterId}
                       </span>
                       {sk === 'zombie' && t.weekBecameZombie && (
-                        <span className="text-[9px] text-[var(--zombie-purple)]">
+                        <span className="text-[11px] text-[var(--zombie-purple)]">
                           Wk {t.weekBecameZombie}
                         </span>
                       )}

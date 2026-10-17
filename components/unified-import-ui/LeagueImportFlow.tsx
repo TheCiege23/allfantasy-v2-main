@@ -187,12 +187,12 @@ export function LeagueImportFlow({
     if (status === 'importing')
       return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#ffb8d1]"><Loader2 className="h-3 w-3 animate-spin" />importing…</span>
     if (status === 'done')
-      return <span className="rounded-full bg-emerald-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">imported ✓</span>
+      return <span className="rounded-full bg-emerald-500/[0.15] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-300">imported ✓</span>
     if (status === 'exists')
-      return <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/55">already imported</span>
+      return <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/55">already imported</span>
     if (status === 'needs-attestation')
-      return <span className="rounded-full bg-amber-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">needs commissioner confirmation</span>
-    return <span className="rounded-full bg-red-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-300">failed</span>
+      return <span className="rounded-full bg-amber-500/[0.15] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-200">needs commissioner confirmation</span>
+    return <span className="rounded-full bg-red-500/[0.15] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-red-300">failed</span>
   }
 
   const previewSectionRef = useRef<HTMLDivElement>(null)
@@ -525,6 +525,8 @@ export function LeagueImportFlow({
                 <button
                   key={id}
                   type="button"
+                  /* An unavailable platform's tab only says "coming soon" — not in the iOS app (2.1). */
+                  data-hide-in-ios-app={isImportProviderAvailable(tabToImportProvider(id)) ? undefined : ''}
                   onClick={() => {
                     setTab(id)
                     setFormError(null)
@@ -543,7 +545,7 @@ export function LeagueImportFlow({
                   {label}
                   {id === 'sleeper' ? (
                     <span
-                      className="absolute -top-1.5 right-2 rounded-full border border-emerald-500/40 bg-emerald-500/[0.14] px-1.5 py-0 text-[8px] font-black uppercase tracking-wider text-emerald-300"
+                      className="absolute -top-1.5 right-2 rounded-full border border-emerald-500/40 bg-emerald-500/[0.14] px-1.5 py-0 text-[11px] font-black uppercase tracking-wider text-emerald-300"
                       aria-label="Recommended provider"
                     >
                       Recommended
@@ -572,7 +574,7 @@ export function LeagueImportFlow({
                           : 'Use a provider account identifier to find an NFL league, then preview the canonical import before you commit it.'}
                       </p>
                     </div>
-                    <span className="rounded-full border border-[#ff3d81]/25 bg-black/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ffb8d1]/85">
+                    <span className="rounded-full border border-[#ff3d81]/25 bg-black/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ffb8d1]/85">
                       {getImportProviderLabel(activeImportProvider)}
                     </span>
                   </div>
@@ -779,6 +781,7 @@ export function LeagueImportFlow({
                 <p
                   className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[13px] text-amber-100"
                   data-testid="import-provider-coming-soon"
+                  data-hide-in-ios-app=""
                 >
                   {getImportProviderLabel(activeImportProvider)} import is coming
                   soon — it isn&apos;t available to connect yet.
@@ -875,7 +878,12 @@ export function LeagueImportFlow({
           </div>
         </div>
 
-        <details className="group mt-10 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        {/*
+          ⚠ Hidden in the iOS app (2.1): it lists Yahoo as not available yet, a placeholder. (Its
+          copy used to call Fantrax, MFL and Fleaflicker "coming soon" too, though all three are
+          live; lib/i18n/translations.ts import.provider.*.detail now says how each one imports.)
+        */}
+        <details className="group mt-10 rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-hide-in-ios-app="">
           <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-white/70">
             Provider connection details
             <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-open:rotate-180" />
@@ -902,7 +910,7 @@ export function LeagueImportFlow({
                       {provider}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
                         support.status === 'verified'
                           ? 'bg-emerald-400/20 text-emerald-200'
                           : 'bg-amber-400/20 text-amber-200'

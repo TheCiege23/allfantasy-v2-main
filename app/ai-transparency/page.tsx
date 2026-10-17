@@ -3,7 +3,7 @@ import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPag
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 
 interface AiTransparencyPageProps {
-  searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
+  searchParams?: Promise<Promise<{ from?: string; next?: string }> | { from?: string; next?: string }>
 }
 
 export const metadata = {
@@ -12,7 +12,8 @@ export const metadata = {
     "How AllFantasy uses AI: trade analysis, rankings, and recommendations are guidance, not guarantees. AI is always optional.",
 }
 
-export default async function AiTransparencyPage({ searchParams }: AiTransparencyPageProps) {
+export default async function AiTransparencyPage(props: AiTransparencyPageProps) {
+  const searchParams = await props.searchParams
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const fromSignup = params.from === "signup"
   const next = typeof params.next === "string" ? params.next : undefined

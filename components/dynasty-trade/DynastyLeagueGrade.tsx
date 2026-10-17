@@ -11,15 +11,14 @@ import { noLeagueGradeHint } from "@/components/trade-evaluator/GradeLeaguePicke
  *
  * Orientation matches the route: each team's list is what that team GETS, so the receipt — taken from
  * Team A's side — sends B's list (`giveValue`) and receives A's (`getValue`).
+ *
+ * The grade's type and its winner live in `./leagueGradeWinner` (plain data, readable by a server page)
+ * and are re-exported here, so importers of this module are unchanged.
  */
-export type DynastyTradeGrade = {
-  grade: string | null
-  partnerGrade: string | null
-  gradeLabel: string | null
-  gradeWithheld: string | null
-  giveValue: number | null
-  getValue: number | null
-}
+import type { DynastyTradeGrade } from "./leagueGradeWinner"
+
+export { NOT_GRADED_WINNER, winnerFromLeagueGrade } from "./leagueGradeWinner"
+export type { DynastyTradeGrade } from "./leagueGradeWinner"
 
 function letterTone(letter: string): string {
   if (letter.startsWith("A")) return "text-green-400"
@@ -61,7 +60,7 @@ export function DynastyLeagueGrade({
 
   return (
     <div data-testid="dynasty-grade" className="rounded-xl border border-cyan-500/30 bg-gradient-to-r from-cyan-950/30 to-purple-950/30 p-5">
-      <div className="text-[10px] uppercase tracking-wider text-gray-400">League grade</div>
+      <div className="text-[11px] uppercase tracking-wider text-gray-400">League grade</div>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <div className="text-center">
           <div className={`text-5xl font-bold font-mono ${letterTone(tradeGrade.grade)}`}>{tradeGrade.grade}</div>

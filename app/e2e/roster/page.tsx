@@ -1,12 +1,13 @@
 import RosterBoard from '@/components/app/roster/RosterBoard'
 
 type E2eRosterPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     leagueId?: string
-  }
+  }>
 }
 
-export default function E2eRosterPage({ searchParams }: E2eRosterPageProps) {
+export default async function E2eRosterPage(props: E2eRosterPageProps) {
+  const searchParams = await props.searchParams
   const leagueId = searchParams?.leagueId?.trim() || 'e2e-roster-league'
 
   return (

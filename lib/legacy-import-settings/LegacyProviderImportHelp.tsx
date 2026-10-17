@@ -32,7 +32,7 @@ export function LegacyProviderImportHelp({ providerId }: { providerId: LegacyPro
           <p>
             <span className="font-semibold text-white">ESPN league id</span> — open your league in a desktop browser. The
             URL looks like{' '}
-            <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">fantasy.espn.com/football/league/123456</code> —
+            <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">fantasy.espn.com/football/league/123456</code> —
             the numeric segment is the league id.
           </p>
           <p className="text-white/55">
@@ -46,7 +46,7 @@ export function LegacyProviderImportHelp({ providerId }: { providerId: LegacyPro
         <div className="space-y-2 text-[11px] leading-snug text-white/80">
           <p>
             <span className="font-semibold text-white">Yahoo league key</span> — from the league URL or Fantasy API tools
-            page, e.g. <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">414.l.123456</code> (game · l · league
+            page, e.g. <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">414.l.123456</code> (game · l · league
             id).
           </p>
           <p className="text-white/55">Use the key for the season you want to anchor; the import tool validates access.</p>

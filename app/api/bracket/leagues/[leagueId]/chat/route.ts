@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isAllowedGifUrl } from "@/lib/rich-message/GIFIntegrationResolver"
 import { sanitizeClientImageUrl } from "@/lib/chat-core/clientMessageInput"
+import { BlockListUnavailableError, getBlockedSenderSetForRead } from "@/lib/moderation/BlockUserService"
 
 /*
  * 🛑 NEVER SELECT `email` HERE. This include is returned to every member of the pool, and it carried
@@ -37,10 +38,8 @@ const messageInclude = {
   },
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -49,6 +48,15 @@ export async function GET(
     where: { leagueId_userId: { leagueId: params.leagueId, userId } },
   })
   if (!member) return NextResponse.json({ error: "Not a member" }, { status: 403 })
+
+  /* Blocked senders hidden; a failed block-list read is a 503, never an unfiltered list (guideline 1.2). */
+  let blocked: Set<string>
+  try {
+    blocked = await getBlockedSenderSetForRead(userId)
+  } catch (err) {
+    if (!(err instanceof BlockListUnavailableError)) throw err
+    return NextResponse.json({ error: "Messages are temporarily unavailable. Try again in a moment." }, { status: 503 })
+  }
 
   const cursor = req.nextUrl.searchParams?.get("before")
   const limit = 50
@@ -64,15 +72,16 @@ export async function GET(
   })
 
   return NextResponse.json({
-    messages: messages.reverse(),
+    messages: (messages as Array<{ userId?: string | null }>)
+      .filter((m) => !m.userId || !blocked.has(m.userId))
+      .reverse(),
+    /* From the rows FETCHED, not the rows shown: hiding a blocked sender must not end pagination. */
     hasMore: messages.length === limit,
   })
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

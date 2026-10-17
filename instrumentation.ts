@@ -1,10 +1,15 @@
 /**
  * PROMPT 151 — Startup: log provider config status (safe, no secrets).
- * Runs when Next.js server boots. Enable with experimental.instrumentationHook in next.config.js.
+ * Runs when Next.js server boots.
+ *
+ * Next 15 always calls this (instrumentation left `experimental`). Under 14 it was
+ * gated in next.config.js to production, or dev with AF_ENABLE_DEV_INSTRUMENTATION=1;
+ * that gate now lives here so dev behaves exactly as before.
  */
 
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.NODE_ENV !== "production" && process.env.AF_ENABLE_DEV_INSTRUMENTATION !== "1") return;
   if (
     process.env.DISABLE_INSTRUMENTATION_DURING_BUILD === "1" &&
     process.env.NODE_ENV === "production"

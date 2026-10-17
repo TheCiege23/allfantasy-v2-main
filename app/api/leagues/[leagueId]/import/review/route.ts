@@ -7,10 +7,8 @@ import {
 } from '@/lib/league-import/importReviewService'
 import { resolveLeagueAccess } from '@/lib/league-access'
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -24,10 +22,8 @@ export async function GET(
   return NextResponse.json({ tasks })
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } },
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

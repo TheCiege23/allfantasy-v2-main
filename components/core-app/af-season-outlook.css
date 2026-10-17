@@ -7,7 +7,7 @@
 .af-so-eyebrow {
   margin: 0 0 6px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -100,7 +100,7 @@
   padding: 11px 13px;
   text-align: left;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -146,7 +146,7 @@
   display: block;
   margin-top: 3px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.03em;
   color: var(--faint);
 }
@@ -188,7 +188,7 @@
 .af-so-panel-eyebrow {
   margin: 0 0 5px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -234,7 +234,7 @@
 
 .af-so-branch-l {
   display: block;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -290,7 +290,7 @@
   border-radius: 6px;
   background: var(--chip);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text2);
 }
@@ -364,7 +364,7 @@
 .af-so-withheld-t {
   margin: 0 0 8px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;

@@ -17,6 +17,8 @@
  * PURE apart from the injected clock and the work itself; results keep input order.
  */
 
+import { findCollidingNames, resolveTileName } from '@/lib/core-app/leagueNameCollision'
+
 export interface BoundedScanOptions {
   concurrency: number
   /** No NEW item starts once this much time has passed. */
@@ -86,6 +88,24 @@ export async function scanWithinBudget<T, R>(
  */
 export const NAME_EVERY_LEAGUE =
   'When you mention these leagues, name every one exactly as listed (and give any "+N more" count as stated) — never group them ("four redraft leagues") or shorten the list with "including".'
+
+/**
+ * Give leagues that share a name a distinct label: "Name · 1a2b" (the last four of the league id).
+ *
+ * ⚠ THE APP'S OWN RULE, NOT A SECOND ONE. `resolveTileName` (lib/core-app/leagueNameCollision.ts,
+ * the league tile's rule) defines the suffix for colliding names; this applies it to the lists
+ * Chimmy's tools hand the model.
+ * Measured 2026-09-28: TheCiege26 has two "TheCiege26's 8-Team NFL Redraft League" and four
+ * "TheCiege26's 12-Team NFL Redraft League", so even with every league named (#1515) the list could
+ * not tell the user WHICH ones. Only colliding names change; a suffix on a unique name is noise.
+ */
+export function withDistinctLeagueNames<T extends { id: string; name: string }>(leagues: readonly T[]): T[] {
+  const colliding = findCollidingNames(leagues.map((l) => ({ name: l.name, nickname: null })))
+  if (colliding.size === 0) return [...leagues]
+  return leagues.map((l) =>
+    colliding.has(l.name) ? { ...l, name: resolveTileName({ id: l.id, name: l.name, nickname: null }, colliding).text } : l,
+  )
+}
 
 /** "A, B, C (+4 more)" — names up to `max`, then counts the rest. */
 export function nameList(names: readonly string[], max = 12): string {

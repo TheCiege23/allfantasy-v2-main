@@ -160,9 +160,8 @@ export function buildDynastyWarRoomPrompt(inputs: DynastyWarRoomPromptInputs): s
   if (inputs.tradeAnalysis) {
     lines.push('')
     lines.push('=== DETERMINISTIC TRADE ANALYSIS ===')
-    lines.push(
-      `verdict=${inputs.tradeAnalysis.verdict} valueDelta=${inputs.tradeAnalysis.valueDelta ?? 'n/a'} rosterFitDelta=${inputs.tradeAnalysis.rosterFitDelta}`,
-    )
+    // 🛑 No verdict or private-scale line (2026-09-30): the verdict is THE grade (warRoomTradeGrade.ts),
+    // and the engine no longer computes one. Facts only.
     for (const f of inputs.tradeAnalysis.explanationFacts) lines.push(`  FACT: ${f}`)
     for (const a of inputs.tradeAnalysis.ageImpact) lines.push(`  AGE: ${a}`)
     for (const pk of inputs.tradeAnalysis.pickImpact) lines.push(`  PICK: ${pk}`)

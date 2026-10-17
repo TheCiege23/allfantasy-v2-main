@@ -177,7 +177,7 @@
 
 .af-pf-tile-why {
   margin-top: 5px;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.45;
   color: var(--faint);
 }
@@ -290,7 +290,7 @@
  */
 .af-pfind-platform {
   padding: 1px 7px;
-  font-size: 9.5px;
+  font-size: 11px;
 }
 
 /* Platform label ahead of the impact card's league name — league names are
@@ -298,7 +298,7 @@
 .af-pf-impact-platform {
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -403,7 +403,7 @@
 }
 
 .af-pf-impact-slot {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   padding: 2px 7px;
@@ -432,7 +432,7 @@
 }
 .af-pf-impact-pts-note {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.35;
   color: var(--faint);
@@ -460,7 +460,7 @@
   color: var(--ink);
 }
 .af-pf-swap-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-pf-swap-pts {
@@ -503,7 +503,7 @@
 
 /* Slot we could not pin down. Quiet, but present — it qualifies the list below. */
 .af-pf-impact-unconfirmed {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--faint);
   flex-basis: 100%;
@@ -512,7 +512,7 @@
 /* A replacement's own injury designation. Sits with his name, not with the
    points, because it qualifies whether he can play at all — not how much. */
 .af-pf-swap-inj {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -653,7 +653,7 @@
 }
 
 .af-core .af-pf-verdict-scope {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   color: var(--faint);
 }
@@ -707,7 +707,7 @@
 
 .af-core .af-pf-verdict-slot {
   flex: none;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   font-weight: 800;
 }
@@ -782,7 +782,7 @@
 }
 
 .af-core .af-pf-swap-meta {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
@@ -981,7 +981,7 @@
 .af-core .af-pf-related-team {
   margin-left: 7px;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--faint);
@@ -1081,7 +1081,7 @@
   flex-wrap: wrap;
 }
 .af-core .af-pf-ready {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1128,7 +1128,7 @@
   border: 1px solid var(--chip-line);
   background: var(--chip);
   color: var(--muted);
-  font: 700 10px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
   cursor: help;
   display: grid;
   place-items: center;
@@ -1166,7 +1166,7 @@
 
 /* ── Slot / status / projection cells ────────────────────────────────── */
 .af-core .af-pf-slot {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1188,7 +1188,7 @@
   color: var(--bad);
 }
 .af-core .af-pf-status {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1206,6 +1206,10 @@
   font-size: 15px;
   font-weight: 800;
   color: var(--text);
+}
+/* AllFantasy's own projection, beside the provider's. */
+.af-core .af-pf-proj.af-pf-af {
+  color: var(--accent);
 }
 .af-core .af-pf-nothing {
   font-size: 11.5px;
@@ -1441,7 +1445,7 @@
 }
 .af-core .af-pf-other-pos {
   margin-left: 6px;
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -1633,7 +1637,7 @@
   padding: 12px;
 }
 .af-core .af-pf-recent-row .af-pf-match-meta {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1657,14 +1661,14 @@
   color: var(--text2);
 }
 
-/* ── Trade visual — give ⇄ get, fairness, engine verdict, hand-off ─────── */
+/* ── Trade visual — give ⇄ get, the one trade grade, hand-off ─────────── */
 .af-core .af-pf-tv {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 16px;
 }
-.af-core .af-pf-tv[data-fairness='lopsided'] {
+.af-core .af-pf-tv[data-grade='F'] {
   border-color: var(--bad);
 }
 .af-core .af-pf-tv-head {
@@ -1722,7 +1726,7 @@
   white-space: nowrap;
 }
 .af-core .af-pf-tv-asset-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-core .af-pf-tv-asset-value {
@@ -1749,47 +1753,31 @@
   gap: 10px;
   flex-wrap: wrap;
 }
-.af-core .af-pf-tv-fairness,
-.af-core .af-pf-tv-engine {
-  font-size: 10px;
+.af-core .af-pf-tv-grade {
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.af-core .af-pf-tv-fairness[data-tone='good'],
-.af-core .af-pf-tv-engine[data-tone='good'] {
+.af-core .af-pf-tv-grade[data-tone='good'] {
   background: var(--good-soft);
   border-color: var(--good);
   color: var(--good);
 }
-.af-core .af-pf-tv-fairness[data-tone='warn'],
-.af-core .af-pf-tv-engine[data-tone='warn'] {
+.af-core .af-pf-tv-grade[data-tone='warn'] {
   background: var(--warn-soft);
   border-color: var(--warn);
   color: var(--warn);
 }
-.af-core .af-pf-tv-fairness[data-tone='bad'],
-.af-core .af-pf-tv-engine[data-tone='bad'] {
+.af-core .af-pf-tv-grade[data-tone='bad'] {
   background: var(--bad-soft);
   border-color: var(--bad);
   color: var(--bad);
 }
-.af-core .af-pf-tv-delta,
-.af-core .af-pf-tv-lineup,
-.af-core .af-pf-tv-accept {
+.af-core .af-pf-tv-delta {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--text2);
-}
-.af-core .af-pf-tv-delta[data-tone='good'],
-.af-core .af-pf-tv-lineup[data-tone='good'] {
-  color: var(--good);
-}
-.af-core .af-pf-tv-delta[data-tone='warn'] {
-  color: var(--warn);
-}
-.af-core .af-pf-tv-lineup[data-tone='bad'] {
-  color: var(--bad);
 }
 .af-core .af-pf-tv-reasons {
   margin: 0;
@@ -2021,7 +2009,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -2209,7 +2197,7 @@
   flex-wrap: wrap;
 }
 .af-core .af-pf-cmp-ready {
-  font-size: 10px;
+  font-size: 11px;
 }
 .af-core .af-pf-cmp-verdict {
   margin: 0;
@@ -2426,7 +2414,7 @@
   color: var(--text2);
 }
 .af-core .af-pf-tw-league {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 .af-core .af-pf-tw-go {
@@ -2516,7 +2504,7 @@
 .af-core .af-pf-lock {
   display: inline-flex;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 11px;
   white-space: nowrap;
   color: var(--text2);
 }
@@ -2634,7 +2622,7 @@
   color: var(--text);
 }
 .af-core .af-pf-triage-status {
-  font-size: 10px;
+  font-size: 11px;
 }
 .af-core .af-pf-triage-meta {
   font-size: 12px;
@@ -2790,47 +2778,6 @@
   }
 }
 
-/* ── Game-day home: "Lineups as of … · Refresh my lineups" (2026-09-27) ── */
-.af-core .af-pf-refresh {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-}
-.af-core .af-pf-refresh-asof {
-  font-size: 12px;
-  color: var(--muted);
-}
-.af-core .af-pf-refresh-btn {
-  min-height: 32px;
-  padding: 4px 12px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-.af-core .af-pf-refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: progress;
-}
-.af-core .af-pf-refresh-note {
-  font-size: 12px;
-  color: var(--text2);
-}
-.af-core .af-pf-refresh[data-phase='error'] .af-pf-refresh-note {
-  color: var(--warn);
-}
-
-@media (max-width: 720px) {
-  .af-core .af-pf-refresh-btn {
-    min-height: 44px;
-    width: 100%;
-  }
-}
-
 /* ── Injury report time + bye (2026-09-06) ───────────────────────────── */
 .af-core .af-pf-injury-when,
 .af-core .af-pf-gameday-when,
@@ -2863,7 +2810,7 @@
    Colours are the button's own; the line only drops weight. */
 .af-core .af-pf-app-hint {
   display: none;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0;
   opacity: 0.8;
@@ -2944,7 +2891,7 @@
 }
 .af-core .af-pf-season-wk {
   fill: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 .af-core .af-pf-season-legend {
   margin: 4px 0 8px;
@@ -3162,7 +3109,7 @@
   color: var(--text);
 }
 .af-core .af-pf-share-status {
-  font-size: 10px;
+  font-size: 11px;
 }
 .af-core .af-pf-share-meta {
   font-size: 12px;
@@ -3452,7 +3399,7 @@
   color: var(--text);
 }
 .af-core .af-pf-call-chip {
-  font-size: 10px;
+  font-size: 11px;
 }
 .af-core .af-pf-call-chip[data-tone='bad'] {
   color: var(--bad);
@@ -3494,6 +3441,26 @@
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+/* The move itself: fix the lineup where the league lives — the primary action on a call that needs one. */
+.af-core .af-pf-call-fix {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-call-fix:hover,
+.af-core .af-pf-call-fix:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
 .af-core .af-pf-calls-foot {
   margin: 0;
   font-size: 11px;
@@ -3503,6 +3470,1758 @@
 
 @media (max-width: 720px) {
   .af-core .af-pf-call-ask {
+    min-height: 44px;
+  }
+}
+
+/* ── The league strip (leagueStrip.ts): one chip per league under the player's name ───────── */
+.af-core .af-pf-strip {
+  margin-top: 10px;
+}
+.af-core .af-pf-strip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-strip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  min-height: 30px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 12px;
+  text-decoration: none;
+}
+.af-core .af-pf-strip-chip:hover,
+.af-core .af-pf-strip-chip:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-strip-league {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-core .af-pf-strip-badge {
+  flex: none;
+  max-width: 110px;
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Yours: starting (green), bench / taxi (neutral), IR (amber). */
+.af-core .af-pf-strip-chip[data-state='start'] .af-pf-strip-badge {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-pf-strip-chip[data-state='ir'] .af-pf-strip-badge {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-core .af-pf-strip-chip[data-state='bench'] .af-pf-strip-badge,
+.af-core .af-pf-strip-chip[data-state='taxi'] .af-pf-strip-badge {
+  background: var(--line2);
+  color: var(--text);
+}
+/* A starter who cannot play: the whole chip says so. */
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='bad'] {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='bad'] .af-pf-strip-badge {
+  background: var(--bad);
+  color: var(--bg);
+}
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='warn'] {
+  border-color: var(--warn);
+}
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='warn'] .af-pf-strip-badge {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+/* Available: the accent — the one state you can act on without a trade. */
+.af-core .af-pf-strip-chip[data-state='free'] .af-pf-strip-badge {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* Someone else's, and unreadable: quiet. Unreadable is dashed — not "free", not "taken". */
+.af-core .af-pf-strip-chip[data-state='other'] {
+  color: var(--muted);
+}
+.af-core .af-pf-strip-chip[data-state='unknown'] {
+  border-style: dashed;
+  color: var(--muted);
+}
+.af-core .af-pf-strip-sum {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+/* The folded strip (LeagueStrip.tsx): yours inline, everything else one toggle per group. */
+.af-core .af-pf-strip-none {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-strip-folds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.af-core .af-pf-strip-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px dashed var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-strip-fold[data-group='free'] {
+  border-style: solid;
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-pf-strip-fold[aria-expanded='true'] {
+  border-style: solid;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.af-core .af-pf-strip-caret {
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+.af-core .af-pf-strip-fold[aria-expanded='true'] .af-pf-strip-caret {
+  transform: rotate(180deg);
+}
+.af-core .af-pf-strip-list--more {
+  margin-top: 8px;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-strip-chip {
+    min-height: 44px;
+    max-width: 100%;
+  }
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-strip-fold {
+    min-height: 44px;
+  }
+}
+
+/* ── Available in your leagues (freeAgentBids.ts): claim links + the AF Pro FAAB bid ─────────── */
+.af-core .af-pf-fa {
+  margin-top: 12px;
+}
+.af-core .af-pf-fa-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-fa-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-fa-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.af-core .af-pf-fa-league {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core .af-pf-fa-bid {
+  color: var(--accent);
+  font-weight: 800;
+}
+.af-core .af-pf-fa-of {
+  color: var(--muted);
+  font-weight: 500;
+}
+.af-core .af-pf-fa-note,
+.af-core .af-pf-fa-room,
+.af-core .af-pf-fa-foot {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-fa-foot {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.af-core .af-pf-fa-claim {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin-top: 2px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-fa-claim:hover,
+.af-core .af-pf-fa-claim:focus-visible {
+  border-color: var(--accent);
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-fa-claim {
+    min-height: 44px;
+  }
+}
+
+/* ── Next man up (depthChartBackups.ts): the depth chart at his spot + where each player is ──────── */
+.af-core .af-pf-dc {
+  margin-top: 12px;
+}
+.af-core .af-pf-dc-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-dc-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-dc-row.is-him {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-dc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.af-core .af-pf-dc-depth {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.af-core .af-pf-dc-name {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core a.af-pf-dc-name {
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+.af-core a.af-pf-dc-name:hover,
+.af-core a.af-pf-dc-name:focus-visible {
+  text-decoration-color: var(--accent);
+}
+.af-core .af-pf-dc-you {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-dc-where {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 34px;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-dc-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.af-core .af-pf-dc-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.af-core .af-pf-dc-cell.is-yours .af-pf-dc-tag {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-pf-dc-cell.is-free .af-pf-dc-tag {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-core .af-pf-dc-cell.is-yours,
+.af-core .af-pf-dc-cell.is-free {
+  color: var(--text);
+}
+.af-core .af-pf-dc-detail {
+  color: var(--muted);
+}
+.af-core .af-pf-dc-claim {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-dc-claim:hover,
+.af-core .af-pf-dc-claim:focus-visible {
+  border-color: var(--accent);
+}
+.af-core .af-pf-dc-foot {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-dc-where {
+    padding-left: 0;
+  }
+  .af-core .af-pf-dc-claim {
+    min-height: 44px;
+  }
+}
+
+/* ── Who'd start him (whoStartsHim.ts): the sell side where he is yours — AF Pro ───────────────── */
+.af-core .af-pf-ws {
+  margin-top: 12px;
+}
+.af-core .af-pf-ws-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-ws-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-ws-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.af-core .af-pf-ws-league {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core .af-pf-ws-count {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+/* Nobody would start him is a real answer, not good news: muted, not accent. */
+.af-core .af-pf-ws-count.is-none {
+  color: var(--muted);
+  font-weight: 600;
+}
+.af-core .af-pf-ws-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-ws-teams {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.af-core .af-pf-ws-team {
+  color: var(--text);
+  font-weight: 600;
+}
+.af-core .af-pf-ws-more {
+  list-style: none;
+  margin-left: -20px;
+  color: var(--faint);
+  font-size: 12px;
+}
+.af-core .af-pf-ws-go {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-ws-go:hover,
+.af-core .af-pf-ws-go:focus-visible {
+  border-color: var(--accent);
+}
+.af-core .af-pf-ws-foot {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-ws-go {
+    min-height: 44px;
+  }
+}
+
+/* ── Market value, last 30 days (valueTrend.ts): sparkline + changes; the nudge is AF Pro ──────── */
+.af-core .af-pf-vt {
+  margin-top: 12px;
+}
+.af-core .af-pf-vt-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-vt-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-vt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.af-core .af-pf-vt-book {
+  color: var(--text);
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.af-core .af-pf-vt-scope {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-vt-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.af-core .af-pf-vt-value {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+}
+.af-core .af-pf-vt-spark {
+  width: 120px;
+  height: 32px;
+  overflow: visible;
+}
+.af-core .af-pf-vt-spark polyline {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.af-core .af-pf-vt-spark circle {
+  fill: var(--muted);
+}
+.af-core .af-pf-vt-spark.is-up polyline {
+  stroke: var(--good);
+}
+.af-core .af-pf-vt-spark.is-up circle {
+  fill: var(--good);
+}
+.af-core .af-pf-vt-spark.is-down polyline {
+  stroke: var(--bad);
+}
+.af-core .af-pf-vt-spark.is-down circle {
+  fill: var(--bad);
+}
+.af-core .af-pf-vt-chgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.af-core .af-pf-vt-chg {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.af-core .af-pf-vt-chg.is-up {
+  color: var(--good);
+}
+.af-core .af-pf-vt-chg.is-down {
+  color: var(--bad);
+}
+.af-core .af-pf-vt-chg.is-none {
+  font-weight: 500;
+}
+.af-core .af-pf-vt-nudge {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.af-core .af-pf-vt-nudge.is-check-cause {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.af-core .af-pf-vt-nudge span {
+  color: var(--muted);
+}
+.af-core .af-pf-vt-foot {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* ── Matchup ranks on the upcoming weeks (matchupOutlook.ts) ───────────────────────────────────── */
+.af-core .af-pf-next-mu {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.af-core .af-pf-next-mu.is-soft {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-pf-next-mu.is-tough {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+/* A local visually-hidden rule: `.af-sr-only` lives in a stylesheet not every finder mount loads. */
+.af-core .af-pf-next-mu-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.af-core .af-pf-next-mu-foot {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* ── Where your starters come from (teamSplit.ts) — inside Your shares, all-leagues mode ──────── */
+.af-core .af-pf-split {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-split-sub {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-split-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-split-row {
+  display: grid;
+  grid-template-columns: 72px minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+.af-core .af-pf-split-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+.af-core .af-pf-split-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-core .af-pf-split-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.af-core .af-pf-split-num {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.af-core .af-pf-split-who {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.af-core .af-pf-split-rest {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-split-bye {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warn);
+  border-radius: 12px;
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+@media (max-width: 560px) {
+  .af-core .af-pf-split-row {
+    grid-template-columns: 64px minmax(40px, 1fr) auto;
+  }
+}
+
+/* ── Live game badge (liveGameBadge.ts): live or final, and his points in your leagues ────────── */
+.af-core .af-pf-live {
+  margin-top: 12px;
+}
+.af-core .af-pf-live[data-state='live'] {
+  border-color: var(--bad);
+}
+.af-core .af-pf-live-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+.af-core .af-pf-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af-core .af-pf-live[data-state='live'] .af-pf-live-tag {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-core .af-pf-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bad);
+  animation: af-pf-live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes af-pf-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-pf-live-dot {
+    animation: none;
+  }
+}
+.af-core .af-pf-live-score {
+  color: var(--text);
+  font-weight: 800;
+}
+.af-core .af-pf-live-week {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-live-list {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-live-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0 12px;
+}
+.af-core .af-pf-live-league {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-pf-live-pts {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+}
+.af-core .af-pf-live-meta {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.af-core .af-pf-live-none {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/*
+ * ⚠ `.af-card` CARRIES NO PADDING (af-core.css) — every finder card sets its own (.af-pf-shares 16px,
+ * .af-pf-calls 14px, …). These five shipped without one, so their content sat flush against the border:
+ * the free-agent bids, next man up, who'd start him, market value and the live badge. The first was seen
+ * in a preview and wrongly put down to the preview's missing styles; measuring `.af-card`'s own rule is
+ * what settled it.
+ */
+.af-core .af-pf-fa,
+.af-core .af-pf-dc,
+.af-core .af-pf-ws,
+.af-core .af-pf-vt,
+.af-core .af-pf-live {
+  padding: 14px 16px;
+}
+
+/* ── Injury timeline chip (injuryTimeline.ts): beside readiness, every width ────────────────────── */
+.af-core .af-pf-injtl {
+  color: var(--muted);
+  font-weight: 700;
+}
+.af-core .af-pf-injtl[data-trend='up'] {
+  color: var(--good);
+}
+.af-core .af-pf-injtl[data-trend='down'] {
+  color: var(--bad);
+}
+/* A local visually-hidden rule: `.af-sr-only` lives in a stylesheet not every finder mount loads. */
+.af-core .af-pf-injtl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * ── Sticky action bar (StickyActionBar.tsx): phones only — the league card's next move, pinned
+ * above the tab bar. It leaves the right-hand lane clear for the floating chat button (56px at
+ * right 14px), and sits one step under the tab bar in z-order.
+ *
+ * ⚠ ANCHORED TO `--af-fab-bottom`, the token af-core.css names for any fixed corner control (tab bar
+ * height + safe area + 12px), so the bar shares the chat button's baseline and cannot drift from the
+ * tab bar. A first version used its own `--af-tabbar-height + 8px` and, measured at 375px, overlapped
+ * the tab bar by 3px.
+ */
+.af-core .af-pf-stickybar {
+  display: none;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-stickybar {
+    position: fixed;
+    left: 12px;
+    right: 80px;
+    bottom: var(--af-fab-bottom, calc(56px + env(safe-area-inset-bottom, 0px) + 12px));
+    z-index: 39;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 8px 8px 12px;
+    border: 1px solid var(--accent-line);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow);
+    transition: transform 0.18s ease, opacity 0.18s ease, visibility 0.18s;
+  }
+  .af-core .af-pf-stickybar[data-hidden='true'] {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  .af-core .af-pf-stickybar-ctx {
+    display: grid;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .af-core .af-pf-stickybar-league {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core .af-pf-stickybar-status {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core .af-pf-stickybar-btn {
+    flex: 0 1 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    max-width: 58%;
+    overflow: hidden;
+    padding: 0 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 720px) and (prefers-reduced-motion: reduce) {
+  .af-core .af-pf-stickybar {
+    transition: none;
+  }
+}
+
+/* Player Finder audit, 2026-10-01. Measured on static renders at 375/768/1280.
+   Own @media block at EOF, per the warning at the top of this file. */
+
+/* The trade-value card sits in a narrow column on desktop (~166px a side),
+   so a nowrap name cut "Amon-Ra St. Brown" to "Amon-Ra St…". Two lines,
+   then clamp. */
+.af-core .af-pf-tv-asset-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  /* The chip carries max-width: 100%, but its LI is a content-sized flex
+     item, so 100% resolved against the chip itself and a long league name
+     pushed the page to 518px on a 375px phone. Cap the LI instead. */
+  .af-core .af-pf-strip-list > li {
+    max-width: 100%;
+    min-width: 0;
+  }
+  /* "auto" handed the slot cell its whole max-content (252px of
+     "W/R/T · slot unconfirmed · locks in 42 min"), leaving the league name
+     a 19px column. fit-content caps the slot side so it wraps instead. */
+  .af-core .af-pf-table tr {
+    grid-template-columns: minmax(0, 1fr) fit-content(55%);
+  }
+  /* The CTA shrank to "Trade for…" while the league name kept its width.
+     The action is the part that must read in full; the context truncates.
+     66% (was 58%) gives it room; on a 320px phone it wraps to a second
+     line rather than cutting the label. */
+  .af-core .af-pf-stickybar-btn {
+    flex-shrink: 0;
+    max-width: 66%;
+    white-space: normal;
+    text-align: center;
+  }
+  /* These two sit at flex-basis 100% but kept the .af-btn nowrap, so a long
+     label ("Copy the pitch to @mikeDeLaCruz2009") set their min-content
+     wider than the row and pushed a 320px phone to 328px. Let them wrap. */
+  .af-core .af-btn.af-pf-gameday-btn,
+  .af-core .af-btn.af-pf-tw-btn {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+  }
+  /* Same shape on the landing triage: the nowrap lock chip ("bench him
+     before your leagues lock") pushed a 320px phone to 330px. Scoped to the
+     triage list; the lock chips in the table rows fit and stay on one line. */
+  .af-core .af-pf-triage-lock .af-pf-lock {
+    max-width: 100%;
+    white-space: normal;
+  }
+}
+
+/* ── Most added this week (trendingAdds.ts): the rail card under Recently searched ─────────────── */
+.af-core .af-pf-trend {
+  margin-top: 12px;
+}
+.af-core .af-pf-trend .af-pf-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 10px;
+}
+.af-core .af-pf-trend-sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+.af-core .af-pf-trend .af-pf-recent-row {
+  display: flex;
+  align-items: center;
+}
+.af-core .af-pf-trend-count {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--good-soft);
+  color: var(--good);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* ── The folded league table (PlayerFinder.tsx OTHERS_FOLD_AFTER): other managers' rows on demand ── */
+.af-core .af-pf-rows-toggle {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+.af-core .af-pf-rows-toggle:hover,
+.af-core .af-pf-rows-toggle:focus-visible {
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-rows-toggle {
+    min-height: 44px;
+  }
+}
+
+/* ── "My players" home + Alert me (2026-10-08): PlayerFinder `.af-pf--home`, FollowButton, FollowingBoard ── */
+.af-core .af-pf-home-head {
+  margin: 0 0 12px;
+}
+.af-core .af-pf-home-title {
+  margin: 0;
+  font-size: 22px;
+}
+.af-core .af-pf-home-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.af-core .af-pf-following {
+  margin-top: 14px;
+}
+/* No rank column on a follow: avatar, then who. */
+.af-core .af-pf-follow-row .af-pf-share-link {
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+.af-core .af-pf-follow-free {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 9px 10px 55px;
+}
+.af-core .af-pf-follow-free-chip {
+  min-height: 28px;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-follow-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.af-core .af-pf-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.af-core .af-pf-follow:hover,
+.af-core .af-pf-follow:focus-visible {
+  background: var(--accent-soft);
+}
+.af-core .af-pf-follow:active {
+  transform: scale(0.96);
+}
+.af-core .af-pf-follow[data-on='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.af-core .af-pf-follow[disabled] {
+  opacity: 0.7;
+  cursor: progress;
+}
+.af-core .af-pf-follow-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-follow {
+    min-height: 44px;
+    padding: 6px 14px;
+  }
+  .af-core .af-pf-follow-free-chip {
+    min-height: 44px;
+  }
+  .af-core .af-pf-follow-free {
+    padding-left: 9px;
+  }
+}
+/*
+ * The phone "My players" home: the search stays on top, then YOUR players, then recent and
+ * trending. The rail's children join the page grid (`display: contents`) so `order` can put the
+ * main column between them — a rail on top made a phone scroll past three search lists before
+ * reaching a single player of its own.
+ */
+@media (max-width: 860px) {
+  .af-core.af-pf--home .af-pf-rail {
+    display: contents;
+  }
+  .af-core.af-pf--home .af-pf-rail > * {
+    margin: 0 16px 14px;
+  }
+  .af-core.af-pf--home .af-pf-h1 {
+    margin-top: 16px;
+  }
+  .af-core.af-pf--home .af-pf-main {
+    order: 1;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+  }
+  .af-core.af-pf--home .af-pf-recent,
+  .af-core.af-pf--home .af-pf-rail-foot {
+    order: 2;
+  }
+}
+
+/* ── Phone actions (2026-10-08): league cards + action sheet, folds, search dock ──────────────── */
+/* League cards (LeagueActionCards.tsx): phone only via `.af-pf-m-only`; a swipeable row. */
+.af-core .af-pf-cards {
+  margin: 12px 0 4px;
+}
+.af-core .af-pf-cards-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.af-core .af-pf-cards-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+.af-core .af-pf-cards-list {
+  display: flex;
+  gap: 10px;
+  margin: 0 -16px;
+  padding: 2px 16px 10px;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 16px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.af-core .af-pf-lcard {
+  display: flex;
+  flex: 0 0 min(78%, 300px);
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface);
+  scroll-snap-align: start;
+}
+.af-core .af-pf-lcard[data-state='start'] {
+  border-color: var(--good);
+}
+.af-core .af-pf-lcard[data-state='free'] {
+  border-color: var(--accent-line);
+}
+.af-core .af-pf-lcard[data-state='other'] {
+  background: transparent;
+}
+.af-core .af-pf-lcard-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.af-core .af-pf-lcard-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-core .af-pf-lcard-more {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: -8px -8px -8px 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.af-core .af-pf-lcard-more:active {
+  background: var(--accent-soft);
+}
+.af-core .af-pf-lcard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-lcard-state[data-state='start'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-pf-lcard-state[data-state='ir'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-core .af-pf-lcard-state[data-state='free'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-core .af-pf-lcard-go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: auto;
+  text-align: center;
+  text-decoration: none;
+}
+.af-core .af-pf-lcard-none {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+/* The action sheet: a bottom sheet over everything, the tab bar included. */
+.af-core .af-pf-sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.af-core .af-pf-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+.af-core .af-pf-sheet {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: 80vh;
+  max-height: 80dvh;
+  overflow-y: auto;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border: 1px solid var(--line2);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  animation: af-pf-sheet-up 0.18s ease-out;
+}
+@keyframes af-pf-sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-pf-sheet {
+    animation: none;
+  }
+}
+.af-core .af-pf-sheet-grip {
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: 0 auto 10px;
+  border-radius: 999px;
+  background: var(--line2);
+}
+.af-core .af-pf-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.af-core .af-pf-sheet-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 900;
+}
+.af-core .af-pf-sheet-close {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-sheet-state {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.af-core .af-pf-sheet-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-sheet-action {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-sheet-action--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.af-core .af-pf-sheet-note {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+/* Folds (PhoneFold.tsx): the toggle exists only on a phone; the body hides only while folded there. */
+.af-core .af-pf-fold-toggle {
+  display: none;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-fold {
+    margin-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .af-core .af-pf-fold-toggle {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .af-core .af-pf-fold-caret {
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  .af-core .af-pf-fold[data-open='true'] .af-pf-fold-caret {
+    transform: rotate(180deg);
+  }
+  .af-core .af-pf-fold[data-open='false'] .af-pf-fold-body {
+    display: none;
+  }
+}
+/* The search dock (PhoneSearchDock.tsx): the sticky bar's lane, shown once the search scrolls away. */
+.af-core .af-pf-dock {
+  display: none;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-dock {
+    position: fixed;
+    left: 12px;
+    right: 80px;
+    bottom: var(--af-fab-bottom, calc(56px + env(safe-area-inset-bottom, 0px) + 12px));
+    z-index: 39;
+    display: block;
+    transition: transform 0.18s ease, opacity 0.18s ease, visibility 0.18s;
+  }
+  .af-core .af-pf-dock[data-hidden='true'] {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  .af-core .af-pf-dock-btn {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow);
+    color: var(--muted);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+  }
+  .af-core .af-pf-dock-icon {
+    color: var(--accent);
+    font-size: 18px;
+  }
+}
+
+/* ── The fun layer (2026-10-08): exposure + form chips, coin flips, weekly MVP, trending "add" ─── */
+.af-core .af-pf-exposure {
+  border-color: var(--line2);
+  color: var(--text2);
+}
+.af-core .af-pf-exposure[data-tier='core'],
+.af-core .af-pf-exposure[data-tier='big'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-core .af-pf-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.af-core .af-pf-form[data-call='hot'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-pf-form[data-call='cold'] {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-pf-form-spark {
+  display: block;
+}
+/* Coin flips (CoinFlips.tsx). */
+.af-core .af-pf-flips {
+  margin: 14px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-core .af-pf-flips-head {
+  margin-bottom: 10px;
+}
+.af-core .af-pf-flips-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-flip-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-flip-league {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.af-core .af-pf-flip-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  touch-action: pan-y;
+  transition: transform 0.12s ease-out;
+  user-select: none;
+}
+.af-core .af-pf-flip-side {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-height: 72px;
+  padding: 10px 8px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+.af-core .af-pf-flip-side:hover:not([disabled]) {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-flip-side[data-picked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-flip-side[data-picked='false'] {
+  opacity: 0.55;
+}
+.af-core .af-pf-flip-side[data-lean='true'] {
+  box-shadow: inset 0 0 0 2px var(--good);
+}
+.af-core .af-pf-flip-side[disabled] {
+  cursor: default;
+}
+.af-core .af-pf-flip-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-core .af-pf-flip-pts {
+  font-size: 20px;
+  font-weight: 900;
+}
+.af-core .af-pf-flip-role {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.af-core .af-pf-flip-vs {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.af-core .af-pf-flip-reveal {
+  margin-top: 8px;
+  font-size: 13px;
+  animation: af-pf-sheet-up 0.18s ease-out;
+}
+.af-core .af-pf-flip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.af-core .af-pf-flip-go {
+  min-height: 40px;
+  text-decoration: none;
+}
+.af-core .af-pf-flip-again {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-pf-flip-pair,
+  .af-core .af-pf-flip-reveal {
+    transition: none;
+    animation: none;
+  }
+}
+/* Weekly MVP (WeeklyMvpCard.tsx). */
+.af-core .af-pf-mvp {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 14px;
+  overflow: hidden;
+  border-color: var(--accent-line);
+  background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surface);
+}
+.af-core .af-pf-mvp-art {
+  font-size: 34px;
+  line-height: 1;
+}
+.af-core .af-pf-mvp-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+}
+.af-core .af-pf-mvp-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-core .af-pf-mvp-text {
+  display: grid;
+  min-width: 0;
+}
+.af-core .af-pf-mvp-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-decoration: none;
+  text-overflow: ellipsis;
+}
+.af-core .af-pf-mvp-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-mvp-points {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+.af-core .af-pf-mvp-beat {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-mvp-leagues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+.af-core .af-pf-mvp-share {
+  align-self: start;
+  min-height: 40px;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-mvp {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-core .af-pf-mvp-art {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+  }
+  .af-core .af-pf-mvp-share {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+/* Trending "Free in N of yours · add" (TrendingAdds.tsx). */
+.af-core .af-pf-trend-free {
+  display: inline-flex;
+  margin: -2px 0 6px 44px;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-trend-free {
+    min-height: 36px;
+    align-items: center;
+  }
+}
+
+/* ── In-context push ask (PushAsk.tsx, 2026-10-10) ─────────────────────────────────────────── */
+.af-core .af-pf-pushask {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--accent-soft);
+}
+.af-core .af-pf-follow-wrap .af-pf-pushask {
+  flex-basis: 100%;
+  margin: 6px 0 0;
+}
+.af-core .af-pf-pushask-icon {
+  font-size: 20px;
+}
+.af-core .af-pf-pushask-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+}
+.af-core .af-pf-pushask-body {
+  margin: 2px 0 0;
+  color: var(--text2);
+  font-size: 12px;
+}
+.af-core .af-pf-pushask-error {
+  margin: 4px 0 0;
+  color: var(--bad);
+  font-size: 12px;
+}
+.af-core .af-pf-pushask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.af-core .af-pf-pushask-go {
+  min-height: 36px;
+}
+.af-core .af-pf-pushask-later {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-pushask-done {
+  margin: 0 0 14px;
+  color: var(--good);
+  font-size: 13px;
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-pushask {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .af-core .af-pf-pushask-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+  .af-core .af-pf-pushask-go,
+  .af-core .af-pf-pushask-later {
+    flex: 1 1 auto;
     min-height: 44px;
   }
 }

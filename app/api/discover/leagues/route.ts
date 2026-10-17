@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getServedOrigin } from "@/lib/http/served-origin"
 import { discoverPublicLeagues } from "@/lib/public-discovery"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -17,9 +18,10 @@ import { resolveUserCareerTier } from "@/lib/ranking/tier-visibility"
 export const dynamic = "force-dynamic"
 
 function getBaseUrl(req: NextRequest): string {
-  return req.headers.get("x-forwarded-host")
-    ? `${req.headers.get("x-forwarded-proto") || "https"}://${req.headers.get("x-forwarded-host")}`
-    : process.env.NEXTAUTH_URL ?? "https://allfantasy.ai"
+  // Config-derived, never the Host / X-Forwarded-Host header: these links are
+  // returned to clients and emailed, and a spoofed header would point them at
+  // an attacker's host. See lib/http/served-origin.ts.
+  return getServedOrigin(req)
 }
 
 function parseIntParam(sp: URLSearchParams, key: string): number | undefined {

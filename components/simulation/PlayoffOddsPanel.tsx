@@ -46,7 +46,7 @@ export function PlayoffOddsPanel({
     <div className={`space-y-4 ${className}`}>
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-white/90">{title}</h2>
-        <span className="text-[10px] text-white/40">
+        <span className="text-[11px] text-white/40">
           {playoffSpots} playoff spots
         </span>
       </div>

@@ -75,7 +75,7 @@ export function ApiHealthPanel() {
         <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/25 p-4">
           <h3 className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-cyan-100/75">Service health</h3>
           <table className="w-full min-w-[560px] text-left text-sm">
-            <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+            <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
               <tr>
                 <th className="py-2 pr-3">Service</th>
                 <th className="py-2 pr-3">Status</th>
@@ -94,7 +94,7 @@ export function ApiHealthPanel() {
                       <div className="text-[11px] uppercase tracking-[0.12em] text-cyan-100/45">{s.category}</div>
                     </td>
                     <td className="py-3 pr-3">
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black ${meta.cls}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-black ${meta.cls}`}>
                         <meta.Icon className="h-3 w-3" aria-hidden /> {meta.label}
                       </span>
                     </td>

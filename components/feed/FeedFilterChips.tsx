@@ -72,7 +72,7 @@ export default function FeedFilterChips({
           >
             {f.label}
             {disabled ? (
-              <span className="ml-1.5 font-mono text-[9px] uppercase tracking-[0.1em] text-white/25">
+              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-white/25">
                 soon
               </span>
             ) : null}

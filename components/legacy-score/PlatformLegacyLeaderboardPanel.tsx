@@ -76,7 +76,7 @@ export default function PlatformLegacyLeaderboardPanel() {
     setNarrativeKey(key)
     setNarrative(null)
     if (!row.leagueId) {
-      setNarrative("This entry is platform-scoped. Open a league-scoped record to generate a detailed AI explanation.")
+      setNarrative("This entry is platform-scoped. Open a league-scoped record to get a detailed explanation from Chimmy.")
       return
     }
     const res = await fetch(`/api/leagues/${encodeURIComponent(row.leagueId)}/legacy-score/explain`, {
@@ -141,7 +141,7 @@ export default function PlatformLegacyLeaderboardPanel() {
             Refresh
           </button>
           <Link
-            href="/power-rankings"
+            href="/core/rankings?scope=league&panel=power"
             className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-200 hover:bg-cyan-500/25"
           >
             Platform power rankings
@@ -211,7 +211,7 @@ export default function PlatformLegacyLeaderboardPanel() {
                     onClick={() => void explainRow(row)}
                     data-testid={`platform-legacy-explain-${key}`}
                   >
-                    AI explain
+                    Explain with Chimmy
                   </button>
                 </div>
               </article>

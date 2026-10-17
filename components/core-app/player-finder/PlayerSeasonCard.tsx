@@ -1,5 +1,9 @@
+'use client'
+
 import type { SectionState } from '@/lib/core-app/leagueHome'
-import { projectionHeadline, type PlayerSeason } from '@/lib/core-app/playerSeason'
+import type { PlayerSeason } from '@/lib/core-app/playerSeason'
+import { finderPlayerInfoCopy, infoReasonText } from '@/lib/core-app/finderPlayerInfoCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * "This season" — a bar per week (what he scored) with a tick for what he was projected, and the
@@ -10,6 +14,9 @@ import { projectionHeadline, type PlayerSeason } from '@/lib/core-app/playerSeas
  * the scoring difference.
  *
  * ⚠ A WEEK HE DID NOT PLAY HAS NO BAR, NOT A ZERO BAR. The data says "no stat line", not "0".
+ *
+ * Spanish (2026-10-05): the words come from finderPlayerInfoCopy.ts at render — the headline rebuilt
+ * from the summary's numbers, the loader's reason through `infoReasonText`. Numbers keep `toFixed`.
  */
 
 const W = 320
@@ -22,13 +29,15 @@ function fmt(n: number | null): string {
 }
 
 export function PlayerSeasonCard({ state, name }: { state: SectionState<PlayerSeason>; name: string }) {
+  const { language } = useOptionalLanguage()
+  const t = finderPlayerInfoCopy(language)
   if (!state.available) {
     return (
       <section className="af-pf-block af-pf-season-card" aria-labelledby="af-pf-season-h">
         <h3 className="af-label" id="af-pf-season-h">
-          This season
+          {t.thisSeason}
         </h3>
-        <p className="af-pf-unavailable">{state.reason}</p>
+        <p className="af-pf-unavailable">{infoReasonText(state.reason, language)}</p>
       </section>
     )
   }
@@ -39,34 +48,34 @@ export function PlayerSeasonCard({ state, name }: { state: SectionState<PlayerSe
   const barW = Math.min(28, slot * 0.56)
   const y = (v: number) => PAD_TOP + (H - PAD_TOP - PAD_BOTTOM) * (1 - v / max)
   const base = H - PAD_BOTTOM
-  const headline = projectionHeadline(summary)
-  const scoringLabel = scoring.kind === 'ppr' ? 'PPR' : `${scoring.leagueName} scoring`
+  const headline = t.headline(summary)
+  const scoringLabel = scoring.kind === 'ppr' ? t.scoringPpr : t.scoringLeague(scoring.leagueName)
 
   return (
     <section className="af-pf-block af-pf-season-card" aria-labelledby="af-pf-season-h">
       <header className="af-pf-season-head">
         <h3 className="af-label" id="af-pf-season-h">
-          This season · {season}
+          {t.thisSeasonOf(season)}
         </h3>
         <span className="af-pf-season-scoring af-num">{scoringLabel}</span>
       </header>
 
       <dl className="af-pf-season-stats-row">
         <div>
-          <dt className="af-label">Points</dt>
+          <dt className="af-label">{t.points}</dt>
           <dd className="af-num">{summary.total.toFixed(1)}</dd>
         </div>
         <div>
-          <dt className="af-label">Per game</dt>
+          <dt className="af-label">{t.perGame}</dt>
           <dd className="af-num">{summary.games ? summary.average.toFixed(1) : '—'}</dd>
         </div>
         <div>
-          <dt className="af-label">Games</dt>
+          <dt className="af-label">{t.games}</dt>
           <dd className="af-num">{summary.games}</dd>
         </div>
         <div>
-          <dt className="af-label">Best</dt>
-          <dd className="af-num">{summary.best ? `${summary.best.points.toFixed(1)} · wk ${summary.best.week}` : '—'}</dd>
+          <dt className="af-label">{t.best}</dt>
+          <dd className="af-num">{summary.best ? t.bestValue(summary.best.points.toFixed(1), summary.best.week) : '—'}</dd>
         </div>
       </dl>
 
@@ -74,9 +83,10 @@ export function PlayerSeasonCard({ state, name }: { state: SectionState<PlayerSe
         className="af-pf-season-chart"
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label={`${name}, week by week: ${weeks
-          .map((w) => `week ${w.week} scored ${w.played && w.actual != null ? w.actual.toFixed(1) : 'nothing on file'}${w.projected != null ? `, projected ${w.projected.toFixed(1)}` : ''}`)
-          .join('; ')}`}
+        aria-label={t.chartAria(
+          name,
+          weeks.map((w) => t.chartWeek(w.week, w.played && w.actual != null ? w.actual.toFixed(1) : null, w.projected != null ? w.projected.toFixed(1) : null)),
+        )}
       >
         <line x1={0} x2={W} y1={base} y2={base} className="af-pf-season-axis" />
         {weeks.map((w, i) => {
@@ -96,18 +106,18 @@ export function PlayerSeasonCard({ state, name }: { state: SectionState<PlayerSe
         })}
       </svg>
       <p className="af-pf-season-legend">
-        <span className="af-pf-season-key af-pf-season-key--bar" aria-hidden /> scored
-        <span className="af-pf-season-key af-pf-season-key--proj" aria-hidden /> projected
+        <span className="af-pf-season-key af-pf-season-key--bar" aria-hidden /> {t.scored}
+        <span className="af-pf-season-key af-pf-season-key--proj" aria-hidden /> {t.projected}
         {headline ? <span className="af-pf-season-headline"> · {headline}</span> : null}
       </p>
 
       <table className="af-pf-season-table">
         <thead>
           <tr>
-            <th className="af-label">Wk</th>
-            <th className="af-label">Opp</th>
-            <th className="af-label">Proj</th>
-            <th className="af-label">Scored</th>
+            <th className="af-label">{t.colWeek}</th>
+            <th className="af-label">{t.colOpp}</th>
+            <th className="af-label">{t.colProj}</th>
+            <th className="af-label">{t.colScored}</th>
           </tr>
         </thead>
         <tbody>
@@ -116,7 +126,7 @@ export function PlayerSeasonCard({ state, name }: { state: SectionState<PlayerSe
               <td className="af-num">{w.week}</td>
               <td>{w.opponent ?? '—'}</td>
               <td className="af-num">{fmt(w.projected)}</td>
-              <td className="af-num">{w.played ? fmt(w.actual) : 'no stats'}</td>
+              <td className="af-num">{w.played ? fmt(w.actual) : t.noStats}</td>
             </tr>
           ))}
         </tbody>

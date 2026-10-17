@@ -28,13 +28,13 @@ export function PartnerProfileCard({ profile }: { profile: PartnerProfile }) {
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="text-sm font-semibold text-white">{profile.name}</div>
-          <div className="text-[10px] text-gray-500 mt-0.5">{profile.sampleSize} trades tracked</div>
+          <div className="text-[11px] text-gray-500 mt-0.5">{profile.sampleSize} trades tracked</div>
         </div>
         <div className="flex gap-1 flex-wrap justify-end">
           {profile.tags.map(tag => (
             <span
               key={tag}
-              className={`px-1.5 py-0.5 text-[9px] font-semibold rounded border ${TAG_STYLES[tag] ?? 'bg-gray-700/50 text-gray-400 border-gray-600/30'}`}
+              className={`px-1.5 py-0.5 text-[11px] font-semibold rounded border ${TAG_STYLES[tag] ?? 'bg-gray-700/50 text-gray-400 border-gray-600/30'}`}
             >
               {tag}
             </span>
@@ -44,11 +44,11 @@ export function PartnerProfileCard({ profile }: { profile: PartnerProfile }) {
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="bg-gray-800/40 rounded-lg px-3 py-2">
-          <div className="text-[9px] text-gray-500 uppercase tracking-wider">Overpays</div>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wider">Overpays</div>
           <div className="text-sm font-bold text-red-400 mt-0.5">{profile.topOverpayPos ?? '—'}</div>
         </div>
         <div className="bg-gray-800/40 rounded-lg px-3 py-2">
-          <div className="text-[9px] text-gray-500 uppercase tracking-wider">Discounts</div>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wider">Discounts</div>
           <div className="text-sm font-bold text-green-400 mt-0.5">{profile.topDiscountPos ?? '—'}</div>
         </div>
       </div>

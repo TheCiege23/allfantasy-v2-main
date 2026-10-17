@@ -22,14 +22,24 @@ const getLiveAdpByNameMock = vi.fn()
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { sportsPlayer: { findMany: (...a: unknown[]) => findManyMock(...a) } },
+  prisma: {
+    sportsPlayer: { findMany: (...a: unknown[]) => findManyMock(...a) },
+    // The NFL board also resolves names through PlayerIdentityMap (lib/draft/sleeperNameCandidates).
+    playerIdentityMap: { findMany: async () => [] },
+  },
 }))
 vi.mock('@/lib/adp/liveAdpFallback', () => ({
   getLiveAdpByName: (...a: unknown[]) => getLiveAdpByNameMock(...a),
 }))
 
-const player = (name: string, externalId: string) => ({
-  externalId,
+/**
+ * Sleeper's own row shape. Since 2026-10-11 the NFL board's `id` is the SLEEPER id, read only from
+ * `source: 'sleeper'` rows — see __tests__/draft-room-player-identity.test.ts for why.
+ */
+const player = (name: string, sleeperId: string) => ({
+  externalId: `sleeper:${sleeperId}`,
+  sleeperId,
+  source: 'sleeper',
   name,
   position: 'WR',
   team: 'CIN',
@@ -68,7 +78,7 @@ describe('GET /api/draft/players', () => {
 
   it('reports the REAL consensus ADP, not a row index', async () => {
     getLiveAdpByNameMock.mockResolvedValue(boardOf([["Ja'Marr Chase", 1.7], ['Zay Flowers', 40.2]]))
-    findManyMock.mockResolvedValue([player('Zay Flowers', 'z1'), player("Ja'Marr Chase", 'c1')])
+    findManyMock.mockResolvedValue([player('Zay Flowers', '9488'), player("Ja'Marr Chase", '7564')])
 
     const body = await callRoute()
     const chase = body.players.find((p: { name: string }) => p.name === "Ja'Marr Chase")
@@ -84,7 +94,7 @@ describe('GET /api/draft/players', () => {
     // Alphabetically 'Aaron Last' sorts FIRST but is priced 300th — under the old route it
     // led the board and was reported as ADP 1.
     getLiveAdpByNameMock.mockResolvedValue(boardOf([['Aaron Last', 300], ['Zach First', 1.2]]))
-    findManyMock.mockResolvedValue([player('Aaron Last', 'a1'), player('Zach First', 'z9')])
+    findManyMock.mockResolvedValue([player('Aaron Last', '1001'), player('Zach First', '1009')])
 
     const body = await callRoute()
     expect(body.players.map((p: { name: string }) => p.name)).toEqual(['Zach First', 'Aaron Last'])
@@ -93,16 +103,16 @@ describe('GET /api/draft/players', () => {
   it('drops an ADP entry with no player row, because it would have no id', async () => {
     // The UI keys drafted/queued state on `id`; an entry without one cannot be drafted.
     getLiveAdpByNameMock.mockResolvedValue(boardOf([['Ghost Player', 5], ['Real Player', 9]]))
-    findManyMock.mockResolvedValue([player('Real Player', 'r1')])
+    findManyMock.mockResolvedValue([player('Real Player', '2001')])
 
     const body = await callRoute()
     expect(body.players).toHaveLength(1)
-    expect(body.players[0].id).toBe('r1')
+    expect(body.players[0].id).toBe('2001')
   })
 
   it('joins on the normalized name so punctuation and suffixes do not lose players', async () => {
     getLiveAdpByNameMock.mockResolvedValue(boardOf([['Aaron Jones Sr.', 33]]))
-    findManyMock.mockResolvedValue([player('Aaron Jones', 'j1')])
+    findManyMock.mockResolvedValue([player('Aaron Jones', '1408')])
 
     const body = await callRoute()
     expect(body.players).toHaveLength(1)
@@ -111,7 +121,7 @@ describe('GET /api/draft/players', () => {
 
   it('returns adp null — never a number — for a sport with no ADP board', async () => {
     getLiveAdpByNameMock.mockResolvedValue(new Map())
-    findManyMock.mockResolvedValue([player('Some Skater', 's1'), player('Other Skater', 's2')])
+    findManyMock.mockResolvedValue([player('Some Skater', '3001'), player('Other Skater', '3002')])
 
     const body = await callRoute('http://localhost/api/draft/players?sport=NHL')
     expect(body.players).toHaveLength(2)
@@ -120,7 +130,7 @@ describe('GET /api/draft/players', () => {
 
   it('degrades to adp null rather than failing when the board is unreadable', async () => {
     getLiveAdpByNameMock.mockRejectedValue(new Error('db down'))
-    findManyMock.mockResolvedValue([player('Any Player', 'p1')])
+    findManyMock.mockResolvedValue([player('Any Player', '4001')])
 
     const body = await callRoute()
     expect(body.players[0].adp).toBeNull()
@@ -134,7 +144,7 @@ describe('GET /api/draft/players', () => {
      * substituting a real number that answers a different question.
      */
     getLiveAdpByNameMock.mockResolvedValue(boardOf([['Real Player', 4]]))
-    findManyMock.mockResolvedValue([player('Real Player', 'r1')])
+    findManyMock.mockResolvedValue([player('Real Player', '2001')])
 
     const body = await callRoute()
     expect(body.players[0].proj).toBeNull()
@@ -149,7 +159,7 @@ describe('GET /api/draft/players', () => {
      * them. A field that does not exist cannot be refilled with a stub, which is the point.
      */
     getLiveAdpByNameMock.mockResolvedValue(boardOf([['Real Player', 4]]))
-    findManyMock.mockResolvedValue([player('Real Player', 'r1')])
+    findManyMock.mockResolvedValue([player('Real Player', '2001')])
 
     const body = await callRoute()
     expect(Object.keys(body.players[0]).sort()).toEqual(
@@ -166,7 +176,7 @@ describe('GET /api/draft/players', () => {
       boardOf(Array.from({ length: 10 }, (_, i) => [`Player ${i}`, i + 1] as [string, number])),
     )
     findManyMock.mockResolvedValue(
-      Array.from({ length: 10 }, (_, i) => player(`Player ${i}`, `p${i}`)),
+      Array.from({ length: 10 }, (_, i) => player(`Player ${i}`, String(5000 + i))),
     )
 
     const body = await callRoute('http://localhost/api/draft/players?sport=NFL&limit=3')

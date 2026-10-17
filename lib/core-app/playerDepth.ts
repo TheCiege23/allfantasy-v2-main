@@ -50,6 +50,8 @@ export type LeagueValue = {
   fitNote: string | null
   mode: 'dynasty' | 'redraft'
   numQbs: 1 | 2
+  /** The value chart's FAAB anchor for this league's format — what turns `value` into a bid (faabBidFor). */
+  faabAnchor?: number | null
 }
 
 export type PlayerDepth = {
@@ -138,8 +140,8 @@ async function loadShared(detail: PlayerDetail): Promise<SharedDepth> {
 
   const [seasonRows, news, blurbs, schedule, odds] = await Promise.all([
     sport === 'NFL' && sleeperId && week ? loadSeasonRows(sleeperId, week.season, week.week).catch(() => null) : Promise.resolve(null),
-    loadNews(player.name, sport).catch(() => ({ available: false as const, reason: 'News could not be read.' })),
-    loadPlayerBlurbs(sleeperId, player.name, sport).catch(() => [] as PlayerCardNews[]),
+    loadNews(player.name, sport, player.team).catch(() => ({ available: false as const, reason: 'News could not be read.' })),
+    loadPlayerBlurbs(player.name, sport, player.team).catch(() => [] as PlayerCardNews[]),
     week ? loadSchedule(player.team, week.season, week.week, null, null, NEXT_GAMES).catch(() => null) : Promise.resolve(null),
     sport === 'NFL' && week && club
       ? readWeekMarketContextByTeam('NFL', week.season, week.week).catch(() => new Map<string, TeamMarketContext>())
@@ -238,7 +240,17 @@ export async function loadLeagueValueMap(sleeperIds: readonly string[], leagueId
       for (const id of sleeperIds) {
         const v = playerValueForLeague(values, id, scoring)
         if (!v) continue
-        perPlayer.set(id, { value: v.adjusted, base: v.base, fitNote: v.fit?.reason ?? null, mode: values.mode, numQbs: values.numQbs })
+        // The FAAB anchor rides along only when the chart has one — a payload without it must not
+        // take the per-league value down with it (the card shows values; the bid is extra).
+        const faabAnchor = values.faab?.anchorValue ?? null
+        perPlayer.set(id, {
+          value: v.adjusted,
+          base: v.base,
+          fitNote: v.fit?.reason ?? null,
+          mode: values.mode,
+          numQbs: values.numQbs,
+          ...(faabAnchor != null ? { faabAnchor } : {}),
+        })
       }
       out.set(l.id, perPlayer)
     }),

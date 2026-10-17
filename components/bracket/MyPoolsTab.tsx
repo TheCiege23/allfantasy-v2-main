@@ -119,7 +119,7 @@ export default function MyPoolsTab({ pools }: { pools?: PoolItem[] | null }) {
                         >
                           {p.name}
                         </Link>
-                        <div className="inline-flex items-center gap-1 text-[10px] text-white/60">
+                        <div className="inline-flex items-center gap-1 text-[11px] text-white/60">
                           <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-cyan-200/90">
                             <span className="font-semibold">{sportUI.badge}</span>
                             <span>{sportUI.shortLabel}</span>

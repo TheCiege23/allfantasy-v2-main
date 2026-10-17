@@ -7,8 +7,17 @@ import webpush from "web-push"
 import { prisma } from "@/lib/prisma"
 import { getBaseUrl } from "@/lib/get-base-url"
 import type { PushSubscriptionInput, PushPayload, SendPushResult } from "./types"
+import { IOS_ENDPOINT_PREFIX, isIosEndpoint, isValidDeviceToken, sendApns } from "./apns"
 
 let vapidConfigured = false
+
+/** Conversation alerts: a new one on the same tag should buzz, not silently replace. */
+const CHAT_PUSH_TYPES: ReadonlySet<string> = new Set(["direct_message", "huddle_message", "mention", "league_chat_message"])
+
+/** Whether a web push should alert again when it replaces a notification with the same tag. PURE. */
+export function shouldRenotify(type: string | null | undefined, tag: string | null | undefined): boolean {
+  return Boolean(tag) && CHAT_PUSH_TYPES.has(String(type))
+}
 
 function ensureVapid() {
   if (vapidConfigured) return
@@ -70,7 +79,7 @@ export async function removePushSubscription(
 }
 
 /** Get all subscriptions for a user. */
-export async function getPushSubscriptions(userId: string): Promise<
+export async function getPushSubscriptions(userId: string, strict = false): Promise<
   { id: string; endpoint: string; p256dh: string; auth: string }[]
 > {
   const rows = await (prisma as any).webPushSubscription
@@ -78,8 +87,25 @@ export async function getPushSubscriptions(userId: string): Promise<
       where: { userId },
       select: { id: true, endpoint: true, p256dh: true, auth: true },
     })
-    .catch(() => [])
+    .catch((error: unknown) => { if(strict)throw error;return [] })
   return rows
+}
+
+/**
+ * A notification picture must be absolute https: Apple's extension and a browser both fetch it
+ * from the device, with no idea which site sent it. A path on this site is made absolute; any
+ * other scheme (http, data:, javascript:) is dropped rather than forwarded — the text still
+ * goes out, it just goes out without a picture.
+ */
+export function absolutePushImageUrl(imageUrl: string | null | undefined): string | null {
+  const url = imageUrl?.trim()
+  if (!url) return null
+  if (url.startsWith("https://")) return url
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    const base = getBaseUrl().replace(/\/$/, "")
+    return base.startsWith("https://") ? `${base}${url}` : null
+  }
+  return null
 }
 
 /** Send push to one subscription (web-push format). */
@@ -105,8 +131,18 @@ async function sendToSubscription(
     href,
     url: href,
     tag: payload.tag ?? undefined,
+    /*
+     * A chat alert reuses its conversation's tag, so the 10-minute re-alert REPLACED the old
+     * notification without a sound or buzz (`renotify` defaults to false in public/sw.js). For a
+     * conversation the new message is the point, so it alerts again.
+     */
+    ...(shouldRenotify(payload.type, payload.tag) ? { renotify: true } : {}),
     type: payload.type ?? "notification",
     leagueId: payload.leagueId ?? null,
+    // public/sw.js already passes `payload.image` to showNotification; Android shows it large.
+    image: payload.imageUrl ?? undefined,
+    // public/sw.js reads `payload.icon` (falling back to the crest): the sender's face on a DM.
+    icon: payload.iconUrl ?? undefined,
   })
 
   const pushSubscription = {
@@ -135,18 +171,52 @@ async function sendToSubscription(
  */
 export async function sendPushToUser(
   userId: string,
-  payload: PushPayload
+  input: PushPayload,
+  options?: { strictSubscriptionRead?: boolean }
 ): Promise<SendPushResult[]> {
-  const subs = await getPushSubscriptions(userId)
-  if (subs.length === 0) return []
+  const all = await getPushSubscriptions(userId, options?.strictSubscriptionRead)
+  if (all.length === 0) return []
+  // Resolved once here so the APNs and web-push halves see the same, already-vetted picture.
+  const payload: PushPayload = {
+    ...input,
+    imageUrl: absolutePushImageUrl(input.imageUrl),
+    iconUrl: absolutePushImageUrl(input.iconUrl),
+  }
+
+  /*
+   * iPhones (endpoint `apns:<token>`, registered by the iOS app) go to Apple's push service;
+   * browsers go through web-push. Each half depends only on ITS OWN keys — this used to return
+   * "VAPID not configured" for every row, which would have silenced iPhones whenever VAPID was
+   * unset, and handed an APNs token to web-push otherwise.
+   */
+  const results: SendPushResult[] = []
+  const ios = all.filter((s) => isIosEndpoint(s.endpoint))
+  const subs = all.filter((s) => !isIosEndpoint(s.endpoint))
+
+  if (ios.length > 0) {
+    const sent = await sendApns(
+      ios.map((s) => s.endpoint.slice(IOS_ENDPOINT_PREFIX.length)),
+      // iOS has no remote icon slot: a face with no other picture rides the attachment instead.
+      { ...payload, imageUrl: payload.imageUrl ?? payload.iconUrl ?? null },
+    )
+    for (let i = 0; i < ios.length; i += 1) {
+      const r = sent[i]
+      results.push(r.ok ? { ok: true, subscriptionId: ios[i].id } : { ok: false, error: r.error, subscriptionId: ios[i].id })
+      if (!r.ok && r.expired) {
+        await (prisma as any).webPushSubscription
+          .deleteMany({ where: { endpoint: ios[i].endpoint } })
+          .catch(() => undefined)
+      }
+    }
+  }
+  if (subs.length === 0) return results
 
   try {
     ensureVapid()
   } catch {
-    return subs.map(() => ({ ok: false, error: "VAPID not configured" }))
+    return [...results, ...subs.map(() => ({ ok: false, error: "VAPID not configured" }))]
   }
 
-  const results: SendPushResult[] = []
   for (const sub of subs) {
     const result = await sendToSubscription(sub, payload)
     results.push({ ...result, subscriptionId: sub.id })
@@ -161,4 +231,45 @@ export async function sendPushToUser(
     }
   }
   return results
+}
+
+/*
+ * ── The iOS app's device tokens ──────────────────────────────────────────────
+ * Stored in web_push_subscriptions beside browser subscriptions: endpoint `apns:<token>`,
+ * p256dh/auth empty (APNs has no per-subscription keys), and userAgent `ios-app sid:<sid>` —
+ * the login's session id (lib/auth/sessionRevocation), so SIGNING OUT removes exactly that
+ * phone and a signed-out phone stops getting someone's notifications.
+ */
+
+const iosAgent = (sid: string | null) => (sid ? `ios-app sid:${sid}` : "ios-app")
+
+/** Register (or re-point) an iPhone. A token already held by another user moves to this one. */
+export async function saveIosDevice(userId: string, token: string, sid: string | null): Promise<boolean> {
+  if (!isValidDeviceToken(token)) return false
+  const endpoint = `${IOS_ENDPOINT_PREFIX}${token.toLowerCase()}`
+  try {
+    await (prisma as any).webPushSubscription.upsert({
+      where: { endpoint },
+      update: { userId, userAgent: iosAgent(sid) },
+      create: { userId, endpoint, p256dh: "", auth: "", userAgent: iosAgent(sid) },
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Unregister one iPhone for this user (the app turned notifications off). */
+export async function removeIosDevice(userId: string, token: string): Promise<boolean> {
+  if (!isValidDeviceToken(token)) return false
+  return removePushSubscription(userId, `${IOS_ENDPOINT_PREFIX}${token.toLowerCase()}`)
+}
+
+/** Sign-out: the phone that held this session stops receiving this user's notifications. */
+export async function removeIosDevicesForSession(sid: string): Promise<number> {
+  if (!sid) return 0
+  const res = await (prisma as any).webPushSubscription
+    .deleteMany({ where: { endpoint: { startsWith: IOS_ENDPOINT_PREFIX }, userAgent: iosAgent(sid) } })
+    .catch(() => ({ count: 0 }))
+  return res.count
 }

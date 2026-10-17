@@ -438,7 +438,7 @@ export default function WorldCupAiInsightsCTA({
         {!aiUnlocked && (
           <Link
             href="/pricing?from=wc-ai-cta&highlight=af-pro"
-            className="text-[10px] font-bold text-cyan-300/60 hover:text-cyan-300 transition-colors"
+            className="text-[11px] font-bold text-cyan-300/60 hover:text-cyan-300 transition-colors"
             onClick={() => trackWcCtaUpgradeClicked({ challengeId, tier: "ai", source: "panel_header" })}
           >
             Unlock All →
@@ -449,13 +449,13 @@ export default function WorldCupAiInsightsCTA({
       {/* AI / Pro row */}
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">
+          <span className="text-[11px] font-bold uppercase tracking-widest text-white/30">
             {t("wc.cta.aiRowLabel")}
           </span>
           {!aiUnlocked && (
             <Link
               href="/pricing?from=wc-ai-cta-row&highlight=af-pro"
-              className="inline-flex items-center gap-0.5 rounded-full border border-cyan-400/25 bg-cyan-400/[0.07] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-300/70 transition hover:text-cyan-300"
+              className="inline-flex items-center gap-0.5 rounded-full border border-cyan-400/25 bg-cyan-400/[0.07] px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-cyan-300/70 transition hover:text-cyan-300"
               data-testid="wc-ai-cta-upgrade-ai"
               onClick={() => trackWcCtaUpgradeClicked({ challengeId, tier: "ai", source: "row_label" })}
             >
@@ -482,13 +482,13 @@ export default function WorldCupAiInsightsCTA({
       {/* Commissioner row */}
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">
+          <span className="text-[11px] font-bold uppercase tracking-widest text-white/30">
             {t("wc.cta.commissionerRowLabel")}
           </span>
           {!commissionerUnlocked && (
             <Link
               href="/pricing?from=wc-ai-cta-commissioner-row&highlight=af-commissioner"
-              className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/25 bg-amber-400/[0.07] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-300/70 transition hover:text-amber-300"
+              className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/25 bg-amber-400/[0.07] px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-amber-300/70 transition hover:text-amber-300"
               data-testid="wc-ai-cta-upgrade-commissioner"
               onClick={() => trackWcCtaUpgradeClicked({ challengeId, tier: "commissioner", source: "row_label" })}
             >

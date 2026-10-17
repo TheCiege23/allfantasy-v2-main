@@ -242,8 +242,9 @@ export default function WarRoomPage() {
             </a>
           </div>
 
+          {/* data-hide-in-ios-app: a price is a purchase prompt the app cannot honour (3.1.1). */}
           {legacy?.monthly ? (
-            <p className="mt-5 text-[13px] text-white/55">
+            <p className="mt-5 text-[13px] text-white/55" data-hide-in-ios-app>
               AF Legacy is {formatUsd(legacy.monthly.amountUsd)} a month.{' '}
               <Link
                 href={LEGACY_CHECKOUT_PATH}
@@ -284,6 +285,8 @@ export default function WarRoomPage() {
               return (
                 <div
                   key={sport}
+                  /* A sport with no page yet is a "Coming Soon" placeholder — not in the iOS app (2.1). */
+                  data-hide-in-ios-app={href ? undefined : ''}
                   className={`flex flex-col rounded-2xl border p-4 ${
                     isActive
                       ? 'border-cyan-500/25 bg-cyan-500/[0.05]'
@@ -293,7 +296,7 @@ export default function WarRoomPage() {
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <span className="text-[15px] font-black text-white">{sport}</span>
                     <span
-                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
                         isActive
                           ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
                           : 'border-white/10 bg-white/[0.04] text-white/35'
@@ -352,6 +355,7 @@ export default function WarRoomPage() {
             id="get-legacy"
             className="rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.05] p-6 sm:p-8"
             data-testid="war-room-buy-section"
+            data-hide-in-ios-app
           >
             <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-cyan-300/70">
               The Plan

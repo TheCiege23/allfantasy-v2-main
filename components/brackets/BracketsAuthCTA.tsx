@@ -188,7 +188,7 @@ const FEATURE_TILES = [
   },
   {
     icon: Sparkles,
-    label: "AI Coach",
+    label: "Chimmy",
     desc: "Win probabilities and upset analysis on every matchup",
     accent: "#c084fc",
   },
@@ -237,7 +237,7 @@ export function BracketsGuestCard() {
         <p className="mx-auto mb-6 max-w-md text-sm" style={{ color: "var(--muted)" }}>
           {isAuthed
             ? "Launch a World Cup pool, fill your bracket, and track live scores — all in one place."
-            : "Launch your first bracket pool in minutes. AI analysis on every pick. No fees, no premium tiers. Free forever."}
+            : "Launch your first bracket pool in minutes. Chimmy's analysis on every pick. No fees, no premium tiers. Free forever."}
         </p>
 
         <div className="flex flex-col items-center gap-2.5 sm:flex-row sm:justify-center sm:gap-3">

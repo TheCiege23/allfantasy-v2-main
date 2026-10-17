@@ -28,11 +28,11 @@ export function C2CCantonPlayerCard({
 
   const scoring =
     player.bucketState === 'canton_starter' ? (
-      <span className="text-[9px] font-bold text-emerald-300">✓ Counts</span>
+      <span className="text-[11px] font-bold text-emerald-300">✓ Counts</span>
     ) : player.bucketState === 'taxi' ? (
-      <span className="text-[9px] font-bold text-amber-300/90">Taxi — Not Counted</span>
+      <span className="text-[11px] font-bold text-amber-300/90">Taxi — Not Counted</span>
     ) : (
-      <span className="text-[9px] font-bold text-white/35">Display Only</span>
+      <span className="text-[11px] font-bold text-white/35">Display Only</span>
     )
 
   return (
@@ -54,22 +54,22 @@ export function C2CCantonPlayerCard({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="truncate text-[12px] font-bold text-white">{player.playerName}</span>
-          <span className="rounded-full bg-blue-600/30 px-1.5 py-0.5 text-[8px] font-bold uppercase text-blue-100">
+          <span className="rounded-full bg-blue-600/30 px-1.5 py-0.5 text-[11px] font-bold uppercase text-blue-100">
             🏙 Canton
           </span>
-          <span className="rounded-full border border-white/[0.08] px-1.5 py-0.5 text-[8px] font-bold text-white/45">
+          <span className="rounded-full border border-white/[0.08] px-1.5 py-0.5 text-[11px] font-bold text-white/45">
             {status}
           </span>
           {scoring}
         </div>
-        <p className="text-[10px] text-white/45">
+        <p className="text-[11px] text-white/45">
           {player.position}
           {player.nflNbaTeam ? ` · ${player.nflNbaTeam}` : ''}
         </p>
         {pts != null ? <p className="text-[13px] font-semibold text-blue-200">{pts.toFixed(1)} pts</p> : null}
         <div className="mt-1 flex flex-wrap gap-1">
-          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/50">Yds —</span>
-          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/50">TDs —</span>
+          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-white/50">Yds —</span>
+          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-white/50">TDs —</span>
         </div>
       </div>
     </button>

@@ -75,16 +75,16 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className={cx('w-2 h-2 rounded-full shrink-0 animate-rival-pulse shadow-sm', tier.dot, tier.glow)} />
-          <span className="text-[10px] text-white/50 font-medium truncate">
+          <span className="text-[11px] text-white/50 font-medium truncate">
             Updated from Sleeper <span className="text-white/70 font-semibold">{freshness}</span>
           </span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className={cx('text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border', tier.color, tier.bg, tier.border)}>
+          <span className={cx('text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border', tier.color, tier.bg, tier.border)}>
             {tier.label}
           </span>
-          <span className={cx('text-[9px] font-black tabular-nums', tier.color)}>
+          <span className={cx('text-[11px] font-black tabular-nums', tier.color)}>
             {dataQuality.completenessScore}%
           </span>
           <svg className={cx('w-3 h-3 text-white/20 transition-transform duration-200', expanded && 'rotate-180')} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -96,7 +96,7 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
       {expanded && (
         <div className="mt-2 rounded-xl glass-card p-3 space-y-3 animate-slide-up">
           <div>
-            <div className="text-[9px] font-bold text-white/25 uppercase tracking-wider mb-2">Source Coverage</div>
+            <div className="text-[11px] font-bold text-white/25 uppercase tracking-wider mb-2">Source Coverage</div>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
               {Object.entries(dataQuality.sources).map(([key, available]) => {
                 const source = SOURCE_LABELS[key]
@@ -106,11 +106,11 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
                     'flex flex-col items-center gap-1 py-1.5 px-1 rounded-lg text-center',
                     available ? 'bg-emerald-500/[0.06] border border-emerald-500/10' : 'bg-red-500/[0.04] border border-red-500/10'
                   )}>
-                    <span className="text-[10px]">{source.icon}</span>
-                    <span className={cx('text-[7px] font-semibold', available ? 'text-emerald-400/70' : 'text-red-400/60')}>
+                    <span className="text-[11px]">{source.icon}</span>
+                    <span className={cx('text-[11px] font-semibold', available ? 'text-emerald-400/70' : 'text-red-400/60')}>
                       {source.label}
                     </span>
-                    <span className={cx('text-[7px]', available ? 'text-emerald-400/40' : 'text-red-400/40')}>
+                    <span className={cx('text-[11px]', available ? 'text-emerald-400/40' : 'text-red-400/40')}>
                       {available ? '\u2713' : '\u2717'}
                     </span>
                   </div>
@@ -121,7 +121,7 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
 
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-lg bg-white/[0.03] p-2">
-              <div className="text-[8px] text-white/25 uppercase font-semibold mb-1">Roster Coverage</div>
+              <div className="text-[11px] text-white/25 uppercase font-semibold mb-1">Roster Coverage</div>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <div
@@ -131,11 +131,11 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
                     style={{ width: `${dataQuality.rosterCoverage}%` }}
                   />
                 </div>
-                <span className="text-[9px] font-bold text-white/40 tabular-nums">{dataQuality.rosterCoverage}%</span>
+                <span className="text-[11px] font-bold text-white/40 tabular-nums">{dataQuality.rosterCoverage}%</span>
               </div>
             </div>
             <div className="rounded-lg bg-white/[0.03] p-2">
-              <div className="text-[8px] text-white/25 uppercase font-semibold mb-1">Matchup Weeks</div>
+              <div className="text-[11px] text-white/25 uppercase font-semibold mb-1">Matchup Weeks</div>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <div
@@ -145,17 +145,17 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
                     style={{ width: `${Math.min((dataQuality.matchupWeeksCovered / 17) * 100, 100)}%` }}
                   />
                 </div>
-                <span className="text-[9px] font-bold text-white/40 tabular-nums">{dataQuality.matchupWeeksCovered}/17</span>
+                <span className="text-[11px] font-bold text-white/40 tabular-nums">{dataQuality.matchupWeeksCovered}/17</span>
               </div>
             </div>
           </div>
 
           {dataQuality.confidencePenalty > 0 && (
             <div className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15">
-              <span className="text-[10px] mt-0.5">{'\u26A0\uFE0F'}</span>
+              <span className="text-[11px] mt-0.5">{'\u26A0\uFE0F'}</span>
               <div>
-                <span className="text-[9px] font-bold text-amber-400/80">Confidence Adjusted</span>
-                <p className="text-[8px] text-amber-400/50 leading-relaxed mt-0.5">
+                <span className="text-[11px] font-bold text-amber-400/80">Confidence Adjusted</span>
+                <p className="text-[11px] text-amber-400/50 leading-relaxed mt-0.5">
                   AI confidence scores reduced by {dataQuality.confidencePenalty}% due to incomplete data coverage.
                 </p>
               </div>
@@ -164,10 +164,10 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
 
           {dataQuality.signals.length > 0 && (
             <div>
-              <div className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1.5">Data Gaps</div>
+              <div className="text-[11px] font-bold text-white/20 uppercase tracking-wider mb-1.5">Data Gaps</div>
               <div className="flex flex-wrap gap-1">
                 {dataQuality.signals.map((signal, i) => (
-                  <span key={i} className="text-[8px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-white/35 font-medium">
+                  <span key={i} className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-white/35 font-medium">
                     {signal}
                   </span>
                 ))}

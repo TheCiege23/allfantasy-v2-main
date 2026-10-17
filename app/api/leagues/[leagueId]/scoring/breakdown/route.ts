@@ -4,10 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

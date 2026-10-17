@@ -6,7 +6,8 @@ import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { dedupeFixtures } from '@/lib/sports/dedupeFixtures'
 import { sameNflTeam } from '@/lib/sports/teamRef'
 import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
-import { NAME_EVERY_LEAGUE, nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
+import { NAME_EVERY_LEAGUE, nameList, scanWithinBudget, withDistinctLeagueNames, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
+import { isLeagueNotStarted } from '@/lib/core-app/leagueNotStarted'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 import { resolveInjuryFacts, type InjuryFact } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
@@ -274,7 +275,8 @@ export async function buildMyStartersPlayingContext(
    * to their newest keeps the answer about real rosters, and the answer names the
    * season either way.
    */
-  const pool = inSeason.length > 0 ? inSeason : nflLeagues.filter((l) => l.season === newestSeason)
+  /* Distinct names BEFORE anything reads `.name` — see withDistinctLeagueNames. */
+  const pool = withDistinctLeagueNames(inSeason.length > 0 ? inSeason : nflLeagues.filter((l) => l.season === newestSeason))
   const reportedSeason = inSeason.length > 0 ? season : newestSeason
   const maxLeagues = input.scan?.maxLeagues ?? MAX_LEAGUES_SCANNED
   const scanned = pool.slice(0, maxLeagues)
@@ -299,6 +301,8 @@ export async function buildMyStartersPlayingContext(
       currentPeriod: 1,
     }).catch(() => null)
 
+    /* A league that has not drafted has no starters to count — not a gap, and not a sync problem. */
+    if (isLeagueNotStarted(league) && (!team || team.starters.length === 0)) return { league, state: 'not-drafted' as const }
     if (!team) return { league, state: 'unreadable' as const }
     if (team.starters.length === 0) return { league, state: 'no-starters' as const }
 
@@ -352,9 +356,14 @@ export async function buildMyStartersPlayingContext(
   const onlyOut: string[] = []
   const unreadable: string[] = []
   const noStarters: string[] = []
+  const notDrafted: string[] = []
   let leaguesWithUnknownTeams = 0
 
   for (const r of results) {
+    if (r.state === 'not-drafted') {
+      notDrafted.push(r.league.name)
+      continue
+    }
     if (r.state === 'unreadable') {
       unreadable.push(r.league.name)
       continue
@@ -478,6 +487,13 @@ export async function buildMyStartersPlayingContext(
 
   if (gaps.length > 0) {
     lines.push(`⚠ KNOWN GAPS, state them if they affect the answer: ${gaps.join('; ')}. ${NAME_EVERY_LEAGUE}`)
+  }
+  /* Deliberately NOT a gap: a league that has not drafted cannot raise the count. */
+  if (notDrafted.length > 0) {
+    lines.push(
+      `NOT DRAFTED YET (${notDrafted.length}): ${nameList(notDrafted)} — no draft yet, so no starters; they cannot change the count. ` +
+        `This is not a sync problem; do not call it a gap. ${NAME_EVERY_LEAGUE}`,
+    )
   }
 
   lines.push(

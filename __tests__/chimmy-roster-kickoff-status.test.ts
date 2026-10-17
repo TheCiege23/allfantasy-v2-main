@@ -150,3 +150,54 @@ describe('the rule the answer is held to', () => {
     expect(LINEUP_ACTION_RULES).toContain('never call his slot fixable')
   })
 })
+
+/*
+ * 2026-09-28 (Monday), live: the injury answer called Questionable starters "the live watch list" —
+ * Breece Hall among them, whose Sunday game was over. Kickoff was checked only for Out/IR starters.
+ */
+describe('get_my_injuries kickoff on EVERY injured starter, not only Out/IR', () => {
+  it('marks a Questionable starter whose game is over GAME STARTED, and one still to play NOT STARTED', async () => {
+    h.leagues.mockResolvedValue([{ id: 'kbfl', name: 'KBFL', sport: 'NFL', season: 2026 }])
+    h.leagueFindMany.mockResolvedValue([{ id: 'kbfl', platform: 'sleeper', settings: {}, leagueType: 'dynasty' }])
+    h.team.mockResolvedValue(team([DANIELS, LAMB]))
+    const fact = (status: string) => ({
+      playerName: 'x', status, type: null, description: null, date: ASKED_AT, week: null, source: 'rolling_insights',
+      fetchedAt: ASKED_AT, reportedAt: ASKED_AT, ageHours: 1, fetchAgeHours: 1, stale: false,
+    })
+    h.injuries.mockResolvedValue({
+      byPlayer: new Map([
+        [normalizeMatchName('Jayden Daniels'), fact('Questionable')],
+        [normalizeMatchName('CeeDee Lamb'), fact('Questionable')],
+      ]),
+      ambiguous: [], newestFetchedAt: ASKED_AT, feedStale: false, coverage: { sourceAvailable: true, reason: null },
+    })
+
+    const out = await buildMyRosterInjuriesContext({ userId: 'viewer', leagueId: 'kbfl' })
+    const daniels = out.split('\n').find((l) => l.startsWith('- Jayden Daniels'))!
+    const lamb = out.split('\n').find((l) => l.startsWith('- CeeDee Lamb'))!
+    expect(daniels).toContain('KBFL (STARTING — GAME STARTED)')
+    expect(lamb).toContain('KBFL (STARTING — NOT STARTED)')
+    expect(out).toContain('A starter marked GAME STARTED is settled for this week, whatever his designation')
+    expect(out).toContain('never call him a watch, a sweat or a decision')
+    /* Questionable is not Out/IR, so no ROSTER PLACEMENT line — and still ONE schedule read. */
+    expect(out).not.toContain('ROSTER PLACEMENT')
+    expect(h.games).toHaveBeenCalledTimes(1)
+  })
+
+  it('a bench player carries no kickoff label; only starting slots do', async () => {
+    h.leagues.mockResolvedValue([{ id: 'kbfl', name: 'KBFL', sport: 'NFL', season: 2026 }])
+    h.leagueFindMany.mockResolvedValue([{ id: 'kbfl', platform: 'sleeper', settings: {}, leagueType: 'dynasty' }])
+    h.team.mockResolvedValue({ ...team([LAMB]), bench: [DANIELS] })
+    const fact = (status: string) => ({
+      playerName: 'x', status, type: null, description: null, date: ASKED_AT, week: null, source: 'rolling_insights',
+      fetchedAt: ASKED_AT, reportedAt: ASKED_AT, ageHours: 1, fetchAgeHours: 1, stale: false,
+    })
+    h.injuries.mockResolvedValue({
+      byPlayer: new Map([[normalizeMatchName('Jayden Daniels'), fact('Questionable')]]),
+      ambiguous: [], newestFetchedAt: ASKED_AT, feedStale: false, coverage: { sourceAvailable: true, reason: null },
+    })
+    const out = await buildMyRosterInjuriesContext({ userId: 'viewer', leagueId: 'kbfl' })
+    expect(out.split('\n').find((l) => l.startsWith('- Jayden Daniels'))).toContain('KBFL (bench)')
+    expect(out).not.toContain('A starter marked GAME STARTED is settled')
+  })
+})

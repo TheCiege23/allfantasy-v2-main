@@ -287,9 +287,16 @@ describe('trade cards are Chimmy moments', () => {
 
     await syncTradeCardsForLeague('l1')
 
-    // Graded from the row's own side: what Casey received against what Casey gave, as names.
+    // Graded from the row's own side: what Casey received against what Casey gave, each player by
+    // name AND the Sleeper id the frozen original is keyed on, for this trade.
     expect(h.gradeImported).toHaveBeenCalledWith(
-      expect.objectContaining({ leagueId: 'l1', received: ["Ja'Marr Chase"], gave: ['Travis Kelce'], teams: 2 }),
+      expect.objectContaining({
+        leagueId: 'l1',
+        tradeId: 'tx1',
+        received: [{ name: "Ja'Marr Chase", sleeperId: '8148' }],
+        gave: [{ name: 'Travis Kelce', sleeperId: '6813' }],
+        teams: 2,
+      }),
     )
     expect(postedBody()).toMatch(/^League grade: Casey D, Jordan B — Jordan comes out ahead, on this league's values today\. /)
     expect(postedBody()).not.toMatch(/On paper|market value/)

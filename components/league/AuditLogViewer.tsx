@@ -104,7 +104,7 @@ export default function AuditLogViewer({
               {new Date(r.createdAt).toLocaleString()}
             </p>
             {(r.beforeState != null || r.afterState != null) && (
-              <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all text-[10px] leading-snug text-white/45">
+              <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all text-[11px] leading-snug text-white/45">
                 {r.beforeState != null ? `− ${JSON.stringify(r.beforeState)}\n` : ''}
                 {r.afterState != null ? `+ ${JSON.stringify(r.afterState)}` : ''}
               </pre>

@@ -38,7 +38,7 @@ export function ContractsTable({ contracts, onCut, onExtend, onTag, compact }: P
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded-lg px-2.5 py-1 text-[10px] font-bold ${
+            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${
               tab === t ? 'bg-sky-500/20 text-sky-100' : 'text-white/45 hover:bg-white/[0.04]'
             }`}
           >
@@ -48,7 +48,7 @@ export function ContractsTable({ contracts, onCut, onExtend, onTag, compact }: P
       </div>
       <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
         <table className="w-full min-w-[640px] text-left text-[11px] text-white/85">
-          <thead className="border-b border-white/[0.06] bg-black/30 text-[10px] uppercase tracking-wide text-white/45">
+          <thead className="border-b border-white/[0.06] bg-black/30 text-[11px] uppercase tracking-wide text-white/45">
             <tr>
               <th className="px-2 py-2">Player</th>
               <th className="px-2 py-2">Pos</th>
@@ -91,21 +91,21 @@ export function ContractsTable({ contracts, onCut, onExtend, onTag, compact }: P
                         <>
                           <button
                             type="button"
-                            className="rounded border border-red-500/35 px-1.5 py-0.5 text-[10px] text-red-200"
+                            className="rounded border border-red-500/35 px-1.5 py-0.5 text-[11px] text-red-200"
                             onClick={() => onCut?.(c)}
                           >
                             Cut
                           </button>
                           <button
                             type="button"
-                            className="rounded border border-sky-500/35 px-1.5 py-0.5 text-[10px] text-sky-200"
+                            className="rounded border border-sky-500/35 px-1.5 py-0.5 text-[11px] text-sky-200"
                             onClick={() => onExtend?.(c)}
                           >
                             Extend
                           </button>
                           <button
                             type="button"
-                            className="rounded border border-amber-500/35 px-1.5 py-0.5 text-[10px] text-amber-200"
+                            className="rounded border border-amber-500/35 px-1.5 py-0.5 text-[11px] text-amber-200"
                             onClick={() => onTag?.(c)}
                           >
                             Tag

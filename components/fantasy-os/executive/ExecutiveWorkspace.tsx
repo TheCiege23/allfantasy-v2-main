@@ -108,7 +108,7 @@ export function ExecutiveWorkspace({ data, productName, freshness }: { data: Exe
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{productName} · Executive Intelligence</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">{productName} · Executive Intelligence</p>
             <h1 className="text-2xl font-black tracking-tight text-primary">Portfolio Intelligence</h1>
           </div>
           {freshness ? <SyncFreshnessBadge freshness={freshness} /> : <DataFreshness importedAt={data.platform.freshness.importedAt} window={window} />}

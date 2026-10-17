@@ -68,7 +68,7 @@ export default function UncertaintyBlock({
                 <span className="text-xs text-amber-200/70">{item.reason}</span>
               )}
               <span
-                className={`inline-flex w-fit rounded px-2 py-0.5 text-[10px] font-medium border capitalize ${impactStyles[item.impact] ?? impactStyles.low}`}
+                className={`inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-medium border capitalize ${impactStyles[item.impact] ?? impactStyles.low}`}
               >
                 {item.impact} impact
               </span>

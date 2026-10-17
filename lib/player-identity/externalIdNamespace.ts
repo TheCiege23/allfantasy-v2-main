@@ -26,6 +26,8 @@
  * against `externalId` and must be scoped by `source` — use `providerIdWhere`.
  */
 
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+
 /** The id spaces `SportsPlayer` rows are written in. */
 export type IdNamespace =
   | 'sleeper'
@@ -84,6 +86,158 @@ export function sleeperIdWhere(sleeperIds: readonly string[], sport?: string) {
 }
 
 /**
+ * Look players up by OUR row id or a Sleeper id — the two spellings a native league's player ids
+ * come in (its pools are seeded from Sleeper; some paths store `SportsPlayer.id`).
+ *
+ * ⚠ STILL NEVER A BARE ID AGAINST `externalId`. The old spelling of this — `id IN ids OR externalId
+ * IN ids` — could reach a Sleeper-id'd player ONLY through a Rolling Insights row for somebody else,
+ * because Sleeper's own rows store `sleeper:<id>` there (2026-09-29: 422 of the top 900 week-4
+ * projections had such an impostor). A caller must key its results with `playerRowKeys`, not by
+ * `externalId`, or the impostor comes back in through the map.
+ */
+export function ourIdOrSleeperIdWhere(ids: readonly string[], sport?: string) {
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter(Boolean))]
+  const bySleeper = sleeperIdWhere(clean)
+  return {
+    ...(sport ? { sport: sport.toUpperCase() } : {}),
+    OR: [{ id: { in: clean } }, ...bySleeper.OR],
+  }
+}
+
+/**
+ * The ids a `SportsPlayer` row may be looked up BY, in the Sleeper/our-row space: its own `id` and
+ * its `sleeperId`. Never its `externalId` — for a Rolling Insights, CFBD, API-Football or backfill
+ * row that is the provider's own number, which collides with Sleeper's for a different person.
+ */
+export function playerRowKeys(row: { id?: string | null; sleeperId?: string | null }): string[] {
+  return [row.id, row.sleeperId].map((k) => String(k ?? '').trim()).filter(Boolean)
+}
+
+/**
+ * Rows from a `sleeperIdWhere` read, keyed by Sleeper id. Several rows can carry one Sleeper id
+ * (Sleeper's own plus the RI / TheSportsDB rows the crosswalk stamped) — one person, but Sleeper's
+ * row holds the fantasy-shaped fields (`QB`, `CAR`), so it wins; otherwise the first row found.
+ */
+export function indexBySleeperId<T extends { sleeperId?: string | null; source?: string | null }>(rows: readonly T[]): Map<string, T> {
+  const out = new Map<string, T>()
+  for (const row of rows) {
+    const key = String(row.sleeperId ?? '').trim()
+    if (!key) continue
+    const held = out.get(key)
+    if (!held || (row.source === 'sleeper' && held.source !== 'sleeper')) out.set(key, row)
+  }
+  return out
+}
+
+/**
+ * Can this id be a Sleeper id? Only in NFL — the one sport whose `SportsPlayer` rows carry Sleeper
+ * ids (13,838 NFL rows; ZERO in NBA, MLB, NHL, NCAAB, NCAAF and SOCCER, measured 2026-09-29) — and
+ * only as a bare number. `name:Josh Allen:QB:BUF` (backfill) and `tsdb_34415964` (TheSportsDB)
+ * describe their own space, so they can never be mistaken for one.
+ */
+export function mayBeSleeperId(id: string, sport: string | null | undefined): boolean {
+  return String(sport ?? '').trim().toUpperCase() === 'NFL' && /^\d+$/.test(String(id ?? '').trim())
+}
+
+/**
+ * Look ids up against `externalId` when they CANNOT be Sleeper ids — a native league's
+ * self-describing ids, or a provider's numbers in a sport Sleeper does not cover (a native NHL
+ * roster holds Rolling Insights ids, and `externalId` is the only place they are named).
+ *
+ * Any id that `mayBeSleeperId` is DROPPED rather than matched: in NFL a bare number reaching
+ * `externalId` finds Rolling Insights' or the backfill's player of that number, who is someone else
+ * (Sleeper 9228 is Bryce Young; RI 9228 is an offensive tackle). Those go through `sleeperIdWhere`.
+ * Sleeper's own rows are excluded too — their `externalId` is `sleeper:<id>`, never a bare token.
+ */
+export function nonSleeperExternalIdWhere(ids: readonly string[], sport: string) {
+  const s = sport.toUpperCase()
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter((id) => id && !mayBeSleeperId(id, s)))]
+  return {
+    sport: s,
+    source: { not: 'sleeper' },
+    externalId: { in: clean },
+  }
+}
+
+/**
+ * A league's player ids (roster, draft pick, queue), split by the id space they are in — so each
+ * half is asked only of the column that speaks it:
+ *
+ *   - `sleeperIds`   → `sleeperIdWhere`, keyed with `indexBySleeperId`
+ *   - `providerIds`  → `nonSleeperExternalIdWhere`, keyed by `externalId`
+ *
+ * Sleeper league: every id is a Sleeper id. Native league: a bare number in NFL is a Sleeper id
+ * (native pools are seeded from Sleeper); everything else is self-describing (`name:…`, `tsdb_…`)
+ * or a provider's number in a sport Sleeper does not cover (a native NHL draft holds Rolling
+ * Insights ids). Any other platform: NEITHER — its ids are its own, and one read as a Sleeper id
+ * or an `externalId` names a stranger. An ESPN roster that came through `sleeperReadableRosters`
+ * is in Sleeper's space already; say so with `translated`.
+ *
+ * Measured on production 2026-09-29: of 6,692 Sleeper-league draft picks, EVERY id is a Sleeper id
+ * and 3,558 of them also match a Rolling Insights / backfill `externalId` row for a DIFFERENT
+ * person — the three-column `OR` this replaces resolved half the board to a stranger.
+ */
+export function leagueIdSpaces(
+  ids: readonly string[],
+  sport: string | null | undefined,
+  platform: string | null | undefined,
+  opts: { translated?: boolean } = {},
+): { sleeperIds: string[]; providerIds: string[] } {
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter(Boolean))]
+  const p = String(platform ?? '').trim().toLowerCase()
+  if (p === 'sleeper' || (opts.translated && p === 'espn')) return { sleeperIds: clean, providerIds: [] }
+  if (!isNativePlatform(p)) return { sleeperIds: [], providerIds: [] }
+  const sleeperIds = clean.filter((id) => mayBeSleeperId(id, sport))
+  return { sleeperIds, providerIds: clean.filter((id) => !mayBeSleeperId(id, sport)) }
+}
+
+/** The `PlayerIdentityMap` columns a league's own player ids can be written in. */
+export type LeagueIdentityColumn = 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId' | 'rollingInsightsId'
+
+const PLATFORM_IDENTITY_COLUMN: Record<string, LeagueIdentityColumn> = {
+  sleeper: 'sleeperId',
+  espn: 'espnId',
+  mfl: 'mflId',
+  fleaflicker: 'fleaflickerId',
+  fantrax: 'fantraxId',
+}
+
+/**
+ * A league's player ids, grouped by the ONE `PlayerIdentityMap` column each is written in — the
+ * identity-map counterpart of `leagueIdSpaces`.
+ *
+ * 🛑 NEVER ONE LIST AGAINST SEVERAL COLUMNS. `sleeperId OR rollingInsightsId OR espnId OR mflId …`
+ * with the same ids finds a different person in every column the number happens to exist in:
+ * Sleeper 9228 is Bryce Young, Rolling Insights 9228 is an offensive tackle, and 17 of 489 live ESPN
+ * ids are somebody else's Sleeper id. A result keyed by every column then files the stranger under
+ * the asked id.
+ *
+ * The platform decides: Sleeper, ESPN, MFL, Fleaflicker and Fantrax ids each have their own column.
+ * A native league (and ids with no league, which are native-shaped) holds Sleeper ids for NFL bare
+ * numbers and Rolling Insights ids for other sports' bare numbers (a native NHL roster). Anything
+ * else — Yahoo, an unknown platform, a self-describing `name:`/`tsdb_` token — has no column and
+ * resolves to nobody.
+ */
+export function leagueIdentityColumns(
+  ids: readonly string[],
+  sport: string | null | undefined,
+  platform: string | null | undefined,
+): Array<{ column: LeagueIdentityColumn; ids: string[] }> {
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter(Boolean))]
+  if (clean.length === 0) return []
+  const p = String(platform ?? '').trim().toLowerCase()
+  const own = PLATFORM_IDENTITY_COLUMN[p]
+  if (own) return [{ column: own, ids: clean }]
+  if (!isNativePlatform(p)) return []
+  const { sleeperIds, providerIds } = leagueIdSpaces(clean, sport, p)
+  const riIds = providerIds.filter((id) => /^\d+$/.test(id))
+  return [
+    ...(sleeperIds.length ? [{ column: 'sleeperId' as const, ids: sleeperIds }] : []),
+    ...(riIds.length ? [{ column: 'rollingInsightsId' as const, ids: riIds }] : []),
+  ]
+}
+
+/**
  * Look players up by a PROVIDER's own id, scoped to that provider.
  *
  * The `source` argument is required rather than optional on purpose: an unscoped `externalId`
@@ -120,4 +274,25 @@ export function playerNamesAgree(a: string | null | undefined, b: string | null 
       .replace(/(jr|sr|ii|iii|iv|v)$/, '')
   const x = norm(a)
   return x.length > 0 && x === norm(b)
+}
+
+/**
+ * The `PlayerIdentityMap` filter for ONE league id. An NFL bare number is a Sleeper id
+ * (`mayBeSleeperId`), so it is asked of `sleeperId` alone: ORing it across `rollingInsightsId`,
+ * `espnId`, `apiSportsId` and the rest finds whichever provider uses that number for somebody else
+ * (Sleeper 8394 is Percy Butler; RI 8394 is Rome Odunze). Any other id keeps every column.
+ */
+export function identityWhereForLeagueId(rawId: string, sport: string) {
+  const id = String(rawId ?? '').trim()
+  if (mayBeSleeperId(id, sport)) return { sleeperId: id }
+  return {
+    OR: [
+      { sleeperId: id },
+      { fantasyCalcId: id },
+      { rollingInsightsId: id },
+      { apiSportsId: id },
+      { espnId: id },
+      { clearSportsId: id },
+    ],
+  }
 }

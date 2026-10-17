@@ -2,11 +2,12 @@
  * chimmy-surfaces — unified AI UI component library
  *
  * Provides the AISurfaceContext, reusable Chimmy UI primitives,
- * shell/layout components, gate components, and page-specific
- * AI surface wrappers for the AllFantasy platform.
+ * shell/layout components and gate components for the AllFantasy
+ * platform. (The page-specific `surfaces/*AISurface` wrappers were
+ * removed as dead code on 2026-09-29 — nothing imported them.)
  *
  * Usage:
- *   import { AISurfaceProvider, useAISurface, ChimmyInsightCard, DashboardAISurface } from '@/components/chimmy-surfaces'
+ *   import { AISurfaceProvider, useAISurface, ChimmyInsightCard } from '@/components/chimmy-surfaces'
  */
 
 // ── Context & hook ────────────────────────────────────────────────────────────
@@ -139,46 +140,6 @@ export type { ChimmyRoleGateProps } from './ChimmyRoleGate'
 
 export { default as ChimmyPremiumGate } from './ChimmyPremiumGate'
 export type { ChimmyPremiumGateProps } from './ChimmyPremiumGate'
-
-// ── Page Surface Wrappers ─────────────────────────────────────────────────────
-export { default as DashboardAISurface } from './surfaces/DashboardAISurface'
-export type { DashboardAISurfaceProps, DashboardAISurfaceInsight, DashboardAISurfaceRecommendation } from './surfaces/DashboardAISurface'
-
-export { default as LeagueHomeAISurface } from './surfaces/LeagueHomeAISurface'
-export type { LeagueHomeAISurfaceProps } from './surfaces/LeagueHomeAISurface'
-
-export { default as DraftRoomAISurface } from './surfaces/DraftRoomAISurface'
-export type { DraftRoomAISurfaceProps, DraftRoomAISurfacePickRec } from './surfaces/DraftRoomAISurface'
-
-export { default as RosterAISurface } from './surfaces/RosterAISurface'
-export type { RosterAISurfaceProps } from './surfaces/RosterAISurface'
-
-export { default as MatchupAISurface } from './surfaces/MatchupAISurface'
-export type { MatchupAISurfaceProps } from './surfaces/MatchupAISurface'
-
-export { default as WaiverAISurface } from './surfaces/WaiverAISurface'
-export type { WaiverAISurfaceProps, WaiverAISurfaceAdd } from './surfaces/WaiverAISurface'
-
-export { default as TradeAISurface } from './surfaces/TradeAISurface'
-export type { TradeAISurfaceProps } from './surfaces/TradeAISurface'
-
-export { default as ChatAISurface } from './surfaces/ChatAISurface'
-export type { ChatAISurfaceProps } from './surfaces/ChatAISurface'
-
-export { default as CommissionerAISurface } from './surfaces/CommissionerAISurface'
-export type { CommissionerAISurfaceProps, CommissionerAlert } from './surfaces/CommissionerAISurface'
-
-export { default as DiscoveryAISurface } from './surfaces/DiscoveryAISurface'
-export type { DiscoveryAISurfaceProps } from './surfaces/DiscoveryAISurface'
-
-export { default as PlayerAISurface } from './surfaces/PlayerAISurface'
-export type { PlayerAISurfaceProps } from './surfaces/PlayerAISurface'
-
-export { default as TeamAISurface } from './surfaces/TeamAISurface'
-export type { TeamAISurfaceProps, TeamDirection } from './surfaces/TeamAISurface'
-
-export { default as AdminAISurface } from './surfaces/AdminAISurface'
-export type { AdminAISurfaceProps } from './surfaces/AdminAISurface'
 
 // ── Action UI (Phase 6) ───────────────────────────────────────────────────────
 export { default as ChimmyActionRecommendationCard } from './ChimmyActionRecommendationCard'

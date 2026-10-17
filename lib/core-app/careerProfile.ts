@@ -315,6 +315,21 @@ async function readStored(userId: string): Promise<StoredCareerProfile | null> {
 }
 
 /**
+ * Milestone alerts (live-career plan, phase 4) for what this rebuild changed — fire and forget.
+ *
+ * ⚠ BOTH WRITERS CALL IT, because either can be the one that first sees a season finish: the
+ * post-import refresh below, or a page read that found the stored profile stale. Calling it from
+ * one only would lose every milestone the other wrote first. Imported lazily so a plain career
+ * read never loads the notification dispatcher.
+ */
+function announceMilestones(userId: string, previous: StoredCareerProfile | null, next: StoredCareerProfile): void {
+  if (!previous || process.env.CORE_CAREER_MILESTONES_DISABLED === '1') return
+  void import('./careerMilestoneNotify')
+    .then(({ notifyCareerMilestones }) => notifyCareerMilestones(userId, previous, next))
+    .catch((err: unknown) => console.error('[core-app/careerProfile] milestone notify failed', err))
+}
+
+/**
  * The writer. Rebuilds from the sources and stores, whatever is stored now.
  *
  * Never throws: it runs at the tail of imports and rank recalculations, and a
@@ -324,9 +339,10 @@ export async function refreshCareerProfile(userId: string): Promise<{ ok: boolea
   if (!userId || process.env.CORE_CAREER_PROFILE_DISABLED === '1') return { ok: false, rows: 0 }
   try {
     const identity = await loadCareerIdentity(userId)
-    const stamped = await computeCareerStamp(userId, identity.legacyUserId)
+    const [stamped, previous] = await Promise.all([computeCareerStamp(userId, identity.legacyUserId), readStored(userId)])
     const stored = await buildStored(userId, identity.legacyUserId, stamped)
     await writeStored(userId, stored)
+    announceMilestones(userId, previous, stored)
     return { ok: true, rows: stored.rows.length }
   } catch (err) {
     console.error('[core-app/careerProfile] refresh failed', err)
@@ -357,9 +373,11 @@ export async function readCareerProfile(userId: string): Promise<CareerProfile> 
   }
 
   const built = await buildStored(userId, legacyUserId, stamped)
-  void writeStored(userId, built).catch((err: unknown) => {
-    console.error('[core-app/careerProfile] store failed', err)
-  })
+  void writeStored(userId, built)
+    .then(() => announceMilestones(userId, stored, built))
+    .catch((err: unknown) => {
+      console.error('[core-app/careerProfile] store failed', err)
+    })
   return {
     source: { identity: who, rows: built.rows, platforms: built.platforms, rosterless: built.rosterless },
     trades: built.trades,

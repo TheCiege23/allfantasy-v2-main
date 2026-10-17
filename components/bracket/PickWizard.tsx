@@ -234,12 +234,12 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
             </div>
             <div className="flex items-center gap-2 mt-1">
               {isUpset && isPicked && (
-                <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: '#c084fc' }}>
+                <span className="flex items-center gap-1 text-[11px] font-bold" style={{ color: '#c084fc' }}>
                   <Zap className="w-3 h-3" /> Upset Pick
                 </span>
               )}
               {isPicked && (
-                <span className="text-[10px] font-bold flex items-center gap-1" style={{ color: AF_BLUE }}>
+                <span className="text-[11px] font-bold flex items-center gap-1" style={{ color: AF_BLUE }}>
                   <Trophy className="w-3 h-3" /> WINNER
                 </span>
               )}
@@ -250,7 +250,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
               <div className="text-2xl font-black" style={{ color: isPicked ? AF_BLUE : 'rgba(255,255,255,0.5)' }}>
                 {Math.round(winProb)}%
               </div>
-              <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.2)' }}>win prob</div>
+              <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>win prob</div>
             </div>
           )}
         </div>
@@ -297,7 +297,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
             <div className="text-xs font-bold uppercase tracking-wider" style={{ color: AF_BLUE }}>
               {ROUND_LABELS[currentNode.round] || `Round ${currentNode.round}`}
             </div>
-            <div className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <div className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
               {currentNode.region && `${currentNode.region} Region`}
               {currentNode.region && ` \u2022 `}
               {pickedInRound}/{totalInRound} picked
@@ -360,7 +360,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
                   {t("bracket.ai.wizard.analysis.title")}
                 </span>
                 {ai.confidence && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)' }}>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)' }}>
                     {ai.confidence}% {t("bracket.ai.wizard.analysis.confidenceShort")}
                   </span>
                 )}
@@ -371,7 +371,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
 
               {ai.keyFactors?.length > 0 && (
                 <div className="space-y-1.5">
-                  <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>
                     {t("bracket.ai.wizard.analysis.keyFactors")}
                   </div>
                   {ai.keyFactors.slice(0, 4).map((f: string, i: number) => (
@@ -412,7 +412,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
                     </div>
                   )}
                   {ai.dataNotes && (
-                    <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
                       {ai.dataNotes}
                     </div>
                   )}
@@ -421,12 +421,12 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
 
               {ai.sources?.length > 0 && (
                 <details className="group">
-                  <summary className="text-[10px] font-semibold cursor-pointer" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                  <summary className="text-[11px] font-semibold cursor-pointer" style={{ color: 'rgba(255,255,255,0.2)' }}>
                     {t("bracket.ai.wizard.analysis.sources")} ({ai.sources.length})
                   </summary>
                   <div className="mt-1 space-y-1">
                     {ai.sources.map((s: any, i: number) => (
-                      <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="block text-[10px] underline" style={{ color: 'rgba(6,182,212,0.6)' }}>
+                      <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="block text-[11px] underline" style={{ color: 'rgba(6,182,212,0.6)' }}>
                         {s.title || s.url}
                       </a>
                     ))}
@@ -446,7 +446,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
                   </span>
                 </div>
                 {ai.strategy.style && (
-                  <span className="text-[9px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.08)', color: 'rgba(255,255,255,0.7)' }}>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.08)', color: 'rgba(255,255,255,0.7)' }}>
                     {ai.strategy.style === "safe" && t("bracket.ai.style.safe")}
                     {ai.strategy.style === "balanced" && t("bracket.ai.style.balanced")}
                     {ai.strategy.style === "upset_heavy" && t("bracket.ai.style.upsetHeavy")}
@@ -464,7 +464,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
                       {ai.strategy.recommendedPick}
                     </span>
                     {ai.strategy.leveragePlay && (
-                      <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc' }}>
+                      <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc' }}>
                         <TrendingUp className="w-3 h-3" /> {t("bracket.ai.wizard.recommendation.leverage")}
                       </span>
                     )}
@@ -475,7 +475,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
                     <div className="text-xl font-black" style={{ color: AF_BLUE }}>
                       {ai.strategy.confidence}%
                     </div>
-                    <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                       {t("bracket.ai.wizard.recommendation.confidence")}
                     </div>
                   </div>
@@ -491,7 +491,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
         </div>
 
         <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
             {currentIdx + 1} of {pickableNodes.length}
           </div>
           <div className="flex items-center gap-1.5">
@@ -513,7 +513,7 @@ export function PickWizard({ nodes, startNode, picks, seedMap, effective, entryI
               )
             })}
           </div>
-          <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
             {Object.values(picks).filter(Boolean).length} picked
           </div>
         </div>

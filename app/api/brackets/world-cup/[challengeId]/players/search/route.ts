@@ -11,10 +11,8 @@ export const runtime = "nodejs"
 const paramsSchema = worldCupChallengeParamsSchema
 const querySchema = z.object({ q: z.string().min(2).max(100) })
 
-export async function GET(
-  request: Request,
-  { params: rawParams }: { params: unknown }
-) {
+export async function GET(request: Request, props: { params: Promise<unknown> }) {
+  const rawParams = await props.params
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 

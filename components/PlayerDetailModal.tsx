@@ -1,10 +1,14 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { X, ChevronDown, ChevronUp } from 'lucide-react'
 import { headshotUrl as buildHeadshot, teamLogoUrl as buildTeamLogo } from '@/lib/media-url'
 import PlayerCardAnalytics from '@/components/player-card/PlayerCardAnalytics'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
+import { currentFantasySeason } from '@/lib/core-app/connectLeague'
+
+/** How many seasons the game-log picker offers: the current one plus this many - 1 before it. */
+const GAME_LOG_SEASON_COUNT = 4
 
 const DEPTH_CHART_POSITION_MAP: Record<string, string> = {
   'RWR': 'WR',
@@ -96,7 +100,13 @@ export default function PlayerDetailModal({
   const [gameLogs, setGameLogs] = useState<GameLog[]>([])
   const [gameLogsLoading, setGameLogsLoading] = useState(false)
   const [gameLogsExpanded, setGameLogsExpanded] = useState(false)
-  const [gameLogsSeason, setGameLogsSeason] = useState('2025')
+  // The current NFL season is DERIVED, never hard-coded: a literal '2025' left the 2026 season
+  // unselectable once it started.
+  const gameLogSeasons = useMemo(() => {
+    const current = currentFantasySeason(new Date())
+    return Array.from({ length: GAME_LOG_SEASON_COUNT }, (_, i) => String(current - i))
+  }, [])
+  const [gameLogsSeason, setGameLogsSeason] = useState(() => gameLogSeasons[0]!)
   const [gameLogsError, setGameLogsError] = useState('')
 
   const fetchProfile = useCallback(async () => {
@@ -106,7 +116,8 @@ export default function PlayerDetailModal({
       const res = await fetch('/api/legacy/player-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_name: playerName, player_id: playerId }),
+        // position/team let the server verify a name-only lookup instead of taking the first namesake.
+        body: JSON.stringify({ player_name: playerName, player_id: playerId, position, team }),
       })
       const data = await res.json()
       if (data.ok) {
@@ -120,7 +131,7 @@ export default function PlayerDetailModal({
     } finally {
       setLoading(false)
     }
-  }, [playerName, playerId])
+  }, [playerName, playerId, position, team])
 
   const fetchGameLogs = useCallback(async (season: string) => {
     if (!playerId) return
@@ -266,31 +277,31 @@ export default function PlayerDetailModal({
                   <div className="flex gap-4 mt-3 flex-wrap">
                     {bio.age && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Age</div>
+                        <div className="text-[11px] text-white/40 uppercase">Age</div>
                         <div className="text-sm font-bold text-white">{bio.age}</div>
                       </div>
                     )}
                     {bio.height && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Height</div>
+                        <div className="text-[11px] text-white/40 uppercase">Height</div>
                         <div className="text-sm font-bold text-white">{bio.height}</div>
                       </div>
                     )}
                     {bio.weight && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Weight</div>
+                        <div className="text-[11px] text-white/40 uppercase">Weight</div>
                         <div className="text-sm font-bold text-white">{bio.weight} lbs</div>
                       </div>
                     )}
                     {bio.yearsExp != null && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Exp</div>
+                        <div className="text-[11px] text-white/40 uppercase">Exp</div>
                         <div className="text-sm font-bold text-white">{bio.yearsExp}</div>
                       </div>
                     )}
                     {bio.college && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">College</div>
+                        <div className="text-[11px] text-white/40 uppercase">College</div>
                         <div className="text-sm font-bold text-white">{bio.college}</div>
                       </div>
                     )}
@@ -329,7 +340,7 @@ export default function PlayerDetailModal({
                       <div className="flex items-start justify-between gap-2">
                         <h4 className="text-sm font-semibold text-white/90 leading-snug">{article.title}</h4>
                         {article.publishedAt && (
-                          <span className="text-[10px] text-white/40 whitespace-nowrap flex-shrink-0">
+                          <span className="text-[11px] text-white/40 whitespace-nowrap flex-shrink-0">
                             {formatInTimezone(article.publishedAt, { month: 'short', day: 'numeric', year: 'numeric' })}
                           </span>
                         )}
@@ -339,10 +350,10 @@ export default function PlayerDetailModal({
                       )}
                       <div className="mt-2 flex items-center gap-2">
                         {article.source && (
-                          <span className="text-[10px] text-cyan-300/70">via {article.source}</span>
+                          <span className="text-[11px] text-cyan-300/70">via {article.source}</span>
                         )}
                         {article.url && (
-                          <a href={article.url} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-400 hover:text-cyan-300 underline">
+                          <a href={article.url} target="_blank" rel="noreferrer" className="text-[11px] text-cyan-400 hover:text-cyan-300 underline">
                             Read more
                           </a>
                         )}
@@ -383,7 +394,7 @@ export default function PlayerDetailModal({
                 {gameLogsExpanded && (
                   <div>
                     <div className="flex gap-1.5 mb-3">
-                      {['2025', '2024', '2023', '2022'].map(yr => (
+                      {gameLogSeasons.map(yr => (
                         <button
                           key={yr}
                           onClick={() => setGameLogsSeason(yr)}

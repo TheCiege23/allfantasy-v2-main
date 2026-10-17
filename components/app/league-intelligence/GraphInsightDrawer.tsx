@@ -68,10 +68,10 @@ export function GraphInsightDrawer({
       <div
         className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-black/95 shadow-xl sm:max-w-lg"
         role="dialog"
-        aria-label="Graph AI insight"
+        aria-label="Chimmy's graph insight"
       >
         <div className="flex items-center justify-between border-b border-white/10 p-4">
-          <h3 className="text-lg font-semibold text-white">AI Graph Insight</h3>
+          <h3 className="text-lg font-semibold text-white">Chimmy&apos;s Graph Insight</h3>
           <button
             type="button"
             onClick={onClose}
@@ -105,7 +105,7 @@ export function GraphInsightDrawer({
                 </div>
               )}
               {!insight.readableSummary && !insight.metricsInterpretation && !insight.momentumStoryline && (
-                <p className="text-sm text-white/50">No AI insight available. Check API keys (OpenAI, DeepSeek, Grok).</p>
+                <p className="text-sm text-white/50">Chimmy has no insight for this graph yet. Try regenerating in a moment.</p>
               )}
               {insight.generatedAt && (
                 <p className="text-xs text-white/40">Generated {formatInTimezone(insight.generatedAt)}</p>

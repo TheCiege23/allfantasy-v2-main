@@ -41,7 +41,7 @@ export function resolveLeagueMedia(
 
   const primary = typeMedia?.video ?? sportMedia?.video ?? '/af-crest.png'
   const fallback = sportMedia?.video ?? typeMedia?.fallback ?? '/af-crest.png'
-  const poster = sportMedia?.poster ?? typeMedia?.fallback ?? '/af-crest.png'
+  const poster = sportMedia?.poster ?? typeMedia?.fallback ?? '/af-crest.svg'
 
   return { primary, fallback, poster }
 }

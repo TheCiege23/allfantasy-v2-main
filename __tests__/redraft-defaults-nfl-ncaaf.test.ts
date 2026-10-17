@@ -43,6 +43,14 @@ const LOCKED_FOOTBALL_REDRAFT_STARTERS = {
 
 const LOCKED_FOOTBALL_REDRAFT_COMPACT_ORDER = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLX', 'K', 'DEF', 'BN']
 
+/**
+ * NCAAF has no team-defense starter: no college team defense exists to draft (the pool holds none),
+ * and an unfilled starter slot fails lineup validation, so a default DEF made every lineup save fail.
+ */
+const { DEF: _ncaafHasNoDefense, ...LOCKED_NCAAF_REDRAFT_STARTERS } = LOCKED_FOOTBALL_REDRAFT_STARTERS
+const LOCKED_NCAAF_REDRAFT_COMPACT_ORDER = LOCKED_FOOTBALL_REDRAFT_COMPACT_ORDER.filter((slot) => slot !== 'DEF')
+const NCAAF_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K']
+
 describe('NFL/NCAAF redraft creation defaults', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -100,15 +108,15 @@ describe('NFL/NCAAF redraft creation defaults', () => {
 
     expect(contract).not.toBeNull()
     expect(contract?.scoring_preset_id).toBe('ncaaf_half_ppr')
-    expect(contract?.rosterTemplate.starterSlots).toEqual(LOCKED_FOOTBALL_REDRAFT_STARTERS)
-    expect(contract?.rosterTemplate.compactRosterSlotOrder).toEqual(LOCKED_FOOTBALL_REDRAFT_COMPACT_ORDER)
+    expect(contract?.rosterTemplate.starterSlots).toEqual(LOCKED_NCAAF_REDRAFT_STARTERS)
+    expect(contract?.rosterTemplate.compactRosterSlotOrder).toEqual(LOCKED_NCAAF_REDRAFT_COMPACT_ORDER)
     expect(contract?.rosterTemplate.starterSlots).not.toHaveProperty('SF')
     expect(contract?.rosterTemplate.benchSlots).toBe(8)
     expect(contract?.rosterTemplate.irSlots).toBe(1)
-    expect(contract?.rosterTemplate.draftableRosterSlots).toBe(17)
-    expect(contract?.draftSettings.rounds).toBe(17)
+    expect(contract?.rosterTemplate.draftableRosterSlots).toBe(16)
+    expect(contract?.draftSettings.rounds).toBe(16)
     expect(contract?.draftSettings.rounds).toBe(contract?.rosterTemplate.draftableRosterSlots)
-    expect(contract?.draftSettings.fallbackRounds).toBe(17)
+    expect(contract?.draftSettings.fallbackRounds).toBe(16)
     expect(contract?.draftSettings.queueSizeLimit).toBe(70)
     expect(contract?.scoringSettings).toMatchObject({
       kickerEnabled: true,
@@ -120,7 +128,7 @@ describe('NFL/NCAAF redraft creation defaults', () => {
       includeNflPlayers: false,
       collegeOnly: true,
       rookieOnly: false,
-      positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'],
+      positions: NCAAF_POSITIONS,
     })
     expect(contract?.tabsEnabled).not.toHaveProperty('keeper_declarations')
   })
@@ -137,6 +145,7 @@ describe('NFL/NCAAF redraft creation defaults', () => {
 
   it('orders default, superflex, and IDP slots in the canonical redraft order', () => {
     expect(getCanonicalRedraftRosterSlotOrder()).toEqual(LOCKED_FOOTBALL_REDRAFT_COMPACT_ORDER)
+    expect(getCanonicalRedraftRosterSlotOrder({ defenseEnabled: false })).toEqual(LOCKED_NCAAF_REDRAFT_COMPACT_ORDER)
 
     expect(getCanonicalRedraftRosterSlotOrder({ flexEnabled: true })).toEqual(LOCKED_FOOTBALL_REDRAFT_COMPACT_ORDER)
 
@@ -227,18 +236,18 @@ describe('NFL/NCAAF redraft creation defaults', () => {
       draft_type: 'snake',
       requested_draft_type: 'snake',
       draft_queue_size_limit: 70,
-      draft_rounds: 17,
+      draft_rounds: 16,
       roster_mode: 'redraft',
       taxi_slots: 0,
       devy: false,
       c2c: false,
     })
     expect(engine.settingsSnapshot.rosterSettings).toMatchObject({
-      starterSlots: LOCKED_FOOTBALL_REDRAFT_STARTERS,
+      starterSlots: LOCKED_NCAAF_REDRAFT_STARTERS,
       benchSlots: 8,
       irSlots: 1,
-      rosterSize: 17,
-      draftablePlayerPositions: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'],
+      rosterSize: 16,
+      draftablePlayerPositions: NCAAF_POSITIONS,
     })
     expect(engine.settingsSnapshot.rosterSettings).not.toMatchObject({
       starterSlots: expect.objectContaining({ SUPERFLEX: expect.any(Number) }),
@@ -256,7 +265,7 @@ describe('NFL/NCAAF redraft creation defaults', () => {
     expect(defaults.engineDraftType).toBe('snake')
     expect(defaults.draftSettings).toMatchObject({
       requestedDraftType: 'mock_draft',
-      rounds: 17,
+      rounds: 16,
       timerSeconds: 90,
       queueSizeLimit: 70,
     })
@@ -264,7 +273,7 @@ describe('NFL/NCAAF redraft creation defaults', () => {
       sport: 'NCAAF',
       includeNflPlayers: false,
       collegeOnly: true,
-      positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'],
+      positions: NCAAF_POSITIONS,
     })
   })
 
@@ -332,7 +341,7 @@ describe('NFL/NCAAF redraft creation defaults', () => {
     expect(config).toMatchObject({
       sport: 'NCAAF',
       draft_type: 'snake',
-      rounds: 17,
+      rounds: 16,
       timer_seconds: 90,
       queue_size_limit: 70,
       autopick_behavior: 'queue-first',

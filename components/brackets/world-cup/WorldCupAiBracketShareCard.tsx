@@ -114,7 +114,7 @@ export default function WorldCupAiBracketShareCard({
             <Sparkles className="h-4 w-4 text-white/85" aria-hidden />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/50">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">
               {t("wc.aiShareCard.eyebrow")}
             </p>
             <h3 className="text-base font-black text-white sm:text-lg">{result.title}</h3>
@@ -128,8 +128,8 @@ export default function WorldCupAiBracketShareCard({
             data-testid="world-cup-ai-share-card-tier"
             className={
               rest.hasBracketBrainAi
-                ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/90"
-                : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/65"
+                ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/90"
+                : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/65"
             }
           >
             {rest.hasBracketBrainAi ? t("wc.aiShareCard.tierPro") : t("wc.aiShareCard.tierPreview")}
@@ -191,7 +191,7 @@ export default function WorldCupAiBracketShareCard({
         </>
       )}
 
-      <p className="mt-3 text-[10px] text-white/40">
+      <p className="mt-3 text-[11px] text-white/40">
         {t("wc.aiShareCard.privacyNote")}
       </p>
     </section>

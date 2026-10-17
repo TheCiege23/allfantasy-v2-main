@@ -53,18 +53,43 @@ function hoursBetween(now: Date, iso: string): number {
   return Math.max(0, (now.getTime() - t) / (1000 * 60 * 60))
 }
 
-function pickWorstCanonical(rows: InjuryNewsSourceRow[]): CanonicalInjuryStatus {
-  let worst: CanonicalInjuryStatus = 'unknown'
-  let bestScore = -1
+/*
+ * 🛑 THE NEWEST DESIGNATION WINS, NOT THE WORST ONE (2026-10-11). This used to take the most severe
+ * status across every row it was handed — three weeks of report logs, news headlines read by regex —
+ * so last week's "Out" beat this morning's "Active" and the trade analyzer cut a cleared starter's
+ * projection to 5%. Now: only injury-feed rows designate (a headline or news blurb never does), the
+ * newest claim among them wins with "Active" counting as a claim, and the worst status breaks a tie
+ * between claims made at the same moment.
+ */
+function designatingRows(rows: InjuryNewsSourceRow[]): InjuryNewsSourceRow[] {
+  return rows.filter(
+    (r) => isAuthoritative(r.kind) && toCanonicalInjuryStatus(r.statusRaw) !== 'unknown',
+  )
+}
+
+function atMs(r: InjuryNewsSourceRow): number {
+  const t = new Date(r.atIso).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+function pickCurrentDesignation(rows: InjuryNewsSourceRow[]): InjuryNewsSourceRow | null {
+  let best: InjuryNewsSourceRow | null = null
   for (const r of rows) {
-    const c = toCanonicalInjuryStatus(r.statusRaw)
-    const sc = severityScore(c)
-    if (sc > bestScore) {
-      bestScore = sc
-      worst = c
+    if (!best) {
+      best = r
+      continue
+    }
+    const byTime = atMs(r) - atMs(best)
+    if (
+      byTime > 0 ||
+      (byTime === 0 &&
+        severityScore(toCanonicalInjuryStatus(r.statusRaw)) >
+          severityScore(toCanonicalInjuryStatus(best.statusRaw)))
+    ) {
+      best = r
     }
   }
-  return worst
+  return best
 }
 
 function detectConflict(
@@ -143,10 +168,14 @@ export function mergeInjuryNewsLayer(args: {
     }
   }
 
-  const canonicalStatus = pickWorstCanonical(rows)
+  const designating = designatingRows(rows)
+  const current = pickCurrentDesignation(designating)
+  const canonicalStatus: CanonicalInjuryStatus = current
+    ? toCanonicalInjuryStatus(current.statusRaw)
+    : 'unknown'
   const mult = projectionMultiplierForStatus(canonicalStatus)
   const material = isMaterialProjectionImpact(mult)
-  const { conflict, detail } = detectConflict(rows, canonicalStatus)
+  const { conflict, detail } = detectConflict(designating, canonicalStatus)
 
   let newestIso: string | null = null
   let newestMs = 0
@@ -158,10 +187,7 @@ export function mergeInjuryNewsLayer(args: {
     }
   }
 
-  const primary =
-    rows
-      .filter((r) => toCanonicalInjuryStatus(r.statusRaw) === canonicalStatus)
-      .sort((a, b) => new Date(b.atIso).getTime() - new Date(a.atIso).getTime())[0] ?? rows[0]
+  const primary = current ?? rows[0]
 
   const freshHours = newestIso ? hoursBetween(now, newestIso) : null
 
@@ -173,10 +199,9 @@ export function mergeInjuryNewsLayer(args: {
     if (hit && item.title) headlines.push(item.title)
   }
 
-  const practice =
-    rows.map((r) => r.practice).find((p) => p && p.trim()) ?? null
-  const gameDesignation =
-    rows.map((r) => r.gameStatus).find((g) => g && g.trim()) ?? null
+  // From the winning claim, not whichever row happened to come first in the list.
+  const practice = current?.practice?.trim() || null
+  const gameDesignation = current ? current.gameStatus?.trim() || current.statusRaw : null
 
   const suspensionOrUnavailable = canonicalStatus === 'suspended' || canonicalStatus === 'ir'
 

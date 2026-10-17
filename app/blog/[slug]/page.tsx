@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { buildBlogSEO } from "@/lib/automated-blog"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
+import { renderBlogBodyHtml } from "@/lib/automated-blog/renderBlogBody"
+import { isBlogAdmin } from "@/lib/automated-blog/blogAdminGate"
 
 const BASE = "https://allfantasy.ai"
 
@@ -15,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await prisma.blogArticle.findUnique({
     where: { slug },
   })
-  if (!article) return { title: "Blog | AllFantasy" }
+  if (!article || article.publishStatus !== "published") return { title: "Blog | AllFantasy" }
   const seo = buildBlogSEO({
     title: article.title,
     excerpt: article.excerpt,
@@ -54,19 +56,11 @@ export default async function BlogArticlePage({ params, searchParams }: Props) {
     where: { slug },
   })
   if (!article) notFound()
-  if (article.publishStatus !== "published" && !isPreview) notFound()
+  // `?preview=1` shows an unpublished article, so it is an admin view — for
+  // anyone else a draft does not exist.
+  if (article.publishStatus !== "published" && !(isPreview && (await isBlogAdmin()))) notFound()
 
-  const bodyHtml = article.body
-    .split("\n")
-    .map((line) => {
-      if (/^###\s/.test(line)) return `<h3 class="text-lg font-semibold mt-6 mb-2">${line.slice(4)}</h3>`
-      if (/^##\s/.test(line)) return `<h2 class="text-xl font-semibold mt-8 mb-2">${line.slice(3)}</h2>`
-      if (/^#\s/.test(line)) return `<h1 class="text-2xl font-bold mt-6 mb-2">${line.slice(2)}</h1>`
-      if (line.trim()) return `<p class="mb-3">${line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</p>`
-      return ""
-    })
-    .filter(Boolean)
-    .join("\n")
+  const bodyHtml = renderBlogBodyHtml(article.body)
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">

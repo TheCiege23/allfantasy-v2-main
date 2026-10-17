@@ -89,7 +89,7 @@ export default function ChimmyAlertCard({
         <button
           type="button"
           onClick={handleDone}
-          className="inline-flex items-center gap-1 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+          className="inline-flex items-center gap-1 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-300 transition hover:bg-emerald-500/20"
         >
           <CheckCircle2 className="h-3 w-3" />
           Done

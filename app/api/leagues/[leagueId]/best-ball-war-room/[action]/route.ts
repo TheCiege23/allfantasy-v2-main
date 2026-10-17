@@ -10,7 +10,7 @@
  *   - stacks              → same-team stack/correlation + bye clusters
  *   - risk                → aggregate construction risk
  *   - waivers             → add/drop (ONLY when the league enables waivers)
- *   - trade-analyze       → trade verdict (ONLY when trades enabled)
+ *   - trade-analyze       → trade facts + THE one trade grade (ONLY when trades enabled)
  *   - trade-find          → trade partner fit (ONLY when trades enabled)
  *   - ask                 → grounded AI answer (AF War Room-gated)
  *
@@ -27,12 +27,14 @@ import { buildBestBallDraftPlan } from '@/lib/best-ball-war-room/bestBallDraftPl
 import { evaluateStacks } from '@/lib/best-ball-war-room/bestBallStackCorrelationEngine'
 import { evaluateRisk } from '@/lib/best-ball-war-room/bestBallRiskEngine'
 import { buildBestBallWaiverRecommendations } from '@/lib/best-ball-war-room/bestBallWaiverEngine'
-import { analyzeBestBallTrade, findBestBallTradeTargets } from '@/lib/best-ball-war-room/bestBallTradeEngine'
+import { bestBallTradeFacts, findBestBallTradeTargets } from '@/lib/best-ball-war-room/bestBallTradeEngine'
 import { BEST_BALL_WAR_ROOM_SYSTEM_RULES, buildBestBallWarRoomPrompt } from '@/lib/best-ball-war-room/bestBallWarRoomPrompt'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { BestBallWarRoomContext } from '@/lib/best-ball-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { warRoomTradeAnalysisForClient } from '@/lib/decision-os/trade/warRoomTradeView'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -111,7 +113,7 @@ export async function POST(
     case 'waivers':
       return NextResponse.json({ waivers: buildBestBallWaiverRecommendations(context, rosterId) })
     case 'trade-analyze': {
-      const analysis = analyzeBestBallTrade(context, {
+      const analysis = bestBallTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -125,9 +127,25 @@ export async function POST(
         rosterId,
         outgoingCount: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds.length : 0,
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
+        tradesEnabled: context.bestBall.tradesEnabled,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral/disabled is derived
+       * for the shadow above, inside Decision OS. The panel shows the grade and the facts.
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
+        tradesEnabled: context.bestBall.tradesEnabled,
+      })
+      // 🛑 The facts only — the engine's value and fit deltas stay on the server (2026-09-29).
+      return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
     case 'trade-find':
       return NextResponse.json({ tradeFinder: findBestBallTradeTargets(context, rosterId) })

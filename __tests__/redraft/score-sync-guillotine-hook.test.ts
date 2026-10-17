@@ -33,7 +33,10 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/c2c/scoringEngine', () => ({ updateC2CMatchupScores: vi.fn() }))
 vi.mock('@/lib/survivor/gameStateMachine', () => ({ syncWeeklyScores: vi.fn() }))
-vi.mock('@/lib/zombie/matchupCompletion', () => ({ checkAllMatchupsComplete: vi.fn() }))
+vi.mock('@/lib/survivor/SurvivorSitOutEngine', () => ({
+  runNbaTribeSitOutDeadlineBatch: vi.fn(async () => ({ considered: 0, failed: 0, outcomes: {} })),
+}))
+vi.mock('@/lib/zombie/matchupCompletion', () => ({ getZombieWeekReadiness: vi.fn() }))
 vi.mock('@/lib/zombie/weeklyResolutionEngine', () => ({ runWeeklyResolution: vi.fn() }))
 vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: vi.fn() }))
 vi.mock('@/lib/redraft/playerWeeklyScoreService', () => ({
@@ -187,7 +190,7 @@ describe('score-sync tournament integration', () => {
 })
 
 
-describe('score-sync — completed tournament recovery', () => {
+describe('score-sync â€” completed tournament recovery', () => {
   it('repairs archival before resolving a calendar or syncing player stats', async () => {
     m.seasons.mockResolvedValue([{ id: 'finished', leagueId: 'L', status: 'complete', sport: 'NFL', league: { bestBallMode: true, bbContestId: 'c', settings: { best_ball_settings: { contestStructure: 'tournament' } } } }])
     m.tournament.mockResolvedValue('complete')

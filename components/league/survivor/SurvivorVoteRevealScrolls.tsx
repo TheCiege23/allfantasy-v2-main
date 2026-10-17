@@ -1,103 +1,59 @@
 'use client'
-
 import { useEffect, useState } from 'react'
-
+import styles from './SurvivorVoteRevealScrolls.module.css'
 export type RevealScroll = {
-  order: number
-  targetUserId: string | null
-  targetName: string | null
-  status: 'counts' | 'late_does_not_count' | 'blocked_by_idol' | 'target_safe'
-  isExtraVote: boolean
+  order: number; targetUserId: string | null; targetName: string | null;
+  status: 'counts' | 'late_does_not_count' | 'blocked_by_idol' | 'target_safe' | 'taken_by_vote_steal'; isExtraVote: boolean
 }
-
-const STATUS_COPY: Record<RevealScroll['status'], { label: string; tone: string }> = {
-  counts: { label: '', tone: 'text-amber-100' },
-  late_does_not_count: { label: 'Does Not Count', tone: 'text-neutral-400' },
-  blocked_by_idol: { label: 'Blocked by Idol', tone: 'text-sky-300' },
-  target_safe: { label: 'Safe — Does Not Count', tone: 'text-emerald-300' },
-}
-
-/**
- * TV-style parchment vote reveal. Reveals one scroll at a time on a timer, stamping
- * "Does Not Count" / "Blocked by Idol" on invalidated ballots. Voter identity is never shown —
- * only the name written on the parchment (the target). Mobile-safe (single column, wraps).
- */
-export function SurvivorVoteRevealScrolls({
-  scrolls,
-  eliminatedName,
-  isTie,
-  tiePhase,
-  autoPlay = true,
-}: {
-  scrolls: RevealScroll[]
-  eliminatedName: string | null
-  isTie: boolean
-  tiePhase: string | null
-  autoPlay?: boolean
+/** Callers pass only the published sequence. */
+export function SurvivorVoteRevealScrolls({ scrolls, eliminatedName, isTie, tiePhase, autoPlay = true, isPublished = true, exileEnabled = false }: {
+  scrolls: RevealScroll[]; eliminatedName: string | null; isTie: boolean; tiePhase: string | null;
+  autoPlay?: boolean; isPublished?: boolean; exileEnabled?: boolean
 }) {
+  const [open, setOpen] = useState(!autoPlay)
   const [shown, setShown] = useState(autoPlay ? 0 : scrolls.length)
-
+  const [playing, setPlaying] = useState(autoPlay)
+  const [reduced, setReduced] = useState(false)
+  const sequenceKey = JSON.stringify(scrolls)
+  useEffect(() => { const mq = window.matchMedia('(prefers-reduced-motion: reduce)'); setReduced(mq.matches); const change = () => setReduced(mq.matches); mq.addEventListener('change', change); return () => mq.removeEventListener('change', change) }, [])
+  useEffect(() => { setOpen(!autoPlay); setShown(autoPlay ? 0 : scrolls.length); setPlaying(autoPlay) }, [sequenceKey, autoPlay])
   useEffect(() => {
-    if (!autoPlay) {
-      setShown(scrolls.length)
-      return
-    }
-    setShown(0)
-    if (scrolls.length === 0) return
-    let i = 0
-    const timer = setInterval(() => {
-      i += 1
-      setShown(i)
-      if (i >= scrolls.length) clearInterval(timer)
-    }, 900)
-    return () => clearInterval(timer)
-  }, [scrolls, autoPlay])
-
-  if (scrolls.length === 0) {
-    return <p className="text-xs text-neutral-500">No ballots were cast at this council.</p>
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2" aria-label="Vote reveal">
-        {scrolls.slice(0, shown).map((s) => {
-          const copy = STATUS_COPY[s.status]
-          const invalid = s.status !== 'counts'
-          return (
-            <div
-              key={s.order}
-              className={`min-w-[120px] flex-1 rounded-md border px-3 py-3 text-center shadow-sm ${
-                invalid ? 'border-neutral-700 bg-neutral-900/60' : 'border-amber-700/50 bg-amber-950/30'
-              }`}
-              style={{ fontFamily: 'ui-serif, Georgia, serif' }}
-            >
-              <div className={`text-base font-semibold ${invalid ? 'text-neutral-300 line-through' : 'text-amber-100'}`}>
-                {s.targetName ?? '—'}
-              </div>
-              {copy.label ? <div className={`mt-1 text-[10px] font-bold uppercase tracking-wide ${copy.tone}`}>{copy.label}</div> : null}
-              {s.isExtraVote ? <div className="mt-1 text-[10px] uppercase tracking-wide text-purple-300">Extra Vote</div> : null}
-            </div>
-          )
-        })}
+    if (!open || !playing || reduced || shown >= scrolls.length) return
+    const timer = setTimeout(() => setShown(n => Math.min(n + 1, scrolls.length)), 2500)
+    return () => clearTimeout(timer)
+  }, [open, playing, reduced, shown, scrolls.length])
+  const counts = new Map<string, number>()
+  for (const vote of scrolls.slice(0, shown)) if (vote.status === 'counts' && vote.targetName) counts.set(vote.targetName, (counts.get(vote.targetName) ?? 0) + 1)
+  const finished = shown >= scrolls.length
+  if (!open) return <div className="text-center">
+    <img src="/survivor/exile/scroll-sealed.svg" alt="Sealed Torch Ceremony scroll" width={200} height={140} className={styles.sealed} />
+    <p className="text-sm text-amber-100">The Torch Ceremony results are published.</p>
+    <button type="button" onClick={() => { setOpen(true); if (reduced) setShown(scrolls.length) }} className="mt-3 min-h-11 rounded border border-amber-300/40 px-4 text-sm text-amber-100">Break the seal</button>
+  </div>
+  return <div className={styles.scroll}>
+    <img src="/survivor/exile/scroll-roller.svg" alt="" width={640} height={36} className={styles.roller} />
+    <div className={styles.paper}>
+      <h4 className={styles.title}>Torch Ceremony</h4>
+      <p className="mt-2 text-center text-xs">Elimination Council · Published results</p>
+      <div aria-live="polite" aria-atomic="false">
+        {scrolls.slice(0, shown).map((vote, i) => <div key={`${vote.order}-${i}`} className={`${styles.slip} ${vote.status !== 'counts' ? styles.invalid : ''}`}>
+          <span className={styles.ordinal}>Vote {i + 1}{vote.isExtraVote ? ' · Extra vote' : ''}</span>
+          <span className={styles.name}>{vote.targetName ?? 'Unnamed target'}</span>
+          {vote.status !== 'counts' && <span className={styles.stamp}>{vote.status === 'taken_by_vote_steal' ? 'Taken · Does not count' : vote.status === 'blocked_by_idol' ? 'Idol · Does not count' : vote.status === 'late_does_not_count' ? 'Late · Does not count' : 'Safe · Does not count'}</span>}
+        </div>)}
       </div>
-
-      {shown >= scrolls.length ? (
-        <div className="rounded-md border border-orange-600/40 bg-orange-950/30 p-3 text-center">
-          {isTie ? (
-            <div className="text-sm font-semibold text-amber-200">
-              It&apos;s a tie. {tiePhase === 'commissioner_tiebreak_required' ? 'A commissioner tiebreak is required.' : 'A revote is required.'}
-            </div>
-          ) : eliminatedName ? (
-            <div className="text-sm font-semibold text-orange-200">🔥 {eliminatedName}, the tribe has spoken.</div>
-          ) : (
-            <div className="text-sm text-neutral-300">No valid votes counted — no one was voted out.</div>
-          )}
-        </div>
-      ) : (
-        <div className="text-center text-[11px] text-neutral-500">Reading the votes…</div>
-      )}
+      {counts.size > 0 && <div className={styles.tally}><p className={styles.ordinal}>Tally</p>{[...counts].sort((a,b) => b[1]-a[1]).map(([name,n]) => <p key={name} className="mt-2 flex justify-between gap-3 text-sm"><span>{name}</span><strong>{n}</strong></p>)}</div>}
+      {finished && <div className={styles.verdict}>
+        {isTie ? <p>A tie remains. {tiePhase === 'commissioner_tiebreak_required' ? 'Awaiting the configured tiebreak.' : 'Awaiting a revote.'}</p> : eliminatedName ? <><span className={styles.stamp}>Voted out</span><p className={`${styles.name} mt-3`}>{eliminatedName}</p>{exileEnabled && <p className="mt-3 text-sm">Heads to Exile Island.</p>}</> : <p>No manager was voted out.</p>}
+        <img src="/survivor/exile/wax-seal-broken.svg" alt="" width={64} height={80} className="mx-auto mt-5" />
+      </div>}
+      {!finished && <p className="mt-4 text-center text-xs">Reading vote {shown} of {scrolls.length}…</p>}
     </div>
-  )
+    <img src="/survivor/exile/scroll-roller.svg" alt="" width={640} height={36} className={styles.roller} />
+    <div className={styles.controls}>
+      {!finished && <><button type="button" onClick={() => setShown(n => Math.min(n+1,scrolls.length))}>Read next vote</button><button type="button" onClick={() => setPlaying(v => !v)}>{playing ? 'Pause' : 'Play'}</button><button type="button" onClick={() => setShown(scrolls.length)}>Show all votes</button></>}
+      {finished && <button type="button" onClick={() => { setShown(0); setOpen(false); setPlaying(true) }}>Replay</button>}
+    </div>
+  </div>
 }
-
 export default SurvivorVoteRevealScrolls

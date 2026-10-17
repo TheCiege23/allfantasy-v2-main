@@ -184,7 +184,7 @@ export default function WorldCupInvitePanel({
             <Trophy className="h-4 w-4 text-white/80" aria-hidden />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
               {t("wc.inviteTab.eyebrow")}
             </p>
             <h2 className="text-lg font-black text-white">
@@ -369,7 +369,7 @@ export default function WorldCupInvitePanel({
             {/* Invite code */}
             <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
               <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/45">
                   {t("wc.inviteTab.commissioner.codeLabel")}
                 </div>
                 <div

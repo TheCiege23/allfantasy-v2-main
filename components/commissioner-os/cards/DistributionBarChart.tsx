@@ -1,6 +1,8 @@
 'use client'
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface DistributionBarPoint {
   label: string
@@ -22,7 +24,10 @@ export interface DistributionBarChartProps {
  * bespoke chart component. See `TrendLineChart` for the multi-series
  * sibling and the same theming rationale.
  */
-export function DistributionBarChart({ data, height = 240, ariaLabel, valueLabel = 'Value' }: DistributionBarChartProps) {
+export function DistributionBarChart({ data, height = 240, ariaLabel, valueLabel: valueLabelProp }: DistributionBarChartProps) {
+  // Only the DEFAULT is the chart's own word; a caller's `valueLabel` is theirs and passes as given.
+  const { language } = useOptionalLanguage()
+  const valueLabel = valueLabelProp ?? cardsCopy('Value', language)
   return (
     <div role="img" aria-label={ariaLabel} style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">

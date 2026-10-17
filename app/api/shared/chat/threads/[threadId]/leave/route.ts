@@ -3,10 +3,8 @@ import { resolvePlatformUser } from "@/lib/platform/current-user"
 import { leaveThread } from "@/lib/platform/chat-service"
 
 /** POST: leave the thread (remove current user's membership). */
-export async function POST(
-  _req: Request,
-  { params }: { params: { threadId: string } }
-) {
+export async function POST(_req: Request, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

@@ -13,7 +13,16 @@ export interface ToolAIEntry {
   typicalIntent: string
 }
 
-const TOOL_ENTRIES: Record<ToolAIEntryKey, Omit<ToolAIEntry, "key">> = {
+/*
+ * 🛑 `psychological` and `psychological_profiles` have NO entry. Both pointed at
+ * /api/leagues/[leagueId]/psychological-profiles/explain, which is retired to a constant
+ * 410 (Milestone 32: manager characterisation is shown to nobody), and there is no
+ * replacement to repoint them to. As of 2026-09-29 they are gone from ToolAIEntryKey too:
+ * no caller typed them. The `psychological` featureType that
+ * /api/leagues/[leagueId]/reputation/explain still sends is a DIFFERENT key space — the
+ * ai-tool-layer's ToolContextMap and the ai-orchestration normalizer — and stays there.
+ */
+const TOOL_ENTRIES: Partial<Record<ToolAIEntryKey, Omit<ToolAIEntry, "key">>> = {
   trade_analyzer: {
     label: "Trade Analyzer",
     apiPath: "/api/legacy/trade/analyze",
@@ -54,18 +63,6 @@ const TOOL_ENTRIES: Record<ToolAIEntryKey, Omit<ToolAIEntry, "key">> = {
     label: "League Graph Insight",
     apiPath: "/api/leagues/[leagueId]/graph-insight",
     featureType: "graph_insight",
-    typicalIntent: "explain",
-  },
-  psychological_profiles: {
-    label: "Psychological Profiles",
-    apiPath: "/api/leagues/[leagueId]/psychological-profiles/explain",
-    featureType: "psychological",
-    typicalIntent: "explain",
-  },
-  psychological: {
-    label: "Psychological Profiles",
-    apiPath: "/api/leagues/[leagueId]/psychological-profiles/explain",
-    featureType: "psychological",
     typicalIntent: "explain",
   },
   legacy_score: {
@@ -178,12 +175,16 @@ const TOOL_ENTRIES: Record<ToolAIEntryKey, Omit<ToolAIEntry, "key">> = {
   },
 }
 
-export function getToolEntry(key: ToolAIEntryKey): ToolAIEntry {
-  return { key, ...TOOL_ENTRIES[key] }
+/** Null for a key with no live route (see the note above TOOL_ENTRIES). */
+export function getToolEntry(key: ToolAIEntryKey): ToolAIEntry | null {
+  const entry = TOOL_ENTRIES[key]
+  return entry ? { key, ...entry } : null
 }
 
 export function getAllToolEntries(): ToolAIEntry[] {
-  return (Object.keys(TOOL_ENTRIES) as ToolAIEntryKey[]).map(getToolEntry)
+  return (Object.keys(TOOL_ENTRIES) as ToolAIEntryKey[])
+    .map(getToolEntry)
+    .filter((entry): entry is ToolAIEntry => entry != null)
 }
 
 export function getApiPathForTool(key: ToolAIEntryKey, leagueId?: string): string {

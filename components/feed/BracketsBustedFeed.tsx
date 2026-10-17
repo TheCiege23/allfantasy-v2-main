@@ -84,7 +84,7 @@ export function BracketsBustedFeed({
         <div>
           <div className="text-sm font-bold flex items-center gap-2">
             <span>Brackets Busted</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
+            <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{
               background: scope === "global" ? "rgba(139,92,246,0.12)" : "rgba(251,146,60,0.12)",
               color: scope === "global" ? "#a78bfa" : "#fb923c",
             }}>
@@ -132,7 +132,7 @@ export function BracketsBustedFeed({
                       <div className="text-sm font-semibold truncate">{e.title}</div>
                       {typeof e.impactPct === "number" && (
                         <span
-                          className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          className="flex-shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full"
                           style={{
                             background: `${accentColor}15`,
                             color: accentColor,
@@ -146,7 +146,7 @@ export function BracketsBustedFeed({
                     <div className="text-[12px] mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>
                       {e.message}
                     </div>
-                    <div className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,0.25)" }}>
+                    <div className="text-[11px] mt-1.5" style={{ color: "rgba(255,255,255,0.25)" }}>
                       {formatInTimezone(e.createdAt)}
                     </div>
                   </div>

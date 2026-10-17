@@ -78,6 +78,11 @@ export interface PendingProviderTrade {
    */
   proposedByViewer: boolean
   proposedAt: string | null
+  /**
+   * When a COMPLETED trade completed (Sleeper's `status_updated`) — the moment its frozen original is
+   * priced at (`completedTradeGrade.gradeAtTradeTime`). Absent on a pending offer and on Yahoo.
+   */
+  completedAt?: string | null
   /** Assets leaving the viewer's roster. */
   assetsGiven: PendingTradeAsset[]
   /** Assets arriving on the viewer's roster. */
@@ -483,6 +488,9 @@ export async function scanPendingSleeperTrades(args: {
                 (tx.creator ? `Manager ${tx.creator.slice(0, 6)}` : 'Another team'),
           proposedByViewer,
           proposedAt: tx.created ? new Date(tx.created).toISOString() : null,
+          ...(lifecycleStatus === 'complete' && tx.status_updated > 0
+            ? { completedAt: new Date(tx.status_updated).toISOString() }
+            : {}),
           assetsGiven,
           assetsReceived,
           readOnly: true,

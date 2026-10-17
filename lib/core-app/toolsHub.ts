@@ -234,22 +234,13 @@ export function buildToolsHub(input: {
           tokenCost: null,
           tier: 'pro',
         },
-        {
-          id: 'psychology',
-          title: 'Manager Psychology',
-          desc: 'How you actually play — tendencies read from your own transaction history.',
-          href: '/af-legacy?tab=compare',
-          leavesShell: true,
-          live: {
-            text:
-              stats.connectedLeagues > 0
-                ? `Reads your transactions across ${stats.connectedLeagues} connected ${stats.connectedLeagues === 1 ? 'league' : 'leagues'}`
-                : 'No connected leagues to read from',
-            tone: 'calm',
-          },
-          tokenCost: null,
-          tier: 'pro',
-        },
+        /*
+         * 🛑 NO "Manager Psychology" CARD. It promised "how you actually play — tendencies
+         * read from your own transaction history": a characterisation label, which Milestone
+         * 32 shows to nobody (the unified psychological tool went in #1659). Its link,
+         * /af-legacy?tab=compare, never read transactions anyway — it is the same
+         * /api/legacy/compare record comparison the Manager Compare card below opens.
+         */
         {
           id: 'compare',
           title: 'Manager Compare',
@@ -274,9 +265,10 @@ export function buildToolsHub(input: {
         {
           id: 'power-rankings',
           title: 'League Power Rankings',
-          desc: 'AI power rankings, trends, strengths and risks for a league.',
-          href: '/rankings',
-          leavesShell: true,
+          desc: 'Power score, trend, strengths and risks for a league — plus your level, class and skill.',
+          // The standalone /rankings page was retired into the hub (2026-10-01); it now redirects here.
+          href: '/core/rankings?scope=league',
+          leavesShell: false,
           live: {
             text:
               stats.connectedLeagues > 0
@@ -286,10 +278,11 @@ export function buildToolsHub(input: {
           },
           tokenCost: null,
           tier: 'free',
-          // /core/rankings is the AF ladder — a different product, already on
-          // the rail. /af-rankings is the career-rank page the old dashboard
-          // linked to; listed so retiring that dashboard does not orphan it.
-          alternates: [{ label: 'AF Rankings (career rank)', href: '/af-rankings' }],
+          // Both former standalone pages now live in the hub as panels (2026-10-01).
+          alternates: [
+            { label: 'Luck, odds and win window', href: '/core/rankings?scope=league&panel=power' },
+            { label: 'Career & legacy import', href: '/core/rankings?scope=portfolio&panel=legacy' },
+          ],
         },
       ],
     },

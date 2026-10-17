@@ -46,7 +46,7 @@ export function LeagueFeedFilters({
             aria-selected={isOn}
             disabled={disabled}
             onClick={() => onChange(f.id)}
-            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
               isOn
                 ? 'bg-white/14 text-white shadow-sm ring-1 ring-white/20'
                 : 'bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white/80'

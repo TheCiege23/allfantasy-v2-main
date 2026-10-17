@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { compatRouteParams } from '@/lib/http/compatRouteParams'
 import { NextResponse } from 'next/server'
 
 /**
@@ -33,6 +34,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'commentary': () => import('../commentary/handler'),
   'commissioner-controls': () => import('../commissioner-controls/handler'),
   'commissioner-rating': () => import('../commissioner-rating/handler'),
+  'commissioner-template': () => import('../commissioner-template/handler'),
   'league-type': () => import('../league-type/handler'),
   'dispersal-draft': () => import('../dispersal-draft/handler'),
   'divisions': () => import('../divisions/handler'),
@@ -61,6 +63,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'matchup-center': () => import('../matchup-center/handler'),
   'matchups': () => import('../matchups/handler'),
   'media': () => import('../media/handler'),
+  'my-team': () => import('../my-team/handler'),
   'orphaned-teams': () => import('../orphaned-teams/handler'),
   'partner-profiles': () => import('../partner-profiles/handler'),
   'power-rankings': () => import('../power-rankings/handler'),
@@ -99,7 +102,8 @@ async function dispatch(method: string, req: NextRequest, ctx: Ctx): Promise<Res
   const mod = await load()
   const fn = mod[method]
   if (typeof fn !== 'function') return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
-  return (fn as (r: NextRequest, c?: unknown) => Promise<Response>)(req, ctx)
+  // Handlers are mixed (some await params, some destructure); hand them both shapes.
+  return (fn as (r: NextRequest, c?: unknown) => Promise<Response>)(req, { ...ctx, params: compatRouteParams(params) })
 }
 
 export const GET = (req: NextRequest, ctx: Ctx) => dispatch('GET', req, ctx)

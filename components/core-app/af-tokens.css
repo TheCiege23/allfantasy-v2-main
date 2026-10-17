@@ -40,7 +40,7 @@
 }
 
 .af-tk-label {
-  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);
@@ -175,7 +175,7 @@
 
 .af-tk-pack-num { font-size: 23px; font-weight: 800; color: var(--accent); line-height: 1; }
 .af-tk-pack-label {
-  font: 500 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 500 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);

@@ -106,17 +106,23 @@ export async function recordTrendSignal(
 export async function recordTrendSignalsAndUpdate(
   events: Array<{ playerId: string; sport: string; signalType: string; value?: number; leagueId?: string }>
 ): Promise<PlayerTrendUpdateResult[]> {
-  const seen = new Set<string>()
+  /*
+   * 🛑 THE PAIR IS KEPT, NEVER RE-PARSED FROM ITS KEY. This used to dedupe on `${playerId}:${sport}`
+   * and split the key on ':' — but a native draft's ids are `name:Jahmyr Gibbs:RB:DET`, so the
+   * split recomputed player "name" in sport "Jahmyr Gibbs". Measured 2026-09-30: 14 such junk rows
+   * in player_meta_trends, and all 41 colon-id players with signals had NO trend row — a name longer
+   * than `sport`'s VarChar(12) failed the upsert, and the draft path's try/catch swallowed it.
+   */
+  const seen = new Map<string, { playerId: string; sport: string }>()
   for (const e of events) {
     await recordTrendSignal(e.playerId, e.sport, e.signalType, {
       value: e.value,
       leagueId: e.leagueId,
     })
-    seen.add(`${e.playerId}:${e.sport}`)
+    seen.set(JSON.stringify([e.playerId, e.sport]), { playerId: e.playerId, sport: e.sport })
   }
   const results: PlayerTrendUpdateResult[] = []
-  for (const key of seen) {
-    const [playerId, sport] = key.split(':')
+  for (const { playerId, sport } of seen.values()) {
     if (playerId && sport) results.push(await updatePlayerTrend(playerId, sport))
   }
   return results

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { assertLeagueMember } from '@/lib/league/league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,10 @@ export async function GET(req: Request) {
   const leagueId = searchParams?.get('leagueId')
   const userId = searchParams?.get('userId')
   if (!leagueId || !userId) return NextResponse.json({ error: 'leagueId and userId required' }, { status: 400 })
+
+  // Any signed-in user could read any league's team items; members only.
+  const membership = await assertLeagueMember(leagueId, session.user.id)
+  if (!membership.ok) return NextResponse.json({ error: 'Forbidden' }, { status: membership.status })
 
   const roster = await prisma.roster.findFirst({
     where: { leagueId, platformUserId: userId },

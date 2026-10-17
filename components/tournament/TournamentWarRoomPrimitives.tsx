@@ -79,7 +79,7 @@ export function WarRoomStatOrb({
       )}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-white/[0.04] to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <p className="relative text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">{label}</p>
+      <p className="relative text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">{label}</p>
       <p className="relative mt-1.5 font-mono text-xl font-bold tracking-tight text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.08)]">
         {value}
       </p>

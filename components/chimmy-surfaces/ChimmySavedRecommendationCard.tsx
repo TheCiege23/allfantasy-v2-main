@@ -103,11 +103,11 @@ export default function ChimmySavedRecommendationCard({
             <Sparkles className="h-2.5 w-2.5 text-indigo-400" aria-hidden="true" />
           </span>
           {/* Sport badge */}
-          <span className={['rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', sportColor].join(' ')}>
+          <span className={['rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide', sportColor].join(' ')}>
             {saved.sport}
           </span>
           {/* Surface badge */}
-          <span className="rounded-full bg-white/8 px-2 py-0.5 text-[10px] font-medium text-white/40 uppercase tracking-wide">
+          <span className="rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-medium text-white/40 uppercase tracking-wide">
             {saved.surface}
           </span>
         </div>

@@ -9,7 +9,12 @@
  */
 
 import { validateUsername } from "@/lib/auth/username-validation"
-import { containsProfanity } from "@/lib/profanity"
+import {
+  isOffensiveDisplayName,
+  isOffensiveUsername,
+  OFFENSIVE_DISPLAY_NAME_MESSAGE,
+  OFFENSIVE_USERNAME_MESSAGE,
+} from "@/lib/moderation/offensiveName"
 import { isAllowedSignupTimezone, resolveSignupTimezone } from "@/lib/signup/TimezoneSelectorService"
 import { resolvePreferredLanguage } from "@/lib/signup/LanguagePreferenceResolver"
 import { resolveAvatarPreset } from "@/lib/signup/AvatarPickerService"
@@ -36,6 +41,7 @@ export interface ResolvedOnboardingProfile {
 
 export type OnboardingProfileError =
   | "DISPLAYNAME_REQUIRED"
+  | "DISPLAYNAME_PROFANE"
   | "USERNAME_INVALID"
   | "USERNAME_PROFANE"
   | "TIMEZONE_INVALID"
@@ -49,6 +55,10 @@ export function resolveOnboardingProfile(input: OnboardingProfileInput): Onboard
   if (!displayName) {
     return { ok: false, error: "Display name is required.", code: "DISPLAYNAME_REQUIRED" }
   }
+  // Other managers read this name on every chat message (lib/moderation/offensiveName).
+  if (isOffensiveDisplayName(displayName)) {
+    return { ok: false, error: OFFENSIVE_DISPLAY_NAME_MESSAGE, code: "DISPLAYNAME_PROFANE" }
+  }
 
   // Username is optional here — blank means "keep the current handle". A provided
   // value must satisfy the canonical rules and be clean.
@@ -58,8 +68,8 @@ export function resolveOnboardingProfile(input: OnboardingProfileInput): Onboard
     if (!validation.ok) {
       return { ok: false, error: validation.reason, code: "USERNAME_INVALID" }
     }
-    if (containsProfanity(validation.normalized)) {
-      return { ok: false, error: "Please choose a different username.", code: "USERNAME_PROFANE" }
+    if (isOffensiveUsername(validation.normalized)) {
+      return { ok: false, error: OFFENSIVE_USERNAME_MESSAGE, code: "USERNAME_PROFANE" }
     }
     username = validation.normalized
   }

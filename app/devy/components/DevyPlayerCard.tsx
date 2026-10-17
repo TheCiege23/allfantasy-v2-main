@@ -91,17 +91,17 @@ export function DevyPlayerCard({
         <div className="flex flex-wrap items-center gap-2">
           <p className={`truncate text-[13px] font-bold ${dimmed ? 'text-white/75' : 'text-white'}`}>{name}</p>
           {statusLabel ? (
-            <span className="rounded-full border border-white/[0.1] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/55">
+            <span className="rounded-full border border-white/[0.1] px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/55">
               {statusLabel}
             </span>
           ) : null}
           {isTaxi ? (
-            <span className="rounded-full bg-amber-500/25 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-100">
+            <span className="rounded-full bg-amber-500/25 px-2 py-0.5 text-[11px] font-bold uppercase text-amber-100">
               Taxi
             </span>
           ) : null}
           {isDevy ? (
-            <span className="rounded-full bg-violet-600/35 px-2 py-0.5 text-[9px] font-bold uppercase text-violet-100">
+            <span className="rounded-full bg-violet-600/35 px-2 py-0.5 text-[11px] font-bold uppercase text-violet-100">
               Devy
             </span>
           ) : null}
@@ -111,13 +111,13 @@ export function DevyPlayerCard({
           {subtitle ? ` · ${subtitle}` : ''}
           {nflTeam ? ` · ${nflTeam}` : ''}
         </p>
-        {classYear ? <p className="text-[10px] text-white/40">Class {classYear}</p> : null}
+        {classYear ? <p className="text-[11px] text-white/40">Class {classYear}</p> : null}
         {isDevy ? (
-          <p className="mt-1 text-[10px] text-violet-200/80">
+          <p className="mt-1 text-[11px] text-violet-200/80">
             {projectedYear ? `NFL entry: ${projectedYear}` : 'Undeclared'}
           </p>
         ) : null}
-        {newsTag ? <p className="mt-1 text-[10px] text-amber-200/80">{newsTag}</p> : null}
+        {newsTag ? <p className="mt-1 text-[11px] text-amber-200/80">{newsTag}</p> : null}
       </div>
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
         {!isDevy ? (
@@ -125,10 +125,10 @@ export function DevyPlayerCard({
             {pointsDisplay ?? '—'}
           </span>
         ) : (
-          <span className="text-[10px] text-white/40">College — no scoring</span>
+          <span className="text-[11px] text-white/40">College — no scoring</span>
         )}
         {variant === 'starter' ? (
-          <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200">
+          <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-200">
             ✓
           </span>
         ) : null}
@@ -136,7 +136,7 @@ export function DevyPlayerCard({
           <button
             type="button"
             onClick={onPromote}
-            className="mt-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-100 min-h-[44px] md:min-h-0"
+            className="mt-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-100 min-h-[44px] md:min-h-0"
             data-testid={`devy-promote-${playerId}`}
           >
             Promote to active
@@ -147,12 +147,12 @@ export function DevyPlayerCard({
             <button
               type="button"
               onClick={onOpen}
-              className="text-[10px] font-semibold text-cyan-300/90 underline"
+              className="text-[11px] font-semibold text-cyan-300/90 underline"
               data-testid={`devy-view-${playerId}`}
             >
               View profile
             </button>
-            <span className="text-[10px] text-white/35">Trade rights · Drop (soon)</span>
+            <span className="text-[11px] text-white/35">Trade rights · Drop (soon)</span>
           </div>
         ) : (
           onMove && (
@@ -160,7 +160,7 @@ export function DevyPlayerCard({
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="rounded-lg border border-white/[0.08] px-2 py-1 text-[10px] text-white/70 min-h-[44px] md:min-h-0"
+                className="rounded-lg border border-white/[0.08] px-2 py-1 text-[11px] text-white/70 min-h-[44px] md:min-h-0"
                 data-testid={`devy-move-menu-${playerId}`}
               >
                 Move ▾
@@ -180,14 +180,14 @@ export function DevyPlayerCard({
                       {a === 'bench' ? 'Bench' : a === 'ir' ? 'IR' : 'Taxi'}
                     </button>
                   ))}
-                  <div className="border-t border-white/[0.06] px-3 py-2 text-[10px] text-white/35">Drop (soon)</div>
+                  <div className="border-t border-white/[0.06] px-3 py-2 text-[11px] text-white/35">Drop (soon)</div>
                 </div>
               ) : null}
             </div>
           )
         )}
         {isTaxi && taxiYear ? (
-          <span className="text-[9px] text-amber-100/70">
+          <span className="text-[11px] text-amber-100/70">
             Year {taxiYear.current} of {taxiYear.max}
           </span>
         ) : null}

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import OpenCommsButton from '@/components/core-app/comms/OpenCommsButton'
 import { Dash34Countdown, Dash34Img, Dash34Time } from './Dashboard34Live'
 import '@/components/core-app/af-dash34.css'
@@ -49,6 +50,8 @@ export type Dash34League = {
   /** Your handle IN THAT LEAGUE — per-league identity, not the AF account name. */
   usernameInLeague?: string | null
   chips?: Dash34StateChip[]
+  /** The viewer commissions it — the same test as the "YOU COMMISH" chip; draws the blue C. */
+  isCommissioner?: boolean
   /** Null until live scoring exists for this league. */
   score?: { you: number; opponent: number; opponentName: string } | null
   /** Kickoff/opponent line shown when there is no live score yet. */
@@ -120,15 +123,40 @@ export type Dash34Brief = {
      */
     atIso?: string | null
     tone?: 'bad' | 'warn' | 'plain' | null
+    /** What `text` was built from, so the home can say it in Spanish (lib/core-app/homeBandsCopy.ts). */
+    parts?: Dash34BriefLineParts | null
   }>
+  /** What `headline` was built from — same reason. */
+  headlineParts?: { kind: 'urgent' | 'drafting' | 'flagged'; count: number } | { kind: 'quiet' } | null
   /** The real next kickoff, when one is scheduled. `initial` is the server paint. */
   countdown?: { initial: string; to: string; label: string } | null
   /** What the brief did not read. Always present — a confident card must say. */
   caveat: string
+  /** What `caveat` was built from — same reason. */
+  caveatParts?: { everSynced: boolean; totalActive: number } | null
   askLabel: string
   moreHref: string
   moreLabel: string
 }
+
+/**
+ * The values a brief line's English `text` was built from (2026-10-04). The English stays exactly as
+ * the loader writes it; these let the /core home rebuild the sentence in Spanish at render. A line
+ * without parts renders its English whole.
+ */
+export type Dash34BriefLineParts =
+  | {
+      kind: 'concentration'
+      name: string
+      position: string | null
+      status: string
+      exposureCount: number
+      totalActive: number
+      startingIn: number
+    }
+  | { kind: 'kickoff'; name: string }
+  | { kind: 'empty-slots'; totalEmpty: number; leagueCount: number; names: string[]; more: number }
+  | { kind: 'flagged'; count: number }
 
 export type Dash34Data = {
   firstLock?: {
@@ -152,6 +180,19 @@ export type Dash34Data = {
     slots: Array<{ key?: string | null; label: string; tone?: 'bad' | 'warn' | null }>
     openHref: string
     openLabel: string
+    /**
+     * What `kickoffLabel`, `headline` and `openLabel` were built from, so the /core home can say them
+     * in Spanish (lib/core-app/homeBandsCopy.ts). The English fields are unchanged.
+     */
+    parts?: {
+      sport: string | null
+      slate: 'pre' | 'post' | null
+      week: number | null
+      away: string | null
+      home: string | null
+      /** The league `openLabel` names ("Check <league>"); null for "Open Player Finder". */
+      leagueName: string | null
+    } | null
   } | null
   today?: { wins: number; losses: number; health?: { score: number; label: string } | null } | null
   /** `time` is an ISO timestamp; `Dash34Time` localises it after hydration. */
@@ -229,7 +270,14 @@ export type Dash34Data = {
    * "Sync has never run" is one fact about the connection, not N facts about N
    * leagues, so it is said once and carries the action the rows carried.
    */
-  notice?: { title: string; body: string; href?: string | null; label?: string | null } | null
+  notice?: {
+    title: string
+    body: string
+    href?: string | null
+    label?: string | null
+    /** What `body` was built from (the /core home's Spanish, lib/core-app/homeBandsCopy.ts). */
+    parts?: { totalActive: number } | null
+  } | null
   /**
    * What this screen is NOT watching.
    *
@@ -238,7 +286,12 @@ export type Dash34Data = {
    * checked — and most of this is not. Naming the gaps is what stops a quiet
    * screen from being a lie.
    */
-  coverage?: Array<{ label: string; reason: string }> | null
+  coverage?: Array<{
+    label: string
+    reason: string
+    /** The one label built from values (the ambiguous injury names) — the rest are fixed text. */
+    parts?: { kind: 'ambiguous-injury'; names: string[]; more: number } | null
+  }> | null
   /**
    * AF Legacy board rows kept out of the list — historical season snapshots from
    * the career import, not leagues you play. Stated, never silently dropped.
@@ -261,7 +314,7 @@ const TOOLS: ReadonlyArray<{ href: string; glyph: string; name: string; leagueSc
   { href: '/core/players', glyph: '●', name: 'Player finder' },
   { href: '/core/trades', glyph: '⇄', name: 'Trade lab', leagueScoped: true },
   { href: '/core/waivers', glyph: '◷', name: 'Waiver plan', leagueScoped: true },
-  { href: '/rankings', glyph: '↑', name: 'Power rankings' },
+  { href: '/core/rankings?scope=league', glyph: '↑', name: 'Power rankings' },
   { href: '/core/career', glyph: '★', name: 'Career & Legacy' },
   { href: '/commissioner-os', glyph: '⚑', name: 'Commissioner HQ' },
 ]
@@ -542,7 +595,7 @@ function Desktop({ data, leagueId }: { data: Dash34Data; leagueId: string | null
               </strong>
               <p className="af-d34-notice-p">
                 {data.totalLeagues === 0
-                  ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+                  ? `Connect ${availableImportPlatformsPhrase()} and your leagues appear here. Read-only, about a minute.`
                   : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
               </p>
               <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>
@@ -808,7 +861,7 @@ function Mobile({ data, leagueId }: { data: Dash34Data; leagueId: string | null 
           </strong>
           <p className="af-d34-notice-p">
             {data.totalLeagues === 0
-              ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+              ? `Connect ${availableImportPlatformsPhrase()} and your leagues appear here. Read-only, about a minute.`
               : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
           </p>
           <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>

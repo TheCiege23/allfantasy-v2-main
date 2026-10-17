@@ -5,7 +5,7 @@ import { RESTRICTED_STATES } from "@/lib/geo/restrictedStates"
 import { getFanCredBoundaryDisclosureLong, getFanCredBoundaryChecklist } from "@/lib/legal/FanCredBoundaryDisclosure"
 
 interface NoGamblingPolicyPageProps {
-  searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
+  searchParams?: Promise<Promise<{ from?: string; next?: string }> | { from?: string; next?: string }>
 }
 
 export const metadata = {
@@ -14,7 +14,8 @@ export const metadata = {
     "AllFantasy's No Gambling Policy: no wagering, no DFS, no paid pick'em. Season-long fantasy sports management and entertainment only.",
 }
 
-export default async function NoGamblingPolicyPage({ searchParams }: NoGamblingPolicyPageProps) {
+export default async function NoGamblingPolicyPage(props: NoGamblingPolicyPageProps) {
+  const searchParams = await props.searchParams
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const fromSignup = params.from === "signup"
   const next = typeof params.next === "string" ? params.next : undefined
@@ -75,7 +76,7 @@ export default async function NoGamblingPolicyPage({ searchParams }: NoGamblingP
             </li>
           ))}
         </ul>
-        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">Paid Contests Restricted</h3>
+        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">Paid Features Restricted</h3>
         <ul className="list-disc list-inside space-y-2 ml-4">
           {paidBlockStates.map((state) => (
             <li key={state.code}>

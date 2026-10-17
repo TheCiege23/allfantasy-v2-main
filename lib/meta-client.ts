@@ -6,6 +6,8 @@ import {
   type MetaEventName,
   type MetaEventPayload,
 } from "@/lib/meta-events"
+import { isInIosAppClient } from "@/lib/platform/iosApp"
+import { isAdOptOutClient } from "@/lib/privacy/adMeasurementOptOut"
 
 declare global {
   interface Window {
@@ -116,6 +118,10 @@ function installFbqShim(): void {
 
 export function ensureMetaPixel(pixelId?: string | null): boolean {
   if (typeof window === "undefined" || typeof document === "undefined") return false
+  // No ad tracking inside the iOS app: App Tracking Transparency (lib/platform/iosApp).
+  if (isInIosAppClient()) return false
+  // Nor for a browser that has opted out of sharing — GPC or /privacy/choices.
+  if (isAdOptOutClient()) return false
   const id = resolveClientMetaPixelId(pixelId)
   if (!id) return false
 

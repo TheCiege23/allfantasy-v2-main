@@ -80,7 +80,7 @@ export function LeagueRecentActivity({ leagueId }: { leagueId: string }) {
         <h2 className="text-[14px] font-bold text-white sm:text-[15px]">Recent Activity</h2>
         <Link
           href={`/league/${encodeURIComponent(leagueId)}?view=trades`}
-          className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#ff3d81]/95 transition hover:text-[#ff9ec0]"
+          className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#ff3d81]/95 transition hover:text-[#ff9ec0]"
           data-testid="league-recent-activity-view-all"
         >
           View all
@@ -110,7 +110,7 @@ export function LeagueRecentActivity({ leagueId }: { leagueId: string }) {
                         <div className="text-[11px] text-white/40">{item.timestamp}</div>
                       </div>
                       <span
-                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide ${pill.className}`}
+                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${pill.className}`}
                       >
                         {pill.label}
                       </span>

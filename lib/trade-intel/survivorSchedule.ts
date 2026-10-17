@@ -159,6 +159,43 @@ export function survivorHorizon(
 }
 
 /**
+ * The horizon for a plain guillotine that has published NO schedule: one team chopped per week from
+ * the `teamsAlive` still playing, until two are left for the final week. Null below two teams.
+ *
+ * ⚠ AN ASSUMPTION, AND LABELLED AS ONE (`id: 'assumed-one-chop'`). It is the same premise
+ * `guillotineHorizon` makes, but run through `survivorHorizon` so `expectedWeeksAlive` counts the
+ * week being played — the unit `allocateFaabAcrossPool` divides by. Without it a no-schedule
+ * guillotine priced this week's pool against the WHOLE remaining budget: measured 2026-09-28 on a
+ * 16-alive league, the listed ceilings summed to the user's entire $200 in week 3. Under this
+ * horizon that week's pool gets $200 / ~8.4 weeks.
+ */
+export function assumedOneChopHorizon(teamsAlive: number): SurvivorHorizon | null {
+  if (!Number.isInteger(teamsAlive) || teamsAlive < 2) return null
+  if (teamsAlive === 2) {
+    return {
+      week: 1,
+      teamsAlive: 2,
+      chopsThisWeek: 1,
+      hazard: 0.5,
+      survivalFromStart: 1,
+      expectedWeeksAlive: 1,
+      multiplier: 1,
+      basis: 'Two teams left: this is the last week, so there is no later week to save for.',
+    }
+  }
+  const aliveByWeek: Record<number, number> = {}
+  for (let i = 0; i < teamsAlive - 1; i += 1) aliveByWeek[i + 1] = teamsAlive - i
+  const h = survivorHorizon({ id: 'assumed-one-chop', label: 'Assumed: one team chopped per week', aliveByWeek }, 1)
+  if (!h) return null
+  return {
+    ...h,
+    basis:
+      `${teamsAlive} teams still alive and no published schedule, so one chop a week is assumed: about ` +
+      `${h.expectedWeeksAlive.toFixed(1)} more weeks you can expect to play, counting this one.`,
+  }
+}
+
+/**
  * The share of your REMAINING survival-weighted weeks that fall on or after a rule change.
  *
  * 🛑 THIS IS WHY A CHART CANNOT PRICE THIS LEAGUE'S QUARTERBACKS. The market chart is fetched with

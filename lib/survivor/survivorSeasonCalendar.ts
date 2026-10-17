@@ -9,8 +9,8 @@ import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 /** Last fantasy regular-season week index (1-based), playoffs excluded — approximate industry defaults. */
 export const REGULAR_SEASON_END_WEEK_BY_SPORT: Record<LeagueSport, number> = {
   NFL: 14,
-  NBA: 23,
-  NHL: 26,
+  NBA: 25,
+  NHL: 28,
   MLB: 26,
   NCAAF: 13,
   NCAAB: 22,

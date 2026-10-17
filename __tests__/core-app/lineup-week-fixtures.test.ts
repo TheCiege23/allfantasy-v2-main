@@ -19,8 +19,23 @@ describe('weekVerdict', () => {
     expect(weekVerdict(index, 'washington commanders', 3)).toEqual({ verdict: 'done' })
   })
 
-  it('done: the whole week is behind the schedule (Tuesday, Sleeper still on the old week)', () => {
-    const tuesday = indexFixturesByWeek([g('Washington Commanders', 'Dallas Cowboys', '2026-10-04T17:00:00Z', 4)])
+  /*
+   * The whole week is behind the schedule (Tuesday, Sleeper still on the old week). The lineup
+   * carries into the next week, so the verdict is that week's — measured 2026-09-29 on the App
+   * Review account: an IR starter with a kickoff in 5 days was missing from Top decisions while
+   * My Team and the triage rail both flagged him.
+   */
+  const tuesday = indexFixturesByWeek([
+    g('Washington Commanders', 'Dallas Cowboys', '2026-10-04T17:00:00Z', 4),
+    g('Miami Dolphins', 'New York Jets', '2026-10-04T20:05:00Z', 4),
+    g('Miami Dolphins', 'Buffalo Bills', '2026-10-11T17:00:00Z', 5),
+  ])
+
+  it('plays: once the lineup week is over, a club with a game next week is still live, at that kickoff', () => {
+    expect(weekVerdict(tuesday, 'miami dolphins', 3)).toEqual({ verdict: 'plays', kickoff: at('2026-10-04T20:05:00Z') })
+  })
+
+  it('done: once the lineup week is over, a club on bye NEXT week has nothing to fix', () => {
     expect(weekVerdict(tuesday, 'philadelphia eagles', 3)).toEqual({ verdict: 'done' })
   })
 

@@ -162,6 +162,20 @@ function seededRandom(seed: string): () => number {
 
 /**
  * Select eligible teams for lottery based on config.
+ *
+ * `rows` arrive BEST-first: rank 1 = best (`LeagueTeam.currentRank`, which every standings read
+ * orders ascending), sorted by `applyTiebreak` — or the Standings table's seeds, for its preview.
+ * The playoff teams are the head of that list, and the lottery pool is always its WORST
+ * `lotteryTeamCount` teams.
+ *
+ * 🛑 UNTIL 2026-10-03 `non_playoff` and `all_teams` took the HEAD of the pool (`slice(0, N)`), so
+ * when more teams sat outside the playoff line than the lottery had places — 12 teams, 4 in the
+ * playoffs, 6 in the lottery — the worst records in the league got no ticket at all, and the best
+ * non-playoff teams drew instead. `bottom_n` was right, except that a count of 0 (`slice(-0)`)
+ * returned every team.
+ *
+ * The output keeps the input's order, so a league whose pool already fit gets exactly the list,
+ * draw and seed-reproducible result it got before.
  */
 export function selectEligibleTeams(
   rows: StandingsRow[],
@@ -170,34 +184,53 @@ export function selectEligibleTeams(
   playoffTeamCount: number
 ): StandingsRow[] {
   const mode = eligibilityMode === 'custom' ? 'all_teams' : eligibilityMode
-  if (mode === 'all_teams') {
-    return rows.slice(0, lotteryTeamCount)
+  if (mode === 'all_teams' || mode === 'bottom_n') {
+    return worstOf(rows, lotteryTeamCount)
   }
-  if (mode === 'bottom_n') {
-    return rows.slice(-lotteryTeamCount)
-  }
-  const nonPlayoffCount = Math.max(0, rows.length - playoffTeamCount)
-  const eligible = rows.slice(playoffTeamCount, playoffTeamCount + nonPlayoffCount)
-  return eligible.slice(0, lotteryTeamCount)
+  return worstOf(rows.slice(Math.max(0, playoffTeamCount)), lotteryTeamCount)
 }
 
 /**
- * Compute weight for a team (higher = better lottery odds).
+ * The `n` worst rows, in their input order. Worst = highest rank; within a tied rank, the row
+ * `applyTiebreak` placed first counts as the worse finish — the same reading the fallback order
+ * (`buildFullSlotOrder`, a stable sort by rank descending) gives a tie.
+ */
+function worstOf(rows: StandingsRow[], n: number): StandingsRow[] {
+  if (!(n > 0)) return []
+  if (rows.length <= n) return rows.slice()
+  const worst = new Set([...rows].sort((a, b) => b.rank - a.rank).slice(0, n))
+  return rows.filter((r) => worst.has(r))
+}
+
+/**
+ * Compute weight for a team (higher = better lottery odds). Worse teams get better odds — what the
+ * settings screen promises ("Worse teams get better odds at top picks").
+ *
+ * 🛑 BOTH WEIGHTINGS WERE FLAT UNTIL 2026-09-29, SO EVERY LOTTERY WAS A COIN TOSS.
+ * - `inverse_standings` computed `bestRank - rank + 1`. `rank` is 1 = best, so for every team in the
+ *   pool (all ranked at or below the pool's best) that is <= 1, and the `max(1, …)` floor made every
+ *   weight 1.
+ * - `inverse_points_for` / `inverse_max_pf` computed `1000 - PF`. A season's points-for is well over
+ *   1,000, so every weight hit the 0.1 floor.
+ * Now both are ranks WITHIN the pool: the worst standing (or the lowest PF) gets the most weight, the
+ * best gets 1, and ties share a weight. A rank is scale-free, so no season's scoring can flatten it.
  */
 export function computeWeight(
   row: StandingsRow,
   weightingMode: LotteryWeightingMode,
   worstRankInPool: number,
-  bestRankInPool: number
+  bestRankInPool: number,
+  pool: readonly StandingsRow[] = [row]
 ): number {
   if (weightingMode === 'inverse_standings') {
-    const range = Math.max(1, bestRankInPool - worstRankInPool + 1)
-    const inverseRank = bestRankInPool - row.rank + 1
-    return Math.max(1, inverseRank)
+    // rank 1 = best, so the pool's worst team (highest rank) gets worstRank - bestRank + 1.
+    return Math.max(1, row.rank - bestRankInPool + 1)
   }
   if (weightingMode === 'inverse_points_for' || weightingMode === 'inverse_max_pf') {
-    const pf = weightingMode === 'inverse_max_pf' ? row.maxPf : row.pointsFor
-    return Math.max(0.1, 1000 - pf)
+    const pfOf = (r: StandingsRow) => (weightingMode === 'inverse_max_pf' ? r.maxPf : r.pointsFor)
+    const pf = pfOf(row)
+    // One plus the teams that scored MORE: the lowest scorer gets the most weight.
+    return 1 + pool.filter((r) => pfOf(r) > pf).length
   }
   return 1
 }
@@ -214,7 +247,7 @@ export function buildEligibleTeamsWithOdds(
   const bestRank = Math.min(...eligible.map((r) => r.rank))
   const withWeight = eligible.map((r) => ({
     ...r,
-    weight: computeWeight(r, weightingMode, worstRank, bestRank),
+    weight: computeWeight(r, weightingMode, worstRank, bestRank, eligible),
   }))
   const totalWeight = withWeight.reduce((s, r) => s + r.weight, 0)
   return withWeight.map((r) => ({

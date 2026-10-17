@@ -82,7 +82,9 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/shared-services/commissioner', () => ({
+// The context imports each builder from its LEAF module (the package barrel is gone), so
+// each leaf is mocked. A barrel mock here intercepts nothing and lets the real builders run.
+vi.mock('@/lib/shared-services/commissioner/CommissionerContextAssembler', () => ({
   buildCommissionerContext: vi.fn().mockResolvedValue({
     leagueId: 'league-1',
     generatedAt: '2026-07-12T00:00:00.000Z',
@@ -93,12 +95,20 @@ vi.mock('@/lib/shared-services/commissioner', () => ({
     gameDayAttentionItems: null,
     managerTendencies: {},
   }),
+}))
+vi.mock('@/lib/shared-services/commissioner/LeagueHealthService', () => ({
   buildLeagueHealthAssessment: vi.fn().mockReturnValue({
     leagueId: 'league-1', category: 'healthy', score: 88, issues: [], evidence: [], confidence: 90, freshness: 'fresh',
     sourceAttribution: { source: 'monitorLeagueHealth', fetchedAt: '', providerTimestamp: null, freshness: 'fresh', confidence: 90, missingDataReason: null },
   }),
+}))
+vi.mock('@/lib/shared-services/commissioner/CommissionerAttentionService', () => ({
   buildCommissionerAttentionItems: vi.fn().mockReturnValue([]),
+}))
+vi.mock('@/lib/shared-services/commissioner/CommissionerRankingService', () => ({
   buildCommissionerRanking: vi.fn().mockResolvedValue(null),
+}))
+vi.mock('@/lib/shared-services/commissioner/CommissionerBriefService', () => ({
   buildCommissionerBrief: vi.fn().mockReturnValue({ leagueId: 'league-1', week: 1, generatedAt: '', sections: [], isHealthy: true, confidence: 80 }),
 }))
 
@@ -122,7 +132,7 @@ function baseLeague(overrides: Record<string, unknown> = {}) {
 describe('assembleCommissionerOsContext — authorization boundary', () => {
   beforeEach(() => {
     // `mockReset()` (not a blanket `vi.resetAllMocks()`, which would also wipe the
-    // `vi.mock('@/lib/shared-services/commissioner', ...)` factory's own `mockResolvedValue`
+    // `vi.mock('@/lib/shared-services/commissioner/*', ...)` factories' own `mockResolvedValue`
     // implementations set only once at module-mock definition time) on just the hoisted prisma
     // mocks — `clearAllMocks` alone leaves any queued-but-unconsumed `mockResolvedValueOnce`
     // values in place, which would otherwise leak into the next test whenever a prior test's flow

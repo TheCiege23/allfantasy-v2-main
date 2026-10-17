@@ -65,7 +65,7 @@
   letter-spacing: -0.02em;
 }
 
-.af-lt[data-variant='rail'] .af-lt-fallback { font-size: 10px; }
+.af-lt[data-variant='rail'] .af-lt-fallback { font-size: 11px; }
 
 /*
  * The badge. Corner mark on the art, never its own row.
@@ -84,7 +84,7 @@
   border-radius: 5px;
   box-shadow: 0 0 0 1.5px var(--surface);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   background: var(--chip);
@@ -94,7 +94,7 @@
 .af-lt[data-variant='rail'] .af-lt-badge {
   width: 12px;
   height: 12px;
-  font-size: 7px;
+  font-size: 11px;
   border-radius: 4px;
 }
 
@@ -140,14 +140,14 @@
 .af-lt-disambig {
   flex: none;
   font-style: normal;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--faint);
   cursor: help;
 }
 
 .af-lt-format {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   color: var(--faint);
   white-space: nowrap;
@@ -155,7 +155,7 @@
   text-overflow: ellipsis;
 }
 
-.af-lt[data-variant='rail'] .af-lt-format { font-size: 9px; }
+.af-lt[data-variant='rail'] .af-lt-format { font-size: 11px; }
 
 .af-lt-status {
   display: flex;
@@ -195,7 +195,7 @@
 .af-lt-state {
   flex: none;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -243,7 +243,7 @@
 
 .af-lt-score-tag {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -251,7 +251,7 @@
 }
 
 .af-lt-score-opp {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
   max-width: 120px;
   white-space: nowrap;
@@ -267,7 +267,7 @@
   border-radius: 9px;
 }
 
-.af-lt[data-variant='rail'] .af-lt-status { font-size: 10px; margin-top: 1px; }
-.af-lt[data-variant='rail'] .af-lt-state { font-size: 8.5px; }
+.af-lt[data-variant='rail'] .af-lt-status { font-size: 11px; margin-top: 1px; }
+.af-lt[data-variant='rail'] .af-lt-state { font-size: 11px; }
 .af-lt[data-variant='rail'] .af-lt-score-nums { font-size: 11px; }
 .af-lt[data-variant='rail'] .af-lt-score-opp { display: none; }

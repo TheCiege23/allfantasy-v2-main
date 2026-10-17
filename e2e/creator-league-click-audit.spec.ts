@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -416,6 +417,15 @@ test.describe('@community creator league click audit', () => {
 
   test('createor alias renders the creator dashboard surface', async ({ page }) => {
     await installCreatorRoutes(page)
+    /*
+     * /creator is gated on `useSession()`. The root layout preloads the server session and hands
+     * it to next-auth's SessionProvider, so a visitor with no cookie starts as `unauthenticated`
+     * and the client never requests /api/auth/session — the route mock in installCreatorRoutes is
+     * never consulted. Before the Next 15.5 / React 19.3 upgrade this test passed only because the
+     * dev server ran the provider's mount effect twice, and the second pass refetched the session.
+     * A real signed cookie is what the other session-gated specs use.
+     */
+    await signInAs(page, { id: 'viewer-1', name: 'Alpha Creator', email: 'alpha@example.com' })
 
     await gotoWithRetry(page, '/createor')
     await expect(page.getByRole('heading', { name: 'Creator dashboard' })).toBeVisible()

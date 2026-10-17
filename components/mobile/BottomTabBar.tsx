@@ -56,14 +56,14 @@ export default function BottomTabBar({ activeTab, onChange, alertCount = 0 }: Bo
                   }`}
                 />
                 {showBadge && (
-                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 flex items-center justify-center px-1 rounded-full bg-rose-500 text-[9px] font-bold text-white leading-none">
+                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 flex items-center justify-center px-1 rounded-full bg-rose-500 text-[11px] font-bold text-white leading-none">
                     {alertCount > 99 ? '99+' : alertCount}
                   </span>
                 )}
               </div>
 
               <span
-                className={`text-[10px] font-medium transition-colors duration-200 ${
+                className={`text-[11px] font-medium transition-colors duration-200 ${
                   isActive ? 'text-cyan-300' : 'text-white/35'
                 }`}
               >

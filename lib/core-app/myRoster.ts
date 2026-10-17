@@ -40,7 +40,12 @@ export function myRosterCandidates(team: ClaimedTeamKeys, userId: string): strin
 }
 
 export type MyRosterLookup =
-  | { found: true; playerData: unknown }
+  /*
+   * `rosterId` is the `Roster.id` — the key roster-scoped tables (`DevyRights`, …) are written under.
+   * Added for the per-league Devy tab so it reads the SAME roster every other "my team" surface does
+   * rather than a second copy of this join.
+   */
+  | { found: true; playerData: unknown; rosterId: string }
   | { found: false; reason: 'no_team_claimed' | 'no_roster' }
 
 /**
@@ -70,11 +75,11 @@ export async function findMyRoster(
     ? await prisma.roster
         .findFirst({
           where: { leagueId, platformUserId: { in: candidates } },
-          select: { playerData: true },
+          select: { id: true, playerData: true },
         })
         .catch(() => null)
     : null
-  if (roster) return { found: true, playerData: roster.playerData }
+  if (roster) return { found: true, playerData: roster.playerData, rosterId: roster.id }
 
   /*
    * 🛑 A SECOND CHANCE BY THE TEAM'S OWN ID, BECAUSE AN OWNER KEY IS NOT AN IDENTITY.
@@ -102,7 +107,9 @@ export async function findMyRoster(
   const byTeam = resolveRostersForTeams([team], rosters, (t) => myRosterCandidates(t, userId))
   const mine = team.externalId ? byTeam.get(team.externalId) : undefined
 
-  return mine ? { found: true, playerData: mine.playerData } : { found: false, reason: 'no_roster' }
+  return mine
+    ? { found: true, playerData: mine.playerData, rosterId: mine.id }
+    : { found: false, reason: 'no_roster' }
 }
 
 /** Sections of a roster object that hold player ids. `players` is the full set; the rest are subsets. */

@@ -111,7 +111,7 @@ export function SalaryCapDashboard({ leagueId }: { leagueId: string }) {
 function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-center">
-      <p className="text-[10px] text-white/40">{label}</p>
+      <p className="text-[11px] text-white/40">{label}</p>
       <p className={clsx('text-lg font-bold', color ?? 'text-white')}>{value}</p>
     </div>
   )
@@ -123,7 +123,7 @@ function ContractsTab({ contracts }: { contracts: CapSummary['contracts'] }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-white/10">
       <table className="w-full min-w-[500px] text-left text-xs">
-        <thead className="border-b border-white/10 text-[10px] uppercase text-white/40">
+        <thead className="border-b border-white/10 text-[11px] uppercase text-white/40">
           <tr>
             <th className="p-2.5">Player</th>
             <th className="p-2.5">Pos</th>
@@ -146,7 +146,7 @@ function ContractsTab({ contracts }: { contracts: CapSummary['contracts'] }) {
               <td className="p-2.5">
                 <span
                   className={clsx(
-                    'rounded px-1.5 py-0.5 text-[9px] font-bold',
+                    'rounded px-1.5 py-0.5 text-[11px] font-bold',
                     c.status === 'active' ? 'bg-emerald-500/20 text-emerald-300' :
                     c.status === 'expiring' ? 'bg-amber-500/20 text-amber-300' :
                     'bg-white/10 text-white/40',
@@ -181,7 +181,7 @@ function CapSheetTab({ data }: { data: CapSummary }) {
           <div className="bg-red-500" style={{ width: `${deadPct}%` }} title={`Dead: $${data.deadMoney.toFixed(0)}`} />
           <div className="bg-emerald-500/30" style={{ width: `${availPct}%` }} title={`Available: $${data.availableCap.toFixed(0)}`} />
         </div>
-        <div className="mt-2 flex flex-wrap gap-4 text-[10px]">
+        <div className="mt-2 flex flex-wrap gap-4 text-[11px]">
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-cyan-500" /> Active: ${data.activeSalary.toFixed(0)}</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> Dead: ${data.deadMoney.toFixed(0)}</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500/30" /> Available: ${data.availableCap.toFixed(0)}</span>
@@ -199,7 +199,7 @@ function FutureTab({ years }: { years: CapSummary['futureYears'] }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-white/10">
       <table className="w-full text-left text-xs">
-        <thead className="border-b border-white/10 text-[10px] uppercase text-white/40">
+        <thead className="border-b border-white/10 text-[11px] uppercase text-white/40">
           <tr>
             <th className="p-2.5">Year</th>
             <th className="p-2.5 text-right">Committed</th>
@@ -223,7 +223,7 @@ function FutureTab({ years }: { years: CapSummary['futureYears'] }) {
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <span className="text-[10px] text-white/40">{pct}%</span>
+                    <span className="text-[11px] text-white/40">{pct}%</span>
                   </div>
                 </td>
               </tr>

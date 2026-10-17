@@ -4,6 +4,7 @@ const db = vi.hoisted(() => ({
   $queryRaw: vi.fn(),
   $transaction: vi.fn(async (ops: unknown[]) => ops),
   tradeAgentSuggestion: { findMany: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn((a: unknown) => ({ op: 'delete', a })), createMany: vi.fn((a: unknown) => ({ op: 'create', a })) },
+  sportsDataCache: { findUnique: vi.fn(), upsert: vi.fn() },
 }))
 const agent = vi.hoisted(() => ({ runTradeAgentForLeague: vi.fn(), tradeAgentLeagueIds: vi.fn() }))
 const telemetry = vi.hoisted(() => ({ recordSyncJobRun: vi.fn(async () => undefined) }))
@@ -14,6 +15,8 @@ vi.mock('@/lib/decision-os/trade/tradeAgent', () => agent)
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => telemetry)
 
 import {
+  leaguesVisitedTonight,
+  markLeaguesVisited,
   readTradeAgentSuggestions,
   resetTradeAgentTableCache,
   saveTradeAgentSuggestions,
@@ -30,6 +33,8 @@ beforeEach(() => {
   db.tradeAgentSuggestion.findMany.mockResolvedValue([])
   agent.tradeAgentLeagueIds.mockResolvedValue(['L1', 'L2', 'L3'])
   agent.runTradeAgentForLeague.mockResolvedValue({ leagueId: 'x', managers: 1, graded: 4, saved: 2, partial: false })
+  db.sportsDataCache.findUnique.mockResolvedValue(null)
+  db.sportsDataCache.upsert.mockResolvedValue({})
 })
 
 describe('tradeAgentTableReady — nothing runs before the migration', () => {
@@ -85,5 +90,50 @@ describe('runTradeAgentPass', () => {
   it('a pass with almost no time left does not start', async () => {
     expect(await runTradeAgentPass({ now: NIGHT, budgetMs: 3_000 })).toMatchObject({ ran: false })
     expect(agent.tradeAgentLeagueIds).not.toHaveBeenCalled()
+  })
+})
+
+describe('a league is graded once a night — after one full visit it is skipped', () => {
+  it('skips leagues an earlier pass visited in full, even with no suggestion saved', async () => {
+    db.sportsDataCache.findUnique.mockResolvedValue({ data: { leagueIds: ['L1', 'L3'] } })
+    const out = await runTradeAgentPass({ now: NIGHT, budgetMs: 200_000 })
+    expect(agent.runTradeAgentForLeague.mock.calls.map((c) => c[0])).toEqual(['L2'])
+    expect(out).toMatchObject({ ran: true, alreadyVisited: 2, visited: 1, marked: 1 })
+  })
+
+  it('marks only complete visits: a budget-interrupted or failing league is retried next hour', async () => {
+    agent.runTradeAgentForLeague.mockImplementation(async (id: string) => {
+      if (id === 'L2') return { leagueId: id, managers: 1, graded: 3, saved: 0, partial: true }
+      if (id === 'L3') throw new Error('boom')
+      return { leagueId: id, managers: 1, graded: 4, saved: 0, partial: false }
+    })
+    const out = await runTradeAgentPass({ now: NIGHT, budgetMs: 200_000 })
+    expect(out).toMatchObject({ ran: true, marked: 1 })
+    const written = db.sportsDataCache.upsert.mock.calls[0]![0] as { where: { cacheKey: string }; create: { data: { leagueIds: string[] }; expiresAt: Date } }
+    expect(written.where.cacheKey).toBe('trade-agent:visited:2026-09-28')
+    expect(written.create.data.leagueIds).toEqual(['L1'])
+    // Expires two days on, so the hourly reaper's cache purge removes it on its own.
+    expect(written.create.expiresAt.toISOString()).toBe('2026-09-30T05:00:00.000Z')
+  })
+
+  it('adds to tonight’s list rather than replacing it', async () => {
+    db.sportsDataCache.findUnique.mockResolvedValue({ data: { leagueIds: ['L9'] } })
+    await markLeaguesVisited('2026-09-28', ['L1'], NIGHT)
+    const written = db.sportsDataCache.upsert.mock.calls[0]![0] as { update: { data: { leagueIds: string[] } } }
+    expect(written.update.data.leagueIds.sort()).toEqual(['L1', 'L9'])
+  })
+
+  it('fails safe both ways: an unreadable list hides nothing, and a lost write is reported, not thrown', async () => {
+    db.sportsDataCache.findUnique.mockRejectedValue(new Error('down'))
+    expect(await leaguesVisitedTonight('2026-09-28')).toEqual(new Set())
+    db.sportsDataCache.findUnique.mockResolvedValue(null)
+    db.sportsDataCache.upsert.mockRejectedValue(new Error('down'))
+    const out = await runTradeAgentPass({ now: NIGHT, budgetMs: 200_000 })
+    expect(out).toMatchObject({ ran: true, visited: 3, marked: 0 })
+    expect(telemetry.recordSyncJobRun).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ warnings: [expect.stringMatching(/graded again next pass/)] }),
+      expect.any(Number),
+    )
   })
 })

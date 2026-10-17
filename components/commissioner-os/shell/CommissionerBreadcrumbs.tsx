@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { useCommissionerNavigation } from '@/components/commissioner-os/providers/CommissionerNavigationProvider'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { commissionerSectionName, shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 /**
  * Per the Design Language & Experience System §3: breadcrumbs appear only
@@ -11,10 +13,11 @@ import { useCommissionerNavigation } from '@/components/commissioner-os/provider
  */
 export function CommissionerBreadcrumbs() {
   const { breadcrumbs } = useCommissionerNavigation()
+  const { language } = useOptionalLanguage()
   if (breadcrumbs.length === 0) return null
 
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1 px-1 py-2 text-sm" style={{ color: 'var(--muted)' }}>
+    <nav aria-label={shellText('Breadcrumb', language)} className="flex items-center gap-1 px-1 py-2 text-sm" style={{ color: 'var(--muted)' }}>
       {breadcrumbs.map((crumb, index) => {
         const isLast = index === breadcrumbs.length - 1
         return (
@@ -22,11 +25,11 @@ export function CommissionerBreadcrumbs() {
             {index > 0 && <ChevronRight size={14} aria-hidden />}
             {isLast ? (
               <span aria-current="page" style={{ color: 'var(--text)' }}>
-                {crumb.label}
+                {commissionerSectionName(crumb.label, language)}
               </span>
             ) : (
               <Link href={crumb.href} className="focus-ring rounded" style={{ color: 'var(--muted)' }}>
-                {crumb.label}
+                {commissionerSectionName(crumb.label, language)}
               </Link>
             )}
           </span>

@@ -36,13 +36,13 @@ function pickQuery(
   return "";
 }
 
-export default async function ImportPage({
-  searchParams,
-}: {
-  searchParams?:
-    | Promise<Record<string, string | string[] | undefined>>
-    | Record<string, string | string[] | undefined>;
-}) {
+export default async function ImportPage(
+  props: {
+    searchParams?: Promise<| Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const sp =
     searchParams instanceof Promise ? await searchParams : searchParams ?? {};
   const returnToRaw = pickQuery(sp, "returnTo");
@@ -113,7 +113,7 @@ export default async function ImportPage({
     pickQuery(sp, "success") === "yahoo_connected";
 
   const session = (await getServerSession(authOptions as never)) as {
-    user?: { id?: string };
+    user?: { id?: string; email?: string | null };
   } | null;
 
   /*
@@ -167,6 +167,7 @@ export default async function ImportPage({
       yahooError={yahooError}
       yahooErrorDesc={yahooErrorDesc}
       yahooConnected={yahooConnected}
+      viewerEmail={session.user.email ?? null}
     />
   );
 }

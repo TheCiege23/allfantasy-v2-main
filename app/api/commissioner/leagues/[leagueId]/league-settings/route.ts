@@ -19,7 +19,8 @@ import type { GetLeagueSettingsResponse } from '@/lib/league-settings-engine/Lea
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest, { params }: { params: { leagueId: string } }): Promise<NextResponse> {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const session = (await getServerSession(authOptions as never)) as {
       user?: { id?: string; email?: string | null }
@@ -116,7 +117,7 @@ export async function GET(req: NextRequest, { params }: { params: { leagueId: st
  * Settings writes go through `PATCH /api/leagues/{leagueId}/settings`, which merges field by field
  * and enforces lifecycle and structural locks. The GET above is unchanged.
  */
-export async function PUT(_req: NextRequest, _ctx: { params: { leagueId: string } }): Promise<NextResponse> {
+export async function PUT(_req: NextRequest, _ctx: { params: Promise<{ leagueId: string }> }): Promise<NextResponse> {
   return NextResponse.json(
     {
       error: 'This endpoint has been retired: it overwrote every league setting. Use PATCH /api/leagues/{leagueId}/settings.',

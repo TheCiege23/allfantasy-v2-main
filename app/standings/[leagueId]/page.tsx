@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPublicLeagueStandings } from '@/lib/core-app/publicStandings'
+import { serializeJsonLd } from '@/lib/seo/StructuredDataResolver'
 import './public-standings.css'
 
 /**
@@ -86,9 +87,10 @@ export default async function PublicStandingsPage({ params }: Params) {
     <main className="ps">
       <script
         type="application/ld+json"
-        // eslint-disable-next-line react/no-danger -- JSON-LD has no HTML in it; the
-        // payload is our own serialised object, not user markup.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        // eslint-disable-next-line react/no-danger -- the object is ours, but the league
+        // and team NAMES inside it are user-controlled; serializeJsonLd escapes `<` so a
+        // name like "</script><img onerror=…>" cannot close the element.
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
       <header className="ps-head">

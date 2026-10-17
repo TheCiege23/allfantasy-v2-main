@@ -26,8 +26,8 @@ export function MatchupAiAnalysisPanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-violet-300/90" />
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">AI matchup breakdown</h3>
-          <span className="text-[10px] text-white/35">{sport}</span>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">Chimmy&apos;s matchup breakdown</h3>
+          <span className="text-[11px] text-white/35">{sport}</span>
         </div>
         <button
           type="button"
@@ -37,7 +37,7 @@ export function MatchupAiAnalysisPanel({
           className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-500/15 px-3 py-1.5 text-[11px] font-semibold text-violet-100/95 disabled:opacity-40"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-          {loading ? 'Analyzing…' : 'Run AI analysis'}
+          {loading ? 'Analyzing…' : 'Ask Chimmy to analyze'}
         </button>
       </div>
 
@@ -92,8 +92,8 @@ export function MatchupAiAnalysisPanel({
             <span className="font-semibold text-amber-200/85">If you need upside → </span>
             {result.scenarios.ifNeedUpside}
           </p>
-          <p className="text-[10px] text-white/45">{result.winProbabilityNotes}</p>
-          <p className="text-[10px] text-white/35">
+          <p className="text-[11px] text-white/45">{result.winProbabilityNotes}</p>
+          <p className="text-[11px] text-white/35">
             Providers: OA {result.providers.openai} · DS {result.providers.deepseek} · Grok {result.providers.grok}.{' '}
             {result.dataNotes}
           </p>

@@ -46,13 +46,13 @@ export default function ConfidenceFreshnessLabel({
     return (
       <div className="flex items-center gap-2 flex-wrap">
         {conf && (
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-medium ${conf.color}`}>
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[11px] font-medium ${conf.color}`}>
             <Shield className="w-2.5 h-2.5" />
             {conf.text}
           </span>
         )}
         {timestamp && (
-          <span className={`inline-flex items-center gap-1 text-[9px] ${freshnessColor(timestamp)}`}>
+          <span className={`inline-flex items-center gap-1 text-[11px] ${freshnessColor(timestamp)}`}>
             <Clock className="w-2.5 h-2.5" />
             {timeAgo(timestamp)}
           </span>
@@ -64,13 +64,13 @@ export default function ConfidenceFreshnessLabel({
   return (
     <div className="flex items-center gap-3 flex-wrap">
       {conf && (
-        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-medium ${conf.color}`}>
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium ${conf.color}`}>
           <Shield className="w-3 h-3" />
           Confidence: {conf.text} {confidence != null && `(${Math.round(confidence * 100)}%)`}
         </div>
       )}
       {timestamp && (
-        <div className={`inline-flex items-center gap-1.5 text-[10px] ${freshnessColor(timestamp)}`}>
+        <div className={`inline-flex items-center gap-1.5 text-[11px] ${freshnessColor(timestamp)}`}>
           <Clock className="w-3 h-3" />
           Data: {timeAgo(timestamp)}
         </div>

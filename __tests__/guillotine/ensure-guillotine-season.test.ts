@@ -21,9 +21,11 @@ const redraftSeasonFindFirst = vi.fn()
 const guillotineSeasonFindFirst = vi.fn()
 const guillotineSeasonCreate = vi.fn()
 const redraftRosterCount = vi.fn()
+const rosterStateUpdateMany = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    guillotineRosterState: { updateMany: (...a: unknown[]) => rosterStateUpdateMany(...a) },
     redraftSeason: { findFirst: (...a: unknown[]) => redraftSeasonFindFirst(...a) },
     guillotineSeason: {
       findFirst: (...a: unknown[]) => guillotineSeasonFindFirst(...a),
@@ -112,5 +114,40 @@ describe('ensureGuillotineSeason', () => {
 
     const result = await ensureGuillotineSeason({ leagueId: 'lg1', redraftSeasonId: 'rs1' })
     expect(result).toEqual({ ok: true, created: false, seasonId: 'theirs' })
+  })
+})
+
+describe('ensureGuillotineSeason — year two starts every team alive', () => {
+  const CREATED_AT = new Date('2027-09-01T00:00:00Z')
+
+  it('🛑 clears last season’s chops when a league starts its next guillotine season', async () => {
+    guillotineSeasonCreate.mockResolvedValue({ id: 'gs2', createdAt: CREATED_AT })
+    guillotineSeasonFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+      'redraftSeasonId' in where ? null : { id: 'gs1' }, // none for THIS redraft season; a prior one exists
+    )
+
+    const result = await ensureGuillotineSeason({ leagueId: 'lg1', redraftSeasonId: 'rs2' })
+
+    expect(result).toEqual({ ok: true, created: true, seasonId: 'gs2' })
+    expect(guillotineSeasonFindFirst).toHaveBeenCalledWith({
+      where: { leagueId: 'lg1', id: { not: 'gs2' }, createdAt: { lt: CREATED_AT } },
+      select: { id: true },
+    })
+    expect(rosterStateUpdateMany).toHaveBeenCalledWith({
+      where: { leagueId: 'lg1', choppedAt: { not: null, lt: CREATED_AT } },
+      data: { choppedAt: null, choppedInPeriod: null, choppedReason: null },
+    })
+  })
+
+  it('touches nothing for a league’s first season', async () => {
+    guillotineSeasonCreate.mockResolvedValue({ id: 'gs1', createdAt: CREATED_AT })
+    await ensureGuillotineSeason({ leagueId: 'lg1', redraftSeasonId: 'rs1' })
+    expect(rosterStateUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('touches nothing when the season already exists', async () => {
+    guillotineSeasonFindFirst.mockResolvedValue({ id: 'existing' })
+    await ensureGuillotineSeason({ leagueId: 'lg1', redraftSeasonId: 'rs1' })
+    expect(rosterStateUpdateMany).not.toHaveBeenCalled()
   })
 })

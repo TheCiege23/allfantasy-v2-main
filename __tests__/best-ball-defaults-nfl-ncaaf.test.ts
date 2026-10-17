@@ -110,7 +110,8 @@ describe('getBestBallDefaultContract — NCAAF', () => {
   it('NCAAF has QB:1, RB:2, WR:3, FLEX:2', () => {
     expect(contract.rosterTemplate.starterSlots).toMatchObject({ QB: 1, RB: 2, WR: 3, FLEX: 2 })
   })
-  it('seasonSettings.regularSeasonLength is 12', () => expect(contract.seasonSettings.regularSeasonLength).toBe(12))
+  // 11 since 2026-09-28: a 4-team bracket plays weeks 12-13, ending on the last full college slate.
+  it('seasonSettings.regularSeasonLength is 11', () => expect(contract.seasonSettings.regularSeasonLength).toBe(11))
   it('seasonSettings.playoffTeams is 4', () => expect(contract.seasonSettings.playoffTeams).toBe(4))
   it('playerPoolRules.includeNflPlayers is false', () => expect(contract.playerPoolRules.includeNflPlayers).toBe(false))
   it('playerPoolRules.includeCollegePlayers is true', () => expect(contract.playerPoolRules.includeCollegePlayers).toBe(true))

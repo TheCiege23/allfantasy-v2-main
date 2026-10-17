@@ -60,6 +60,8 @@ export async function resolveUnifiedStorylines(
     managerIds: [...managerIds],
     limitPerManager: 3,
   })
+  // Behaviour heat is built from profile trait scores, so it may rank storylines
+  // but is never printed as a reason (Milestone 32: no characterisation reaches users).
   const behaviorHeatByManager = new Map(behaviorContext.map((row) => [row.managerId, row.behaviorHeat]))
 
   const storylines: UnifiedStorylineRecord[] = []
@@ -115,7 +117,6 @@ export async function resolveUnifiedStorylines(
       reasons: [
         `Rivalry score ${Math.round(rivalry.rivalryScore)}`,
         ...(topDrama ? [`Linked drama ${topDrama.dramaType}`] : []),
-        ...(behaviorHeat > 0 ? [`Behavior heat ${Math.round(behaviorHeat)}`] : []),
       ],
     })
   }
@@ -151,7 +152,6 @@ export async function resolveUnifiedStorylines(
       relatedTeamIds: event.relatedTeamIds,
       reasons: [
         `Drama score ${Math.round(event.dramaScore)}`,
-        ...(behaviorHeat > 0 ? [`Behavior heat ${Math.round(behaviorHeat)}`] : []),
       ],
     })
   }

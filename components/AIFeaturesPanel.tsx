@@ -175,9 +175,9 @@ function FeatureCard({
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold text-white">{feature.title}</span>
-            <span className={cx('text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border shrink-0', feature.tagClasses)}>{feature.tag}</span>
+            <span className={cx('text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border shrink-0', feature.tagClasses)}>{feature.tag}</span>
           </div>
-          <p className="text-[9px] text-white/35 leading-relaxed line-clamp-2 group-hover:text-white/45 transition-colors">{feature.description}</p>
+          <p className="text-[11px] text-white/35 leading-relaxed line-clamp-2 group-hover:text-white/45 transition-colors">{feature.description}</p>
         </div>
         <svg
           className={cx(
@@ -200,19 +200,19 @@ function FeatureCard({
             {loading && (
               <div className="flex items-center gap-2 py-2">
                 <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
-                <span className="text-[10px] text-white/40">Generating personalized insight...</span>
+                <span className="text-[11px] text-white/40">Generating personalized insight...</span>
               </div>
             )}
             {error && (
-              <div className="text-[10px] text-red-300/70 py-1">
+              <div className="text-[11px] text-red-300/70 py-1">
                 Could not load AI insight. Try again later.
               </div>
             )}
             {insight && !loading && (
               <div className="space-y-2.5">
                 <div className="flex items-start gap-2">
-                  <div className={cx('w-4 h-4 rounded-md flex items-center justify-center shrink-0 mt-0.5 text-[8px] font-black', feature.tagClasses)}>AI</div>
-                  <p className="text-[10px] text-white/60 leading-relaxed">{insight}</p>
+                  <div className={cx('w-4 h-4 rounded-md flex items-center justify-center shrink-0 mt-0.5 text-[11px] font-black', feature.tagClasses)}>AI</div>
+                  <p className="text-[11px] text-white/60 leading-relaxed">{insight}</p>
                 </div>
               </div>
             )}
@@ -221,13 +221,13 @@ function FeatureCard({
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
               onClick={(e) => { e.stopPropagation(); setExpanded(false) }}
-              className="text-[9px] text-white/25 hover:text-white/50 transition-colors"
+              className="text-[11px] text-white/25 hover:text-white/50 transition-colors"
             >
               Collapse
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onNavigate(feature.tabId) }}
-              className={cx('text-[9px] font-bold px-3 py-1.5 rounded-lg border transition-all hover:scale-105', feature.tagClasses)}
+              className={cx('text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all hover:scale-105', feature.tagClasses)}
             >
               Open {feature.title} &rarr;
             </button>
@@ -257,7 +257,7 @@ export default function AIFeaturesPanel({ leagueName, leagueId, onNavigate }: AI
               </div>
               <div>
                 <h3 className="text-sm font-black text-white">AI Features Included at Launch</h3>
-                <p className="text-[10px] text-white/35 mt-0.5">
+                <p className="text-[11px] text-white/35 mt-0.5">
                   {leagueName ? (
                     <>Unlocked for <span className="text-cyan-400/60 font-semibold">{leagueName}</span></>
                   ) : (
@@ -270,9 +270,9 @@ export default function AIFeaturesPanel({ leagueName, leagueId, onNavigate }: AI
             <div className="flex items-center gap-2 mt-3">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-rival-pulse" />
-                <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-wider">All Active</span>
+                <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">All Active</span>
               </div>
-              <span className="text-[8px] text-white/20">{AI_FEATURES.length} AI-powered tools ready</span>
+              <span className="text-[11px] text-white/20">{AI_FEATURES.length} AI-powered tools ready</span>
             </div>
           </div>
         </div>
@@ -285,7 +285,7 @@ export default function AIFeaturesPanel({ leagueName, leagueId, onNavigate }: AI
           </div>
 
           <div className="mt-4 pt-3 border-t border-white/[0.04] text-center">
-            <p className="text-[9px] text-white/20 font-medium">
+            <p className="text-[11px] text-white/20 font-medium">
               All features are context-aware and personalized to your league settings, scoring, and manager history
             </p>
           </div>

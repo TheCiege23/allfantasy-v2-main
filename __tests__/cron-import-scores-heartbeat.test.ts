@@ -65,6 +65,8 @@ const { withSyncJobRunMock, syncRuns, prismaMock, fetchGamesForSportMock, syncAP
   })
 
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({ withSyncJobRun: withSyncJobRunMock }))
+const scoreAlertsMock = vi.hoisted(() => vi.fn(async () => ({ games: 1, events: 1, sent: 1, recipients: 2, capped: 0, alreadySent: 0 })))
+vi.mock('@/lib/follows/teamScoreAlerts', () => ({ dispatchTeamScoreAlerts: scoreAlertsMock }))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/api-sports', () => ({
   syncAPISportsGamesToDb: syncAPISportsGamesToDbMock,
@@ -165,6 +167,26 @@ describe('import-scores heartbeat contract', () => {
     expect(outcome.warnings ?? []).toHaveLength(0)
     expect(outcome.errors ?? []).toHaveLength(0)
     expect(outcome.metadata?.gatedSports?.length).toBeGreaterThan(0)
+  })
+
+  it('runs the followed-team score alerts after the sports and reports them in metadata', async () => {
+    gateIsClosed()
+    await importScoresGET(req('/api/cron/import-scores'))
+
+    expect(scoreAlertsMock).toHaveBeenCalledTimes(1)
+    const outcome = syncRuns[0]!.outcome as { metadata?: { scoreAlerts?: { sent?: number } } }
+    expect(outcome.metadata?.scoreAlerts?.sent).toBe(1)
+  })
+
+  it('a failing score-alert path never fails the scores run', async () => {
+    gateIsClosed()
+    scoreAlertsMock.mockRejectedValueOnce(new Error('boom'))
+    const res = await importScoresGET(req('/api/cron/import-scores'))
+
+    expect(res.status).toBe(200)
+    const outcome = syncRuns[0]!.outcome as { errors?: string[]; metadata?: { scoreAlerts?: { error?: string } } }
+    expect(outcome.errors ?? []).toHaveLength(0)
+    expect(outcome.metadata?.scoreAlerts?.error).toBe('boom')
   })
 
   it('keeps the single-sport response shape for explicit ?sport= callers', async () => {
@@ -338,5 +360,61 @@ describe('import-scores CFBD throttle + cfbdAsked telemetry', () => {
     prismaMock.sportsGame.findFirst.mockResolvedValue({ fetchedAt: new Date() })
     await importScoresGET(req('/api/cron/import-scores'))
     expect(outcomeMeta()?.cfbdAsked).toBe(false)
+  })
+})
+
+/*
+ * CFP Phase 2 (2026-10-02): CFBD's postseason slate rides the NCAAF tick in December and January.
+ * The fetch itself is pinned in cfbd-postseason-writer.test.ts; these pin what the ROUTE passes.
+ */
+describe('import-scores CFBD postseason wiring', () => {
+  beforeEach(async () => {
+    const { __resetCfbdThrottleForTests } = await import('@/lib/scores/cfbdThrottle')
+    __resetCfbdThrottleForTests()
+    prismaMock.sportsGame.findFirst.mockResolvedValue({ fetchedAt: new Date(Date.now() - 3_600_000), id: 'g' })
+    prismaMock.sportsGame.findMany.mockResolvedValue([])
+    syncAPISportsGamesToDbMock.mockResolvedValue(0)
+    fetchGamesForSportMock.mockResolvedValue([{ source: 'cfbd', games: [], error: null }])
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const optsFor = (sport: string) => fetchGamesForSportMock.mock.calls.find((c) => c[0] === sport)?.[3]
+
+  it('in December asks for that season’s postseason, for NCAAF only', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-12-20T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: 2026 })
+    expect(optsFor('NFL')?.cfbd).toBeUndefined()
+  })
+
+  it('in January asks for the PREVIOUS season’s postseason', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2027-01-12T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: 2026 })
+  })
+
+  it('in the regular season asks for no postseason', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-17T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: null })
+  })
+
+  it('postseason=only with a season is a backfill of that postseason, without its regular slate', async () => {
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF&season=2025&postseason=only&force=true'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: 2025, regular: false })
+    expect(optsFor('NCAAF')?.skip).toBeUndefined()
+  })
+
+  it('postseason=only WITHOUT a season is ignored rather than guessing one', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-17T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF&postseason=only'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: null })
   })
 })

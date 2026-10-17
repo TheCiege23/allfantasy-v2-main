@@ -176,7 +176,7 @@ export function RecommendedLeaguesSection({ sport = null, limit = 6 }: Recommend
                   {reasons.slice(0, 2).map((reason) => (
                     <span
                       key={`${league.id}-${reason}`}
-                      className="rounded-full border px-2 py-0.5 text-[10px]"
+                      className="rounded-full border px-2 py-0.5 text-[11px]"
                       style={{ borderColor: "var(--border)", color: "var(--text)" }}
                     >
                       {reason}
@@ -184,7 +184,7 @@ export function RecommendedLeaguesSection({ sport = null, limit = 6 }: Recommend
                   ))}
                 </div>
               ) : null}
-              <p className="mt-1 text-[10px] uppercase tracking-[0.1em]" style={{ color: "var(--muted)" }}>
+              <p className="mt-1 text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--muted)" }}>
                 {explanationSource === "ai" ? "AI-enhanced explanation" : "Deterministic explanation"}
               </p>
             </div>

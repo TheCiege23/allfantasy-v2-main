@@ -24,7 +24,7 @@ export function ChimmyFreshnessChip({ tier, label }: { tier: string | null | und
   return (
     <span
       className={[
-        "rounded-full border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide",
+        "rounded-full border px-1.5 py-px text-[11px] font-semibold uppercase tracking-wide",
         style.border,
         style.bg,
         style.text,

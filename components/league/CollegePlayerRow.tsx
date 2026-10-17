@@ -40,11 +40,11 @@ export default function CollegePlayerRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <div className="truncate text-[15px] font-semibold text-white">{slot.player.name}</div>
-          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
             {statusPill}
           </span>
           {isLive ? (
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-100">
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
               LIVE +{(slot.player.score ?? 0).toFixed(1)}
             </span>
           ) : null}
@@ -57,7 +57,7 @@ export default function CollegePlayerRow({
             {slot.player.badges.map((badge) => (
               <span
                 key={`${slot.id}-${badge}`}
-                className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-white/75"
+                className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-white/75"
               >
                 {badge}
               </span>
@@ -73,7 +73,7 @@ export default function CollegePlayerRow({
           {slot.player.nextGameLabel ?? (slot.player.draftYear ? `Draft ${slot.player.draftYear}` : 'College asset')}
         </div>
         {slot.player.projectedLandingSpot ? (
-          <div className="mt-1 text-[10px] text-amber-200">→ {slot.player.projectedLandingSpot}</div>
+          <div className="mt-1 text-[11px] text-amber-200">→ {slot.player.projectedLandingSpot}</div>
         ) : null}
       </div>
     </div>

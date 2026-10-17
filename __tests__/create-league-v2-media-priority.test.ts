@@ -12,6 +12,7 @@ import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/opti
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
 import {
   SURVIVOR_CAST_SIZE_OPTIONS,
+  SURVIVOR_CREATE_CAST_SIZES,
   clampSurvivorCastSize,
 } from '@/lib/league-creation-wizard/sport-team-limits'
 import {
@@ -48,6 +49,8 @@ describe('resolveCreateLeagueHeroMedia (focus)', () => {
     expect(m.mediaKey).toMatch(/^draft:snake/)
     expect(m.video).toBe('/media/create-league/drafts/videos/Snake Draft.mp4')
     expect(m.badge).toBe('Draft format')
+    expect(m.fallback).toBe(SPORT_MEDIA.NFL.video)
+    expect(m.fallback).toMatch(/\.mp4$/)
   })
 
   it('draft focus falls back to concept when draft asset missing', () => {
@@ -140,7 +143,7 @@ describe('draft intro resolver (fail closed)', () => {
   })
 })
 
-describe('Survivor catalog vs soccer', () => {
+describe('Survivor NBA creation pilot and underlying sport catalog', () => {
   beforeEach(() => {
     setClientLeagueCreateOptionsCatalog(LEAGUE_CREATE_OPTIONS_CATALOG_V1)
   })
@@ -154,15 +157,19 @@ describe('Survivor catalog vs soccer', () => {
     expect(isSportAllowedForType('SOCCER', 'survivor')).toBe(false)
   })
 
-  it('Survivor + NFL + snake remains valid and complete', () => {
-    expect(isSportAllowedForType('NFL', 'survivor')).toBe(true)
+  it('hides new NFL Survivor creation while preserving its existing draft and cast rules', () => {
+    expect(isSportAllowedForType('NFL', 'survivor')).toBe(false)
+    expect(isSportAllowedForType('NBA', 'survivor')).toBe(true)
     const opts = getDraftTypeOptions('survivor', 'NFL').map((o) => o.id)
     expect(opts).toContain('snake')
     // 29566580a (feat(survivor): add phase 1 foundation) deliberately widened the cast from
     // [16, 20, 24] to a contiguous 16-20 and did not update this assertion, leaving the file
     // red on main. The catalog is the authoritative side.
+    // 2026-10-12: new leagues are offered 16 or 20 (four tribes of four or five), a subset of the
+    // 16-20 the engine accepts, so every offered size still survives the server clamp below.
     const survivorTeams = LEAGUE_CREATE_OPTIONS_CATALOG_V1.teamCountOptionsByConceptSport.survivor?.NFL
-    expect(survivorTeams).toEqual([16, 17, 18, 19, 20])
+    expect(survivorTeams).toEqual([16, 20])
+    for (const size of survivorTeams ?? []) expect(SURVIVOR_CAST_SIZE_OPTIONS).toContain(size)
   })
 
   it('the pre-fetch fallback offers the same sizes as the catalog', () => {
@@ -173,7 +180,7 @@ describe('Survivor catalog vs soccer', () => {
     setClientLeagueCreateOptionsCatalog(null)
     const fromFallback = getTeamCountOptions('NFL', 'survivor')
     expect(fromFallback).toEqual(fromCatalog)
-    expect(fromFallback).toEqual([...SURVIVOR_CAST_SIZE_OPTIONS])
+    expect(fromFallback).toEqual([...SURVIVOR_CREATE_CAST_SIZES])
   })
 
   it('every offered cast size survives the server clamp unchanged, on BOTH resolution paths', () => {

@@ -223,12 +223,16 @@ describe('chat prompt contracts', () => {
 
     const res = await postToLeagueRoom('vote Team Alpha')
     expect(res.status).toBe(200)
-    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(1)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(2)
     expect(createLeagueChatMessageMock).toHaveBeenCalledWith(
       'l1',
       'u1',
       'vote Team Alpha',
       expect.objectContaining({ isPrivate: true, visibleToUserId: 'u1', messageSubtype: 'survivor_private_ballot' })
+    )
+    expect(createLeagueChatMessageMock).toHaveBeenCalledWith(
+      'l1', 'u1', 'Vote recorded for Team Alpha.',
+      expect.objectContaining({ isPrivate: true, visibleToUserId: 'u1', messageSubtype: 'chimmy_private_response' }),
     )
   })
 
@@ -306,7 +310,7 @@ describe('chat prompt contracts', () => {
     expect(tryDeterministicAnswerMock).not.toHaveBeenCalled()
     const json = await res.json()
     expect(json?.commandResult).toMatchObject({ ok: true, intent: 'vote', message: 'Vote recorded for Team Alpha.' })
-    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(1)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(2)
     expect(createLeagueChatMessageMock).toHaveBeenCalledWith(
       'l1',
       'u1',
@@ -315,7 +319,7 @@ describe('chat prompt contracts', () => {
     )
   })
 
-  it('returns the command error for a rejected "@Chimmy vote X" and posts nothing', async () => {
+  it('privately explains how to correct a rejected "@Chimmy vote X"', async () => {
     const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
     vi.mocked(survivor.processSurvivorOfficialCommand).mockResolvedValueOnce({
       handled: true,
@@ -325,10 +329,17 @@ describe('chat prompt contracts', () => {
     })
 
     const res = await postToLeagueRoom('@chimmy vote Team Alpha')
-    expect(res.status).toBe(400)
-    await expect(res.json()).resolves.toMatchObject({ error: 'No tribal council open for voting' })
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      commandResult: { ok: false, intent: 'vote', message: 'No tribal council open for voting' },
+    })
     expect(tryDeterministicAnswerMock).not.toHaveBeenCalled()
-    expect(createLeagueChatMessageMock).not.toHaveBeenCalled()
+    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(2)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledWith(
+      'l1', 'u1',
+      expect.stringContaining('To vote, send @Chimmy @manager'),
+      expect.objectContaining({ isPrivate: true, visibleToUserId: 'u1', messageSubtype: 'chimmy_private_response' }),
+    )
   })
 
   it('keeps an @chimmy question that only mentions voting on the private answer path', async () => {

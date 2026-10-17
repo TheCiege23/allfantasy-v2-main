@@ -1,6 +1,10 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import type { LeagueScoreboard, ScoreboardTeam } from '@/lib/core-app/leagueScoreboard'
+import { rosterLabel } from '@/lib/core-app/managerName'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * Every game in the league this week.
@@ -29,6 +33,8 @@ function Side({
   /** This side's chance of winning, 0–100, or null while unmeasurable. */
   winPct: number | null
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const value = team.points ?? team.projected
   const partial = unplayed && team.projected != null && team.projectedFrom < team.starterCount
 
@@ -51,10 +57,16 @@ function Side({
         </span>
       )}
       <span className="af-sb-name">
-        {team.teamName ?? team.managerName ?? `Roster ${team.rosterId}`}
+        {rosterLabel([team.teamName, team.managerName], team.rosterId)}
       </span>
       <span className="af-sb-pts af-num" data-projected={unplayed}>
         {value != null ? value.toFixed(1) : '—'}
+        {/* AllFantasy's own engine, under the provider total, while the week is unplayed. */}
+        {unplayed && team.afProjected != null ? (
+          <span className="af-sb-af" title={copy("AllFantasy engine projection, under this league's scoring")}>
+            AF {team.afProjected.toFixed(1)}
+          </span>
+        ) : null}
       </span>
       {/*
         Coverage travels with the number it qualifies. A total built from five
@@ -62,7 +74,7 @@ function Side({
         gap between teams rather than a gap in our data.
       */}
       {partial ? (
-        <span className="af-sb-cov" title="Projected from only part of this lineup">
+        <span className="af-sb-cov" title={copy('Projected from only part of this lineup')}>
           {team.projectedFrom}/{team.starterCount}
         </span>
       ) : (
@@ -72,7 +84,7 @@ function Side({
         <span
           className="af-sb-win af-num"
           data-fav={winPct >= 50}
-          title="Chance of winning, from both projected totals and the spread of a real fantasy week"
+          title={copy('Chance of winning, from both projected totals and the spread of a real fantasy week')}
         >
           {winPct}%
         </span>
@@ -100,11 +112,14 @@ export function LeagueScoreboardPanel({
    */
   winProbability?: { pWin: number; confidence: string } | null
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     <div className="af-sb">
       <div className="af-sb-head">
         <span className="af-label">
-          Week {board.week} · {board.games.length} {board.games.length === 1 ? 'game' : 'games'}
+          {copy('Week')} {board.week} · {board.games.length} {copy(board.games.length === 1 ? 'game' : 'games')}{' '}
+          <TopicTip topic="scoreboardWinChance" />
         </span>
         {/*
           ⚠ "UNDER YOUR LEAGUE'S SCORING" IS A CLAIM, and it was printed over totals that were
@@ -114,8 +129,10 @@ export function LeagueScoreboardPanel({
         {board.allUnplayed ? (
           <span className="af-sb-proj-flag">
             {board.unpricedReason
-              ? `Nothing scored yet — no projections, because ${board.unpricedReason}`
-              : 'Nothing scored yet — these are projections, under your league’s scoring'}
+              ? language === 'es'
+                ? `Aún no hay puntos ni proyecciones porque ${board.unpricedReason}`
+                : `Nothing scored yet — no projections, because ${board.unpricedReason}`
+              : copy('Nothing scored yet — these are projections, under your league’s scoring')}
           </span>
         ) : null}
       </div>
@@ -128,10 +145,10 @@ export function LeagueScoreboardPanel({
       <div className="af-sb-cols" aria-hidden>
         <span />
         <span />
-        <span className="af-label">{board.allUnplayed ? 'PROJ' : 'PTS'}</span>
-        <span className="af-label">FROM</span>
-        <span className="af-label">WIN</span>
-        <span className="af-label">MARGIN</span>
+        <span className="af-label">{copy(board.allUnplayed ? 'PROJ' : 'PTS')}</span>
+        <span className="af-label">{copy('FROM')}</span>
+        <span className="af-label">{copy('WIN')}</span>
+        <span className="af-label">{copy('MARGIN')}</span>
       </div>
 
       <ul className="af-sb-list">
@@ -157,13 +174,13 @@ export function LeagueScoreboardPanel({
             {g.teams.some((t) => t.isYou) && winProbability ? (
               <span
                 className="af-sb-winprob af-num"
-                title={`Win probability · ${winProbability.confidence}`}
+                title={`${copy('Win probability')} · ${winProbability.confidence}`}
               >
                 {Math.round(winProbability.pWin * 100)}%
               </span>
             ) : g.margin != null ? (
               <span className="af-sb-margin af-num">
-                {g.margin === 0 ? 'level' : `by ${g.margin.toFixed(1)}`}
+                {g.margin === 0 ? copy('level') : `${copy('by')} ${g.margin.toFixed(1)}`}
               </span>
             ) : null}
           </li>
@@ -177,10 +194,10 @@ export function LeagueScoreboardPanel({
       */}
       {board.unpaired.length > 0 ? (
         <div className="af-sb-unpaired">
-          <span className="af-label">Not paired into a game yet</span>
+          <span className="af-label">{copy('Not paired into a game yet')}</span>
           <span className="af-sb-unpaired-who">
             {board.unpaired
-              .map((t) => t.teamName ?? t.managerName ?? `Roster ${t.rosterId}`)
+              .map((t) => rosterLabel([t.teamName, t.managerName], t.rosterId))
               .join(', ')}
           </span>
         </div>

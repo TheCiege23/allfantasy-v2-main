@@ -201,3 +201,25 @@ describe('every league list carries the name-every-league rule', () => {
     expect(out).not.toContain('(or counting)')
   })
 })
+
+/*
+ * 2026-09-28: six native leagues still in setup were reported as "a team with no players synced — the
+ * real list can only be longer", and five of them shared two names.
+ */
+describe('leagues that have not drafted, and duplicate names', () => {
+  it('lists not-drafted leagues on their own line (never as a gap), with duplicate names made distinct', async () => {
+    h.leagues.mockResolvedValue([
+      { id: 'efdfb9c3-0466', name: 'Redraft 8', sport: 'NFL', season: 2026, platform: 'manual', status: 'setup' },
+      { id: '9d0a700c-0427', name: 'Redraft 8', sport: 'NFL', season: 2026, platform: 'manual', status: 'setup' },
+      { id: 'sleeper-empty', name: 'KBI Commish Chat', sport: 'NFL', season: 2026, platform: 'sleeper', status: 'in_season' },
+    ])
+    h.team.mockResolvedValue({ starters: [], bench: [], injuredReserve: [], taxi: [] })
+    const out = await buildMyRosterInjuriesContext({ userId: 'u1', sport: 'NFL' })
+    const notDrafted = out.split('\n').find((l) => l.startsWith('NOT DRAFTED YET'))!
+    const gaps = out.split('\n').find((l) => l.startsWith('⚠ KNOWN GAPS'))!
+    expect(notDrafted).toContain('NOT DRAFTED YET (2): Redraft 8 · 0466, Redraft 8 · 0427')
+    expect(notDrafted).toContain('This is not a sync problem and does not hide any injury')
+    expect(gaps).toContain('1 league(s) have a team with no players synced (KBI Commish Chat)')
+    expect(gaps).not.toContain('Redraft 8')
+  })
+})

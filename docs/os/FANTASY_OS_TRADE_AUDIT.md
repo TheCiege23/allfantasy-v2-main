@@ -14,7 +14,7 @@ Phase 14's audit cited `lib/engine/trade.ts` (via `/api/engine/trade/analyze`) a
 - `app/api/engine/trade/analyze/route.ts` itself has **no session/auth check at all** and no league-membership check.
 - Both are orphaned, legacy-adjacent code, not the live path.
 
-Phase 5's shared Trade service (`lib/shared-services/trade/`) compares against `trade-engine.ts`'s `computeTradeDrivers` and T2 (`lib/trade-value/grader.ts`) — **neither of which is called by `lib/engine/trade.ts` either.** Phase 5's own docstring already correctly identified `computeTradeDrivers` as wired to "the trade-evaluator, trade-finder, and legacy goal-proposals/league-analyze routes" — none of which are the same as `lib/engine/trade.ts`. This phase's audit did not find a live route that calls `computeTradeDrivers` as its primary path either (see below) — it appears to power a distinct, older evaluator surface not central to this audit.
+Phase 5's shared Trade service (`lib/shared-services/trade/`) compares against `trade-engine.ts`'s `computeTradeDrivers` and T2 (`lib/trade-value/grader.ts`) — **neither of which is called by `lib/engine/trade.ts` either.** Phase 5's own docstring already correctly identified `computeTradeDrivers` as wired to "the trade-evaluator, trade-finder, and legacy goal-proposals/league-analyze routes" *(league-analyze was removed 2026-09-30 — commit `1b2e29ca4`)* — none of which are the same as `lib/engine/trade.ts`. This phase's audit did not find a live route that calls `computeTradeDrivers` as its primary path either (see below) — it appears to power a distinct, older evaluator surface not central to this audit.
 
 ## There is no single "the" live Trade route
 

@@ -15,7 +15,7 @@ export function PowerInventoryCard({
             }`}
           >
             <span className="font-semibold text-white">{p.name}</span>
-            <span className="text-[10px] text-white/45">
+            <span className="text-[11px] text-white/45">
               {p.phase} · {p.window}
             </span>
             {p.eligible && !p.used ? (

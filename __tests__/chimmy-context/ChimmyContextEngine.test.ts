@@ -108,7 +108,6 @@ function buildEngine(overrides: Partial<{
           careerRecord: null,
           winPercentage: null,
           championships: 0,
-          archetype: null,
           recentLeagues: [],
         }),
       sportsSchedule:

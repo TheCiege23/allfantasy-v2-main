@@ -207,7 +207,7 @@ function TeamPickInfo({
           <Info className="h-3.5 w-3.5 text-cyan-200" />
           {t("wc.groupStage.teamInfo")}
         </span>
-        <span className="rounded-full border border-cyan-200/25 bg-cyan-200/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-cyan-50">
+        <span className="rounded-full border border-cyan-200/25 bg-cyan-200/10 px-2 py-0.5 text-[11px] uppercase tracking-wide text-cyan-50">
           {t("wc.groupStage.freeSignal")}
         </span>
       </summary>
@@ -323,7 +323,7 @@ function GroupAiInsightPanel({
           <Sparkles className="h-3.5 w-3.5" />
           {t("wc.groupStage.aiTitle")}
         </span>
-        <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+        <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[11px] uppercase tracking-wide">
           {unlocked ? t("wc.groupStage.aiTierOpen") : t("wc.groupStage.aiTierLocked")}
         </span>
       </summary>
@@ -370,7 +370,7 @@ function ThirdPlaceAiInsightPanel({
     <details data-testid="world-cup-third-place-ai-insight" className="mt-3 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.055] p-3 text-xs text-white/90">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-black">
         <span className="inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> {t("wc.thirdPlace.aiTitle")}</span>
-        <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[10px] uppercase tracking-wide">{unlocked ? t("wc.groupStage.aiTierOpen") : t("wc.groupStage.aiTierLocked")}</span>
+        <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[11px] uppercase tracking-wide">{unlocked ? t("wc.groupStage.aiTierOpen") : t("wc.groupStage.aiTierLocked")}</span>
       </summary>
       <div className="mt-3 space-y-2 leading-5 text-white/75">
         {insights.map((line, idx) => (
@@ -656,7 +656,7 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                         </div>
                       </div>
                       {badge ? (
-                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${badge.className}`}>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black ${badge.className}`}>
                           {badge.label}
                         </span>
                       ) : null}
@@ -665,7 +665,7 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                           type="button"
                           onClick={() => setGroupOrder(group.id, moveItem(order, index, -1))}
                           disabled={isLocked || index === 0}
-                          className="min-h-11 rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[10px] font-bold text-white/70 touch-manipulation disabled:opacity-35"
+                          className="min-h-11 rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[11px] font-bold text-white/70 touch-manipulation disabled:opacity-35"
                         >
                           {t("wc.groupStage.moveUp")}
                         </button>
@@ -673,7 +673,7 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                           type="button"
                           onClick={() => setGroupOrder(group.id, moveItem(order, index, 1))}
                           disabled={isLocked || index === order.length - 1}
-                          className="min-h-11 rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[10px] font-bold text-white/70 touch-manipulation disabled:opacity-35"
+                          className="min-h-11 rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[11px] font-bold text-white/70 touch-manipulation disabled:opacity-35"
                         >
                           {t("wc.groupStage.moveDown")}
                         </button>
@@ -840,7 +840,7 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                   ) : null}
                 </span>
                 {badge ? (
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${badge.className}`}>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black ${badge.className}`}>
                     {badge.label}
                   </span>
                 ) : null}

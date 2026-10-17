@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { MessageCircle, Send } from 'lucide-react'
+import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
+import { mockDraftReportThreadId } from '@/lib/moderation/reportRooms'
 
 export interface MockDraftChatPanelProps {
   draftId: string
@@ -22,6 +24,10 @@ export function MockDraftChatPanel({ draftId, pollIntervalMs = 5000, aiSuggestio
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Who is reading — from the chat route, so Report and Block skip your own messages. */
+  const [viewerId, setViewerId] = useState<string | null>(null)
+  /** Blocked here, hidden at once — the route drops them from the next poll. */
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const fetchMessages = async () => {
@@ -30,6 +36,7 @@ export function MockDraftChatPanel({ draftId, pollIntervalMs = 5000, aiSuggestio
       if (res.ok) {
         const data = await res.json()
         setMessages(data.messages ?? [])
+        if (typeof data.viewerUserId === 'string') setViewerId(data.viewerUserId)
         setError(null)
       } else {
         const data = await res.json().catch(() => ({}))
@@ -95,12 +102,24 @@ export function MockDraftChatPanel({ draftId, pollIntervalMs = 5000, aiSuggestio
         {messages.length === 0 ? (
           <p className="py-4 text-center text-white/50">No messages yet. Mock chat does not sync with league chat.</p>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} className="mb-2 rounded-lg border border-white/5 bg-black/30 px-2 py-1.5">
-              <span className="font-medium text-cyan-300">{m.displayName || 'User'}:</span>{' '}
-              <span className="text-white/90">{m.content}</span>
-            </div>
-          ))
+          messages
+            .filter((m) => !m.userId || !blockedAuthors.has(m.userId))
+            .map((m) => (
+              <div key={m.id} className="mb-2 flex items-start gap-1 rounded-lg border border-white/5 bg-black/30 px-2 py-1.5">
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium text-cyan-300">{m.displayName || 'User'}:</span>{' '}
+                  <span className="text-white/90">{m.content}</span>
+                </span>
+                <MessageModerationMenu
+                  threadId={mockDraftReportThreadId(draftId)}
+                  messageId={m.id}
+                  authorId={m.userId}
+                  authorName={m.displayName}
+                  viewerId={viewerId}
+                  onBlocked={(id) => setBlockedAuthors((prev) => new Set(prev).add(id))}
+                />
+              </div>
+            ))
         )}
         <div ref={bottomRef} />
       </div>

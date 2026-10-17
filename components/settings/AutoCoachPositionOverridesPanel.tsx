@@ -78,12 +78,12 @@ export function AutoCoachPositionOverridesPanel() {
               <span className="font-mono text-sm font-semibold text-white/80">{pos}</span>
               <div className="flex items-center gap-2">
                 {override?.disabled && (
-                  <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                  <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-400">
                     Disabled
                   </span>
                 )}
                 {override?.minProjectionDelta && (
-                  <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
+                  <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400">
                     Δ +{override.minProjectionDelta.toFixed(1)}
                   </span>
                 )}
@@ -100,7 +100,7 @@ export function AutoCoachPositionOverridesPanel() {
           ))}
 
           <div className="mt-3 border-t border-white/[0.06] pt-3">
-            <p className="text-[10px] font-semibold uppercase text-white/30 mb-2">Add Override</p>
+            <p className="text-[11px] font-semibold uppercase text-white/30 mb-2">Add Override</p>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
               {POSITIONS.map((pos) => {
                 const override = preferences.positionOverrides?.[pos]

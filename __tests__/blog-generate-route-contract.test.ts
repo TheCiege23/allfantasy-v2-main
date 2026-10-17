@@ -5,6 +5,11 @@ const generateBlogDraftMock = vi.hoisted(() => vi.fn())
 const buildBlogSEOMock = vi.hoisted(() => vi.fn())
 const suggestInternalLinksMock = vi.hoisted(() => vi.fn())
 const getBlogProviderStatusMock = vi.hoisted(() => vi.fn())
+const requireAdminOrBearerMock = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/adminAuth", () => ({
+  requireAdminOrBearer: requireAdminOrBearerMock,
+}))
 
 vi.mock("@/lib/automated-blog", () => ({
   generateBlogDraft: generateBlogDraftMock,
@@ -21,6 +26,24 @@ describe("blog generate route contract", () => {
       xai: false,
       deepseek: false,
     })
+    requireAdminOrBearerMock.mockResolvedValue({ ok: true, user: { role: "admin" } })
+  })
+
+  // Generation spends LLM budget; it was reachable anonymously.
+  it("refuses a non-admin without calling the model", async () => {
+    requireAdminOrBearerMock.mockResolvedValue({
+      ok: false,
+      res: Response.json({ error: "Unauthorized" }, { status: 401 }),
+    })
+    const { POST } = await import("@/app/api/blog/generate/route")
+    const req = createMockNextRequest("http://localhost/api/blog/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sport: "NFL", category: "weekly_strategy" }),
+    })
+    const res = await POST(req as any)
+    expect(res.status).toBe(401)
+    expect(generateBlogDraftMock).not.toHaveBeenCalled()
   })
 
   it("returns draft plus seo and internal links", async () => {

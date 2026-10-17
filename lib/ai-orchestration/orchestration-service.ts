@@ -293,30 +293,33 @@ function toConfidenceLabel(score: number): 'low' | 'medium' | 'high' {
  * says so plainly; the "Deterministic guidance from" marker is kept after it because that string
  * is what the runbook tells people to look for.
  */
-const AI_UNAVAILABLE_LEAD =
-  "Chimmy's AI models are unavailable right now, so this is not a full answer — only the raw context I have."
+const AI_UNAVAILABLE_LEAD = "Chimmy's AI models are unavailable right now, so this is not an answer."
 
+/** `projectedPoints` / `roster_slots` → "projected points" / "roster slots". Names, never values. */
+function readableContextName(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim().toLowerCase()
+}
+
+/*
+ * 🛑 NO RAW PAYLOAD IN THE REPLY (2026-09-29). This used to print up to six `key: value` pairs
+ * straight out of the deterministic payload — internal field names and unlabelled numbers such as
+ * "week: 7; rosterId: 4; confidenceScore: 58" — as if they were guidance. Only the NAMES of what
+ * was on hand are said now, in words, and never a value. The "Deterministic guidance from <sport>
+ * context" marker and the closing "AI explanation is temporarily unavailable" are kept verbatim:
+ * the outage runbook and `providerOutageAlert` look for them. Billing does not read this text —
+ * `judgeChimmyDelivery` refunds from the model outputs.
+ */
 function buildDeterministicFallbackText(envelope: AIContextEnvelope): string {
   const payload = envelope.deterministicPayload
   if (!payload || typeof payload !== 'object') {
-    return 'AI providers are temporarily unavailable and deterministic context is missing. Retry shortly.'
+    return `${AI_UNAVAILABLE_LEAD} AI explanation is temporarily unavailable. Please try again in a few minutes.`
   }
-  const keyValues = Object.entries(payload)
-    .filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value))
-    .slice(0, 6)
-    .map(([key, value]) => `${key}: ${String(value)}`)
-  const contextLabels = Object.keys(payload)
-    .slice(0, 4)
-    .map((key) => key.replace(/([A-Z])/g, ' $1').replace(/[_-]+/g, ' ').trim().toLowerCase())
-  const summary = keyValues.length > 0
-    ? keyValues.join('; ')
-    : contextLabels.length > 0
-      ? `available context includes ${contextLabels.join(', ')}`
-      : 'deterministic context is available'
+  const names = Object.keys(payload).slice(0, 4).map(readableContextName).filter(Boolean)
+  const onHand = names.length > 0 ? `I have your ${names.join(', ')}` : 'I have your league context'
   const missing = envelope.dataQualityMetadata?.missing?.length
-    ? ` Missing data: ${envelope.dataQualityMetadata?.missing?.slice(0, 4).join(', ')}.`
+    ? ` Still missing: ${envelope.dataQualityMetadata.missing.slice(0, 4).map(readableContextName).join(', ')}.`
     : ''
-  return `${AI_UNAVAILABLE_LEAD} Deterministic guidance from ${envelope.sport} context: ${summary}.${missing} AI explanation is temporarily unavailable.`
+  return `${AI_UNAVAILABLE_LEAD} Deterministic guidance from ${envelope.sport} context only: ${onHand}, but no model could turn it into advice.${missing} AI explanation is temporarily unavailable. Please try again in a few minutes.`
 }
 
 const FALLBACK_MAX_CONFIDENCE_PCT = 35

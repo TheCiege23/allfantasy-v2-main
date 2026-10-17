@@ -105,3 +105,24 @@ describe('hasProfanity', () => {
     expect(hasProfanity('shit')).toBe(true)
   })
 })
+
+/*
+ * App Store guideline 1.2: slurs and sexual-violence terms are filtered too. They are
+ * whole-word matches with at most a plural s, so the innocent neighbours below survive.
+ */
+describe("censorProfanity — slurs (guideline 1.2)", () => {
+  it("masks slurs and their plurals", () => {
+    for (const word of ["faggot", "fags", "retarded", "retard", "niggas", "tranny", "spics", "kike", "rapist", "raped"]) {
+      const out = censorProfanity(`you ${word} lol`)
+      expect(out, word).not.toContain(word)
+      expect(out.startsWith("you " + word[0])).toBe(true)
+      expect(hasProfanity(word), word).toBe(true)
+    }
+  })
+
+  it("leaves words that merely contain a slur alone", () => {
+    for (const word of ["spicy", "spice", "therapist", "grape", "grapes", "drape", "retardant", "fagioli", "Rapinoe", "scrape"]) {
+      expect(censorProfanity(word), word).toBe(word)
+    }
+  })
+})

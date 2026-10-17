@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { careerHref, type BestSeason, type CareerData, type CareerSeasonRow } from '@/lib/core-app/careerModel'
 import { TIER_LABEL, type CareerAward } from '@/lib/core-app/careerAwards'
 import { TIMELINE_KINDS, TIMELINE_KIND_LABEL, type CareerTimeline } from '@/lib/core-app/careerTimeline'
@@ -7,6 +8,7 @@ import type { CareerPeers } from '@/lib/core-app/careerPeers'
 import type { CareerCoverageExtras, CareerRecordBook } from '@/lib/core-app/careerScreen'
 import { platformLabel } from '@/lib/core-app/rankingsEngine'
 import { CareerProgressChart } from './CareerProgressChart'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * The career brief's views. Every one renders absence as absence: an empty
@@ -21,7 +23,7 @@ const pct = (n: number | null) => (n == null ? '—' : `${(Math.round(n * 1000) 
 
 export function AccomplishmentStrip({ data }: { data: CareerData }) {
   const a = data.accomplishments
-  const tiles: Array<{ k: string; label: string; value: string; tone?: string; note?: string; muted?: boolean; title?: string }> = [
+  const tiles: Array<{ k: string; label: string; value: string; tone?: string; note?: string; muted?: boolean; tip?: ReactNode }> = [
     { k: 'titles', label: 'Championships', value: nf(a.championships), tone: 'warn' },
     {
       k: 'finals',
@@ -29,7 +31,7 @@ export function AccomplishmentStrip({ data }: { data: CareerData }) {
       value: a.finals == null ? 'Not recorded' : nf(a.finals),
       muted: a.finals == null,
       note: a.finals == null ? 'No stored playoff bracket to check' : `${nf(a.championships)} won · ${nf(a.finalsLost)} lost`,
-      title: a.finalsNote,
+      tip: <TopicTip topic="careerFinals" />,
     },
     {
       k: 'playoffs',
@@ -52,8 +54,11 @@ export function AccomplishmentStrip({ data }: { data: CareerData }) {
   return (
     <section className="af-crx-acc" aria-label="Accomplishments">
       {tiles.map((t) => (
-        <div key={t.k} className="af-crx-acc-tile" data-muted={t.muted ? '' : undefined} title={t.title}>
-          <span className="af-crx-acc-l">{t.label}</span>
+        <div key={t.k} className="af-crx-acc-tile" data-muted={t.muted ? '' : undefined}>
+          <span className="af-crx-acc-l">
+            {t.label}
+            {t.tip ? <> {t.tip}</> : null}
+          </span>
           <b className={`af-crx-acc-v${t.tone ? ` ${t.tone}` : ''}`}>{t.value}</b>
           {t.note ? <span className="af-crx-acc-n">{t.note}</span> : null}
         </div>
@@ -192,6 +197,26 @@ export function AwardsView({ awards, isEmpty }: { awards: CareerAward[]; isEmpty
 
 /* ── 2. timeline ────────────────────────────────────────────────────────── */
 
+/**
+ * Live-career plan, phase 5: the newest years stay open, older ones fold to one line each.
+ * Measured on a ten-season sample career the unfolded timeline ran 3,600px on a phone; the
+ * question someone brings to it is usually about the last few seasons. A kind filter opens
+ * every year, because a filtered list is already short and folding it would hide the answer.
+ */
+const TIMELINE_OPEN_YEARS = 3
+
+function TimelineFold({ fold, count, children }: { fold: boolean; count: number; children: ReactNode }) {
+  if (!fold) return <>{children}</>
+  return (
+    <details className="af-crx-tl-fold">
+      <summary>
+        Show {count} {count === 1 ? 'event' : 'events'}
+      </summary>
+      {children}
+    </details>
+  )
+}
+
 export function TimelineView({ timeline, data }: { timeline: CareerTimeline | null; data: CareerData }) {
   if (!timeline) {
     return (
@@ -222,13 +247,14 @@ export function TimelineView({ timeline, data }: { timeline: CareerTimeline | nu
         </p>
       ) : (
         <ol className="af-crx-tl">
-          {timeline.seasons.map((s) => (
+          {timeline.seasons.map((s, i) => (
             <li key={s.season} className="af-crx-tl-season">
               <div className="af-crx-tl-year">
                 <b>{s.season}</b>
                 {s.record ? <span>{s.record}</span> : null}
                 {s.titles ? <span className="warn">{s.titles === 1 ? '1 title' : `${s.titles} titles`}</span> : null}
               </div>
+              <TimelineFold fold={!timeline.kind && i >= TIMELINE_OPEN_YEARS} count={s.events.length}>
               <ul className="af-crx-tl-events">
                 {s.events.map((e) => (
                   <li key={e.key} className="af-crx-tl-event" data-kind={e.kind} data-tone={e.tone}>
@@ -271,6 +297,7 @@ export function TimelineView({ timeline, data }: { timeline: CareerTimeline | nu
                   </li>
                 ))}
               </ul>
+              </TimelineFold>
             </li>
           ))}
         </ol>
@@ -455,7 +482,9 @@ export function PeersView({ peers }: { peers: CareerPeers | null }) {
   return (
     <div className="af-crx-stack">
       <section className="af-c13-card">
-        <p className="af-c13-head">You vs your leagues</p>
+        <p className="af-c13-head">
+          You vs your leagues <TopicTip topic="careerPeersIndex" />
+        </p>
         <div className="af-crx-tablewrap">
           <table className="af-crx-table">
             <thead>

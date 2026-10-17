@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The chop</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.gl-rank{width:22px;text-align:right;font:700 12px 'JetBrains Mono';color:#7d84a3}
+.gl-cut{position:relative;height:0;border-top:2px dashed #e0402e;margin:6px 0}
+.gl-cut span{position:absolute;right:0;top:-11px;white-space:nowrap;padding:1px 8px;border-radius:4px;background:#e0402e;color:#fff;font:700 10px 'Archivo';letter-spacing:.08em}
+.gl-big{font-family:'Bebas Neue',sans-serif;letter-spacing:.02em}
+.gl-stage{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding-top:120px}
+.gl-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px 16px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.08);transition:background .3s,border-color .3s}
+.gl-blade{position:absolute;left:50%;top:-118px;width:200px;margin-left:-100px;z-index:3;transition:transform .5s cubic-bezier(.7,0,.9,.4)}
+.gl-blade svg{display:block;width:100%}
+.gl-chopped .gl-blade{transform:translateY(96px)}
+.gl-slash{position:absolute;left:-6px;right:-6px;top:50%;height:4px;background:#e0402e;box-shadow:0 0 14px #e0402e;transform:rotate(-8deg) scaleX(0);transform-origin:left;transition:transform .3s ease-out .5s}
+.gl-chopped .gl-slash{transform:rotate(-8deg) scaleX(1)}
+.gl-chopped .gl-target{animation:spShake .4s ease-out .5s both;background:rgba(224,64,46,.16);border-color:#e0402e}
+.gl-stampw{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.gl-stamp{display:inline-block;padding:6px 14px;border:4px solid #e0402e;color:#ff6a5a;font:400 40px 'Bebas Neue';letter-spacing:.08em;border-radius:6px;background:rgba(7,8,13,.7);animation:spPop .4s ease-out .6s both;rotate:-10deg}
+.gl-pl{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+</style>
+</helmet>
+<div class="sp" style="--acc: #e0402e; --acc2: #ff9a8a; --accInk: #fff; --disp: Bebas Neue; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="GuillotineHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">The chop · week 5</h1><span class="sp-t2">Guillotine League 26 · scores final, stat corrections closed</span></div>
+  <span class="sp-chip" style="color: #ff9a8a; border-color: rgba(224,64,46,.5)">Elimination lock · Tue 11:00 AM ET</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px 32px; align-items: flex-start">
+  <section class="sp-card {{stageCls}}" style="flex: 1 1 760px; padding: 24px; display: flex; flex-direction: column; gap: 16px; background: radial-gradient(ellipse at 50% 0%, rgba(224,64,46,.14), transparent 60%), #0b0d14">
+    <div style="display: flex; align-items: center; gap: 12px"><span class="sp-lbl" style="flex: 1">Bottom three · week 5 final</span>
+      <sc-if value="{{canDrop}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{drop}}" style="min-height: 46px; padding: 0 22px">Drop the blade</button></sc-if>
+      <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><button class="sp-btn" onClick="{{reset}}">Replay</button></sc-if></div>
+    <div class="gl-stage">
+      <sc-for list="{{cards}}" as="c" hint-placeholder-count="3">
+        <div class="gl-card {{c.cls}}">
+          <sc-if value="{{c.target}}" hint-placeholder-val="{{ false }}"><div class="gl-blade" aria-hidden="true"><svg viewBox="0 0 200 110"><rect x="2" y="0" width="196" height="18" rx="3" fill="#3a1e12" stroke="#000" stroke-width="3"/><path d="M14,18 L186,18 L186,60 L14,104 Z" fill="#cfd5de" stroke="#000" stroke-width="4" stroke-linejoin="round"/><path d="M20,98 L180,58" stroke="#fff" stroke-width="3"/><path d="M100,0 V-200" stroke="#c9a46a" stroke-width="4"/></svg></div><span class="gl-slash"></span></sc-if>
+          <span class="sp-av" style="width: 56px; height: 56px; font-size: 15px; background: {{c.c}}; filter: {{c.f}}">{{c.ini}}</span>
+          <span style="font-weight: 700; font-size: 16px">{{c.name}}</span>
+          <span class="sp-num" style="font-size: 30px; font-weight: 700; color: {{c.pc}}">{{c.pts}}</span>
+          <span class="sp-t3" style="font-size: 12px">{{c.sub}}</span>
+          <sc-if value="{{c.stamp}}" hint-placeholder-val="{{ false }}"><div class="gl-stampw"><span class="gl-stamp">Chopped</span></div></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <span class="sp-t2" style="font-size: 13px">{{note}}</span>
+  </section>
+  <aside style="flex: 1 1 360px; max-width: 420px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: center; gap: 10px"><img src="specialty/guillotine/icon-zone.svg" alt="" style="width: 28px"><span class="sp-lbl" style="flex: 1">{{relLbl}}</span></div>
+    <sc-for list="{{released}}" as="p" hint-placeholder-count="6">
+      <div class="gl-pl sp-up" style="animation-delay: {{p.d}}; opacity: {{p.op}}"><span class="sp-tag" style="background: #151926; color: #a3a9c2; width: 40px; justify-content: center">{{p.pos}}</span><span style="flex: 1; font-weight: 600">{{p.name}}</span><span class="sp-t3 sp-num" style="font-size: 12px">AF ${{p.val}}</span><button class="sp-btn" style="min-height: 32px; padding: 0 10px" disabled="{{p.locked}}">Bid</button></div>
+    </sc-for>
+    <div class="sp-card2" style="padding: 14px; font-size: 12.5px; color: #a3a9c2">FAAB bids on released players open right after the chop and run Wed 3:00 AM ET. AF suggests bids from your remaining budget ($64).</div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":720}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { done: false }; }
+  renderVals() {
+    const d = this.state.done;
+    const C = [['Open Team 12','O12','#3a1f30','101.5','Survives by 8.8',false],['Open Team 4','O4','#1f2a4d','97.7','Survives by 5.0',false],['Open Team 11','O11','#2a3a1a','92.7','Lowest score',true]];
+    return { stageCls: d ? 'gl-chopped' : '', canDrop: !d, done: d, drop: () => this.setState({ done: true }), reset: () => this.setState({ done: false }),
+      cards: C.map(([name, ini, c, pts, sub, t]) => ({ name, ini, c, pts, sub: t && d ? 'Chopped · roster released' : sub, target: t, cls: t ? 'gl-target' : '', stamp: t && d,
+        f: t && d ? 'grayscale(1) brightness(.7)' : 'none', pc: t ? '#ff9a8a' : '#e8eaf2' })),
+      note: d ? 'Open Team 11 is out with 92.7. 8 teams remain. Their roster is on waivers now.' : 'Stat corrections are in and nothing changed. The lowest score is chopped when the blade drops.',
+      relLbl: d ? 'Released to waivers · 6 of 15' : 'Roster to be released',
+      released: [['WR','Jaylen Waddle',34],['RB','Tony Pollard',27],['QB','Baker Mayfield',22],['TE','Jake Ferguson',12],['WR','Rome Odunze',19],['K','Brandon Aubrey',3]]
+        .map(([pos, name, val], i) => ({ pos, name, val, d: d ? (0.9 + i * 0.12).toFixed(2) + 's' : '0s', op: d ? '1' : '.45', locked: !d })) };
+  }
+}
+</script>
+</body>
+</html>

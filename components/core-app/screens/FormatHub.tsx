@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import Link from 'next/link'
 import type { FormatHubData, HubFormat } from '@/lib/core-app/formatHubs'
 import '@/components/core-app/af-format-hubs.css'
@@ -8,6 +9,21 @@ import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 import { HUB_TABS, HubSwitcher } from '@/components/core-app/hubs/HubSwitcher'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { HubBroadcast } from '@/components/core-app/hubs/HubBroadcast'
+import { TopicTip } from '@/components/core-app/TopicTip'
+import type { HelpTopicId } from '@/lib/core-app/helpTopics'
+
+/**
+ * What each format's card meter measures — one "?" beside the leagues heading, never one per card.
+ * Tournament cards carry no meter, so no topic. Each topic's text is read from that format's
+ * builder in lib/core-app/formatHubs.ts.
+ */
+const METER_TOPIC: Partial<Record<HubFormat, HelpTopicId>> = {
+  zombie: 'zombieHubMeter',
+  survivor: 'survivorHubMeter',
+  guillotine: 'guillotineHubMeter',
+  c2c: 'c2cHubMeter',
+  efl: 'eflHubMeter',
+}
 
 /**
  * Multi-league format hub — design_handoff_multi_league_hubs (2026-09-13).
@@ -105,7 +121,7 @@ const THEMES: Record<HubFormat, Theme> = {
     broadcastLabel: 'Broadcast to every C2C league',
     emptyTitle: 'You’re not in a C2C league yet',
     canCreate: true,
-    foot: 'AllFantasy never writes back to Sleeper, ESPN or Yahoo — sync reads only.',
+    foot: `AllFantasy never writes back to ${availableImportPlatformsPhrase()} — sync reads only.`,
     video: '/league-type-c2c.mp4',
     poster: '/league-type-c2c.png',
   },
@@ -227,7 +243,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
               ↓
             </span>
             <div className="afh-row-main">
-              <span className="afh-row-title">Import from Sleeper, ESPN, Yahoo, Fantrax or MFL</span>
+              <span className="afh-row-title">Import from {availableImportPlatformsPhrase()}</span>
               <span className="afh-row-detail">It appears here as soon as it is recognised as a {theme.tab} league.</span>
             </div>
             <Link className="afh-btn afh-btn--sm" href="/import">
@@ -305,6 +321,10 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
               <h2 id="afh-leagues" className="afh-label" style={{ margin: 0 }}>
                 {theme.leaguesLabel}
               </h2>
+              {/* Beside the heading, not in it: the h2 names this section (aria-labelledby). */}
+              {METER_TOPIC[data.format] && data.leagues.some((l) => l.meter) ? (
+                <TopicTip topic={METER_TOPIC[data.format]!} />
+              ) : null}
             </div>
             <div className="afh-grid">
               {data.leagues.map((l) => (

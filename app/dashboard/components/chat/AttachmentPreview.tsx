@@ -52,8 +52,8 @@ export function AttachmentPreview({
         <div className="flex max-w-[200px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] p-1.5 pr-2">
           <img src={gif.previewUrl || gif.url} alt="" className="h-[80px] w-[80px] shrink-0 rounded-lg object-cover" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-medium text-white/70">{gif.title}</p>
-            <p className="text-[9px] text-white/35">GIF</p>
+            <p className="truncate text-[11px] font-medium text-white/70">{gif.title}</p>
+            <p className="text-[11px] text-white/35">GIF</p>
           </div>
           <button
             type="button"
@@ -83,9 +83,9 @@ export function AttachmentPreview({
             </div>
           ) : null}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] text-white/70">{a.name || a.type}</p>
+            <p className="truncate text-[11px] text-white/70">{a.name || a.type}</p>
             {a.duration != null ? (
-              <p className="text-[9px] text-white/35">
+              <p className="text-[11px] text-white/35">
                 {a.type === 'voice' ? `Voice · ${Math.round(a.duration)}s` : `${Math.round(a.duration)}s`}
               </p>
             ) : null}

@@ -100,7 +100,7 @@ function SectionCard({
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-white/50 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-white/50 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
         >
           Edit
         </button>

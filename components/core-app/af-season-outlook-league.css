@@ -212,7 +212,7 @@
   text-align: left;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 700;
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -397,7 +397,7 @@
 }
 
 .af-sol-attention-note {
-  font: 400 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 400 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.08em;
   color: var(--faint);
 }

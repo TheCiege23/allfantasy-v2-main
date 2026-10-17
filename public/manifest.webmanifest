@@ -2,7 +2,7 @@
   "id": "/core",
   "name": "AllFantasy.ai",
   "short_name": "AllFantasy",
-  "description": "AI-powered fantasy sports \u2014 trade analyzer, draft assistant, waiver AI, and more.",
+  "description": "AI-powered fantasy sports — trade analyzer, draft assistant, waiver AI, and more.",
   "start_url": "/core",
   "scope": "/",
   "display": "standalone",
@@ -110,7 +110,13 @@
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -139,13 +145,6 @@
       "label": "Free forever for players, with paid tiers for deeper tools"
     },
     {
-      "src": "/screenshots/bracket-wide.png",
-      "sizes": "1280x800",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Bracket challenge pools with AI analysis on every matchup"
-    },
-    {
       "src": "/screenshots/home-narrow.png",
       "sizes": "412x824",
       "type": "image/png",
@@ -165,13 +164,6 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Free forever for players, with paid tiers for deeper tools"
-    },
-    {
-      "src": "/screenshots/bracket-narrow.png",
-      "sizes": "412x824",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Bracket challenge pools with AI analysis on every matchup"
     }
   ],
   "shortcuts": [
@@ -188,9 +180,9 @@
       ]
     },
     {
-      "name": "Your week",
-      "short_name": "Week",
-      "url": "/core/week",
+      "name": "Your career",
+      "short_name": "Career",
+      "url": "/core/career",
       "icons": [
         {
           "src": "/icons/icon-96.png",
@@ -204,6 +196,19 @@
       "name": "Live scores",
       "short_name": "Live",
       "url": "/core/live",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Your week",
+      "short_name": "Week",
+      "url": "/core/week",
       "icons": [
         {
           "src": "/icons/icon-96.png",

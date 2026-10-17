@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getSeasonBoard, type MarketPlayer } from '@/lib/sports-data/sleeperMarketService'
+import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 
 export const dynamic = 'force-dynamic'
 
@@ -158,7 +159,7 @@ export async function GET(req: NextRequest) {
     linked: true as const,
     inLeague: true as const,
     fetchedAt: new Date().toISOString(),
-    dynasty: context.variant.dynasty || context.variant.keeper,
+    dynasty: pricesOnDynastyChart(context.variant),
     draftLive,
     draftedCount: draftedIds.size,
     starters: bySlot,

@@ -94,10 +94,6 @@ const MUST_WIRE: ReadonlyArray<{ file: string; why: string }> = [
  */
 const MUST_NOT_WIRE: ReadonlyArray<{ file: string; why: string }> = [
   {
-    file: 'app/api/instant/trade/route.ts',
-    why: 'parses a trade out of free text; league size is guessed from the prose and there is no league id at all',
-  },
-  {
     file: 'lib/trade-alternatives.ts',
     why: 'receives a UserTrade, which carries transactionId and parties but no league id',
   },

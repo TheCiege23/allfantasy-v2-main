@@ -20,7 +20,7 @@ export function PostDraftReportModal({ open, onClose, leagueId }: PostDraftRepor
       <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0a1228] p-4 shadow-xl">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Post-draft</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Post-draft</p>
             <h2 className="text-sm font-semibold text-white">Roster report</h2>
             <p className="mt-1 text-[11px] text-white/50">
               <code className="text-cyan-200/80">POST /api/war-room/post-draft-report</code> reads{' '}

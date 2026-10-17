@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getPublishLog, publishArticle, scheduleArticle, unpublishArticle } from "@/lib/automated-blog"
+import { requireAdminOrBearer } from "@/lib/adminAuth"
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ articleId: string }> }
 ) {
+  const gate = await requireAdminOrBearer(req)
+  if (!gate.ok) return gate.res
   try {
     const { articleId } = await params
     const article = await prisma.blogArticle.findUnique({ where: { articleId } })
@@ -35,6 +38,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ articleId: string }> }
 ) {
+  const gate = await requireAdminOrBearer(req)
+  if (!gate.ok) return gate.res
   try {
     const { articleId } = await params
     const body = await req.json().catch(() => ({}))

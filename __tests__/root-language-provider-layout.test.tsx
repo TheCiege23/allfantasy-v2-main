@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url)
 vi.mock("next-auth/react", () => ({
   SessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   signOut: vi.fn(),
-  useSession: () => undefined,
+  useSession: () => ({ data: null, status: 'unauthenticated' }),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -746,8 +746,13 @@ describe("root language provider layout", () => {
     expect(cleanAt, 'build:railway must run the Railway clean step').toBeGreaterThan(-1)
     expect(tailwindAt, 'build:railway must run the tailwind prebuild').toBeGreaterThan(cleanAt)
 
-    // The build must end at `next build`, however it is wrapped to get there.
-    expect(scripts.build).toMatch(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
+    // The build must end at `next build`, however it is wrapped to get there. Since 2026-10-01
+    // `build` is scripts/next-build.cjs (the Railway webpack-cache wrapper), so follow it to the
+    // command it actually spawns rather than accepting the wrapper's name as proof.
+    const buildCommand = scripts.build.includes("scripts/next-build.cjs")
+      ? (require("../scripts/next-build.cjs") as { NEXT_BUILD_ARGS: string[] }).NEXT_BUILD_ARGS.join(" ")
+      : scripts.build
+    expect(buildCommand).toMatch(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
     expect(scripts["build:railway"]).toMatch(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
     expect(scripts["build:railway"].indexOf("railway-tailwind-prebuild.cjs")).toBeLessThan(
       scripts["build:railway"].search(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
@@ -829,3 +834,4 @@ describe("root language provider layout", () => {
     expect(layoutSource).not.toContain("--font-inter")
   })
 })
+

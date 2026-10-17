@@ -180,6 +180,10 @@ export async function getFinaleState(
   leagueId: string,
   week: number
 ): Promise<SurvivorFinaleState> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const { readSurvivorFullSeasonPlan } = await import('./survivorFullSeasonPlan')
+  const plan = readSurvivorFullSeasonPlan(league?.settings)
+  const plannedFinaleReady = !plan || (week >= plan.finaleWeek && Boolean((await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { weekScoringFinalAt: true } }))?.weekScoringFinalAt))
   const [merged, activeRosterIds, jury, winnerEvent] = await Promise.all([
     isMergeTriggered(leagueId, week),
     getActiveRosterIdsForLeague(leagueId),
@@ -187,7 +191,7 @@ export async function getFinaleState(
     getLatestWinnerEvent(leagueId),
   ])
 
-  const finalists = merged && activeRosterIds.length >= 2 && activeRosterIds.length <= MAX_FINALISTS
+  const finalists = merged && plannedFinaleReady && activeRosterIds.length >= 2 && activeRosterIds.length <= MAX_FINALISTS
     ? [...activeRosterIds].sort()
     : []
   const juryRosterIds = jury.map((member) => member.rosterId)

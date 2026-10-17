@@ -64,7 +64,7 @@ function TeamSlot({
       className,
     )}>
       <div className="flex items-center gap-2">
-        <div className={cx('w-5 h-5 rounded-full bg-gradient-to-br flex items-center justify-center text-[9px] font-bold text-white', seedColor(seed))}>
+        <div className={cx('w-5 h-5 rounded-full bg-gradient-to-br flex items-center justify-center text-[11px] font-bold text-white', seedColor(seed))}>
           {seed}
         </div>
         <span className={cx('text-xs truncate max-w-[100px]', winner ? 'font-semibold text-white' : 'font-medium text-white/80')}>
@@ -114,7 +114,7 @@ function RoundHeader({ title, week }: { title: string; week: string; isChampions
       <span className={cx('text-xs uppercase tracking-wider font-semibold', isChamp ? 'text-amber-400' : 'text-cyan-300/80')}>
         {title}
       </span>
-      <span className="block text-[10px] text-white/40">({week})</span>
+      <span className="block text-[11px] text-white/40">({week})</span>
     </div>
   )
 }
@@ -169,22 +169,22 @@ function BracketShell({ leagueName, season, playoffTeamCount, children }: { leag
   return (
     <div className="rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1a3a5c 50%, #0d2442 100%)' }}>
       <div className="absolute top-4 right-4 z-10">
-        <img src="/af-crest.jpg" alt="AllFantasy Crest" className="w-14 h-14 rounded-lg shadow-lg shadow-blue-500/30 object-cover" />
+        <img src="/af-crest.svg" alt="AllFantasy Crest" className="w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(59,130,246,0.35)]" />
       </div>
       <div className="text-center pt-6 pb-4">
         <h3 className="text-2xl sm:text-3xl font-bold text-white tracking-wide">PLAYOFFS</h3>
         <p className="text-cyan-300/70 text-sm mt-1">{leagueName} &middot; {season} Season &middot; {playoffTeamCount} Team Bracket</p>
-        <p className="text-[10px] text-white/30 mt-1 italic">Simulated preview &middot; Seeded by current standings</p>
+        <p className="text-[11px] text-white/30 mt-1 italic">Simulated preview &middot; Seeded by current standings</p>
       </div>
       <div className="px-4 sm:px-8 pb-8 overflow-x-auto">
         {children}
       </div>
       <div className="px-4 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-[8px] font-black text-white">AF</div>
-          <span className="text-[10px] text-white/40 font-medium">Powered by AllFantasy</span>
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-[11px] font-black text-white">AF</div>
+          <span className="text-[11px] text-white/40 font-medium">Powered by AllFantasy</span>
         </div>
-        <span className="text-[9px] text-white/25 italic">Live bracket updates coming soon</span>
+        <span className="text-[11px] text-white/25 italic" data-hide-in-ios-app="">Live bracket updates coming soon</span>
       </div>
     </div>
   )

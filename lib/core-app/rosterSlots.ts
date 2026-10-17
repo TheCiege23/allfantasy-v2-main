@@ -19,7 +19,9 @@ const SLOT_ALIAS: Record<string, string> = {
   SUPER_FLEX: 'SFLEX',
   REC_FLEX: 'W/T',
   IDP_FLEX: 'IDP',
-  WRRB_FLEX: 'FLEX',
+  /* NOT 'FLEX': Sleeper's WRRB_FLEX takes no tight end, and FLEX below does — the bench check
+     offered TEs for a slot they cannot fill. Same rule as slotEligibility.ts. */
+  WRRB_FLEX: 'W/R',
   DST: 'DEF',
 }
 
@@ -100,6 +102,7 @@ const SLOT_ELIGIBILITY: Record<string, readonly string[]> = {
   FLEX: ['RB', 'WR', 'TE'],
   SFLEX: ['QB', 'RB', 'WR', 'TE'],
   'W/T': ['WR', 'TE'],
+  'W/R': ['WR', 'RB'],
   IDP: ['DL', 'LB', 'DB'],
   DL: ['DL'],
   LB: ['LB'],

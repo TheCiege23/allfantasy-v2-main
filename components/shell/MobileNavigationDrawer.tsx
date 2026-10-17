@@ -128,7 +128,7 @@ export function MobileNavigationDrawer({
           </div>
           <nav className="flex-1 space-y-4 overscroll-contain overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="rounded-xl border p-2" style={{ borderColor: "var(--border)" }}>
-              <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
                 Quick actions
               </p>
               <div className="space-y-1">
@@ -179,7 +179,7 @@ export function MobileNavigationDrawer({
             </div>
 
             <div>
-              <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
                 Products
               </p>
               <div className="space-y-1">
@@ -205,7 +205,7 @@ export function MobileNavigationDrawer({
             </div>
 
             <div>
-              <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
                 Workspace
               </p>
               <div className="space-y-1">
@@ -231,7 +231,7 @@ export function MobileNavigationDrawer({
             </div>
 
             <div>
-              <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
                 Account
               </p>
               <div className="space-y-1">
@@ -257,7 +257,7 @@ export function MobileNavigationDrawer({
             </div>
 
             <div className="rounded-xl border p-2" style={{ borderColor: "var(--border)" }}>
-              <p className="px-1 pb-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
                 Appearance
               </p>
               <div className="flex flex-wrap items-center gap-2">

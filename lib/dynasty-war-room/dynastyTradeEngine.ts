@@ -1,11 +1,16 @@
 /**
- * DYNASTY TRADE ANALYZER / FINDER — pure, deterministic. No AI, no fabrication.
+ * DYNASTY TRADE FACTS / FINDER — pure, deterministic. No AI, no fabrication.
  *
- * analyzeDynastyTrade(): compares outgoing vs incoming using dynasty asset VALUE,
+ * dynastyTradeFacts(): compares outgoing vs incoming using dynasty asset VALUE,
  * AGE-trajectory adjustment, roster-fit, AND real future-pick capital. Dynasty
  * horizon — value is long-term, not weekly. Picks are priced by their deterministic
- * structural tier (round + seasons-out), never a fabricated market value. When no
- * value signal exists for the involved assets the verdict is 'needs_more_data'.
+ * structural tier (round + seasons-out), never a fabricated market value. A missing
+ * value signal is flagged, never fabricated.
+ *
+ * 🛑 IT RETURNS FACTS, NEVER A VERDICT (2026-09-30) — see redraftTradeEngine.ts. The
+ * verdict is THE grade (lib/decision-os/trade/warRoomTradeGrade.ts); the retired
+ * accept / reject / neutral rule that reads `valueDelta` / `rosterFitDelta` for the
+ * shadow is lib/decision-os/trade/warRoomLegacyVerdict.ts.
  *
  * findDynastyTradeTargets(): ranks partners by complementary needs/surplus AND
  * contention windows — contenders pair with rebuilders (win-now vets ↔ youth/picks),
@@ -18,11 +23,8 @@ import { evaluateDynastyTeamDirection } from './dynastyTeamDirectionEngine'
 import { summarizePickCapital } from './dynastyPickValueEngine'
 import type { DynastyFuturePick, DynastyPlayerFact, DynastyWarRoomContext } from './types'
 
-export type DynastyTradeVerdict = 'accept' | 'reject' | 'neutral' | 'needs_more_data'
-
 export interface DynastyTradeAnalysis {
-  verdict: DynastyTradeVerdict
-  /** Incoming - outgoing age-adjusted value delta from the USER's perspective. */
+  /** Incoming - outgoing age-adjusted value delta from the USER's perspective. Shadow input only. */
   valueDelta: number | null
   rosterFitDelta: number
   ageImpact: string[]
@@ -84,7 +86,7 @@ export interface AnalyzeDynastyTradeInput {
   incomingPickIds?: string[]
 }
 
-export function analyzeDynastyTrade(
+export function dynastyTradeFacts(
   context: DynastyWarRoomContext,
   input: AnalyzeDynastyTradeInput,
 ): DynastyTradeAnalysis {
@@ -101,7 +103,6 @@ export function analyzeDynastyTrade(
 
   if (outgoing.length === 0 && incoming.length === 0 && outgoingPicks.length === 0 && incomingPicks.length === 0) {
     return {
-      verdict: 'needs_more_data',
       valueDelta: null,
       rosterFitDelta: 0,
       ageImpact: [],
@@ -119,29 +120,28 @@ export function analyzeDynastyTrade(
     context.availability.futurePicks === 'available' || context.availability.futurePicks === 'partial'
   const requestedPickIds = (input.outgoingPickIds?.length ?? 0) + (input.incomingPickIds?.length ?? 0)
   if (requestedPickIds > 0 && !picksAvailable) {
-    riskFlags.push('Pick capital is not tracked for this league — picks in this trade are excluded from the value delta.')
+    riskFlags.push('Pick capital is not tracked for this league — picks in this trade are not in its facts.')
   } else if (requestedPickIds > 0 && requestedPickIds !== outgoingPicks.length + incomingPicks.length) {
     riskFlags.push('Some referenced picks could not be resolved and were excluded.')
   }
   const outPickValues = outgoingPicks.map((pk) => pk.estValue)
   const inPickValues = incomingPicks.map((pk) => pk.estValue)
-  for (const pk of incomingPicks) pickImpact.push(`Acquiring ${pickLabel(pk)} pick${pk.estValue != null ? ` (tier ${pk.estValue.toFixed(1)})` : ''}.`)
-  for (const pk of outgoingPicks) pickImpact.push(`Sending ${pickLabel(pk)} pick${pk.estValue != null ? ` (tier ${pk.estValue.toFixed(1)})` : ''}.`)
+  // 🛑 No "(tier 8.5)": a pick's structural tier is this engine's private scale (2026-09-29).
+  for (const pk of incomingPicks) pickImpact.push(`Acquiring ${pickLabel(pk)} pick.`)
+  for (const pk of outgoingPicks) pickImpact.push(`Sending ${pickLabel(pk)} pick.`)
 
   const outValues = [...outgoing.map(ageAdjustedValue), ...outPickValues]
   const inValues = [...incoming.map(ageAdjustedValue), ...inPickValues]
   const haveAllValues = [...outValues, ...inValues].every((v) => v != null)
   const haveAnyValue = [...outValues, ...inValues].some((v) => v != null)
 
+  // 🛑 Kept for this engine's shadow telemetry only (2026-09-29): the War Room's value scale is never a
+  // line users read — the verdict on this screen is the one grade (warRoomTradeGrade.ts).
   let valueDelta: number | null = null
   if (haveAnyValue) {
     const inSum = inValues.reduce<number>((s, v) => s + (v ?? 0), 0)
     const outSum = outValues.reduce<number>((s, v) => s + (v ?? 0), 0)
     valueDelta = Math.round((inSum - outSum) * 100) / 100
-    const pickNote = outgoingPicks.length + incomingPicks.length > 0 ? ' (incl. pick tiers)' : ''
-    facts.push(
-      `Age-adjusted value in ${inSum.toFixed(1)} vs out ${outSum.toFixed(1)} (delta ${valueDelta >= 0 ? '+' : ''}${valueDelta})${pickNote}.`,
-    )
   }
 
   // Age impact narrative.
@@ -194,20 +194,11 @@ export function analyzeDynastyTrade(
     if (p.injuryStatus && !/^(healthy|active|ok)$/i.test(p.injuryStatus)) riskFlags.push(`Incoming ${p.playerName} listed ${p.injuryStatus}.`)
   }
 
-  let verdict: DynastyTradeVerdict
-  if (!haveAnyValue) {
-    verdict = 'needs_more_data'
-    missingDataFlags.push('No dynasty value signal for the involved players or picks — verdict unavailable.')
-  } else {
-    if (!haveAllValues) riskFlags.push('Some players lack a value signal — verdict weighted by available data only.')
-    const composite = (valueDelta ?? 0) + rosterFitDelta * 1.5
-    if (composite >= 3) verdict = 'accept'
-    else if (composite <= -3) verdict = 'reject'
-    else verdict = 'neutral'
-  }
+  // Value-signal coverage — facts, not a verdict (the retired rule is warRoomLegacyVerdict.ts).
+  if (!haveAnyValue) missingDataFlags.push('No dynasty value signal for the involved players or picks.')
+  else if (!haveAllValues) riskFlags.push('Some players have no dynasty value signal.')
 
   return {
-    verdict,
     valueDelta,
     rosterFitDelta,
     ageImpact: [...new Set(ageImpact)],

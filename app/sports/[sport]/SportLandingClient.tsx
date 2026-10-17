@@ -82,7 +82,7 @@ export default function SportLandingClient({ config }: { config: SportConfig }) 
               className="mt-3 inline-flex items-center gap-2 text-sm font-medium"
               style={{ color: 'var(--accent-cyan)' }}
             >
-              Meet Chimmy AI
+              Meet Chimmy
               <ArrowRight className="h-4 w-4" />
             </Link>
           </section>

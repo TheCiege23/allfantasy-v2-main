@@ -78,8 +78,8 @@ export const AI_COST_GATES = {
   league_format_ai: { label: 'devy & IDP analysis', featureId: 'commissioner_ai_tools', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
 
   // ── Free forever, capped ─────────────────────────────────────────────────────
-  // A logged-out acquisition tool: stays public, capped per IP.
-  instant_trade: { label: 'instant trade checks', paidFromLaunch: false, perMinute: 10, dailyFree: 20, dailyPaid: 20, dailyAnonymous: 5 },
+  // (`instant_trade`, the logged-out instant trade check, was removed 2026-09-30: its only caller,
+  // /api/instant/trade, was deleted as dead code in PR #1621.)
   // Shared career cards bring people in — never paywalled, only capped.
   share_copy: { label: 'share captions', paidFromLaunch: false, perMinute: 5, dailyFree: 20, dailyPaid: 20 },
   /*

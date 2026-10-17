@@ -334,7 +334,7 @@ export function KeeperPanel({
             ) : (
               <div className="flex flex-wrap gap-1.5" data-testid="draft-keeper-carryover-list">
                 {effectiveRosterCarryover.slice(0, 24).map((name) => (
-                  <span key={name} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/80">
+                  <span key={name} className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-white/80">
                     {name}
                   </span>
                 ))}

@@ -105,14 +105,14 @@ export function DraftOrderList({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={av} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[10px] text-white/40">
+                    <div className="flex h-full w-full items-center justify-center text-[11px] text-white/40">
                       {(row.ownerName || '?').slice(0, 2).toUpperCase()}
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[12px] font-semibold text-white">{row.ownerName}</p>
-                  <p className="truncate text-[10px] text-white/35">Team</p>
+                  <p className="truncate text-[11px] text-white/35">Team</p>
                 </div>
               </>
             )}
@@ -120,7 +120,7 @@ export function DraftOrderList({
               <select
                 value={row.ownerId}
                 onChange={(e) => onAssignSlot(idx, e.target.value)}
-                className="max-w-[140px] flex-shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.05] px-1.5 py-1 text-[10px] text-white"
+                className="max-w-[140px] flex-shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.05] px-1.5 py-1 text-[11px] text-white"
               >
                 {sortedTeams.map((t) => (
                   <option key={t.id} value={t.id}>

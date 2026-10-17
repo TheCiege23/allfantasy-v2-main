@@ -82,6 +82,7 @@ const RECEIVING: NcaafScoringCategory = {
   id: 'receiving',
   label: 'Receiving',
   rows: [
+    { key: 'te_premium', label: 'TE Reception Bonus', helper: 'Added to the regular reception value for tight ends only.', defaultValue: 0 },
     { key: 'reception',                   label: 'Reception',                                                          defaultValue: 0.5 },
     { key: 'receiving_yards',             label: 'Receiving Yards',         helper: '0.10 pts/yd (1 pt per 10 yds)',  defaultValue: 0.1 },
     { key: 'receiving_td',                label: 'Receiving TD',                                                       defaultValue: 6 },
@@ -112,7 +113,7 @@ const KICKING: NcaafScoringCategory = {
   id: 'kicking',
   label: 'Kicking',
   rows: [
-    { key: 'fg_made',              label: 'FG Made',                   defaultValue: 0 },
+    { key: 'fg_made',              label: 'FG Made', helper: 'CFBD supplies total makes and attempts. Distance scoring is unavailable from this feed.', defaultValue: 3 },
     { key: 'fg_0_19',             label: 'FG Made (0-19 yards)',       defaultValue: 3 },
     { key: 'fg_20_29',            label: 'FG Made (20-29 yards)',      defaultValue: 3 },
     { key: 'fg_30_39',            label: 'FG Made (30-39 yards)',      defaultValue: 3 },

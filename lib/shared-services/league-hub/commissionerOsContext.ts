@@ -23,12 +23,9 @@
  * When a league has no rows yet (the engine has never run for it), the
  * corresponding field is honestly empty, never fabricated.
  *
- * Authorization is intentionally NOT delegated to
- * `lib/shared-services/commissioner/CommissionerAuthorization.ts`'s
- * `resolveCommissionerAccess` (which wraps `getLeagueRole()`) — that
- * module's own docstring discloses a real gap: for imported leagues,
- * `getLeagueRole()` reflects "who imported it," not real, attestation-aware
- * commissioner status. This phase instead reuses
+ * Authorization is intentionally NOT delegated to `getLeagueRole()`, which has
+ * a real gap: for imported leagues it reflects "who imported it," not real,
+ * attestation-aware commissioner status. This phase instead reuses
  * `resolveActiveLeagueContext`'s `isCommissioner`, which this same phase
  * just fixed (see `activeLeagueContext.ts`) to also trust a real, recorded
  * `commissionerVerification` attestation for MFL/ESPN/Yahoo — the more
@@ -39,18 +36,20 @@ import { prisma } from '@/lib/prisma'
 import { resolveActiveLeagueContext } from './activeLeagueContext'
 import { deriveImportType } from './providerCapabilities'
 import { resolveFantraxRefreshability } from './leagueRefreshability'
-import {
-  buildCommissionerContext,
-  buildLeagueHealthAssessment,
-  buildCommissionerAttentionItems,
-  buildCommissionerRanking,
-  buildCommissionerBrief,
-  type CommissionerContext,
-  type LeagueHealthAssessment,
-  type CommissionerAttentionItem,
-  type CommissionerPowerRanking,
-  type CommissionerBrief,
-} from '@/lib/shared-services/commissioner'
+// Leaf imports, not the package barrel: only these builders were restored after
+// fe0b9bf18 removed the package, and the barrel also re-exported its shadow store.
+import { buildCommissionerContext } from '@/lib/shared-services/commissioner/CommissionerContextAssembler'
+import { buildLeagueHealthAssessment } from '@/lib/shared-services/commissioner/LeagueHealthService'
+import { buildCommissionerAttentionItems } from '@/lib/shared-services/commissioner/CommissionerAttentionService'
+import { buildCommissionerRanking } from '@/lib/shared-services/commissioner/CommissionerRankingService'
+import { buildCommissionerBrief } from '@/lib/shared-services/commissioner/CommissionerBriefService'
+import type {
+  CommissionerContext,
+  LeagueHealthAssessment,
+  CommissionerAttentionItem,
+  CommissionerPowerRanking,
+  CommissionerBrief,
+} from '@/lib/shared-services/commissioner/types'
 import type { ActiveLeagueContext, LeagueHubProvider, SyncFreshness } from './types'
 
 export interface LeagueChampionRecord {

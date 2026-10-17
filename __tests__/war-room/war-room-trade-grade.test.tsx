@@ -106,6 +106,13 @@ describe('WarRoomTradeGradeLine', () => {
     rerender(<WarRoomTradeGradeLine testId="g" grade={{ graded: false, reason: 'No values.' }} />)
     expect(screen.getByTestId('g-withheld').textContent).toBe('Not graded: No values.')
   })
+
+  it('🛑 no grade in the response is "Not graded" with the reason — never nothing, never a fallback verdict (2026-09-29)', () => {
+    const { rerender } = render(<WarRoomTradeGradeLine testId="g" grade={null} />)
+    expect(screen.getByTestId('g-withheld').textContent).toBe('Not graded: This trade could not be graded just now.')
+    rerender(<WarRoomTradeGradeLine testId="g" grade={undefined} />)
+    expect(screen.getByTestId('g-withheld').textContent).toBe('Not graded: This trade could not be graded just now.')
+  })
 })
 
 describe('wiring', () => {
@@ -116,12 +123,13 @@ describe('wiring', () => {
     it(`${kind}: the route grades trade-analyze from the analysed roster’s side and returns it`, () => {
       const src = code(route)
       expect(src).toMatch(/gradeWarRoomTrade\(\{[\s\S]{0,80}viewerSide: rosterId === context\.userRosterId/)
-      expect(src).toMatch(/NextResponse\.json\(\{ tradeAnalysis: analysis, tradeGrade \}\)/)
+      expect(src).toMatch(/NextResponse\.json\(\{ tradeAnalysis: warRoomTradeAnalysisForClient\(analysis\), tradeGrade \}\)/)
     })
 
-    it(`${kind}: 🛑 the panel shows the private verdict only when no grade came back`, () => {
-      const src = code(panel)
-      expect(src).toMatch(/\{tradeGrade \? \(\s*<WarRoomTradeGradeLine grade=\{tradeGrade\}/)
+    it(`${kind}: 🛑 the panel never shows the private verdict — no grade is "Not graded" (2026-09-29)`, () => {
+      const src = code(panel).replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      expect(src).toMatch(new RegExp(`<WarRoomTradeGradeLine grade=\\{tradeGrade\\} testId="${kind}-war-room-trade-grade" />`))
+      expect(src).not.toMatch(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/)
       expect(src).toMatch(/setTradeGrade\(analyzed\.tradeGrade \?\? null\)/)
     })
   }

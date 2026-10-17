@@ -3,12 +3,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 import { sendTradeAlertConfirmationEmail } from '@/lib/resend-client'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+
+/*
+ * ⚠ SECURITY. This route used to be fully anonymous: GET turned any public
+ * Sleeper handle into the email address behind it, and POST sent a confirmation
+ * email to any address, cleared a prior unsubscribe, and added the address to
+ * the marketing list — unlimited. Both now require a legacy identity (session
+ * or signed guest), POST is rate-limited per actor, the username is taken from
+ * the identity rather than the body, an opt-out is never reversed here, and
+ * GET never returns an email (a guest session can be minted for ANY handle via
+ * guest-import, so identity alone does not prove the address is yours).
+ */
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", tool: "LegacyEmailPreferences" })(async (req: NextRequest) => {
   try {
-    const body = await req.json()
+    const body = await req.json().catch(() => ({} as Record<string, unknown>))
+    const gate = await requireLegacySleeperIdentity(req, {
+      allowGuest: true,
+      requestedUsername: String(body.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'email-preferences', maxRequests: 5, windowMs: 60 * 60 * 1000 },
+    })
+    if (!gate.ok) return gate.response
+
     const email = String(body.email || '').trim().toLowerCase()
-    const sleeperUsername = String(body.sleeper_username || '').trim()
+    const sleeperUsername = gate.identity.sleeperUsername
     const tradeAlerts = body.trade_alerts !== false
 
     if (!email || !email.includes('@')) {
@@ -61,6 +80,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", to
       where: { email },
     })
     const wasAlreadyEnabled = existingPref?.tradeAlerts === true
+    // Whoever typed this address may not own it, so a recorded opt-out stands.
+    const optedOut = Boolean(existingPref?.unsubscribedAt)
 
     // Upsert email preference
     const emailPref = await prisma.emailPreference.upsert({
@@ -69,7 +90,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", to
         legacyUserId: legacyUserId || undefined,
         sleeperUsername: sleeperUsername || undefined,
         tradeAlerts,
-        unsubscribedAt: null,
         updatedAt: new Date(),
       },
       create: {
@@ -82,7 +102,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", to
     })
 
     // Send confirmation email if newly enabling trade alerts
-    if (tradeAlerts && !wasAlreadyEnabled) {
+    const sendConfirmation = tradeAlerts && !wasAlreadyEnabled && !optedOut
+    if (sendConfirmation) {
       try {
         await sendTradeAlertConfirmationEmail(email, sleeperUsername || 'Fantasy Manager')
       } catch (e) {
@@ -96,7 +117,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", to
       message: wasAddedToEarlyAccess 
         ? 'You\'ve been added to Early Access and trade alerts are now enabled!'
         : 'Email preferences saved! You\'ll receive trade alerts when new trades are analyzed.',
-      confirmationSent: tradeAlerts && !wasAlreadyEnabled,
+      confirmationSent: sendConfirmation,
       addedToEarlyAccess: wasAddedToEarlyAccess,
     })
   } catch (e) {
@@ -107,20 +128,17 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", to
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/email-preferences", tool: "LegacyEmailPreferences" })(async (req: NextRequest) => {
   try {
-    const email = req.nextUrl.searchParams?.get('email')
-    const sleeperUsername = req.nextUrl.searchParams?.get('sleeper_username')
+    const gate = await requireLegacySleeperIdentity(req, {
+      allowGuest: true,
+      requestedUsername: req.nextUrl.searchParams?.get('sleeper_username')?.trim() || null,
+      rateLimit: { action: 'email-preferences-read', maxRequests: 30, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
 
-    if (!email && !sleeperUsername) {
-      return NextResponse.json({ error: 'Email or sleeper_username required' }, { status: 400 })
-    }
-
+    // Only the caller's own handle, never a caller-supplied email: looking an
+    // address up by name is exactly the enumeration this route used to allow.
     const emailPref = await prisma.emailPreference.findFirst({
-      where: {
-        OR: [
-          email ? { email: email.toLowerCase() } : {},
-          sleeperUsername ? { sleeperUsername } : {},
-        ].filter((o) => Object.keys(o).length > 0),
-      },
+      where: { sleeperUsername: { equals: gate.identity.sleeperUsername, mode: 'insensitive' } },
     })
 
     if (!emailPref) {
@@ -129,7 +147,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/email-preferences", too
 
     return NextResponse.json({
       found: true,
-      email: emailPref.email,
       tradeAlerts: emailPref.tradeAlerts,
       weeklyDigest: emailPref.weeklyDigest,
       productUpdates: emailPref.productUpdates,

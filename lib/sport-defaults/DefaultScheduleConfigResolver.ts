@@ -89,7 +89,8 @@ const BASE_CONFIGS: Record<SportType, DefaultScheduleConfig> = {
     scoring_period_behavior: 'full_period',
     reschedule_handling: 'use_final_time',
     doubleheader_or_multi_game_handling: 'all_games_count',
-    playoff_transition_point: 13,
+    // Matches the registry's 6-team bracket (weeks 11-13): NCAAF brackets end on week 13 (ncaafPlayoffWindow.ts).
+    playoff_transition_point: 11,
     schedule_generation_strategy: 'round_robin',
   },
   NCAAB: {

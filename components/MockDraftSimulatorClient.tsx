@@ -359,34 +359,34 @@ function VolatilityBadge({ v }: { v: VolatilityMeter }) {
     <div className={`rounded-lg p-2.5 ${c.bg} ring-1 ${c.ring} shadow-sm ${c.glow} space-y-2`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${c.text}`}>{v.chaosLevel} chaos</span>
-          <span className="text-[9px] text-gray-500">({v.chaosScore}%)</span>
+          <span className={`text-[11px] font-bold uppercase tracking-wider ${c.text}`}>{v.chaosLevel} chaos</span>
+          <span className="text-[11px] text-gray-500">({v.chaosScore}%)</span>
         </div>
-        <div className={`px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase ${t.bg} ${t.text}`}>
+        <div className={`px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase ${t.bg} ${t.text}`}>
           {v.tierStability} tier
         </div>
       </div>
       <div className="space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-gray-500 w-12 shrink-0">Top pick</span>
+          <span className="text-[11px] text-gray-500 w-12 shrink-0">Top pick</span>
           <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
             <div className="h-full rounded-full bg-cyan-500/70" style={{ width: `${v.confidenceBands.high}%` }} />
           </div>
-          <span className="text-[9px] text-cyan-400 w-7 text-right tabular-nums">{v.confidenceBands.high}%</span>
+          <span className="text-[11px] text-cyan-400 w-7 text-right tabular-nums">{v.confidenceBands.high}%</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-gray-500 w-12 shrink-0">Top 3</span>
+          <span className="text-[11px] text-gray-500 w-12 shrink-0">Top 3</span>
           <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
             <div className="h-full rounded-full bg-blue-500/60" style={{ width: `${v.confidenceBands.mid}%` }} />
           </div>
-          <span className="text-[9px] text-blue-400 w-7 text-right tabular-nums">{v.confidenceBands.mid}%</span>
+          <span className="text-[11px] text-blue-400 w-7 text-right tabular-nums">{v.confidenceBands.mid}%</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-gray-500 w-12 shrink-0">Top 6</span>
+          <span className="text-[11px] text-gray-500 w-12 shrink-0">Top 6</span>
           <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
             <div className="h-full rounded-full bg-indigo-500/50" style={{ width: `${v.confidenceBands.low}%` }} />
           </div>
-          <span className="text-[9px] text-indigo-400 w-7 text-right tabular-nums">{v.confidenceBands.low}%</span>
+          <span className="text-[11px] text-indigo-400 w-7 text-right tabular-nums">{v.confidenceBands.low}%</span>
         </div>
       </div>
     </div>
@@ -1847,7 +1847,7 @@ export default function MockDraftSimulatorClient({
                               <span className="text-xs text-emerald-400">Value: {player.value.toFixed(0)}</span>
                             )}
                             {player.adpTrend != null && player.adpTrend !== 0 && (
-                              <span className={`text-[10px] flex items-center gap-0.5 ${player.adpTrend < 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                              <span className={`text-[11px] flex items-center gap-0.5 ${player.adpTrend < 0 ? 'text-emerald-500' : 'text-red-400'}`}>
                                 {player.adpTrend < 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                                 {player.adpTrend < 0 ? 'Rising' : 'Falling'}
                               </span>
@@ -1910,7 +1910,7 @@ export default function MockDraftSimulatorClient({
                           }}
                         >
                           {isOnClockPick && (
-                            <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-[9px] px-2 py-0.5 rounded-full font-bold">
+                            <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-[11px] px-2 py-0.5 rounded-full font-bold">
                               ON THE CLOCK
                             </div>
                           )}
@@ -1934,12 +1934,12 @@ export default function MockDraftSimulatorClient({
                           </div>
                           {isRevealedPick ? (
                             <div className="flex items-center gap-2 mb-2">
-                              <Badge className={`${POSITION_COLORS[pick.position] || ''} border text-[10px] px-1.5 py-0`}>
+                              <Badge className={`${POSITION_COLORS[pick.position] || ''} border text-[11px] px-1.5 py-0`}>
                                 {pick.position}
                               </Badge>
                               <span className="text-sm text-gray-400">{pick.team}</span>
                               {pick.isBotPick && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">AI BOT</span>
+                                <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">AI BOT</span>
                               )}
                             </div>
                           ) : (
@@ -1974,7 +1974,7 @@ export default function MockDraftSimulatorClient({
                                   />
                                 </div>
                                 {adpInfo.adpTrend != null && adpInfo.adpTrend !== 0 && (
-                                  <div className={`text-[9px] ${adpInfo.adpTrend < 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                                  <div className={`text-[11px] ${adpInfo.adpTrend < 0 ? 'text-emerald-500' : 'text-red-400'}`}>
                                     {adpInfo.adpTrend < 0 ? 'Rising' : 'Falling'} in drafts
                                   </div>
                                 )}
@@ -1983,7 +1983,7 @@ export default function MockDraftSimulatorClient({
                           })() : <div className="text-xs text-gray-500">No player selected yet.</div>}
 
                           {isRevealedPick && pick.notes && (
-                            <p className="text-[10px] text-gray-600 mt-2 line-clamp-2">{pick.notes}</p>
+                            <p className="text-[11px] text-gray-600 mt-2 line-clamp-2">{pick.notes}</p>
                           )}
 
                           {isOnClockUserPick && (
@@ -2087,7 +2087,7 @@ export default function MockDraftSimulatorClient({
                                   const topPos = Object.entries(needs).sort(([,a], [,b]) => b - a)[0]
                                   if (avgNeed <= 0) return null
                                   return (
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                                       avgNeed >= 70 ? 'bg-red-500/20 text-red-400' :
                                       avgNeed >= 45 ? 'bg-orange-500/20 text-orange-400' :
                                       'bg-emerald-500/20 text-emerald-400'
@@ -2105,13 +2105,13 @@ export default function MockDraftSimulatorClient({
                                   const posColor = getPositionBarColor(pos)
                                   return (
                                     <div key={pos} className="text-center">
-                                      <div className="text-[10px] text-gray-500 mb-1">{pos}</div>
+                                      <div className="text-[11px] text-gray-500 mb-1">{pos}</div>
                                       <div className="text-lg font-bold">{count}<span className="text-gray-600 text-xs">/{target}</span></div>
                                       <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden mt-1">
                                         <div className={`h-full rounded-full ${posColor} transition-all`} style={{ width: `${pct}%` }} />
                                       </div>
                                       {count < target && (
-                                        <div className="text-[9px] text-orange-400 mt-0.5 font-bold">NEED</div>
+                                        <div className="text-[11px] text-orange-400 mt-0.5 font-bold">NEED</div>
                                       )}
                                     </div>
                                   )
@@ -2386,9 +2386,9 @@ export default function MockDraftSimulatorClient({
                       <div className="h-full bg-amber-500/70" style={{ width: `${(medCount / total) * 100}%` }} />
                       <div className="h-full bg-red-500/70" style={{ width: `${(highCount / total) * 100}%` }} />
                     </div>
-                    <span className="text-[10px] text-gray-400 tabular-nums shrink-0">avg {avgChaos}%</span>
+                    <span className="text-[11px] text-gray-400 tabular-nums shrink-0">avg {avgChaos}%</span>
                   </div>
-                  <div className="flex gap-4 text-[10px]">
+                  <div className="flex gap-4 text-[11px]">
                     <span className="text-emerald-400">{lowCount} low</span>
                     <span className="text-amber-400">{medCount} medium</span>
                     <span className="text-red-400">{highCount} high</span>
@@ -2459,7 +2459,7 @@ export default function MockDraftSimulatorClient({
                             </div>
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                               {factors.map((fct) => (
-                                <div key={fct.label} className="flex items-center gap-1 text-[10px]">
+                                <div key={fct.label} className="flex items-center gap-1 text-[11px]">
                                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotColors[fct.label]}`} />
                                   <span className="text-gray-500">{fct.label}</span>
                                   <span className="text-gray-400 font-semibold tabular-nums">{fct.pct}%</span>
@@ -2554,7 +2554,7 @@ export default function MockDraftSimulatorClient({
                   <div className="text-sm font-semibold text-white">
                     Your Pick: Round {entry.round}  -  Pick {entry.pick} (#{entry.userPickOverall})
                   </div>
-                  <span className="text-[10px] text-gray-500">{entry.picksBefore} picks before yours</span>
+                  <span className="text-[11px] text-gray-500">{entry.picksBefore} picks before yours</span>
                 </div>
 
                 {entry.alerts.length === 0 ? (
@@ -2579,12 +2579,12 @@ export default function MockDraftSimulatorClient({
                             <span className={`text-sm font-bold tabular-nums ${s.text}`}>{alert.snipeProbability}%</span>
                           </div>
                           <div className="flex items-center gap-2 mb-1.5">
-                            <span className="text-[10px] text-gray-500">Snipe probability</span>
+                            <span className="text-[11px] text-gray-500">Snipe probability</span>
                             <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
                               <div className={`h-full rounded-full ${alert.urgencyLevel === 'critical' ? 'bg-red-500/70' : alert.urgencyLevel === 'warning' ? 'bg-amber-500/70' : 'bg-blue-500/60'}`} style={{ width: `${alert.snipeProbability}%` }} />
                             </div>
                           </div>
-                          <div className="flex items-center justify-between text-[10px]">
+                          <div className="flex items-center justify-between text-[11px]">
                             <span className="text-gray-500">
                               Likely sniped by: {alert.snipedByManagers.slice(0, 2).map(m => `${m.manager} (${m.probability}%)`).join(', ')}
                             </span>
@@ -2598,7 +2598,7 @@ export default function MockDraftSimulatorClient({
 
                 {entry.topAvailableIfNoSnipe.length > 0 && (
                   <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-2">
-                    <div className="text-[10px] font-semibold text-emerald-400 mb-1">Most likely available at your pick</div>
+                    <div className="text-[11px] font-semibold text-emerald-400 mb-1">Most likely available at your pick</div>
                     <div className="flex flex-wrap gap-2">
                       {entry.topAvailableIfNoSnipe.map((p) => (
                         <span key={p.player} className="text-xs text-gray-300 bg-white/5 rounded px-2 py-0.5">
@@ -2642,7 +2642,7 @@ export default function MockDraftSimulatorClient({
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-lg bg-red-500/5 border border-red-500/15 p-2">
-                        <div className="text-[10px] text-red-400 font-semibold mb-1">YOU GIVE</div>
+                        <div className="text-[11px] text-red-400 font-semibold mb-1">YOU GIVE</div>
                         {offer.userGives.map(g => (
                           <div key={g.pickOverall} className="text-xs text-gray-300">
                             Pick #{g.pickOverall} <span className="text-gray-500">(R{g.round}P{g.pick}  -  val {g.value})</span>
@@ -2650,29 +2650,29 @@ export default function MockDraftSimulatorClient({
                         ))}
                       </div>
                       <div className="rounded-lg bg-green-500/5 border border-green-500/15 p-2">
-                        <div className="text-[10px] text-green-400 font-semibold mb-1">YOU GET</div>
+                        <div className="text-[11px] text-green-400 font-semibold mb-1">YOU GET</div>
                         {offer.userGets.map(g => (
                           <div key={g.pickOverall} className="text-xs text-gray-300">
                             Pick #{g.pickOverall} <span className="text-gray-500">(R{g.round}P{g.pick}  -  val {g.value})</span>
                           </div>
                         ))}
                         {offer.topPlayerGain && (
-                          <div className="text-[10px] text-cyan-400 mt-1">Top target: {offer.topPlayerGain}</div>
+                          <div className="text-[11px] text-cyan-400 mt-1">Top target: {offer.topPlayerGain}</div>
                         )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
                       <div className="rounded-lg bg-white/5 p-2 text-center">
-                        <div className="text-[10px] text-gray-500">Acceptance Odds</div>
+                        <div className="text-[11px] text-gray-500">Acceptance Odds</div>
                         <div className={`text-sm font-bold tabular-nums ${offer.acceptanceOdds >= 50 ? 'text-green-400' : offer.acceptanceOdds >= 30 ? 'text-amber-400' : 'text-red-400'}`}>{offer.acceptanceOdds}%</div>
                       </div>
                       <div className="rounded-lg bg-white/5 p-2 text-center">
-                        <div className="text-[10px] text-gray-500">Minimum Ask</div>
+                        <div className="text-[11px] text-gray-500">Minimum Ask</div>
                         <div className="text-sm font-semibold text-gray-300">R{offer.minimumAsk.round} (val {offer.minimumAsk.value})</div>
                       </div>
                       <div className="rounded-lg bg-white/5 p-2 text-center">
-                        <div className="text-[10px] text-gray-500">Walk Away If</div>
+                        <div className="text-[11px] text-gray-500">Walk Away If</div>
                         <div className="text-sm font-semibold text-orange-400">{'>'}{offer.walkAwayThreshold} cost</div>
                       </div>
                     </div>
@@ -2701,7 +2701,7 @@ export default function MockDraftSimulatorClient({
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-lg bg-red-500/5 border border-red-500/15 p-2">
-                        <div className="text-[10px] text-red-400 font-semibold mb-1">YOU GIVE</div>
+                        <div className="text-[11px] text-red-400 font-semibold mb-1">YOU GIVE</div>
                         {offer.userGives.map(g => (
                           <div key={g.pickOverall} className="text-xs text-gray-300">
                             Pick #{g.pickOverall} <span className="text-gray-500">(R{g.round}P{g.pick}  -  val {g.value})</span>
@@ -2709,7 +2709,7 @@ export default function MockDraftSimulatorClient({
                         ))}
                       </div>
                       <div className="rounded-lg bg-blue-500/5 border border-blue-500/15 p-2">
-                        <div className="text-[10px] text-blue-400 font-semibold mb-1">YOU GET</div>
+                        <div className="text-[11px] text-blue-400 font-semibold mb-1">YOU GET</div>
                         {offer.userGets.map(g => (
                           <div key={g.pickOverall} className="text-xs text-gray-300">
                             Pick #{g.pickOverall} <span className="text-gray-500">(R{g.round}P{g.pick}  -  val {g.value})</span>
@@ -2720,15 +2720,15 @@ export default function MockDraftSimulatorClient({
 
                     <div className="grid grid-cols-3 gap-2">
                       <div className="rounded-lg bg-white/5 p-2 text-center">
-                        <div className="text-[10px] text-gray-500">Acceptance Odds</div>
+                        <div className="text-[11px] text-gray-500">Acceptance Odds</div>
                         <div className={`text-sm font-bold tabular-nums ${offer.acceptanceOdds >= 50 ? 'text-green-400' : offer.acceptanceOdds >= 30 ? 'text-amber-400' : 'text-red-400'}`}>{offer.acceptanceOdds}%</div>
                       </div>
                       <div className="rounded-lg bg-white/5 p-2 text-center">
-                        <div className="text-[10px] text-gray-500">Minimum Ask</div>
+                        <div className="text-[11px] text-gray-500">Minimum Ask</div>
                         <div className="text-sm font-semibold text-gray-300">R{offer.minimumAsk.round} (val {offer.minimumAsk.value})</div>
                       </div>
                       <div className="rounded-lg bg-white/5 p-2 text-center">
-                        <div className="text-[10px] text-gray-500">Walk Away If</div>
+                        <div className="text-[11px] text-gray-500">Walk Away If</div>
                         <div className="text-sm font-semibold text-orange-400">{'>'}{offer.walkAwayThreshold} cost</div>
                       </div>
                     </div>
@@ -2763,7 +2763,7 @@ export default function MockDraftSimulatorClient({
                 <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
                   <div className="text-sm text-sky-300 font-semibold mb-1">{boardDriftReport.weekLabel} vs {boardDriftReport.previousWeekLabel}</div>
                   <p className="text-sm text-gray-300">{boardDriftReport.headline}</p>
-                  <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                  <div className="flex gap-4 mt-2 text-[11px] text-gray-500">
                     <span>{boardDriftReport.totalPlayersTracked} players tracked</span>
                     <span>Avg drift: {boardDriftReport.averageDrift} spots</span>
                   </div>
@@ -2788,14 +2788,14 @@ export default function MockDraftSimulatorClient({
                               <span className="text-xs text-gray-400">{p.position}  -  {p.team || '-'}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-gray-500">ADP {p.previousAdp} -&gt; {p.currentAdp}</span>
+                              <span className="text-[11px] text-gray-500">ADP {p.previousAdp} -&gt; {p.currentAdp}</span>
                               <span className="text-sm font-bold text-emerald-400 tabular-nums">{p.drift > 0 ? '' : '+'}{Math.abs(p.drift)}</span>
                               <ArrowUp className="h-3.5 w-3.5 text-emerald-400" />
                             </div>
                           </div>
                           <div className="mt-1 flex flex-wrap gap-1.5">
                             {p.reasons.map((r: string, i: number) => (
-                              <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300">{r}</span>
+                              <span key={i} className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300">{r}</span>
                             ))}
                           </div>
                         </div>
@@ -2823,14 +2823,14 @@ export default function MockDraftSimulatorClient({
                               <span className="text-xs text-gray-400">{p.position}  -  {p.team || '-'}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-gray-500">ADP {p.previousAdp} -&gt; {p.currentAdp}</span>
+                              <span className="text-[11px] text-gray-500">ADP {p.previousAdp} -&gt; {p.currentAdp}</span>
                               <span className="text-sm font-bold text-red-400 tabular-nums">-{Math.abs(p.drift)}</span>
                               <ArrowDown className="h-3.5 w-3.5 text-red-400" />
                             </div>
                           </div>
                           <div className="mt-1 flex flex-wrap gap-1.5">
                             {p.reasons.map((r: string, i: number) => (
-                              <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-300">{r}</span>
+                              <span key={i} className="text-[11px] px-2 py-0.5 rounded bg-red-500/10 text-red-300">{r}</span>
                             ))}
                           </div>
                         </div>
@@ -2863,7 +2863,7 @@ export default function MockDraftSimulatorClient({
                         {mc.changedSignals.length > 0 && (
                           <div className="flex flex-wrap gap-2">
                             {mc.changedSignals.map((cs: any, i: number) => (
-                              <span key={i} className={`text-[10px] px-2 py-0.5 rounded ${cs.direction === 'up' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
+                              <span key={i} className={`text-[11px] px-2 py-0.5 rounded ${cs.direction === 'up' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
                                 {cs.signal}: {cs.previous} -&gt; {cs.current} {cs.direction === 'up' ? 'up' : 'down'}
                               </span>
                             ))}
@@ -2881,14 +2881,14 @@ export default function MockDraftSimulatorClient({
                       <div key={nri.round} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold text-white">Round {nri.round}</span>
-                          <span className="text-[10px] text-gray-500">{nri.summary}</span>
+                          <span className="text-[11px] text-gray-500">{nri.summary}</span>
                         </div>
 
                         {nri.risersInWindow.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
-                            <span className="text-[10px] text-emerald-400 font-semibold">Rising in:</span>
+                            <span className="text-[11px] text-emerald-400 font-semibold">Rising in:</span>
                             {nri.risersInWindow.map((p: any) => (
-                              <span key={p.name} className="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded">
+                              <span key={p.name} className="text-[11px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded">
                                 {p.name} <span className="text-emerald-400">+{Math.abs(p.drift)}</span>
                               </span>
                             ))}
@@ -2897,9 +2897,9 @@ export default function MockDraftSimulatorClient({
 
                         {nri.fallersInWindow.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
-                            <span className="text-[10px] text-red-400 font-semibold">Falling in:</span>
+                            <span className="text-[11px] text-red-400 font-semibold">Falling in:</span>
                             {nri.fallersInWindow.map((p: any) => (
-                              <span key={p.name} className="text-[10px] bg-red-500/10 text-red-300 px-1.5 py-0.5 rounded">
+                              <span key={p.name} className="text-[11px] bg-red-500/10 text-red-300 px-1.5 py-0.5 rounded">
                                 {p.name} <span className="text-red-400">-{Math.abs(p.drift)}</span>
                               </span>
                             ))}
@@ -2908,9 +2908,9 @@ export default function MockDraftSimulatorClient({
 
                         {nri.newEntrants.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
-                            <span className="text-[10px] text-sky-400 font-semibold">New to window:</span>
+                            <span className="text-[11px] text-sky-400 font-semibold">New to window:</span>
                             {nri.newEntrants.map((p: any) => (
-                              <span key={p.name} className="text-[10px] bg-sky-500/10 text-sky-300 px-1.5 py-0.5 rounded">
+                              <span key={p.name} className="text-[11px] bg-sky-500/10 text-sky-300 px-1.5 py-0.5 rounded">
                                 {p.name} ({p.position}, ADP {p.adp})
                               </span>
                             ))}
@@ -2972,11 +2972,11 @@ export default function MockDraftSimulatorClient({
                     <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-gray-500 font-semibold uppercase">Fallback</span>
+                          <span className="text-[11px] text-gray-500 font-semibold uppercase">Fallback</span>
                           <span className="text-sm text-gray-300">{assistantData.fallback.player}</span>
-                          <span className="text-[10px] text-gray-500">{assistantData.fallback.position}</span>
+                          <span className="text-[11px] text-gray-500">{assistantData.fallback.position}</span>
                         </div>
-                        <span className="text-[10px] text-gray-500 tabular-nums">{assistantData.fallback.probability}%</span>
+                        <span className="text-[11px] text-gray-500 tabular-nums">{assistantData.fallback.probability}%</span>
                       </div>
                     </div>
                   )}
@@ -2988,7 +2988,7 @@ export default function MockDraftSimulatorClient({
                       <span className={`text-sm font-bold ${assistantData.waitAdvice.canWait ? 'text-emerald-400' : 'text-red-400'}`}>
                         {assistantData.waitAdvice.canWait ? 'SAFE TO WAIT' : 'TAKE NOW'}
                       </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${assistantData.waitAdvice.canWait ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${assistantData.waitAdvice.canWait ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>
                         {assistantData.waitAdvice.availabilityAt4}% availability at +4
                       </span>
                     </div>
@@ -3007,11 +3007,11 @@ export default function MockDraftSimulatorClient({
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-gray-500">{i + 1}.</span>
                               <span className="text-sm text-white">{q.player}</span>
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded border ${posBg[q.position] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>{q.position}</span>
+                              <span className={`text-[11px] px-1.5 py-0.5 rounded border ${posBg[q.position] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>{q.position}</span>
                             </div>
                             <div className="text-right">
-                              <div className="text-[10px] text-gray-400 tabular-nums">{q.probability}%</div>
-                              <div className="text-[9px] text-gray-600">Pick {q.pickOverall}</div>
+                              <div className="text-[11px] text-gray-400 tabular-nums">{q.probability}%</div>
+                              <div className="text-[11px] text-gray-600">Pick {q.pickOverall}</div>
                             </div>
                           </div>
                         )
@@ -3038,7 +3038,7 @@ export default function MockDraftSimulatorClient({
           </DialogHeader>
           <div className="flex flex-wrap gap-1.5 mb-3">
             {scenarioLabels.map(l => (
-              <span key={l} className="text-[10px] px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/20">{l}</span>
+              <span key={l} className="text-[11px] px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/20">{l}</span>
             ))}
           </div>
           <div className="max-h-[65vh] overflow-y-auto space-y-4 pr-1">
@@ -3062,12 +3062,12 @@ export default function MockDraftSimulatorClient({
                       <span className="text-xs text-gray-500">{base.manager}</span>
                     </div>
                     {changed && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 font-semibold">SHIFTED</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 font-semibold">SHIFTED</span>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-2">Baseline</div>
+                      <div className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider mb-2">Baseline</div>
                       {base.topTargets.slice(0, 3).map((t, i) => {
                         const posBg: Record<string, string> = { QB: 'text-red-400', RB: 'text-cyan-400', WR: 'text-green-400', TE: 'text-purple-400' }
                         return (
@@ -3075,7 +3075,7 @@ export default function MockDraftSimulatorClient({
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-gray-500 w-4">{i + 1}.</span>
                               <span className="text-sm text-white">{t.player}</span>
-                              <span className={`text-[10px] ${posBg[t.position] || 'text-gray-400'}`}>{t.position}</span>
+                              <span className={`text-[11px] ${posBg[t.position] || 'text-gray-400'}`}>{t.position}</span>
                             </div>
                             <span className="text-xs text-gray-400 tabular-nums">{t.probability}%</span>
                           </div>
@@ -3083,7 +3083,7 @@ export default function MockDraftSimulatorClient({
                       })}
                     </div>
                     <div>
-                      <div className="text-[10px] text-violet-400 font-semibold uppercase tracking-wider mb-2">Scenario</div>
+                      <div className="text-[11px] text-violet-400 font-semibold uppercase tracking-wider mb-2">Scenario</div>
                       {scen.topTargets.slice(0, 3).map((t, i) => {
                         const baseMatch = base.topTargets.find(b => b.player === t.player)
                         const delta = baseMatch ? t.probability - baseMatch.probability : t.probability
@@ -3095,12 +3095,12 @@ export default function MockDraftSimulatorClient({
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-gray-500 w-4">{i + 1}.</span>
                               <span className={`text-sm ${!baseMatch ? 'text-violet-300 font-semibold' : 'text-white'}`}>{t.player}</span>
-                              <span className={`text-[10px] ${posBg[t.position] || 'text-gray-400'}`}>{t.position}</span>
+                              <span className={`text-[11px] ${posBg[t.position] || 'text-gray-400'}`}>{t.position}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs text-gray-400 tabular-nums">{t.probability}%</span>
                               {delta !== 0 && (
-                                <span className={`text-[10px] font-bold tabular-nums ${deltaColor[dir]}`}>
+                                <span className={`text-[11px] font-bold tabular-nums ${deltaColor[dir]}`}>
                                   {delta > 0 ? '+' : ''}{delta}
                                 </span>
                               )}

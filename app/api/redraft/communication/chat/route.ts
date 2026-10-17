@@ -8,6 +8,7 @@ import {
 import { validateMessageBody } from '@/lib/league-chat/LeagueMessageComposer'
 import { filterBbReadableMessages, resolveBbWriteChannel } from '@/lib/big-brother/bbChatChannelAccess'
 import { sanitizeClientMessageMetadata, sanitizeClientMessageType } from '@/lib/chat-core/clientMessageInput'
+import { BlockListUnavailableError, getBlockedSenderSetForRead } from '@/lib/moderation/BlockUserService'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +41,16 @@ export async function GET(req: NextRequest) {
     requestingUserId: user.appUserId,
   })
   /* The same table as league chat, so the same Big Brother room rule (lib/big-brother/bbChatChannelAccess.ts). */
-  const messages = await filterBbReadableMessages(leagueId, user.appUserId, allRooms)
+  const readable = await filterBbReadableMessages(leagueId, user.appUserId, allRooms)
+  /* ...and the same block rule as league chat's GET: blocked senders hidden, 503 rather than unfiltered. */
+  let blocked: Set<string>
+  try {
+    blocked = await getBlockedSenderSetForRead(user.appUserId)
+  } catch (err) {
+    if (!(err instanceof BlockListUnavailableError)) throw err
+    return NextResponse.json({ error: 'Messages are temporarily unavailable. Try again in a moment.' }, { status: 503 })
+  }
+  const messages = readable.filter((m) => !m.senderUserId || !blocked.has(m.senderUserId))
   return NextResponse.json({
     status: 'ok',
     leagueId,

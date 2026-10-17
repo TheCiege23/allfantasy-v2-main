@@ -420,7 +420,7 @@ export function DraftShell({
             ) : rightTab === 'roster' ? (
               <RosterPanel myPicks={myPicks} />
             ) : rightTab === 'chat' ? (
-              <DraftChatPanel sessionId={sessionId} mode={mode} />
+              <DraftChatPanel sessionId={sessionId} mode={mode} viewerId={userId} />
             ) : (
               <ChimmyDraftChat
                 sessionId={sessionId}

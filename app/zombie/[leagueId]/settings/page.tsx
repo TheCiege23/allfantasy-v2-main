@@ -57,7 +57,7 @@ export default function ZombieSettingsPage() {
     <div className="mx-auto max-w-4xl">
       {/* Header */}
       <div className="mb-4 rounded-2xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--zombie-text-dim)]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--zombie-text-dim)]">
           Commissioner Settings
         </p>
         <h1 className="mt-1 text-xl font-black text-[var(--zombie-text-full)]">{leagueName}</h1>

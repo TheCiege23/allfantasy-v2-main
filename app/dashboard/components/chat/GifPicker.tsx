@@ -12,7 +12,7 @@ function GiphyAttributionFooter() {
         href="https://giphy.com"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[9px] font-semibold uppercase tracking-widest text-white/40 transition-colors hover:text-white/70"
+        className="text-[11px] font-semibold uppercase tracking-widest text-white/40 transition-colors hover:text-white/70"
       >
         Powered By GIPHY
       </a>
@@ -46,7 +46,7 @@ function KlipyAttributionFooter() {
       href="https://klipy.com"
       target="_blank"
       rel="noopener noreferrer"
-      className="text-[9px] font-semibold uppercase tracking-widest text-white/40 transition-colors hover:text-white/70"
+      className="text-[11px] font-semibold uppercase tracking-widest text-white/40 transition-colors hover:text-white/70"
     >
       Powered by KLIPY
     </a>
@@ -148,7 +148,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
           className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
           data-testid="gif-picker-search"
         />
-        <button type="button" onClick={onClose} className="text-[10px] text-white/40 hover:text-white">
+        <button type="button" onClick={onClose} className="text-[11px] text-white/40 hover:text-white">
           Done
         </button>
       </div>
@@ -160,7 +160,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
               key={c.label}
               type="button"
               onClick={() => setCategory(c.value)}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                 category === c.value
                   ? 'bg-cyan-500/15 text-cyan-400'
                   : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'
@@ -213,7 +213,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
           </button>
         ) : null}
         {loading && page > 0 ? (
-          <p className="py-2 text-center text-[10px] text-white/35">Loading…</p>
+          <p className="py-2 text-center text-[11px] text-white/35">Loading…</p>
         ) : null}
       </div>
 

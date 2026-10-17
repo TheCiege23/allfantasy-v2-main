@@ -74,6 +74,12 @@ function rosterPlayers(sport: 'NFL' | 'NCAAF', leaguePrefix: string, mgrIndex: n
 }
 
 async function clearLeague(leagueId: string) {
+  // The fixture reuses proposal ids. Settlement evidence and event keys live
+  // outside RedraftSeason's cascade, so clear them before recreating proposals.
+  await prisma.tradeReversal.deleteMany({ where: { leagueId } })
+  await prisma.tradeExecutionSnapshot.deleteMany({ where: { leagueId } })
+  await prisma.domainEvent.deleteMany({ where: { leagueId } })
+  await prisma.redraftTradeMarketEvent.deleteMany({ where: { leagueId } })
   // Proposals/assets/votes cascade from RedraftSeason delete; clear belt-and-suspenders.
   const season = await prisma.redraftSeason.findFirst({ where: { leagueId }, select: { id: true } })
   if (season) {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -384,6 +385,10 @@ test.describe('@simulation full click audit', () => {
     await page.getByRole('button', { name: 'Run dynasty simulation' }).click()
     await expect(page.getByText('Sport: NBA')).toBeVisible()
 
+    // /leagues/<id> shows a sign-in wall to a settled-unauthenticated session since
+    // 1f5105f6 (every fetch on that page is session-gated). The mocked league APIs
+    // still answer; the visitor just has to be signed in to reach the tab.
+    await signInAs(page, { id: 'e2e-simulation-user' })
     await page.goto('/leagues/league_sim_1?tab=Standings%2FPlayoffs')
     await expect(page.getByRole('heading', { name: 'Season & playoff forecast' }).first()).toBeVisible()
     await page.getByLabel('Season simulation selector').fill('2027')
@@ -392,7 +397,7 @@ test.describe('@simulation full click audit', () => {
     await page.getByLabel('Playoff spots selector').fill('4')
     await page.getByRole('button', { name: 'Apply' }).click()
     await page.getByRole('button', { name: 'Rerun season simulation' }).click()
-    await page.getByRole('button', { name: 'Explain season simulation with AI' }).click()
+    await page.getByRole('button', { name: 'Explain season simulation with Chimmy' }).click()
     await expect(page.getByText(/Alpha leads the race/i)).toBeVisible()
     const playoffChatLink = page.getByRole('link', { name: 'Ask Chimmy about playoff odds →' })
     await expect(playoffChatLink).toHaveAttribute('href', /leagueId=league_sim_1/)

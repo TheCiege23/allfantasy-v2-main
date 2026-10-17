@@ -1,4 +1,5 @@
 import { kickoffClock } from './lineupLock'
+import { lineupFixLink, type PlatformLink } from './platformLinks'
 import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import { playerLock, type Kickoffs } from './swapLegality'
 import type { MoveTone } from './playerMoves'
@@ -33,6 +34,11 @@ export type LeagueCall = {
   why: string
   /** The swap that makes the call, when one exists: who comes in and who goes out (Sleeper ids). */
   swap: { startId: string; startName: string; benchId: string; benchName: string } | null
+  /**
+   * Where to make the change: the platform's VERIFIED lineup screen, or a native league's in-app
+   * editor (platformLinks.lineupFixLink) — null when neither exists (MFL / Fantrax / Fleaflicker).
+   */
+  fix?: PlatformLink | null
 }
 
 function fmt(n: number): string {
@@ -67,7 +73,19 @@ export function leagueCall(args: {
   nowIso: string
 }): LeagueCall {
   const { impact, player, readinessTone, kickoffs, nowIso } = args
-  const base = { leagueId: impact.leagueId, leagueName: impact.leagueName, platform: impact.platform }
+  const base = {
+    leagueId: impact.leagueId,
+    leagueName: impact.leagueName,
+    platform: impact.platform,
+    fix: lineupFixLink({
+      id: impact.leagueId,
+      platform: impact.platform,
+      platformLeagueId: impact.platformLeagueId,
+      season: impact.season,
+      name: impact.leagueName,
+      teamId: impact.teamExternalId,
+    }),
+  }
   const lock = playerLock(player.team, kickoffs, nowIso)
   if (lock.locked) {
     return { ...base, kind: 'locked', tone: 'none', headline: 'Locked', why: `His game ${lock.label} — nothing can move now.`, swap: null }
@@ -140,8 +158,19 @@ export function leagueCall(args: {
   return { ...base, kind: 'hold', tone: 'none', headline: 'Bench is right', why: readinessTone === 'bad' ? 'He is ruled out.' : 'He does not out-project a starter here.', swap: null }
 }
 
-/** The prefilled question for "Ask Chimmy" — names the league, the player and the call, so the answer starts where the card left off. */
-export function chimmyAsk(call: LeagueCall, playerName: string): string {
+/**
+ * The prefilled question for "Ask Chimmy" — names the league, the player and the call, so the answer starts where the card left off.
+ * In the reader's language: it lands in the composer, where he reads it before sending.
+ */
+export function chimmyAsk(call: LeagueCall, playerName: string, language: string = 'en'): string {
+  if (language === 'es') {
+    if (call.kind === 'hold' && call.swap) {
+      return `En ${call.leagueName}: ${playerName} es dudoso. ¿Lo mantengo o alineo a ${call.swap.startName}?`
+    }
+    return call.swap
+      ? `En ${call.leagueName}: ¿debería ${call.kind === 'start' ? `alinear a ${playerName} por delante de ${call.swap.benchName}` : `sentar a ${playerName} y alinear a ${call.swap.startName}`} esta semana?`
+      : `En ${call.leagueName}: ¿qué debería hacer con ${playerName} esta semana?`
+  }
   if (call.kind === 'hold' && call.swap) {
     return `In ${call.leagueName}: ${playerName} is questionable — should I keep him in or start ${call.swap.startName}?`
   }

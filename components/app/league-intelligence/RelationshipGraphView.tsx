@@ -269,14 +269,14 @@ export function RelationshipGraphView({
                       setSelectedNodeId(null);
                       setRelationshipInsight(null);
                     }}
-                    className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/10"
+                    className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/80 hover:bg-white/10"
                   >
                     Edge details
                   </button>
                   <button
                     type="button"
                     onClick={() => onSelectManager?.(data.nodes?.find((n) => n.nodeId === r.nodeA)?.entityId ?? r.nodeA)}
-                    className="rounded border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/20"
+                    className="rounded border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20"
                   >
                     Manager card
                   </button>
@@ -331,14 +331,14 @@ export function RelationshipGraphView({
                       setSelectedNodeId(null);
                       setRelationshipInsight(null);
                     }}
-                    className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/10"
+                    className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/80 hover:bg-white/10"
                   >
                     Edge details
                   </button>
                   <button
                     type="button"
                     onClick={() => onSelectManager?.(data.nodes?.find((n) => n.nodeId === t.fromNodeId)?.entityId ?? t.fromNodeId)}
-                    className="rounded border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/20"
+                    className="rounded border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20"
                   >
                     Manager card
                   </button>

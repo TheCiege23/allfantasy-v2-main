@@ -63,7 +63,7 @@ export function keepTileInView(scroller: HTMLElement, tile: HTMLElement): void {
 }
 
 export function useRailScrollMemory(
-  scrollerRef: RefObject<HTMLElement>,
+  scrollerRef: RefObject<HTMLElement | null>,
   layout: RailLayout | null,
   activeLeagueId: string | null,
 ): void {

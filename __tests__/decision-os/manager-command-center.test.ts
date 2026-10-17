@@ -239,3 +239,43 @@ describe('resolveManagerCommandCenterSnapshot', () => {
     expect(elapsed).toBeLessThan(DELAY_MS * 3)
   })
 })
+
+describe('resolveManagerCommandCenterSnapshot — career layer (live-career plan, phase 4)', () => {
+  const stale = {
+    id: 'league_sync_attention:L1',
+    leagueId: 'L1',
+    type: 'league_sync_attention' as const,
+    severity: 'medium' as const,
+    priorityScore: 300,
+    title: 'League data is out of date',
+    explanation: 'x',
+    recommendedAction: 'Re-sync this league from Sync.',
+    timestamp: NOW.toISOString(),
+    source: 'career' as const,
+  }
+  const outOfScope = { ...stale, id: 'league_sync_attention:ELSEWHERE', leagueId: 'ELSEWHERE' }
+
+  beforeEach(() => {
+    mockResolve.mockReset()
+    mockResolve.mockImplementation(async (leagueId: string) => availableSnapshot({ leagueId }))
+  })
+
+  it('merges career signals for leagues in scope, and drops any for other leagues', async () => {
+    const snap = await resolveManagerCommandCenterSnapshot(
+      'user-1',
+      ['L1', 'L2'],
+      NOW,
+      Promise.resolve({ signals: [stale, outOfScope], legacyLine: "Win Alpha and it's ring #3." }),
+    )
+    expect(snap.attentionQueue.map((s) => s.id)).toEqual(['league_sync_attention:L1'])
+    expect(snap.legacy).toEqual({ line: "Win Alpha and it's ring #3.", href: '/core/career' })
+  })
+
+  it('is unchanged without career input, and survives a career read that rejects', async () => {
+    const plain = await resolveManagerCommandCenterSnapshot('user-1', ['L1'], NOW)
+    expect(plain.legacy).toBeNull()
+    const rejected = await resolveManagerCommandCenterSnapshot('user-1', ['L1'], NOW, Promise.reject(new Error('boom')))
+    expect(rejected.legacy).toBeNull()
+    expect(rejected.attentionQueue).toEqual(plain.attentionQueue)
+  })
+})

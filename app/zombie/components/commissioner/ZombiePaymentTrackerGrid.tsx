@@ -91,7 +91,7 @@ export function ZombiePaymentTrackerGrid({ leagueId, canEdit }: { leagueId: stri
 
   return (
     <SettingsSection id="zm-payment-tracker" title="Member payment tracker">
-      <p className="mb-3 text-[10px] leading-relaxed text-white/45">
+      <p className="mb-3 text-[11px] leading-relaxed text-white/45">
         Commissioner-only notes; members see amounts and status without notes. Export is CSV for your records.
       </p>
       <SettingsRow
@@ -247,7 +247,7 @@ export function ZombiePaymentTrackerGrid({ leagueId, canEdit }: { leagueId: stri
                     <button
                       type="button"
                       disabled={!editable}
-                      className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100/95 disabled:opacity-40"
+                      className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-100/95 disabled:opacity-40"
                       onClick={() => {
                         const next = rows.map((x) =>
                           x.userId === e.userId ? { ...x, remindersSent: x.remindersSent + 1 } : x,

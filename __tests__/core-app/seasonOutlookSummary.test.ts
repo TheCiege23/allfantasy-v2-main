@@ -18,6 +18,7 @@ const db = vi.hoisted(() => ({
   rosters: { _max: { updatedAt: new Date('2026-09-17T09:00:00Z') }, _count: { _all: 12 } } as unknown,
   sync: [{ sport: 'NFL', lastSuccessAt: new Date('2026-09-17T11:00:00Z') }] as unknown,
   week: { season: '2026', week: 3 } as unknown,
+  native: [] as unknown,
 }))
 const reject = (v: unknown) => (v instanceof Error ? Promise.reject(v) : Promise.resolve(v))
 vi.mock('@/lib/prisma', () => ({
@@ -27,6 +28,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueTeam: { aggregate: () => reject(db.teams) },
     roster: { aggregate: () => reject(db.rosters) },
     providerSyncState: { findMany: () => reject(db.sync) },
+    redraftMatchup: { findMany: () => reject(db.native) },
   },
 }))
 vi.mock('@/lib/core-app/playerProjections', () => ({ latestProjectionWeek: () => reject(db.week) }))
@@ -189,5 +191,12 @@ describe('seasonOutlookFingerprint', () => {
     db.matchups = new Error('timeout')
     const failed = await seasonOutlookFingerprint(LEAGUES, null)
     expect(failed).not.toBe(healthy)
+  })
+  it('changes a native league fingerprint for score, period and ownership changes',async()=>{
+    const leagues=[{id:'native',platform:'allfantasy',platformLeagueId:'external-copy',settings:{}}]
+    db.native=[{homeScore:10,season:{currentWeek:3},homeRoster:{ownerId:'u'}}]
+    const before=await seasonOutlookFingerprint(leagues,null)
+    db.native=[{homeScore:20,season:{currentWeek:4},homeRoster:{ownerId:'v'}}]
+    expect(await seasonOutlookFingerprint(leagues,null)).not.toBe(before)
   })
 })

@@ -235,7 +235,7 @@ export function Pill({
     default: 'bg-white/5 border-white/10 text-white/60',
   }
   const sizes = {
-    sm: 'px-2 py-0.5 text-[10px]',
+    sm: 'px-2 py-0.5 text-[11px]',
     default: 'px-2.5 py-1 text-[11px] sm:text-xs',
   }
   
@@ -330,7 +330,7 @@ export function StatCard({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {icon && <span className="text-base sm:text-lg flex-shrink-0">{icon}</span>}
-          <span className="text-[10px] sm:text-[11px] uppercase tracking-wide text-white/50 truncate">
+          <span className="text-[11px] sm:text-[11px] uppercase tracking-wide text-white/50 truncate">
             {label}
           </span>
         </div>
@@ -343,7 +343,7 @@ export function StatCard({
       <div className={cx('mt-1.5 sm:mt-2 text-xl sm:text-2xl font-extrabold leading-none', valueColors[accent])}>
         {value}
       </div>
-      {subValue && <div className="mt-1 text-[10px] sm:text-xs text-white/40">{subValue}</div>}
+      {subValue && <div className="mt-1 text-[11px] sm:text-xs text-white/40">{subValue}</div>}
     </div>
   )
 }
@@ -487,7 +487,7 @@ export function ProgressBar({
         />
       </div>
       {showLabel && (
-        <div className="mt-1 text-[10px] sm:text-xs text-white/50 text-right">{Math.round(percent)}%</div>
+        <div className="mt-1 text-[11px] sm:text-xs text-white/50 text-right">{Math.round(percent)}%</div>
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { containsProfanity } from "@/lib/profanity"
+import { isOffensiveUsername } from "@/lib/moderation/offensiveName"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -10,7 +10,7 @@ function normalizeUsername(u: string) {
 }
 
 function isValidUsername(username: string): boolean {
-  return username.length >= 3 && username.length <= 30 && /^[A-Za-z0-9_]+$/.test(username) && !containsProfanity(username)
+  return username.length >= 3 && username.length <= 30 && /^[A-Za-z0-9_]+$/.test(username) && !isOffensiveUsername(username)
 }
 
 export async function GET(req: Request) {

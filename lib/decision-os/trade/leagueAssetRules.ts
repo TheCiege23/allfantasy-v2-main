@@ -85,6 +85,24 @@ export function matchHeldDevy(
   return matches.length === 1 ? matches[0]! : null
 }
 
+/**
+ * What one held prospect is worth in this league — the ONE call every devy price in the grade goes
+ * through, and the one the per-league Devy tab (`lib/core-app/devyLeagueTab.ts`) shows. A second copy of
+ * this argument mapping is how a tab and a letter end up quoting different numbers for the same player.
+ * `value` is null when a factor is unmeasured; null is never zero.
+ */
+export function heldDevyOptionValue(held: HeldDevyPlayer, currentSeason: number) {
+  return devyOptionValue({
+    name: held.name,
+    position: held.position,
+    ppaSeasonTotal: held.ppaSeasonTotal,
+    recruitingComposite: held.recruitingComposite,
+    recruitingStars: held.recruitingStars,
+    draftEligibleYear: held.draftEligibleYear,
+    currentSeason,
+  } satisfies DevyOptionValueArgs)
+}
+
 export const DEVY_BASIS_NOTE =
   'College prospects are priced as options on an NFL career — the chance a player like him is drafted, times the dynasty value such a player carries on arrival, discounted for the wait — on the FantasyCalc Superflex 12-team board.'
 
@@ -122,15 +140,7 @@ export function priceHeldDevyAssets(args: {
     if (!p.unpriced || p.type === 'pick') return
     const held = matchHeldDevy(undefined, p.name, args.held)
     if (!held) return
-    const option = devyOptionValue({
-      name: held.name,
-      position: held.position,
-      ppaSeasonTotal: held.ppaSeasonTotal,
-      recruitingComposite: held.recruitingComposite,
-      recruitingStars: held.recruitingStars,
-      draftEligibleYear: held.draftEligibleYear,
-      currentSeason: args.currentSeason,
-    } satisfies DevyOptionValueArgs)
+    const option = heldDevyOptionValue(held, args.currentSeason)
     if (option.value == null) {
       unmeasured.push(option.basis)
       return
@@ -166,15 +176,7 @@ export function applyDevyPricing(args: {
     const input = aligned ? args.inputs[i] : undefined
     const held = matchHeldDevy(input && input.kind === 'player' ? input : undefined, line.name, args.held)
     if (!held) return
-    const option = devyOptionValue({
-      name: held.name,
-      position: held.position,
-      ppaSeasonTotal: held.ppaSeasonTotal,
-      recruitingComposite: held.recruitingComposite,
-      recruitingStars: held.recruitingStars,
-      draftEligibleYear: held.draftEligibleYear,
-      currentSeason: args.currentSeason,
-    } satisfies DevyOptionValueArgs)
+    const option = heldDevyOptionValue(held, args.currentSeason)
     if (option.value == null) {
       unmeasured.push(option.basis)
       return

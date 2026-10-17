@@ -9,6 +9,9 @@ import { isLeagueMessageThreaded } from './chat/chat-timestamps'
 import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
+import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
+import { RecapShareButton } from '@/components/core-app/comms/RecapShareButton'
+import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 
 export type LeagueChatMessage = {
   id: string
@@ -128,7 +131,7 @@ function GifWithAttribution({
         href="https://giphy.com"
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-0.5 block text-right text-[8px] text-white/25 transition-colors hover:text-white/50"
+        className="mt-0.5 block text-right text-[11px] text-white/25 transition-colors hover:text-white/50"
       >
         GIPHY
       </a>
@@ -205,6 +208,7 @@ export function LeagueChatInPanel({
   commissionerLeagues = [],
 }: LeagueChatInPanelProps) {
   const [messages, setMessages] = useState<LeagueChatMessage[]>([])
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
   const [queryPrefill, setQueryPrefill] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
@@ -503,13 +507,15 @@ export function LeagueChatInPanel({
   )
 
   const isUserCommissioner = selectedLeague.isCommissioner === true
-  const visibleMessages = isBigBrotherLeague
+  const channelMessages = isBigBrotherLeague
     ? messages.filter((message) => readBbChannelFromMessage(message.metadata) === selectedBbChannel)
     : messages
+  /* Blocked from this panel, hidden at once — /api/league/chat already drops them from the next read. */
+  const visibleMessages = channelMessages.filter((m) => !m.authorId || !blockedAuthors.has(m.authorId))
   const selectedChannelMeta = bbChannels.find((channel) => channel.key === selectedBbChannel) ?? null
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
+    <div className="af-lcp flex h-full min-h-0 min-w-0 flex-col">
       {isBigBrotherLeague && bbChannels.length > 0 ? (
         <div className="shrink-0 border-b border-white/[0.07] px-3 py-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -621,12 +627,15 @@ export function LeagueChatInPanel({
               if (chimmyPrivateReply) {
                 return (
                   <div key={message.id} className="mt-2 flex items-start gap-2 py-1.5">
-                    <div className="mt-0.5 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-[11px] font-bold text-violet-200">
-                      C
+                    <div
+                      className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-[14px] text-violet-200"
+                      aria-hidden
+                    >
+                      ✦
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="mb-0.5 text-[10px] font-semibold text-violet-200/90">🔒 Chimmy (private)</p>
-                      <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-tl-sm border border-violet-500/15 bg-violet-500/5 px-3 py-2 text-[13px] text-white/90">
+                      <p className="mb-1 text-[12px] font-semibold text-violet-200/90">🔒 Chimmy (private)</p>
+                      <div className="max-w-[92%] whitespace-pre-wrap rounded-[18px] rounded-tl-md bg-violet-500/10 px-3 py-2 text-[15px] leading-[1.42] text-white ring-1 ring-inset ring-violet-400/20">
                         {message.text}
                       </div>
                       <span className="mt-0.5 text-[11px] text-white/30">{formatChatTime(message.createdAt)}</span>
@@ -639,7 +648,7 @@ export function LeagueChatInPanel({
                 return (
                   <div key={message.id} className="mt-2 flex items-start gap-2 py-1.5" data-chimmy="true">
                     <div
-                      className="mt-0.5 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[13px] text-cyan-200"
+                      className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[14px] text-cyan-200"
                       aria-hidden
                     >
                       ✦
@@ -653,7 +662,7 @@ export function LeagueChatInPanel({
                           ✦ {displayName}
                         </span>
                         {chimmyMomentLabel ? (
-                          <span className="ml-1.5 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
+                          <span className="ml-1.5 shrink-0 text-[11px] uppercase tracking-wide text-white/40">
                             {chimmyMomentLabel}
                           </span>
                         ) : null}
@@ -661,9 +670,17 @@ export function LeagueChatInPanel({
                           {formatChatTime(message.createdAt)}
                         </span>
                       </div>
-                      <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-tl-sm border border-cyan-500/20 bg-[#0a1228] px-3 py-2 text-[13px] text-white/90">
+                      <div className="mt-1 max-w-[92%] whitespace-pre-wrap rounded-[18px] rounded-tl-md bg-[#0f1a2e] px-3 py-2 text-[15px] leading-[1.42] text-white ring-1 ring-inset ring-cyan-400/25">
                         {message.text}
                       </div>
+                      {isWeeklyRecap(meta) ? (
+                        <RecapShareButton
+                          leagueId={selectedLeague.id}
+                          leagueName={selectedLeague.name}
+                          recap={message.text}
+                          className="mt-1.5 inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-[#22d3ee] px-3.5 text-[13px] font-semibold text-[#04050c] transition hover:brightness-110 disabled:opacity-60"
+                        />
+                      ) : null}
                     </div>
                   </div>
                 )
@@ -687,40 +704,67 @@ export function LeagueChatInPanel({
                 )
 
               const groupGap = threaded ? 'mt-0.5' : 'mt-2'
+              /*
+               * The drawer's run shape: inside a run of one sender's messages the corner facing the
+               * speaker squares off, so the run reads as one voice — the top corner when this message
+               * continues a run, the bottom corner when the next one continues it. The time sits once,
+               * under the last message of the run.
+               */
+              const next = index + 1 < visibleMessages.length ? visibleMessages[index + 1] : undefined
+              const continues = Boolean(
+                next &&
+                  !next.isActivity &&
+                  !isChimmyAuthored(next.metadata) &&
+                  next.messageType !== 'system' &&
+                  isLeagueMessageThreaded(
+                    { authorId: message.authorId, created: message.created },
+                    { authorId: next.authorId, created: next.created }
+                  )
+              )
 
               if (isOutgoing) {
+                /* Your ordinary message is the solid accent bubble, as in the drawer; tinted kinds keep their tint. */
+                const plainOwn = !isPrivateToViewer && !isGlobalBroadcast && !isAtAllSubtype
                 return (
-                  <div key={message.id} className={`flex justify-end py-1.5 ${index > 0 ? groupGap : ''}`}>
+                  <div key={message.id} className={`flex justify-end ${threaded ? 'pt-px' : 'pt-1.5'} ${continues ? 'pb-px' : 'pb-1.5'} ${index > 0 && !threaded ? groupGap : ''}`}>
                     <div className="ml-auto flex min-w-0 max-w-[82%] flex-col items-end">
                       <div
-                        className={`rounded-2xl rounded-tr-sm px-3 py-2 text-[13px] text-white ${
+                        data-testid="league-chat-own-bubble"
+                        data-plain={plainOwn || undefined}
+                        className={`rounded-[18px] px-3 py-2 text-[15px] leading-[1.42] ${threaded ? 'rounded-tr-md' : ''} ${
+                          continues ? 'rounded-br-md' : ''
+                        } ${
                           isPrivateToViewer
-                            ? 'border border-violet-500/15 bg-violet-500/5'
+                            ? 'bg-violet-500/10 text-white ring-1 ring-inset ring-violet-400/20'
                             : isGlobalBroadcast
-                              ? 'border border-cyan-500/20 border-l-2 border-l-cyan-500 bg-cyan-500/10'
+                              ? 'border-l-2 border-l-cyan-500 bg-cyan-500/10 text-white'
                               : isAtAllSubtype
-                                ? 'border border-amber-500/15 border-l-2 border-l-amber-500/60 bg-white/[0.06]'
-                                : 'border border-cyan-500/25 bg-cyan-500/15'
+                                ? 'border-l-2 border-l-amber-500/60 bg-white/[0.06] text-white'
+                                : 'bg-[#22d3ee] text-[#04050c]'
                         }`}
                       >
                         {isCommissionerAnnouncement ? (
-                          <p className="mb-1 text-[10px] font-semibold text-amber-200/90">📣 Commissioner</p>
+                          <p className={`mb-1 text-[11px] font-semibold ${plainOwn ? 'text-[#04050c]/70' : 'text-amber-200/90'}`}>
+                            📣 Commissioner
+                          </p>
                         ) : null}
                         {isGlobalBroadcast ? (
-                          <p className="mb-1 text-[10px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
+                          <p className="mb-1 text-[11px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
                         ) : null}
                         {isAtAllSubtype ? (
-                          <p className="mb-1 text-[10px] font-semibold text-amber-200/80">📢 @all</p>
+                          <p className="mb-1 text-[11px] font-semibold text-amber-200/80">📢 @all</p>
                         ) : null}
                         {isPrivateToViewer ? (
-                          <p className="mb-1 text-[10px] text-violet-200/85">🔒 Only visible to you</p>
+                          <p className="mb-1 text-[11px] text-violet-200/85">🔒 Only visible to you</p>
                         ) : null}
                         {gifDisplay ? <GifWithAttribution gif={gifDisplay} /> : null}
-                        {message.text ? <p className="leading-relaxed">{message.text}</p> : null}
+                        {message.text ? <p className="whitespace-pre-wrap">{message.text}</p> : null}
                       </div>
-                      <span className="mt-0.5 text-right text-[11px] text-white/25">
-                        {formatChatTime(message.createdAt)}
-                      </span>
+                      {continues ? null : (
+                        <span className="mt-1 text-right text-[11px] text-white/40">
+                          {formatChatTime(message.createdAt)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )
@@ -729,14 +773,14 @@ export function LeagueChatInPanel({
               return (
                 <div
                   key={message.id}
-                  className={`flex items-start gap-2 py-1.5 ${index > 0 ? groupGap : ''}`}
+                  className={`flex items-start gap-2 ${threaded ? 'pt-px' : 'pt-1.5'} ${continues ? 'pb-px' : 'pb-1.5'} ${index > 0 && !threaded ? groupGap : ''}`}
                 >
                   <div className="mt-0.5 shrink-0">
                     {threaded ? (
-                      <div className="h-[26px] w-[26px]" aria-hidden />
+                      <div className="h-8 w-8" aria-hidden />
                     ) : (
                       <ChatSenderAvatar
-                        size={26}
+                        size={32}
                         authorAvatar={message.author_avatar}
                         authorDisplayName={displayName}
                       />
@@ -744,44 +788,61 @@ export function LeagueChatInPanel({
                   </div>
                   <div className="min-w-0 flex-1">
                     {threaded ? null : (
-                      <div className="mb-0.5 flex min-w-0 items-baseline">
-                        <span className="min-w-0 truncate text-[13px] font-semibold text-white/55">
+                      <div className="mb-1 flex min-w-0 items-baseline pl-1">
+                        <span className="min-w-0 truncate text-[12px] font-semibold text-white/65">
                           {displayName}
                         </span>
-                        <span className="ml-1.5 shrink-0 text-[11px] text-white/30">
+                        <span className="ml-1.5 shrink-0 text-[11px] text-white/35">
                           {formatChatTime(message.createdAt)}
                         </span>
                       </div>
                     )}
                     <div
-                      className={`max-w-[85%] rounded-2xl rounded-tl-sm px-3 py-2 text-[13px] text-white/90 ${
+                      className={`w-fit max-w-[85%] rounded-[18px] px-3 py-2 text-[15px] leading-[1.42] text-white ${
+                        threaded ? 'rounded-tl-md' : ''
+                      } ${continues ? 'rounded-bl-md' : ''} ${
                         isPrivateToViewer
-                          ? 'border border-violet-500/15 bg-violet-500/5'
+                          ? 'bg-violet-500/10 ring-1 ring-inset ring-violet-400/20'
                           : isGlobalBroadcast
-                            ? 'border border-white/[0.07] border-l-2 border-l-cyan-500 bg-white/[0.05]'
+                            ? 'border-l-2 border-l-cyan-500 bg-[#232b33] ring-1 ring-inset ring-white/[0.08]'
                             : isAtAllSubtype
-                              ? 'border border-white/[0.07] border-l-2 border-l-amber-500/60 bg-white/[0.05]'
-                              : 'bg-white/[0.07]'
+                              ? 'border-l-2 border-l-amber-500/60 bg-[#232b33] ring-1 ring-inset ring-white/[0.08]'
+                              : 'bg-[#232b33] ring-1 ring-inset ring-white/[0.08]'
                       }`}
                     >
                       {isCommissionerAnnouncement ? (
-                        <p className="mb-1 text-[10px] font-semibold text-amber-200/90">📣 Commissioner</p>
+                        <p className="mb-1 text-[11px] font-semibold text-amber-200/90">📣 Commissioner</p>
                       ) : null}
                       {isGlobalBroadcast ? (
-                        <p className="mb-1 text-[10px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
+                        <p className="mb-1 text-[11px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
                       ) : null}
                       {isAtAllSubtype ? (
-                        <p className="mb-1 text-[10px] font-semibold text-amber-200/80">📢 @all</p>
+                        <p className="mb-1 text-[11px] font-semibold text-amber-200/80">📢 @all</p>
                       ) : null}
                       {isPrivateToViewer ? (
-                        <p className="mb-1 text-[10px] text-violet-200/85">🔒 Only visible to you</p>
+                        <p className="mb-1 text-[11px] text-violet-200/85">🔒 Only visible to you</p>
                       ) : null}
                       {gifDisplay ? <GifWithAttribution gif={gifDisplay} /> : null}
-                      {message.text ? <p className="leading-relaxed">{message.text}</p> : null}
+                      {message.text ? <p className="whitespace-pre-wrap">{message.text}</p> : null}
                     </div>
-                    {threaded ? (
-                      <p className="mt-0.5 text-[11px] text-white/30">{formatChatTime(message.createdAt)}</p>
+                    {threaded && !continues ? (
+                      <p className="mt-1 pl-1 text-[11px] text-white/35">{formatChatTime(message.createdAt)}</p>
                     ) : null}
+                  </div>
+                  {/*
+                    Report / Block (App Store guideline 1.2) — league chat's own room and routes, the
+                    same ones LeagueConversation uses. Only another member's message reaches here:
+                    outgoing, system, Chimmy and activity rows all returned above.
+                  */}
+                  <div className="self-center">
+                    <MessageModerationMenu
+                      threadId={`league:${selectedLeague.id}`}
+                      messageId={message.id}
+                      authorId={message.authorId || null}
+                      authorName={displayName}
+                      viewerId={userId}
+                      onBlocked={(id) => setBlockedAuthors((prev) => new Set(prev).add(id))}
+                    />
                   </div>
                 </div>
               )

@@ -31,6 +31,14 @@ export async function getReturnedRosterIds(leagueId: string): Promise<Set<string
 }
 
 export async function getCurrentlyEliminatedRosterIds(leagueId: string): Promise<Set<string>> {
+  // The canonical cast state changes only when elimination commits, not when a private tally
+  // has merely selected a candidate. It also survives return-to-island transitions.
+  const cast = await prisma.survivorPlayer.findMany({ where: { leagueId }, select: { redraftRosterId: true, playerState: true } })
+  if (cast.length) {
+    const ids = cast.filter(player => player.playerState !== 'active' && player.playerState !== 'survivor_winner').map(player => player.redraftRosterId).filter((id): id is string => Boolean(id))
+    const links = ids.length ? await prisma.roster.findMany({ where: { leagueId, id: { in: ids } }, select: { redraftRosterId: true } }) : []
+    return new Set([...ids, ...links.map(row => row.redraftRosterId).filter((id): id is string => Boolean(id))])
+  }
   const [eliminatedRows, returnedRosterIds] = await Promise.all([
     prisma.survivorTribalCouncil.findMany({
       where: {

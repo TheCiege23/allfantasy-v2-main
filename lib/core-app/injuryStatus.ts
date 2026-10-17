@@ -44,6 +44,16 @@ function words(status: string): string[] {
  */
 const ABSENT_TOKENS = new Set(['ir', 'il', 'pup', 'nfi', 'out'])
 
+/**
+ * A word that means a suspension: the long spellings ("Suspension", "Suspended") by their `suspen`
+ * prefix, and the abbreviations providers and depth charts actually write — "Sus" (the same token
+ * `rosterDesignation` reads) and "Susp". Whole words only, so nothing merely containing the letters
+ * ("Suspicious", "Sustain") reads as a suspension.
+ */
+function isSuspensionToken(t: string): boolean {
+  return t.startsWith('suspen') || t === 'sus' || t === 'susp'
+}
+
 /** He is declared absent. A starter carrying this scores zero. */
 export function isRuledOut(status: string | null | undefined): boolean {
   if (!status) return false
@@ -57,7 +67,7 @@ export function isRuledOut(status: string | null | undefined): boolean {
    * suspended player only if a provider happened to write the verb. Every
    * suspension in `sportsInjury` today was being priced as available.
    */
-  if (w.some((t) => t.startsWith('suspen'))) return true
+  if (w.some(isSuspensionToken)) return true
   /* Reserve and list are the two long spellings; both are an absence. */
   if (w.includes('injured') && (w.includes('reserve') || w.includes('list'))) return true
   return w.join(' ').includes('did not play')
@@ -73,7 +83,7 @@ export function isOutDesignation(status: string | null | undefined): boolean {
   if (!status) return false
   const w = words(status)
   if (!w.includes('out')) return false
-  if (w.some((t) => t === 'ir' || t === 'il' || t === 'pup' || t === 'nfi' || t.startsWith('suspen'))) return false
+  if (w.some((t) => t === 'ir' || t === 'il' || t === 'pup' || t === 'nfi' || isSuspensionToken(t))) return false
   return true
 }
 
@@ -89,9 +99,9 @@ export function isOutDesignation(status: string | null | undefined): boolean {
  *
  * `NA` and `Unrevealed` are the provider declining to say, which is an absence
  * of information rather than a report of risk — an amber chip on those is a
- * claim we do not have.
+ * claim we do not have. `ACT` is Rolling Insights' spelling of Active.
  */
-const NO_DESIGNATION = ['active', 'healthy', 'na', 'n/a', 'none', 'unrevealed', 'unknown']
+const NO_DESIGNATION = ['active', 'act', 'healthy', 'na', 'n/a', 'none', 'unrevealed', 'unknown']
 
 export function isHealthyDesignation(status: string | null | undefined): boolean {
   if (!status) return true
@@ -125,4 +135,35 @@ export function ruledOutByFact(fact: { status: string | null; stale: boolean } |
   if (!fact || !isRuledOut(fact.status)) return false
   if (fact.stale && isOutDesignation(fact.status)) return false
   return true
+}
+
+/**
+ * The designation a dated injury FACT still supports right now — or null when it supports none.
+ *
+ * The same staleness rule as {@link ruledOutByFact}, applied to every designation rather than only
+ * to absences: a game-day word ("Out", "Questionable", "Doubtful") that has gone stale is last week's
+ * news and is suppressed; a season-scale ruling (IR, PUP, NFI, a suspension) still holds when stale.
+ * A healthy word ("Active", "ACT") is not a designation at all, so it is null too.
+ *
+ * ⚠ NULL IS "NOTHING TO REPORT", NEVER "HEALTHY". A missing fact and a cleared player read the
+ * same here on purpose — both mean there is no injury badge to draw — but callers must not turn
+ * either into a claim that the player is fine.
+ */
+export function currentDesignationFromFact(
+  fact: { status: string | null; stale: boolean } | null | undefined,
+): string | null {
+  const status = fact?.status?.trim() || null
+  if (!fact || !status || isHealthyDesignation(status)) return null
+  if (fact.stale && !ruledOutByFact(fact)) return null
+  return status
+}
+
+/**
+ * A ROSTER status that is itself an absence: a SEASON-SCALE placement (injured reserve, PUP, NFI, a
+ * suspension). Never a game-day "Out" — that is an injury-report word, which a roster status does not
+ * carry, and it is exactly the value `PlayerStatusAggregator` stamps onto `SportsPlayer` rows and never
+ * clears. Callers must only pass a value they know is a roster status (Sleeper's own row).
+ */
+export function isRosterAbsence(status: string | null | undefined): boolean {
+  return isRuledOut(status) && !isOutDesignation(status)
 }

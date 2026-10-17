@@ -40,7 +40,7 @@ export function ZombieRulesClient({
       <div className="mb-6 rounded-2xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--zombie-text-dim)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--zombie-text-dim)]">
               Zombie Rules
             </p>
             <h1 className="mt-1 text-xl font-black text-[var(--zombie-text-full)]">{leagueName}</h1>
@@ -51,7 +51,7 @@ export function ZombieRulesClient({
           <div className="flex flex-col items-end gap-1">
             <span
               className={clsx(
-                'rounded-lg px-2.5 py-1 text-[10px] font-bold',
+                'rounded-lg px-2.5 py-1 text-[11px] font-bold',
                 isPaid
                   ? 'bg-amber-500/15 text-amber-200'
                   : 'bg-sky-500/15 text-sky-200',
@@ -59,7 +59,7 @@ export function ZombieRulesClient({
             >
               {isPaid ? 'PAID LEAGUE' : 'FREE LEAGUE'}
             </span>
-            <span className="text-[10px] text-[var(--zombie-text-dim)]">
+            <span className="text-[11px] text-[var(--zombie-text-dim)]">
               {cfg.lineupFrequency === 'daily' ? 'Daily lineups' : 'Weekly lineups'}
             </span>
           </div>
@@ -170,7 +170,7 @@ function ThresholdsTab({ cfg, isPaid }: { cfg: ReturnType<typeof getZombieSportC
           </div>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 text-teal-400">●</span>
-            <p>Serum Antidote = reverse infection (one-time use)</p>
+            <p>Collect serums = a Zombie can return as a Survivor</p>
           </div>
         </div>
         <p className="mt-3 text-[11px] text-[var(--zombie-text-dim)]">
@@ -213,7 +213,7 @@ function ItemsTab({ cfg }: { cfg: ReturnType<typeof getZombieSportConfig> }) {
           Weapons — {cfg.label} Thresholds
         </h2>
         <p className="mt-1 text-[12px] text-[var(--zombie-text-mid)]">
-          Score above these thresholds to earn weapons that provide advantages.
+          Earned automatically each week. This season weapons are tracked only — they do not change scores.
         </p>
         <div className="mt-4 space-y-2">
           {cfg.weaponThresholds.map((w) => (
@@ -228,9 +228,11 @@ function ItemsTab({ cfg }: { cfg: ReturnType<typeof getZombieSportConfig> }) {
                   <p className="text-[11px] text-[var(--zombie-text-mid)]">{w.description}</p>
                 </div>
               </div>
-              <span className="rounded-lg bg-white/[0.06] px-3 py-1 text-[13px] font-bold text-white/80">
-                {w.minPoints}+ pts
-              </span>
+              {w.minPoints != null && (
+                <span className="rounded-lg bg-white/[0.06] px-3 py-1 text-[13px] font-bold text-white/80">
+                  {w.minPoints.toLocaleString()}+ pts
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -263,37 +265,18 @@ function ItemsTab({ cfg }: { cfg: ReturnType<typeof getZombieSportConfig> }) {
       {/* Item legend */}
       <section className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-5">
         <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Item Legend</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
-          <div className="flex items-center gap-2">
+        {/* v1: the engine awards items; no item changes a score or a matchup yet, so no effects are promised. */}
+        <div className="mt-3 space-y-2 text-[12px]">
+          <p className="flex items-center gap-2">
             <span>🧪</span>
-            <span className="text-teal-300">Serum Antidote</span>
-            <span className="text-[var(--zombie-text-dim)]">— Reverse infection</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🔪</span>
-            <span className="text-white/80">Knife</span>
-            <span className="text-[var(--zombie-text-dim)]">— +5% score boost</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🪓</span>
-            <span className="text-white/80">Axe</span>
-            <span className="text-[var(--zombie-text-dim)]">— +8% score boost</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🏹</span>
-            <span className="text-white/80">Bow</span>
-            <span className="text-[var(--zombie-text-dim)]">— Steal item from opponent</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>🔫</span>
-            <span className="text-white/80">Gun</span>
-            <span className="text-[var(--zombie-text-dim)]">— +12% score boost</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>💣</span>
-            <span className="text-amber-300">Bomb</span>
-            <span className="text-[var(--zombie-text-dim)]">— One-time league reset</span>
-          </div>
+            <span className="text-teal-300">Serums</span>
+            <span className="text-[var(--zombie-text-dim)]">— collect enough and a Zombie returns as a Survivor</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <span>🔪🏹🪓🔫💣</span>
+            <span className="text-white/80">Weapons</span>
+            <span className="text-[var(--zombie-text-dim)]">— earned and tracked this season; they do not change scores</span>
+          </p>
         </div>
       </section>
     </div>
@@ -324,15 +307,15 @@ function ScheduleTab({ cfg, sport }: { cfg: ReturnType<typeof getZombieSportConf
         <div className="mt-3 grid grid-cols-3 gap-3 text-center">
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
             <p className="text-[20px] font-black text-white">{schedule.totalWeeks}</p>
-            <p className="text-[10px] text-[var(--zombie-text-dim)]">Total Weeks</p>
+            <p className="text-[11px] text-[var(--zombie-text-dim)]">Total Weeks</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
             <p className="text-[20px] font-black text-[var(--zombie-red)]">{fullSchedule.endgameStartWeek}</p>
-            <p className="text-[10px] text-[var(--zombie-text-dim)]">Endgame Start</p>
+            <p className="text-[11px] text-[var(--zombie-text-dim)]">Endgame Start</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
             <p className="text-[20px] font-black text-teal-300">{fullSchedule.serumExpiryWeek}</p>
-            <p className="text-[10px] text-[var(--zombie-text-dim)]">Serums Expire</p>
+            <p className="text-[11px] text-[var(--zombie-text-dim)]">Serums Expire</p>
           </div>
         </div>
       </section>
@@ -351,7 +334,7 @@ function ScheduleTab({ cfg, sport }: { cfg: ReturnType<typeof getZombieSportConf
             >
               <div className="flex items-center justify-between">
                 <p className="text-[13px] font-bold text-[var(--zombie-text-full)]">{phase.label}</p>
-                <span className="rounded bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono text-[var(--zombie-text-dim)]">
+                <span className="rounded bg-white/[0.06] px-2 py-0.5 text-[11px] font-mono text-[var(--zombie-text-dim)]">
                   {phase.weeks}
                 </span>
               </div>
@@ -441,15 +424,15 @@ function ScheduleTab({ cfg, sport }: { cfg: ReturnType<typeof getZombieSportConf
         <div className="mt-3 grid grid-cols-3 gap-3 text-center">
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
             <p className="text-[20px] font-black text-white">{cfg.starterCount}</p>
-            <p className="text-[10px] text-[var(--zombie-text-dim)]">Starters</p>
+            <p className="text-[11px] text-[var(--zombie-text-dim)]">Starters</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
             <p className="text-[20px] font-black text-white">{cfg.benchCount}</p>
-            <p className="text-[10px] text-[var(--zombie-text-dim)]">Bench</p>
+            <p className="text-[11px] text-[var(--zombie-text-dim)]">Bench</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
             <p className="text-[20px] font-black text-white">{cfg.irSlots}</p>
-            <p className="text-[10px] text-[var(--zombie-text-dim)]">IR Slots</p>
+            <p className="text-[11px] text-[var(--zombie-text-dim)]">IR Slots</p>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">

@@ -6,6 +6,11 @@ const getPublishLogMock = vi.hoisted(() => vi.fn())
 const publishArticleMock = vi.hoisted(() => vi.fn())
 const scheduleArticleMock = vi.hoisted(() => vi.fn())
 const unpublishArticleMock = vi.hoisted(() => vi.fn())
+const requireAdminOrBearerMock = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/adminAuth", () => ({
+  requireAdminOrBearer: requireAdminOrBearerMock,
+}))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -25,6 +30,35 @@ vi.mock("@/lib/automated-blog", () => ({
 describe("blog publish route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    requireAdminOrBearerMock.mockResolvedValue({ ok: true, user: { role: "admin" } })
+  })
+
+  // An anonymous request could publish, unpublish or reschedule any article
+  // before the admin gate existed.
+  it("refuses a non-admin before touching any article", async () => {
+    requireAdminOrBearerMock.mockResolvedValue({
+      ok: false,
+      res: Response.json({ error: "Unauthorized" }, { status: 401 }),
+    })
+    const { GET, POST } = await import("@/app/api/blog/[articleId]/publish/route")
+    const ctx = { params: Promise.resolve({ articleId: "article-1" }) }
+
+    const post = await POST(
+      createMockNextRequest("http://localhost/api/blog/article-1/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "unpublish" }),
+      }),
+      ctx,
+    )
+    const get = await GET(createMockNextRequest("http://localhost/api/blog/article-1/publish"), ctx)
+
+    expect(post.status).toBe(401)
+    expect(get.status).toBe(401)
+    expect(publishArticleMock).not.toHaveBeenCalled()
+    expect(unpublishArticleMock).not.toHaveBeenCalled()
+    expect(scheduleArticleMock).not.toHaveBeenCalled()
+    expect(blogArticleFindUniqueMock).not.toHaveBeenCalled()
   })
 
   it("returns publish status and logs for GET", async () => {

@@ -106,7 +106,8 @@ describe('runMatchupOddsSweep', () => {
     expect(r1.slice(1, 6)).toEqual(['sl-ice', 2026, 4, 'r1', 'r2'])
     expect(r1[11]).toBe(ODDS_MODEL)
     expect(r1[9]).toBe(3)
-    const p = winProbabilityOf({ mu: 140, sigma: 12 }, { mu: 95, sigma: 12 })
+    // Spread has a floor of 10% of each team's mean, independent of sport units.
+    const p = winProbabilityOf({ mu: 140, sigma: 14 }, { mu: 95, sigma: 9.5 })
     expect(r1[8] as number).toBeCloseTo(p, 10)
     expect((r1[8] as number) + (r2[8] as number)).toBeCloseTo(1, 10)
     expect(h.queryRaw.mock.calls[0].slice(1)).toEqual([2026])

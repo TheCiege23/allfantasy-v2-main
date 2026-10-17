@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters, sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -181,12 +181,18 @@ export async function loadLeagueDefenderBoard(
 
   const rosterPositions = extractRosterPositions(league.settings)
 
-  const rosters = await args.prisma.roster
-    .findMany({
-      where: { leagueId: league.id },
-      select: { id: true, platformUserId: true, playerData: true },
-    })
-    .catch(() => [] as Array<{ id: string; platformUserId: string; playerData: unknown }>)
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one, the board
+  // would list, price and assign an owner to a stranger, so such rosters contribute no ids. An ESPN
+  // roster is translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech).
+  const rosters = await sleeperReadableRosters(
+    await args.prisma.roster
+      .findMany({
+        where: { leagueId: league.id },
+        select: { id: true, platformUserId: true, playerData: true },
+      })
+      .catch(() => [] as Array<{ id: string; platformUserId: string; playerData: unknown }>),
+    league.platform,
+  )
 
   if (rosters.length === 0) return EMPTY('no_rostered_defenders')
 
@@ -234,22 +240,20 @@ export async function loadLeagueDefenderBoard(
    * error here: the board is still worth reading, every row simply reports `isMine: false`.
    */
   const mine = await findMyRoster(args.prisma, league.id, args.userId).catch(() => null)
-  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one, the
-  // board would list, price and assign an owner to a stranger. Such rosters contribute no ids.
   const myIdSet = new Set<string>(
-    mine && mine.found ? rosterPlayerIds(sleeperReadablePlayerData(league.platform, mine.playerData)) : [],
+    mine && mine.found ? rosterPlayerIds(await sleeperReadablePlayerDataOf(league.platform, mine.playerData)) : [],
   )
 
   /* Every rostered player in the league, and who holds each one. */
   const ownerByPlayerId = new Map<string, string>()
   const leagueIds = new Set<string>()
   for (const r of rosters) {
-    for (const id of rosterPlayerIds(sleeperReadablePlayerData(league.platform, r.playerData))) {
+    for (const id of rosterPlayerIds(r.playerData)) {
       leagueIds.add(id)
       if (!ownerByPlayerId.has(id)) ownerByPlayerId.set(id, r.platformUserId)
     }
   }
-  if (leagueIds.size === 0) return EMPTY(isForeignIdSpace(league.platform) ? 'ids_unreadable' : 'no_rostered_defenders')
+  if (leagueIds.size === 0) return EMPTY(rosterIdSpaceOf(league.platform) !== 'sleeper' ? 'ids_unreadable' : 'no_rostered_defenders')
 
   const vorp = await loadLeagueIdpVorp({
     prisma: args.prisma,

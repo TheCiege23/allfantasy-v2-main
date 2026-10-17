@@ -160,7 +160,7 @@ export function ZombieOverridePanel({ leagueId, canEdit }: { leagueId: string; c
               <p className="text-[11px] text-[var(--zombie-text-mid)]">{action.description}</p>
             </div>
             {action.destructive && (
-              <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-300">
+              <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] font-bold text-red-300">
                 DESTRUCTIVE
               </span>
             )}

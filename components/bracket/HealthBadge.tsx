@@ -62,7 +62,7 @@ export function HealthBadge({ entryId }: Props) {
           {t("bracket.review.health.title")}
         </div>
         {loading && (
-          <div className="text-[10px] text-white/60">
+          <div className="text-[11px] text-white/60">
             {t("bracket.review.health.loading")}
           </div>
         )}

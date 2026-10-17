@@ -204,9 +204,9 @@ export function CheckoutCoveragePanel() {
                         <p className="text-xs font-semibold text-white/80">
                           {product?.title ?? sku}
                         </p>
-                        <p className="text-[10px] font-mono text-white/35">{sku}</p>
+                        <p className="text-[11px] font-mono text-white/35">{sku}</p>
                         {product?.issue && (
-                          <p className="text-[10px] text-rose-300/70">
+                          <p className="text-[11px] text-rose-300/70">
                             {product.issue.replace(/_/g, " ")}
                           </p>
                         )}
@@ -215,7 +215,7 @@ export function CheckoutCoveragePanel() {
                   )
                 })}
               </ul>
-              <p className="mt-3 text-[10px] text-white/30">
+              <p className="mt-3 text-[11px] text-white/30">
                 Set the corresponding{" "}
                 <span className="font-mono text-white/45">STRIPE_CHECKOUT_LINK_*</span>{" "}
                 env vars in Vercel to resolve.
@@ -268,7 +268,7 @@ export function CheckoutCoveragePanel() {
                       >
                         <td className="px-3 py-2">
                           <p className="font-semibold text-white/80">{p.title}</p>
-                          <p className="font-mono text-[10px] text-white/30">{p.sku}</p>
+                          <p className="font-mono text-[11px] text-white/30">{p.sku}</p>
                         </td>
                         <td className="px-3 py-2 text-white/50">
                           {p.expectedPurchaseType}
@@ -280,7 +280,7 @@ export function CheckoutCoveragePanel() {
                             <XCircle className="mx-auto h-3.5 w-3.5 text-rose-400" />
                           )}
                         </td>
-                        <td className="px-3 py-2 text-[10px] text-rose-300/70">
+                        <td className="px-3 py-2 text-[11px] text-rose-300/70">
                           {p.issue ? p.issue.replace(/_/g, " ") : (
                             <span className="text-white/25">—</span>
                           )}

@@ -199,13 +199,13 @@ export default function WorldCupMatchupCard({
         onKeyDown={onOpenMatchupPicker ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenMatchupPicker(match.id) } } : undefined}
         aria-label={onOpenMatchupPicker ? t("wc.matchup.openGuidedAria", { number: match.matchNumber }) : undefined}
       >
-        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-white/35">
           {t("wc.matchup.matchLabel", { number: match.matchNumber })}
         </span>
         <div className="flex items-center gap-1">
           {/* Live / HT status pill */}
           {isLive && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/25 bg-rose-500/15 px-2 py-0.5 text-[10px] font-black text-rose-300">
+            <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/25 bg-rose-500/15 px-2 py-0.5 text-[11px] font-black text-rose-300">
               <Radio className="h-2.5 w-2.5 animate-pulse" />
               LIVE
               {match.elapsedMinute != null && (
@@ -222,53 +222,53 @@ export default function WorldCupMatchupCard({
             </span>
           )}
           {isFinal && (
-            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-white/85">
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-white/85">
               {t("wc.matchup.statusFinal")}
             </span>
           )}
           {isPostponed && (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-white/80">
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-white/80">
               {t("wc.matchup.statusPostponed")}
             </span>
           )}
           {isCancelled && (
-            <span className="rounded-full bg-zinc-500/15 px-2 py-0.5 text-[10px] font-bold text-zinc-400">
+            <span className="rounded-full bg-zinc-500/15 px-2 py-0.5 text-[11px] font-bold text-zinc-400">
               {t("wc.matchup.statusCancelled")}
             </span>
           )}
           {isSimulated && (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-white/80">
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-white/80">
               {t("wc.matchup.statusSimulated")}
             </span>
           )}
           {isTestFixture && (
-            <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold text-white/80">
+            <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-bold text-white/80">
               {t("wc.matchup.statusTestFixture")}
             </span>
           )}
           {!matchIsPickable && !isFinal && (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-white/80" title={unpickableReason ?? "unknown"}>
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-white/80" title={unpickableReason ?? "unknown"}>
               {t("wc.matchup.notReadyPill")}
             </span>
           )}
           {isSaving ? (
-            <span className="rounded-full bg-cyan-300/15 px-2 py-0.5 text-[10px] font-bold text-white/90">
+            <span className="rounded-full bg-cyan-300/15 px-2 py-0.5 text-[11px] font-bold text-white/90">
               {t("wc.matchup.statusSaving")}
             </span>
           ) : null}
           {/* Pick result badges */}
           {pickLiveState === "correct" && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-white/85">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[11px] font-bold text-white/85">
               <Check className="h-2.5 w-2.5" /> {t("wc.matchup.pickBadgeCorrect")}
             </span>
           )}
           {pickLiveState === "incorrect" && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-rose-400/15 px-1.5 py-0.5 text-[10px] font-bold text-white/80">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-rose-400/15 px-1.5 py-0.5 text-[11px] font-bold text-white/80">
               <X className="h-2.5 w-2.5" /> {t("wc.matchup.pickBadgeIncorrect")}
             </span>
           )}
           {locked && !isLive && !isFinal ? (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-white/35">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] font-bold text-white/35">
               <Lock className="h-3 w-3" />
             </span>
           ) : null}
@@ -281,7 +281,7 @@ export default function WorldCupMatchupCard({
           data-testid={`wc-match-pick-summary-${match.id}`}
           className="mb-2 rounded-lg border border-cyan-400/15 bg-cyan-500/[0.06] px-2 py-1.5"
         >
-          <div className="flex flex-wrap items-center justify-between gap-1 text-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
             <span className="text-white/50">
               {t("wc.matchup.yourPick")}{" "}
               {/* Team name (selectedPickLabel) intentionally NOT translated — Phase 5 brief. */}
@@ -304,7 +304,7 @@ export default function WorldCupMatchupCard({
             <div
               data-testid="wc-match-pick-visual"
               data-state={pickVisual}
-              className="mt-1 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide"
+              className="mt-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide"
             >
               {pickVisual === "correct" && (
                 <span className="text-white/90">{t("wc.matchup.pickVisualCorrect")}</span>
@@ -323,7 +323,7 @@ export default function WorldCupMatchupCard({
       {isFinal && (match.winnerTeamName || match.winnerTeamId) && (
         <div
           data-testid={`wc-match-official-winner-${match.id}`}
-          className="mb-2 text-center text-[10px] font-bold text-white/85"
+          className="mb-2 text-center text-[11px] font-bold text-white/85"
         >
           {/* Team name (match.winnerTeamName) intentionally NOT translated — Phase 5 brief. */}
           {t("wc.matchup.winnerOfficial", { name: match.winnerTeamName ?? "—" })}
@@ -333,7 +333,7 @@ export default function WorldCupMatchupCard({
       {!matchIsPickable && !isFinal ? (
         <p
           data-testid={`world-cup-match-disabled-reason-${match.id}`}
-          className="mb-2 rounded-lg border border-amber-300/20 bg-amber-500/10 px-2 py-1.5 text-[10px] font-bold text-white/85"
+          className="mb-2 rounded-lg border border-amber-300/20 bg-amber-500/10 px-2 py-1.5 text-[11px] font-bold text-white/85"
         >
           {unpickableMessage}
         </p>
@@ -370,7 +370,7 @@ export default function WorldCupMatchupCard({
       {compactBoard ? null : (
       <details
         data-testid={`world-cup-match-ai-insight-${match.id}`}
-        className="mb-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.055] px-2 py-2 text-[10px] text-white/90"
+        className="mb-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.055] px-2 py-2 text-[11px] text-white/90"
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-black">
           <span className="inline-flex items-center gap-1">
@@ -446,19 +446,19 @@ export default function WorldCupMatchupCard({
         >
           {/* Minute (live) or FT badge (final) centered above score */}
           {isLive && match.elapsedMinute != null && (
-            <span className="text-[10px] font-black tabular-nums text-rose-400">
+            <span className="text-[11px] font-black tabular-nums text-rose-400">
               {match.elapsedMinute}{match.injuryTime ? `+${match.injuryTime}` : ""}′
             </span>
           )}
           {isLive && match.apiStatusShort?.toUpperCase() === "HT" && (
-            <span className="text-[10px] font-black text-white/55">HT</span>
+            <span className="text-[11px] font-black text-white/55">HT</span>
           )}
           {isLive && match.apiStatusShort?.toUpperCase() === "PEN" && (
-            <span className="text-[10px] font-black text-amber-300/80">PEN</span>
+            <span className="text-[11px] font-black text-amber-300/80">PEN</span>
           )}
           <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
             {isFinal && (
-              <span className="rounded-md bg-emerald-500/25 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/90">
+              <span className="rounded-md bg-emerald-500/25 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/90">
                 {t("wc.matchup.ftBadge")}
               </span>
             )}
@@ -466,7 +466,7 @@ export default function WorldCupMatchupCard({
             <span className="text-xs text-white/35">–</span>
             <span className="text-lg font-black tabular-nums text-white sm:text-xl">{match.awayScore ?? 0}</span>
             {(match.homePenaltyScore !== null || match.awayPenaltyScore !== null) && (
-              <span className="w-full text-[10px] text-white/40 sm:w-auto">
+              <span className="w-full text-[11px] text-white/40 sm:w-auto">
                 ({match.homePenaltyScore ?? 0}–{match.awayPenaltyScore ?? 0} {t("wc.matchup.pensAbbr")})
               </span>
             )}
@@ -477,14 +477,14 @@ export default function WorldCupMatchupCard({
       {/* Kickoff date — only before match. Gated on hasMounted because toLocaleString output
           differs between Node SSR (UTC default) and the browser (user locale + timezone). */}
       {hasMounted && isScheduled && match.startsAt && !compactBoard && (
-        <div className="mb-2 text-center text-[10px] text-white/40" data-testid={`wc-match-kickoff-${match.id}`}>
+        <div className="mb-2 text-center text-[11px] text-white/40" data-testid={`wc-match-kickoff-${match.id}`}>
           {formatWorldCupKickoffShort(match.startsAt)}
         </div>
       )}
 
       {/* Venue — small hint line */}
       {match.venueName && isScheduled && !compactBoard && (
-        <div className="mb-2 truncate text-center text-[10px] text-white/25">
+        <div className="mb-2 truncate text-center text-[11px] text-white/25">
           {match.venueName}{match.venueCity ? `, ${match.venueCity}` : ""}
         </div>
       )}
@@ -561,9 +561,9 @@ export default function WorldCupMatchupCard({
                 <span className={`block truncate font-bold leading-tight ${compactBoard ? "text-[11px]" : "text-sm"} ${isPlaceholder ? "italic text-white/40" : winner ? "text-emerald-200 font-black" : isFinal ? "text-white/50" : "text-white"}`}>
                   {displayName}
                 </span>
-                <span className="block truncate text-[10px] text-white/30">{team.slotKey}</span>
+                <span className="block truncate text-[11px] text-white/30">{team.slotKey}</span>
                 {hasMounted && isScheduled && match.startsAt && !compactBoard && (
-                  <span className="mt-0.5 block text-[9px] text-white/35" data-testid={`wc-row-kickoff-${match.id}-${team.side}`}>
+                  <span className="mt-0.5 block text-[11px] text-white/35" data-testid={`wc-row-kickoff-${match.id}-${team.side}`}>
                     {formatWorldCupKickoffShort(match.startsAt)}
                   </span>
                 )}
@@ -582,7 +582,7 @@ export default function WorldCupMatchupCard({
               {selected && !locked && matchIsPickable && !winner && !isFinal && <Check className="h-4 w-4 shrink-0 text-white/75" />}
               {selected && locked && !winner && <Lock className="h-3.5 w-3.5 shrink-0 text-white/25" />}
               {winner && (
-                <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-black uppercase text-white/85">
+                <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-black uppercase text-white/85">
                   <Trophy className="h-4 w-4" />
                   {t("wc.matchup.winnerLabel")}
                 </span>
@@ -595,7 +595,7 @@ export default function WorldCupMatchupCard({
 
       {/* Lock hint / venue footer */}
       {lockHint && isScheduled && !compactBoard && (
-        <div className="mt-2 flex items-center gap-1 text-[10px] text-white/30">
+        <div className="mt-2 flex items-center gap-1 text-[11px] text-white/30">
           <Clock className="h-3 w-3" />
           {lockHint}
         </div>

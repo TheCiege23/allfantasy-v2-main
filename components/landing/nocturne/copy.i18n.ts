@@ -50,7 +50,7 @@ const es: NocturneCopy = {
       clock: 'Semana 12 · Dom 11:41',
       rows: [
         { initial: 'S', color: '#1f2a4d', name: 'Dynasty Dragons', sub: 'Sleeper · Dynasty PPR', score: '96.2', opp: '–88.4', tag: 'Ajusta el flex', tagIcon: 'alert', tagKind: 'accent' },
-        { initial: 'E', color: '#4a1414', name: 'Gridiron Gang', sub: 'ESPN · 0.5 PPR', score: '74.0', opp: '–91.6', tag: 'Waiver hoy', tagIcon: 'bell', tagKind: 'accent' },
+        { initial: 'E', color: '#4a1414', name: 'Gridiron Gang', sub: 'ESPN · 0.5 PPR', score: '74.0', opp: '–91.6', tag: 'Reclamos hoy', tagIcon: 'bell', tagKind: 'accent' },
         { initial: 'Y', color: '#3a1d55', name: 'Waiver Warriors', sub: 'Yahoo · Standard', score: '110.8', opp: '–102.1', tag: 'Cambio', tagIcon: 'trade', tagKind: 'accent' },
         { initial: 'E', color: '#4a1414', name: 'End Zone Elites', sub: 'ESPN · Keeper', score: '88.4', opp: '–71.9', tag: 'Todo listo', tagIcon: 'check', tagKind: 'neutral' },
       ],
@@ -82,7 +82,7 @@ const es: NocturneCopy = {
         index: '02',
         title: ['Sabe qué necesita', 'tu atención.'],
         body:
-          'En todas tus ligas a la vez: alineaciones sin definir, waivers de hoy, cambios que te esperan — cada uno etiquetado con la liga y exactamente qué hacer.',
+          'En todas tus ligas a la vez: alineaciones sin definir, procesamientos de reclamos de hoy, cambios que te esperan — cada uno etiquetado con la liga y exactamente qué hacer.',
       },
       {
         index: '03',
@@ -111,7 +111,7 @@ const es: NocturneCopy = {
         icon: 'cursor',
         title: '3 · Sabe qué hacer',
         body:
-          'AllFantasy lee todas tus ligas y señala qué necesita atención — la alineación sin definir, el objetivo de waiver, el cambio que vale la pena. Tú decides; te muestra el camino.',
+          'AllFantasy lee todas tus ligas y señala qué necesita atención — la alineación sin definir, el agente libre a fichar, el cambio que vale la pena. Tú decides; te muestra el camino.',
       },
     ],
   },
@@ -135,7 +135,7 @@ const es: NocturneCopy = {
     kicker: 'Precios simples',
     title: 'Todas las ligas son gratis. Mejora para tener ventaja.',
     body:
-      'Crea, importa y dirige todas las ligas que quieras — drafts, cambios, waivers, marcadores en vivo y clasificaciones incluidos, gratis para siempre. Elige Pro para Chimmy y herramientas de jugador, Commissioner para automatización e integridad de liga, o Supreme para ambos.',
+      'Crea, importa y dirige todas las ligas que quieras — drafts, cambios, agentes libres, marcadores en vivo y clasificaciones incluidos, gratis para siempre. Elige Pro para Chimmy y herramientas de jugador, Commissioner para automatización e integridad de liga, o Supreme para ambos.',
     footnote: 'Los planes de pago se facturan mensual o anualmente. Cancela cuando quieras desde Configuración → Facturación.',
     tiers: [
       {
@@ -143,7 +143,7 @@ const es: NocturneCopy = {
         plan: null, featured: false, badge: null, cta: 'Empieza gratis',
         features: [
           { text: 'Crea e importa ligas ilimitadas' },
-          { text: 'Drafts, cambios, waivers y marcadores en vivo' },
+          { text: 'Drafts, cambios, agentes libres y marcadores en vivo' },
           { text: 'Todas tus ligas en un tablero' },
           { text: 'Lo básico del comisionado: ajustes, invitaciones y playoffs' },
         ],
@@ -154,7 +154,7 @@ const es: NocturneCopy = {
         features: [
           { text: 'Todo lo de Gratis' },
           { text: `Chimmy: ${PRO_CHIMMY_DAILY} respuestas al día` },
-          { text: 'Herramientas de cambios y waivers' },
+          { text: 'Herramientas de cambios y agentes libres' },
           { text: 'Guía de alineación y start/sit' },
         ],
       },

@@ -43,7 +43,7 @@ export default function ChimmyProviderIndicator({
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       {loading ? (
-        <span className="text-[10px] text-white/40">Checking…</span>
+        <span className="text-[11px] text-white/40">Checking…</span>
       ) : (
         display.map(({ name, ok }) => (
           <span
@@ -59,7 +59,7 @@ export default function ChimmyProviderIndicator({
           type="button"
           onClick={onOpenCompare}
           data-testid="chimmy-open-provider-compare-button"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/70 hover:bg-white/10 hover:text-white/90 min-h-[36px]"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/10 hover:text-white/90 min-h-[36px]"
           aria-label="Open provider comparison"
         >
           <GitCompare className="h-3.5 w-3.5" />

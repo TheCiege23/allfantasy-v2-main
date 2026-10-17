@@ -10,8 +10,9 @@
  *   1. RedraftSeason.currentWeek (AF-native redraft)
  *   2. TeamWeekResult MAX(week WHERE status='final') + 1 (any AF-scored league)
  *   3. WeeklyMatchup MAX(week WHERE seasonYear === league.season) + 1 (Sleeper)
- *   4. League.settings JSON heuristic (leg / currentWeek / current_week)
+ *   4. League.settings JSON heuristic (current_week / currentWeek / leg)
  *   5. Fallback to 1
+ *   Then, for an NFL league in the season under way, the calendar is a floor under 4 and 5.
  *
  * Playoff context (best-effort, never throws):
  *   - playoffStartWeek prefers RedraftSeason.playoffStartWeek when available,
@@ -21,6 +22,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { nflWeekForDate } from "@/lib/import-os/season"
 import type { ChimmyContextRequest } from "@/lib/chimmy-context/types"
 
 export type CurrentWeekSource =
@@ -30,6 +32,7 @@ export type CurrentWeekSource =
   | "weeklyMatchup"
   | "leagueSettings"
   | "fallback"
+  | "nflCalendar"
 
 export type ResolvedCurrentWeek = {
   leagueId: string
@@ -49,6 +52,8 @@ export type ResolveCurrentWeekArgs = {
   season?: number | null
   /** Optional shared memo from the chimmy-context request. */
   memo?: Map<string, unknown>
+  /** The clock, for tests. */
+  now?: Date
 }
 
 const MEMO_KEY = "chimmyContext:currentWeek"
@@ -62,7 +67,14 @@ function toJsonRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-/** Sleeper convention: `settings.leg`; AF legacy: `settings.currentWeek`. */
+/**
+ * `current_week` first, `leg` last — the order `lib/core-app/seasonTimeline.ts` already reads them in.
+ *
+ * 🛑 `leg` IS STALE ON AN IMPORTED SLEEPER LEAGUE. The legacy importer stored Sleeper's raw settings
+ * (with `leg`) at the root, and the collector's refresh merges fresh settings OVER them — fresh
+ * `current_week`, but no `leg` — so a preseason `leg: 1` survives all season. Read first, it made
+ * Chimmy say "Week 1 of 2026, 14 weeks until playoffs" on 2026-09-30.
+ */
 function weekFromLeagueSettings(settings: unknown): number | null {
   const root = toJsonRecord(settings)
   const nested =
@@ -70,12 +82,12 @@ function weekFromLeagueSettings(settings: unknown): number | null {
       ? (root.settings as Record<string, unknown>)
       : null
   const candidates: unknown[] = [
-    nested?.leg,
-    root.leg,
-    nested?.currentWeek,
-    root.currentWeek,
     nested?.current_week,
     root.current_week,
+    nested?.currentWeek,
+    root.currentWeek,
+    nested?.leg,
+    root.leg,
   ]
   for (const raw of candidates) {
     if (typeof raw === "number" && Number.isFinite(raw) && raw >= 1) {
@@ -103,6 +115,23 @@ function currentNflSeason(now: Date): number {
   return m >= 8 ? y : y - 1
 }
 
+/**
+ * The NFL regular-season week the calendar is in, MINUS ONE, or null outside the regular season.
+ *
+ * A floor, not an answer: `nflWeekForDate` is a calendar estimate (Week 1 on Sep 4) that runs up to
+ * a week ahead of Sleeper's own week at the turnover, so one week of slack keeps it from ever
+ * overstating. It only lifts a week that came from settings or the bare fallback — a week read from
+ * the league's own scored results or redraft season is never second-guessed.
+ */
+export function nflCalendarWeekFloor(now: Date): { season: number; week: number } | null {
+  const month = now.getUTCMonth() + 1
+  const day = now.getUTCDate()
+  const inSeason = (month === 9 && day >= 4) || month >= 10 || (month === 1 && day <= 6)
+  if (!inSeason) return null
+  const season = month === 1 ? now.getUTCFullYear() - 1 : now.getUTCFullYear()
+  return { season, week: Math.max(1, nflWeekForDate(now) - 1) }
+}
+
 export async function resolveCurrentWeek(
   args: ResolveCurrentWeekArgs
 ): Promise<ResolvedCurrentWeek> {
@@ -115,7 +144,7 @@ export async function resolveCurrentWeek(
     prisma.league
       .findUnique({
         where: { id: leagueId },
-        select: { season: true, playoffStartWeek: true, settings: true },
+        select: { season: true, playoffStartWeek: true, settings: true, sport: true },
       })
       .catch(() => null),
     prisma.redraftSeason
@@ -195,6 +224,16 @@ export async function resolveCurrentWeek(
   if (week == null) {
     week = 1
     source = "fallback"
+  }
+
+  // 7. NFL calendar floor under the two sources that can be stale or absent.
+  if (source === "leagueSettings" || source === "fallback") {
+    // Only for a league read as NFL: an unread league is not assumed to be one.
+    const floor = String(league?.sport ?? "").toUpperCase() === "NFL" ? nflCalendarWeekFloor(args.now ?? new Date()) : null
+    if (floor && floor.season === fallbackSeason && floor.week > week) {
+      week = floor.week
+      source = "nflCalendar"
+    }
   }
 
   const playoffStartWeek =

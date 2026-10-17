@@ -3,6 +3,7 @@ import 'server-only'
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { bridgeColumnFor, isUnbridgedId } from '@/lib/core-app/bridgedRosterIds'
 import {
   defaultLeagueWeekPricingDeps,
   isLeagueWeekRefusal,
@@ -15,6 +16,8 @@ import { fillLineup, DEFAULT_SLOT_ELIGIBILITY, type ImpactPlayer } from '@/lib/d
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { afEngineForLeague, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
+import type { AfEngineCarryInput } from '@/lib/core-app/afEngineCarry'
 import { activePlayerIds, viewerRosterOf } from './leagueRosterIndex'
 import type { RosterIdsUnreadable, ScenarioWeek } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
@@ -68,6 +71,12 @@ export type OptimizerPlayer = {
   injury: string | null
   /** This week's points under the league's rules. NULL is "not priced", never zero. */
   points: number | null
+  /**
+   * AllFantasy's OWN engine for the same week, carried into this league's scoring by the provider
+   * line (`afEngineForLeague`). A SECOND OPINION for the model to quote — the lineup, every total and
+   * the swap list are computed from `points` alone. Absent when the engine has no row for him.
+   */
+  af?: number | null
 }
 
 export type LineupOptimizationUnresolvedReason =
@@ -112,6 +121,17 @@ export type LineupOptimization =
       unfilledSlots: string[]
       lockedPlayers?: OptimizerPlayer[]
       unverifiedLocks?: OptimizerPlayer[]
+      /**
+       * Bench players the best lineup WOULD use if their game had not already started, and what that
+       * costs. Null when no started bench player would have made it.
+       */
+      lockedOut?: { players: OptimizerPlayer[]; cost: number } | null
+      /**
+       * When the first of the recommended swaps locks: the earliest known kickoff among the players
+       * moved in or out. `early` when that is before the main Sunday slate (see `isEarlyKickoff`).
+       * Null with no swaps, or when no moved player's kickoff is known.
+       */
+      deadline?: { player: OptimizerPlayer; at: string; early: boolean } | null
     }
 
 export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
@@ -121,6 +141,15 @@ export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
     ids: string[],
   ) => Promise<Map<string, { name: string | null; position: string | null; team?: string | null; injury?: string | null }>>
   checkLocks?: (args: { sport: string; season: number; week: number; players: Array<{ playerId: string; name: string; team: string | null; gameTime: null }> }) => Promise<LockCheck>
+  /**
+   * AllFantasy's engine (PPR) and the provider's generic PPR total for the same week, by id — what
+   * carries AF into the league's scoring. Optional: without it the block simply shows no AF.
+   */
+  loadAfWeek?: (args: { week: { season: string; week: number }; ids: string[] }) => Promise<{
+    /* The engine row, not just its number: a defender's AF figure is IDP-scored and must not be carried by the PPR ratio. */
+    engine: ReadonlyMap<string, AfEngineCarryInput>
+    generic: ReadonlyMap<string, number>
+  }>
 }
 
 /** Enough for any roster with IR and taxi; the name read is bounded by it. */
@@ -131,6 +160,16 @@ const defaultDeps: LineupOptimizerDeps = {
   resolveWorld: resolveCanonicalWorld,
   loadPlayers: async (sport, ids) => enrichLineupAvailability(sport, await resolveNames(normalizeToSupportedSport(sport), ids, MAX_ROSTER_IDS)),
   checkLocks: checkStartedGames,
+  loadAfWeek: async ({ week, ids }) => {
+    const [engine, providers] = await Promise.all([
+      lookupAfEngineProjections(ids, week),
+      lookupProjections(ids, week),
+    ])
+    return {
+      engine,
+      generic: new Map([...providers].map(([id, p]) => [id, p.projectedPoints])),
+    }
+  },
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -151,10 +190,28 @@ export async function buildLineupOptimization(
   if (!roster) {
     return unresolved('no_viewer_roster', 'Your team in this league is not claimed or has no synced roster.')
   }
-  // The port strips a foreign league's roster ids, so the roster reads empty and every refusal below
-  // ("no player on your roster has a projection") would be a false claim about the team.
-  if (isForeignIdSpace(world.provenance?.provider)) {
-    return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
+  /*
+   * A foreign league's roster reads empty unless the port could read it through the Fleaflicker /
+   * MFL identity bridge (decision-os/world/port.ts). Empty, every refusal below ("no player on your
+   * roster has a projection") would be a false claim about the team.
+   *
+   * 🛑 BRIDGED, IT MUST STILL BE COMPLETE FOR THIS ROSTER. An unidentified player cannot be priced,
+   * so a "best lineup" would quietly leave him out — and this result drives push alerts telling
+   * someone to bench a player. One unidentified ACTIVE player refuses, with the count.
+   */
+  const provider = world.provenance?.provider
+  if (isForeignIdSpace(provider)) {
+    if (!bridgeColumnFor(provider) || roster.playerIds.length === 0) {
+      return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
+    }
+    const activeIds = activePlayerIds(roster)
+    const unseen = activeIds.filter((id) => isUnbridgedId(id)).length
+    if (unseen > 0) {
+      return unresolved(
+        'roster_ids_unreadable',
+        `${unseen} of ${activeIds.length} active players on your roster could not be identified, so a best lineup could leave one of them out.`,
+      )
+    }
   }
 
   const slots = world.league.rosterSettings.starterSlots
@@ -173,6 +230,10 @@ export async function buildLineupOptimization(
     const entry = priced.get(id)
     if (entry && unavailableForLineup(meta.get(id)?.injury)) priced.set(id, { ...entry, projectedPoints: 0 })
   }
+  /* AllFantasy's own engine for the same week — shown beside each number, never used to fill the lineup. */
+  const afWeek = deps.loadAfWeek
+    ? await deps.loadAfWeek({ week: basis.week, ids: active }).catch(() => null)
+    : null
   const impact: ImpactPlayer[] = active.map((id) => priced.get(id)!)
   if (impact.every((p) => p.projectedPoints == null)) {
     return unresolved(
@@ -183,7 +244,7 @@ export async function buildLineupOptimization(
 
   const currentIds = (roster.starterIds ?? []).filter((id) => !EMPTY_SLOT_IDS.has(String(id)))
   const currentSet = new Set(currentIds)
-  const locks = deps.checkLocks ? await deps.checkLocks({
+  const locks: LockCheck = deps.checkLocks ? await deps.checkLocks({
     sport: world.league.sport, season: Number(basis.week.season), week: basis.week.week,
     players: active.map((id) => ({ playerId: id, name: meta.get(id)?.name ?? id, team: meta.get(id)?.team ?? null, gameTime: null })),
   }).catch(() => ({ started: new Map<string, string>(), unverified: active })) : { started: new Map<string, string>(), unverified: [] }
@@ -199,7 +260,18 @@ export async function buildLineupOptimization(
     fixed.set(index, id)
   }
   const remainingSlots = startingSlots.filter((_, index) => !fixed.has(index))
-  const best = fillLineup(impact.filter((p) => !locks.started.has(p.playerId) && !unavailableForLineup(meta.get(p.playerId)?.injury)), remainingSlots)
+  const playable = (p: { playerId: string }) => !unavailableForLineup(meta.get(p.playerId)?.injury)
+  const best = fillLineup(impact.filter((p) => !locks.started.has(p.playerId) && playable(p)), remainingSlots)
+  /*
+   * 🛑 A STARTED BENCH PLAYER WAS DROPPED IN SILENCE. Production 2026-10-11, HailShiva: Bhayshul Tuten
+   * (12.7) out-projected a starter (Devaughn Vele, 9.7), but Jacksonville kicked off in London at
+   * 9:30 AM ET, so the fill left him out and the only trace was a generic "known started games"
+   * line. The same fill, run once more with started bench players allowed, names who the lock cost.
+   */
+  const fixedIds = new Set(fixed.values())
+  const unlocked = fillLineup(impact.filter((p) => !fixedIds.has(p.playerId) && playable(p)), remainingSlots)
+  const lockedOutIds = unlocked.starterIds.filter((id) => locks.started.has(id) && !currentSet.has(id))
+  const lockedOutCost = round2(unlocked.points - best.points)
   let remainingIndex = 0
   const remainingAssignments = best.assignments.slice()
   best.assignments = startingSlots.flatMap((slot, index) => {
@@ -226,7 +298,15 @@ export async function buildLineupOptimization(
       team: m?.team ?? null,
       injury: lineupDesignation(m?.injury),
       points: p?.projectedPoints ?? null,
+      ...afFor(id, p?.projectedPoints ?? null),
     }
+  }
+  function afFor(id: string, leaguePoints: number | null): { af?: number } {
+    if (!afWeek) return {}
+    // Ruled out: the provider number is already a certain 0, and AF says the same.
+    if (unavailableForLineup(meta.get(id)?.injury) && afWeek.engine.has(id)) return { af: 0 }
+    const af = afEngineForLeague(afWeek.engine.get(id), afWeek.generic.get(id) ?? null, leaguePoints)
+    return af == null ? {} : { af }
   }
 
   const bestIds = new Set(best.starterIds)
@@ -242,6 +322,21 @@ export async function buildLineupOptimization(
   const gain = currentPoints == null ? null : round2(bestPoints - currentPoints)
 
   const byPoints = (a: OptimizerPlayer, b: OptimizerPlayer) => (b.points ?? -Infinity) - (a.points ?? -Infinity)
+
+  const startInstead = known ? best.starterIds.filter((id) => !currentSet.has(id)).map(player).sort(byPoints) : []
+  const benchInstead = known ? currentIds.filter((id) => !bestIds.has(id)).map(player).sort(byPoints) : []
+  /*
+   * ⚠ A SWAP IS ONLY AS GOOD AS THE FIRST KICKOFF IT TOUCHES. Production 2026-10-11: Jacksonville
+   * played in London at 9:30 AM ET, three and a half hours before the slate everyone sets a lineup
+   * for. Moving a player in or out of a game that has started is refused, so the earliest kickoff
+   * among the moved players is the deadline for the whole set of changes.
+   */
+  const moved = [...startInstead, ...benchInstead]
+    .map((p) => ({ p, t: locks.kickoffs?.get(p.playerId)?.getTime() }))
+    .filter((x): x is { p: OptimizerPlayer; t: number } => x.t != null && Number.isFinite(x.t))
+    .sort((a, b) => a.t - b.t)
+  const first = moved[0]
+  const deadline = first ? { player: first.p, at: new Date(first.t).toISOString(), early: isEarlyKickoff(new Date(first.t)) } : null
 
   return {
     status: 'ready',
@@ -260,8 +355,8 @@ export async function buildLineupOptimization(
      * ⚠ ONLY WHEN THE PLATFORM SENT A LINEUP. With none there is nothing to swap against, and
      * listing the whole best lineup as "start these" would read as nine changes nobody needs.
      */
-    startInstead: known ? best.starterIds.filter((id) => !currentSet.has(id)).map(player).sort(byPoints) : [],
-    benchInstead: known ? currentIds.filter((id) => !bestIds.has(id)).map(player).sort(byPoints) : [],
+    startInstead,
+    benchInstead,
     gain,
     unpricedStarters,
     injuredStarters: currentStarters.filter((p) => p.injury && p.injury.trim()),
@@ -276,7 +371,44 @@ export async function buildLineupOptimization(
     unfilledSlots: best.unfilledSlots,
     lockedPlayers: active.filter((id) => locks.started.has(id)).map(player),
     unverifiedLocks: locks.unverified.map(player),
+    lockedOut: lockedOutIds.length > 0 && lockedOutCost > 0 ? { players: lockedOutIds.map(player).sort(byPoints), cost: lockedOutCost } : null,
+    deadline,
   }
+}
+
+/* ── Kickoff deadline ─────────────────────────────────────────────────────────────────────────── */
+
+const ET_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+const ET_LABEL = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
+/** "Sun 9:30 AM ET" — the clock people set a lineup by. */
+export function kickoffLabel(at: Date): string {
+  // ICU puts a narrow no-break space before AM/PM on some Node builds; plain spaces read the same everywhere.
+  return `${ET_LABEL.format(at).replace(/[\s,]+/g, ' ')} ET`
+}
+
+/**
+ * Before the main Sunday slate (1:00 PM ET), in an NFL week that runs Tuesday → Monday: a Thursday or
+ * Saturday game, a Sunday morning London / Germany game. Those are the ones a lineup set "on Sunday"
+ * misses. A late Sunday or Monday kickoff is after it, and needs no extra warning.
+ */
+export function isEarlyKickoff(at: Date): boolean {
+  const parts = Object.fromEntries(ET_PARTS.formatToParts(at).map((x) => [x.type, x.value]))
+  const day = parts.weekday
+  if (day === 'Mon') return false
+  if (day !== 'Sun') return true
+  return Number(parts.hour) * 60 + Number(parts.minute) < 13 * 60
 }
 
 /* ── Prompt block ─────────────────────────────────────────────────────────────────────────────── */
@@ -286,8 +418,11 @@ const who = (p: OptimizerPlayer) => {
   const bits = [p.position, p.team].filter(Boolean).join(', ')
   return bits ? `${p.name} (${bits})` : p.name
 }
-const pts = (p: OptimizerPlayer, week: number) =>
-  p.points == null ? `no week ${week} projection` : `${fmt(p.points)} pts`
+const pts = (p: OptimizerPlayer, week: number) => {
+  const af = p.af != null ? fmt(p.af) : null
+  if (p.points == null) return af != null ? `no week ${week} projection (AF ${af}, not used in the maths)` : `no week ${week} projection`
+  return af != null ? `${fmt(p.points)} pts · AF ${af}` : `${fmt(p.points)} pts`
+}
 
 export function isOutDesignation(status: string | null | undefined): boolean {
   return unavailableForLineup(status)
@@ -306,6 +441,13 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
   const wk = r.week.week
   const lines: Array<string | null> = [
     `LINEUP OPTIMIZER (week ${wk}, this league's real roster, projections scored under THIS league's own rules — repeat these numbers, never estimate your own):`,
+    /*
+     * Said once, up front, whenever any AF figure appears: which number the maths used, and that AF
+     * is a second opinion — so the model can quote both without re-ranking the lineup by AF.
+     */
+    [...r.best.slots.map((s) => s.player), ...r.bench, ...r.startInstead, ...r.benchInstead, ...r.current.starters].some((p) => p.af != null)
+      ? `- Each player shows the provider (Sleeper) projection first, then "AF": AllFantasy's own projection engine for the same week under the same rules. The best lineup, every total and every swap are computed from the FIRST number only. Quote AF as a second opinion — worth mentioning when it disagrees — but never re-rank the lineup or change a recommendation by it.`
+      : null,
     `- Best lineup projects ${fmt(r.best.points)} pts:`,
     ...r.best.slots.map(({ slot, player }) => `  ${slot}: ${who(player)} — ${pts(player, wk)}${player.injury ? ` [${player.injury}]` : ''}`),
   ]
@@ -356,6 +498,22 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
   }
   if (r.unpricedActive > 0) {
     lines.push(`- ${r.unpricedActive} active player(s) have no week ${wk} projection and were left out of the maths.`)
+  }
+  if (r.lockedOut) {
+    lines.push(
+      `- 🔒 ALREADY LOCKED: ${r.lockedOut.players.map((p) => `${who(p)} (${pts(p, wk)})`).join(', ')} would be in the best lineup, but ` +
+        `${r.lockedOut.players.length === 1 ? 'his game has' : 'their games have'} already started, so ${r.lockedOut.players.length === 1 ? 'he' : 'they'} can no longer be moved in ` +
+        `(${fmt(r.lockedOut.cost)} projected pts the lock costs). Say this plainly, and never recommend starting ${r.lockedOut.players.length === 1 ? 'him' : 'them'}.`,
+    )
+  }
+  if (r.deadline && (r.startInstead.length > 0 || r.benchInstead.length > 0)) {
+    const when = kickoffLabel(new Date(r.deadline.at))
+    lines.push(
+      r.deadline.early
+        ? `- ⏰ EARLY KICKOFF: set these changes before ${when} — ${r.deadline.player.name}'s game, the first of them to start. ` +
+            'That is before the main Sunday slate and easy to miss: lead with the time, and say that once his game starts the swap can no longer be made.'
+        : `- ⏰ The first of these changes locks at ${when}, when ${r.deadline.player.name}'s game starts. Mention the time.`,
+    )
   }
   if (r.lockedPlayers?.length) lines.push(`- Known started games: ${r.lockedPlayers.map(who).join(', ')}. Current starters were kept in place and started bench players were excluded.`)
   if (r.unverifiedLocks?.length) lines.push(`- Kickoff locks could not be verified for ${r.unverifiedLocks.map(who).join(', ')}. Confirm them on the provider before acting.`)

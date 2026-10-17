@@ -183,7 +183,7 @@ describe('completedTradeInputs — used picks become the drafted player', () => 
 
   it('a future pick stays a pick; an old pick the draft cannot resolve still withholds, named', () => {
     const inputs = completedTradeInputs(trade([pick('2027', 1, null), pick('2023', 3, null)]), 2026)!
-    expect(inputs.get.assets).toContainEqual({ kind: 'pick', year: 2027, round: 1 })
+    expect(inputs.get.assets).toContainEqual({ kind: 'pick', year: 2027, round: 1, originalRosterId: '3' })
     expect(inputs.get.unpriceable).toEqual(['2023 round 3'])
   })
 })

@@ -39,7 +39,7 @@ function FootprintKpi({
   return (
     <div className={cn('flex min-h-[76px] flex-col justify-between rounded-2xl border p-3', decisionOsToneClasses(tone))}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</span>
+        <span className="text-[11px] font-bold uppercase tracking-wide text-muted">{label}</span>
         <Icon className="h-3.5 w-3.5 text-current opacity-70" aria-hidden />
       </div>
       <span className="mt-1 text-[24px] font-black leading-none text-current">{value}</span>
@@ -109,7 +109,7 @@ export function PlatformFocus({
 
           {model.areas.length > 0 ? (
             <>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted">Where the work is</p>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted">Where the work is</p>
               <ExecutiveHorizontalBars items={bars} />
             </>
           ) : (

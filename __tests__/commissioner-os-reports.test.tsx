@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 /*
@@ -157,7 +157,9 @@ describe("commissioner-os reports — view", () => {
       const table = screen.getByRole('table')
       expect(within(table).getByText(template.name).closest('tr')).toHaveTextContent('Generating')
 
-      await vi.advanceTimersByTimeAsync(2000)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+      })
 
       expect(within(table).getByText(template.name).closest('tr')).toHaveTextContent('Ready')
     } finally {

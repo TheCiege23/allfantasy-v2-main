@@ -16,11 +16,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   adminAuditLog: { create: vi.fn() },
-  league: { findFirst: vi.fn() },
+  // `findUnique` is the score sync's platform read (NFL path); unset -> a native (Sleeper-id) league.
+  league: { findFirst: vi.fn(), findUnique: vi.fn() },
+  exileWeeklyEntry: { findMany: vi.fn() },
   playerGameLogCache: { findMany: vi.fn() },
   playerGameStat: { findMany: vi.fn() },
   playerIdentityMap: { findFirst: vi.fn(), findMany: vi.fn() },
-  playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn() },
+  playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(async () => []) },
   redraftRoster: { findMany: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },
@@ -61,6 +63,8 @@ describe('daily-sport weekly score sync', () => {
     prismaMock.sportsPlayer.findFirst.mockResolvedValue(null)
     prismaMock.sportsGame.findMany.mockResolvedValue([])
     prismaMock.playerGameLogCache.findMany.mockResolvedValue([])
+    prismaMock.league.findUnique.mockResolvedValue(null)
+    prismaMock.exileWeeklyEntry.findMany.mockResolvedValue([])
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'roster-1' }])
     prismaMock.playerGameStat.findMany.mockResolvedValue([])
   })
@@ -75,9 +79,10 @@ describe('daily-sport weekly score sync', () => {
   })
 
   it('still refuses a sport with no normalizer', async () => {
-    prismaMock.league.findFirst.mockResolvedValue({ sport: 'SOCCER', settings: {} })
-    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('SOCCER'))
-    await expect(runSync({ seasonStartUtc: SEASON_START })).rejects.toThrow(/NFL, NBA and NHL/)
+    // SOCCER until it gained a normalizer (2026-09-28); the control is now a sport no league can be.
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'CRICKET', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('CRICKET'))
+    await expect(runSync({ seasonStartUtc: SEASON_START })).rejects.toThrow(/CRICKET is not available yet/)
   })
 
   describe('week selection', () => {
@@ -150,6 +155,25 @@ describe('daily-sport weekly score sync', () => {
     expect(written.create.sport).toBe('NBA')
     expect(written.create.week).toBe(3)
     expect(typeof written.create.fantasyPts).toBe('number')
+  })
+
+  it.each(['NBA', 'NHL'])('ingests a closed %s Exile roster even when no main-island roster holds that player', async sport => {
+    prismaMock.league.findUnique.mockResolvedValue({ platform: 'allfantasy', survivorMode: true })
+    prismaMock.league.findFirst.mockResolvedValue({ sport, settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor(sport))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([])
+    prismaMock.exileWeeklyEntry.findMany.mockResolvedValue([{ submittedLineup: {
+      version: 1, anchorId: 'p-exile', team: 'BOS', closedAt: '2026-10-28T00:00:00Z', lockedAt: null,
+      players: [{ id: 'p-exile', name: 'Exile anchor', position: sport === 'NBA' ? 'PG' : 'G', team: 'BOS', slot: sport === 'NBA' ? 'PG' : 'G' }],
+    } }])
+    prismaMock.playerGameStat.findMany.mockResolvedValue([{ playerId: 'p-exile', normalizedStatMap: { seasonType: 'regular', stats: sport === 'NBA' ? { points: 24 } : { saves: 27 } } }])
+
+    const result = await runSync({ seasonStartUtc: SEASON_START })
+
+    expect(prismaMock.exileWeeklyEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'league-1', week: 3 } }))
+    expect(result.rosteredPlayers).toBe(1)
+    expect(result.scoresUpserted).toBe(1)
+    expect(prismaMock.playerWeeklyScore.upsert.mock.calls[0][0].where.playerId_week_season_sport.playerId).toBe('p-exile')
   })
 
   it('does not score a PRESEASON game that falls inside the week', async () => {
@@ -231,6 +255,41 @@ describe('daily-sport weekly score sync', () => {
     expect(summary.scoresUpserted).toBe(0)
     expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
     expect(summary.warnings.join(' ')).toContain('vendor_specific_tally')
+  })
+
+  it('REGRESSION (2026-09-28): a soccer DEFENDER is scored from his box line, not treated as an NFL team defense', async () => {
+    // `isTeamDefenseRow` keys on position `DEF`, which is exactly a soccer defender's position. The
+    // test-DB smoke (scripts/smoke-soccer-gameweek-testdb.ts) found 16 of 16 defenders unscored.
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'SOCCER', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('SOCCER'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: '1208', sport: 'SOCCER', position: 'DEF', team: 'ARS' }])
+    prismaMock.playerIdentityMap.findMany.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      'rollingInsightsId' in args.where ? [{ id: 'pim-def', rollingInsightsId: '1208', sleeperId: null }] : [],
+    )
+    prismaMock.playerGameStat.findMany.mockImplementation(async (args: { where: { playerId: { in: string[] } } }) =>
+      args.where.playerId.in.includes('pim-def')
+        ? [{ playerId: 'pim-def', normalizedStatMap: { seasonType: 'regular', group: 'fielders', position: 'Defender', stats: { clean_sheets: 1, minutes_played: 90, goals: 0, assists: 1 } } }]
+        : [],
+    )
+
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
+
+    expect(summary.scoresUpserted).toBe(1)
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0][0]
+    expect(written.create.stats).toMatchObject({ clean_sheet_def: 1, assists: 1, minutes_played: 90 })
+    expect(written.create.fantasyPts).toBeGreaterThan(0)
+    // No team-defense lookup: that path reads SportsGame for a points-allowed result.
+    expect(prismaMock.sportsGame.findMany).not.toHaveBeenCalled()
+  })
+
+  it('[control] an NFL DEF is still a team defense', async () => {
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'NFL', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NFL'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'nfl:def:BUF', sport: 'NFL', position: 'DEF', team: 'BUF' }])
+
+    await runSync()
+
+    expect(prismaMock.sportsGame.findMany).toHaveBeenCalled()
   })
 
   it('records a player with no games this week as missing, not as zero', async () => {

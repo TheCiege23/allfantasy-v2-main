@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Steal 3 (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.mi-row{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:#0b0d14;color:#e8eaf2;font:inherit;text-align:left;cursor:pointer;min-height:48px}
+.mi-row:disabled{cursor:default;opacity:.45}
+.mi-pos{width:30px;height:20px;flex:none;border-radius:4px;display:grid;place-items:center;font:700 10px 'Archivo';color:#0b0d14}
+.mi-box{width:18px;height:18px;flex:none;border-radius:4px;border:1.5px solid rgba(255,255,255,.25);display:grid;place-items:center;font:700 11px 'Archivo';color:#1a1204}
+.mi-bar{display:flex;gap:4px}.mi-bar span{flex:1;height:4px;border-radius:99px}
+@keyframes miFly{0%{transform:translateY(20px);opacity:0}100%{transform:none;opacity:1}}
+</style>
+</helmet>
+<div class="ex" style="height: 100vh; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 18px">
+  <div style="display: flex; align-items: center; gap: 10px">
+    <a class="ex-btn" href="IdolVault.dc.html" aria-label="Back" style="padding: 0 12px; min-height: 36px">‹</a>
+    <img src="survivor/idols/steal-three-icon.svg" alt="" style="height: 30px">
+    <div style="flex: 1; display: flex; flex-direction: column"><b style="font: 700 16px 'Cinzel', serif; color: #ff7a7f">Steal 3</b><span class="ex-t3" style="font-size: 12px">{{stepL}}</span></div>
+  </div>
+  <div class="mi-bar"><sc-for list="{{bar}}" as="b" hint-placeholder-count="4"><span style="background: {{b.c}}"></span></sc-for></div>
+
+  <sc-if value="{{picking}}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; align-items: baseline"><b style="flex: 1; font-size: 15px">Pick 3 from Open Team 7</b><span class="ex-num ex-gold" style="font-size: 13px">{{n}} of 3</span></div>
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow: hidden">
+      <sc-for list="{{rows}}" as="p" hint-placeholder-count="9">
+        <button class="mi-row" onClick="{{p.pick}}" disabled="{{p.off}}" aria-pressed="{{p.on}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+          <span class="mi-box" style="border-color: {{p.bc}}; background: {{p.bb}}">{{p.tick}}</span>
+          <span class="mi-pos" style="background: {{p.pc}}">{{p.pos}}</span>
+          <span style="flex: 1; display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600; font-size: 13.5px">{{p.n}}</span><span class="ex-t3" style="font-size: 11px">{{p.sub}}</span></span>
+          <span class="ex-num" style="font-size: 12px; color: {{p.fc}}">{{p.fp}}</span>
+        </button>
+      </sc-for>
+    </div>
+    <button class="ex-btn ex-btn-gold" onClick="{{play}}" disabled="{{notReady}}" style="min-height: 50px; width: 100%">Next</button>
+  </sc-if>
+
+  <sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; background: radial-gradient(circle at 50% 35%, rgba(229,72,77,.25), transparent 60%)">
+      <img src="survivor/idols/steal-three.svg" alt="" style="height: 170px">
+      <span style="font: 700 24px 'Cinzel', serif; letter-spacing: .03em">The hand has struck</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; width: 100%">
+        <sc-for list="{{got}}" as="p" hint-placeholder-count="3"><div class="ex-card2" style="padding: 10px 12px; display: flex; align-items: center; gap: 10px; animation: miFly .5s ease-out both; animation-delay: {{p.d}}"><span class="mi-pos" style="background: {{p.pc}}">{{p.pos}}</span><b style="flex: 1; text-align: left">{{p.n}}</b><span class="ex-t3" style="font-size: 11.5px">from Open Team 7</span></div></sc-for>
+      </div>
+      <span class="ex-t2" style="font-size: 12.5px">The league has been told. Roschon Johnson, Noah Gray and Tyjae Spears went to waivers.</span>
+    </div>
+    <a class="ex-btn ex-btn-gold" href="MobileLineup.dc.html" style="min-height: 50px">Set lineup</a>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { take: [1, 3], done: false }; }
+  renderVals() {
+    const st = this.state, POS = { QB: '#e5728a', RB: '#3fbf95', WR: '#5b9cf0', TE: '#e0a84a' };
+    const R = [['Puka Nacua', 'WR', 'Sun 4:25 PM', '22.4', 0], ['Josh Jacobs', 'RB', 'Sun 1:00 PM', '18.9', 0], ['Chris Olave', 'WR', 'Sun 1:00 PM', '14.1', 0], ['Trey McBride', 'TE', 'Sun 1:00 PM', '15.6', 0], ['Kyler Murray', 'QB', 'Sun 1:00 PM', '19.7', 0],
+      ['DK Metcalf', 'WR', 'Played Thu · locked', '11.2', 1], ['Chase Brown', 'RB', 'Sun 4:25 PM', '15.8', 0], ['Tyler Warren', 'TE', 'Sun 1:00 PM', '9.8', 0], ['Jaylen Warren', 'RB', 'Played Thu · locked', '9.1', 1]];
+    const take = st.take, full = take.length >= 3;
+    const rows = R.map(([n, pos, sub, fp, lock], i) => { const on = take.includes(i);
+      return { n, pos, sub, fp, pc: POS[pos], off: !!lock || (full && !on), on: on ? 'true' : 'false', tick: on ? '✓' : '', bc: on ? '#d9b45a' : 'rgba(255,255,255,.25)', bb: on ? '#d9b45a' : 'transparent',
+        fc: on ? '#f1d58a' : '#a3a9c2', line: on ? 'rgba(217,180,90,.5)' : 'rgba(255,255,255,.06)', bg: on ? 'rgba(217,180,90,.06)' : '#0b0d14', pick: () => this.setState({ take: on ? take.filter(x => x !== i) : take.concat(i) }) }; });
+    const step = st.done ? 4 : 2;
+    return { rows, n: take.length, notReady: take.length !== 3, picking: !st.done, done: st.done,
+      stepL: st.done ? 'Played · week 6' : 'Step 2 of 4 · pick 3 players',
+      bar: [1, 2, 3, 4].map(k => ({ c: k <= step ? '#d9b45a' : '#151926' })),
+      got: take.map((i, k) => ({ n: R[i][0], pos: R[i][1], pc: POS[R[i][1]], d: (k * .15) + 's' })),
+      play: () => this.setState({ done: true }) };
+  }
+}
+</script>
+</body>
+</html>

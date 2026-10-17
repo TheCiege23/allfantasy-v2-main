@@ -25,7 +25,7 @@ const TRUTH_CLASS: Record<TruthLabel, string> = {
 export function TruthLabelBadge({ label, className = '' }: { label: TruthLabel; className?: string }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${TRUTH_CLASS[label]} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] ${TRUTH_CLASS[label]} ${className}`}
       data-truth-label={label}
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
@@ -44,7 +44,7 @@ export function ConfidenceBadge({ level, rationale }: { level: ConfidenceLevel; 
   return (
     <span
       title={rationale}
-      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${CONF_CLASS[level]}`}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.1em] ${CONF_CLASS[level]}`}
     >
       {level} confidence
     </span>
@@ -83,7 +83,7 @@ export function SyncFreshnessBadge({ freshness, now }: { freshness: FreshnessCon
   const cadence = freshness.refreshCadenceMinutes >= 60 ? `${freshness.refreshCadenceMinutes / 60}h` : `${freshness.refreshCadenceMinutes}m`
   return (
     <div className="flex flex-col items-end gap-1" data-testid="sync-freshness">
-      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${SYNC_STATUS_CLASS[freshness.syncStatus]}`} data-sync-status={freshness.syncStatus}>
+      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] ${SYNC_STATUS_CLASS[freshness.syncStatus]}`} data-sync-status={freshness.syncStatus}>
         <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
         {SYNC_STATUS_LABEL[freshness.syncStatus]}
       </span>
@@ -107,7 +107,7 @@ export function WorkspaceSectionHeader({ eyebrow, title, subtitle, right }: { ey
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{eyebrow}</p> : null}
+        {eyebrow ? <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">{eyebrow}</p> : null}
         <h2 className="text-lg font-black tracking-tight text-primary">{title}</h2>
         {subtitle ? <p className="mt-0.5 text-[13px] leading-relaxed text-secondary">{subtitle}</p> : null}
       </div>
@@ -175,20 +175,20 @@ export function ExecutiveInsightPanel({ insight }: { insight: Explanation }) {
         <ConfidenceBadge level={insight.confidence.level} rationale={insight.confidence.rationale} />
       </div>
       <div className="flex flex-col gap-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">What happened</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">What happened</p>
         <p className="text-[14px] font-semibold leading-snug text-primary">{insight.whatHappened}</p>
       </div>
       <div className="flex flex-col gap-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">Evidence</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Evidence</p>
         <EvidenceList items={insight.evidence} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">Why it matters</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Why it matters</p>
           <p className="mt-1 text-[12px] leading-relaxed text-secondary">{insight.whyItMatters}</p>
         </div>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">Recommended action</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Recommended action</p>
           <p className="mt-1 text-[12px] leading-relaxed text-secondary">{insight.recommendation}</p>
         </div>
       </div>

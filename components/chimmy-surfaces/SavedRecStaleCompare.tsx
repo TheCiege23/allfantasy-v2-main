@@ -76,8 +76,8 @@ const DIRECTION_ICON = {
   up: <TrendingUp className="h-3 w-3 text-emerald-400" />,
   down: <TrendingDown className="h-3 w-3 text-red-400" />,
   neutral: <Minus className="h-3 w-3 text-white/30" />,
-  new: <span className="text-[9px] font-bold text-sky-400">NEW</span>,
-  removed: <span className="text-[9px] font-bold text-red-400">GONE</span>,
+  new: <span className="text-[11px] font-bold text-sky-400">NEW</span>,
+  removed: <span className="text-[11px] font-bold text-red-400">GONE</span>,
 }
 
 export default function SavedRecStaleCompare({
@@ -100,11 +100,11 @@ export default function SavedRecStaleCompare({
 
       {/* Column headers */}
       <div className="grid grid-cols-[minmax(0,1fr)_20px_minmax(0,1fr)] items-center gap-2 px-4 py-2 border-b border-amber-500/10 bg-white/[0.02]">
-        <span className="text-[10px] text-white/40 uppercase tracking-wide">Saved ({
+        <span className="text-[11px] text-white/40 uppercase tracking-wide">Saved ({
           new Date(saved.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         })</span>
         <span />
-        <span className="text-[10px] text-white/40 uppercase tracking-wide">{freshLabel}</span>
+        <span className="text-[11px] text-white/40 uppercase tracking-wide">{freshLabel}</span>
       </div>
 
       {/* Diff rows */}
@@ -121,7 +121,7 @@ export default function SavedRecStaleCompare({
             >
               {/* Saved value */}
               <div className="min-w-0">
-                <p className="text-[10px] text-white/40 truncate">{labelKey(d.key)}</p>
+                <p className="text-[11px] text-white/40 truncate">{labelKey(d.key)}</p>
                 <p className={`text-xs truncate ${d.direction === 'removed' ? 'text-red-400 line-through' : 'text-white/60'}`}>
                   {formatValue(d.saved)}
                 </p>
@@ -134,7 +134,7 @@ export default function SavedRecStaleCompare({
 
               {/* Fresh value */}
               <div className="min-w-0">
-                <p className="text-[10px] text-white/40 invisible">·</p>
+                <p className="text-[11px] text-white/40 invisible">·</p>
                 <p className={`text-xs font-medium truncate ${
                   d.direction === 'up' ? 'text-emerald-300' :
                   d.direction === 'down' ? 'text-red-300' :

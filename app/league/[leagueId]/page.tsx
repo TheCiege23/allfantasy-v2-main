@@ -20,6 +20,7 @@ import {
 import { isAppRouterRedirectError } from '@/lib/next/is-app-router-redirect-error'
 import { resolveBracketPoolRedirectUrl } from '@/lib/league/bracketPoolGuard'
 import { LeagueShellClient } from './LeagueShellClient'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,11 +30,12 @@ export const dynamic = 'force-dynamic'
  * mobile (most users hit the league dashboard from a phone). Kept lean: one
  * indexed-safe title + description, no private data beyond the league name.
  */
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ leagueId: string }> | { leagueId: string }
-}) {
+export async function generateMetadata(
+  props: {
+    params: Promise<Promise<{ leagueId: string }> | { leagueId: string }>
+  }
+) {
+  const params = await props.params
   const { leagueId } = params instanceof Promise ? await params : params
   try {
     const league = await prisma.league.findFirst({
@@ -54,11 +56,8 @@ export async function generateMetadata({
   }
 }
 
-// LeagueShellClient is imported directly — it owns the dynamic() call inside a client component.
-// This keeps next/dynamic with ssr:false inside a proper 'use client' boundary.
-const _unused = {
-  ssr: false,  // reminder: ssr:false is applied inside LeagueShellClient.tsx
-}
+// LeagueShellClient is the 'use client' boundary; since 925110077 (2026-07-01) it renders LeagueShell
+// directly rather than through next/dynamic with ssr:false, so the shell server-renders.
 
 function firstSearchParam(value: string | string[] | undefined): string | null {
   if (typeof value === 'string') return value
@@ -92,26 +91,26 @@ function logLeaguePageFailure(details: {
   }
 }
 
-export default async function LeaguePage({
-    params,
-    searchParams,
-}: {
-    params: Promise<{ leagueId: string }>
-    searchParams?: Promise<Record<string, string | string[] | undefined>>
-}) {
-    const missingEnvVars = getDashboardMissingEnvVars()
-    if (missingEnvVars.length > 0) {
-          const issue = createDashboardRuntimeIssue(missingEnvVars)
-          return (
-                  <DashboardUnavailableState
-                            title={issue.title}
-                            message={issue.message}
-                            missing={issue.missing}
-                          />
-                )
-    }
+export default async function LeaguePage(
+  props: {
+      params: Promise<{ leagueId: string }>
+      searchParams?: Promise<Record<string, string | string[] | undefined>>
+  }
+) {
+  const searchParams = await props.searchParams
+  const missingEnvVars = getDashboardMissingEnvVars()
+  if (missingEnvVars.length > 0) {
+        const issue = createDashboardRuntimeIssue(missingEnvVars)
+        return (
+                <DashboardUnavailableState
+                          title={issue.title}
+                          message={issue.message}
+                          missing={issue.missing}
+                        />
+              )
+  }
 
-  const { leagueId } = await params
+  const { leagueId } = await props.params
 
   /*
    * ⚠ NOT AWAITED, AND NOT IN A `try`. `touchLeagueViewed` swallows every error itself and
@@ -143,17 +142,17 @@ export default async function LeaguePage({
   let session: {
         user?: { id?: string; name?: string | null; email?: string | null; image?: string | null }
   } | null
-    try {
-          session = (await getServerSession(authOptions as never)) as typeof session
-    } catch (error) {
-          console.error('[league] getServerSession failed:', error)
-          return (
-                  <DashboardUnavailableState
-                            title="League page temporarily unavailable"
-                            message="We couldn't verify your session. Please sign in again or try again in a moment."
-                          />
-                )
-    }
+  try {
+        session = (await getServerSession(authOptions as never)) as typeof session
+  } catch (error) {
+        console.error('[league] getServerSession failed:', error)
+        return (
+                <DashboardUnavailableState
+                          title="League page temporarily unavailable"
+                          message="We couldn't verify your session. Please sign in again or try again in a moment."
+                        />
+              )
+  }
 
   if (!session?.user?.id) {
         const leaguePath = embedMode ? `/league/${leagueId}?embed=1` : `/league/${leagueId}`
@@ -174,6 +173,7 @@ export default async function LeaguePage({
                     where: { id: leagueId },
                     include: {
                                 teams: { orderBy: { externalId: 'asc' } },
+                                leagueSettings: { select: { draftDateUtc: true } },
                                 rosters: {
                                               select: { platformUserId: true, faabRemaining: true, waiverPriority: true },
                                 },
@@ -259,6 +259,7 @@ export default async function LeaguePage({
 
       let draftDateIso: string | null = null
         const draftDateCandidate =
+                league.leagueSettings?.draftDateUtc?.toISOString() ??
                 leagueSettings.draftDate ??
                 leagueSettings.draft_date ??
                 leagueSettings.draft_at ??
@@ -362,6 +363,12 @@ export default async function LeaguePage({
           }
                       : null
 
+      const draftSetupSession = await prisma.draftSession.findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { rounds: true, timerSeconds: true },
+      }).catch(() => null)
+
       return (
         <div className="flex min-h-0 flex-1 flex-col" data-league-id={leagueId}>
           <LeagueShellClient
@@ -375,6 +382,7 @@ export default async function LeaguePage({
             userName={session.user.name ?? session.user.email ?? 'Manager'}
             userImage={userImage}
             draftDateIso={draftDateIso}
+            draftSetupSession={draftSetupSession}
             sleeperCommissionerId={sleeperCommissionerId}
             sleeperUsersByPlatformId={sleeperUsersByPlatformId}
             currentSleeperUserId={currentSleeperUserId}

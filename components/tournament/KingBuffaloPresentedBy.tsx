@@ -20,7 +20,7 @@ export function KingBuffaloPresentedBy({ variant = 'strip', className = '' }: Pr
       className={`flex items-center justify-center gap-3 border border-white/10 bg-[#070d18]/90 ${isFooter ? 'rounded-b-xl py-2' : isCompact ? 'rounded-lg py-1.5' : 'rounded-xl py-2.5'} px-3 ${className}`}
       data-testid="kingbuffalo-presented-by"
     >
-      <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/45">Presented by</span>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">Presented by</span>
       {logoOk ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -42,7 +42,7 @@ export function KingBuffaloPresentedByText({ className = '' }: { className?: str
       className={`rounded-xl border border-cyan-500/15 bg-cyan-950/20 px-3 py-2 text-center ${className}`}
       data-testid="kingbuffalo-presented-by-fallback"
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200/80">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/80">
         Presented by <span className="text-cyan-100">KingBuffalo</span>
       </p>
     </div>

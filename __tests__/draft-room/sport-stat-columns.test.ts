@@ -97,13 +97,15 @@ describe('getStatValueForDraftPlayer — resolves aliases', () => {
     expect(getStatValueForDraftPlayer(player, tkl)).toBe(142)
   })
 
-  it('NBA: points/rebounds from display.stats', () => {
+  it('NBA: per-game points, rebounds and minutes from display.stats', () => {
     const cols = getDraftStatColumnsForSport('NBA')
     const pts = cols.find((c) => c.key === 'pts')!
     const reb = cols.find((c) => c.key === 'reb')!
-    const player = { display: { stats: { points: 27.4, rebounds: 8.1 } } }
+    const mpg = cols.find((c) => c.key === 'mpg')!
+    const player = { display: { stats: { pointsPerGame: 27.4, reboundsPerGame: 8.1, minutesPerGame: 33.2 } } }
     expect(getStatValueForDraftPlayer(player, pts)).toBe(27.4)
     expect(getStatValueForDraftPlayer(player, reb)).toBe(8.1)
+    expect(getStatValueForDraftPlayer(player, mpg)).toBe(33.2)
   })
 
   it('MLB hitter AVG / OBP formatting', () => {
@@ -199,8 +201,8 @@ describe('filterDraftPlayersByStat', () => {
 
   it('gt / lt / between / eq / exists', () => {
     const players = [
-      { display: { stats: { points: 10 } } },
-      { display: { stats: { points: 25 } } },
+      { display: { stats: { pointsPerGame: 10 } } },
+      { display: { stats: { pointsPerGame: 25 } } },
       { display: { stats: {} } },
     ]
     expect(filterDraftPlayersByStat(players, pts, { op: 'gt', value: 20 })).toHaveLength(1)

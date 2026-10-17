@@ -1,3 +1,4 @@
+import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -24,16 +25,18 @@ import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import {
+  noSportPickMarketUnpricedReason,
   pickUnpricedReason,
   playerUnpricedReason,
+  sportHasPickMarket,
   type UnpricedReason,
 } from '@/lib/trade-value/unpricedReason'
 import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
 import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { valueBookFor, describeValueBook } from '@/lib/core-app/valueBook'
-import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
+import { valueBookFor, describeValueBook, pricesOnDynastyChart } from '@/lib/core-app/valueBook'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import {
   generateMultiTeamTradeSuggestions,
@@ -108,6 +111,13 @@ export type TradeableRosterPlayer = {
   /** Current provider weekly projection used only for before/after simulation. */
   weeklyProjection: number | null
   /**
+   * AllFantasy's own engine for the same week, carried into this league's scoring by the player's
+   * provider line (`afEngineForLeague`). DISPLAY ONLY: nothing in the simulation, the proposal
+   * evidence or the grade reads it — those stay on `weeklyProjection`. Optional for the same rollout
+   * reason as `stock`; absent or null when the engine has no row for him.
+   */
+  afProjection?: number | null
+  /**
    * Why `value` is null, in words the builder prints beside "Unpriced"; null when priced.
    *
    * Optional for the same rollout reason as `stock`: a browser on the previous deploy's bundle
@@ -170,6 +180,8 @@ export type TradeableRoster = {
   teamExternalId: string | null
   /** Team name where the league has one, else the AllFantasy account's name. */
   ownerName: string | null
+  /** Other names this manager goes by (the manager's own name beside the team name), for matching a screenshot's label. */
+  ownerHandles: string[]
   /** Manager avatar from `LeagueTeam`, so the picker can show whose roster it is. */
   avatarUrl: string | null
   /**
@@ -326,6 +338,8 @@ export async function GET(
           where: { leagueId },
           select: {
             platformUserId: true, teamName: true, externalId: true,
+            // The manager's own Sleeper name; the chips show the TEAM name. A DM screenshot uses this one.
+            ownerName: true,
             // Already one query; these ride along rather than costing another.
             avatarUrl: true, wins: true, losses: true, ties: true,
             // The roster↔team join the imported pick inventory needs.
@@ -406,7 +420,7 @@ export async function GET(
   const chartTeams = Number(league?.leagueSize) || 12
   const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
   const chartSettings = {
-    isDynasty: marketContext.variant.dynasty || marketContext.variant.keeper,
+    isDynasty: pricesOnDynastyChart(marketContext.variant),
     numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2,
     numTeams: chartTeams,
     ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,
@@ -502,6 +516,9 @@ export async function GET(
   )
   const teamNameByPlatformId = new Map(
     namedTeams.map((t) => [String(t.platformUserId), t.teamName]),
+  )
+  const managerNameByPlatformId = new Map(
+    namedTeams.map((t) => [String(t.platformUserId), t.ownerName ?? null]),
   )
   const externalIdByPlatformId = new Map(
     namedTeams.map((t) => [String(t.platformUserId), String(t.externalId)]),
@@ -628,6 +645,7 @@ export async function GET(
           account?.displayName ||
           account?.username ||
           null,
+        ownerHandles: rosterManagerHandles(r.playerData, [managerNameByPlatformId.get(String(r.platformUserId)), account?.username]),
         canReceiveProposal: Boolean(account),
       }
     }),
@@ -713,7 +731,7 @@ export async function GET(
    * what keeps a missing snapshot table from costing the rosters.
    */
   const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
-  const [stock, projections, loadedMarketRows, leagueValues] = await Promise.all([
+  const [stock, projections, loadedMarketRows, leagueValues, afEngine] = await Promise.all([
     stockIds.length > 0
       ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
           () => new Map(),
@@ -734,6 +752,13 @@ export async function GET(
         numTeams: Number(league?.leagueSize) || rosters.length || null,
       },
     }).catch(() => null),
+    /* AllFantasy's own engine, same ids and week as the provider read above. Display only; a failed
+       read costs the AF figures and nothing else. */
+    stockIds.length > 0
+      ? lookupAfEngineProjections(stockIds, projectionWeek).catch(
+          (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+        )
+      : Promise.resolve(new Map() as Awaited<ReturnType<typeof lookupAfEngineProjections>>),
   ])
 
   const marketRows = loadedMarketRows ?? []
@@ -763,7 +788,16 @@ export async function GET(
   // The pricer's own reason for a pick it refuses (no market in this format), so the preview does not
   // call a pick with no market "could not be loaded".
   const pickRefusals = new Map<string, UnpricedReason>()
+  // Outside the NFL nothing prices a pick — the chart is the NFL's — so the preview refuses it with the
+  // sport's reason, as the analysis does (`resolveAssets`), rather than quoting a football price.
+  const leagueSportForPicks = String(league?.sport ?? 'NFL')
+  const pickSportRefusal = sportHasPickMarket(leagueSportForPicks) ? null : noSportPickMarketUnpricedReason(leagueSportForPicks)
   await Promise.all([...requestedPicks].map(async ([key, pick]) => {
+    if (pickSportRefusal) {
+      pickPreviewBook.values[key] = null
+      pickRefusals.set(key, pickSportRefusal)
+      return
+    }
     const resolved = loadedMarketRows == null ? null
       : await priceLeagueTradePick(pick, pickPricing).catch(() => null)
     pickPreviewBook.values[key] = resolved && !resolved.priced.unpriced
@@ -814,6 +848,14 @@ export async function GET(
         ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null
         : null
       p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
+      // Set only when the engine priced him, so every other player's shape is exactly as before.
+      const afProjection = afEngineForLeague(
+        afEngine.get(p.id),
+        projection?.projectedPoints ?? null,
+        leagueProjection,
+        scoring,
+      )
+      if (afProjection != null) p.afProjection = afProjection
       p.unpricedReason =
         p.value == null
           ? (resolvedForLeague.has(p.id)
@@ -1080,5 +1122,5 @@ export async function GET(
      */
     pickCoverage: nativePicks ? 'complete' : importedPicks.coverage,
     pickPreviewBook,
-  })
+  });
 }

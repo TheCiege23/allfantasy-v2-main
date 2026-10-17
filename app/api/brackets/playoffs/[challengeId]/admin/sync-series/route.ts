@@ -36,8 +36,8 @@ async function canSyncChallenge(request: Request, challengeId: string): Promise<
   return challenge?.ownerUserId === userId
 }
 
-export async function POST(request: Request, context: { params: { challengeId: string } }) {
-  const params = playoffChallengeParamsSchema.safeParse(context.params)
+export async function POST(request: Request, context: { params: Promise<{ challengeId: string }> }) {
+  const params = playoffChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 })
   }
