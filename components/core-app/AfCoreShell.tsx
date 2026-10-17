@@ -31,6 +31,7 @@ import { useLiveRailScores } from './useLiveRailScores'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
@@ -2379,11 +2380,18 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             It LINKS to /core/notifications rather than asking for permission itself; there
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
-          {active === 'home' ? <GameDayAlertsBanner /> : null}
-          {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
-          {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
-          {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
-          <CoreWelcomeTour leagueCount={leagues.length} />
+          {/*
+            The optional prompts queue for ONE slot on home (HomePromptSlot) instead of stacking
+            up to four deep above the content. Off home the slot is disabled and the tour renders
+            as it always has.
+          */}
+          <HomePromptSlot enabled={active === 'home'}>
+            {active === 'home' ? <GameDayAlertsBanner /> : null}
+            {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
+            {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
+            {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
+            <CoreWelcomeTour leagueCount={leagues.length} />
+          </HomePromptSlot>
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the
