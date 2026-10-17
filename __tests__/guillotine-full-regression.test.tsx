@@ -331,14 +331,15 @@ describe('Guillotine full regression matrix', () => {
       where: { id: 'rr-low' },
       data: { isEliminated: true },
     })
+    // A chopped manager loses the team, not the league: the team is marked eliminated and the
+    // claim that `assertLeagueMember` admits them by is left alone.
     expect(prismaMock.leagueTeam.updateMany).toHaveBeenCalledWith({
-      where: { leagueId: 'league-1', externalId: 'r-low' },
-      data: {
-        claimedByUserId: null,
-        platformUserId: null,
-        isOrphan: true,
-      },
+      where: { leagueId: 'league-1', externalId: 'r-low', eliminatedAt: null },
+      data: { eliminatedAt: expect.any(Date), lifecycleState: 'CURRENT' },
     })
+    const teamWrite = prismaMock.leagueTeam.updateMany.mock.calls[0][0].data
+    expect(teamWrite).not.toHaveProperty('claimedByUserId')
+    expect(teamWrite).not.toHaveProperty('isOrphan')
     expect(releaseChoppedRostersMock).toHaveBeenCalledWith({
       leagueId: 'league-1',
       rosterIds: ['r-low'],
