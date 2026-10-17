@@ -1,10 +1,14 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 /**
- * "top add: Puka Nacua (WR, +6.1 pts)" — the best free agent for ONE league's hole, under the triage
- * card's "swap in …" line.
+ * "Add Puka Nacua (WR, +6.1 pts) in Guillotine League 26" — the triage card's free-agent button, upgraded
+ * in place from "Find free agents in …" once the best free agent for that league's hole is known, and
+ * deep-linked to the Waivers screen with him highlighted (`?player=`, priced the same way via `&out=`).
+ * It is a button rather than text inside the league chip because the chip is itself a link.
  *
  * ⚠ ON DEMAND, AND CAPPED, BECAUSE THE HOME MUST NOT FAN OUT. Answering "who is available" needs that
  * league's whole player pool, its rostered-elsewhere exclusion and this week's projections — ~6
@@ -22,11 +26,11 @@ import { useEffect, useState } from 'react'
 export const BEST_ADD_AUTO_LIMIT = 3
 const CACHE_MS = 5 * 60_000
 
-type BoardCandidate = { name: string; position: string | null; gain: number }
+type BoardCandidate = { sleeperId?: string | null; name: string; position: string | null; gain: number }
 type Board = { state?: string; candidates?: BoardCandidate[] }
 
 export type BestAdd =
-  | { kind: 'add'; name: string; position: string | null; gain: number }
+  | { kind: 'add'; sleeperId: string | null; name: string; position: string | null; gain: number }
   | { kind: 'none' }
 
 /** The board's answer reduced to what the card says; null when it cannot say anything honest. */
@@ -34,28 +38,57 @@ export function bestAddFrom(board: Board | null | undefined): BestAdd | null {
   if (!board || board.state !== 'ok' || !Array.isArray(board.candidates)) return null
   const top = board.candidates[0]
   if (!top || !(top.gain > 0)) return { kind: 'none' }
-  return { kind: 'add', name: top.name, position: top.position, gain: top.gain }
+  return { kind: 'add', sleeperId: top.sleeperId ?? null, name: top.name, position: top.position, gain: top.gain }
 }
 
-export function bestAddText(add: BestAdd, es: boolean): string {
-  if (add.kind === 'none') return es ? 'ningún agente libre mejora tu alineación' : 'no free agent beats your lineup'
+/** The button's words: the add itself, nobody worth adding, or the plain search it started as. */
+export function bestAddCtaText(add: BestAdd | null, leagueName: string, es: boolean): string {
+  if (!add) return es ? `Buscar agentes libres en ${leagueName}` : `Find free agents in ${leagueName}`
+  if (add.kind === 'none') {
+    return es ? `Ningún agente libre mejora tu alineación en ${leagueName}` : `No free agent beats your lineup in ${leagueName}`
+  }
   const pts = `+${add.gain.toFixed(1)} pts`
   const detail = add.position ? `${add.position}, ${pts}` : pts
-  return es ? `mejor agente libre: ${add.name} (${detail})` : `top add: ${add.name} (${detail})`
+  return es ? `Añadir a ${add.name} (${detail}) en ${leagueName}` : `Add ${add.name} (${detail}) in ${leagueName}`
+}
+
+/** The Waivers deep link: that league, the player highlighted, priced with the injured starter at zero. */
+export function bestAddHref(baseHref: string, add: BestAdd | null, injuredId: string | null): string {
+  if (!add || add.kind !== 'add' || !add.sleeperId) return baseHref
+  const join = baseHref.includes('?') ? '&' : '?'
+  const out = injuredId ? `&out=${encodeURIComponent(injuredId)}` : ''
+  return `${baseHref}${join}player=${encodeURIComponent(add.sleeperId)}${out}`
 }
 
 // One answer per (league, injured player) for a few minutes: the shell re-renders this route every
 // couple of minutes and on every return to the app, and none of that should re-price the wire.
 const cache = new Map<string, { at: number; add: BestAdd | null }>()
 
-export function TriageBestAdd({ leagueId, injuredId, es }: { leagueId: string; injuredId: string; es: boolean }) {
-  const key = `${leagueId}|${injuredId}`
+export function TriageFreeAgentCta({
+  leagueId,
+  leagueName,
+  baseHref,
+  injuredId,
+  auto,
+  es,
+}: {
+  leagueId: string
+  leagueName: string
+  /** `/core/waivers?league=…` — where the button goes until (and unless) a best add is known. */
+  baseHref: string
+  /** Sleeper id of the injured starter; null outside the NFL. */
+  injuredId: string | null
+  /** One of the capped few that may ask (see BEST_ADD_AUTO_LIMIT). */
+  auto: boolean
+  es: boolean
+}) {
+  const key = `${leagueId}|${injuredId ?? ''}`
   const hit = cache.get(key)
   const fresh = hit && Date.now() - hit.at < CACHE_MS ? hit : null
   const [add, setAdd] = useState<BestAdd | null>(fresh?.add ?? null)
 
   useEffect(() => {
-    if (fresh) return
+    if (!auto || !injuredId || fresh) return
     let live = true
     const url =
       `/api/idp/players?view=waiver-board&limit=1&leagueId=${encodeURIComponent(leagueId)}` +
@@ -68,22 +101,25 @@ export function TriageBestAdd({ leagueId, injuredId, es }: { leagueId: string; i
         if (live) setAdd(next)
       })
       .catch(() => {
-        /* the "Find free agents" link below is still there */
+        /* the button stays the plain search it started as */
       })
     return () => {
       live = false
     }
     // `fresh` is derived from `key`; re-running on its identity would refetch a cached answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, leagueId, injuredId])
+  }, [key, leagueId, injuredId, auto])
 
-  if (!add) return null
   return (
-    <span className="af-triage-bench af-triage-best-add" data-kind={add.kind}>
-      {' · '}
-      {bestAddText(add, es)}
-    </span>
+    <Link
+      className="af-triage-cta"
+      data-kind={add?.kind ?? 'search'}
+      href={bestAddHref(baseHref, add, injuredId)}
+      onClick={() => sendProductAnalyticsBeacon('product.triage.free_agent_clicked', { kind: add?.kind ?? 'search' })}
+    >
+      {bestAddCtaText(add, leagueName, es)}
+    </Link>
   )
 }
 
-export default TriageBestAdd
+export default TriageFreeAgentCta

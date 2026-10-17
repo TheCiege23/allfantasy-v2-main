@@ -23,6 +23,9 @@ import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import { bestBallDepthAlerts, type DepthAlert } from './bestBallDepth'
 import { clubKey, indexFixturesByWeek, weekVerdict } from './lineupWeekFixtures'
 import { coverOptions, type CoverCandidate, type CoverOptions } from './lineupCover'
+import { lookupProjections } from './playerProjections'
+import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
+import { lineupFixLink } from './platformLinks'
 import type {
   Dash34Brief,
   Dash34Data,
@@ -1640,6 +1643,7 @@ async function loadDash34Data(
         name: p.name,
         position: p.position,
         rank: valueBySleeperId.get(pid)?.overallRank ?? null,
+        points: pointsIn(leagueId, pid),
         canPlay: canPlay(p) && starterWeek(p.sport, p.team, week).verdict !== 'done',
       }
     }
@@ -1708,6 +1712,29 @@ async function loadDash34Data(
     'ONE_QB',
     options,
   ))
+  /*
+   * This week's projections for the same cover candidates, in ONE batched read. Ranking cover by a
+   * dynasty price answered "who is worth more" when the card asks "who do I start Sunday". Scored
+   * under each league's own rules where the league carries them; the generic PPR line otherwise.
+   * A failed read leaves every candidate at `points: null`, which falls back to the market order.
+   */
+  const projectionById = coverIds.size > 0
+    ? await timing.read('projections', () => lookupProjections([...coverIds]).catch(() => new Map()))
+    : new Map()
+  const scoringByLeague = new Map<string, Record<string, unknown> | null>()
+  function pointsIn(leagueId: string, pid: string): number | null {
+    const proj = projectionById.get(pid)
+    if (!proj) return null
+    if (!scoringByLeague.has(leagueId)) {
+      const sc = extractScoringSettings(formatByLeague.get(leagueId)?.settings)
+      scoringByLeague.set(leagueId, sc && hasScoringRules(sc) ? sc : null)
+    }
+    const scoring = scoringByLeague.get(leagueId)
+    const scored = scoring ? computeLeagueProjectedPoints(proj.componentStats, scoring)?.points : null
+    const pts = scored ?? proj.projectedPoints
+    return typeof pts === 'number' && Number.isFinite(pts) ? Math.round(pts * 10) / 10 : null
+  }
+
   const rankOf = (b: BookEntry): number | null =>
     valueBySleeperId.get(b.sleeperId)?.overallRank ?? null
 
@@ -1770,6 +1797,20 @@ async function loadDash34Data(
                    * needs no replacement, and offering one there is noise on a
                    * card whose whole job is picking out the decisions.
                    */
+                  /*
+                   * Where to make the move: the platform's verified lineup screen (Sleeper, ESPN,
+                   * Yahoo), or a native league's team tab. None of those platforms accept a lineup
+                   * write from us, so "fix it" is a precise hand-off, never a pretend apply.
+                   */
+                  fixHref: b.slotByLeague.get(id) === 'starter'
+                    ? lineupFixLink({
+                        id,
+                        platform: row.platform,
+                        platformLeagueId: row.platformLeagueId ?? row.sleeperLeagueId ?? null,
+                        season: row.season ?? null,
+                        teamId: teamByLeague.get(id)?.externalId ?? null,
+                      })?.href ?? null
+                    : null,
                   ...(!rosterByLeague.get(id)?.bestBall && b.slotByLeague.get(id) === 'starter'
                     ? (({ direct, chain }) => ({ bench: direct, cover: chain }))(coverFor(id, b.sleeperId, b.position))
                     : { bench: [], cover: null }),
@@ -1785,8 +1826,9 @@ async function loadDash34Data(
               platform: string
               imageUrl: string | null
               slot: 'starter' | 'bench' | 'ir' | 'taxi' | null
-              bench: Array<{ name: string; position: string | null }>
+              bench: CoverOptions['direct']
               cover: CoverOptions['chain']
+              fixHref: string | null
             } => x !== null,
           )
           .sort((a, b2) => a.name.localeCompare(b2.name)),

@@ -36,7 +36,7 @@ describe('coverOptions', () => {
   it('drops a bench player whose game is over, and offers the flex chain as a true second option', () => {
     const out = coverOptions({ ...base, bench: BENCH })
     expect(out.direct.map((d) => d.name)).toEqual(['Allgeier'])
-    expect(out.chain).toEqual({ move: 'Pollard', toSlot: 'RB', fromSlot: 'FLEX', fill: 'Washington' })
+    expect(out.chain).toMatchObject({ move: 'Pollard', toSlot: 'RB', fromSlot: 'FLEX', fill: 'Washington' })
   })
 
   it('never routes the chain through someone the direct answer already covers', () => {
@@ -69,7 +69,7 @@ describe('coverOptions', () => {
       bench: [c('Allgeier', 'RB')],
     })
     expect(out.direct).toEqual([])
-    expect(out.chain).toEqual({ move: 'Watson', toSlot: 'QB', fromSlot: 'SUPER_FLEX', fill: 'Allgeier' })
+    expect(out.chain).toMatchObject({ move: 'Watson', toSlot: 'QB', fromSlot: 'SUPER_FLEX', fill: 'Allgeier' })
   })
 
   it('orders cover by market rank, unranked last', () => {
@@ -79,6 +79,27 @@ describe('coverOptions', () => {
 
   it('slot unknown (starters and slots disagree): same position only, no chain', () => {
     const out = coverOptions({ ...base, slots: SLOTS.slice(1), bench: BENCH })
+    expect(out.direct.map((d) => d.name)).toEqual(['Allgeier'])
+    expect(out.chain).toBeNull()
+  })
+})
+
+describe('coverOptions — this week\'s points', () => {
+  const p = (id: string, position: string, points: number | null, rank: number | null = null): CoverCandidate => ({ ...c(id, position, true, rank), points })
+
+  it('ranks by league-scored projection over market rank', () => {
+    const out = coverOptions({ ...base, bench: [p('Star', 'RB', 4.1, 5), p('Grinder', 'RB', 12.3, 140)] })
+    expect(out.direct.map((d) => d.name)).toEqual(['Grinder', 'Star'])
+    expect(out.direct[0].points).toBe(12.3)
+  })
+
+  it('shows the flex chain with what it gains over the simple swap', () => {
+    const out = coverOptions({ ...base, bench: [p('Allgeier', 'RB', 9.0), p('Washington', 'TE', 11.4)] })
+    expect(out.chain).toMatchObject({ fill: 'Washington', fillPoints: 11.4, gain: 2.4 })
+  })
+
+  it('drops a chain that does not beat the simple swap — it is just more taps', () => {
+    const out = coverOptions({ ...base, bench: [p('Allgeier', 'RB', 11.2), p('Washington', 'TE', 6.0)] })
     expect(out.direct.map((d) => d.name)).toEqual(['Allgeier'])
     expect(out.chain).toBeNull()
   })

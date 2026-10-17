@@ -28,6 +28,12 @@ export type CoverCandidate = {
   /** Market rank, lower is better; null sorts last and never reads as "worthless". */
   rank: number | null
   /**
+   * This week's projection under THE LEAGUE'S scoring, when one is on file. It outranks market
+   * rank: "who do I start Sunday" is a this-week question, and a dynasty price answers a different
+   * one. Null (or absent) falls back to rank, never to zero.
+   */
+  points?: number | null
+  /**
    * Bench: healthy and his club still plays this week. Starter: not ruled out and his game has
    * not kicked off — a locked starter cannot be moved, so he is never a pivot.
    */
@@ -43,16 +49,32 @@ export type CoverChain = {
   fromSlot: string
   /** The bench player who fills `fromSlot`; null when only a free agent could. */
   fill: string | null
+  /** `fill`'s projection this week, when known. */
+  fillPoints?: number | null
+  /**
+   * Points this chain adds over the best direct swap — the reason it is shown at all. Null when
+   * there is no direct swap to compare with, or either side has no projection.
+   */
+  gain?: number | null
 }
 
 export type CoverOptions = {
-  direct: Array<{ name: string; position: string | null }>
+  direct: Array<{ name: string; position: string | null; points?: number | null }>
   chain: CoverChain | null
 }
 
 const DIRECT_LIMIT = 2
 
+const round1 = (n: number) => Math.round(n * 10) / 10
+
 function byRankThenName(a: CoverCandidate, b: CoverCandidate): number {
+  const ap = a.points ?? null
+  const bp = b.points ?? null
+  if (ap !== bp) {
+    if (ap == null) return 1
+    if (bp == null) return -1
+    return bp - ap
+  }
   if (a.rank !== b.rank) {
     if (a.rank == null) return 1
     if (b.rank == null) return -1
@@ -89,12 +111,12 @@ export function coverOptions(input: {
       .filter((b) => normalizePosition(b.position) === want)
       .sort(byRankThenName)
       .slice(0, DIRECT_LIMIT)
-    return { direct: direct.map((d) => ({ name: d.name, position: d.position })), chain: null }
+    return { direct: direct.map((d) => ({ name: d.name, position: d.position, points: d.points ?? null })), chain: null }
   }
 
   const directPool = playable.filter((b) => canFillSlot(injuredSlot, b.position)).sort(byRankThenName)
   const directIds = new Set(directPool.map((d) => d.id))
-  const direct = directPool.slice(0, DIRECT_LIMIT).map((d) => ({ name: d.name, position: d.position }))
+  const direct = directPool.slice(0, DIRECT_LIMIT).map((d) => ({ name: d.name, position: d.position, points: d.points ?? null }))
 
   let best: { pivot: CoverCandidate; fromSlot: string; fill: CoverCandidate } | null = null
   let fallback: { pivot: CoverCandidate; fromSlot: string } | null = null
@@ -118,7 +140,15 @@ export function coverOptions(input: {
 
   if (best) {
     const b = best as { pivot: CoverCandidate; fromSlot: string; fill: CoverCandidate }
-    return { direct, chain: { move: b.pivot.name, toSlot: injuredSlot, fromSlot: b.fromSlot, fill: b.fill.name } }
+    const fillPoints = b.fill.points ?? null
+    const directBest = directPool[0]?.points ?? null
+    const gain = fillPoints != null && directBest != null ? round1(fillPoints - directBest) : null
+    // With both projections known, a chain that does not beat the simple swap is just more taps.
+    if (gain != null && gain <= 0) return { direct, chain: null }
+    return {
+      direct,
+      chain: { move: b.pivot.name, toSlot: injuredSlot, fromSlot: b.fromSlot, fill: b.fill.name, fillPoints, gain },
+    }
   }
   // Nothing on the bench fits either way: the wider flex seat is still the better hole to take to
   // the waiver wire, so say which move opens it.
