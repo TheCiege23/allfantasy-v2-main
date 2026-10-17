@@ -51,6 +51,8 @@ type TriageLeague = {
 
 export type TriageBookRow = {
   initials: string
+  /** The Sleeper id, for the on-demand best free agent (TriageBestAdd). Absent on older payloads. */
+  sleeperId?: string | null
   name: string
   imageUrl: string | null
   leagues: TriageLeague[]
@@ -135,6 +137,7 @@ export function Dash3ATriage({
         key: `${p.name}|${p.team ?? ''}`,
         name: p.name,
         initials: p.initials,
+        sleeperId: p.sleeperId ?? null,
         imageUrl: p.imageUrl,
         playerHref: `/core/players?q=${encodeURIComponent(p.name)}`,
         position: p.position,

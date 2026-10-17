@@ -1739,6 +1739,8 @@ async function loadDash34Data(
       const kickoff = kickoffFor(b.sport, b.team)
       return {
         initials: initialsOf(b.name),
+        /* For the card's on-demand "top add" (TriageBestAdd), which prices this player at zero. */
+        sleeperId: b.sleeperId,
         name: b.name,
         imageUrl: b.imageUrl,
         /*

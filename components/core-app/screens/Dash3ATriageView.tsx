@@ -9,6 +9,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { slotText } from '@/lib/core-app/playerMovesCopy'
 import { coverSlotLabel } from '@/lib/core-app/lineupCover'
+import { BEST_ADD_AUTO_LIMIT, TriageBestAdd } from '@/components/core-app/screens/TriageBestAdd'
 import { ageText } from '@/lib/core-app/shellCopy'
 import type { TriageSlot } from '@/components/core-app/screens/Dash3ATriage'
 
@@ -77,6 +78,8 @@ export type TriageViewRow = {
   key: string
   name: string
   initials: string
+  /** Sleeper id, for the on-demand best free agent; null when we hold none. */
+  sleeperId?: string | null
   imageUrl: string | null
   playerHref: string
   position: string | null
@@ -206,6 +209,18 @@ export function Dash3ATriageView({
   const { language } = useOptionalLanguage()
   const es = language === 'es'
   const hasStarters = rows.length > 0
+  /*
+   * Which league chips get an on-demand "top add" — the first few where he STARTS, NFL only (the
+   * board's ids are Sleeper ids), in the order the card shows them. Capped: see TriageBestAdd.
+   */
+  const bestAddKeys = new Set<string>()
+  for (const p of rows) {
+    if (String(p.sport ?? '').toUpperCase() !== 'NFL' || !p.sleeperId) continue
+    for (const l of p.leagues) {
+      if (bestAddKeys.size >= BEST_ADD_AUTO_LIMIT) break
+      if (l.slot === 'starter') bestAddKeys.add(`${p.key}|${l.id}`)
+    }
+  }
   const title = hasStarters
     ? es ? 'Titulares en duda' : 'Starters in doubt'
     : es ? 'Revisa tu plantilla' : 'Roster check'
@@ -329,6 +344,9 @@ export function Dash3ATriageView({
                             {' '}
                             {coverText(l, es)}
                           </span>
+                        ) : null}
+                        {p.sleeperId && bestAddKeys.has(`${p.key}|${l.id}`) ? (
+                          <TriageBestAdd leagueId={l.id} injuredId={p.sleeperId} es={es} />
                         ) : null}
                       </Link>
                     ))}
