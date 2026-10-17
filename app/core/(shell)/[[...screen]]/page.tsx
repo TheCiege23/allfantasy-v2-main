@@ -31,6 +31,7 @@ import ConnectedFranchiseWarRoom from '@/components/core-app/screens/ConnectedFr
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
+import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
@@ -4553,7 +4554,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           /* The read failed for a league the user HAS selected — say so, and keep
              them on this screen. Falling through to the picker below would tell
              them to choose a league they already chose. */
-          <ScreenLoadError screen="My team" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('my-team')} retryHref={retryHref} />
         ) : /*
            * 2026-09-07 handoff. The ranked board IS the screen now; the picker
            * lives behind `?all=1`, which the board's own footer links to.
@@ -4583,7 +4584,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <Matchup data={matchup} />
           </>
         ) : matchupLoadFailed ? (
-          <ScreenLoadError screen="Matchup" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('matchup')} retryHref={retryHref} />
         ) : showAllLeagues || !matchupPulse ? (
           /*
            * A failed pulse read is not "no games" — fall back to the picker, and SAY it failed.
@@ -4646,7 +4647,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             />
           </>
         ) : tradesLoadFailed ? (
-          <ScreenLoadError screen="Trade Center" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('trades')} retryHref={retryHref} />
         ) : (
           <TradeCenter
             viewerId={userId}
@@ -4659,7 +4660,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         waivers ? (
           <Waivers data={waivers} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />
         ) : waiversLoadFailed ? (
-          <ScreenLoadError screen="Waivers" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('waivers')} retryHref={retryHref} />
         ) : !showAllLeagues && waiversBoard ? (
           <WaiversBoard
             data={waiversBoard}
@@ -4765,7 +4766,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : selectedLeagueId && draftArchiveSlot ? (
           draftArchiveSlot
         ) : draftHqLoadFailed ? (
-          <ScreenLoadError screen="Draft HQ" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} />
         ) : showAllLeagues || !homeDrafts ? (
           <>{draftArchiveSlot}<PickALeague
             tabKey="draft-hq"
@@ -4898,7 +4899,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             ) : null}
           </>
         ) : scoutLoadFailed ? (
-          <ScreenLoadError screen="War Room" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('war-room')} retryHref={retryHref} />
         ) : (
           <PickALeague
             tabKey="war-room"
@@ -5050,7 +5051,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               />
             )
           ) : (
-            <ScreenLoadError screen="Your Week" retryHref={retryHref} />
+            <ScreenLoadError screen={navLabel('week')} retryHref={retryHref} />
           )}
         </>
       ) : activeKey === 'commissioner' ? (

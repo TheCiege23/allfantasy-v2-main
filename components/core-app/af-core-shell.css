@@ -241,8 +241,11 @@
 }
 
 .af-nav-glyph {
+  /* Holds a drawn CoreNavIcon (an inline SVG), not a unicode glyph. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
-  text-align: center;
   opacity: 0.85;
 }
 .af-nav-label {
@@ -1051,6 +1054,7 @@
 
   .af-core .af-tabbar-glyph {
     position: relative;
+    display: inline-flex;
     font-size: 15px;
     line-height: 1;
   }
@@ -3296,6 +3300,7 @@ html[data-mode='light'] .af-core {
   }
   .af-core.af-shell:not([data-league-first='true']) .af-tabbar-glyph {
     position: relative;
+    display: inline-flex;
     font-size: 15px;
     line-height: 1;
   }

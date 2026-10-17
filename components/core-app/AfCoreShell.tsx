@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
+import { navLabel } from '@/lib/core-app/navLabels'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
@@ -532,12 +533,12 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     flag === false ? [] : [item]
 
   return [
-    { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
+    { key: 'home', label: navLabel('home'), glyph: '▣', href: inLeague('/core') },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
       key: 'my-team',
-      label: 'My team',
+      label: navLabel('my-team'),
       glyph: '◈',
       href: props.selectedLeagueId
         ? `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -559,7 +560,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Reads a scored week — hidden until this league has one. */
     ...ifScored({
       key: 'matchup',
-      label: 'Matchup',
+      label: navLabel('matchup'),
       glyph: '⚔',
       href: props.selectedLeagueId
         ? `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -567,7 +568,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     }),
     ...ifImported(props.importCapabilities?.trades, {
       key: 'trades',
-      label: 'Trades',
+      label: navLabel('trades'),
       glyph: '⇄',
       href: props.selectedLeagueId
         ? `/core/trades?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -577,7 +578,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     }),
     {
       key: 'waivers',
-      label: 'Waivers',
+      label: navLabel('waivers'),
       glyph: '◷',
       href: props.selectedLeagueId
         ? `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -585,7 +586,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'players',
-      label: 'Player Finder',
+      label: navLabel('players'),
       glyph: '●',
       // 38a scopes this to the league in context — "in THIS league" rather than
       // "across every platform" — so the link carries the league the way the
@@ -606,7 +607,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Reads a scored week — hidden until this league has one. */
     ...ifScored({
       key: 'week',
-      label: 'Your week',
+      label: navLabel('week'),
       glyph: '◱',
       href: props.selectedLeagueId
         ? `/core/week?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -620,7 +621,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
      */
     {
       key: 'live',
-      label: 'Live scores',
+      label: navLabel('live'),
       glyph: '◉',
       href: props.selectedLeagueId
         ? `/core/live?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -631,7 +632,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'war-room',
-      label: 'War Room',
+      label: navLabel('war-room'),
       glyph: '◆',
       href: props.selectedLeagueId
         ? `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -639,7 +640,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'draft-hq',
-      label: 'Draft HQ',
+      label: navLabel('draft-hq'),
       glyph: '▤',
       href: props.selectedLeagueId
         ? `/core/draft-hq?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -733,7 +734,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Ranks by points scored, so it needs a scored week. */
     ...ifScored({
       key: 'standings',
-      label: 'Standings',
+      label: navLabel('standings'),
       glyph: '≡',
       href: props.selectedLeagueId
         ? `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -742,7 +743,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Projects from played weeks — nothing to project from yet. */
     ...ifScored({
       key: 'season-outlook',
-      label: 'Season Outlook',
+      label: navLabel('season-outlook'),
       glyph: '◎',
       href: props.selectedLeagueId
         ? `/core/season-outlook?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -2145,7 +2146,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     aria-current={item.key === active ? 'page' : undefined}
                   >
                     <span className="af-nav-glyph" aria-hidden>
-                      {item.glyph}
+                      <CoreNavIcon navKey={item.key} size={16} />
                     </span>
                     <span className="af-nav-label">{copy(item.label)}</span>
                     {item.badge ? (
@@ -2457,7 +2458,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             data-active={active !== 'live' && !mobileMoreOpen}
             aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
-            <span className="af-tabbar-glyph" aria-hidden>▣</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="home" size={20} /></span>
             <span className="af-tabbar-label">{copy('Leagues')}</span>
           </Link>
           <Link
@@ -2470,7 +2471,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             aria-label={props.liveGameCount && props.liveGameCount > 0 ? `Live, ${props.liveGameCount} ${props.liveGameCount === 1 ? 'game' : 'games'} in progress` : undefined}
           >
             <span className="af-tabbar-glyph" aria-hidden>
-              ●
+              <CoreNavIcon navKey="live" size={20} />
               {props.liveGameCount && props.liveGameCount > 0 ? <span className="af-tabbar-dot" data-tone="live" /> : null}
             </span>
             <span className="af-tabbar-label">{copy('Live')}</span>
@@ -2480,7 +2481,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             className="af-tabbar-item af-tabbar-chimmy"
             onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'chimmy' } }))}
           >
-            <span className="af-tabbar-glyph" aria-hidden>✦</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="chimmy" size={20} /></span>
             <span className="af-tabbar-label">Chimmy</span>
           </button>
           <button
@@ -2494,7 +2495,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               setMobileMoreOpen((open) => !(open && mobileSheet === 'play'))
             }}
           >
-            <span className="af-tabbar-glyph" aria-hidden>⊕</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="play" size={20} /></span>
             <span className="af-tabbar-label">{copy('Play')}</span>
           </button>
           <button
@@ -2509,7 +2510,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               setMobileMoreOpen((open) => !(open && mobileSheet === 'me'))
             }}
           >
-            <span className="af-tabbar-glyph" aria-hidden>◉</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="me" size={20} /></span>
             <span className="af-tabbar-label">{copy('Me')}</span>
           </button>
         </nav>
@@ -2525,7 +2526,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-current={item.key === active ? 'page' : undefined}
             >
               <span className="af-tabbar-glyph" aria-hidden>
-                {item.glyph}
+                <CoreNavIcon navKey={item.key} size={20} />
                 {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
               </span>
               <span className="af-tabbar-label">{copy(item.label)}</span>
@@ -2541,7 +2542,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             onClick={() => setMobileMoreOpen((open) => !open)}
           >
             <span className="af-tabbar-glyph" aria-hidden>
-              ⋯
+              <CoreNavIcon navKey="more" size={20} />
             </span>
             <span className="af-tabbar-label">{copy('More')}</span>
           </button>
