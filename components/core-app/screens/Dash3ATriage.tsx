@@ -101,6 +101,7 @@ export function Dash3ATriage({
   valueBasis,
   freshness = null,
   depthAlerts = [],
+  pro = null,
 }: {
   book: TriageBookRow[] | null
   now: Date
@@ -116,6 +117,12 @@ export function Dash3ATriage({
    * per row, and omitted entirely when no row carries a price.
    */
   valueBasis?: { format: string; qbFormat: string } | null
+  /**
+   * AF Pro access for the card's paid parts — the best-free-agent button and the Questionable
+   * game-time calls (founder decision 2026-10-17; swap tips and "Set lineup" stay free). Null when
+   * the plan could not be read: fails OPEN, like the rest of /core's depth reads.
+   */
+  pro?: { unlocked: boolean; upgradePath: string } | null
 }) {
   /*
    * ⚠ DECISIONS ONLY. The loader's full book (BOOK_LIMIT rows, every
@@ -135,7 +142,8 @@ export function Dash3ATriage({
    * rows, and never counted toward the overflow, so the wall-of-headshots problem above cannot return.
    */
   const nowMs = now.getTime()
-  const gameTimeCalls = (book ?? [])
+  const proOpen = pro?.unlocked !== false
+  const gameTimeCalls = (proOpen ? book ?? [] : [])
     .filter((p) => {
       if (p.tone !== 'warn' || p.startingIn <= 0 || !p.nextKickoffAt) return false
       const until = new Date(p.nextKickoffAt).getTime() - nowMs
@@ -197,6 +205,7 @@ export function Dash3ATriage({
       overflow={overflow}
       depthAlerts={depthAlerts.slice(0, 4)}
       valueBasis={valueBasis && rows.some((r) => r.value) ? valueBasis : null}
+      proUpsell={proOpen ? null : pro?.upgradePath ?? null}
       freshness={freshness}
     />
   )

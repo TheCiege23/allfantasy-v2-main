@@ -59,7 +59,7 @@ export type CoverChain = {
 }
 
 export type CoverOptions = {
-  direct: Array<{ name: string; position: string | null; points?: number | null }>
+  direct: Array<{ id?: string; name: string; position: string | null; points?: number | null }>
   chain: CoverChain | null
 }
 
@@ -111,12 +111,12 @@ export function coverOptions(input: {
       .filter((b) => normalizePosition(b.position) === want)
       .sort(byRankThenName)
       .slice(0, DIRECT_LIMIT)
-    return { direct: direct.map((d) => ({ name: d.name, position: d.position, points: d.points ?? null })), chain: null }
+    return { direct: direct.map((d) => ({ id: d.id, name: d.name, position: d.position, points: d.points ?? null })), chain: null }
   }
 
   const directPool = playable.filter((b) => canFillSlot(injuredSlot, b.position)).sort(byRankThenName)
   const directIds = new Set(directPool.map((d) => d.id))
-  const direct = directPool.slice(0, DIRECT_LIMIT).map((d) => ({ name: d.name, position: d.position, points: d.points ?? null }))
+  const direct = directPool.slice(0, DIRECT_LIMIT).map((d) => ({ id: d.id, name: d.name, position: d.position, points: d.points ?? null }))
 
   let best: { pivot: CoverCandidate; fromSlot: string; fill: CoverCandidate } | null = null
   let fallback: { pivot: CoverCandidate; fromSlot: string } | null = null

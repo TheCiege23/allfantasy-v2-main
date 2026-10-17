@@ -106,6 +106,11 @@ export type HomeLoads = {
   trades: Promise<ComponentProps<typeof DashTradeBand>['trades']>
   /** AF Pro's trade depth — gates the band's "why this grade" line. Null when it could not be read. */
   tradeDepth: Promise<CoreDepthAccess | null>
+  /**
+   * AF Pro's player depth — gates the triage card's best-free-agent button and its Questionable
+   * game-time calls (2026-10-17). Absent or null when it could not be read: the card fails OPEN.
+   */
+  playerDepth?: Promise<CoreDepthAccess | null>
   /** The daily check-in streak (lib/core-app/dailyStreakStore.ts). Null when it could not be read. */
   streak: Promise<StreakSummary | null>
   brief: Promise<ComponentProps<typeof DashSinceLastVisit>['brief']>
@@ -297,13 +302,14 @@ async function DraftsCard({ drafts, now }: { drafts: HomeLoads['drafts']; now: D
   return <DashDraftsBand data={await drafts} now={now} />
 }
 
-async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: Date }) {
-  const data = await dash34
+async function TriageCard({ dash34, playerDepth, now }: { dash34: HomeLoads['dash34']; playerDepth?: HomeLoads['playerDepth']; now: Date }) {
+  const [data, depth] = await Promise.all([dash34, (playerDepth ?? Promise.resolve(null)).catch(() => null)])
   if (!data) return null
   return (
     <Dash3ATriage
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
+      pro={depth ? { unlocked: depth.unlocked, upgradePath: depth.upgradePath } : null}
       valueBasis={data.valueBasis ?? null}
       depthAlerts={data.depthAlerts ?? []}
       freshness={
@@ -559,7 +565,7 @@ export function CoreHomeCards({
       <GameDayCard strip={loads.strip} plays={loads.plays} regularSeason={loads.regularSeason} now={now} />,
     ),
     drafts: card('drafts', <DraftsCard drafts={loads.drafts} now={now} />),
-    triage: card('triage', <TriageCard dash34={loads.dash34} now={now} />),
+    triage: card('triage', <TriageCard dash34={loads.dash34} playerDepth={loads.playerDepth} now={now} />),
     'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} tradeDepth={loads.tradeDepth} now={now} />),
     carryover: card('carryover', <CarryoverCard dash34={loads.dash34} />),
     'user-os': card('user-os', <UserOsCard userOs={loads.userOs} />),

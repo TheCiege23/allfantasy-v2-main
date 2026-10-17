@@ -470,3 +470,12 @@
 .af-triage-cta--fix {
   font-weight: 600;
 }
+
+.af-triage-upsell {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--af-accent, #7c5cff);
+}
