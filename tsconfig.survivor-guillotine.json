@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false, "jsx": "react-jsx" },
+  "include": [
+    "next-env.d.ts",
+    "lib/survivor-guillotine/**/*.ts",
+    "components/survivor-guillotine/**/*.tsx",
+    "app/survivor-guillotine/**/*.tsx",
+    "app/api/leagues/[leagueId]/survivor-guillotine/**/*.ts",
+    "app/api/cron/waivers/route.ts",
+    "__tests__/survivor-guillotine-engine.test.ts",
+    "__tests__/survivor-guillotine-live.test.ts",
+    "__tests__/survivor-guillotine-capped-scoring.test.ts",
+    "__tests__/survivor-guillotine-corrections.test.ts",
+    "__tests__/survivor-guillotine-setup.test.tsx"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -57,14 +57,16 @@ describe('search prices use the analyzer basis', () => {
     expect((await GET(request('q=Test&sport=NFL&leagueId=l1'))).status).toBe(404)
   })
 
-  it('uses the same non-NFL conversion as grading and preserves missing values', async () => {
+  it('agrees with grading: a non-NFL row carries no price, and says why', async () => {
+    // Grading no longer converts `sports_players.dynasty_value` (a list position) into a price, so
+    // search must not show one either — the picker and the verdict say the same thing.
     mocks.search.mockResolvedValue([
-      { id: 'NCAAF:c1', name: 'Test Priced', sport: 'NCAAF', position: 'QB', dynastyValue: 20 },
-      { id: 'NCAAF:c2', name: 'Test Unpriced', sport: 'NCAAF', position: 'RB', dynastyValue: 0 },
+      { id: 'NCAAF:c1', name: 'Test Ranked', sport: 'NCAAF', position: 'QB', dynastyValue: 20 },
+      { id: 'NCAAF:c2', name: 'Test Unranked', sport: 'NCAAF', position: 'RB', dynastyValue: 0 },
     ])
     const response = await GET(request('q=Test&sport=NCAAF'))
     expect(await response.json()).toEqual([
-      expect.objectContaining({ value: 1500, unpricedReason: null }),
+      expect.objectContaining({ value: null, unpricedReason: expect.objectContaining({ code: 'no_feed_for_sport' }) }),
       expect.objectContaining({ value: null, unpricedReason: expect.objectContaining({ code: 'no_feed_for_sport' }) }),
     ])
   })

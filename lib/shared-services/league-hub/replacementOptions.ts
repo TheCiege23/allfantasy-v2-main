@@ -145,7 +145,8 @@ export async function resolveReplacementOptions(args: {
    * projection table is keyed on Sleeper ids: a bench id would carry a stranger's projection, and
    * nobody could be subtracted from the "unrostered" pool. Honest empty lists, with the reason.
    */
-  if (isForeignIdSpace(league.platform)) {
+  // A native league of another sport too: its Rolling Insights ids are not Sleeper ids (rosterIdSpace.ts).
+  if (isForeignIdSpace(league.platform, league.sport)) {
     return {
       leagueId,
       affectedPlayerId,

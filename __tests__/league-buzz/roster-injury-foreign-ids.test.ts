@@ -24,9 +24,10 @@ const ROSTERS: Row[] = [
   { id: 'r-other-user', leagueId: 'L-x', platformUserId: 'u2', playerData: { players: ['4046'] }, league: { platform: 'sleeper', sport: 'NFL' } },
 ]
 const IDENTITY_MAP: Row[] = [{ espnId: '4040404', sleeperId: '4046' }]
-/** The Sleeper-keyed injury table: 6038 and 1332 ARE Sleeper ids — for strangers. */
-const SLEEPER_INJURED: Record<string, string> = { '6038': 'O', '1332': 'O', '4046': 'Q' }
+/** Sleeper's own `SportsPlayer` rows: 6038 and 1332 ARE Sleeper ids — for strangers. */
 const SLEEPER_NAMES: Record<string, string> = { '4046': 'Mapped Guy', '6038': 'Sleeper Stranger', '1332': 'Ifeanyi Momah', '9228': 'Bryce Young' }
+/** The live injury feed, by name: the strangers are hurt too, so naming one would announce him. */
+const FEED_INJURED: Record<string, string> = { 'Sleeper Stranger': 'Out', 'Ifeanyi Momah': 'Out', 'Mapped Guy': 'Questionable' }
 
 function matches(row: Row, where: Where): boolean {
   for (const [key, cond] of Object.entries(where)) {
@@ -47,19 +48,33 @@ vi.mock('@/lib/prisma', () => ({
     userProfile: { findUnique: vi.fn(async () => null) },
     roster: { findMany: vi.fn(async ({ where }: { where: Where }) => ROSTERS.filter((r) => matches(r, where))) },
     playerIdentityMap: { findMany: vi.fn(async ({ where }: { where: Where }) => IDENTITY_MAP.filter((r) => matches(r, where))) },
-  },
-}))
-vi.mock('@/lib/decision-os/world/injuryEnrichedWorld', () => ({
-  resolveInjuryContext: vi.fn(async (_sport: string, ids: string[]) => {
-    h.injuryAsked.push(...ids)
-    return {
-      byId: new Map(
-        ids
-          .filter((id) => SLEEPER_INJURED[id])
-          .map((id) => [id, { status: SLEEPER_INJURED[id], availabilityCategory: 'unavailable', freshness: null }]),
+    /* The by-Sleeper-id identity read. Records what it was ASKED, which is what this file pins. */
+    sportsPlayer: {
+      findMany: vi.fn(async ({ where }: { where: { OR: Array<{ sleeperId?: { in: string[] } }> } }) => {
+        const ids = where.OR.find((c) => c.sleeperId)?.sleeperId?.in ?? []
+        h.injuryAsked.push(...ids)
+        return ids
+          .filter((id) => SLEEPER_NAMES[id])
+          .map((id) => ({ sleeperId: id, source: 'sleeper', name: SLEEPER_NAMES[id], team: null, position: 'WR', status: 'Active' }))
+      }),
+    },
+    sportsInjury: {
+      findMany: vi.fn(async () =>
+        Object.entries(FEED_INJURED).map(([playerName, status]) => ({
+          playerName,
+          status,
+          type: null,
+          description: null,
+          date: new Date(),
+          week: null,
+          source: 'rolling_insights',
+          fetchedAt: new Date(),
+          team: null,
+          position: 'WR',
+        })),
       ),
-    }
-  }),
+    },
+  },
 }))
 vi.mock('@/lib/roster/resolvePlayerNames', () => ({
   resolvePlayerNamesForSport: vi.fn(async (ids: string[]) => new Map(ids.map((id) => [id, SLEEPER_NAMES[id] ?? `Player ${id}`]))),

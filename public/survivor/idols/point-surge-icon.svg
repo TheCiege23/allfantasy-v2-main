@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<defs>
+<radialGradient id="point-surge-ic-aura" cx="50%" cy="45%" r="50%"><stop offset="0" stop-color="#22d3ee" stop-opacity=".55"/><stop offset=".6" stop-color="#22d3ee" stop-opacity=".14"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient>
+<linearGradient id="point-surge-ic-lit" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a6478"/><stop offset="1" stop-color="#1a1e28"/></linearGradient>
+<linearGradient id="point-surge-ic-dark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#151821"/><stop offset="1" stop-color="#06070b"/></linearGradient>
+<filter id="point-surge-ic-blur" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.4"/></filter>
+</defs>
+<circle cx="32" cy="30" r="31" fill="url(#point-surge-ic-aura)"/>
+<ellipse cx="32" cy="62" rx="15" ry="2" fill="#000" opacity=".5"/>
+<path d="M32,2 L32,62 L25,59 L18,46 L20,26 L11,27 Z" fill="url(#point-surge-ic-lit)"/>
+<path d="M32,2 L32,62 L39,59 L46,46 L44,26 L53,27 Z" fill="url(#point-surge-ic-dark)"/>
+<path d="M32,2 L53,27 L44,26 L46,46 L39,59 L32,62 L25,59 L18,46 L20,26 L11,27 Z" fill="none" stroke="#120c06" stroke-width="2.6" stroke-linejoin="round"/>
+<g fill="none" stroke-linejoin="miter">
+<path d="M25,20 L32,14 L39,20 M22,28 L32,20 L42,28" stroke="#22d3ee" stroke-width="4" filter="url(#point-surge-ic-blur)"/>
+<path d="M25,20 L32,14 L39,20 M22,28 L32,20 L42,28" stroke="#22d3ee" stroke-width="2.6"/>
+<path d="M25,20 L32,14 L39,20 M22,28 L32,20 L42,28" stroke="#e9feff" stroke-width="1"/>
+</g>
+<path d="M22,34 L30,37 L29,39.5 L23,37.5 Z M42,34 L34,37 L35,39.5 L41,37.5 Z" fill="#9ff0ff" stroke="#120c06" stroke-width=".8"/>
+<path d="M13,27.5 L18,33 L16.5,38 L21,43" fill="none" stroke="#22d3ee" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="miter"/>
+<path d="M51,27.5 L46,32 L47.5,37 L44,41" fill="none" stroke="#22d3ee" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="miter"/>
+<path d="M26,50 L38,50" stroke="#22d3ee" stroke-width="1.6"/>
+<path d="M33,4 L52,26" stroke="#22d3ee" stroke-width="1" opacity=".8"/>
+</svg>

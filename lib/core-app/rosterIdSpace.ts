@@ -45,13 +45,48 @@ export type RosterIdSpace = 'sleeper' | 'espn' | 'other'
 
 export const ROSTER_KEYS = ['players', 'starters', 'reserve', 'taxi'] as const
 
-export function rosterIdSpaceOf(platform: string | null | undefined): RosterIdSpace {
+/**
+ * The league's sport, as these helpers take it: a string (any case) when the caller knows it, or
+ * absent when it does not. Absent keeps the platform-only answer — see `isKnownNonNflSport`.
+ */
+export type RosterIdSport = string | null | undefined
+
+/**
+ * 🛑 A NATIVE LEAGUE SPEAKS SLEEPER IDS ONLY IN NFL (2026-10-12). Native pools are seeded from
+ * Sleeper for NFL alone; in every other sport a native roster holds a provider's numbers — Rolling
+ * Insights' bare ids, TheSportsDB's `tsdb_…` (see `leagueIdSpaces`). And the tables a Sleeper id is
+ * looked up on carry one for NFL rows only: `SportsPlayer.sleeperId` 13,838 NFL rows and ZERO in
+ * NBA/MLB/NHL/NCAAB/NCAAF/SOCCER, `PlayerIdentityMap.sleeperId` likewise (`mayBeSleeperId`). So an
+ * unscoped `sleeperId` read named NFL strangers: on production league `d41382f9…` ("NHL Season
+ * Verification") 49 of its 72 roster ids did — NHL A.J. Greer (RI 1114) as NFL WR Justin Blackmon,
+ * Adam Clendening (RI 268) as QB Alex Smith — on My Team, the live page and in Chimmy's grounding.
+ * A native league whose sport is KNOWN and is not NFL is therefore stripped like a foreign one.
+ *
+ * ⚠ A SLEEPER LEAGUE OF ANOTHER SPORT IS NOT TOUCHED. Its ids ARE Sleeper ids (Sleeper's NBA space),
+ * and the readers built for it scope every read by sport (`gameDayTriageLoader`, the rail) — their
+ * tests pin an NBA Sleeper league resolving to NBA players. Only the native "Sleeper space" was a
+ * claim about ids nobody had checked.
+ *
+ * ⚠ AN UNKNOWN SPORT KEEPS THE PLATFORM-ONLY ANSWER. Treating it as non-NFL would strip every native
+ * NFL league reached by a caller that has not been threaded (102 rosters on production), which is a
+ * whole product going blank to prevent a bug on four. A caller that can see the sport passes it.
+ */
+export function isKnownNonNflSport(sport: RosterIdSport): boolean {
+  const s = String(sport ?? '').trim().toUpperCase()
+  return s !== '' && s !== 'NFL'
+}
+
+export function rosterIdSpaceOf(platform: string | null | undefined, sport?: RosterIdSport): RosterIdSpace {
   const p = (platform ?? '').trim().toLowerCase()
   if (p === 'espn') return 'espn'
-  // Native leagues speak Sleeper ids. `isNativePlatform` owns the native spellings (allfantasy, af,
-  // manual, native); a local copy of that list once omitted `af` and `native` and would have
-  // stripped a native league's roster as foreign.
-  if (p === '' || p === 'sleeper' || isNativePlatform(p)) return 'sleeper'
+  if (p === 'sleeper') return 'sleeper'
+  // Native leagues speak Sleeper ids — in NFL. `isNativePlatform` owns the native spellings
+  // (allfantasy, af, manual, native); a local copy of that list once omitted `af` and `native` and
+  // would have stripped a native league's roster as foreign. An unknown platform ('') keeps the
+  // Sleeper answer whatever the sport: `League.platform` is never empty, so '' is a caller with no
+  // league row, and the rail's and the advisor's tests pin it as Sleeper's space.
+  if (p === '') return 'sleeper'
+  if (isNativePlatform(p)) return isKnownNonNflSport(sport) ? 'other' : 'sleeper'
   return 'other'
 }
 
@@ -59,8 +94,8 @@ export function rosterIdSpaceOf(platform: string | null | undefined): RosterIdSp
  * THE rule: this league's roster ids must never be read as Sleeper ids. One predicate so the
  * translators, the crosswalk callers, the rail and the search counts cannot disagree about it.
  */
-export function isForeignIdSpace(platform: string | null | undefined): boolean {
-  return rosterIdSpaceOf(platform) === 'other'
+export function isForeignIdSpace(platform: string | null | undefined, sport?: RosterIdSport): boolean {
+  return rosterIdSpaceOf(platform, sport) === 'other'
 }
 
 /**
@@ -106,8 +141,8 @@ export function stripForeignIds(playerData: unknown): Record<string, unknown> {
  * To READ an ESPN roster, translate it: `sleeperReadableRosters` below, which is async because
  * translation is one indexed read.
  */
-export function sleeperReadablePlayerData(platform: string | null | undefined, playerData: unknown): unknown {
-  if (rosterIdSpaceOf(platform) === 'sleeper') return playerData
+export function sleeperReadablePlayerData(platform: string | null | undefined, playerData: unknown, sport?: RosterIdSport): unknown {
+  if (rosterIdSpaceOf(platform, sport) === 'sleeper') return playerData
   return Array.isArray(playerData) ? [] : stripForeignIds(playerData)
 }
 
@@ -232,8 +267,9 @@ export type TranslatedRosters<T> = {
 export async function translateRostersToSleeperIds<T extends { playerData: unknown }>(
   platform: string | null | undefined,
   rosters: readonly T[],
+  sport?: RosterIdSport,
 ): Promise<TranslatedRosters<T>> {
-  const idSpace = rosterIdSpaceOf(platform)
+  const idSpace = rosterIdSpaceOf(platform, sport)
   if (idSpace === 'other') {
     // Counted, never read: a foreign id surviving to a Sleeper-id lookup IS the collision.
     return {
@@ -265,6 +301,8 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
  *   - ESPN                          translated through `PlayerIdentityMap.espnId → sleeperId`, ids
  *                                   with no mapping DROPPED (see `translatePlayerData`)
  *   - every other platform          stripped (see the header and `stripForeignIds`)
+ *   - a native league of a KNOWN     stripped (`rosterIdSpaceOf`): its ids are Rolling Insights' —
+ *     non-NFL sport                  pass `sport` wherever the caller holds it
  *
  * ONE indexed read covers every ESPN roster passed, whatever the mix of leagues. `platform` is the
  * league's platform when every roster is from one league, or a function giving each roster's.
@@ -277,8 +315,9 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
 export async function sleeperReadableRosters<T extends { playerData: unknown }>(
   rosters: readonly T[],
   platform: string | null | undefined | ((roster: T) => string | null | undefined),
+  sport?: RosterIdSport | ((roster: T) => RosterIdSport),
 ): Promise<T[]> {
-  return (await sleeperReadableRostersWithGaps(rosters, platform)).rosters
+  return (await sleeperReadableRostersWithGaps(rosters, platform, sport)).rosters
 }
 
 /**
@@ -295,9 +334,11 @@ export async function sleeperReadableRosters<T extends { playerData: unknown }>(
 export async function sleeperReadableRostersWithGaps<T extends { playerData: unknown }>(
   rosters: readonly T[],
   platform: string | null | undefined | ((roster: T) => string | null | undefined),
+  sport?: RosterIdSport | ((roster: T) => RosterIdSport),
 ): Promise<{ rosters: T[]; untranslatedEspnIds: string[] }> {
   const platformOf = typeof platform === 'function' ? platform : () => platform
-  const spaceOf = rosters.map((r) => rosterIdSpaceOf(platformOf(r)))
+  const sportOf = typeof sport === 'function' ? sport : () => sport
+  const spaceOf = rosters.map((r) => rosterIdSpaceOf(platformOf(r), sportOf(r)))
   const espnIds = collectTranslatableIds(rosters.filter((_, i) => spaceOf[i] === 'espn').map((r) => r.playerData))
   const map = espnIds.length > 0 ? await loadEspnToSleeperMap(espnIds) : new Map<string, string>()
   return {
@@ -311,17 +352,23 @@ export async function sleeperReadableRostersWithGaps<T extends { playerData: unk
 }
 
 /** One roster's `playerData`, through `sleeperReadableRosters`. For a loop, pass the rosters at once. */
-export async function sleeperReadablePlayerDataOf(platform: string | null | undefined, playerData: unknown): Promise<unknown> {
-  return (await sleeperReadableRosters([{ playerData }], platform))[0]!.playerData
+export async function sleeperReadablePlayerDataOf(
+  platform: string | null | undefined,
+  playerData: unknown,
+  sport?: RosterIdSport,
+): Promise<unknown> {
+  return (await sleeperReadableRosters([{ playerData }], platform, sport))[0]!.playerData
 }
 
 /**
  * Rosters spanning many leagues, by league — `sleeperReadableRosters` keyed on `leagueId`.
- * Rosters of leagues absent from `platformByLeague` are treated as Sleeper-id rosters.
+ * Rosters of leagues absent from `platformByLeague` are treated as Sleeper-id rosters; a league
+ * absent from `sportByLeague` (or no map at all) keeps the platform-only answer.
  */
 export async function translateRostersByLeague<T extends { leagueId: string; playerData: unknown }>(
   rosters: readonly T[],
   platformByLeague: ReadonlyMap<string, string | null | undefined>,
+  sportByLeague?: ReadonlyMap<string, RosterIdSport>,
 ): Promise<T[]> {
-  return sleeperReadableRosters(rosters, (r) => platformByLeague.get(r.leagueId))
+  return sleeperReadableRosters(rosters, (r) => platformByLeague.get(r.leagueId), (r) => sportByLeague?.get(r.leagueId))
 }

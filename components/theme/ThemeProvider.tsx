@@ -34,6 +34,7 @@ function readInitialModeFromDocument(): AppMode {
 
 export function ThemeProvider(props: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<AppMode>(readInitialModeFromDocument)
+  const [restored, setRestored] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -48,6 +49,8 @@ export function ThemeProvider(props: { children: React.ReactNode }) {
     } catch {
       /* ignore */
     }
+    // Commit the restored mode before any effect writes it back to storage/DOM.
+    setRestored(true)
   }, [])
 
   useEffect(() => {
@@ -62,7 +65,7 @@ export function ThemeProvider(props: { children: React.ReactNode }) {
 
   /** When theme is System, repaint when OS light/dark preference changes. */
   useEffect(() => {
-    if (typeof window === "undefined" || mode !== "system") return
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function" || !restored || mode !== "system") return
     const mq = window.matchMedia("(prefers-color-scheme: light)")
     const onChange = () => {
       applyThemeToDocument("system")
@@ -70,18 +73,18 @@ export function ThemeProvider(props: { children: React.ReactNode }) {
     mq.addEventListener("change", onChange)
     applyThemeToDocument("system")
     return () => mq.removeEventListener("change", onChange)
-  }, [mode])
+  }, [mode, restored])
 
   /** Always paint the active theme to <html data-mode> so global backgrounds/images react immediately. */
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !restored) return
     applyThemeToDocument(mode)
-  }, [mode])
+  }, [mode, restored])
 
   useEffect(() => {
-    if (typeof document === "undefined") return
+    if (typeof document === "undefined" || !restored) return
     setStoredTheme(mode)
-  }, [mode])
+  }, [mode, restored])
 
   const api = useMemo<ThemeCtx>(() => {
     return {

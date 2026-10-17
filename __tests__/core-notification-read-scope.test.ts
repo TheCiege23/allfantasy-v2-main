@@ -23,3 +23,7 @@ it('rejects malformed scope instead of clearing the whole account', async () => 
   expect((await request({ ids: 'all', leagueId: 3 })).status).toBe(400)
   expect(updateMany).not.toHaveBeenCalled()
 })
+it.each([null, [], { ids: [3] }, { ids: [''] }, { ids: [] }, { ids: 'all', unknown: true }])('rejects malformed receipt %j before writing', async (body) => {
+  expect((await request(body as any)).status).toBe(400)
+  expect(updateMany).not.toHaveBeenCalled()
+})

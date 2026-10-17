@@ -12,7 +12,8 @@
  * valid brief, not a loading placeholder — see `CommissionerCommandCenterSection.tsx`'s own
  * zero-input-while-loading convention).
  */
-import { CheckCircle2, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { CheckCircle2, Sparkles, Trophy } from 'lucide-react'
 import type { DailyBrief } from '@/lib/decision-os/dailyBrief'
 import { DecisionOsBadge, DecisionOsPanel, decisionOsCardClassName, SEVERITY_DOT_CLASS } from './DecisionOsCardPrimitives'
 
@@ -33,6 +34,17 @@ export default function TodaysBriefCard({ brief, leagueNameById }: TodaysBriefCa
         <p className="mt-3 text-lg font-black leading-snug text-primary" data-testid="todays-brief-summary">
           {brief.summary}
         </p>
+        {brief.legacyLine ? (
+          <p className="mt-2 flex items-start gap-2 text-sm text-secondary" data-testid="todays-brief-legacy-line">
+            <Trophy className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+            <span>
+              {brief.legacyLine}{' '}
+              <Link href="/core/career" className="font-semibold text-primary underline-offset-2 hover:underline">
+                Your career →
+              </Link>
+            </span>
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-4 p-5">

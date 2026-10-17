@@ -140,7 +140,7 @@ const SURVIVOR_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'survivor_setup', label: '🏝 Survivor Setup' },
   { id: 'survivor_tribes', label: '🔥 Tribes' },
   { id: 'survivor_challenges', label: '⚡ Challenges' },
-  { id: 'survivor_tribal', label: '🗳 Tribal Council' },
+  { id: 'survivor_tribal', label: '🗳 Torch Ceremony' },
   { id: 'survivor_idols', label: '🔮 Idols & Powers' },
   { id: 'survivor_exile', label: '🏚 Exile Island' },
   { id: 'survivor_merge', label: '🌊 Merge & Jury' },

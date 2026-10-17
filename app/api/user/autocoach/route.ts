@@ -7,10 +7,16 @@ import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { isBestBallLeague } from '@/lib/autocoach/AutoCoachEngine'
 import { parseAutoCoachUserPreferences } from '@/lib/autocoach/autoCoachPreferences'
+import { listAutoCoachRosterPlayers } from '@/lib/autocoach/autoCoachRosterPlayers'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+/**
+ * GET /api/user/autocoach — the global switch, preferences and per-league rows.
+ * `?include=players` adds `players`: the user's rostered players in those leagues, for the Settings
+ * exclusion picker. Opt-in, because the league Team tab polls this route and needs none of it.
+ */
+export async function GET(req: NextRequest) {
   try {
     const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
     const userId = session?.user?.id
@@ -31,11 +37,20 @@ export async function GET() {
             autoCoachEnabled: true,
             leagueVariant: true,
             bestBallMode: true,
+            sport: true,
           },
         },
       },
       orderBy: { updatedAt: 'desc' },
     })
+
+    const includePlayers = req.nextUrl.searchParams.get('include') === 'players'
+    const players = includePlayers
+      ? await listAutoCoachRosterPlayers(
+          userId,
+          settings.map((s) => ({ id: s.league.id, name: s.league.name, sport: String(s.league.sport) })),
+        )
+      : undefined
 
     return NextResponse.json({
       globalEnabled: profile?.autoCoachGlobalEnabled ?? true,
@@ -50,6 +65,7 @@ export async function GET() {
         totalSwapsMade: s.totalSwapsMade,
         league: s.league,
       })),
+      ...(players ? { players } : {}),
     })
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err))

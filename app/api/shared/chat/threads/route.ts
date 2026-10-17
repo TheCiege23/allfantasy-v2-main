@@ -4,6 +4,7 @@ import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { createPlatformThread, getPlatformChatThreads } from '@/lib/platform/chat-service'
 import { hasBlockBetween, resolveConversationSafetyForUser } from '@/lib/moderation'
 import { prisma } from '@/lib/prisma'
+import { chatRateLimitResponse } from '@/lib/chat-core/chatRateLimits'
 
 /**
  * The season and week matchup rooms should be created for.
@@ -62,6 +63,12 @@ export async function POST(req: NextRequest) {
 
   if (!['dm', 'group', 'ai'].includes(threadType)) {
     return NextResponse.json({ error: 'Unsupported threadType' }, { status: 400 })
+  }
+
+  // A conversation with other people is the spam vector; a private Chimmy thread is not.
+  if (threadType !== 'ai') {
+    const limited = chatRateLimitResponse(user.appUserId, threadType === 'dm' ? 'dm_start' : 'thread_create')
+    if (limited) return limited
   }
 
   let memberUserIds: string[] = []

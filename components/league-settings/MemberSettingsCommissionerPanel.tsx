@@ -114,7 +114,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
         return
       }
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Failed to load'); return }
+      if (!res.ok) { setError(data.error ?? t('leagueSettings.loadFailed')); return }
 
       setCanManageMembers(true)
 
@@ -184,7 +184,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
         }))
       setAvailableUsers(unassigned)
     } catch {
-      setError('Failed to load member settings')
+      setError(t('member.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -228,15 +228,15 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
       })
       const data = (await res.json()) as { inviteUrl?: string; error?: string }
       if (!res.ok) {
-        toast.error(data.error ?? 'Could not create invite link')
+        toast.error(data.error ?? t('member.inviteFailed'))
         return
       }
       if (data.inviteUrl) {
         await navigator.clipboard.writeText(data.inviteUrl)
-        toast.success('Invite link copied to clipboard')
+        toast.success(t('member.inviteCopied'))
       }
     } catch {
-      toast.error('Failed to create invite')
+      toast.error(t('member.inviteError'))
     } finally {
       setInviteLoading(false)
     }
@@ -253,11 +253,11 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
         { method: 'DELETE' }
       )
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Failed to remove'); return }
+      if (!res.ok) { setError(data.error ?? t('member.removeFailed')); return }
       setSuccess(t('member.removed'))
       setTimeout(() => setSuccess(null), 3000)
       await load() // Reload
-    } catch { setError('Request failed') }
+    } catch { setError(t('leagueSettings.requestFailed')) }
     finally { setActionLoading(null) }
   }, [leagueId, load])
 
@@ -277,16 +277,16 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
         }
       )
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Failed to assign'); return }
+      if (!res.ok) { setError(data.error ?? t('member.assignFailed')); return }
       setSuccess(t('member.assigned'))
       setTimeout(() => setSuccess(null), 3000)
       await load() // Reload
-    } catch { setError('Request failed') }
+    } catch { setError(t('leagueSettings.requestFailed')) }
     finally { setActionLoading(null) }
   }, [leagueId, load])
 
   if (loading) {
-    return <div className="py-8 text-center text-sm text-white/50">Loading member settings...</div>
+    return <div className="py-8 text-center text-sm text-white/50">{t('member.loading')}</div>
   }
 
   return (
@@ -316,19 +316,19 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
             className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/25 bg-cyan-950/25 px-3 py-1.5 text-[11px] font-semibold text-cyan-200 transition hover:bg-cyan-950/40 disabled:opacity-50"
           >
             <Link2 className="h-3.5 w-3.5" />
-            {inviteLoading ? 'Preparing…' : 'Copy invite link'}
+            {inviteLoading ? t('member.preparing') : t('member.copyInvite')}
           </button>
         </div>
       ) : null}
 
       <div className="space-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Search members</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">{t('member.searchLabel')}</p>
         <div className="relative">
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Team or owner…"
+            placeholder={t('member.searchPlaceholder')}
             className="w-full rounded-lg border border-white/15 bg-[#0d1526] py-2.5 pl-4 pr-10 text-[13px] text-white placeholder:text-white/30 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
           />
           <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
@@ -338,11 +338,11 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
       <div className="flex flex-wrap gap-1.5">
         {(
           [
-            ['all', 'All'],
-            ['commissioner', 'Commissioner'],
-            ['coowner', 'Co-owner'],
-            ['orphan', 'Orphan'],
-            ['assigned', 'Assigned'],
+            ['all', t('member.filterAll')],
+            ['commissioner', t('member.filterCommissioner')],
+            ['coowner', t('member.filterCoOwner')],
+            ['orphan', t('member.filterOrphan')],
+            ['assigned', t('member.filterAssigned')],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -395,16 +395,22 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
                   )}
                   {member.isCommissioner ? (
                     <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-200">
-                      Commissioner
+                      {t('member.filterCommissioner')}
                     </span>
                   ) : null}
                   {member.isCoCommissioner ? (
                     <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-200">
-                      Co-comm
+                      {t('member.coCommBadge')}
                     </span>
                   ) : null}
                   <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-medium uppercase text-white/35">
-                    {member.teamRole}
+                    {member.teamRole === 'member'
+                      ? t('member.roleMember')
+                      : member.teamRole === 'commissioner'
+                        ? t('member.roleCommissioner')
+                        : member.teamRole === 'co_commissioner'
+                          ? t('member.roleCoCommissioner')
+                          : member.teamRole.replace(/_/g, ' ')}
                   </span>
                 </div>
               </div>
@@ -514,7 +520,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
 
         {displayedMembers.length === 0 && (
           <div className="py-8 text-center text-[13px] text-white/30">
-            {members.length === 0 ? t('member.noMembers') : 'No teams match this filter.'}
+            {members.length === 0 ? t('member.noMembers') : t('member.noFilterMatch')}
           </div>
         )}
       </div>

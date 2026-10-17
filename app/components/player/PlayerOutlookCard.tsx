@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import type { PlayerOutlook } from '@/lib/player-outlook'
-import { TIER_LABELS } from '@/lib/player-outlook'
+import type { PlayerOutlook } from '@/lib/player-outlook/player-outlook-types'
+// From the types module, not the index: the index re-exports the server-only service (prisma).
+import { TIER_LABELS } from '@/lib/player-outlook/player-outlook-types'
 
 // ---------------------------------------------------------------------------
 // Helpers

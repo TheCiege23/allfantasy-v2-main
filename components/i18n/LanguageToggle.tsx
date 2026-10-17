@@ -1,7 +1,6 @@
 "use client";
 
 import { Globe } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useOptionalSession } from "@/components/auth/useOptionalSession";
 import { useOptionalLanguage } from "./LanguageProviderClient";
 import { getLanguageOptionLabel, SELECTABLE_LANGUAGES, type LanguageCode } from "@/lib/i18n/constants";
@@ -22,20 +21,20 @@ export type LanguageToggleVariant = "default" | "compact";
  */
 export default function LanguageToggle({
   variant = "default",
-  refreshOnChange = false,
 }: {
   /** Visual style. Defaults to the existing "default" variant. */
   variant?: LanguageToggleVariant;
-  /** When true, calls router.refresh() after language change so server-rendered pages re-fetch with the new locale. */
-  refreshOnChange?: boolean;
 } = {}) {
-  const router = useRouter();
+  /*
+   * No refresh here any more (2026-10-03): `refreshOnChange` was opt-in and only three bracket pages
+   * set it, so everywhere else server-rendered text kept the old language. `LanguageProviderClient`
+   * now refreshes on every real switch, from any control — a second refresh here would double it.
+   */
   const { data: session } = useOptionalSession();
   const { language, setLanguage, t } = useOptionalLanguage();
 
   const selectLang = (lang: LanguageCode) => {
     setLanguage(lang);
-    if (refreshOnChange) router.refresh();
     if (session?.user) {
       fetch("/api/user/profile", {
         method: "PATCH",

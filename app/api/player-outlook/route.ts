@@ -19,6 +19,9 @@ export async function GET(request: NextRequest) {
     const playerName = searchParams.get('playerName') ?? undefined
     const playerId = searchParams.get('playerId') ?? undefined
     const sport = searchParams.get('sport') ?? 'NFL'
+    // Optional: the player page passes the identity's own position/team so a namesake is not valued.
+    const position = searchParams.get('position')
+    const team = searchParams.get('team')
     const narrative = searchParams.get('narrative') === 'true'
 
     if (!playerName && !playerId) {
@@ -32,6 +35,8 @@ export async function GET(request: NextRequest) {
       playerName,
       playerId,
       sport,
+      position,
+      team,
       includeNarrative: narrative,
     })
 

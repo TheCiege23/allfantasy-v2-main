@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Idol setup</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.is-card{position:relative;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:#e8eaf2;font:inherit;text-align:left;cursor:pointer;overflow:hidden;min-height:76px}
+.is-card:disabled{cursor:default;opacity:.38}
+.is-glow{position:absolute;left:-20px;top:50%;width:120px;height:120px;transform:translateY(-50%);border-radius:999px;opacity:.22;filter:blur(22px);pointer-events:none}
+.is-box{width:20px;height:20px;flex:none;border-radius:5px;border:1.5px solid rgba(255,255,255,.25);display:grid;place-items:center;font:700 12px 'Archivo',sans-serif}
+.is-tier{font:600 10px 'JetBrains Mono',monospace;color:#6f7590;letter-spacing:.06em}
+@keyframes isFlip{from{transform:rotateY(90deg);opacity:0}to{transform:rotateY(0);opacity:1}}
+.is-draw{animation:isFlip .45s ease-out both}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <a class="ex-btn" href="TribeSetup.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <span class="ex-lbl ex-gold">Commissioner · Blah Survivor</span>
+      <h1 class="ex-h1">Hidden idols</h1>
+      <span class="ex-t2">Choose which idol types are hidden in the draft. Which players hide them is always random and sealed at draft lock.</span>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 28px; align-items: flex-start">
+    <main style="flex: 999 1 680px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+      <section class="ex-card" style="padding: 18px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 8px; flex: 1 1 300px">
+          <span class="ex-lbl">How idols are chosen</span>
+          <div class="ex-seg" role="radiogroup" aria-label="Selection mode"><sc-for list="{{modes}}" as="m" hint-placeholder-count="2"><button role="radio" aria-checked="{{m.on}}" class="{{m.cls}}" onClick="{{m.pick}}" style="min-height: 38px">{{m.label}}</button></sc-for></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span class="ex-lbl">Idols in the draft</span>
+          <div class="ex-seg" role="radiogroup" aria-label="Idol count"><sc-for list="{{counts}}" as="c" hint-placeholder-count="3"><button role="radio" aria-checked="{{c.on}}" class="{{c.cls}}" onClick="{{c.pick}}" style="min-height: 38px; min-width: 52px">{{c.label}}</button></sc-for></div>
+        </div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: baseline; gap: 10px"><span class="ex-lbl">Always in every league</span><span class="ex-t3" style="font-size: 12px">Can't be removed</span></div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px">
+          <sc-for list="{{always}}" as="a" hint-placeholder-count="2">
+            <div class="is-card" style="cursor: default; border-color: {{a.line}}">
+              <span class="is-glow" style="background: {{a.glow}}"></span>
+              <img src="{{a.src}}" alt="" style="position: relative; height: 56px">
+              <div style="position: relative; flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font: 700 14px 'Cinzel', serif; color: {{a.glow}}">{{a.name}}</span><span class="ex-t2" style="font-size: 12px">{{a.short}}</span></div>
+              <span class="ex-chip" style="position: relative; color: #d9b45a; border-color: rgba(217,180,90,.4)">Always in</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <sc-if value="{{isRandom}}" hint-placeholder-val="{{ true }}">
+        <section style="display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+            <span class="ex-lbl">This league's draw · {{drawCount}} more</span>
+            <span style="flex: 1"></span>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer"><input type="checkbox" checked="{{hideDraw}}" onChange="{{toggleHide}}" style="width: 18px; height: 18px; accent-color: #d9b45a">Hide the draw from me too (I'm playing)</label>
+            <button class="ex-btn" onClick="{{reroll}}">Re-roll</button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px">
+            <sc-for list="{{draw}}" as="d" hint-placeholder-count="5">
+              <div class="is-card is-draw" style="cursor: default; animation-delay: {{d.delay}}; border-color: {{d.line}}">
+                <sc-if value="{{d.shown}}" hint-placeholder-val="{{ true }}">
+                  <span class="is-glow" style="background: {{d.glow}}"></span>
+                  <img src="{{d.src}}" alt="" style="position: relative; height: 56px">
+                  <div style="position: relative; flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font: 700 14px 'Cinzel', serif; color: {{d.glow}}">{{d.name}}</span><span class="ex-t2" style="font-size: 12px">{{d.short}}</span></div>
+                  <span class="is-tier" style="position: relative">{{d.cat}} · {{d.tierDots}}</span>
+                </sc-if>
+                <sc-if value="{{d.hidden}}" hint-placeholder-val="{{ false }}">
+                  <span style="width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: #151926; border: 1px dashed rgba(217,180,90,.4); font: 700 22px 'Cinzel', serif; color: #d9b45a">?</span>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font: 700 14px 'Cinzel', serif; color: #a3a9c2">Sealed idol</span><span class="ex-t3" style="font-size: 12px">Revealed when someone plays it</span></div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <span class="ex-t3" style="font-size: 12px">Balanced draw: no more than one heavy idol (three dots), no more than two from the same group, and always at least one voting idol and one scoring or roster idol. The final draw happens on the server when the draft locks. This preview shows what a draw looks like.</span>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{isPick}}" hint-placeholder-val="{{ false }}">
+        <section style="display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+            <span class="ex-lbl">Pick {{drawCount}} more · {{picked}} picked</span>
+            <span style="flex: 1"></span>
+            <sc-for list="{{cats}}" as="c" hint-placeholder-count="6"><button class="ex-chip" onClick="{{c.pick}}" style="cursor: pointer; height: 30px; padding: 0 12px; background: {{c.bg}}; color: {{c.fg}}; border-color: {{c.line}}">{{c.label}}</button></sc-for>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px">
+            <sc-for list="{{pool}}" as="p" hint-placeholder-count="18">
+              <button class="is-card" onClick="{{p.toggle}}" aria-pressed="{{p.on}}" disabled="{{p.off}}" style="border-color: {{p.line}}; background: {{p.bg}}">
+                <span class="is-glow" style="background: {{p.glow}}"></span>
+                <span class="is-box" style="position: relative; background: {{p.boxBg}}; border-color: {{p.boxLine}}; color: #1a1204">{{p.tick}}</span>
+                <img src="{{p.src}}" alt="" style="position: relative; height: 52px">
+                <div style="position: relative; flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font: 700 13.5px 'Cinzel', serif; color: {{p.glow}}">{{p.name}}</span><span class="ex-t2" style="font-size: 11.5px">{{p.short}}</span><span class="is-tier">{{p.cat}} · {{p.tierDots}}</span></div>
+              </button>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+    </main>
+
+    <aside style="flex: 1 1 320px; max-width: 380px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px">
+      <div class="ex-card2" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
+        <span class="ex-lbl">Summary</span>
+        <div style="display: flex; align-items: baseline; gap: 8px"><span class="ex-num" style="font-size: 30px; color: #d9b45a">{{total}}</span><span class="ex-t2">idols hidden in the draft</span></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px"><sc-for list="{{summary}}" as="s" hint-placeholder-count="7"><span title="{{s.name}}" style="width: 36px; height: 36px; border-radius: 8px; background: #0b0d14; border: 1px solid rgba(255,255,255,.08); display: grid; place-items: center"><img src="{{s.icon}}" alt="{{s.name}}" style="width: 28px; height: 28px; opacity: {{s.op}}"></span></sc-for></div>
+        <span class="ex-t2" style="font-size: 12.5px">{{statusLine}}</span>
+        <button class="ex-btn ex-btn-gold" disabled="{{notReady}}" style="min-height: 44px">Lock idols for the draft</button>
+      </div>
+      <div class="ex-card" style="padding: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px">
+        <span class="ex-lbl">Good to know</span>
+        <span>Immunity and Tribe immunity are in every Survivor league.</span>
+        <span class="ex-t2">Commissioners can see which idol types are in play, but never which players hide them.</span>
+        <span class="ex-t2">Settings lock when the draft starts. After that, idols only change hands when they're found or played.</span>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { mode: 'random', count: 7, seed: 7, hide: false, picks: ['captain', 'silence', 'second-chance', 'first-claim', 'decoy'], cat: 'All' }; }
+  draw(n, seed) {
+    let s = seed * 9301 + 49297; const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+    const pool = CAT.filter(i => !i.always).slice().sort(() => rnd() - 0.5);
+    const out = []; const byCat = {};
+    for (const i of pool) {
+      if (out.length >= n) break;
+      if (i.tier === 3 && out.some(o => o.tier === 3)) continue;
+      if ((byCat[i.cat] || 0) >= 2) continue;
+      out.push(i); byCat[i.cat] = (byCat[i.cat] || 0) + 1;
+    }
+    const hasVote = out.some(o => o.cat === 'Votes'), hasScore = out.some(o => o.cat === 'Scoring' || o.cat === 'Roster');
+    if ((!hasVote || !hasScore) && seed < 9999) return this.draw(n, seed + 101);
+    return out;
+  }
+  renderVals() {
+    const st = this.state; const need = st.count - 2;
+    const dots = t => '●'.repeat(t) + '○'.repeat(3 - t);
+    const img = i => ({ src: 'survivor/idols/' + i.id + '.svg', icon: 'survivor/idols/' + i.id + '-icon.svg' });
+    const always = CAT.filter(i => i.always).map(i => ({ ...i, ...img(i), line: i.glow + '55' }));
+    const drawn = this.draw(need, st.seed);
+    const draw = drawn.map((i, k) => ({ ...i, ...img(i), tierDots: dots(i.tier), shown: !st.hide, hidden: st.hide, delay: (k * 0.07) + 's', line: st.hide ? 'rgba(217,180,90,.25)' : 'rgba(255,255,255,.07)' }));
+    const picks = st.picks.filter(id => CAT.some(i => i.id === id)).slice(0, need);
+    const full = picks.length >= need;
+    const cats = ['All', 'Votes', 'Scoring', 'Roster', 'Game', 'Bluff'].map(c => ({ label: c, bg: st.cat === c ? '#151926' : 'transparent', fg: st.cat === c ? '#e8eaf2' : '#a3a9c2', line: st.cat === c ? '#d9b45a' : 'rgba(255,255,255,.1)', pick: () => this.setState({ cat: c }) }));
+    const pool = CAT.filter(i => !i.always && (st.cat === 'All' || i.cat === st.cat)).map(i => {
+      const on = picks.includes(i.id);
+      return { ...i, ...img(i), tierDots: dots(i.tier), on: on ? 'true' : 'false', off: !on && full, tick: on ? '✓' : '',
+        line: on ? i.glow : 'rgba(255,255,255,.07)', bg: on ? '#10131c' : '#0b0d14', boxBg: on ? i.glow : 'transparent', boxLine: on ? i.glow : 'rgba(255,255,255,.25)',
+        toggle: () => this.setState({ picks: on ? picks.filter(x => x !== i.id) : [...picks, i.id] }) };
+    });
+    const chosen = st.mode === 'random' ? drawn : CAT.filter(i => picks.includes(i.id));
+    const summary = [...CAT.filter(i => i.always), ...chosen].map(i => ({ name: (st.mode === 'random' && st.hide && !i.always) ? 'Sealed idol' : i.name, icon: img(i).icon, op: (st.mode === 'random' && st.hide && !i.always) ? 0.15 : 1 }));
+    while (summary.length < st.count) summary.push({ name: 'Empty slot', icon: 'exile/token-empty.svg', op: 0.5 });
+    const ready = st.mode === 'random' || picks.length === need;
+    return {
+      modes: [['random', 'Random, balanced'], ['pick', "I'll pick"]].map(([id, label]) => ({ label, on: st.mode === id ? 'true' : 'false', cls: 'ex-sg' + (st.mode === id ? ' ex-sg-on' : ''), pick: () => this.setState({ mode: id }) })),
+      counts: [6, 7, 8].map(n => ({ label: String(n), on: st.count === n ? 'true' : 'false', cls: 'ex-sg' + (st.count === n ? ' ex-sg-on' : ''), pick: () => this.setState({ count: n }) })),
+      always, draw, drawCount: need, isRandom: st.mode === 'random', isPick: st.mode === 'pick', hideDraw: st.hide,
+      toggleHide: e => this.setState({ hide: e.target.checked }), reroll: () => this.setState({ seed: st.seed + 13 }),
+      cats, pool, picked: picks.length, total: st.count, summary, notReady: !ready,
+      statusLine: ready ? (st.mode === 'random' ? (st.hide ? 'The draw is sealed. You\'ll find out what\'s in play when idols are played, like everyone else.' : 'Ready. The server makes the final draw when the draft locks.') : 'Ready to lock.') : 'Pick ' + (need - picks.length) + ' more to lock.'
+    };
+  }
+}
+const CAT = [{"id": "immunity", "name": "Immunity idol", "glow": "#f2c94c", "cat": "Protection", "tier": 3, "always": true, "short": "Cancels every vote against you.", "power": "Cancels every vote cast against you at one Tribal Council.", "when": "Before votes close", "target": "Yourself"}, {"id": "tribe-immunity", "name": "Tribe immunity", "glow": "#3fd0b4", "cat": "Protection", "tier": 3, "always": true, "short": "Your whole tribe skips Tribal Council.", "power": "Your whole tribe is safe this week and skips Tribal Council.", "when": "Before the week locks", "target": "Your tribe"}, {"id": "steal-three", "name": "Steal 3", "glow": "#e5484d", "cat": "Roster", "tier": 3, "short": "Take 3 players from any team.", "power": "Take any 3 players from one team's roster and add them to yours.", "when": "Any week before playoffs", "target": "One team, 3 players"}, {"id": "point-surge", "name": "Point surge", "glow": "#22d3ee", "cat": "Scoring", "tier": 2, "short": "Boosts your score for one week.", "power": "Adds a scoring boost to your team for one week. The commissioner sets the size, e.g. +15%.", "when": "Before the week locks", "target": "Your team"}, {"id": "vote-steal", "name": "Vote steal", "glow": "#a78bfa", "cat": "Votes", "tier": 2, "short": "Take someone's vote and cast it.", "power": "Take another manager's vote at Tribal Council and cast it yourself.", "when": "Before votes close", "target": "One manager"}, {"id": "lineup-lock", "name": "Lineup lock", "glow": "#f59e0b", "cat": "Scoring", "tier": 2, "short": "Freeze an opponent's lineup.", "power": "Freeze an opponent's lineup for one week. No swaps, no waivers.", "when": "Before the week locks", "target": "One opponent"}, {"id": "extra-vote", "name": "Extra vote", "glow": "#5b9cf0", "cat": "Votes", "tier": 2, "short": "Cast a second vote.", "power": "Cast a second vote at Tribal Council.", "when": "Before votes close", "target": "Yourself"}, {"id": "idol-nullifier", "name": "Idol nullifier", "glow": "#84cc16", "cat": "Votes", "tier": 2, "short": "Cancels another manager's idol.", "power": "Cancels another manager's idol the moment they play it.", "when": "Before votes close", "target": "One manager"}, {"id": "captain", "name": "Captain's mark", "glow": "#fb923c", "cat": "Scoring", "tier": 2, "short": "One starter scores double.", "power": "Pick one starter. Their points count double this week.", "when": "Before that player's game", "target": "One starter"}, {"id": "safety-net", "name": "Safety net", "glow": "#38bdf8", "cat": "Scoring", "tier": 1, "short": "Your score can't drop below average.", "power": "Your score this week can't fall below your season average.", "when": "Before the week locks", "target": "Your team"}, {"id": "injury-shield", "name": "Injury shield", "glow": "#4ade80", "cat": "Scoring", "tier": 1, "short": "An injured starter still scores.", "power": "One injured or inactive starter scores his projection instead of zero.", "when": "Before that player's game", "target": "One starter"}, {"id": "bye-cover", "name": "Bye cover", "glow": "#e9c46a", "cat": "Scoring", "tier": 1, "short": "Starters on bye score their average.", "power": "Starters on a bye week score their season average this week.", "when": "Before the week locks", "target": "Your team"}, {"id": "silence", "name": "Silence", "glow": "#cbd5e1", "cat": "Votes", "tier": 2, "short": "Block one manager from voting.", "power": "Block one manager from casting a vote at this week's Tribal Council.", "when": "Before votes close", "target": "One manager"}, {"id": "spyglass", "name": "Spyglass", "glow": "#99f6e4", "cat": "Votes", "tier": 1, "short": "See one manager's vote early.", "power": "See who one manager voted for before the reveal.", "when": "After they vote, before the reveal", "target": "One manager"}, {"id": "revote", "name": "Revote", "glow": "#e879f9", "cat": "Votes", "tier": 3, "short": "Forces a second round of voting.", "power": "Throws out your Tribal Council result and forces a second round of voting.", "when": "During the reveal, before the verdict", "target": "Your Tribal Council"}, {"id": "tribute", "name": "Tribute", "glow": "#fb7185", "cat": "Scoring", "tier": 2, "short": "Take 10% of an opponent's points.", "power": "Take 10% of one opponent's points this week and add them to yours.", "when": "Before the week locks", "target": "One opponent"}, {"id": "second-chance", "name": "Second chance", "glow": "#ff7a45", "cat": "Game", "tier": 3, "short": "Bring a manager back from Exile.", "power": "Bring one voted-out manager (including yourself) back from Exile Island right away.", "when": "Any time before the merge", "target": "One exiled manager"}, {"id": "defector", "name": "Defector", "glow": "#14b8a6", "cat": "Game", "tier": 2, "short": "Switch to another tribe.", "power": "Move to another tribe before the next Tribal Council.", "when": "Before the week locks", "target": "Yourself"}, {"id": "first-claim", "name": "First claim", "glow": "#93c5fd", "cat": "Roster", "tier": 1, "short": "Your next waiver claim goes first, free.", "power": "Your next waiver claim processes first and costs no FAAB.", "when": "Before waivers run", "target": "Your next claim"}, {"id": "decoy", "name": "Decoy", "glow": "#9ca3af", "cat": "Bluff", "tier": 1, "short": "Wastes a Spyglass or nullifier on you.", "power": "A bluff. Any Spyglass or Idol nullifier used on you is wasted.", "when": "Passive once owned", "target": "Yourself"}];
+</script>
+</body>
+</html>

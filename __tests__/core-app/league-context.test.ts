@@ -262,7 +262,7 @@ describe('Draft HQ and its board, in one render', () => {
     expect(board, 'draft board rendered').not.toBeNull()
 
     expect(reads('league')).toHaveLength(1)
-    expect(claimedReads().map((c) => c.method).sort()).toEqual(['findFirst', 'findMany'])
+    expect(claimedReads().map((c) => c.method).sort()).toEqual(['findFirst'])
   })
 
   /*
@@ -277,6 +277,6 @@ describe('Draft HQ and its board, in one render', () => {
     await Promise.all([getDraftHqData(L, U), getDraftBoardData(L, U)])
 
     expect(reads('league')).toHaveLength(2)
-    expect(claimedReads().map((c) => c.method).sort()).toEqual(['findFirst', 'findFirst', 'findMany'])
+    expect(claimedReads().map((c) => c.method).sort()).toEqual(['findFirst', 'findFirst'])
   })
 })

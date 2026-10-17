@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Shield } from 'lucide-react'
 import { PlayerImage } from '@/app/components/PlayerImage'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 /**
  * Shared player-headshot component for the NFL redraft league dashboard
@@ -202,19 +203,7 @@ export function PlayerHeadshot(props: PlayerHeadshotProps) {
   const alt = props.alt ?? ''
   const className = props.className ?? ''
 
-  if (props.src) {
-    return (
-      <img
-        src={props.src}
-        alt={alt}
-        width={size}
-        height={size}
-        className={`rounded-full border border-white/10 object-cover ${className}`}
-      />
-    )
-  }
-
-  return (
+  const placeholder = (
     <div
       className={`flex items-center justify-center rounded-full border border-white/10 bg-[#1C2539] text-[#8B9DB8] ${className}`}
       style={{ width: size, height: size }}
@@ -224,6 +213,26 @@ export function PlayerHeadshot(props: PlayerHeadshotProps) {
       <Shield size={Math.max(16, Math.floor(size / 2))} />
     </div>
   )
+
+  if (props.src) {
+    /*
+     * ⚠ A DEAD URL FALLS BACK TO THE SAME SHIELD AS A MISSING ONE. This raw `<img>` had no
+     * `onError`, so the ~15 legacy callers (league Trades tab, player rows, activity feed,
+     * bracket…) drew a broken-image glyph wherever Sleeper's CDN refused an id.
+     */
+    return (
+      <FallbackImg
+        src={props.src}
+        alt={alt}
+        width={size}
+        height={size}
+        className={`rounded-full border border-white/10 object-cover ${className}`}
+        fallback={placeholder}
+      />
+    )
+  }
+
+  return placeholder
 }
 
 export default PlayerHeadshot

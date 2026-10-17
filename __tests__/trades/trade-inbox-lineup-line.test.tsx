@@ -14,7 +14,7 @@ vi.mock('@/components/core-app/screens/tradesPanelFetch', () => ({
 }))
 
 import { TradeInbox, toPickedAssets } from '@/components/core-app/screens/TradeInbox'
-import { assetValues, importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
+import { assetValues, importedTradeTimelineRows, pickKey } from '@/lib/core-app/importedTradeTimeline'
 
 const imported = {
   transactionId: 'league:old-trade', at: new Date('2023-09-10T12:00:00Z'), rosterIds: ['1', '2'],
@@ -109,10 +109,11 @@ describe('TradeInbox — lineup effect line', () => {
     expect(outcome.textContent).toContain('Net 120 league points while held.')
     const row = container.querySelector('.af-tc-timeline-row')!
     const [sideA, sideB] = row.querySelectorAll('.af-tc-timeline-assets > div')
-    expect(sideA.querySelector('span')!.textContent).toBe('Your team sent')
-    expect([...sideA.querySelectorAll('.af-tc-timeline-asset-name b')].map((b) => b.textContent)).toEqual(['Outgoing Runner'])
-    expect(sideB.querySelector('span')!.textContent).toBe('Other team sent')
-    expect([...sideB.querySelectorAll('.af-tc-timeline-asset-name b')].map((b) => b.textContent)).toEqual(['Incoming Receiver', '2024 round 2'])
+    // Each column holds what its named team RECEIVED — the KeepTradeCut "Team 1 gets…" reading.
+    expect(sideA.querySelector('span')!.textContent).toBe('Your team received')
+    expect([...sideA.querySelectorAll('.af-tc-timeline-asset-name b')].map((b) => b.textContent)).toEqual(['Incoming Receiver', '2024 round 2'])
+    expect(sideB.querySelector('span')!.textContent).toBe('Other team received')
+    expect([...sideB.querySelectorAll('.af-tc-timeline-asset-name b')].map((b) => b.textContent)).toEqual(['Outgoing Runner'])
     // No grade on the record: no letter is invented, and no value is drawn beside any asset.
     expect(row.querySelectorAll('.af-tc-timeline-grades strong')[0].textContent).toBe('—')
     expect(row.querySelectorAll('.af-tc-timeline-grades strong')[1].textContent).toBe('—')
@@ -137,9 +138,10 @@ describe('TradeInbox — lineup effect line', () => {
       ['Other team', 'D'],
     ])
     const [sideA, sideB] = row.querySelectorAll('.af-tc-timeline-assets > div')
-    expect([...sideA.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['4,000'])
-    expect([...sideB.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['3,200', '1,800'])
-    expect(sideB.querySelector('img')!.getAttribute('src')).toBe('https://img.example/receiver.png')
+    // Your team's B sits over what Your team got (5,000), not over what it gave away (4,000).
+    expect([...sideA.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['3,200', '1,800'])
+    expect([...sideB.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['4,000'])
+    expect(sideA.querySelector('img')!.getAttribute('src')).toBe('https://img.example/receiver.png')
     const why = row.querySelector('.af-tc-timeline-why')!.textContent!
     expect(why).toContain('Your team got the better end of it — 5,000 in league value for 4,000.')
     expect(why).toContain('Graded on this league\'s values today (Dynasty · Superflex · 12 teams · PPR).')
@@ -159,9 +161,11 @@ describe('TradeInbox — lineup effect line', () => {
       ['Other team', 'D'],
       ['Your team', 'B'],
     ])
+    // Other team's D sits over what Other team received.
     const [sideA] = container.querySelectorAll('.af-tc-timeline-assets > div')
-    expect([...sideA.querySelectorAll('.af-tc-timeline-asset-name b')].map((b) => b.textContent)).toEqual(['Incoming Receiver', '2024 round 2'])
-    expect([...sideA.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['3,200', '1,800'])
+    expect(sideA.querySelector('span')!.textContent).toBe('Other team received')
+    expect([...sideA.querySelectorAll('.af-tc-timeline-asset-name b')].map((b) => b.textContent)).toEqual(['Outgoing Runner'])
+    expect([...sideA.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['4,000'])
   })
   it('a withheld grade says why and draws no letter', async () => {
     fetchTradesPanel.mockResolvedValue(panel([]))
@@ -181,6 +185,40 @@ describe('TradeInbox — lineup effect line', () => {
     expect(assetValues([{ id: 'a', label: 'X' }, { id: 'b', label: 'Y' }], lines.slice(1), 'get')).toEqual([null, null])
     // A used pick is priced as the player drafted with it.
     expect(assetValues([{ id: 'pick:0', label: '2026 round 1', gradedAs: 'Someone Else' }], lines, 'give')).toEqual([1])
+  })
+  /*
+   * HailShiva, CaliMike85 ↔ Manifest Destiny (reported 2026-10-01). The ledger names picks "2027 round 2",
+   * the grader "2027 1st", and the two lists run in different orders — so the positional fallback put
+   * the 1st's 3,034 beside the 2nd, under a sentence calling the 1st the most valuable asset.
+   */
+  it('prices each pick by its year and round, whatever order and spelling the two sides use', () => {
+    const lines = [
+      { side: 'get' as const, name: 'Malik Willis', marketValue: 2020, leagueValue: 2020 },
+      { side: 'get' as const, name: 'Omar Cooper', marketValue: 1676, leagueValue: 1676 },
+      { side: 'get' as const, name: 'Malachi Fields', marketValue: 1370, leagueValue: 1370 },
+      { side: 'get' as const, name: '2027 1st', marketValue: 3034, leagueValue: 3034 },
+      { side: 'get' as const, name: '2027 2nd', marketValue: 1559, leagueValue: 1559 },
+      { side: 'get' as const, name: '2028 4th', marketValue: 804, leagueValue: 804 },
+    ]
+    const assets = [
+      { id: 'p1', label: 'Malik Willis' },
+      { id: 'p2', label: 'Omar Cooper' },
+      { id: 'p3', label: 'Malachi Fields' },
+      { id: 'pick:0:2027 round 2', label: '2027 round 2' },
+      { id: 'pick:1:2027 round 1', label: '2027 round 1' },
+      { id: 'pick:2:2028 round 4', label: '2028 round 4' },
+    ]
+    expect(assetValues(assets, lines, 'get')).toEqual([2020, 1676, 1370, 1559, 3034, 804])
+  })
+  it('reads one year and round out of every pick spelling, and none out of a player', () => {
+    expect(pickKey('2027 round 1')).toBe('2027:1')
+    expect(pickKey('2027 Round 12')).toBe('2027:12')
+    expect(pickKey('2027 1st')).toBe('2027:1')
+    expect(pickKey('2027 Mid 2nd')).toBe('2027:2')
+    expect(pickKey('2028 4th')).toBe('2028:4')
+    expect(pickKey('2027 Pick 1.04')).toBe('2027:1')
+    expect(pickKey('Malik Willis')).toBeNull()
+    expect(pickKey('2027 Pick')).toBeNull()
   })
   it('does not infer send direction from multi-party received arrays', () => {
     expect(importedTradeTimelineRows([{ ...imported as object, rosterIds: ['1', '2', '3'] } as never])).toEqual([])

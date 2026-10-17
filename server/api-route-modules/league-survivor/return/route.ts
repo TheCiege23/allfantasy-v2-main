@@ -1,3 +1,4 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -28,6 +29,9 @@ export async function POST(
   if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  if (league && isNativePlatform(league.platform)) return NextResponse.json({ error: 'The system selects Exile returns after the configured return week is finalized. Return spots cannot be claimed manually.' }, { status: 409 })
 
   const [exileLeagueId, mainRosterId, currentWeek] = await Promise.all([
     getExileLeagueId(leagueId),

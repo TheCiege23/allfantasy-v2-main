@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Draft types &amp; specialty leagues</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}
+.ty{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-height:58px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:#10131c;color:#989fc2;cursor:pointer;text-align:left}
+.ty-on{border-color:#22d3ee;background:rgba(34,211,238,.10);color:#eef0fa}
+.bidb{min-height:52px;flex:1;border-radius:12px;border:1px solid rgba(255,255,255,.13);background:#0b0d14;color:#eef0fa;font:900 18px/1 'JetBrains Mono',monospace;cursor:pointer}</style>
+</helmet>
+<div class="af" style="flex-direction: column">
+  <header class="topb" style="background: #0b0d14">
+    <a class="btn btn-g btn-sm" href="DraftLive.dc.html">‹ Draft HQ</a>
+    <span style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700; font-size: 17px; letter-spacing: -0.03em">Draft types &amp; specialty leagues</span><span class="lbl">How the room changes per format</span></span>
+  </header>
+
+  <div class="wrap" style="display: flex; flex-direction: column; gap: 20px">
+    <nav aria-label="Draft type" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 8px">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="9"><button class="{{t.cls}}" onClick="{{t.pick}}" aria-pressed="{{t.on}}"><span style="font: 700 15px/1 'Archivo', sans-serif">{{t.name}}</span><span class="lbl" style="color: inherit">{{t.sub}}</span></button></sc-for>
+    </nav>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+      <section class="card" style="flex: 999 1 680px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow-x: auto">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap"><h2 class="h2">{{t.title}}</h2><span class="chip chip-af">{{t.badge}}</span></div>
+
+        <!-- Order-based (snake / linear / 3RR) -->
+        <sc-if value="{{isOrder}}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 8px; min-width: 640px">
+            <sc-for list="{{orderRows}}" as="r" hint-placeholder-count="4">
+              <div style="display: grid; grid-template-columns: 70px repeat(10, 1fr) 30px; gap: 4px; align-items: center">
+                <span class="lbl">{{r.label}}</span>
+                <sc-for list="{{r.slots}}" as="s" hint-placeholder-count="10"><span style="height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font: 600 12px/1 'JetBrains Mono', monospace; background: {{s.bg}}; color: {{s.c}}; border: 1px solid {{s.line}}">{{s.n}}</span></sc-for>
+                <span style="font-size: 18px; color: {{r.ac}}; text-align: center">{{r.arrow}}</span>
+              </div>
+            </sc-for>
+            <span style="font-size: 12px; color: #7d84a8">Cyan = your team (slot 9). Numbers are draft slots in the order they pick.</span>
+          </div>
+        </sc-if>
+
+        <!-- Auction -->
+        <sc-if value="{{isAuction}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 16px; flex-wrap: wrap">
+            <div style="flex: 1 1 340px; padding: 18px; border-radius: 16px; background: #10131c; border: 1px solid rgba(34,211,238,.35); display: flex; flex-direction: column; gap: 12px">
+              <span class="lbl" style="color: #22d3ee">On the block · nominated by Open Team 5</span>
+              <div style="display: flex; align-items: center; gap: 12px"><span class="av" style="width: 52px; height: 52px; border-radius: 999px; background: #1c2342; color: #c3c9e6; font-size: 15px">JC</span><span style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 20px; font-weight: 700">James Cook</span><span class="num" style="font-size: 11px; color: #5ee6b0">RB · BUF · BYE 7 · proj 218.9</span></span></div>
+              <div style="display: flex; align-items: baseline; gap: 14px"><span class="num" style="font-size: 52px; font-weight: 600; color: #eef0fa">${{bid}}</span><span style="font-size: 13px; color: #c3c9e6">high bid · {{bidder}}</span></div>
+              <div class="bar" style="height: 6px"><div style="width: 40%; background: #fbbf24"></div></div>
+              <span class="num" style="font-size: 12px; color: #fbbf24">0:06 — going once</span>
+              <div style="display: flex; gap: 8px"><button class="bidb" onClick="{{bid1}}">+$1</button><button class="bidb" onClick="{{bid5}}">+$5</button><button class="bidb" style="background: #22d3ee; color: #04050c; border-color: #22d3ee" onClick="{{bidMax}}">AF max ${{afMax}}</button></div>
+              <span style="font-size: 12px; line-height: 1.5; color: #c3c9e6">AF value <strong style="color: #34d399">$41</strong> for your build · you can afford <strong>${{maxBid}}</strong> and still fill 11 slots at $1.</span>
+            </div>
+            <div style="flex: 1 1 300px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; align-content: start">
+              <sc-for list="{{budgets}}" as="b" hint-placeholder-count="12">
+                <div style="padding: 8px 10px; border-radius: 10px; background: {{b.bg}}; border: 1px solid {{b.line}}; display: flex; flex-direction: column; gap: 4px">
+                  <span style="display: flex; justify-content: space-between"><span style="font-size: 12px; font-weight: 600">{{b.name}}</span><span class="num" style="font-size: 12px; font-weight: 600; color: {{b.c}}">${{b.left}}</span></span>
+                  <span class="num" style="font-size: 9px; color: #989fc2">max ${{b.max}} · {{b.slots}} slots left</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Board variants (keeper / dynasty / devy) -->
+        <sc-if value="{{isBoard}}" hint-placeholder-val="{{ false }}">
+          <div style="display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 6px; min-width: 700px">
+            <sc-for list="{{vcells}}" as="c" hint-placeholder-count="18">
+              <div style="min-height: 64px; padding: 7px 8px; border-radius: 9px; background: {{c.bg}}; border: 1px {{c.ls}} {{c.line}}; display: flex; flex-direction: column; justify-content: space-between; gap: 2px">
+                <span style="display: flex; justify-content: space-between"><span class="num" style="font-size: 9px; color: #7d84a8">{{c.label}}</span><span class="num" style="font-size: 8px; font-weight: 700; color: {{c.tc}}">{{c.tag}}</span></span>
+                <span style="font-weight: 600; font-size: 11px; line-height: 1.2; color: {{c.nc}}">{{c.name}}</span>
+                <span class="num" style="font-size: 9px; color: #989fc2">{{c.meta}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- Best ball -->
+        <sc-if value="{{isBestBall}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 20px; flex-wrap: wrap">
+            <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 10px">
+              <span class="lbl">Build targets · 18 rounds · no lineups</span>
+              <sc-for list="{{bb}}" as="b" hint-placeholder-count="4">
+                <div style="display: grid; grid-template-columns: 40px 1fr 70px; gap: 10px; align-items: center"><span class="pos p-{{b.pos}}">{{b.pos}}</span><span class="bar" style="height: 12px; position: relative"><span style="width: {{b.have}}; background: {{b.c}}"></span></span><span class="num" style="font-size: 12px; font-weight: 600; text-align: right">{{b.txt}}</span></div>
+              </sc-for>
+            </div>
+            <div style="flex: 1 1 260px; padding: 16px; border-radius: 14px; background: #0b0d14; display: flex; flex-direction: column; gap: 8px">
+              <span class="lbl" style="color: #22d3ee">Stack meter</span>
+              <span style="font-size: 22px; font-weight: 700">CIN stack · 2 of 3</span>
+              <span style="font-size: 13px; color: #c3c9e6">Burrow + Chase. Adding Tee Higgins makes it a triple stack — AF best-ball weeks spike 18%.</span>
+              <span style="font-size: 12px; color: #7d84a8">Weeks 15–17 playoff games are weighted in AF's best-ball ADP.</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Survivor teaser -->
+        <sc-if value="{{isSurvivor}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 18px; border-radius: 16px; background: #0b0d14; border: 1px solid rgba(246,196,69,.4)">
+            <span aria-hidden="true" style="width: 72px; height: 72px; border-radius: 20px; background: #f6c445; color: #1a1204; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700">◆</span>
+            <div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 18px; font-weight: 700">Every pick could be hiding an idol</span><span style="font-size: 13px; line-height: 1.5; color: #c3c9e6">The board looks the same to everyone and nothing changes during the draft. When the last pick is in, every idol holder gets a private DM from AF Host.</span></div>
+            <a class="btn btn-p" href="SurvivorDraft.dc.html">Open the Survivor room</a>
+          </div>
+        </sc-if>
+
+        <!-- Guillotine / survivor -->
+        <sc-if value="{{isGuillotine}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 20px; flex-wrap: wrap">
+            <div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 6px">
+              <span class="lbl">Weekly cut ladder · lowest score is eliminated</span>
+              <sc-for list="{{ladder}}" as="l" hint-placeholder-count="6">
+                <div style="display: grid; grid-template-columns: 52px 1fr 90px; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: {{l.bg}}">
+                  <span class="num" style="font-size: 11px; color: #7d84a8">{{l.wk}}</span><span style="font-size: 13px; font-weight: 700; color: {{l.c}}">{{l.text}}</span><span class="num" style="font-size: 11px; text-align: right; color: {{l.c}}">{{l.tag}}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="flex: 1 1 260px; padding: 16px; border-radius: 14px; background: #0b0d14; display: flex; flex-direction: column; gap: 8px">
+              <span class="lbl" style="color: #22d3ee">How the draft changes</span>
+              <span style="font-size: 13px; line-height: 1.55; color: #c3c9e6">Weekly floor beats ceiling: AF ADP moves steady starters up and boom-bust players down. Cut teams' rosters go to FAAB, so AF also shows your <strong style="color: #eef0fa">survival odds by week</strong> for every pick.</span>
+              <span class="num" style="font-size: 26px; font-weight: 600; color: #34d399">Survive to wk 10 · 62%</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="padding: 12px 14px; border-radius: 12px; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.35); font-size: 13px; line-height: 1.5; color: #c3c9e6"><span class="lbl" style="color: #22d3ee">AF intelligence for this format</span><br>{{t.ai}}</div>
+      </section>
+
+      <aside class="card" style="flex: 1 1 320px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+        <span class="lbl">How it works</span>
+        <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.5; color: #c3c9e6">
+          <sc-for list="{{t.rules}}" as="r" hint-placeholder-count="4"><li>{{r}}</li></sc-for>
+        </ul>
+        <span class="lbl" style="margin-top: 10px">Room changes</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{t.ui}}" as="u" hint-placeholder-count="3"><span class="chip">{{u}}</span></sc-for></div>
+        <span class="lbl" style="margin-top: 10px">Commissioner settings</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{t.cfg}}" as="u" hint-placeholder-count="3"><span class="chip chip-gold">{{u}}</span></sc-for></div>
+      </aside>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { type: 'snake', bid: 34, bidder: 'Open Team 5' }; }
+  renderVals() {
+    const st = this.state;
+    const T = {
+      snake: { name: 'Snake', sub: 'Default', title: 'Snake draft', badge: 'Order reverses every round', view: 'order',
+        rules: ['Round 1 goes 1→12, round 2 goes 12→1, and so on.', 'Every team gets one early and one late pick in each pair of rounds.'], ui: ['Board', 'Turn countdown', '"You pick in N"'], cfg: ['Pick timer', 'Draft order: random or manual', 'Rounds'],
+        ai: 'AF counts the picks until your next turn and warns when a position tier will be gone before then.' },
+      linear: { name: 'Linear', sub: 'Same order', title: 'Linear draft', badge: 'Same order every round', view: 'order',
+        rules: ['Slot 1 picks first in every round.', 'Common for rookie and supplemental drafts, often in reverse standings order.'], ui: ['Board', 'Pick trading highlighted'], cfg: ['Order from standings', 'Pick trading'],
+        ai: 'With a late slot every round, AF leans toward positions with deeper tiers and flags when pick trades fix your spot.' },
+      rr3: { name: '3rd-round reversal', sub: 'Snake variant', title: 'Third-round reversal', badge: 'Round 3 repeats round 2', view: 'order',
+        rules: ['Rounds 1–2 are a normal snake.', 'Round 3 runs in the same direction as round 2, then the snake resumes.', 'Balances the advantage of the 1.01 pick.'], ui: ['Board arrows show the reversal'], cfg: ['Reversal round'],
+        ai: 'Late round-1 slots get back-to-back picks at the 2/3 turn — AF plans both picks together.' },
+      auction: { name: 'Auction', sub: 'Salary cap', title: 'Auction draft', badge: '$200 budget · nominate + bid', view: 'auction',
+        rules: ['Managers take turns nominating a player.', 'Everyone bids; highest bid wins when the timer runs out.', 'You must keep $1 for every empty roster slot.'], ui: ['Nomination block', 'Bid buttons', 'Budgets for every team', 'Max bid shown live'], cfg: ['Budget', 'Bid timer', 'Min bid', 'Nomination order'],
+        ai: 'AF prices every player for your build, tracks every team’s max bid, and suggests nominating players you don’t want to drain rival budgets.' },
+      keeper: { name: 'Keeper', sub: 'Carry over', title: 'Keeper draft', badge: 'Keepers pre-filled on the board', view: 'board', kind: 'keeper',
+        rules: ['Each team keeps up to N players from last season.', 'A keeper costs the pick in the round it was drafted in, plus any league penalty.', 'Kept players appear locked before the draft starts.'], ui: ['Locked keeper cells', 'Forfeited picks greyed out'], cfg: ['Keepers per team', 'Round cost rule', 'Keeper deadline'],
+        ai: 'Before the draft, AF compares keeping a player with the value of the pick it costs. In the draft, it removes kept players from the pool.' },
+      dynasty: { name: 'Dynasty startup', sub: 'Players + picks', title: 'Dynasty startup', badge: 'Future picks are draftable', view: 'board', kind: 'dynasty',
+        rules: ['Rosters carry over forever, so age matters.', 'Future rookie picks can be drafted or traded like players.', 'Usually 25–30 rounds.'], ui: ['Age on every card', 'Pick assets on the board', 'Pick trading in-draft'], cfg: ['Rounds', 'Rookie pick years', 'Taxi squad'],
+        ai: 'AF switches to dynasty value: age curves and three-year projections. It shows "win now" against "rebuild" for each pick.' },
+      devy: { name: 'Rookie / Devy', sub: 'College + rookies', title: 'Rookie & devy draft', badge: 'College players held until they turn pro', view: 'board', kind: 'devy',
+        rules: ['Rookie drafts pick incoming NFL rookies.', 'Devy drafts college players you stash until they declare.', 'Devy slots don’t count against the active roster.'], ui: ['College team + class year', 'Years until eligible', 'Devy slots'], cfg: ['Devy roster size', 'Draft order: reverse standings'],
+        ai: 'Uses AF college data (NCAAF) for production, draft-capital projections and years to eligibility.' },
+      bestball: { name: 'Best ball', sub: 'No lineups', title: 'Best ball draft', badge: 'Lineups set automatically each week', view: 'bestball',
+        rules: ['Draft once and never set a lineup.', 'Your highest scorers start automatically each week.', 'Depth and stacks matter more than one-week ceilings.'], ui: ['Position targets', 'Stack meter', 'Weeks 15–17 view'], cfg: ['Rounds', 'Tournament format'],
+        ai: 'AF ADP is re-weighted for best-ball spike weeks and playoff schedules, and it pushes stacks with your QB.' },
+      guillotine: { name: 'Guillotine', sub: 'Weekly cuts', title: 'Guillotine', badge: 'Lowest score is cut every week', view: 'guillotine',
+        rules: ['The lowest-scoring team each week is eliminated.', 'Cut rosters drop to waivers for a FAAB frenzy.', 'Last team standing wins.'], ui: ['Survival odds per pick', 'Cut-line forecast'], cfg: ['Teams cut per week', 'FAAB budget', 'Bye-week protection'],
+        ai: 'AF ranks for safe floors and bye coverage, not ceiling, because one bad week ends your season.' }
+    };
+    Object.assign(T, {
+      offline: { name: 'Offline', sub: 'Commish enters', title: 'Offline draft', badge: 'Draft in person, record it here', view: 'order',
+        rules: ['The league drafts in person or on a call.', 'The commissioner (or a co-commish) enters each pick on the board as it happens.', 'Managers can follow along live on their phones.'], ui: ['Fast pick entry with search', 'Undo / edit any pick', 'No pick timer'], cfg: ['Who can enter picks', 'Draft order'],
+        ai: 'Entry is type-ahead from the AF player pool, so names and positions are never mistyped. Managers still get AF picks on their own screens.' },
+      auto: { name: 'Auto draft', sub: 'AF picks for all', title: 'Auto draft', badge: 'AF drafts every team at a set time', view: 'order',
+        rules: ['Nobody has to be online.', 'At draft time AF drafts for every team from that manager’s queue and rankings, then AF ADP.', 'Results post to league chat right after.'], ui: ['Pre-draft queue and rankings only', 'Recap and grades after'], cfg: ['Draft time', 'Use manager queues', 'Roster limits by position'],
+        ai: 'Each team is drafted to fill its starting lineup first, so nobody ends up with five QBs.' },
+      bigbrother: { name: 'Big Brother', sub: 'Any draft type', title: 'Big Brother league draft', badge: 'Uses a standard draft', view: 'order',
+        rules: ['Big Brother leagues use a regular draft: snake, linear, auction, offline or auto.', 'The Big Brother twists happen during the season, not in the draft room.'], ui: ['Same room as the chosen draft type'], cfg: ['Draft type', 'Pick timer'],
+        ai: 'Same AF draft intelligence as the chosen format.' },
+      survivor: { name: 'Survivor', sub: 'Hidden idols', title: 'Survivor draft', badge: 'Hidden idols ride on players', view: 'survivor',
+        rules: ['Any draft type: snake, linear, auction, offline or auto.', 'Before the draft, AF secretly attaches 6–8 idols to players in the pool.', 'Whoever drafts that player gets the idol. Nobody, including the drafter, finds out during the draft.', 'When the draft ends, each holder gets a private DM from AF Host.', 'The idol belongs to the manager, not the player, so trades and drops don’t move it.'], ui: ['Identical board for everyone', 'Post-draft idol DMs', 'Sealed commissioner view'], cfg: ['Idols per league (6–8)', 'Idol types: immunity, tribe immunity, steal 3, and more', 'Commish can unseal after season'],
+        ai: 'AF never uses idol locations in its recommendations, so its advice can’t leak where an idol is.' }
+    });
+    const key = st.type, t = T[key];
+    const tabs = Object.keys(T).map(k => ({ name: T[k].name, sub: T[k].sub, on: k === key ? 'true' : 'false', cls: 'ty' + (k === key ? ' ty-on' : ''), pick: () => this.setState({ type: k }) }));
+    // order rows (10 teams for clarity, you are slot 9)
+    const Nn = 10, ME = 9;
+    const seq = r => { const fwd = Array.from({ length: Nn }, (_, i) => i + 1), rev = fwd.slice().reverse();
+      if (key === 'linear') return fwd; if (key === 'rr3') return [fwd, rev, rev, fwd][r]; return r % 2 === 0 ? fwd : rev; };
+    const orderRows = [0, 1, 2, 3].map(r => { const s = seq(r); const dir = s[0] === 1 ? '→' : '←';
+      return { label: 'Round ' + (r + 1), arrow: dir, ac: key === 'rr3' && r === 2 ? '#fbbf24' : '#7d84a8',
+        slots: s.map(n => ({ n, bg: n === ME ? 'rgba(34,211,238,.18)' : '#0b0d14', c: n === ME ? '#22d3ee' : '#c3c9e6', line: n === ME ? '#22d3ee' : (key === 'rr3' && r === 2 ? 'rgba(251,191,36,.4)' : 'rgba(255,255,255,.07)') })) }; });
+    // auction
+    const myLeft = 146, slotsLeft = 11, maxBid = myLeft - (slotsLeft - 1);
+    const budgets = [['You',146,12],['Open Team 9',88,8],['Open Team 5',121,10],['Open Team 2',64,7],['Open Team 11',132,11],['Open Team 3',97,9],['Sunday Scaries',41,5],['Open Team 8',110,10],['Open Team 12',75,9],['Open Team 10',102,9],['Open Team 6',58,8],['Open Team 4',119,11]]
+      .map(([name, left, slots]) => ({ name, left, slots, max: left - (slots - 1), c: left > 100 ? '#34d399' : left > 60 ? '#fbbf24' : '#fb5b78',
+        bg: name === 'You' ? 'rgba(34,211,238,.10)' : '#0b0d14', line: name === 'You' ? 'rgba(34,211,238,.45)' : 'rgba(255,255,255,.07)' }));
+    // board variants
+    const V = {
+      keeper: [['Bijan Robinson','RB · ATL','K · rd 3','#f6c445'],["Ja'Marr Chase",'WR · CIN','',''],['Puka Nacua','WR · LAR','K · rd 8','#f6c445'],['Justin Jefferson','WR · MIN','',''],['','forfeited · keeper','—','#7d84a8'],['CeeDee Lamb','WR · DAL','',''],
+               ['Saquon Barkley','RB · PHI','',''],['Brock Bowers','TE · LV','K · rd 10','#f6c445'],['Jahmyr Gibbs','RB · DET','',''],['Malik Nabers','WR · NYG','',''],['Nico Collins','WR · HOU','',''],['','forfeited · keeper','—','#7d84a8']],
+      dynasty: [["Ja'Marr Chase",'WR · age 26','',''],['Bijan Robinson','RB · age 24','',''],['Malik Nabers','WR · age 23','',''],['2027 1st (Open Team 4)','Rookie pick','PICK','#c4b5fd'],['Brock Bowers','TE · age 24','',''],['Puka Nacua','WR · age 25','',''],
+                ['Jahmyr Gibbs','RB · age 24','',''],['Ashton Jeanty','RB · age 22','',''],['2027 1st (Open Team 6)','Rookie pick','PICK','#c4b5fd'],['Drake London','WR · age 25','',''],['Brian Thomas Jr.','WR · age 24','',''],['Jayden Daniels','QB · age 26','','']],
+      devy: [['Jeremiah Smith','WR · Ohio St · Jr','2027','#7fd4f0'],['Arch Manning','QB · Texas · Jr','2027','#7fd4f0'],['Ryan Williams','WR · Alabama · Jr','2027','#7fd4f0'],['Bryce Underwood','QB · Michigan · So','2028','#7fd4f0'],['Cam Coleman','WR · Auburn · Jr','2027','#7fd4f0'],['Julian Sayin','QB · Ohio St · Jr','2027','#7fd4f0'],
+             ['Isaac Brown','RB · Louisville · Jr','2027','#7fd4f0'],['Dakorien Moore','WR · Oregon · So','2028','#7fd4f0'],['Malachi Toney','WR · Miami · So','2028','#7fd4f0'],['Justice Haynes','RB · Michigan · Sr','2027','#7fd4f0'],['Ahmad Hardy','RB · Missouri · Jr','2027','#7fd4f0'],['Dante Moore','QB · Oregon · Jr','2027','#7fd4f0']]
+    };
+    const list = V[t.kind] || [];
+    const vcells = list.map(([name, meta, tag, tc], i) => { const r = Math.floor(i / 6), s = i % 6, pick = r % 2 === 0 ? s + 1 : 6 - s;
+      const kept = t.kind === 'keeper' && tag.startsWith('K'); const forf = name === '';
+      return { label: (r + 1) + '.' + String(pick).padStart(2, '0'), name: forf ? 'Pick forfeited' : name, meta, tag, tc,
+        nc: forf ? '#7d84a8' : '#eef0fa', bg: kept ? 'rgba(246,196,69,.10)' : forf ? 'transparent' : tag === 'PICK' ? 'rgba(167,139,250,.12)' : 'rgba(255,255,255,.04)',
+        ls: forf ? 'dashed' : 'solid', line: kept ? 'rgba(246,196,69,.45)' : 'rgba(255,255,255,.06)' }; });
+    const bb = [['QB','2 of 3','#fb8aa0','66%'],['RB','4 of 6','#5ee6b0','66%'],['WR','5 of 8','#7fb7e8','62%'],['TE','1 of 3','#fbbf24','33%']].map(([pos, txt, c, have]) => ({ pos, txt, c, have }));
+    const ladder = [['Wk 1','Open Team 4 cut','CUT','#fb5b78'],['Wk 2','Open Team 6 cut','CUT','#fb5b78'],['Wk 3','Open Team 10 cut','CUT','#fb5b78'],['Wk 4','You · 8th of 9 alive','+35.9 over','#34d399'],['Wk 5','Projected cut: Open Team 12','61% risk','#fbbf24'],['Wk 6','Your cut risk','9%','#22d3ee']]
+      .map(([wk, text, tag, c]) => ({ wk, text, tag, c, bg: text.startsWith('You') ? 'rgba(34,211,238,.08)' : '#0b0d14' }));
+    return { tabs, t, orderRows, budgets, vcells, bb, ladder,
+      isSurvivor: t.view === 'survivor', isOrder: t.view === 'order', isAuction: t.view === 'auction', isBoard: t.view === 'board', isBestBall: t.view === 'bestball', isGuillotine: t.view === 'guillotine',
+      bid: st.bid, bidder: st.bidder, maxBid, afMax: 41,
+      bid1: () => this.setState({ bid: st.bid + 1, bidder: 'You' }), bid5: () => this.setState({ bid: st.bid + 5, bidder: 'You' }), bidMax: () => this.setState({ bid: Math.max(st.bid + 1, 41), bidder: 'You' }) };
+  }
+}
+</script>
+</body>
+</html>

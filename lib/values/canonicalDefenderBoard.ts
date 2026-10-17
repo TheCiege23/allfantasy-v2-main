@@ -146,6 +146,19 @@ export async function loadCanonicalDefenderBoard(
 
   const sleeperIds = [...new Set(rows.map((r) => r.sleeperId).filter((id): id is string => !!id))]
 
+  /*
+   * 🛑 THE WEEK BEING PLAYED, STATED — NOT "NEWEST STAT WEEK + 1". Without a window the pricer
+   * projects the week after the newest stat line, and from Thursday night to Monday the newest stat
+   * week is the one in progress (2026-10-03: week 4 held 144 players, Thursday's game only) — so a
+   * refresh on any of those days priced every defender on NEXT week's projection. A league already
+   * passes its own `current_week` (`resolveLeagueIdpScoring`); this league-free board has no league,
+   * so it takes the week the projection feed is being refreshed for. Unknown → the old rule.
+   */
+  const { latestProjectionWeek } = await import('@/lib/core-app/playerProjections')
+  const at = await latestProjectionWeek().catch(() => null)
+  const season = at ? Number(at.season) : NaN
+  const projectionWindow = at && Number.isInteger(season) && at.week >= 1 ? { season, week: at.week } : undefined
+
   const priced = await priceIdpBoard({
     prisma: args.prisma,
     scoring: canonicalIdpScoring(),
@@ -153,6 +166,7 @@ export async function loadCanonicalDefenderBoard(
     rosterSlots: CANONICAL_IDP_SLOTS,
     numTeams: CANONICAL_NUM_TEAMS,
     isDynasty: args.isDynasty ?? true,
+    ...(projectionWindow ? { projectionWindow } : {}),
   })
 
   return { ...priced, reference, candidates: sleeperIds.length }

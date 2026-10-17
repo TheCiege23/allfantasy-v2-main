@@ -1,5 +1,6 @@
 'use client'
 
+import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { useMemo } from 'react'
 import type { AccentTone } from '@/lib/create-league-v2/theme'
 import type { CreateLeagueV2State, TradeReviewMode } from '@/lib/create-league-v2/state'
@@ -154,6 +155,7 @@ export function CreateLeagueReviewStep({
         title="Review"
         hint="Final snapshot before submit. Fix any warnings above if something looks off."
       />
+      <SurvivorSeasonPreview state={state} />
       <div className="divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-white/[0.02] px-4 py-2">
         {rows.map((row) => (
           <div key={row.label} className="flex items-start justify-between gap-3 py-2.5">

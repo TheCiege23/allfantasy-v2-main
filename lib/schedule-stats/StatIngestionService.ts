@@ -164,6 +164,7 @@ export async function ingestSportStats(
               weekOrRound: input.weekOrRound,
               statPayload: row.statPayload,
               normalizedStatMap: normalized,
+              source: input.source,
               fantasyPoints,
               /*
                * ⚠ `?? undefined`, NEVER `?? null`. Prisma treats an explicit null as
@@ -184,6 +185,7 @@ export async function ingestSportStats(
               weekOrRound: input.weekOrRound,
               statPayload: row.statPayload,
               normalizedStatMap: normalized,
+              source: input.source,
               fantasyPoints,
               opponent: row.opponent ?? null,
               team: row.team ?? null,

@@ -107,6 +107,30 @@ export function getPositionMinDelta(
 }
 
 /**
+ * Why AutoCoach must leave this player where he is, or null when it may move him.
+ *
+ * 🛑 THE ONLY PREFERENCES THE ENGINE HONOURS ARE THE ONES THAT CAN ONLY MAKE IT DO LESS, AT THE
+ * USER'S REQUEST. AutoCoach replaces a starter who is definitively OUT/IR/inactive — a guaranteed
+ * zero — so any healthy bench player is a strict improvement. A knob that BLOCKS such a swap on a
+ * projection margin (aggressiveness, `confidenceThreshold`, `minProjectionDelta`) would leave that
+ * zero in the lineup while calling itself "conservative": the engine's confidence is 60–80 off the
+ * projected delta, and the default 65 would refuse any swap under a ~1.25 pt edge. Those fields stay
+ * in the schema and stay unread, and Settings does not show them. (Owner's call, 2026-10-02.)
+ *
+ *  - `excluded`: the user manages this player themselves. Never moved — not out, and not in either.
+ *  - `position_off`: the user turned AutoCoach off for this position ("don't touch my QB").
+ */
+export function autoCoachSkipReason(
+  player: { id: string; position?: string | null },
+  prefs: AutoCoachUserPreferences,
+): 'excluded' | 'position_off' | null {
+  if (isPlayerExcluded(String(player.id), prefs)) return 'excluded'
+  const pos = String(player.position ?? '').trim()
+  if (pos && isPositionDisabled(pos, prefs)) return 'position_off'
+  return null
+}
+
+/**
  * Serialize preferences to JSON for database storage
  */
 export function serializeAutoCoachPreferences(prefs: AutoCoachUserPreferences): Record<string, unknown> {

@@ -64,7 +64,7 @@ Set these as server-side secrets in the deployment. Never use a `NEXT_PUBLIC_` p
 
 | Variable | Value |
 | --- | --- |
-| `APPLE_IAP_BUNDLE_ID` | `ai.allfantasy.www` (confirm this matches the App Store Connect app record) |
+| `APPLE_IAP_BUNDLE_ID` | `ai.allfantasy.app` — the App Store Connect app record's Bundle ID and `appId` in `ios-app/capacitor.config.json`. The server rejects every transaction signed for any other bundle. |
 | `APPLE_IAP_APP_APPLE_ID` | Numeric Apple ID shown for the app in App Store Connect |
 | `APPLE_IAP_KEY_ID` | In-App Purchase key ID |
 | `APPLE_IAP_ISSUER_ID` | In-App Purchase issuer ID |
@@ -73,11 +73,15 @@ Set these as server-side secrets in the deployment. Never use a `NEXT_PUBLIC_` p
 
 Download trusted Apple root certificates from [Apple PKI](https://www.apple.com/certificateauthority/) and encode the **DER** files as base64. Apple's official server library validates the full signed certificate chain. Deploy the database migration before enabling purchases.
 
-## iOS wrapper
+## iOS app
 
-The PWABuilder Xcode project provided by the owner is in `ios-pwabuilder/src/AllFantasy.xcworkspace`. The owner must copy `GoogleService-Info.plist` from the original PWABuilder ZIP to `ios-pwabuilder/src/AllFantasy/GoogleService-Info.plist` before building; this Firebase configuration is intentionally excluded from the public repository. Its bundle ID is `ai.allfantasy.www`. `ViewController.swift` registers an `apple-iap` script handler for the first-party HTTPS page. It loads StoreKit products, makes purchases with the signed-in user's `appAccountToken`, returns Apple's signed transaction to the web client, and restores entitlements plus unfinished purchases. The web client verifies each transaction with the server before asking StoreKit to finish it. The shared checkout function routes iOS app purchases to this bridge while browsers continue using Stripe. The iOS paywalls show StoreKit localized prices and a Restore Purchases button. Both Stripe checkout API routes reject requests from the PWABuilder iOS shell; an older shell without the bridge displays an update message.
+The app is the Capacitor shell in `ios-app/` (bundle ID `ai.allfantasy.app`). An earlier PWABuilder wrapper (`ios-pwabuilder/`, bundle `ai.allfantasy.www`) carried the first version of this bridge; it never shipped under the App Store Connect record and was removed when the bridge moved here.
 
-**The build already submitted for review cannot gain this Swift code through a web deployment.** Open the workspace on a Mac with Xcode, set your Apple Developer signing team, build and sandbox-test, then submit a new build. The project build number was raised from 1 to 2; raise it again if build 2 is already used in App Store Connect. PWABuilder's standard wrapper did not include this native purchase bridge. See [PWABuilder's iOS FAQ](https://github.com/pwa-builder/PWABuilder/blob/main/docs/builder/faq.md).
+- `ios-app/ios/App/App/AppleIAPHandler.swift` is registered by `AppBridgeViewController` as the WebView's `apple-iap` script message handler, accepting messages only from the main frame of `https://www.allfantasy.ai` / `https://allfantasy.ai`. It loads StoreKit products, purchases with the signed-in user's `appAccountToken`, returns Apple's signed transaction to the page, restores entitlements plus unfinished purchases, and opens Apple's Manage Subscriptions sheet. It finishes a transaction only when the page reports that our server granted it. It also listens to `Transaction.updates` from launch: renewals are finished there (the notification endpoint grants them); consumables are left unfinished for Restore Purchases to grant.
+- The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (`ios-app/capacitor.config.json`). `AFIAP` tells the website this build can buy: middleware reopens `/upgrade`, `/pricing`, `/commissioner-upgrade` and `/tokens`, and `html[data-ios-iap]` unhides their links and the `data-ios-purchase` copy (`lib/platform/iosApp.ts`, `app/globals.css`). A 1.0 build has no `AFIAP` and keeps the full no-purchase gate. Stripe checkout, the billing portal, donations, the marketplace and league dues stay refused in every build.
+- `lib/monetization/checkout-client.ts` sends any purchase made inside the app to the bridge; browsers keep Stripe. Both Stripe checkout routes also refuse the app's User-Agent (`isAppleIosShellRequest`). The paywalls show StoreKit's localized prices, Restore Purchases and Manage Subscriptions.
+
+**A web deploy cannot add the Swift code to a build already in App Store Connect.** Run the **ios-testflight** workflow (no Mac needed — see `docs/app-store/RUNBOOK.md`) with the version that is open in App Store Connect (`1.0` while it has never been released — the `1.1` in the User-Agent is only a label), sandbox-test, then submit that build with the in-app purchases.
 
 The iOS paywalls include Restore Purchases and Manage Subscriptions. The latter opens Apple's subscription management sheet. The server notification endpoint handles renewals and refunds that happen outside the purchase screen.
 

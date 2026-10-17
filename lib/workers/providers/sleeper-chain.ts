@@ -6,10 +6,7 @@ import { getPlayersBySport } from '@/lib/sleeper-client'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import type { ApiFetchParams, ApiProvider } from '@/lib/workers/api-config'
 import { toApiChainSport } from '@/lib/workers/api-config'
-
-function namesClose(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase()
-}
+import { pickSleeperHeadshotPlayer } from '@/lib/player-assets/headshotCandidateMatch'
 
 export const sleeperChainProvider: ApiProvider = {
   name: 'sleeper',
@@ -44,21 +41,29 @@ export const sleeperChainProvider: ApiProvider = {
     }
 
     if (String(dataType) === 'player_headshots') {
-      const q = search || playerName
-      if (!q) return null
-      let best: { id: string; name: string; team: string | null; img: string } | null = null
-      for (const [id, raw] of Object.entries(players)) {
+      // Identity rules live in `pickSleeperHeadshotPlayer`: the subject's own Sleeper id when the
+      // caller has one, else exact name + position group + team, refusing ambiguity. This used to
+      // be a substring match that let a team-less free agent through — see that helper's header.
+      const sleeperId = typeof query.sleeperId === 'string' ? query.sleeperId.trim() : ''
+      const name = searchRaw || playerNameRaw
+      if (!name && !sleeperId) return null
+      const candidates = Object.entries(players).map(([id, raw]) => {
         const p = raw as unknown as Record<string, unknown>
-        const name = String(p.full_name ?? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim())
-        const nl = name.toLowerCase()
-        if (!nl.includes(q) && !q.split(/\s+/).every((w) => w.length < 2 || nl.includes(w))) continue
-        const t = normalizeTeamAbbrev(String(p.team ?? ''))
-        if (teamCode && t && !namesClose(t, teamCode)) continue
-        const img = `https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`
-        best = { id, name, team: t, img }
-        if (namesClose(name, searchRaw) || namesClose(name, playerNameRaw)) break
-      }
-      if (!best) return null
+        return {
+          id,
+          name: String(p.full_name ?? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim()),
+          position: p.position != null ? String(p.position) : null,
+          team: normalizeTeamAbbrev(String(p.team ?? '')),
+        }
+      })
+      const picked = pickSleeperHeadshotPlayer(candidates, {
+        sleeperId,
+        name,
+        position: typeof query.position === 'string' ? query.position : null,
+        team: teamCode,
+      })
+      if (!picked) return null
+      const best = { ...picked, img: `https://sleepercdn.com/content/nfl/players/thumb/${picked.id}.jpg` }
       return {
         playerId: best.id,
         playerName: best.name,

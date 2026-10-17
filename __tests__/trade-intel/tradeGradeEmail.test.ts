@@ -221,6 +221,32 @@ describe('the one grade, and only the one grade', () => {
     for (const v of ['5,170', '2,830', '8,000', '2,600', '2,100', '1,300', '6,000']) expect(html, v).toContain(v)
   })
 
+  /*
+   * The letter is often the FROZEN original, whose lines are in the order of whichever surface froze
+   * it — so the email lists this side's picks 2nd-then-1st while the grade lists 1st-then-2nd. By place
+   * alone the 1st's value printed beside the 2nd (HailShiva, 2026-10-01).
+   */
+  it('prints each pick’s value beside that pick, whatever order the grade lists them in', () => {
+    const twoPicks = trade([
+      side({ rosterId: 1, ownerId: 'u1', managerName: 'managerOne', picksIn: [pick(2, true), pick(1, true)], playersOut: [player('Rashid Shaheed', 0)], net: 0 }),
+      side({ rosterId: 2, ownerId: 'u2', managerName: 'managerTwo', playersIn: [player('Rashid Shaheed', 0)], picksOut: [pick(2, true), pick(1, true)], net: 0 }),
+    ])
+    const g = graded({
+      lines: [
+        { side: 'give', name: 'Rashid Shaheed', marketValue: 2600, leagueValue: 2600 },
+        { side: 'get', name: '2026 1st', marketValue: 6100, leagueValue: 6100 },
+        { side: 'get', name: '2026 2nd', marketValue: 2830, leagueValue: 2830 },
+      ],
+    })
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: twoPicks, ledgerUrl: URL, grade: g })
+    const at = (s: string) => html.indexOf(s)
+    // 2nd, its 2,830, then 1st, its 6,100 — never the 1st's 6,100 beside the 2nd.
+    expect(at('2026 2nd round pick')).toBeGreaterThan(-1)
+    expect(at('2026 2nd round pick')).toBeLessThan(at('2,830'))
+    expect(at('2,830')).toBeLessThan(at('2026 1st round pick'))
+    expect(at('2026 1st round pick')).toBeLessThan(at('6,100'))
+  })
+
   it('a count mismatch prints names without values rather than values against the wrong asset', () => {
     const g = graded({ lines: [{ side: 'get', name: 'Brenton Strange', marketValue: 5170, leagueValue: 5170 }] })
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })

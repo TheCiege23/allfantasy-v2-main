@@ -71,11 +71,11 @@ export async function loadLeagueShareView(
   opts: { includeValues?: boolean; season: number },
 ): Promise<LeagueShareView | null> {
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { id: true, name: true, platform: true, settings: true } })
+    .findUnique({ where: { id: leagueId }, select: { id: true, name: true, platform: true, sport: true, settings: true } })
     .catch(() => null)
   if (!league) return null
   const sleeperIds = rows.map((r) => r.player.sleeperId)
-  const idSpace = rosterIdSpaceOf(league.platform)
+  const idSpace = rosterIdSpaceOf(league.platform, league.sport)
   /*
    * Fleaflicker / MFL: read through the identity bridge when most of the league translates
    * (bridgedRosterIds.ts), an unbridged id dropped. A player with no bridge id of his own could be

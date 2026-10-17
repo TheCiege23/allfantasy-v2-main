@@ -127,11 +127,17 @@ describe('the league Overview inside the shell', () => {
 })
 
 describe('the league header bar', () => {
-  const bar = (coverageHref: string | null) => (
+  it('identifies native leagues as hosted here rather than imported, even with a stale coverage href', () => {
+    render(bar('/core?league=lg-1#league-data-coverage', 'allfantasy'))
+    expect(screen.getByText('Hosted on AllFantasy · Beta')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /import/i })).toBeNull()
+  })
+
+  const bar = (coverageHref: string | null, platform = 'sleeper') => (
     <CoreLeagueContextBar
       leagueId="lg-1"
       leagueName="Kings of Buffalo"
-      platform="sleeper"
+      platform={platform}
       logoLetter="K"
       coverageHref={coverageHref}
       syncLabel="3m ago"
@@ -156,9 +162,9 @@ describe('the league header bar', () => {
     )
   })
 
-  it('leaves the chip as plain text when there is no import to describe', () => {
+  it('keeps the hosting label when no import coverage link is available', () => {
     render(bar(null))
     expect(screen.queryByRole('link', { name: /import/ })).toBeNull()
-    expect(screen.getByText('SLEEPER import')).toBeInTheDocument()
+    expect(screen.getByText('Imported · Hosted on Sleeper')).toBeInTheDocument()
   })
 })

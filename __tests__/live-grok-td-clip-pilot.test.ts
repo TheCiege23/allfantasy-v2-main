@@ -31,11 +31,16 @@ let feed: ReturnType<typeof touchdown>[] = []
 
 vi.mock('@/lib/live/playByPlayFeed', () => ({ readPlayByPlayFeed: vi.fn(async () => feed) }))
 vi.mock('@/lib/live/playFeedPresentation', () => ({
+  PLAY_FEED_SPORT: 'NFL',
   getPlayFeed: vi.fn(async () => feed.map((e) => ({ id: e.idempotencyKey, team: 'KC', headline: `${e.playerName} 12-yard TD` }))),
 }))
-// Player "started" is in someone's lineup; player "bench" is not.
+// Player "started" is in someone's lineup; player "bench" is not. The real lookup resolves nobody
+// without a sport (RI ids are only unique within one), so the double does the same.
 vi.mock('@/lib/live/bigPlayNotifier', () => ({
-  ownersByPlayerId: vi.fn(async (ids: string[]) => new Map(ids.filter((i) => i === 'started').map((i) => [i, ['user-1']]))),
+  ownersByPlayerId: vi.fn(async (ids: string[], opts?: { sport?: string }) =>
+    opts?.sport === 'NFL'
+      ? new Map(ids.filter((i) => i === 'started').map((i) => [i, ['user-1']]))
+      : new Map()),
 }))
 vi.mock('@/lib/xai-client', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/xai-client')>()

@@ -393,7 +393,8 @@ describe('6e — the completion bar counts live platforms', () => {
 
     /* Sleeper (profile) + ESPN (cookies present) are connected in this fixture. */
     const connected = 2
-    const total = LIVE.length
+    /* Fleaflicker imports by league id with no credential — nothing to connect, so not counted. */
+    const total = LIVE.filter((o) => o.provider !== 'fleaflicker').length
     const pct = Math.round((connected / total) * 100)
     expect(screen.getByText(new RegExp(`${connected} of ${total} live platforms connected`, 'i'))).toBeTruthy()
     expect(screen.getByText(`${pct}%`)).toBeTruthy()
@@ -419,7 +420,12 @@ describe('6e — the completion bar counts live platforms', () => {
     vi.doMock('@/lib/league-import/provider-ui-config', async (importOriginal) => {
       const actual = await importOriginal<typeof import('@/lib/league-import/provider-ui-config')>()
       const options = actual.IMPORT_PROVIDER_UI_OPTIONS.map((o) =>
-        o.provider === 'fleaflicker' ? { ...o, available: false } : o,
+        /*
+         * Fantrax, not Fleaflicker: Fleaflicker left the denominator on 2026-10-02 (it has no
+         * credential, so it can never be "connected"), and switching it off would no longer
+         * move the number this test exists to watch.
+         */
+        o.provider === 'fantrax' ? { ...o, available: false } : o,
       )
       return {
         ...actual,
@@ -429,7 +435,7 @@ describe('6e — the completion bar counts live platforms', () => {
     })
     try {
       const { ConnectedPlatforms: Scoped } = await import('@/components/core-app/import/ConnectedPlatforms')
-      const scopedLive = LIVE.filter((o) => o.provider !== 'fleaflicker')
+      const scopedLive = LIVE.filter((o) => o.provider !== 'fantrax' && o.provider !== 'fleaflicker')
       render(<Scoped sleeperUsername={null} />)
       await waitFor(() => expect(document.querySelector('.af-ca-progress')).toBeTruthy())
       /*

@@ -33,6 +33,7 @@ import {
   ESPN_POSITION_LABELS,
   ESPN_TEAM_ABBREVIATIONS,
 } from '@/lib/league-import/espn/EspnLeagueFetchService'
+import { espnDefenseTeamAbbreviation } from '@/lib/league-import/espn/espnTeamDefenseIds'
 
 /** db-first-exception: provider adapter, sole importer is the ingestion module. */
 const ESPN_CORE_ATHLETES = 'https://sports.core.api.espn.com/v3/sports/football/nfl/athletes'
@@ -92,18 +93,16 @@ export function isRealEspnAthleteName(name: unknown): boolean {
  * ⚠ ESPN DENOTES A D/ST WITH A NEGATIVE ID, and none of them resolve as athletes —
  * `-16012` would stay unmapped for ever while every human player resolved. The
  * convention is `-16000 - proTeamId`, so -16012 is team 12 and -16026 is team 26.
- * Derived rather than fetched: arithmetic over a table we already ship.
+ * Derived rather than fetched: arithmetic over a table we already ship — the same arithmetic the
+ * roster crosswalk uses to score the defence (`espnTeamDefenseIds.ts`).
  */
 export function espnDefenseIdentity(
   providerPlayerId: string,
   teamAbbreviations: Record<number, string>,
 ): EspnAthlete | null {
-  const n = Number(String(providerPlayerId ?? '').trim())
-  if (!Number.isInteger(n) || n > -16001 || n < -16099) return null
-  const teamId = -16000 - n
-  const abbreviation = teamAbbreviations[teamId]
+  const abbreviation = espnDefenseTeamAbbreviation(providerPlayerId, teamAbbreviations)
   if (!abbreviation) return null
-  return { id: String(n), displayName: `${abbreviation} D/ST` }
+  return { id: String(Number(String(providerPlayerId).trim())), displayName: `${abbreviation} D/ST` }
 }
 
 /** First non-empty string among several candidate shapes, or null. */

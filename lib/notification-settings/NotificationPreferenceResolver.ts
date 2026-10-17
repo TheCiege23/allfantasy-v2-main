@@ -3,7 +3,13 @@ import type {
   NotificationCategoryId,
   NotificationChannelPrefs,
 } from "./types"
-import { NOTIFICATION_CATEGORY_IDS, OPT_IN_NOTIFICATION_CATEGORY_IDS } from "./types"
+import {
+  EMAIL_DEFAULT_OFF_CATEGORY_IDS,
+  NOTIFICATION_CATEGORY_IDS,
+  OPT_IN_NOTIFICATION_CATEGORY_IDS,
+  SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS,
+} from "./types"
+import { readSmsConsent } from "@/lib/sms/smsConsent"
 
 const DEFAULT_CHANNEL: NotificationChannelPrefs = {
   enabled: true,
@@ -30,18 +36,40 @@ const OPT_IN_CHANNEL: NotificationChannelPrefs = {
  * below reads `defaults.categories[id]` field by field. So an opt-in category saved as
  * `{ enabled: true }` alone does NOT silently switch its email on: absent channels stay off.
  */
-export function getDefaultCategoryPreferences(id: NotificationCategoryId): NotificationChannelPrefs {
-  return OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id) ? { ...OPT_IN_CHANNEL } : { ...DEFAULT_CHANNEL }
+export function getDefaultCategoryPreferences(
+  id: NotificationCategoryId,
+  opts: { smsConsented?: boolean } = {},
+): NotificationChannelPrefs {
+  if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) return { ...OPT_IN_CHANNEL }
+  return {
+    ...DEFAULT_CHANNEL,
+    email: !EMAIL_DEFAULT_OFF_CATEGORY_IDS.includes(id),
+    sms: Boolean(opts.smsConsented) && SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS.includes(id),
+  }
+}
+
+/**
+ * Has this preferences blob a LIVE SMS consent record (agreed, not withdrawn)? It flips the SMS
+ * DEFAULT for the time-sensitive categories. It is read from the same JSON the resolver is given,
+ * so every caller agrees without threading a flag through.
+ *
+ * ⚠ This decides a default, never a send. The dispatcher still requires `hasSmsConsent` against
+ * the CURRENT phone number (consent is per number), a verified phone and the daily cap; a stale
+ * record for an old number can therefore flip a switch on screen but cannot text anyone.
+ */
+export function hasLiveSmsConsentRecord(saved: unknown): boolean {
+  const record = readSmsConsent(saved)
+  return Boolean(record?.consentedAt) && !record?.revokedAt
 }
 
 /**
  * Returns default preferences: every category enabled with in-app + push + email and no SMS,
  * except the opt-in categories, which start off on every channel.
  */
-export function getDefaultNotificationPreferences(): NotificationPreferences {
+export function getDefaultNotificationPreferences(opts: { smsConsented?: boolean } = {}): NotificationPreferences {
   const categories: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>> = {}
   for (const id of NOTIFICATION_CATEGORY_IDS) {
-    categories[id] = getDefaultCategoryPreferences(id)
+    categories[id] = getDefaultCategoryPreferences(id, opts)
   }
   return { globalEnabled: true, categories }
 }
@@ -64,7 +92,7 @@ export function getDefaultNotificationPreferences(): NotificationPreferences {
 export function resolveNotificationPreferences(
   saved: NotificationPreferences | null | undefined
 ): NotificationPreferences {
-  const defaults = getDefaultNotificationPreferences()
+  const defaults = getDefaultNotificationPreferences({ smsConsented: hasLiveSmsConsentRecord(saved) })
   // Preserved on BOTH return paths — the early return dropped them too.
   const passthrough: Partial<NotificationPreferences> = {
     ...(saved?.quietHours !== undefined && { quietHours: saved.quietHours }),
@@ -110,5 +138,27 @@ export function getNotificationPreferencesFingerprint(
     const push = value.push ?? value.inApp
     return `${id}:${value.enabled ? "1" : "0"}${value.inApp ? "1" : "0"}${value.email ? "1" : "0"}${value.sms ? "1" : "0"}${push ? "1" : "0"}`
   })
-  return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}`
+  /*
+   * ⚠ QUIET HOURS AND LEAGUE OVERRIDES ARE PART OF THE STATE. The "updated elsewhere" banner compares
+   * this string; before 2026-10-02 it covered only the switch and the categories, so a quiet-hours
+   * window or a league mute changed on another device was never noticed — and the stale draft on
+   * screen then saved over it.
+   *
+   * Canonical on purpose: a league override with no opinion (`{}`, what "Follow my settings" and
+   * Reset write) prints the same as an absent one, and leagues are sorted, so two equivalent states
+   * cannot raise a false "updated elsewhere".
+   */
+  const q = resolved.quietHours
+  // A window switched off is the same state as no window at all.
+  const quiet =
+    q && q.enabled !== false ? `q:${q.startHour}-${q.endHour}${q.allowCritical === false ? "c0" : "c1"}` : "q:off"
+  const leagues = Object.entries(resolved.leagues ?? {})
+    .map(([id, o]) => {
+      const muted = [...(o?.mutedCategories ?? [])].sort().join(",")
+      const off = o?.enabled === false
+      return off || muted ? `${id}:${off ? "0" : "1"}:${muted}` : null
+    })
+    .filter((x): x is string => x !== null)
+    .sort()
+  return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}|${quiet}|L:${leagues.join(";")}`
 }

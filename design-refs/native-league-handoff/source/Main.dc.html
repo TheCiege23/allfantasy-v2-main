@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — League Home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}a{color:#22d3ee}a:hover{color:#67e8f9}</style>
+</helmet>
+<div class="af">
+
+  <!-- League rail: click to switch, Sleeper-style, with AF status rings -->
+  <nav class="rail" aria-label="Your leagues">
+    <a class="rail-home" href="#" aria-label="All leagues home">AF</a>
+    <div class="rail-sep"></div>
+    <sc-for list="{{rail}}" as="l" hint-placeholder-count="7">
+      <button class="{{l.cls}}" onClick="{{l.pick}}" aria-label="{{l.name}}">
+        <span class="rl-pill"></span>
+        <span class="av" style="background: {{l.bg}}; color: {{l.fg}}; box-shadow: 0 0 0 2px #0b0d14, 0 0 0 3.5px {{l.ring}}">{{l.ini}}
+          <span class="av-tag" style="background: {{l.tagBg}}; color: {{l.tagFg}}">{{l.tag}}</span>
+          <sc-if value="{{l.unread}}" hint-placeholder-val="{{ false }}"><span class="av-dot">{{l.unread}}</span></sc-if>
+        </span>
+        <span class="rl-score" style="color: {{l.ring}}">{{l.mini}}</span>
+        <span class="rl-tip">
+          <span style="font: 600 14px/1.2 'Archivo', sans-serif; color: #eef0fa">{{l.name}}</span>
+          <span style="font: 500 11px/1.3 'JetBrains Mono', monospace; color: #989fc2">{{l.meta}}</span>
+          <span style="font: 700 11px/1.3 'Archivo', sans-serif; color: {{l.ring}}">{{l.status}}</span>
+        </span>
+      </button>
+    </sc-for>
+    <div class="rail-sep"></div>
+    <button class="rail-add" aria-label="Create or import a league">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </nav>
+
+  <!-- Section nav -->
+  <nav class="snav" aria-label="League sections">
+    <a class="nv" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>All leagues</a>
+    <div style="display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; padding: 12px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255,255,255,.07)">
+      <span class="av" style="width: 36px; height: 36px; font-size: 14px; background: {{cur.bg}}; color: {{cur.fg}}">{{cur.ini}}</span>
+      <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+        <span style="font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{cur.name}}</span>
+        <span class="lbl" style="color: {{cur.ring}}">{{cur.phase}}</span>
+      </span>
+    </div>
+    <span class="lbl nv-h">This league</span>
+    <a class="nv nv-on" href="Main.dc.html">League home</a>
+    <a class="nv" href="Lineup.dc.html">My team</a>
+    <a class="nv" href="Matchup.dc.html">Matchup</a>
+    <a class="nv" href="Waivers.dc.html">Players &amp; waivers</a>
+    <a class="nv" href="Trades.dc.html">Trades<span class="nv-c">1</span></a>
+    <a class="nv" href="MockSetup.dc.html">Draft HQ</a>
+    <a class="nv" href="Standings.dc.html">Standings &amp; playoffs</a>
+    <a class="nv" href="Chat.dc.html">League chat<span class="nv-c">3</span></a>
+    <sc-if value="{{isCommish}}" hint-placeholder-val="{{ true }}">
+      <a class="nv" href="Commissioner.dc.html" style="color: #f6c445">Commissioner</a>
+    </sc-if>
+    <span class="lbl nv-h">This week</span>
+    <a class="nv" href="#">War Room</a>
+    <a class="nv" href="#">Live scores<span class="nv-c">12</span></a>
+    <a class="nv" href="#">Season Outlook</a>
+    <span class="lbl nv-h">Your record</span>
+    <a class="nv" href="#">Your career</a>
+    <a class="nv" href="#">Rankings</a>
+  </nav>
+
+  <div class="mainc">
+    <header class="topb">
+      <button class="viewing"><span class="lbl">Viewing</span>{{cur.name}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <label class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Find a player or jump to a league" aria-label="Search"><span class="kbd">⌘K</span></label>
+      <div style="flex: 1"></div>
+      <span class="chip chip-af">● Live on AF</span>
+      <span class="num" style="font-size: 11px; color: #989fc2">NFL WK 5</span>
+    </header>
+
+    <div class="wrap" style="display: flex; flex-direction: column; gap: 24px">
+
+      <!-- League header -->
+      <section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 20px; background: #10131c">
+        <div class="lhead">
+          <div class="av" style="width: 64px; height: 64px; font-size: 26px; border-radius: 16px; background: {{cur.bg}}; color: {{cur.fg}}; border: 1px solid rgba(255,255,255,.13)">{{cur.ini}}</div>
+          <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <span class="{{cur.originCls}}">{{cur.origin}}</span>
+              <sc-if value="{{isCommish}}" hint-placeholder-val="{{ true }}"><span class="chip chip-gold">Commissioner</span></sc-if>
+            </div>
+            <h1 class="h1">{{cur.name}}</h1>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap">
+              <sc-for list="{{cur.chips}}" as="c" hint-placeholder-count="5"><span class="chip">{{c}}</span></sc-for>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap">
+            <sc-if value="{{isNative}}" hint-placeholder-val="{{ true }}">
+              <button class="btn btn-p">Invite managers</button>
+            </sc-if>
+            <a class="btn btn-g" href="Commissioner.dc.html">League settings</a>
+          </div>
+        </div>
+        <ol aria-label="Season phase" style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 6px">
+          <sc-for list="{{phases}}" as="p" hint-placeholder-count="5">
+            <li style="display: flex; flex-direction: column; gap: 8px">
+              <div style="height: 4px; border-radius: 999px; background: {{p.bar}}"></div>
+              <span style="font: 700 10px/1 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; color: {{p.color}}">{{p.name}}</span>
+            </li>
+          </sc-for>
+        </ol>
+      </section>
+
+      <!-- Imported, not yet native -->
+      <sc-if value="{{isShadow}}" hint-placeholder-val="{{ false }}">
+        <section class="card" style="padding: 24px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; border-color: rgba(34,211,238,.28)">
+          <div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 8px">
+            <span class="lbl" style="color: #22d3ee">Synced from {{cur.platform}} · read-only</span>
+            <h2 class="h2">Run {{cur.name}} on AllFantasy</h2>
+            <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #c3c9e6; max-width: 60ch">Today AF reads this league from {{cur.platform}}. Move it here to set lineups, run waivers, trade and draft without leaving AllFantasy. Rosters, settings and history come with it.</p>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap"><button class="btn btn-p">Make it native</button><button class="btn btn-g">Open in {{cur.platform}}</button></div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{isNative}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+          <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+
+            <section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 18px; background: #10131c">
+              <div style="display: flex; justify-content: space-between; gap: 12px"><span class="lbl" style="color: #22d3ee">Next up</span><span class="lbl">Draft HQ</span></div>
+              <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap">
+                <div style="display: flex; flex-direction: column; gap: 8px">
+                  <h2 class="h2" style="font-size: 30px">Draft · Mon, Oct 19 · 4:11 AM</h2>
+                  <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #c3c9e6; max-width: 52ch">12-team snake. The room opens 30 minutes early; set your queue before then.</p>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap"><a class="btn btn-p" href="MockSetup.dc.html">Enter Draft HQ</a><a class="btn btn-g" href="DraftLive.dc.html">Draft board</a></div>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 12px">
+                <a href="DraftRoom.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); color: #eef0fa"><span style="font-weight: 600; font-size: 15px">Mock draft</span><span style="font-size: 13px; line-height: 1.45; color: #989fc2">This league's exact settings, against AF drafters.</span></a>
+                <a href="DraftRoom.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); color: #eef0fa"><span style="font-weight: 600; font-size: 15px">Queue &amp; rankings</span><span style="font-size: 13px; line-height: 1.45; color: #989fc2">Your board auto-picks from it if you time out.</span></a>
+                <a href="DraftRoom.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); color: #eef0fa"><span style="font-weight: 600; font-size: 15px">Supplemental draft</span><span style="font-size: 13px; line-height: 1.45; color: #989fc2">Late joiners and dispersal pools. Commissioner-run.</span></a>
+              </div>
+            </section>
+
+            <sc-if value="{{isCommish}}" hint-placeholder-val="{{ true }}">
+              <section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 16px">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+                  <div style="display: flex; flex-direction: column; gap: 8px"><span class="lbl">Get the league ready</span><h2 class="h2">Smart defaults are on — review before the draft</h2></div>
+                  <div style="display: flex; align-items: center; gap: 12px"><span class="num" style="font-size: 13px; font-weight: 700; color: #c3c9e6">2 of 6</span><div class="bar" style="width: 140px"><div style="width: 33%; background: #22d3ee"></div></div></div>
+                </div>
+                <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px">
+                  <sc-for list="{{setup}}" as="s" hint-placeholder-count="6">
+                    <li><a href="Commissioner.dc.html" class="row" style="color: #eef0fa">
+                      <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 999px; flex: none; display: flex; align-items: center; justify-content: center; border: 1.5px solid {{s.ring}}; background: {{s.fill}}; color: #04050c; font-size: 12px; font-weight: 700">{{s.mark}}</span>
+                      <span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 700; font-size: 14px">{{s.title}}</span><span style="font-size: 13px; color: #989fc2">{{s.detail}}</span></span>
+                      <span style="font: 700 10px/1 'JetBrains Mono', monospace; letter-spacing: .1em; text-transform: uppercase; color: {{s.ring}}">{{s.status}}</span>
+                    </a></li>
+                  </sc-for>
+                </ul>
+              </section>
+            </sc-if>
+
+            <section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 14px">
+              <div style="display: flex; justify-content: space-between"><span class="lbl">League activity</span><a href="#" style="font-size: 13px; font-weight: 700">All activity</a></div>
+              <div class="row" style="padding: 10px 0"><span class="av" style="width: 32px; height: 32px; font-size: 11px; border-radius: 999px; background: #1f2a4d; color: #9fd4ff">TC</span><span style="flex: 1; font-size: 14px"><strong>TheCiege26</strong> scheduled the draft for Mon, Oct 19</span></div>
+              <div class="row" style="padding: 10px 0"><span class="av" style="width: 32px; height: 32px; font-size: 11px; border-radius: 999px; background: #1f2a4d; color: #9fd4ff">TC</span><span style="flex: 1; font-size: 14px"><strong>TheCiege26</strong> created the league on AllFantasy</span></div>
+            </section>
+          </div>
+
+          <aside style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+            <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
+              <span class="lbl">Your team</span>
+              <span style="font-weight: 600; font-size: 17px">TheCiege26's Team</span>
+              <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+                <div style="padding: 12px; border-radius: 10px; background: #0b0d14; display: flex; flex-direction: column; gap: 8px"><span class="lbl">Record</span><span class="num" style="font-size: 18px; font-weight: 600">0–0</span></div>
+                <div style="padding: 12px; border-radius: 10px; background: #0b0d14; display: flex; flex-direction: column; gap: 8px"><span class="lbl">PF</span><span class="num" style="font-size: 18px; font-weight: 600">0.0</span></div>
+                <div style="padding: 12px; border-radius: 10px; background: #0b0d14; display: flex; flex-direction: column; gap: 8px"><span class="lbl">FAAB</span><span class="num" style="font-size: 18px; font-weight: 600; color: #7d84a8">—</span></div>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px"><a class="btn btn-g" href="Lineup.dc.html">My team</a><a class="btn btn-g" href="Waivers.dc.html">Players</a></div>
+            </section>
+
+            <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
+              <div style="display: flex; justify-content: space-between"><span class="lbl">League chat</span><span class="chip chip-bad">3 new</span></div>
+              <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.45">
+                <div><strong>TheCiege26</strong> <span style="color: #c3c9e6">Draft is set for the 19th — get your queues in.</span></div>
+              </div>
+              <label class="search" style="max-width: none; border-color: rgba(255,255,255,.13)"><input type="text" placeholder="Message the league" aria-label="Message the league"></label>
+            </section>
+
+            <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 10px">
+              <div style="display: flex; justify-content: space-between"><span class="lbl">Standings</span><a href="#" style="font-size: 13px; font-weight: 700">Full table</a></div>
+              <ol style="list-style: none; margin: 0; padding: 0">
+                <sc-for list="{{standings}}" as="t" hint-placeholder-count="6">
+                  <li style="display: flex; align-items: center; gap: 12px; padding: 9px 4px; border-bottom: 1px solid rgba(255,255,255,.05)"><span class="num" style="width: 18px; font-size: 12px; color: #7d84a8">{{t.rank}}</span><span style="flex: 1; font-size: 14px; color: {{t.color}}">{{t.name}}</span><span class="num" style="font-size: 13px; color: #c3c9e6">0–0</span></li>
+                </sc-for>
+              </ol>
+            </section>
+          </aside>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <button class="fab" aria-label="Ask Chimmy"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { league: 'blah' }; }
+  renderVals() {
+    const G = '#34d399', R = '#fb5b78', A = '#fbbf24', C = '#22d3ee', N = '#7d84a8';
+    const L = [
+      { id: 'blah', name: 'Blah', ini: 'B', bg: '#10131c', fg: C, tag: 'AF', native: true, commish: true, ring: A, mini: 'SETUP', status: 'Draft Mon, Oct 19 · 2 setup steps left', meta: '2026 · 12-team redraft · Half PPR', phase: 'Setup', phaseIdx: 0, unread: 3, chips: ['NFL','2026','Redraft','12 teams','Snake','Half PPR'] },
+      { id: 'parbur', name: 'Parbur', ini: 'P', bg: '#1f2a4d', fg: '#9fd4ff', tag: 'SLP', platform: 'Sleeper', ring: G, mini: '88–71', status: 'Winning · Wk 5', meta: '2026 · 12-team redraft · PPR', phase: 'Regular season · Wk 5', phaseIdx: 2, unread: 0, chips: ['NFL','2026','Redraft','12 teams','PPR'] },
+      { id: 'horse', name: 'Four Horsemen All-Stars 2023', ini: '4H', bg: '#12352a', fg: '#7ff0c4', tag: 'SLP', platform: 'Sleeper', ring: R, mini: '62–80', status: 'Losing · Wk 5', meta: '2026 · 4-team dynasty · PPR', phase: 'Regular season · Wk 5', phaseIdx: 2, unread: 0, chips: ['NFL','2026','Dynasty','4 teams','PPR'] },
+      { id: 'koth', name: 'KOTH', ini: 'K', bg: '#3a2410', fg: '#f0b46a', tag: 'SLP', platform: 'Sleeper', ring: G, mini: '101–93', status: 'Winning · Wk 5', meta: '2026 · 10-team redraft · PPR', phase: 'Regular season · Wk 5', phaseIdx: 2, unread: 16, chips: ['NFL','2026','Redraft','10 teams','PPR'] },
+      { id: 'pirate', name: 'Pirate League!', ini: 'PL', bg: '#3a1d55', fg: '#dcb4ff', tag: 'SLP', platform: 'Sleeper', ring: R, mini: '70–74', status: 'Losing · Wk 5', meta: '2026 · 14-team redraft · PPR', phase: 'Regular season · Wk 5', phaseIdx: 2, unread: 13, chips: ['NFL','2026','Redraft','14 teams','PPR'] },
+      { id: 'guil', name: 'Guillotine League 26', ini: 'GL', bg: '#4a1414', fg: '#ffb4b4', tag: 'SLP', platform: 'Sleeper', ring: G, mini: '8TH', status: '+35.9 over the cut', meta: '2026 · 14-team guillotine', phase: 'Regular season · Wk 5', phaseIdx: 2, unread: 0, chips: ['NFL','2026','Guillotine','14 teams'] },
+      { id: 'elim', name: 'Elimination Station 2', ini: 'ES', bg: '#123244', fg: '#7fd4f0', tag: 'SLP', platform: 'Sleeper', ring: G, mini: '8TH', status: '+17.5 over the cut', meta: '2026 · 14-team guillotine', phase: 'Regular season · Wk 5', phaseIdx: 2, unread: 0, chips: ['NFL','2026','Guillotine','14 teams'] }
+    ];
+    const cur0 = L.find(l => l.id === this.state.league) || L[0];
+    const rail = L.map(l => ({ ...l,
+      tagBg: l.native ? C : '#2a2f4a', tagFg: l.native ? '#04050c' : '#c3c9e6',
+      cls: 'rl' + (l.id === cur0.id ? ' rl-on' : ''), pick: () => this.setState({ league: l.id }) }));
+    const cur = { ...cur0,
+      origin: cur0.native ? 'Native on AllFantasy' : 'Synced from ' + cur0.platform,
+      originCls: cur0.native ? 'chip chip-af' : 'chip' };
+    const names = ['Setup','Draft','Regular season','Playoffs','Offseason'];
+    const phases = names.map((n, i) => ({ name: n,
+      bar: i < cur0.phaseIdx ? 'rgba(34,211,238,.45)' : i === cur0.phaseIdx ? C : 'rgba(255,255,255,.1)',
+      color: i === cur0.phaseIdx ? C : i < cur0.phaseIdx ? '#c3c9e6' : N }));
+    const S = (title, detail, done) => done
+      ? { title, detail, status: 'Done', ring: G, fill: G, mark: '✓' }
+      : { title, detail, status: 'Needs you', ring: A, fill: 'transparent', mark: '' };
+    const setup = [
+      S('Scoring', 'Half PPR', true), S('Draft scheduled', 'Mon, Oct 19 · 4:11 AM', true),
+      S('Invite managers', 'Open teams are claimed on join', false), S('Waivers', 'FAAB or rolling priority', false),
+      S('Playoffs', 'Teams, weeks and seeding', false), S('Draft order', 'Randomize or set by hand', false)
+    ];
+    const standings = ["TheCiege26's Team",'Open Team 2','Open Team 3','Open Team 4','Open Team 5','Open Team 6']
+      .map((n, i) => ({ rank: i + 1, name: n, color: i === 0 ? '#eef0fa' : '#c3c9e6' }));
+    return { rail, cur, phases, setup, standings,
+      isNative: !!cur0.native, isShadow: !cur0.native, isCommish: !!cur0.commish };
+  }
+}
+</script>
+</body>
+</html>

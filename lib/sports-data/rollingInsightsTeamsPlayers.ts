@@ -172,10 +172,15 @@ export async function syncRollingInsightsTeamsToDb(opts: {
         expiresAt,
       }
 
+      // ⚠ A MISSING BADGE IS NOT "NO LOGO". RI sends no `img` for college and most soccer
+      // teams, and writing that absence as `logo: null` on every sync erased the logos
+      // backfilled onto these rows from TheSportsDB/CFBD by school match (2026-10-01). Only
+      // a logo the vendor actually sent may replace the stored one.
+      const { logo: _vendorLogo, ...withoutLogo } = data
       try {
         await prisma.sportsTeam.upsert({
           where: { sport_externalId_source: { sport, externalId, source: SOURCE } },
-          update: data,
+          update: logo ? data : withoutLogo,
           create: { sport, externalId, source: SOURCE, ...data },
         })
         result.written += 1

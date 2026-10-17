@@ -43,7 +43,7 @@ export async function submitVote(
   opts: SubmitVoteOptions = {},
 ): Promise<SubmitVoteOutcome> {
   const ctx = await loadCouncilContext(leagueId)
-  if (!ctx) return { ok: false, status: 404, code: 'no_active_council', error: 'No active Tribal Council.' }
+  if (!ctx) return { ok: false, status: 404, code: 'no_active_council', error: 'No active Elimination Council.' }
   const { council, settings, eligibility, userToRoster } = ctx
 
   if (council.isRevealed || council.status === 'cancelled') {
@@ -65,6 +65,9 @@ export async function submitVote(
 
   const now = new Date()
   const past = now.getTime() > council.voteDeadlineAt.getTime() || council.status === 'closed'
+  if (council.phase === 'revote' && past) {
+    return { ok: false, status: 409, code: 'revote_closed', error: 'The two-hour revote window has closed. Uncast ballots do not count.' }
+  }
   const late = past
   if (late && !settings.lateVotesAllowed && !opts.allowLateOverride) {
     // Still record the ballot but flag it does-not-count — truthful, not silently dropped.

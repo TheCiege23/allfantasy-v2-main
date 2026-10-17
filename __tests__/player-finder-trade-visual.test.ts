@@ -62,6 +62,9 @@ vi.mock('@/lib/decision-os/trade/leagueTradeGrader', async () => {
 })
 vi.mock('@/lib/engine/trade', () => ({ runTradeAnalysis: mockRunTradeAnalysis }))
 
+import { bidReasonText } from '@/lib/core-app/finderTradeValueCopy'
+/** The bid sentence's own English words — none may survive into the Spanish. */
+const BID_EN = /\b(trades|league|waivers|owner|roster|upgrade|value|week|weeks|budget|remaining|lineup|improve|schedule|pace|dollars|share)\b/
 import { getPlayerTradeVisual, marketContextFor, recommendedPackage } from '@/lib/core-app/playerTradeVisual'
 import type { FairnessBand } from '@/lib/trade-discovery/redraftTradeDiscovery'
 
@@ -398,6 +401,15 @@ describe('getPlayerTradeVisual', () => {
     expect(bid.budgetTotal).toBe(1000)
     expect(bid.ceilingAtRemaining).toBe(91)
     expect(bid.reason).toMatch(/No trades in this league/)
+    /*
+     * The parts the Spanish card is rebuilt from (finderTradeValueCopy.ts `bidReasonText`) are the
+     * numbers this English sentence printed — and the Spanish carries the same ones, in no English.
+     */
+    expect(bid.parts).toEqual({ bid: 'upgrade', sharePct: 23, weekBudget: 400, paced: false, budgetRemaining: 400, weeksAssumed: 1, faabKnown: true })
+    expect(bid.reason).toContain("he gets 23% of this week's $400 — your whole remaining budget")
+    expect(bid.reason).toMatch(BID_EN) // the control: the English trips the check the Spanish must pass
+    expect(bidReasonText(bid, 'es')).toContain('le corresponde el 23% de los $400 de esta semana: todo tu presupuesto restante')
+    expect(bidReasonText(bid, 'es')).not.toMatch(BID_EN)
   })
 
   it('⚠ and with no faabRemaining on the roster it gives the share and REFUSES the dollars', async () => {
@@ -414,6 +426,9 @@ describe('getPlayerTradeVisual', () => {
     // 🛑 The league budget is on file, and must NOT be substituted for what he has left.
     expect(bid.budgetTotal).toBe(1000)
     expect(bid.reason).toMatch(/do not hold your remaining FAAB/)
+    expect(bid.parts).toMatchObject({ bid: 'upgrade', faabKnown: false, budgetRemaining: 0, paced: false })
+    expect(bidReasonText(bid, 'es')).toContain('No tenemos tu FAAB restante en esta liga')
+    expect(bidReasonText(bid, 'es')).not.toMatch(BID_EN)
   })
 
   /*
@@ -444,6 +459,10 @@ describe('getPlayerTradeVisual', () => {
     expect(bid.shareOfSupply).toBeCloseTo(2100 / 9200, 4)
     expect(bid.ceilingAtRemaining).toBe(23)
     expect(bid.reason).toMatch(/4\.0 more weeks/)
+    expect(bid.parts).toMatchObject({ bid: 'upgrade', paced: true, weeksAssumed: 4, budgetRemaining: 400, weekBudget: 100 })
+    expect(bid.reason).toContain('your $400 spread over about 4.0 more weeks.')
+    expect(bidReasonText(bid, 'es')).toContain('tus $400 repartidos en unas 4.0 semanas más.')
+    expect(bidReasonText(bid, 'es')).not.toMatch(BID_EN)
   })
 
   it('⚠ [control] an UNREGISTERED league gets the same share but is NOT paced', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMatchupStrip, nextStripState } from '@/lib/live/matchupStrip'
+import { buildMatchupStrip, describeRemaining, nextStripState } from '@/lib/live/matchupStrip'
 import type { MatchupData } from '@/lib/core-app/matchup'
 
 const team = (teamName: string, isYou: boolean) => ({ teamName, ownerName: '', record: null, isYou, avatarUrl: null })
@@ -18,6 +18,10 @@ function data(over: Partial<MatchupData> = {}): MatchupData {
     projectedFinal: { available: false, reason: 'x' },
     yetToPlay: { available: false, reason: 'x' },
     starterCounts: { upcoming: 3, live: 2, final: 5, unknown: 0 },
+    starterCountsBySide: {
+      you: { upcoming: 1, live: 1, final: 3, unknown: 0 },
+      opponent: { upcoming: 2, live: 1, final: 2, unknown: 0 },
+    },
     ...over,
   } as MatchupData
 }
@@ -32,7 +36,7 @@ describe('buildMatchupStrip', () => {
   })
   it('reports margin, win probability and remaining starters', () => {
     const s = buildMatchupStrip(data())
-    expect(s).toMatchObject({ kind: 'scored', margin: 10.5, pWin: 0.63, remaining: { upcoming: 3, live: 2 } })
+    expect(s).toMatchObject({ kind: 'scored', margin: 10.5, pWin: 0.63, remaining: { you: { upcoming: 1, live: 1 }, opponent: { upcoming: 2, live: 1 } } })
   })
   it('never presents an unscored week as 0-0', () => {
     const s = buildMatchupStrip(data({ sides: { available: false, reason: 'unplayed' } }))
@@ -48,11 +52,16 @@ describe('buildMatchupStrip', () => {
     const s = buildMatchupStrip(
       data({
         starterCounts: { upcoming: 3, live: 2, final: 4, unknown: 1 },
+        starterCountsBySide: {
+          you: { upcoming: 1, live: 1, final: 3, unknown: 0 },
+          opponent: { upcoming: 2, live: 1, final: 1, unknown: 1 },
+        },
         winProbability: { available: false, reason: 'x' },
       }),
     )
-    expect(s).toMatchObject({ kind: 'scored', pWin: null, remaining: null })
-    expect(buildMatchupStrip(data({ starterCounts: null }))).toMatchObject({ remaining: null })
+    // One side with an unknown game state is unknown on its own; the other side still counts.
+    expect(s).toMatchObject({ kind: 'scored', pWin: null, remaining: { you: { upcoming: 1, live: 1 }, opponent: null } })
+    expect(buildMatchupStrip(data({ starterCountsBySide: null }))).toMatchObject({ remaining: null })
   })
 })
 
@@ -70,5 +79,14 @@ describe('nextStripState', () => {
   })
   it('lets a server "no matchup" replace the strip, since that is a real answer', () => {
     expect(nextStripState(good, null)).toEqual({ strip: null, stale: false })
+  })
+})
+
+describe('describeRemaining', () => {
+  it('says what is left, per team, and never a number it cannot back', () => {
+    expect(describeRemaining({ upcoming: 2, live: 1 })).toBe('3 to play (1 live)')
+    expect(describeRemaining({ upcoming: 2, live: 0 })).toBe('2 to play')
+    expect(describeRemaining({ upcoming: 0, live: 0 })).toBe('none left')
+    expect(describeRemaining(null)).toBe('unknown')
   })
 })

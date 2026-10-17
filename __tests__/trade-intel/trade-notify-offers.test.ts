@@ -36,6 +36,7 @@ const h = vi.hoisted(() => ({
   createGrader: vi.fn(),
   gradeDeal: vi.fn(),
   ledger: vi.fn(),
+  prefs: [] as Array<{ email: string; tradeAlerts: boolean; unsubscribedAt: Date | null }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -72,7 +73,7 @@ vi.mock('@/lib/prisma', () => ({
         { id: 'uC', email: 'c@example.org' },
       ],
     },
-    emailPreference: { findMany: async () => [] },
+    emailPreference: { findMany: async () => h.prefs },
     // uB's claimed team carries no platform id, so their Sleeper id must come from the profile —
     // the same fallback the league Trades panel uses.
     userProfile: { findMany: async () => [{ userId: 'uB', sleeperUserId: 'sl-B' }] },
@@ -207,6 +208,7 @@ beforeEach(() => {
   h.createGrader.mockImplementation(async (args: { leagueId: string; userId: string }) => ({ ...args, leagueType: LEAGUE_TYPE }))
   h.gradeDeal.mockImplementation(async () => view('B', 14))
   h.ledger.mockResolvedValue({ offersWritten: 0, leaguesFailed: 0 })
+  h.prefs = []
 })
 
 describe('planTradeNotifications (pure)', () => {
@@ -269,6 +271,37 @@ describe('🛑 an offer goes only to the managers in it, linked to their own cop
     expect(h.sendPush).toHaveBeenCalledWith('uB', expect.objectContaining({ href: '/core/trades?league=af-B&trade=T1' }))
     // No grade email for an offer: it is not a completed trade.
     expect(h.gradeEmail).not.toHaveBeenCalled()
+  })
+
+  it('the offer push carries a signed trade-card picture', async () => {
+    const prev = process.env.NEXTAUTH_SECRET
+    try {
+      process.env.NEXTAUTH_SECRET = 'test-secret'
+      h.currentIds.mockResolvedValue([trade('pending')])
+      await detectAndNotifyLeague('SL1')
+      const payload = h.sendPush.mock.calls.find((c: unknown[]) => c[0] === 'uB')?.[1] as { imageUrl?: string | null }
+      expect(payload.imageUrl).toMatch(/^\/api\/push-card\/trade\?d=[\w-]+&s=[\w-]+$/)
+    } finally {
+      process.env.NEXTAUTH_SECRET = prev
+    }
+  })
+
+  it('🛑 turning off trade EMAILS does not silence the trade PUSH — push has its own switch', async () => {
+    h.prefs = [{ email: 'b@example.org', tradeAlerts: false, unsubscribedAt: null }]
+    h.currentIds.mockResolvedValue([trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.sendEmail).not.toHaveBeenCalled()
+    expect(h.pushGate).toHaveBeenCalledWith('uB', expect.objectContaining({ category: 'trade_proposals' }))
+    expect(h.sendPush).toHaveBeenCalledWith('uB', expect.objectContaining({ href: '/core/trades?league=af-B&trade=T1' }))
+  })
+
+  it('…and the push switch still rules the push', async () => {
+    h.prefs = [{ email: 'b@example.org', tradeAlerts: false, unsubscribedAt: null }]
+    h.pushGate.mockResolvedValue({ allowed: false, reason: 'channel_off' })
+    h.currentIds.mockResolvedValue([trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.sendEmail).not.toHaveBeenCalled()
+    expect(h.sendPush).not.toHaveBeenCalled()
   })
 
   it('the manager who SENT the offer is not told about it', async () => {

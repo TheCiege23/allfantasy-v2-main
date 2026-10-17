@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
@@ -20,6 +20,10 @@ import { EspnCookieConnection } from "@/components/settings/EspnCookieConnection
 import { MflApiKeyConnection } from "@/components/settings/MflApiKeyConnection"
 import { ConnectedPlatforms } from "@/components/core-app/import/ConnectedPlatforms"
 import type { SettingsProfile } from "./settings-types"
+import { useConfirm } from "./ConfirmDialog"
+
+/** Window-focus refreshes of providers + profile are at most this frequent. */
+const FOCUS_REFRESH_MIN_MS = 30_000
 
 /*
  * ⚠ THE HARDCODED PLATFORM LIST IS GONE, NOT MOVED. It named five platforms as
@@ -53,6 +57,8 @@ export function ConnectedAccountsSettingsSection({
   const [refreshing, setRefreshing] = useState(false)
   const [busyProviderId, setBusyProviderId] = useState<SignInProviderId | null>(null)
   const [linkingProvider, setLinkingProvider] = useState<"discord" | "spotify" | null>(null)
+  const [disconnecting, setDisconnecting] = useState<"sleeper" | "discord" | "spotify" | null>(null)
+  const [askConfirm, confirmDialog] = useConfirm()
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<"info" | "error" | "success" | null>(null)
 
@@ -85,28 +91,28 @@ export function ConnectedAccountsSettingsSection({
     const spotifyStatus = searchParams?.get("spotify")
     if (discordStatus === "connected") {
       setStatusTone("success")
-      setStatusMessage("Discord connected. Your pool and league sharing tools can now use this account.")
+      setStatusMessage(t("settings.connected.discordStatus.connected"))
     } else if (discordStatus === "config-error") {
       setStatusTone("error")
-      setStatusMessage("Discord is temporarily unavailable because its connection settings need attention. Please contact support.")
+      setStatusMessage(t("settings.connected.discordStatus.configError"))
     } else if (discordStatus === "error") {
       setStatusTone("error")
-      setStatusMessage("Discord could not be connected. Start a new connection from this page and try again.")
+      setStatusMessage(t("settings.connected.discordStatus.error"))
     } else if (discordStatus === "session-expired" || discordStatus === "authorization-expired") {
       setStatusTone("error")
-      setStatusMessage("This Discord connection attempt expired or was replaced. Start a new connection from this page in the same browser.")
+      setStatusMessage(t("settings.connected.discordStatus.expired"))
     } else if (discordStatus === "cancelled") {
       setStatusTone("info")
-      setStatusMessage("Discord connection cancelled. Your account has not been changed.")
+      setStatusMessage(t("settings.connected.discordStatus.cancelled"))
     } else if (discordStatus === "provider-error") {
       setStatusTone("error")
-      setStatusMessage("Discord could not complete the connection. Please try again shortly.")
+      setStatusMessage(t("settings.connected.discordStatus.providerError"))
     } else if (discordStatus === "save-error") {
       setStatusTone("error")
-      setStatusMessage("Discord authorized the connection, but AllFantasy could not save it. Please try again or contact support.")
+      setStatusMessage(t("settings.connected.discordStatus.saveError"))
     } else if (discordStatus === "account-required") {
       setStatusTone("error")
-      setStatusMessage("Connect your Discord account before adding the AllFantasy bot to a server.")
+      setStatusMessage(t("settings.connected.discordStatus.accountRequired"))
     } else if (discordStatus === "bot-linked") {
       /*
        * The BOT install statuses land on this page too, and until now this
@@ -114,29 +120,38 @@ export function ConnectedAccountsSettingsSection({
        * here and said nothing at all, whether it worked or not.
        */
       setStatusTone("success")
-      setStatusMessage("AllFantasy is in your Discord server. You can now create a league channel from the league page.")
+      setStatusMessage(t("settings.connected.discordStatus.botLinked"))
     } else if (discordStatus === "bot-unverified") {
       setStatusTone("error")
-      setStatusMessage(
-        "We could not verify server-management access. Connect the Discord account that manages this server, check that the bot is installed, and try again.",
-      )
+      setStatusMessage(t("settings.connected.discordStatus.botUnverified"))
     } else if (discordStatus === "bot-not-ready") {
       setStatusTone("error")
-      setStatusMessage("The AllFantasy Discord bot is not configured on this environment yet, so it cannot be installed.")
+      setStatusMessage(t("settings.connected.discordStatus.botNotReady"))
     } else if (discordStatus === "bot-error") {
       setStatusTone("error")
-      setStatusMessage("The server installation could not be verified or is linked to another AllFantasy account. Restart the connection from Settings.")
+      setStatusMessage(t("settings.connected.discordStatus.botError"))
     } else if (spotifyStatus === "connected") {
       setStatusTone("success")
-      setStatusMessage("Spotify connected. Music controls are now available where supported.")
+      setStatusMessage(t("settings.connected.spotifyStatus.connected"))
     } else if (spotifyStatus === "error") {
       setStatusTone("error")
-      setStatusMessage("Spotify could not be connected. Check the Spotify app redirect URL and try again.")
+      setStatusMessage(t("settings.connected.spotifyStatus.error"))
     }
   }, [searchParams])
 
+  /*
+   * Refresh when the user comes back to the tab (e.g. from an OAuth window), but at most once per
+   * 30s and only when the page is actually visible. Unthrottled, every app switch on a phone
+   * refetched the whole profile — and each refetch was another chance for a dropped request to
+   * blank the page (useSettingsProfile now keeps the last good profile either way).
+   */
+  const lastFocusRefresh = useRef(0)
   useEffect(() => {
     const onFocus = () => {
+      if (document.visibilityState === "hidden") return
+      const now = Date.now()
+      if (now - lastFocusRefresh.current < FOCUS_REFRESH_MIN_MS) return
+      lastFocusRefresh.current = now
       void loadProviders(true)
     }
     if (typeof window !== "undefined") {
@@ -155,6 +170,14 @@ export function ConnectedAccountsSettingsSection({
     setStatusMessage(null)
     setStatusTone(null)
     setBusyProviderId(providerId)
+    /*
+     * ⚠ `settings.connected.connectError` did not EXIST until 2026-10-02, and t() returns the KEY for
+     * a missing string — so the old `t(...) || fallback` put the raw key on screen and its fallback
+     * was dead code. The string now exists in en and es, and names the provider by its label
+     * ("Google"), not its id ("google").
+     */
+    const connectError = () =>
+      tInterpolate("settings.connected.connectError", { provider: signInProviderLabel(providerId, t) })
     // signIn() for OAuth providers does a full-page redirect — the .finally() fires
     // only if the redirect does NOT happen (e.g. the provider is missing on the server).
     void signIn(providerId, { callbackUrl: "/settings?tab=connected" })
@@ -163,46 +186,91 @@ export function ConnectedAccountsSettingsSection({
         // does a hard redirect so we never reach this branch on success.
         if (result?.error) {
           setStatusTone("error")
-          setStatusMessage(
-            t("settings.connected.connectError") ||
-              `Could not connect ${providerId}. Please try again.`
-          )
+          setStatusMessage(connectError())
         }
       })
       .catch(() => {
         setStatusTone("error")
-        setStatusMessage(`Could not connect ${providerId}. Please try again.`)
+        setStatusMessage(connectError())
       })
       .finally(() => {
         setBusyProviderId(null)
       })
   }
 
-  const handleDisconnectSleeper = async () => {
-    if (typeof window !== "undefined" && !window.confirm(t("settings.connected.confirmDisconnectSleeper"))) return
-    const res = await fetch("/api/user/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ disconnectSleeper: true }),
-    })
-    if (res.ok) {
-      onRefetchProfile()
-      await loadProviders(true)
-    }
-  }
-
-  const handleDisconnectDiscord = async () => {
-    const res = await fetch("/api/auth/discord/disconnect", { method: "POST" })
-    if (res.ok) {
+  /*
+   * One path for every disconnect: an in-app confirmation saying what disconnecting does
+   * (ConfirmDialog — not window.confirm, which some webviews suppress), a busy state so a second
+   * tap cannot fire a second request, and a message on BOTH outcomes. Sleeper used to fail
+   * silently, and Discord and Spotify went in a single tap.
+   */
+  const runDisconnect = async (
+    which: "sleeper" | "discord" | "spotify",
+    confirm: { title: string; body?: string },
+    request: () => Promise<Response>,
+    label: string,
+  ) => {
+    if (disconnecting) return
+    if (
+      !(await askConfirm({
+        ...confirm,
+        confirmLabel: tInterpolate("settings.connected.confirmDisconnectLabel", { provider: label }),
+        cancelLabel: t("settings.actions.cancel"),
+      }))
+    )
+      return
+    setDisconnecting(which)
+    setStatusMessage(null)
+    setStatusTone(null)
+    try {
+      const res = await request()
+      if (!res.ok) throw new Error(String(res.status))
       onRefetchProfile()
       await loadProviders(true)
       setStatusTone("success")
-      setStatusMessage("Discord disconnected.")
-    } else {
+      setStatusMessage(tInterpolate("settings.connected.disconnectSuccess", { provider: label }))
+    } catch {
       setStatusTone("error")
-      setStatusMessage("Discord could not be disconnected. Please try again.")
+      setStatusMessage(tInterpolate("settings.connected.disconnectFailed", { provider: label }))
+    } finally {
+      setDisconnecting(null)
     }
   }
+
+  const handleDisconnectSleeper = () =>
+    runDisconnect(
+      "sleeper",
+      {
+        title: t("settings.connected.confirmDisconnectSleeper"),
+        body: t("settings.connected.disconnectSleeperBody"),
+      },
+      () =>
+        fetch("/api/user/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ disconnectSleeper: true }),
+        }),
+      "Sleeper",
+    )
+
+  const handleDisconnectDiscord = () =>
+    runDisconnect(
+      "discord",
+      {
+        title: t("settings.connected.confirmDisconnectDiscord"),
+        body: t("settings.connected.confirmDisconnectDiscordBody"),
+      },
+      () => fetch("/api/auth/discord/disconnect", { method: "POST" }),
+      "Discord",
+    )
+
+  const handleDisconnectSpotify = () =>
+    runDisconnect(
+      "spotify",
+      { title: t("settings.connected.confirmDisconnectSpotify"), body: t("settings.connected.reconnectAnyTime") },
+      () => fetch("/api/auth/spotify/disconnect", { method: "POST" }),
+      "Spotify",
+    )
 
   const handleLinkIdentity = async (provider: "discord" | "spotify") => {
     setStatusMessage(null)
@@ -215,7 +283,9 @@ export function ConnectedAccountsSettingsSection({
       window.location.href = authRoute
     } catch (error) {
       setStatusTone("error")
-      setStatusMessage(error instanceof Error ? error.message : `Failed to connect ${provider}.`)
+      setStatusMessage(
+        error instanceof Error ? error.message : tInterpolate("settings.connected.connectFailed", { provider }),
+      )
       setLinkingProvider(null)
     }
   }
@@ -230,14 +300,13 @@ export function ConnectedAccountsSettingsSection({
       )
       return
     }
-    if (typeof window !== "undefined") {
-      const shouldDisconnect = window.confirm(
-        tInterpolate("settings.connected.confirmDisconnectProvider", {
-          provider: provider.name,
-        }),
-      )
-      if (!shouldDisconnect) return
-    }
+    const shouldDisconnect = await askConfirm({
+      title: tInterpolate("settings.connected.confirmDisconnectProvider", { provider: provider.name }),
+      body: tInterpolate("settings.connected.disconnectProviderBody", { provider: provider.name }),
+      confirmLabel: tInterpolate("settings.connected.confirmDisconnectLabel", { provider: provider.name }),
+      cancelLabel: t("settings.actions.cancel"),
+    })
+    if (!shouldDisconnect) return
     setBusyProviderId(provider.id)
     setStatusMessage(null)
     setStatusTone(null)
@@ -271,6 +340,8 @@ export function ConnectedAccountsSettingsSection({
       </div>
       {statusMessage && (
         <div
+          /* Announced: connect/disconnect results were silent to a screen reader. */
+          role={statusTone === "error" ? "alert" : "status"}
           className="rounded-xl border px-3 py-2 text-sm"
           style={{
             borderColor: statusTone === "error" ? "var(--accent-red)" : "var(--accent-cyan)",
@@ -314,7 +385,13 @@ export function ConnectedAccountsSettingsSection({
           <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.connected.loading")}</p>
         ) : (
           <ul className="space-y-3">
-            {providers.map((provider) => (
+            {/*
+              A provider this deployment has no OAuth credentials for cannot be linked — its Connect
+              button only ever printed a "not available" note. Measured live 2026-10-02: Apple,
+              Facebook, Instagram, X and TikTok all rendered an enabled Connect beside "Not configured".
+              Unlinked + unconfigured rows are dropped; a LINKED one stays so it can still be managed.
+            */}
+            {providers.filter((provider) => provider.configured || provider.linked).map((provider) => (
               <li key={provider.id} className="flex flex-wrap items-center justify-between gap-2">
                 <ConnectedIdentityRenderer provider={provider} size="md" />
                 {!provider.linked ? (
@@ -387,10 +464,11 @@ export function ConnectedAccountsSettingsSection({
               type="button"
               data-testid="settings-disconnect-discord"
               onClick={() => void handleDisconnectDiscord()}
+              disabled={disconnecting === "discord"}
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              {t("settings.connected.disconnect")}
+              {disconnecting === "discord" ? t("settings.connected.disconnecting") : t("settings.connected.disconnect")}
             </button>
           </div>
         )}
@@ -413,13 +491,13 @@ export function ConnectedAccountsSettingsSection({
               Re-enable only after extended quota is granted and the playback
               chain is fixed (scope persistence, isPremium, preview enrichment).
             */}
-            <p className="text-xs" style={{ color: "var(--muted)" }}>Music while you manage your leagues.</p>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.connected.spotifyBlurb")}</p>
             <span
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium opacity-60"
               style={{ borderColor: "var(--border)", color: "var(--muted)" }}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-              Spotify — coming soon
+              {t("settings.connected.spotifyComingSoon")}
             </span>
           </div>
         ) : (
@@ -430,29 +508,19 @@ export function ConnectedAccountsSettingsSection({
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>
-                  {(profile as any)?.spotifyDisplayName ?? "Spotify Connected"}
+                  {(profile as any)?.spotifyDisplayName ?? t("settings.connected.spotifyConnectedFallback")}
                 </p>
-                <p className="truncate text-xs" style={{ color: "var(--muted)" }}>Connected</p>
+                <p className="truncate text-xs" style={{ color: "var(--muted)" }}>{t("settings.connected.connectedLabel")}</p>
               </div>
             </div>
             <button
               type="button"
-              onClick={async () => {
-                const res = await fetch("/api/auth/spotify/disconnect", { method: "POST" })
-                if (res.ok) {
-                  onRefetchProfile()
-                  await loadProviders(true)
-                  setStatusTone("success")
-                  setStatusMessage("Spotify disconnected.")
-                } else {
-                  setStatusTone("error")
-                  setStatusMessage("Spotify could not be disconnected. Please try again.")
-                }
-              }}
+              onClick={() => void handleDisconnectSpotify()}
+              disabled={disconnecting === "spotify"}
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              Disconnect
+              {disconnecting === "spotify" ? t("settings.connected.disconnecting") : t("settings.connected.disconnect")}
             </button>
           </div>
         )}
@@ -484,6 +552,7 @@ export function ConnectedAccountsSettingsSection({
           <ConnectedPlatforms
             sleeperUsername={profile?.sleeperUsername ?? null}
             onDisconnectSleeper={() => void handleDisconnectSleeper()}
+            sleeperBusy={disconnecting === "sleeper"}
           />
           <div className="mt-4 space-y-4">
             <EspnCookieConnection />
@@ -507,6 +576,7 @@ export function ConnectedAccountsSettingsSection({
           </Link>
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zombie armory</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./specialty/sp.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;family=Caveat:wght@600;700&amp;family=Bebas+Neue&amp;family=Pirata+One&amp;family=Creepster&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.zb-t{font-family:'Creepster',cursive;letter-spacing:.04em;color:#c8f08a}
+.zb-lg{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:#10131c;border:1px solid rgba(255,255,255,.07)}
+.zb-dot{width:10px;height:10px;border-radius:99px;flex:none}
+.zb-st{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:99px;font:700 10.5px 'Archivo';letter-spacing:.04em;text-transform:uppercase}.gy-d{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;line-height:.95}
+.gy-cut{position:relative;height:0;border-top:2px dashed #ff3d2e;margin:9px 0}
+.gy-cut>span{position:absolute;left:50%;top:-12px;transform:translateX(-50%);white-space:nowrap;padding:2px 10px;border-radius:5px;background:#ff3d2e;color:#fff;font:800 10px 'Archivo';letter-spacing:.1em}
+.gy-head{width:34px;height:34px;flex:none}
+.gy-pos{display:inline-grid;place-items:center;height:20px;min-width:26px;padding:0 4px;border-radius:5px;font:900 9.5px 'Archivo';letter-spacing:.02em}
+.gy-gl{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:6px;background:#151926;font:700 11px 'JetBrains Mono';color:#e8eaf2}
+.gy-meter{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#7a1410,#ff3d2e 30%,#ffc531 55%,#3abf7a 80%);overflow:visible}
+.gy-meter>i{position:absolute;top:-6px;width:4px;height:26px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #07080d}
+@keyframes gyBlade{0%{transform:translateY(-120%)}70%{transform:translateY(6%)}85%{transform:translateY(-3%)}100%{transform:translateY(0)}}
+@keyframes gyRoll{0%{transform:translate(-40px,-30px) rotate(-90deg);opacity:0}40%{opacity:1}100%{transform:translate(0,0) rotate(200deg);opacity:1}}
+@keyframes gyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.gy-blade{animation:gyBlade .55s cubic-bezier(.5,0,.75,0) both}
+.gy-roll{animation:gyRoll .9s .45s cubic-bezier(.2,.8,.2,1) both}
+.gy-shake{animation:gyShake .4s .5s both}
+.gy-tomb{position:relative;width:100%;aspect-ratio:200/240}
+.gy-tomb>img{position:absolute;inset:0;width:100%}
+.gy-tomb>div{position:absolute;left:18%;right:18%;top:49%;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.gy-tomb>div>b{font:800 12.5px 'Archivo';color:#1a1d24;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gy-tomb>div>span{font:700 10px 'JetBrains Mono';color:#2a2f3a}
+.gy-mode{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border-radius:99px;background:#151926;border:1px solid rgba(255,255,255,.1);font:700 12px 'Archivo'}
+.gy-mode>img{width:22px}
+.tt-ck{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.tt-ck>i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:800 13px 'Archivo';font-style:normal}
+.tt-ck>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.tt-ck>div>b{font:600 14px 'Archivo'}
+.tt-ck>div>span{font-size:12px;color:#7d84a3}
+.tt-job{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tt-job:last-child{border-bottom:0}
+.nt-ev{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.nt-ev>img{width:30px;flex:none}
+.nt-ev>div{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.nt-ev>div>b{font:700 13px 'Archivo'}
+.nt-ev>div>span{font-size:11px;color:#7d84a3}
+.nt-ev[aria-pressed="true"]{border-color:#ffc531;background:rgba(255,197,49,.08)}
+.nt-phone{position:relative;width:340px;height:700px;flex:none;border-radius:46px;border:10px solid #1b1e29;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,var(--wa),transparent 60%),radial-gradient(ellipse at 80% 90%,var(--wb),transparent 60%),#0a0b12;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.nt-push{display:flex;gap:10px;padding:11px 12px;border-radius:18px;background:rgba(40,44,60,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);text-align:left}
+.nt-push>img{width:38px;height:38px;flex:none;border-radius:9px;background:#07080d;padding:2px}
+.nt-push>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.nt-push>div>small{display:flex;justify-content:space-between;font:600 10.5px 'Archivo';color:#a3a9c2;letter-spacing:.03em}
+.nt-push>div>b{font:700 13px 'Archivo';color:#fff}
+.nt-push>div>span{font-size:12px;color:#d6d9e6;line-height:1.35}
+.nt-push.dim{opacity:.55;transform:scale(.97)}
+.nt-on{display:inline-block;min-width:34px;padding:2px 6px;border-radius:5px;font:700 10px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.lu-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#10131c;border:1px solid rgba(255,255,255,.05)}
+.lu-row>.s{width:44px;flex:none}
+.lu-row>.n{flex:1;min-width:0;display:flex;flex-direction:column}
+.lu-row>.n>b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lu-row>.n>span{font-size:11px;color:#7d84a3}
+.lu-flag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font:800 9.5px 'Archivo';letter-spacing:.06em;text-transform:uppercase}
+.gy-step{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px 12px;border-radius:14px;background:#10131c;border:1px solid rgba(255,255,255,.06)}
+.gy-step>img{height:84px}
+.gy-step>b{font:800 15px 'Archivo'}
+.gy-step>span{font-size:12.5px;color:#a3a9c2}
+.gy-step>i{font:900 11px 'Archivo';font-style:normal;color:#ffc531;letter-spacing:.12em}
+.gy-tl{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px;flex:none}
+.gy-tl>img{width:40px}
+.gy-tl>b{font:800 9.5px 'Archivo';color:#ffc531;letter-spacing:.06em}
+.gy-tl>span{font:600 9.5px 'Archivo';color:#a3a9c2;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-ev[aria-pressed="true"]{border-color:#8be03a;background:rgba(139,224,58,.08)}
+.gy-step>i{color:#8be03a}
+.zt{font-family:'Creepster',cursive;letter-spacing:.04em;line-height:1}
+.zs{position:relative;display:grid;place-items:center;border-radius:18px;overflow:hidden;background:radial-gradient(circle at 50% 45%,var(--zg,rgba(139,224,58,.25)),transparent 62%),#0b0d14;border:1px solid rgba(255,255,255,.07)}
+.zs>img.f{position:absolute;width:300px;height:300px;top:50%;left:50%;margin:-170px 0 0 -150px;opacity:0}
+.zs>img.f0{opacity:1}
+@keyframes zbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes zbOut{from{opacity:1}to{opacity:0}}
+@keyframes zbFlash{0%{opacity:0}30%{opacity:.9}100%{opacity:0}}
+@keyframes zbShake{0%,100%{transform:none}20%{transform:translate(-5px,2px)}40%{transform:translate(5px,-2px)}60%{transform:translate(-3px,1px)}80%{transform:translate(3px,0)}}
+@keyframes zbPulse{0%,100%{box-shadow:0 0 0 0 rgba(139,224,58,.0)}50%{box-shadow:0 0 0 10px rgba(139,224,58,.18)}}
+@keyframes zbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes zbLoot{0%{transform:translateX(-90px);opacity:0}30%{opacity:1}100%{transform:none;opacity:1}}
+.zs.play>img.f0{animation:zbOut .4s ease-in 1.1s forwards}
+.zs.play>img.f1{animation:zbIn .5s ease-out .9s forwards,zbOut .4s ease-in 2.1s forwards}
+.zs.play>img.f2{animation:zbIn .6s ease-out 1.9s forwards,zbOut .4s ease-in 3.1s forwards}
+.zs.play>img.f3{animation:zbIn .6s ease-out 2.9s forwards}
+.zs.play{animation:zbShake .45s ease-in-out 2.9s 1}
+.zs .fl{position:absolute;inset:0;background:radial-gradient(circle,rgba(200,255,106,.55),transparent 60%);opacity:0;pointer-events:none}
+.zs.play .fl{animation:zbFlash .7s ease-out .9s 1,zbFlash 1s ease-out 2.9s 1}
+.zs.still>img.f{opacity:1;animation:zbFloat 4s ease-in-out infinite}
+.zi{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 12px 16px;border-radius:14px;background:radial-gradient(circle at 50% 32%,var(--g),transparent 66%),#0b0d14;border:1px solid rgba(255,255,255,.07);color:inherit;font:inherit;text-align:center;cursor:pointer}
+.zi[aria-pressed="true"]{border-color:#8be03a;box-shadow:0 0 0 1px #8be03a inset}
+.zi>img{height:120px}
+.zi>b{font:800 15px 'Archivo'}
+.zi>span{font-size:11.5px;color:#a3a9c2}
+.zi>em{position:absolute;top:10px;right:10px;font:800 11px 'JetBrains Mono';font-style:normal;padding:2px 7px;border-radius:99px;background:#151926;color:#c8f08a}
+.zi[data-off="true"]>img{filter:grayscale(1) brightness(.55)}
+.zpip{display:flex;gap:6px}.zpip>span{width:18px;height:26px;border-radius:6px;border:2px solid #3a5a1a;background:#0b0d14}.zpip>span.on{background:linear-gradient(#e8ff7a,#5ec82a);border-color:#8be03a}
+.zm{position:relative;height:16px;border-radius:99px;background:#151926;overflow:visible}
+.zm>span{position:absolute;left:0;top:0;bottom:0;border-radius:99px}
+.zm>i{position:absolute;top:-6px;bottom:-6px;width:2px;background:#fff;opacity:.6}
+.zm>i>b{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font:700 10px 'Archivo';font-style:normal;white-space:nowrap;color:#a3a9c2}
+.zl{animation:zbLoot .8s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){.zs.play>img.f,.zs.play,.zs.play .fl,.zs.still>img.f,.zl{animation:none!important;opacity:1}}
+</style>
+</helmet>
+<div class="sp" style="--acc: #8be03a; --acc2: #c8f08a; --accInk: #0a1a04; --disp: Creepster; min-height: 100vh; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+  <a class="sp-btn" href="ZombieHome.dc.html" aria-label="Back" style="padding: 0 12px">‹</a>
+  <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px"><h1 class="sp-h1">Armory</h1><span class="sp-t2">Gamma 2 · NFL thresholds · weapons are for Survivors; Zombies can only hold serums</span></div>
+  <div class="sp-seg"><sc-for list="{{tabs}}" as="t" hint-placeholder-count="3"><button aria-pressed="{{t.on}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div>
+</header>
+<div style="display: grid; grid-template-columns: 1fr 380px; gap: 20px; padding: 22px 28px 28px; align-items: start">
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <div style="display: grid; grid-template-columns: repeat({{cols}}, 1fr); gap: 12px">
+      <sc-for list="{{items}}" as="i" hint-placeholder-count="5">
+        <button class="zi" onClick="{{i.pick}}" aria-pressed="{{i.on}}" data-off="{{i.off}}" style="--g: {{i.g}}"><em>×{{i.n}}</em><img src="{{i.art}}" alt=""><b>{{i.name}}</b><span style="color: {{i.ec}}; font-weight: 700">{{i.effect}}</span><span>{{i.earn}}</span></button>
+      </sc-for>
+    </div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl">{{rulesT}}</span>
+      <sc-for list="{{rulesL}}" as="r" hint-placeholder-count="4"><div class="sp-rule"><b>{{r.n}}</b><span>{{r.t}}</span></div></sc-for>
+    </div>
+    <div class="sp-card" style="padding: 14px 16px; display: flex; flex-direction: column"><span class="sp-lbl" style="margin-bottom: 6px">Your ledger</span>
+      <table class="sp-tbl"><tr><th>Week</th><th>Item</th><th>What happened</th><th class="n">Balance</th></tr>
+      <sc-for list="{{ledger}}" as="l" hint-placeholder-count="5"><tr><td class="n" style="text-align: left">{{l.w}}</td><td><span style="display: inline-flex; align-items: center; gap: 8px"><img src="{{l.icon}}" alt="" style="width: 22px">{{l.item}}</span></td><td>{{l.what}}</td><td class="n" style="color: {{l.c}}">{{l.bal}}</td></tr></sc-for></table></div>
+  </section>
+  <aside style="display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px">
+    <div class="sp-card" style="padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; background: radial-gradient(circle at 50% 30%, {{sel.g}}, transparent 65%), #0b0d14">
+      <img src="{{sel.art}}" alt="" style="height: 170px">
+      <span class="zt" style="font-size: 36px; color: {{sel.ec}}">{{sel.name}}</span>
+      <span class="sp-t2" style="font-size: 13px">{{sel.long}}</span>
+    </div>
+    <div class="sp-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <span class="sp-lbl">{{useT}}</span>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #10131c"><img src="specialty/zombie/char-zombie.svg" alt="" style="width: 40px; border-radius: 99px; background: #151926"><div style="flex: 1; display: flex; flex-direction: column"><b style="font-size: 13px">Week 7 vs Open Team 3</b><span class="sp-t3" style="font-size: 11.5px">Zombie · projected 114.0 to your 109.5</span></div></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><sc-for list="{{armed}}" as="a" hint-placeholder-count="2"><div class="zl" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; background: rgba(139,224,58,.08); border: 1px solid rgba(139,224,58,.3)"><img src="{{a.icon}}" alt="" style="width: 26px"><span style="flex: 1; font-size: 13px; font-weight: 600">{{a.t}}</span><span class="sp-num" style="color: #c8f08a">{{a.v}}</span></div></sc-for></div>
+      <span class="sp-t2" style="font-size: 12.5px">{{useNote}}</span>
+      <sc-if value="{{canUse}}" hint-placeholder-val="{{ true }}"><button class="sp-btn sp-btn-p" onClick="{{use}}" style="min-height: 46px">{{useL}}</button></sc-if>
+      <sc-if value="{{used}}" hint-placeholder-val="{{ false }}"><div style="padding: 10px 12px; border-radius: 10px; background: rgba(139,224,58,.1); border: 1px solid rgba(139,224,58,.4); font-size: 13px; font-weight: 600; color: #c8f08a">{{usedL}}</div></sc-if>
+      <sc-if value="{{locked}}" hint-placeholder-val="{{ false }}"><div style="padding: 10px 12px; border-radius: 10px; background: #10131c; font-size: 12.5px; color: #a3a9c2">{{lockedL}}</div></sc-if>
+    </div>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: 'w', sel: 'axe', armed: ['axe'], used: false, ssel: 'shield' }; }
+  renderVals() {
+    const Z = "specialty/zombie/", st = this.state, w = st.tab === 'w';
+    const tabs = [['w', 'Weapons'], ['s', 'Serums']].map(([id, label]) => ({ label, on: st.tab === id ? 'true' : 'false', pick: () => this.setState({ tab: id, used: false }) }));
+    const W = { knife: ['Knife', 1, '+4 vs the horde', 'Score 120+ in a week', '#c9d1dc', 'rgba(201,209,220,.22)', 'A quick stab. Adds 4 points to your score in a matchup against a Zombie or the Whisperer.', 4],
+      axe: ['Axe', 1, '+6 vs the horde', 'Score 140+ in a week', '#e0a868', 'rgba(224,168,104,.25)', 'Heavy and reliable. Adds 6 points against a Zombie or the Whisperer.', 6],
+      bow: ['Bow', 0, '+5 from range', 'Top 2 Survivor score (100+)', '#d8b07a', 'rgba(216,176,122,.2)', 'Adds 5 points against the horde, and you can arm it right up to your last player’s kickoff.', 5],
+      gun: ['Gun', 0, '+8 vs the horde', 'Score 160+ in a week', '#9fb4d0', 'rgba(159,180,208,.22)', 'Loud. Adds 8 points against a Zombie or the Whisperer.', 8],
+      bomb: ['Bomb', 0, 'Cancels one infection', 'Season-high score (one-time)', '#ffb43a', 'rgba(255,180,58,.25)', 'The one-time override. If you lose to the horde, the bomb cancels the infection. One per league per season.', 0] };
+    const S = { serum: ['Serum', 2, 'Hold up to 5', 'Season high · weekly top Survivor · survive a bashing', '#c8f08a', 'rgba(200,255,106,.25)', 'The currency of survival. Hold up to 5. Spend 1 to shield, or 3 to revive.'],
+      shield: ['Serum shield', '1', 'Costs 1 serum', 'Survivors only · before lineup lock', '#8ad0ff', 'rgba(138,208,255,.25)', 'Blocks one infection this week. If you lose to a Zombie or the Whisperer, you stay human. Lasts one week.'],
+      revive: ['Revive', '3', 'Costs 3 serums', 'Zombies only', '#f2c94c', 'rgba(242,201,76,.25)', 'Turns a Zombie back into a Survivor at the next lineup lock, with the gold Revived badge.'] };
+    let items, sel, rulesT, rulesL, armed = [], useT, useNote, canUse, useL, usedL, locked = false, lockedL = '';
+    if (w) {
+      items = Object.entries(W).map(([k, v]) => ({ name: v[0], n: v[1], effect: v[2], earn: v[3], ec: v[4], g: v[5], art: Z + 'weapon-' + k + '.svg', off: v[1] ? 'false' : 'true', on: st.sel === k ? 'true' : 'false', pick: () => this.setState({ sel: k, used: false }) }));
+      const s0 = W[st.sel] || W.axe; sel = { name: s0[0], art: Z + 'weapon-' + st.sel + '.svg', ec: s0[4], g: s0[5], long: s0[6] };
+      rulesT = 'How weapons work';
+      rulesL = ['Score past a line in a week and the weapon is yours. Lines are set per sport.', 'Top two active: only your 2 strongest weapons count in a week.', 'Weapons only fire against a Zombie or the Whisperer, and they’re used up when they fire.', 'Zombies can’t use weapons. Get revived and they unlock.'];
+      armed = (st.armed || []).map(k => ({ icon: Z + 'weapon-' + k + '.svg', t: W[k][0], v: '+' + W[k][7] }));
+      const have = W[st.sel][1] > 0, isArmed = (st.armed || []).includes(st.sel);
+      useT = 'Arm for week 7'; canUse = have && !st.used && st.sel !== 'bomb';
+      useL = isArmed ? 'Lock in ' + armed.length + ' weapon' + (armed.length === 1 ? '' : 's') : 'Arm the ' + W[st.sel][0].toLowerCase();
+      useNote = armed.length ? 'Armed: +' + armed.reduce((a, x) => a + parseInt(x.v), 0) + ' if you face the horde. That turns a 4.5-point loss into a win.' : 'Pick up to 2 weapons. They fire only if you face a Zombie or the Whisperer.';
+      usedL = 'Locked in. Your weapons fire at Thursday’s lineup lock.';
+      if (!have) { locked = true; lockedL = 'You don’t have a ' + W[st.sel][0].toLowerCase() + ' yet. ' + W[st.sel][3] + '.'; }
+    } else {
+      const sk = st.ssel;
+      items = Object.entries(S).map(([k, v]) => ({ name: v[0], n: v[1], effect: v[2], earn: v[3], ec: v[4], g: v[5], art: Z + (k === 'serum' ? 'serum.svg' : 'serum-' + k + '.svg'), off: 'false', on: sk === k ? 'true' : 'false', pick: () => this.setState({ ssel: k, used: false }) }));
+      const s0 = S[sk]; sel = { name: s0[0], art: Z + (sk === 'serum' ? 'serum.svg' : 'serum-' + sk + '.svg'), ec: s0[4], g: s0[5], long: s0[6] };
+      rulesT = 'How serums work';
+      rulesL = ['Earn a serum for the season high, the top Survivor score of the week, or surviving a bashing.', 'Hold up to 5. Serums carry over week to week.', 'Shield (1 serum): stay human this week even if you lose to the horde.', 'Revive (3 serums): a Zombie becomes a Survivor again.'];
+      useT = sk === 'revive' ? 'Revive' : 'Shield week 7';
+      canUse = sk === 'shield' && !st.used; useL = 'Use 1 serum to shield week 7';
+      useNote = sk === 'shield' ? 'You have 2 serums. Shield now and you’ll have 1 left. You can’t cancel once the week locks.' : sk === 'revive' ? 'You’re a Survivor, so there’s nothing to revive. Zombies see this button.' : 'Serums are earned, not bought.';
+      usedL = 'Shield up for week 7. 1 serum left.';
+      if (sk === 'revive') { locked = true; lockedL = 'Only Zombies can revive.'; }
+    }
+    const ledger = [['6', 'weapon-knife.svg', 'Knife', 'Earned: 121.6 cleared 120', '×1', '#c8f08a'], ['5', 'serum.svg', 'Serum', 'Earned: top Survivor score (134.2)', '2', '#c8f08a'], ['5', 'weapon-axe.svg', 'Axe', 'Earned: 140.8 cleared 140', '×1', '#c8f08a'],
+      ['4', 'weapon-bow.svg', 'Bow', 'Fired vs Open Team 11 (+5), won by 2.1', '×0', '#ff9a8a'], ['2', 'serum.svg', 'Serum', 'Earned: survived a bashing (lost by 33)', '1', '#c8f08a']].map(([w, i, item, what, bal, c]) => ({ w, icon: Z + i, item, what, bal, c }));
+    return { tabs, cols: w ? 5 : 3, items, sel, rulesT, rulesL: rulesL.map((t, i) => ({ n: String(i + 1), t })), ledger, armed, useT, useNote, canUse, useL, used: st.used, usedL, locked, lockedL,
+      use: () => w && !(st.armed || []).includes(st.sel) ? this.setState({ armed: (st.armed || []).concat(st.sel).slice(-2) }) : this.setState({ used: true }) };
+  }
+}
+</script>
+</body>
+</html>

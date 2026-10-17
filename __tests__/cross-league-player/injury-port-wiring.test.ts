@@ -198,6 +198,8 @@ describe('injury read port wiring (Slice 18)', () => {
   it('genuine player-record injury tokens still work as fallback when RI has no row', async () => {
     for (const [token, expected] of [
       ['IR', 'ir'],
+      // Sleeper's season-scale roster absence, the one roster status resolveInjuryContext passes on.
+      ['Injured Reserve', 'ir'],
       ['Out', 'out'],
       ['Questionable', 'questionable'],
       ['Suspension', 'suspended'],
@@ -218,6 +220,30 @@ describe('injury read port wiring (Slice 18)', () => {
       ['Day-To-Day', 'day_to_day'],
       // Probable states the player is expected to play — severity none.
       ['Probable', 'healthy'],
+    ] as const) {
+      resolveInjuryFactsMock.mockResolvedValue(riResolution([{ name: 'Player p1', status: designation }]))
+      const result = await assemble()
+      expect(result.items[0].injury?.status, designation).toBe(expected)
+    }
+  })
+
+  it('feed absence words outside the RI vocabulary (ESPN IL lists, PUP, NFI, suspensions) are not "unknown"', async () => {
+    for (const [designation, expected] of [
+      ['60-day IL', 'ir'],
+      ['15-day IL', 'ir'],
+      ['10-day IL', 'ir'],
+      ['7-day IL', 'ir'],
+      ['I.L.', 'ir'],
+      ['PUP', 'ir'],
+      ['NFI', 'ir'],
+      ['Injured Reserve', 'ir'],
+      ['injury reserve', 'ir'],
+      ['Reserve-Ret', 'ir'],
+      ['Susp', 'suspended'],
+      ['Suspended (4 games)', 'suspended'],
+      // Not a designation the shared rule reads as absence — still no claim.
+      ['Elbow', 'unknown'],
+      ['Paternity', 'unknown'],
     ] as const) {
       resolveInjuryFactsMock.mockResolvedValue(riResolution([{ name: 'Player p1', status: designation }]))
       const result = await assemble()

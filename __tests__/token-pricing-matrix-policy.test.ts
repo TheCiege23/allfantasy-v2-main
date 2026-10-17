@@ -60,7 +60,12 @@ describe("Token pricing matrix and subscription coexistence policy", () => {
     expect(decision.subscriptionEligible).toBe(false)
   })
 
-  it("applies subscriber discount for eligible plan features", () => {
+  /*
+   * Subscriptions stopped discounting tokens in e026876bf (2026-08-17, "tokens off subscriptions"):
+   * every plan's discountedTokenSpendPct is 0, because a subscriber has the plan's features
+   * unlocked outright. The decision still identifies the subscriber; it just takes nothing off.
+   */
+  it("charges a subscriber full token price (no subscription discount since the pricing overhaul)", () => {
     const decision = resolveTokenChargeDecisionForEntitlement({
       entitlement: {
         plans: ["supreme"],
@@ -73,22 +78,28 @@ describe("Token pricing matrix and subscription coexistence policy", () => {
     })
 
     expect(decision.chargeMode).toBe("subscriber_discounted_tokens")
-    expect(decision.discountPct).toBeGreaterThan(0)
-    expect(decision.effectiveTokenCost).toBeLessThan(100)
-    expect(decision.effectiveTokenCost).toBeGreaterThanOrEqual(1)
+    expect(decision.discountPct).toBe(0)
+    expect(decision.effectiveTokenCost).toBe(100)
   })
 
-  it("matches launch token costs for core AI and World Cup commissioner actions", () => {
+  /*
+   * 225531335 (2026-08-17) repriced the matrix onto five scope bands — 1 lookup, 10 subject,
+   * 30 team, 75 league, 200 agentic — with an explicit per-action list. These pins follow it; a
+   * future price change should move this test in the same commit, deliberately.
+   */
+  it("matches the banded token costs for core AI and World Cup commissioner actions", () => {
     const byCode = new Map(TOKEN_SPEND_RULE_MATRIX.map((rule) => [rule.code, rule]))
 
-    expect(byCode.get("ai_chimmy_chat_message")?.tokenCost).toBe(15)
-    expect(byCode.get("world_cup_ai_matchup_analysis")?.tokenCost).toBe(15)
-    expect(byCode.get("world_cup_ai_bracket_explanation")?.tokenCost).toBe(50)
-    expect(byCode.get("world_cup_ai_commissioner_report")?.tokenCost).toBe(100)
-    expect(byCode.get("world_cup_commissioner_ai_pool_summary")?.tokenCost).toBe(25)
-    expect(byCode.get("world_cup_commissioner_ai_weekly_recap")?.tokenCost).toBe(50)
-    expect(byCode.get("world_cup_commissioner_ai_leaderboard_analysis")?.tokenCost).toBe(50)
+    expect(byCode.get("ai_chimmy_chat_message")?.tokenCost).toBe(10)
+    expect(byCode.get("world_cup_ai_matchup_analysis")?.tokenCost).toBe(10)
+    expect(byCode.get("world_cup_ai_bracket_explanation")?.tokenCost).toBe(30)
+    expect(byCode.get("world_cup_ai_commissioner_report")?.tokenCost).toBe(75)
+    expect(byCode.get("world_cup_commissioner_ai_pool_summary")?.tokenCost).toBe(30)
+    expect(byCode.get("world_cup_commissioner_ai_weekly_recap")?.tokenCost).toBe(75)
+    expect(byCode.get("world_cup_commissioner_ai_leaderboard_analysis")?.tokenCost).toBe(75)
     expect(byCode.get("world_cup_commissioner_ai_who_can_still_win")?.tokenCost).toBe(75)
-    expect(byCode.get("world_cup_commissioner_ai_full_pool_intelligence_report")?.tokenCost).toBe(100)
+    expect(byCode.get("world_cup_commissioner_ai_full_pool_intelligence_report")?.tokenCost).toBe(200)
+    // Every cost sits on one of the five bands — the invariant the repricing established.
+    for (const rule of TOKEN_SPEND_RULE_MATRIX) expect([1, 10, 30, 75, 200]).toContain(rule.tokenCost)
   })
 })

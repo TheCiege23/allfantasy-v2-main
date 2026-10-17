@@ -1,5 +1,8 @@
 /**
  * GET: Zombie league summary (statuses, whisperer, survivors, zombies, config). PROMPT 353.
+ *
+ * Also everything the Zombie home tab draws: the season (sport, weeks, scene), the viewer's own status,
+ * matchup and winnings, and the rule numbers the engine actually uses (`getZombieRulesForSport`).
  */
 
 import { NextResponse } from 'next/server'
@@ -24,6 +27,16 @@ import {
   redactSurvivorAndZombieIds,
   withWhispererRoster,
 } from '@/lib/zombie/whispererRedaction'
+import { loadNativeWeekResults } from '@/lib/zombie/ZombieInfectionEngine'
+import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { BASH_TRANSFER_SHARE, MAUL_TRANSFER_SHARE } from '@/lib/zombie/winningsShares'
+import {
+  buildZombieWeeklyBoard,
+  pickMyMatchup,
+  resolveSummaryWeek,
+  zombieRosterDisplayNames,
+  zombieThemeForLeague,
+} from '@/lib/zombie/zombieHomeSummary'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,13 +63,42 @@ export async function GET(
     getWhispererRosterId(leagueId),
     prisma.league.findUnique({
       where: { id: leagueId },
-      select: { zombieLeague: { select: { universeId: true } } },
+      select: {
+        name: true,
+        zombieLeague: {
+          select: {
+            universeId: true,
+            sport: true,
+            season: true,
+            currentWeek: true,
+            totalWeeks: true,
+            themeLabel: true,
+            status: true,
+          },
+        },
+      },
     }),
-    prisma.roster.findMany({ where: { leagueId }, select: { id: true } }),
+    prisma.roster.findMany({
+      where: { leagueId },
+      select: {
+        id: true,
+        platformUserId: true,
+        playerData: true,
+        redraftRoster: { select: { teamName: true, ownerName: true } },
+      },
+      orderBy: { id: 'asc' },
+    }),
     getCurrentUserRosterIdForLeague(leagueId, userId),
     prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { id: true, teamName: true, ownerName: true },
+      select: {
+        id: true,
+        teamName: true,
+        ownerName: true,
+        externalId: true,
+        platformUserId: true,
+        claimedByUserId: true,
+      },
       orderBy: [{ currentRank: 'asc' }, { id: 'asc' }],
     }),
   ])
@@ -64,32 +106,67 @@ export async function GET(
   if (!config) return NextResponse.json({ error: 'Config not found' }, { status: 500 })
 
   const weekParam = typeof _req.url === 'string' ? new URL(_req.url).searchParams?.get('week') : null
-  const week = weekParam ? Math.max(1, parseInt(weekParam, 10)) || 1 : 1
-  const universeId = league?.zombieLeague?.universeId ?? null
-  const board = await getWeeklyBoardData(leagueId, week, universeId)
+  const zl = league?.zombieLeague ?? null
+  const totalWeeks = Math.max(1, zl?.totalWeeks ?? 1)
+  const currentWeek = Math.max(0, zl?.currentWeek ?? 0)
+  const week = resolveSummaryWeek(weekParam, currentWeek, totalWeeks)
+  const universeId = zl?.universeId ?? null
+  const sport = zl?.sport ?? 'NFL'
+  const season = zl?.season ?? new Date().getFullYear()
 
-  const rosterDisplayNames: Record<string, string> = {}
-  for (let i = 0; i < rosters.length && i < teams.length; i++) {
-    const r = rosters[i]
-    const t = teams[i]
-    if (r && t) rosterDisplayNames[r.id] = t.teamName || t.ownerName || r.id
-  }
-  for (const r of rosters) {
-    if (!rosterDisplayNames[r.id]) rosterDisplayNames[r.id] = r.id
-  }
+  const [board, rules, weekResults, zombieTeams] = await Promise.all([
+    getWeeklyBoardData(leagueId, week, universeId),
+    getZombieRulesForSport(sport),
+    loadNativeWeekResults(leagueId, week, season).catch(() => null),
+    prisma.zombieLeagueTeam.findMany({
+      where: { leagueId },
+      select: { rosterId: true, status: true, revivedAt: true, weekBecameZombie: true, killedByRosterId: true },
+    }),
+  ])
+
+  // By the shared roster↔team rule; pairing the two lists by position named teams after strangers.
+  const rosterDisplayNames = zombieRosterDisplayNames(rosters, teams)
 
   let myResources = { serums: 0, weapons: 0, ambush: 0 }
+  let myWinnings: { week: number | null; total: number } | null = null
   if (myRosterId) {
-    const [serums, ambush, weaponRows] = await Promise.all([
+    const [serums, ambush, weaponRows, winningsRows, myTeam] = await Promise.all([
       getSerumBalance(leagueId, myRosterId),
       getAmbushBalance(leagueId, myRosterId),
       prisma.zombieResourceLedger.findMany({
         where: { leagueId, rosterId: myRosterId, resourceType: 'weapon' },
         select: { balance: true },
       }),
+      prisma.zombieWeeklyWinnings.findMany({
+        where: { leagueId, rosterId: myRosterId },
+        select: { week: true, amount: true },
+      }),
+      prisma.zombieLeagueTeam.findUnique({
+        where: { leagueId_rosterId: { leagueId, rosterId: myRosterId } },
+        select: {
+          ambushesRemaining: true,
+          items: { where: { isUsed: false, isExpired: false }, select: { itemType: true } },
+        },
+      }),
     ])
-    const weapons = weaponRows.reduce((sum, row) => sum + row.balance, 0)
-    myResources = { serums, weapons, ambush }
+    /*
+     * 🛑 A NATIVE LEAGUE'S SUPPLIES ARE TEAM ITEMS, NOT LEDGER ROWS. `weaponEngine` and `serumEngine` (the
+     * weekly resolution) write `ZombieTeamItem`; `zombieResourceLedger` is the legacy store. Reading only
+     * the ledger showed every native team 0 of everything. Each flow writes one store, so they add.
+     */
+    const unused = myTeam?.items ?? []
+    const weapons =
+      weaponRows.reduce((sum, row) => sum + row.balance, 0) + unused.filter((i) => i.itemType.startsWith('weapon')).length
+    myResources = {
+      serums: serums + unused.filter((i) => i.itemType.includes('serum')).length,
+      weapons,
+      ambush: Math.max(ambush, myTeam?.ambushesRemaining ?? 0),
+    }
+    const thisWeek = winningsRows.find((r) => r.week === week)
+    myWinnings = {
+      week: thisWeek ? thisWeek.amount : null,
+      total: Math.round(winningsRows.reduce((sum, r) => sum + r.amount, 0) * 100) / 100,
+    }
   }
 
   // Whisperer secrecy: the id, its status and its absence from the survivor/zombie lists would
@@ -101,6 +178,17 @@ export async function GET(
   const lists = viewer.canSee
     ? { survivors: board.survivors, zombies: board.zombies }
     : redactSurvivorAndZombieIds(board, identity)
+  // Statuses only ever come from the redacted list, so a hidden Whisperer reads as a Survivor here too.
+  const statusOf = (rosterId: string) => shownStatuses.find((s) => s.rosterId === rosterId)?.status ?? 'Survivor'
+  const mine = pickMyMatchup(weekResults, myRosterId)
+  const weeklyBoard = buildZombieWeeklyBoard({
+    week,
+    results: weekResults,
+    teams: zombieTeams,
+    bashingMargin: rules.bashingThreshold,
+    maulingMargin: rules.maulingThreshold,
+    hiddenInfector: (rosterId) => !viewer.canSee && identity.rosterIds.has(rosterId),
+  })
 
   return NextResponse.json({
     config: {
@@ -120,5 +208,40 @@ export async function GET(
     rosterDisplayNames,
     myRosterId: myRosterId ?? undefined,
     myResources,
+    league: {
+      name: league?.name ?? null,
+      sport,
+      season,
+      currentWeek,
+      totalWeeks,
+      status: zl?.status ?? null,
+      backgroundTheme: zombieThemeForLeague(zl?.themeLabel, leagueId),
+      teamCount: rosters.length,
+    },
+    myStatus: myRosterId ? statusOf(myRosterId) : null,
+    // A Whisperer is never revived, so this list cannot single one out.
+    revivedRosterIds: zombieTeams
+      .filter((t) => t.revivedAt != null && t.status === 'Survivor')
+      .map((t) => t.rosterId),
+    weeklyBoard,
+    myMatchup: mine
+      ? {
+          ...mine,
+          opponentName: rosterDisplayNames[mine.opponentRosterId] ?? 'Opponent',
+          opponentStatus: statusOf(mine.opponentRosterId),
+        }
+      : null,
+    myWinnings,
+    rules: {
+      bashingMargin: rules.bashingThreshold,
+      maulingMargin: rules.maulingThreshold,
+      knifeScore: rules.weaponShieldThreshold,
+      bowScore: rules.weaponAmbushThreshold,
+      axeMargin: rules.weaponAxeMargin,
+      // What serumEngine.revive checks — not config.serumReviveCount, which no engine reads.
+      reviveSerums: rules.reviveThreshold,
+      bashShare: BASH_TRANSFER_SHARE,
+      maulShare: MAUL_TRANSFER_SHARE,
+    },
   })
 }

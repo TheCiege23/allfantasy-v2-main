@@ -1,6 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { ZombieSceneBackground } from './ZombieSceneBackground'
 import { Biohazard, Radio } from 'lucide-react'
 import { type ReactNode } from 'react'
 import {
@@ -54,6 +55,7 @@ export function ZombieCommandHero({
   dangerLevel,
   whispererPanel,
   quickActions,
+  sceneThemeId,
 }: {
   leagueName: string | null
   logoUrl?: string | null
@@ -70,6 +72,8 @@ export function ZombieCommandHero({
   dangerLevel?: ZombieDangerLevel
   whispererPanel: ReactNode
   quickActions: ReactNode
+  /** The league's scene art behind the hero; without it the sport preset gradient shows. */
+  sceneThemeId?: string | null
 }) {
   const preset = getZombieSportHeroPreset(sport)
   const tier = resolveZombieUniverseTier(level ?? null)
@@ -77,8 +81,9 @@ export function ZombieCommandHero({
 
   return (
     <section className="zombie-hero-shell border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+      {sceneThemeId ? <ZombieSceneBackground themeId={sceneThemeId} /> : null}
       <div className="zombie-hero-fog" aria-hidden />
-      <div className={clsx('pointer-events-none absolute inset-0', preset.overlayClass)} aria-hidden />
+      {!sceneThemeId && <div className={clsx('pointer-events-none absolute inset-0', preset.overlayClass)} aria-hidden />}
       <div className="zombie-drift-particles opacity-[0.35]" aria-hidden />
 
       <div className="relative z-[1] p-5 sm:p-6">

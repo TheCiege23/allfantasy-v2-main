@@ -109,6 +109,20 @@ describe('resolveNames — the Sleeper id space is asked for Sleeper ids', () =>
     expect(names.get('1')).toMatchObject({ name: 'New Name', team: 'NEW' })
   })
 
+  /*
+   * 🛑 A FRESHER ROW FROM ANOTHER SOURCE IS NOT A NEWER NAME. TheSportsDB's row got Sleeper id 11304
+   * by name match and is a different man; Chimmy described a rostered E.J. Jenkins as "Elgton
+   * Jenkins, G, Cleveland Browns" because that row was the freshest.
+   */
+  it('🛑 the Sleeper row names the id over a fresher TheSportsDB namesake', async () => {
+    state.players = [
+      player({ externalId: 'sleeper:11304', sleeperId: '11304', name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles', fetchedAt: 1 }),
+      player({ externalId: 'tsdb_34163931', sleeperId: '11304', source: 'thesportsdb', name: 'Elgton Jenkins', position: 'G', team: 'Cleveland Browns', fetchedAt: 9 }),
+    ]
+    const names = await resolveNames('NFL', ['11304'], 800)
+    expect(names.get('11304')).toMatchObject({ name: 'E.J. Jenkins', position: 'TE', team: 'Philadelphia Eagles' })
+  })
+
   it('only the sport asked for is read', async () => {
     state.players = [player({ sport: 'NBA', externalId: 'sleeper:2', sleeperId: '2', name: 'Wrong Sport' })]
     const names = await resolveNames('NFL', ['2'], 800)

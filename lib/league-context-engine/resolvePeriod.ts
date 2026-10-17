@@ -16,13 +16,15 @@ export async function resolveMatchupPeriod(args: {
     try {
       const st = await fetch(`${SLEEPER_STATE}/nfl`, { next: { revalidate: 60 } })
       if (st.ok) {
-        const j = (await st.json()) as { week?: number }
+        const j = (await st.json()) as { week?: number; season?: string; season_type?: string }
         if (typeof j.week === 'number' && j.week > 0) {
           return {
             season: args.leagueSeason,
             currentPeriod: j.week,
             periodLabel: `NFL week ${j.week}`,
             source: 'sleeper_state_nfl',
+            verifiedRegularSeason: Number.isInteger(j.week) && j.week >= 1 && j.week <= 18 &&
+              j.season === String(args.leagueSeason) && j.season_type === 'regular',
           }
         }
       }

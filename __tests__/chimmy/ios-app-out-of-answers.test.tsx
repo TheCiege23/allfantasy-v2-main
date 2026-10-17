@@ -13,10 +13,12 @@ import { fireEvent, render, screen } from '@testing-library/react'
  * review notes send the reviewer to Chimmy, and a free account meets this after two questions.
  */
 
-const inApp = vi.hoisted(() => ({ value: true }))
+const inApp = vi.hoisted(() => ({ value: true, iap: false }))
 vi.mock('@/lib/platform/iosApp', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/platform/iosApp')>()),
   isInIosAppClient: () => inApp.value,
+  isInIosAppWithIapClient: () => inApp.value && inApp.iap,
+  isInIosAppWithoutIapClient: () => inApp.value && !inApp.iap,
 }))
 const consent = vi.hoisted(() => ({ confirmTokenSpend: vi.fn(), previewTokenSpend: vi.fn() }))
 vi.mock('@/lib/tokens/client-confirm', () => consent)
@@ -60,6 +62,7 @@ describe('describeOutOfAnswers in the iOS app', () => {
 describe('the Chimmy drawer in the iOS app', () => {
   beforeEach(() => {
     inApp.value = true
+    inApp.iap = false
     sessionStorage.clear()
     Element.prototype.scrollIntoView = vi.fn()
     consent.confirmTokenSpend.mockReset()
@@ -110,6 +113,13 @@ describe('the Chimmy drawer in the iOS app', () => {
     expect(await screen.findByRole('link', { name: 'Get AF Pro' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Buy tokens' })).toBeTruthy()
   })
+
+  it('an app build that sells through Apple offers both, like the website', async () => {
+    inApp.iap = true
+    openAndAsk('Who should I start at flex?')
+    expect(await screen.findByRole('link', { name: 'Get AF Pro' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Buy tokens' })).toBeTruthy()
+  })
 })
 
 describe('the AI-access line in the legacy right rail', () => {
@@ -120,13 +130,13 @@ describe('the AI-access line in the legacy right rail', () => {
     expect(inIosAppAccessLine({ hasSubscription: false, tokenBalance: 0 })).toBe('2 free Chimmy questions a day.')
   })
 
-  it("the rail hides the resolver's message in the app and shows the app line instead", () => {
+  it("the rail hides the resolver's message in an app build without IAP and shows the app line instead", () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'components/navigation/SharedRightRail.tsx'), 'utf8')
-    expect(src).toMatch(/<div data-hide-in-ios-app>\{aiAccess\.data\.message\}<\/div>/)
-    expect(src).toMatch(/<div data-only-in-ios-app>\{inIosAppAccessLine\(aiAccess\.data\)\}<\/div>/)
+    expect(src).toMatch(/<div data-ios-purchase>\{aiAccess\.data\.message\}<\/div>/)
+    expect(src).toMatch(/<div data-ios-purchase-alt>\{inIosAppAccessLine\(aiAccess\.data\)\}<\/div>/)
     // …and the attribute pair is real CSS, not a convention nobody implemented.
     const css = fs.readFileSync(path.join(process.cwd(), 'app/globals.css'), 'utf8')
-    expect(css).toMatch(/html\[data-ios-app\] \[data-hide-in-ios-app\]/)
-    expect(css).toMatch(/html:not\(\[data-ios-app\]\) \[data-only-in-ios-app\]/)
+    expect(css).toMatch(/html\[data-ios-app\]:not\(\[data-ios-iap\]\) \[data-ios-purchase\]/)
+    expect(css).toMatch(/html:not\(\[data-ios-app\]\) \[data-ios-purchase-alt\],\s*html\[data-ios-iap\] \[data-ios-purchase-alt\]/)
   })
 })

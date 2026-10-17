@@ -8,8 +8,11 @@ import { prisma } from '../lib/prisma'
 test('authenticated native draft uses real routes and finalizes drafted teams @db', async ({ page, request }) => {
   test.skip(process.env.AF_NATIVE_DRAFT_TEST_DB !== '1', 'Explicit guarded test database run required')
   test.setTimeout(900_000)
-  const host = new URL(process.env.DATABASE_URL ?? '').hostname
-  if (!host.startsWith('ep-muddy-leaf-') || !host.endsWith('.neon.tech')) throw new Error('KNOWN_TEST_DATABASE_REQUIRED')
+  const databaseUrl = new URL(process.env.DATABASE_URL ?? '')
+  const knownNeonTestDb = databaseUrl.hostname.startsWith('ep-muddy-leaf-') && databaseUrl.hostname.endsWith('.neon.tech')
+  const isolatedLocalDb = process.env.AF_LOCAL_LEAGUE_RUNTIME === '1' && databaseUrl.hostname === '127.0.0.1' &&
+    databaseUrl.port === '54327' && databaseUrl.pathname === '/allfantasy_staging'
+  if (!knownNeonTestDb && !isolatedLocalDb) throw new Error('KNOWN_TEST_DATABASE_REQUIRED')
   const marker = 'native-browser-' + randomUUID(), password = randomUUID()
   let userId: string | undefined, leagueId: string | undefined, contestId: string | undefined
   try {

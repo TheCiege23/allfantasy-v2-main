@@ -3,8 +3,10 @@ import { leagueWeekProgress } from './leagueWeekProgress'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
-import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { leagueContextFor, type LeagueContext, type LeagueContextRow } from './leagueContext'
 import { letterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
+import { resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { buildWeeklyCareer, type WeeklyCareer } from './leagueWeeklyCareer'
 import type { TradeGradesPayload, TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 
 /**
@@ -33,9 +35,12 @@ const TRADE_GRADES_CACHE_PREFIX = 'trade-grades:v2:'
  *
  * They are binding on every consumer, and three of them shape this file:
  *
- *   1. SPARSE COVERAGE IS THE NORMAL PATH. Three leagues in production have
- *      matchup facts. The unavailable branch here is the primary code path, not
- *      an edge case, and no consumer may render absence as 0 wins and 0 losses.
+ *   1. NO CONSUMER MAY RENDER ABSENCE AS 0 WINS AND 0 LOSSES. The ADR wrote this
+ *      when three leagues had matchup facts; ⚠ THAT COUNT IS LONG STALE —
+ *      measured on production 2026-10-01, 295 of 398 leagues render a career
+ *      here. The policy stands; the "sparse is normal" premise does not. Most of
+ *      what is still missing is leagues with no opponent at all (guillotine), now
+ *      read from weekly team scores — see `getWeeklyCareer` below.
  *   3. Incomplete fixtures — `scoreA = 0 ∧ scoreB = 0 ∧ winnerTeamId IS NULL` —
  *      are EXCLUDED from every completed summary. They are scheduled games, not
  *      ties. 108 of the 1,186 rows are these.
@@ -122,8 +127,18 @@ export type CareerTradeStory = {
   awards: CareerTradeAward[]
 }
 
+/** A league with no head-to-head history, read from weekly team scores — see `leagueWeeklyCareer.ts`. */
+export type LeagueWeeklyCareerData = {
+  league: { id: string; name: string; platform: string }
+  weekly: WeeklyCareer
+  tradeGrade: SectionState<LeagueGrade>
+  waiverGrade: SectionState<LeagueGrade>
+  tradeStory: SectionState<CareerTradeStory>
+}
+
 export type LeagueCareerResult =
-  | ({ available: true } & LeagueCareerData)
+  | ({ available: true; mode?: 'h2h' } & LeagueCareerData)
+  | ({ available: true; mode: 'weekly' } & LeagueWeeklyCareerData)
   | { available: false; leagueName: string; reason: string }
 
 /** Below this a "rivalry" is one game, which is a result rather than a pattern. */
@@ -137,6 +152,110 @@ const MIN_RIVAL_MEETINGS = 2
  */
 function isCompleted(f: { scoreA: number; scoreB: number; winnerTeamId: string | null }): boolean {
   return !(f.scoreA === 0 && f.scoreB === 0 && f.winnerTeamId == null)
+}
+
+/** One played game, from either source. `teamA`/`teamB` are slot keys the caller's `mySlots` uses. */
+type CareerFixture = {
+  season: number | null
+  weekOrPeriod: number
+  teamA: string
+  teamB: string
+  scoreA: number
+  scoreB: number
+  winnerTeamId: string | null
+}
+
+/**
+ * A native league's finished games, as fixtures keyed on `RedraftRoster.id`.
+ *
+ * ⚠ IDENTITY IS `RedraftRoster.ownerId`, NOT A CLAIMED `LeagueTeam`. Native rosters are owned by an
+ * AppUser id directly; every other roster is a placeholder (`open-slot…`, `orphan…`, `local-…`,
+ * measured on production 2026-10-01). A claim lookup would find no team for the owner of a league
+ * they are plainly playing in.
+ *
+ * ⚠ BYES AND MEDIAN GAMES ARE NOT GAMES AGAINST A MANAGER. A null `awayRosterId` is a bye, and an
+ * `isMedianMatchup` row is a game against the league median — counting either would hand you a
+ * "rival" who does not exist. Only `status = 'final'`: a scheduled or live week is not a result.
+ */
+async function readNativeFixtures(
+  leagueId: string,
+  userId: string,
+): Promise<{ fixtures: CareerFixture[]; mySlots: Set<string>; nameBySlot: Map<string, string> } | null> {
+  const [matchups, rosters] = await Promise.all([
+    prisma.redraftMatchup
+      .findMany({
+        where: { leagueId, status: 'final', isMedianMatchup: false, awayRosterId: { not: null } },
+        select: {
+          week: true,
+          homeRosterId: true,
+          awayRosterId: true,
+          homeScore: true,
+          awayScore: true,
+          season: { select: { season: true } },
+        },
+      })
+      .catch(() => []),
+    prisma.redraftRoster
+      .findMany({ where: { leagueId }, select: { id: true, ownerId: true, ownerName: true, teamName: true } })
+      .catch(() => []),
+  ])
+  if (matchups.length === 0) return null
+
+  const nameBySlot = new Map<string, string>()
+  for (const r of rosters) {
+    const label = r.teamName?.trim() || r.ownerName?.trim()
+    if (label) nameBySlot.set(r.id, label)
+  }
+  return {
+    fixtures: matchups.map((m) => ({
+      season: m.season?.season ?? null,
+      weekOrPeriod: m.week,
+      teamA: m.homeRosterId,
+      teamB: m.awayRosterId as string,
+      scoreA: m.homeScore,
+      scoreB: m.awayScore,
+      winnerTeamId: null,
+    })),
+    mySlots: new Set(rosters.filter((r) => r.ownerId === userId).map((r) => r.id)),
+    nameBySlot,
+  }
+}
+
+/** League phases where no week can have been played — the honest answer is "not yet", not "missing". */
+const NOT_STARTED_STATUSES = new Set(['pre_draft', 'drafting', 'draft', 'setup'])
+
+/**
+ * Weekly team scores for a league with no fixture history, shaped by `buildWeeklyCareer`.
+ *
+ * ⚠ FORMAT FROM THE CANONICAL RESOLVER. `resolveLeagueCardTypeKey` reads the column, the variant
+ * AND the settings flag; the `leagueType` column alone misses older guillotine leagues (measured
+ * 2026-09-08: 12 by column, 14 really). Only a guillotine is read as elimination — anything else
+ * is reported as plain weekly scores, which makes no claim about being chopped.
+ */
+async function getWeeklyCareer(league: LeagueContextRow, mySlots: ReadonlySet<string>): Promise<WeeklyCareer | null> {
+  const rows = await prisma.teamPerformance
+    .findMany({
+      where: { team: { leagueId: league.id }, points: { gt: 0 } },
+      select: { season: true, week: true, points: true, team: { select: { externalId: true } } },
+    })
+    .catch(() => [])
+  if (rows.length === 0) return null
+
+  const typeKey = resolveLeagueCardTypeKey({
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    settings: (league.settings ?? undefined) as Record<string, unknown> | undefined,
+    isDynasty: league.isDynasty,
+    guillotineMode: league.guillotineMode,
+    bestBallMode: league.bestBallMode,
+  })
+  const progress = leagueWeekProgress(league)
+  return buildWeeklyCareer({
+    rows: rows.map((r) => ({ slot: String(r.team.externalId), season: r.season, week: r.week, points: r.points })),
+    mySlots,
+    format: typeKey === 'guillotine' ? 'elimination' : 'scores',
+    isFinal: (season, week) => progress.currentWeek == null || progress.isFinal(season, week),
+  })
 }
 
 export async function getLeagueCareer(
@@ -183,23 +302,82 @@ export async function getLeagueCareer(
       .catch(() => []),
   ])
 
+  let fixtures: CareerFixture[] = facts
+  let mySlots = new Set(
+    teams.filter((t) => t.claimedByUserId === userId).map((t) => String(t.externalId)),
+  )
+  const nameBySlot = new Map<string, string>()
+  for (const t of teams) {
+    const label = t.teamName?.trim() || t.ownerName?.trim()
+    if (label) nameBySlot.set(String(t.externalId), label)
+  }
+  let progress: { currentWeek: number | null; isFinal(season: number, week: number): boolean } =
+    leagueWeekProgress(league)
+
+  /*
+   * An AllFantasy-native league keeps its own fixtures — `redraft_matchups`, scored by our engine —
+   * and never had a warehouse import to fill `MatchupFact`. Same summary, different source. Only
+   * looked for when the warehouse is empty, so an imported league never pays for the read.
+   */
   if (facts.length === 0) {
-    /*
-     * The normal path, per policy 1. It says what is missing and why rather than
-     * rendering an identity banner reading 0—0 over "0 seasons", which is what
-     * an empty-but-real history would look like and is a different claim.
-     */
-    return {
-      available: false,
-      leagueName,
-      reason:
-        'no multi-season history has been built for this league. Season-by-season records live in the warehouse table, which is populated by a historical backfill — this league has not had one run against it, so there is nothing behind a career record here yet.',
+    const native = await readNativeFixtures(leagueId, userId)
+    if (native) {
+      fixtures = native.fixtures
+      mySlots = native.mySlots
+      for (const [slot, name] of native.nameBySlot) nameBySlot.set(slot, name)
+      // `status = 'final'` is the engine's own verdict, already applied in the read.
+      progress = { currentWeek: null, isFinal: () => true }
     }
   }
 
-  const mySlots = new Set(
-    teams.filter((t) => t.claimedByUserId === userId).map((t) => String(t.externalId)),
-  )
+  if (fixtures.length === 0) {
+    /*
+     * ⚠ NO FIXTURES IS NOT NO HISTORY. The comment that used to stand here called this "the
+     * normal path" on the strength of three leagues having matchup facts; measured on production
+     * 2026-10-01, 295 of 398 leagues do. What is left here is mostly leagues with no opponent to
+     * record — guillotine and elimination formats — whose every weekly score is in
+     * `team_performances`. Read that before giving up, and say plainly when the league simply has
+     * not played yet rather than blaming a backfill that has nothing to fetch.
+     *
+     * It still never renders absence as 0—0 (policy 1): every branch below either has real weeks
+     * or says why there are none.
+     */
+    if (mySlots.size > 0) {
+      const weekly = await getWeeklyCareer(league, mySlots)
+      if (weekly) {
+        const [tradeGrade, waiverGrade, tradeStory] = await Promise.all([
+          gradeTrades(leagueId, league.platformLeagueId, userId, lc),
+          gradeWaivers(leagueId, userId),
+          loadTradeStory(league.platformLeagueId, userId, teams),
+        ])
+        return {
+          available: true,
+          mode: 'weekly',
+          league: { id: league.id, name: leagueName, platform: String(league.platform ?? 'manual').toLowerCase() },
+          weekly,
+          tradeGrade,
+          waiverGrade,
+          tradeStory,
+        }
+      }
+    }
+    if (NOT_STARTED_STATUSES.has(String(league.status ?? '').toLowerCase())) {
+      return {
+        available: false,
+        leagueName,
+        reason:
+          'this league has not played a week yet. Your career here starts once week 1’s games are final — every score after that lands on this screen.',
+      }
+    }
+    if (mySlots.size > 0) {
+      return {
+        available: false,
+        leagueName,
+        reason:
+          'no finished week is on file for this league yet — no head-to-head results and no weekly team scores. Once a week’s games are final and the league next syncs, your record here starts.',
+      }
+    }
+  }
 
   if (mySlots.size === 0) {
     return {
@@ -210,18 +388,11 @@ export async function getLeagueCareer(
     }
   }
 
-  const nameBySlot = new Map<string, string>()
-  for (const t of teams) {
-    const label = t.teamName?.trim() || t.ownerName?.trim()
-    if (label) nameBySlot.set(String(t.externalId), label)
-  }
-
   const bySeason = new Map<number, CareerSeasonLine>()
   const rivals = new Map<string, { wins: number; losses: number; meetings: number; marginSum: number }>()
 
-  const progress = leagueWeekProgress(league)
   const seenGames = new Set<string>()
-  for (const f of facts) {
+  for (const f of fixtures) {
     if (!isCompleted(f)) continue
     if (f.season == null) continue
     if (progress.currentWeek != null && !progress.isFinal(f.season, f.weekOrPeriod)) continue

@@ -3,6 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import type { FantasyCalcSettings } from '@/lib/fantasycalc'
+import { isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { excludeUntranslatedEspn } from '@/lib/decision-os/waiver/pool'
 
 /**
  * PLAYERS NOT ON ANY ROSTER IN THE LEAGUE IN SCOPE.
@@ -212,7 +214,7 @@ function fantasyCalcSettingsForLeague(league: {
  * table's known duplicate-group hazards apply here.
  */
 async function deepPoolFromFantasyCalc(
-  rostered: Set<string>,
+  rostered: Rostered,
   settings: FantasyCalcSettings,
 ): Promise<{ available: Array<{ name: string; position: string; overallRank: number }>; total: number } | null> {
   /*
@@ -228,7 +230,14 @@ async function deepPoolFromFantasyCalc(
   if (real.length === 0) return null
 
   const available = real
-    .filter((p) => !rostered.has(String(p.player.sleeperId)))
+    .filter(
+      (p) =>
+        !isTaken(rostered, String(p.player.sleeperId), {
+          full_name: p.player.name,
+          position: String(p.player.position ?? ''),
+          team_abbreviation: p.player.maybeTeam ?? null,
+        }),
+    )
     .sort((a, b) => a.overallRank - b.overallRank)
     .map((p) => ({
       name: p.player.name,
@@ -239,11 +248,34 @@ async function deepPoolFromFantasyCalc(
   return { available, total: real.length }
 }
 
-/** Roster player ids for EVERY team in the league, not just the reader's. */
-async function rosteredPlayerIds(leagueId: string): Promise<Set<string>> {
-  const rosters = await prisma.roster
+type NameRow = { full_name?: string | null; position?: string | null; team_abbreviation?: string | null }
+
+/** Who is taken: Sleeper-space ids, plus untranslated ESPN players hidden by their ESPN name. */
+type Rostered = { ids: Set<string>; untranslated: number; hidesByName: (row: NameRow) => boolean }
+
+/**
+ * Roster player ids for EVERY team in the league, not just the reader's, in SLEEPER's id space.
+ *
+ * 🛑 THESE WERE READ RAW. The values below are keyed by Sleeper id, so an ESPN, Yahoo, MFL,
+ * Fleaflicker or Fantrax league's ids subtracted almost nothing: their rostered players came back
+ * "available", and a stranger whose Sleeper id happened to equal one of their numbers vanished. The
+ * rosters now go through the one translator (`sleeperReadableRostersWithGaps`): ESPN is translated,
+ * other foreign platforms are refused before this is called, and an ESPN id the map cannot place is
+ * still a player on somebody's team, so it is hidden by name exactly as the waiver pool hides it.
+ */
+async function rosteredPlayerIds(leagueId: string, platform: string | null, sport: string): Promise<Rostered> {
+  const raw = await prisma.roster
     .findMany({ where: { leagueId }, select: { playerData: true } })
-    .catch(() => [])
+    .catch(() => [] as Array<{ playerData: unknown }>)
+  const { rosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(raw, platform)
+  const hide =
+    untranslatedEspnIds.length > 0
+      ? await excludeUntranslatedEspn(untranslatedEspnIds, sport).catch(() => null)
+      : null
+  // Untranslated players we could not even look up by name: nobody can be called free.
+  if (untranslatedEspnIds.length > 0 && !hide) {
+    throw new Error('untranslated ESPN roster ids could not be named')
+  }
 
   const ids = new Set<string>()
   for (const r of rosters) {
@@ -264,7 +296,16 @@ async function rosteredPlayerIds(leagueId: string): Promise<Set<string>> {
       }
     }
   }
-  return ids
+  return {
+    ids,
+    untranslated: untranslatedEspnIds.length,
+    hidesByName: hide ? (row) => hide.hides(row) : () => false,
+  }
+}
+
+/** Taken by id, or (an untranslated ESPN player) by name. */
+function isTaken(rostered: Rostered, id: string, row: NameRow): boolean {
+  return rostered.ids.has(id) || rostered.hidesByName(row)
 }
 
 /**
@@ -285,6 +326,7 @@ export async function buildAvailablePlayersContext(
       select: {
         name: true,
         sport: true,
+        platform: true,
         isDynasty: true,
         scoring: true,
         settings: true,
@@ -298,6 +340,27 @@ export async function buildAvailablePlayersContext(
   }
 
   const leagueName = league.name ?? 'this league'
+  const sportCode = String(league.sport ?? 'NFL').toUpperCase()
+
+  /*
+   * 🛑 A YAHOO / MFL / FLEAFLICKER / FANTRAX ROSTER CANNOT BE READ AS PLAYER IDS WE KNOW. Subtracting
+   * it anyway listed their own rostered players as "available". Refused, the same way the lineup
+   * optimizer refuses — with the real reason, not "the rosters have not synced".
+   */
+  if (isForeignIdSpace(league.platform)) {
+    return [
+      `"${leagueName}" is a ${league.platform} league, and AllFantasy cannot yet match ${league.platform} roster entries to players,`,
+      'so we cannot tell who is taken and who is free there. Say that plainly and suggest checking free agents',
+      `in ${league.platform} directly; do NOT name anyone as available.`,
+    ].join(' ')
+  }
+
+  let rostered: Rostered
+  try {
+    rostered = await rosteredPlayerIds(leagueId, league.platform ?? null, sportCode)
+  } catch {
+    return `The rosters in "${leagueName}" could not be fully read just now, so who is free is unknown. Say so; do NOT name anyone as available.`
+  }
 
   /*
    * ⚠ THE VALUE RANKING BELOW IS NFL ONLY. The values table holds NFL assets; running it for an NBA
@@ -306,14 +369,24 @@ export async function buildAvailablePlayersContext(
    * pool and rank by AllFantasy's per-game projection instead — see availablePlayersOtherSports.ts,
    * which says in its own block that the ranking basis is different.
    */
-  if (String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') {
+  if (sportCode !== 'NFL') {
+    /*
+     * The other-sport pool matches by id only. An ESPN player the identity map cannot place is still
+     * on somebody's team, and with no name rule in that path he would be offered — so say so instead.
+     */
+    if (rostered.untranslated > 0) {
+      return [
+        `${rostered.untranslated} rostered players in "${leagueName}" could not be matched from ESPN,`,
+        'so we cannot be sure who is free there. Say that plainly; do NOT name anyone as available.',
+      ].join(' ')
+    }
     try {
       const { buildOtherSportAvailableContext } = await import('@/lib/chimmy/tools/availablePlayersOtherSports')
       return await buildOtherSportAvailableContext({
         leagueName,
         sport: String(league.sport),
         leagueId,
-        rostered: await rosteredPlayerIds(leagueId),
+        rostered: rostered.ids,
       })
     } catch {
       return `Player values are only published for NFL, and the ${league.sport} player pool could not be ranked just now for "${leagueName}". Say that plainly; do not name anyone.`
@@ -323,14 +396,12 @@ export async function buildAvailablePlayersContext(
   /* Starting slots this league fills that no source we hold can rank. */
   const unranked = unrankedStarterSlots(league.settings)
 
-  const rostered = await rosteredPlayerIds(leagueId)
-
   /*
    * ⚠ NO ROSTERS MEANS NO ANSWER, NOT AN EMPTY SUBTRACTION. With an empty set
    * every ranked player would come back "available" — a confident, complete,
    * entirely wrong pickup board.
    */
-  if (rostered.size === 0) {
+  if (rostered.ids.size === 0 && rostered.untranslated === 0) {
     return [
       `No rosters are stored for "${leagueName}", so we cannot tell who is taken and who is free.`,
       'Everyone would look available, which would be wrong. Say the rosters have not synced;',
@@ -381,7 +452,7 @@ export async function buildAvailablePlayersContext(
   const seen = new Set<string>()
   const available = valued.filter((v) => {
     const id = String(v.playerId)
-    if (rostered.has(id) || seen.has(id)) return false
+    if (isTaken(rostered, id, { full_name: v.playerName, position: shortPosition(v.position) }) || seen.has(id)) return false
     seen.add(id)
     return true
   })

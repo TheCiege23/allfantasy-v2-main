@@ -29,6 +29,54 @@ writes a `finished_at IS NULL` row into `_prisma_migrations`, and every later
 A well-guarded refusal still blocks everyone. Parking it here means the guard
 never has to fire.
 
+## 2026-10-03: four moved to `prisma/migrations/` — and why the other seventeen stay
+
+Moved, because each is **applied and recorded** in production with a `_prisma_migrations`
+checksum equal to the sha256 of its committed LF `migration.sql`, **and** `schema.prisma` already
+models everything it creates — so `migrate deploy` matches and skips it, and `migrate dev` gains
+nothing to undo:
+
+| moved | ledger checksum = LF file |
+|---|---|
+| `20260902000000_draft_fact_metadata` | `db0fe2033d…` |
+| `20260902020000_yahoo_connection_identity` | `4b82763bc5…` |
+| `20260904040000_deleted_league_tombstones` | `87cacb1cf8…` |
+| `20260912020000_import_run_attempt` | `babd02fa75…` |
+
+**Measured, not argued.** The full history was replayed into an empty throwaway Postgres 18
+(`prisma migrate diff --from-migrations … --to-schema-datamodel …`) before and after the move.
+With these four in, the replay still succeeds and the history-vs-schema diff **loses 60 lines and
+gains 0** — the lines it loses are exactly these four migrations' objects. Positive control: a
+planted migration creating an unmodelled table appeared in the same diff as `DROP TABLE`.
+
+🛑 **The seven Commissioner OS migrations (`t101` … `t201`) are applied and checksum-match, but
+CANNOT move.** Replayed on an empty database, `t101` aborts — `database roles not provisioned
+(missing: commish_app, commish_migrate, commish_platform, commish_purge). Land T-001 first` — and
+the other six depend on it. The roles are provisioned outside the migration history, so in
+`prisma/migrations/` they would make every `prisma migrate dev` fail with P3006 and break any
+database built from history. Parking is load-bearing for them, not housekeeping.
+
+✅ `20260830190000_devy_head_coach_context` was applied with a CRLF ledger checksum (`ed157f6d5e…`)
+that did not match its file (`f06fd2fa23…`). On 2026-10-03 the ledger row was corrected to the LF
+digest and the folder moved to `prisma/migrations/`, after the same shadow replay as the four above:
+the replay still succeeds and the history-vs-schema diff lost exactly its six `DevyPlayer` columns
+and gained nothing (control: a planted column appeared as `DROP COLUMN`). See its `PROVENANCE.md`.
+The other nine have **no** ledger row, so moving any of them would make
+the next `migrate deploy` RUN it: `t101b` (do not apply yet), `fact_table_uniqueness` (deletes
+duplicate rows), `league_max_pf_freeze`, the three `manager_psych_*` and `league_last_viewed_at`.
+
+✅ **Two of the original nine are now RECORDED (2026-10-03, on the owner's instruction):**
+`domain_os_facts` (16:08:55Z) and `weekly_matchup_roster_id_text` (16:09:03Z). Both had been
+applied by hand and never recorded. Production was first verified to match each file exactly —
+`domain_os_facts`' 10 column types, lengths, nullability and defaults plus its pkey and three
+indexes; `WeeklyMatchup.rosterId` = `text` over 106,704 rows, 0 null, 0 non-numeric, four indexes —
+with a positive control (planted wrong expectations were all reported). Then
+`prisma migrate resolve --applied` from an LF export, so each ledger checksum equals the sha256 of
+the committed LF file (`91be26727c…`, `91305477aa…`). A later `migrate deploy` now matches and
+SKIPS them instead of re-running them. Both were then moved to `prisma/migrations/` the same day
+(#1954 — see the section at the end of this file); a shadow replay of `main` afterwards showed the
+move gave `prisma migrate dev` nothing to DROP, as it did for the four above.
+
 ## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
 
 Of the seven, `t101b` below is still parked. The three added 2026-09-02 are in
@@ -53,8 +101,9 @@ leave no trace in the mainline history, and nothing in the tooling notices.
 
 `yahoo_connection_identity` is recorded by hand with the real `sha256` of its
 `migration.sql` (`4b82763b…`), so a later `migrate deploy` matches and skips.
-Its directory deliberately stays here rather than moving to `prisma/migrations/`,
-per the note on that migration below. Everything else in this directory has been
+It stayed here while `schema.prisma` lagged production (the note on that migration
+below); the schema has since caught up, and it moved to `prisma/migrations/` on
+2026-10-03 — see the section above. Everything else in this directory has been
 applied and recorded in `_prisma_migrations` with the real `sha256` of its
 `migration.sql`, so a later `migrate deploy` matches and skips rather than
 re-running:
@@ -104,7 +153,10 @@ role", but "the app's role is a MEMBER of the migration role".
 
 ## ⚠ A THIRD CASE: applied to production, but NOT through Prisma
 
-### `20260901220000_domain_os_facts`
+### `20260901220000_domain_os_facts` — ✅ moved to `prisma/migrations/` 2026-10-03 (see the end of this file)
+
+✅ **RECORDED 2026-10-03 16:08:55Z** — see the 2026-10-03 section at the top. The table below
+describes the state before that: the "RUNS it" row no longer applies.
 
 **Applied to production 2026-09-01 by the owner, as raw SQL in a console.** So it
 is neither "pending approval" nor recorded in `_prisma_migrations` — it is a
@@ -313,9 +365,10 @@ every read of those models; against a database that lacks them that is P2022 on
 `findMany`, not confined to code that wants the new fields. The order is: apply,
 then update `schema.prisma`, then ship writers.
 
-### `20260903222531_weekly_matchup_roster_id_text`
+### `20260903222531_weekly_matchup_roster_id_text` — ✅ moved to `prisma/migrations/` 2026-10-03 (see the end of this file)
 
-✅ **APPLIED TO PRODUCTION 2026-09-03.** `WeeklyMatchup.rosterId Int` → `String`.
+✅ **APPLIED TO PRODUCTION 2026-09-03, and RECORDED 2026-10-03 16:09:03Z** (it had no
+`_prisma_migrations` row until then — see the 2026-10-03 section at the top). `WeeklyMatchup.rosterId Int` → `String`.
 One statement: `ALTER COLUMN "rosterId" TYPE TEXT USING "rosterId"::text` —
 lossless, every existing Int becomes its exact text form. Verified before (44,538
 rows, 0 nulls) and after (44,538 rows, 0 nulls, 0 non-numeric values, all four
@@ -412,6 +465,10 @@ production, not by the record: all three token columns read `is_nullable=YES`,
 `userId` exists, `YahooConnection_userId_key` exists, and
 `YahooConnection_userId_fkey` exists. It is the most recent row in
 `_prisma_migrations` (169 rows).
+
+✅ **RESOLVED BY 2026-10-03 — `schema.prisma` now declares the three token columns nullable
+and `userId String? @unique`, and the migration moved to `prisma/migrations/`.** The paragraph
+below is the risk as it stood:
 
 🛑 **`schema.prisma` HAS NOT CAUGHT UP, AND THAT IS THE LIVE RISK.** The model still
 declares `accessToken`/`refreshToken` as `String` and `tokenExpiresAt` as
@@ -791,3 +848,35 @@ remain). `schema.prisma` carries the matching `@@unique`, and `db:drift:ci` is b
 `DROP INDEX` of this index, which is what an applied constraint absent from the model looks like.
 
 `ROLLBACK.sql` drops the index. No data is lost by the rollback; duplicates become possible again.
+
+---
+
+## `20260901220000_domain_os_facts` + `20260903222531_weekly_matchup_roster_id_text` — ✅ moved to `prisma/migrations/` 2026-10-03
+
+Both were hand-applied to production in September (their own headers record it) and then sat
+here for a month with **no** `_prisma_migrations` row. On 2026-10-03 at 16:08:55 and 16:09:03 UTC
+another session recorded them with `migrate resolve --applied` — 0 steps, `started_at = finished_at`.
+The owner then authorised moving the folders. **No SQL was run by the move; it is a pure `git mv`.**
+
+**Verified by the objects, not the ledger**, on `ep-curly-block-ad0dlt9o/neondb`, read-only:
+
+- `domain_os_facts`: all 10 columns with the migration's types and nullability (`confidence`,
+  `sampleSize` nullable), and all four indexes, including the load-bearing unique
+  `(domain, kind, level, "scopeKey")` that `store.ts`'s upsert needs. Live: 1,470 rows, newest
+  `capturedAt` 16:00 that day.
+- `"WeeklyMatchup"."rosterId"`: `text NOT NULL`, unique `(leagueId, seasonYear, week, rosterId)`
+  intact, 106,704 rows, 0 null, 0 non-numeric.
+
+**The checksums match, so nothing looks modified.** Each ledger row's `checksum` equals the
+sha256 of the file as git stores it (LF): `91be2672…` and `91305477…`. The move keeps the
+blobs byte-identical. Control: `20261003110000_expand_player_trend_ids` matches its blob the same
+way. ⚠ The CRLF working-tree copy on a Windows checkout hashes differently. That is a property of
+the checkout, not of the migration, and Linux CI reads the LF blob.
+
+**What the move changes elsewhere.** Production: nothing, because both are recorded and
+`migrate deploy` skips them. A FRESH database now gets them in order:
+- `domain_os_facts` is all `IF NOT EXISTS`.
+- The `rosterId` cast runs after `20260407024117_init` created the column as `INTEGER`, which is
+  exactly the drift that left the M19 test database unable to round-trip `WeeklyMatchup`. A
+  non-production database still on the integer column is now cured by an ordinary
+  `migrate deploy`.

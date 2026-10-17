@@ -50,6 +50,9 @@ export async function POST(req: Request) {
     if (started.reason === 'ROSTER_CONFIGURATION_INCOMPLETE') {
       return NextResponse.json({ error: 'Roster configuration incomplete', code: started.reason }, { status: 409 })
     }
+    if (started.reason === 'SURVIVOR_CAST_INCOMPLETE') {
+      return NextResponse.json({ code: started.reason, error: started.error }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Draft session is not ready' }, { status: 400 })
   }
 

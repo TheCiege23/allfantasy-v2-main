@@ -1,3 +1,4 @@
+import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET: Current draft order (slotOrder from session).
  * PATCH: Set draft order (commissioner only, pre_draft only).
@@ -56,6 +57,8 @@ export async function PATCH(
 
   const commissioner = await isCommissioner(leagueId, userId)
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+
+  if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
   const slotOrder = body.slotOrder as { slot: number; rosterId: string; displayName: string }[] | undefined

@@ -93,8 +93,8 @@ test.describe("@db @messaging league chat feature flows", () => {
       },
     ]
 
-    let typingPostCalls = 0
-    let readReceiptPostCalls = 0
+    let typingReads = 0
+    let readReceiptCalls = 0
     let messagePatchCalls = 0
     let messageDeleteCalls = 0
 
@@ -126,6 +126,25 @@ test.describe("@db @messaging league chat feature flows", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ openai: true, deepseek: true, grok: true }),
+      })
+    })
+
+    await page.route("**/api/app/leagues/e2e-league-chat-ai/chat**", async (route) => {
+      if (route.request().method() !== "GET") return route.fallback()
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          viewerUserId: "user-1",
+          messages: leagueMessages.map((message) => ({
+            id: message.id,
+            authorId: message.senderUserId,
+            authorName: message.senderName,
+            text: message.body,
+            messageType: message.messageType,
+            createdAt: message.createdAt,
+          })),
+        }),
       })
     })
 
@@ -162,16 +181,16 @@ test.describe("@db @messaging league chat feature flows", () => {
       }
 
       if (rest === "typing" && method === "GET") {
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", typing: [{ userId: "user-2", displayName: "Alex" }] }) })
+        typingReads += 1
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", typing: [{ userId: "user-2", name: "Alex" }] }) })
       }
 
       if (rest === "typing" && method === "POST") {
-        typingPostCalls += 1
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", typing: [] }) })
       }
 
-      if (rest === "read-receipts" && method === "POST") {
-        readReceiptPostCalls += 1
+      if (rest === "read-receipts" && (method === "GET" || method === "POST")) {
+        readReceiptCalls += 1
         return route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -229,20 +248,30 @@ test.describe("@db @messaging league chat feature flows", () => {
     await page.goto("/e2e/league-chat-ai")
     await expect(page.getByRole("heading", { name: "League Chat AI Harness" })).toBeVisible()
 
-    await submitSearchWithRetry(page, "Search league messages", "alex")
+    await page.getByRole("button", { name: "Search chat" }).click()
+    await submitSearchWithRetry(page, "Search this chat", "alex")
     await expect(page.getByRole("button", { name: /Trade angle from Alex/i })).toBeVisible()
     await expect(page.getByText(/is typing/i)).toBeVisible()
-    await expect(page.getByText(/Seen by Alex/i)).toBeVisible()
 
-    await page.getByRole("button", { name: "Edit" }).first().click()
-    await page.getByRole("button", { name: "Delete" }).first().click()
+    const ownLeagueMessage = page.getByRole("article", { name: /You,.*Press Enter for actions/i }).first()
+    await ownLeagueMessage.press("Enter")
+    await page.getByRole("button", { name: "Edit", exact: true }).click()
+    await page.getByRole("textbox", { name: "Edit your message" }).fill("Edited message body")
+    await page.getByRole("button", { name: "Save", exact: true }).click()
+    await expect.poll(() => messagePatchCalls).toBeGreaterThan(0)
+    await ownLeagueMessage.press("Enter")
+    await page.getByRole("button", { name: "Delete", exact: true }).click()
+    await page.getByRole("button", { name: "Delete", exact: true }).click()
 
     await page.getByRole("button", { name: "Messages" }).click()
-    await submitSearchWithRetry(page, "Search messages", "alex")
+    await page.getByRole("button", { name: /Alex DM/i }).click()
+    await page.getByRole("button", { name: "Search this conversation" }).click()
+    await submitSearchWithRetry(page, "Search this chat", "alex")
     await expect(page.getByRole("button", { name: /Alex says hello/i })).toBeVisible()
+    await expect(page.getByText(/Seen by Alex/i)).toBeVisible()
 
-    expect(typingPostCalls).toBeGreaterThan(0)
-    expect(readReceiptPostCalls).toBeGreaterThan(0)
+    expect(typingReads).toBeGreaterThan(0)
+    expect(readReceiptCalls).toBeGreaterThan(0)
     expect(messagePatchCalls).toBeGreaterThan(0)
     expect(messageDeleteCalls).toBeGreaterThan(0)
   })

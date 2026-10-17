@@ -42,7 +42,7 @@ describe('WaiverLineupBoard — a season-rate league', () => {
     render(<WaiverLineupBoard leagueId="lg1" />)
     await waitFor(() => expect(screen.getByTestId('waiver-lineup-board')).toBeTruthy())
     const text = screen.getByTestId('waiver-lineup-board').textContent ?? ''
-    expect(text).toContain('your lineup 61.4 per game')
+    expect(text).toContain('your best lineup 61.4 per game')
     expect(text).not.toMatch(/wk /)
     expect(text).toContain('per game · season')
     expect(text).toContain('over Bench Winger')

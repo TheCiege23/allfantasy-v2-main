@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blah — Draft player pool (phone)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./af-shell.css">
+<link rel="stylesheet" href="./draft-sleek.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#07080d}
+.hs{position:relative;width:42px;height:42px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:#c3c9e6;background:linear-gradient(160deg,#1c2342,#10131c);border:1px solid rgba(255,255,255,.1)}
+.tl{position:absolute;right:-6px;bottom:-4px;min-width:24px;height:15px;padding:0 3px;border-radius:5px;display:flex;align-items:center;justify-content:center;font:900 7px/1 'JetBrains Mono',monospace;border:2px solid #07080d}</style>
+</helmet>
+<div class="af ph" style="min-height: 0">
+  <header style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #0b0d14; border-bottom: 1px solid rgba(255,255,255,.07)">
+    <a class="iconbtn" href="MobileDraftBoard.dc.html" aria-label="Back to board">‹</a>
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span class="lbl" style="color: #22d3ee">On the clock · Open Team 10</span><span style="font-weight: 700; font-size: 15px">You're next · 4.04</span></span>
+    <span class="num" style="font-size: 28px; font-weight: 600; color: #22d3ee">0:52</span>
+  </header>
+
+  <a href="#" style="margin: 10px 12px 0; padding: 12px; border-radius: 14px; background: linear-gradient(120deg, rgba(34,211,238,.18), rgba(34,211,238,.04)); border: 1px solid rgba(34,211,238,.45); display: flex; align-items: center; gap: 12px; color: #eef0fa">
+    <span class="hs" style="box-shadow: 0 0 0 2px #07080d, 0 0 0 4px #22d3ee">JC<span class="tl" style="background: #00338D; color: #fff">BUF</span></span>
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span class="lbl" style="color: #22d3ee">AF says draft next</span><span style="font-weight: 700; font-size: 15px">James Cook · RB</span><span style="font-size: 11px; color: #c3c9e6">RB run · fills RB2 · 78% there at 4.04</span></span>
+  </a>
+
+  <div style="padding: 10px 12px 6px"><div class="seg" role="tablist" aria-label="Dock"><sc-for list="{{tabs}}" as="t" hint-placeholder-count="4"><button role="tab" class="{{t.cls}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div></div>
+
+  <div class="ph-scroll" style="padding: 0 12px 12px">
+    <sc-if value="{{onPlayers}}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 8px"><span class="chip chip-af">All</span><span class="chip">QB</span><span class="chip">RB</span><span class="chip">WR</span><span class="chip">TE</span><span class="chip">ADP · Sleeper</span></div>
+      <sc-for list="{{pool}}" as="p" hint-placeholder-count="7">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-bottom: 1px solid rgba(255,255,255,.05); background: {{p.bg}}; border-radius: 10px">
+          <span class="num" style="width: 24px; font-size: 13px; font-weight: 700; color: {{p.rc}}">{{p.af}}</span>
+          <span class="hs" role="img" aria-label="{{p.name}} headshot">{{p.ini}}<span class="tl" style="background: {{p.tBg}}; color: {{p.tFg}}">{{p.team}}</span></span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+            <span style="font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{p.name}}</span>
+            <span class="num" style="font-size: 10px; color: #989fc2"><span style="color: {{p.pc}}; font-weight: 600">{{p.pos}}</span> · BYE {{p.bye}} · {{p.proj}} pts · API {{p.api}}</span>
+          </span>
+          <sc-if value="{{p.tag}}" hint-placeholder-val="{{ false }}"><span class="{{p.tagCls}}" style="height: 20px; font-size: 9px">{{p.tag}}</span></sc-if>
+          <button class="iconbtn" style="width: 40px; height: 40px" aria-label="Queue {{p.name}}">+</button>
+        </div>
+      </sc-for>
+    </sc-if>
+    <sc-if value="{{onRoster}}" hint-placeholder-val="{{ false }}">
+      <span class="lbl" style="padding: 6px 2px">Starters</span>
+      <sc-for list="{{starters}}" as="s" hint-placeholder-count="9">
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px 10px; border-radius: 12px; min-height: 48px; background: {{s.bg}}; border: 1px {{s.ls}} {{s.line}}"><span class="pos p-{{s.sp}}">{{s.slot}}</span><span style="flex: 1; font-size: 13px; font-weight: 700; color: {{s.nc}}">{{s.name}}</span><span class="num" style="font-size: 10px; color: #989fc2">{{s.bye}}</span></div>
+      </sc-for>
+      <span class="lbl" style="padding: 14px 2px 0; display: block">Bench · 6 open</span>
+    </sc-if>
+    <sc-if value="{{onOther}}" hint-placeholder-val="{{ false }}">
+      <div style="padding: 20px 6px; font-size: 13px; color: #989fc2">{{otherText}}</div>
+    </sc-if>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 10px 12px 24px; border-top: 1px solid rgba(255,255,255,.07); background: #0b0d14">
+    <button class="btn btn-g" style="flex: 1">Queue · 2</button>
+    <button class="btn btn-p" style="flex: 2" disabled="{{ true }}">Draft (your turn next)</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: 'players' }; }
+  renderVals() {
+    const t = this.state.tab;
+    const tabs = [['players','Players'],['queue','Queue'],['roster','Roster'],['chat','Chat']].map(([id,label]) => ({ label, cls: 'sg' + (t === id ? ' sg-on' : ''), pick: () => this.setState({ tab: id }) }));
+    const TC = { PIT: ['#101820','#FFB612'], BUF: ['#00338D','#fff'], SF: ['#AA0000','#fff'], CIN: ['#FB4F14','#000'], BAL: ['#241773','#fff'], KC: ['#E31837','#fff'], NO: ['#101820','#D3BC8D'] };
+    const PC = { QB: '#fb8aa0', RB: '#5ee6b0', WR: '#7fb7e8', TE: '#fbbf24' };
+    const pool = [['DK Metcalf','WR','PIT',9,'212.4',39,41,'Value','chip chip-good'],['James Cook','RB','BUF',7,'218.9',40,43,'AF pick','chip chip-af'],['George Kittle','TE','SF',14,'176.5',42,47,'Target','chip chip-af'],['Joe Burrow','QB','CIN',10,'351.2',44,46,'',''],['Zay Flowers','WR','BAL',7,'196.0',45,44,'',''],['Chris Olave','WR','NO',11,'191.7',47,51,'Value','chip chip-good'],['Travis Kelce','TE','KC',10,'158.3',48,45,'Fade','chip chip-bad']]
+      .map(([name,pos,team,bye,proj,af,api,tag,tagCls]) => ({ name,pos,team,bye,proj,af,api,tag,tagCls, pc: PC[pos],
+        ini: name.split(' ').map(x => x[0]).join('').slice(0, 2), tBg: TC[team][0], tFg: TC[team][1],
+        bg: name === 'James Cook' ? 'rgba(34,211,238,.08)' : 'transparent', rc: name === 'James Cook' ? '#22d3ee' : '#eef0fa' }));
+    const S = (slot, sp, name, bye) => ({ slot, sp, name: name || 'Open starter', bye: bye || '', nc: name ? '#eef0fa' : '#fbbf24',
+      bg: name ? '#10131c' : 'transparent', ls: name ? 'solid' : 'dashed', line: name ? 'rgba(255,255,255,.1)' : 'rgba(251,191,36,.4)' });
+    const starters = [S('QB','QB'), S('RB','RB','Kyren Williams','BYE 8'), S('RB','RB'), S('WR','WR','Malik Nabers','BYE 11'), S('WR','WR','Mike Evans','BYE 9'), S('TE','TE'), S('FLX','FLEX'), S('K','K'), S('DEF','DEF')];
+    return { tabs, pool, starters, onPlayers: t === 'players', onRoster: t === 'roster', onOther: t === 'queue' || t === 'chat',
+      otherText: t === 'queue' ? 'Queue: 1. DK Metcalf · 2. George Kittle. Auto-pick is on.' : 'Draft room · League · Chimmy chats live here — same three tabs as desktop.' };
+  }
+}
+</script>
+</body>
+</html>

@@ -8,6 +8,8 @@ The API contracts are committed at `contracts/`:
 - `contracts/thesportsdb/`
 - `contracts/api-sports/`
 - `contracts/fleaflicker/`
+- `contracts/espn/` — NCAAB teams + roster only so far; ESPN's many older call sites are
+  outside it. ⚠ Its `GAPS.md` M-01: Rolling Insights NCAAB `ACT` is NOT "current roster".
 
 **Do not call any of these providers' APIs to determine a response shape.** Read
 `ENDPOINTS.yaml` and `fixtures/` in the relevant contract directory. Unknowns are
@@ -430,6 +432,38 @@ pay one extra request and no-op on an unchanged hash. Either way you are right.
 What is **not** acceptable either way: returning `[]` on a 304 without a
 cache-busted retry. That reports "no data" for what may be a cache hit, and it is
 indistinguishable from a real empty result.
+
+## Running Prisma migrations against production
+
+🛑 **Never run a bare `npx prisma migrate deploy` / `resolve` against production.** Use:
+
+```
+ALLOW_PROD_MIGRATION=1 npm run db:migrate:deploy:prod
+ALLOW_PROD_MIGRATION=1 npm run db:resolve:prod -- --applied <migration>
+railway run node scripts/railway-prod-migrate.cjs                          # deploy
+railway run node scripts/railway-prod-migrate.cjs resolve --applied <name>  # resolve
+```
+
+Both refuse unless the target is positively production, and **both refuse a checkout whose
+`prisma/migrations/*/migration.sql` holds a CR byte**. That is not pedantry. Prisma records each
+migration's checksum as the sha256 of the bytes on disk, and a Windows checkout
+(`core.autocrlf=true`) has CRLF bytes. On 2026-10-03 **four** production `_prisma_migrations` rows
+carried CRLF checksums that no Linux checkout matches. Every one came from a careful,
+target-checked run (two deploys, two hand-run `resolve`s, Claude and Codex both), and every one
+was corrected by hand.
+
+⚠ **The obvious fix does not work.** `git -c core.autocrlf=false checkout -- prisma/migrations`
+and `git restore` leave every CR byte in place, because git skips files it considers unchanged.
+Measured: remove the tracked files, then check them out with `autocrlf=false`, on a clean tree only:
+
+```
+git ls-files -z -- prisma/migrations | xargs -0 rm -f
+git -c core.autocrlf=false checkout -- prisma/migrations
+```
+
+`db:resolve:prod --applied` also reads the ledger back and exits 1 unless the recorded checksum
+equals the LF file's sha256. `--applied` runs no SQL. It asserts the migration's effects are
+**already** live, so verify the objects by effect first; nothing can check that for you.
 
 ## Git
 
@@ -1397,6 +1431,20 @@ remove`.** `rmdir` unlinks the junction and never recurses into its target;
 with it. Count the target's entries before and after and confirm the number is
 unchanged — the same "prove the negative" rule the junction detection above
 already carries.
+
+🛑 **REMOVE A WORKTREE ONLY WITH `npm run wt:remove -- <path> [--force]`.** The rule
+above failed TWICE on 2026-10-01 (~15:44 and ~16:45 UTC): two sessions each ran an
+"is it a junction?" check first, got a wrong "no" (one compared PowerShell output
+ending in `\r`), skipped the `rmdir`, and `git worktree remove` emptied the SHARED
+`node_modules` — breaking every session's local tests and tsc until a reinstall.
+A rule that depends on a detection step being right fails exactly when detection is
+wrong. `scripts/safe-worktree-remove.mjs` never detects: it unlinks `node_modules`
+BY EFFECT (a non-recursive `rmdir`, which removes a junction and refuses a real
+non-empty folder), counts the shared folder before, after unlinking and after git,
+and aborts BEFORE `git worktree remove` if anything shrank. Node built-ins only, so
+it still runs when the shared folder is the thing that is empty. Its test first
+reproduces the wipe with a plain `git worktree remove` (5 → 0); that control is what
+makes the script's 5 → 5 mean something.
 
 ⚠ **AND THE MILD VERSION IS THE COMMON ONE — IT MOVES THE BASELINE.** The
 follow-up commit that repaired the break above carried "148 errors" in its own
@@ -2483,6 +2531,21 @@ canary — a job whose normal duration is under a second (`cron-waivers`,
 exceeded 15 s, then count what else was running at each of those instants. Check the
 `status` column while you are there: every one of the 48 was `success` and untouched by
 the reaper, which is what separates this from the deploy-swap failures above.
+
+### Batched deploys — a merge to `main` does not deploy immediately (2026-10-06)
+
+Owner's decision, after measuring 30 deploys in 4 hours on ONE Railway builder: overlapping builds
+share its CPU, so a ~15-minute deploy became 20-35. Once switched on, `allfantasy-v2-main` is
+deployed ONLY by `.github/workflows/railway-deploy.yml` (Railway's own deploy-on-push is off): one
+build at a time, always the newest `main`, after a 3-minute quiet window and after any build already
+in flight. A burst of merges becomes at most two builds.
+
+- **Expect ~18-35 min from merge to live**, and a merge during a build waits for it. That is the
+  design, not a stuck pipeline. A red "Railway deploy (batched)" run IS a failed deploy.
+- **To deploy now:** Actions → "Railway deploy (batched)" → Run workflow (quiet window 0).
+- **Docs- and test-only merges do not deploy** (`paths-ignore`); the next real merge carries them.
+- 🛑 **Never re-enable Railway autodeploy without setting the repo variable
+  `RAILWAY_BATCHED_DEPLOY` off** — with both on, every merge builds twice.
 
 ### What is enforced for you, and what is not
 

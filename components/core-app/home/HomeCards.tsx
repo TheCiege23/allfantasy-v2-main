@@ -5,15 +5,14 @@ import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
 import { CardFreshness } from '@/components/core-app/home/CardFreshness'
 import { DecisionQueue } from '@/components/core-app/home/DecisionQueue'
 import { HomeActivity, HomePrefetch } from '@/components/core-app/home/HomeClientEffects'
-import { freshnessStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
+import { freshnessStamp, leagueDataStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
-import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
+import { HomeReadFailure, HomeScopeEmpty, HomeScopeNote } from '@/components/core-app/home/HomePanels'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
-  connectedLeagueCount,
   Dash3AExposure,
   Dash3AFollowing,
   Dash3ALeagues,
@@ -23,6 +22,7 @@ import Dashboard3A, {
   Dash3ARivals,
   Dash3ARoutine,
 } from '@/components/core-app/screens/Dashboard3A'
+import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover, Dash34Coverage } from '@/components/core-app/screens/Dash34Carryover'
 import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
@@ -32,6 +32,10 @@ import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastV
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import type { Dash34Result } from '@/lib/core-app/dash34'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import type { StreakSummary } from '@/lib/core-app/dailyStreak'
+import { DailyStreakCardView, StreakGlanceView, type StreakGlanceItem } from '@/components/core-app/home/DailyStreakCardView'
+import '@/components/core-app/home/af-streak.css'
 import type { PortfolioSummaryMeta } from '@/lib/core-app/homePortfolioSummary'
 import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
 
@@ -100,10 +104,17 @@ export type HomeLoads = {
   plays: Promise<ComponentProps<typeof DashGameDayBand>['plays']>
   regularSeason: Promise<ComponentProps<typeof DashGameDayBand>['regularSeasonUnderway']>
   trades: Promise<ComponentProps<typeof DashTradeBand>['trades']>
+  /** AF Pro's trade depth — gates the band's "why this grade" line. Null when it could not be read. */
+  tradeDepth: Promise<CoreDepthAccess | null>
+  /**
+   * AF Pro's player depth — gates the triage card's best-free-agent button and its Questionable
+   * game-time calls (2026-10-17). Absent or null when it could not be read: the card fails OPEN.
+   */
+  playerDepth?: Promise<CoreDepthAccess | null>
+  /** The daily check-in streak (lib/core-app/dailyStreakStore.ts). Null when it could not be read. */
+  streak: Promise<StreakSummary | null>
   brief: Promise<ComponentProps<typeof DashSinceLastVisit>['brief']>
   drafts: Promise<ComponentProps<typeof DashDraftsBand>['data']>
-  /** Not a card: settles once the trade scan's pending-offers cache write has. The tab badges wait on it. */
-  offersSettled: Promise<void>
 }
 
 /**
@@ -129,9 +140,10 @@ export function emptyHomeLoads(): HomeLoads {
     plays: none([]) as HomeLoads['plays'],
     regularSeason: none(false),
     trades: none([]) as HomeLoads['trades'],
+    tradeDepth: none(null),
+    streak: none(null),
     brief: none(null),
     drafts: none(null),
-    offersSettled: none(undefined),
   }
 }
 
@@ -147,6 +159,7 @@ export type HomeCardName =
   | 'schedule'
   | 'routine'
   | 'issues'
+  | 'streak'
   | 'matchups'
   | 'chimmy'
   | 'career'
@@ -184,40 +197,6 @@ function injuriesAt(data: Dash34Result | null): string | null {
 }
 
 /**
- * The stamp on every card built from league syncs.
- *
- * ⚠ THE OLDEST SYNC, NOT THE NEWEST. These cards cover every league in view at once, so one league
- * synced a minute ago said "updated 1m ago" over a portfolio whose other 59 leagues were days old —
- * a fresh timestamp laundering stale ones. The oldest is the only instant every row is at least as
- * new as. A league that has never synced makes the stamp stale whatever the others say; with none
- * synced at all it reads "not read yet". AllFantasy-native leagues have nothing to sync and are not
- * counted.
- */
-function leagueDataStamp(
-  input: { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number },
-  now: Date,
-): CardFreshnessStamp {
-  if (input.syncable === 0 && input.paused) {
-    return { source: 'Account sync paused', asOf: null, label: null, stale: false, missingLabel: 'history retained' }
-  }
-  /*
-   * The warning has to say WHY. "⚠ Oldest league data updated 7 min ago" is a contradiction on its
-   * face when the reason is a league that has never been read — so that case names the count.
-   */
-  const unread = input.neverSynced > 0 && input.oldestAt
-    ? `${input.neverSynced} ${input.neverSynced === 1 ? 'league' : 'leagues'} never read · `
-    : ''
-  const scope = input.paused ? 'active league data' : 'league data'
-  const excluded = input.paused ? ` · ${input.paused} paused ${input.paused === 1 ? 'connection' : 'connections'} excluded` : ''
-  const source = `${unread}${input.syncable > 1 ? `Oldest ${scope}` : `${scope[0].toUpperCase()}${scope.slice(1)}`}${excluded}`
-  const stamp = freshnessStamp(source, input.oldestAt, now, {
-    staleRule: 'fantasy_league',
-    missing: input.syncable === 0 ? 'none-yet' : 'never-read',
-  })
-  return unread ? { ...stamp, stale: true } : stamp
-}
-
-/**
  * "Summary updated 2m ago" — only when the queue was served from the stored portfolio summary. A
  * summary built for this very render is not worth a line. One served past its TTL while it rebuilds
  * (`last-known`) is marked stale, whatever its age: its rows may already be out of date.
@@ -225,7 +204,7 @@ function leagueDataStamp(
 function summaryStamp(data: { summary?: PortfolioSummaryMeta } | null, now: Date): CardFreshnessStamp | null {
   const meta = data?.summary
   if (!meta || meta.source === 'live') return null
-  return { ...freshnessStamp('Summary', meta.builtAt, now), stale: meta.source === 'last-known' }
+  return { ...freshnessStamp('Summary', meta.builtAt, now, { parts: { kind: 'summary' } }), stale: meta.source === 'last-known' }
 }
 
 function Stamps({ stamps }: { stamps: CardFreshnessStamp[] }) {
@@ -254,18 +233,9 @@ async function DecisionsCard({
 }) {
   const [data, list] = await Promise.all([dash34, issues])
   if (!data) {
-    // The panel that used to replace the whole home when this read failed — see the header.
-    return (
-      <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-        <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-          Your leagues
-        </h1>
-        <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-          We could not read your leagues just now. This is a read failure on our side, not a sign
-          that you have none.
-        </p>
-      </div>
-    )
+    // The panel that used to replace the whole home when this read failed — see the header. Its
+    // words are said in the reader's language by a client panel (HomePanels.tsx).
+    return <HomeReadFailure />
   }
   return (
     <DecisionQueue
@@ -278,7 +248,7 @@ async function DecisionsCard({
         <Stamps
           stamps={[
             rostersStamp,
-            freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' }),
+            freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries', parts: { kind: 'injuries' } }),
             ...(summaryStamp(data, now) ? [summaryStamp(data, now)!] : []),
           ]}
         />
@@ -332,21 +302,76 @@ async function DraftsCard({ drafts, now }: { drafts: HomeLoads['drafts']; now: D
   return <DashDraftsBand data={await drafts} now={now} />
 }
 
-async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: Date }) {
-  const data = await dash34
+async function TriageCard({ dash34, playerDepth, now }: { dash34: HomeLoads['dash34']; playerDepth?: HomeLoads['playerDepth']; now: Date }) {
+  const [data, depth] = await Promise.all([dash34, (playerDepth ?? Promise.resolve(null)).catch(() => null)])
   if (!data) return null
   return (
     <Dash3ATriage
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
+      pro={depth ? { unlocked: depth.unlocked, upgradePath: depth.upgradePath } : null}
       valueBasis={data.valueBasis ?? null}
-      freshness={<Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' })]} />}
+      depthAlerts={data.depthAlerts ?? []}
+      freshness={
+        <Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries', parts: { kind: 'injuries' } })]} />
+      }
     />
   )
 }
 
-async function TradeBandCard({ trades, now }: { trades: HomeLoads['trades']; now: Date }) {
-  return <><CoreTradeRefresh /><DashTradeBand trades={await trades} now={now} /></>
+/**
+ * The daily streak strip. It awaits ONLY the streak read — one cache row — so it paints before the
+ * league reads land; today's glance streams into it separately (StreakGlance) and is simply absent
+ * until then. A failed streak read renders nothing: no card beats a "Day 0" that is not true.
+ */
+async function StreakCard({ loads, now }: { loads: HomeLoads; now: Date }) {
+  const streak = await loads.streak.catch(() => null)
+  if (!streak) return null
+  return (
+    <DailyStreakCardView streak={streak}>
+      <Suspense fallback={null}>
+        <StreakGlance dash34={loads.dash34} trades={loads.trades} now={now} />
+      </Suspense>
+    </DailyStreakCardView>
+  )
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Today at a glance: lineups, injuries, trades — counted from reads the home already makes, so the
+ * glance costs no query of its own. A read that failed drops its chip rather than claiming "all set".
+ */
+async function StreakGlance({ dash34, trades, now }: Pick<HomeLoads, 'dash34' | 'trades'> & { now: Date }) {
+  const [data, recent] = await Promise.all([dash34.catch(() => null), trades.catch(() => null)])
+  const items: StreakGlanceItem[] = []
+  if (data) {
+    const leagues = data.allLeagues ?? data.leagues ?? []
+    const needs = leagues.filter((l) => (l.emptyStarters ?? 0) > 0 || (l.hurtStarters ?? 0) > 0)
+    items.push({
+      key: 'lineups',
+      tone: needs.length > 0 ? 'warn' : 'ok',
+      count: needs.length,
+      href: needs[0] ? `/core/my-team?league=${encodeURIComponent(needs[0].id)}` : '/core/my-team',
+    })
+    const flagged =
+      ((data.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length +
+      (data.depthAlerts?.length ?? 0)
+    items.push({ key: 'injuries', tone: flagged > 0 ? 'warn' : 'ok', count: flagged, href: flagged > 0 ? '#af-home-triage' : '/my-players' })
+  }
+  if (Array.isArray(recent)) {
+    const n = recent.filter((t) => {
+      const at = new Date(t.acceptedAt).getTime()
+      return Number.isFinite(at) && now.getTime() - at <= DAY_MS
+    }).length
+    items.push({ key: 'trades', tone: 'ok', count: n, href: '/core/trades' })
+  }
+  return <StreakGlanceView items={items} />
+}
+
+async function TradeBandCard({ trades, tradeDepth, now }: { trades: HomeLoads['trades']; tradeDepth: HomeLoads['tradeDepth']; now: Date }) {
+  const [rows, depth] = await Promise.all([trades, tradeDepth.catch(() => null)])
+  return <><CoreTradeRefresh /><DashTradeBand trades={rows} now={now} depth={depth} /></>
 }
 
 async function CarryoverCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
@@ -380,7 +405,9 @@ async function MatchupsCard({
       week={weekAll}
       winProb={probabilities}
       weekLabel={data.weekLabel ?? null}
-      freshness={<Stamps stamps={[freshnessStamp('Scores', weekAll?.scoresAt ?? null, now, { missing: 'none-yet' })]} />}
+      freshness={
+        <Stamps stamps={[freshnessStamp('Scores', weekAll?.scoresAt ?? null, now, { missing: 'none-yet', parts: { kind: 'scores' } })]} />
+      }
     />
   )
 }
@@ -452,17 +479,9 @@ async function CoverageCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
 
 /* ── The home ─────────────────────────────────────────────────────────────────────────────── */
 
-/** A filtered home says so above everything, with the way back to every league. */
+/** A filtered home says so above everything, with the way back to every league (HomePanels.tsx). */
 function ScopeNote({ scope }: { scope: HomeScopeInfo }) {
-  return (
-    <p className="af-home-scope" role="status">
-      <span>
-        Showing <b>{scope.label}</b> — {scope.count} of {scope.total} {scope.total === 1 ? 'league' : 'leagues'}.
-        Everything below covers only these.
-      </span>
-      <ScopeResetLink>Show all leagues</ScopeResetLink>
-    </p>
-  )
+  return <HomeScopeNote label={scope.label} count={scope.count} total={scope.total} />
 }
 
 export function CoreHomeCards({
@@ -489,7 +508,7 @@ export function CoreHomeCards({
   scope: HomeScopeInfo
   /**
    * The "League data" stamp's inputs, over the syncable leagues in scope: the OLDEST sync, and how
-   * many have never synced at all. See `leagueDataStamp`.
+   * many have never synced at all. See `leagueDataStamp` (lib/core-app/cardFreshness.ts).
    */
   leagueData: { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number }
   /** Per-viewer card order — lib/core-app/homeCardOrder.ts. */
@@ -546,8 +565,8 @@ export function CoreHomeCards({
       <GameDayCard strip={loads.strip} plays={loads.plays} regularSeason={loads.regularSeason} now={now} />,
     ),
     drafts: card('drafts', <DraftsCard drafts={loads.drafts} now={now} />),
-    triage: card('triage', <TriageCard dash34={loads.dash34} now={now} />),
-    'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} now={now} />),
+    triage: card('triage', <TriageCard dash34={loads.dash34} playerDepth={loads.playerDepth} now={now} />),
+    'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} tradeDepth={loads.tradeDepth} now={now} />),
     carryover: card('carryover', <CarryoverCard dash34={loads.dash34} />),
     'user-os': card('user-os', <UserOsCard userOs={loads.userOs} />),
     schedule: card('schedule', <ScheduleCard schedule={loads.schedule} syncLabel={syncLabel} />),
@@ -563,14 +582,7 @@ export function CoreHomeCards({
          * device. Said plainly, rather than rendering a home of cards that each claim "nothing here"
          * about leagues that were simply filtered out.
          */
-        <div className="af-frame af-home-scope-empty">
-          <h2>No leagues in this view</h2>
-          <p>
-            None of your leagues match &ldquo;{scope.label}&rdquo;
-            {scope.key === 'fav' ? ' — star a league in the league picker at the top to add it here' : ''}.{' '}
-            <ScopeResetLink>Show all leagues</ScopeResetLink>
-          </p>
-        </div>
+        <HomeScopeEmpty label={scope.label} scopeKey={scope.key} />
       ) : (
         <>
           {/* No `data-home-card`: that feeds the per-viewer card ORDER, and this card is not one of them. */}
@@ -584,6 +596,11 @@ export function CoreHomeCards({
             ahead of the news bands, because a decision is what the reader can act on. It replaced
             the "Outstanding issues" section inside the dashboard below; see DecisionQueue.
           */}
+          {/*
+            The daily streak leads as a single compact row (founder, 2026-10-08). It sits above the
+            decision queue but stays one row tall on a phone, so the decisions still open the fold.
+          */}
+          {card('streak', <StreakCard loads={loads} now={now} />)}
           {card(
             'issues',
             <DecisionsCard

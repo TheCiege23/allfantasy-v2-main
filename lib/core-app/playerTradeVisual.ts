@@ -226,7 +226,29 @@ export type PlayerBidInstead = {
   ceilingAtRemaining: number | null
   /** What that manager has left, in dollars. Null when the roster row does not carry it. */
   budgetRemaining: number | null
+  /** The English sentence. Chimmy's trade-target verdict reads it as written. */
   reason: string
+  /**
+   * The values `reason` was built from, so the card can say it in the reader's language
+   * (finderTradeValueCopy.ts `bidReasonText`). Optional: a payload built before it existed renders
+   * its English.
+   */
+  parts?: PlayerBidReasonParts
+}
+
+export type PlayerBidReasonParts = {
+  /** Which of faabBid.ts's three bid sentences `reason` carries. */
+  bid: 'unpriced' | 'no-upgrade' | 'upgrade'
+  /** His share of the upgrade value, whole percent, as the sentence prints it. */
+  sharePct: number
+  weekBudget: number
+  /** True when a published elimination schedule paced the budget. */
+  paced: boolean
+  /** The budget the allocation was run against (`faabRemaining`, or 0 when unknown). */
+  budgetRemaining: number
+  weeksAssumed: number
+  /** False when we do not hold this manager's remaining FAAB — the sentence then says so. */
+  faabKnown: boolean
 }
 
 const GRADE_BUDGET_MS = 6000
@@ -273,7 +295,7 @@ export async function readLeagueTradeRows(leagueId: string) {
     prisma.roster
       .findMany({
         where: { leagueId },
-        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true } } },
+        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true, sport: true } } },
       })
       /*
        * A foreign league's ids collide with real Sleeper ids: read raw, the holder, "already on your
@@ -281,7 +303,7 @@ export async function readLeagueTradeRows(leagueId: string) {
        * An ESPN roster is translated instead — read raw, its 12483 (Stafford) priced as Jack Bech.
        */
       .then(async (rs) =>
-        (await sleeperReadableRosters(rs, (r) => r.league?.platform)).map(({ league: _league, ...r }) => r),
+        (await sleeperReadableRosters(rs, (r) => r.league?.platform, (r) => r.league?.sport)).map(({ league: _league, ...r }) => r),
       )
       .catch(() => []),
   ])
@@ -604,6 +626,11 @@ function bidFor(args: {
   })
   const mine = alloc?.bids.find((b) => b.id === args.targetSleeperId)
   if (!alloc || !mine) return null
+  // The same test faabBid.ts makes before it picks a sentence: no usable margin is "not priced".
+  const candidate = pool.find((c) => c.id === args.targetSleeperId)
+  const priced =
+    candidate != null && Number.isFinite(candidate.playerValue) && Number.isFinite(candidate.replacedValue)
+  const margin = priced ? candidate.playerValue - candidate.replacedValue : null
 
   return {
     concept: args.concept,
@@ -620,6 +647,15 @@ function bidFor(args: {
           (args.faabRemaining == null
             ? ' We do not hold your remaining FAAB for this league, so that share cannot be turned into dollars.'
             : ''),
+    parts: {
+      bid: margin == null ? 'unpriced' : margin <= 0 ? 'no-upgrade' : 'upgrade',
+      sharePct: Math.round(mine.shareOfSupply * 100),
+      weekBudget: alloc.weekBudget,
+      paced: alloc.paced,
+      budgetRemaining: args.faabRemaining ?? 0,
+      weeksAssumed: alloc.weeksAssumed,
+      faabKnown: args.faabRemaining != null,
+    },
   }
 }
 
@@ -647,7 +683,7 @@ export async function getPlayerTradeVisual(
 
   // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
   // read them — not that he is free to claim.
-  if (isForeignIdSpace(league.platform)) {
+  if (isForeignIdSpace(league.platform, league.sport)) {
     return { available: false, reason: `${FOREIGN_IDS_UNREADABLE.toLowerCase()}, so we can't tell who holds him` }
   }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null

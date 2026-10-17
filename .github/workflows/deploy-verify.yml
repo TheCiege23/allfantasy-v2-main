@@ -24,6 +24,15 @@ name: Deploy verify
 on:
   push:
     branches: [main]
+    # The SAME list as railway-deploy.yml: those commits do not deploy on their own (2026-10-06,
+    # batched deploys), so waiting for them to be served would end NOT_DEPLOYED. The next real
+    # deploy contains them, and this check verifies that one.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "__tests__/**"
+      - "e2e/**"
+      - "agent-tester/**"
   schedule:
     # Daily backstop. A push-triggered run covers regressions that ship with a commit; this covers
     # the ones that arrive with no commit at all -- a changed env var, a rolled-back deploy, a
@@ -61,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     # Must exceed VERIFY_WAIT_MINUTES below plus the probes (~2 min, up to ~6 with retries).
     # 20 was set when builds took under 15 minutes; they now take 16-21.
-    timeout-minutes: 55
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
 
@@ -84,8 +93,9 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           # How long to wait for the pushed commit (or a descendant) to be served. Measured
           # 2026-09-24: 16-21 min from push to live. Raise it if builds get slower; keep
-          # timeout-minutes above it.
-          VERIFY_WAIT_MINUTES: "40"
+          # timeout-minutes above it. 50 since 2026-10-06: batched deploys (railway-deploy.yml) add a
+          # 3-min quiet window and may wait out a build already in flight — worst case ~35 min.
+          VERIFY_WAIT_MINUTES: "50"
           # Read-only: the GitHub compare API answers "does the served commit contain the
           # pushed one?", which a fetch-depth-1 checkout cannot answer with local git.
           GITHUB_TOKEN: ${{ github.token }}

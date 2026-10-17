@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * The live half of a lineup-lock countdown.
@@ -28,6 +30,8 @@ export function MyTeamLockClock({
   elapsedLabel?: string
 }) {
   const [now, setNow] = useState<number | null>(null)
+  /* A distant lock reads as a date ("Oct 4"); `kickoffText` gives it the reader's language. */
+  const { language } = useOptionalLanguage()
 
   useEffect(() => {
     /*
@@ -43,9 +47,9 @@ export function MyTeamLockClock({
     return () => clearTimeout(id)
   }, [atMs, now])
 
-  if (now == null) return <>{initial}</>
+  if (now == null) return <>{kickoffText(initial, language)}</>
   const label = formatLockLabel(atMs, now)
-  return <>{label.locked ? elapsedLabel : label.text}</>
+  return <>{label.locked ? elapsedLabel : kickoffText(label.text, language)}</>
 }
 
 export default MyTeamLockClock

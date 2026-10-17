@@ -1,3 +1,5 @@
+import { isEspnMlbSource } from './EspnMlbSource'
+import { ESPN_TEAM_ABBREVIATIONS } from './espnTeamDefenseIds'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
 import type {
   EspnImportDraftPick,
@@ -75,44 +77,10 @@ export const ESPN_POSITION_LABELS: Record<number, string> = {
 }
 
 /**
- * Exported for `buildEspnDefenceIdentities`: a D/ST carries a negative id
- * (`-16000 - proTeamId`) and appears in no athlete list, so the only way to name
- * one is arithmetic over this table.
+ * Exported for `buildEspnDefenceIdentities`. The table lives in the pure `espnTeamDefenseIds.ts`
+ * so the roster crosswalk can name an ESPN D/ST without importing this fetch service.
  */
-export const ESPN_TEAM_ABBREVIATIONS: Record<number, string> = {
-  1: 'ATL',
-  2: 'BUF',
-  3: 'CHI',
-  4: 'CIN',
-  5: 'CLE',
-  6: 'DAL',
-  7: 'DEN',
-  8: 'DET',
-  9: 'GB',
-  10: 'TEN',
-  11: 'IND',
-  12: 'KC',
-  13: 'LV',
-  14: 'LAR',
-  15: 'MIA',
-  16: 'MIN',
-  17: 'NE',
-  18: 'NO',
-  19: 'NYG',
-  20: 'NYJ',
-  21: 'PHI',
-  22: 'ARI',
-  23: 'PIT',
-  24: 'LAC',
-  25: 'SF',
-  26: 'SEA',
-  27: 'TB',
-  28: 'WAS',
-  29: 'CAR',
-  30: 'JAX',
-  33: 'BAL',
-  34: 'HOU',
-}
+export { ESPN_TEAM_ABBREVIATIONS }
 
 /**
  * ESPN's `lineupSlotId` for the bench and for injured reserve.
@@ -1323,6 +1291,10 @@ export async function fetchEspnLeagueForImport(
   sourceInput: string,
   options: EspnFetchOptions = {}
 ): Promise<EspnImportPayload> {
+  if (isEspnMlbSource(sourceInput)) {
+    const { fetchEspnMlbLeagueForImport } = await import('./EspnMlbLeagueFetchService')
+    return fetchEspnMlbLeagueForImport(userId, sourceInput, options)
+  }
   const opts = { ...DEFAULT_FETCH_OPTIONS, ...options }
   const { leagueId, season } = parseEspnSourceInput(sourceInput)
   const auth = await getEspnAuthForUser(userId)
@@ -1420,6 +1392,10 @@ export async function fetchEspnScheduleForSync(
   leagueId: string,
   season: number
 ): Promise<EspnImportScheduleWeek[]> {
+  if (isEspnMlbSource(leagueId)) {
+    const { fetchEspnMlbLeagueForImport } = await import('./EspnMlbLeagueFetchService')
+    return (await fetchEspnMlbLeagueForImport(userId, `${season}:${leagueId}`, { includePreviousSeasons: false })).schedule
+  }
   const auth = await getEspnAuthForUser(userId)
   const raw = await loadEspnLeagueRaw({
     leagueId,
@@ -1469,6 +1445,10 @@ export async function fetchEspnActivityForSync(
   transactions: EspnImportTransaction[]
   transactionsFetched: boolean
 }> {
+  if (isEspnMlbSource(leagueId)) {
+    // MLB communication is not covered by the captured contract. Never poll NFL for this id.
+    return { teams: [], transactions: [], transactionsFetched: false }
+  }
   const auth = await getEspnAuthForUser(userId)
   const raw = await loadEspnLeagueRaw({ leagueId, season, auth, views: ['mTeam'] })
   const teams = parseEspnTeams(raw, null)
@@ -1480,3 +1460,5 @@ export async function fetchEspnActivityForSync(
     transactionsFetched: transactionsRaw != null,
   }
 }
+
+export { buildEspnMemberDirectory, resolveEspnOwners, resolveEspnCommissionerTeamIds, parseEspnSettings }

@@ -73,6 +73,14 @@ export interface DailyBrief {
   /** A single, deterministic, template-composed sentence — never AI-generated, never a claim this
    * object's own fields don't already support. */
   summary: string
+  /**
+   * Live-career plan, phase 4: one line on what is at stake for the manager's career ("Win X and
+   * it's ring #3. Next up: …"). Composed upstream from the Career screen's own stakes and
+   * milestones and passed through verbatim; null when there is nothing to say. It never affects
+   * `isHealthy` or the summary — a legacy line is context, not something needing attention.
+   * Optional so a brief built by hand elsewhere (the validation cohort, fixtures) still type-checks.
+   */
+  legacyLine?: string | null
 }
 
 export interface DailyBriefLeagueTrend {
@@ -94,6 +102,8 @@ export interface DailyBriefInput {
   signals: readonly DecisionOsAttentionSignal[]
   /** Already-derived per-league trends (e.g. `CommissionerCommandCenterSnapshot.recentChanges`). */
   leagueTrends: readonly DailyBriefLeagueTrend[]
+  /** See `DailyBrief.legacyLine`. Optional so existing callers compose exactly as before. */
+  legacyLine?: string | null
 }
 
 function composeSummary(o: {
@@ -156,6 +166,7 @@ export function composeDailyBrief(input: DailyBriefInput, now: Date = new Date()
     positiveHighlights,
     recommendedActions,
     isHealthy,
+    legacyLine: input.legacyLine ?? null,
     summary: composeSummary({
       leaguesNeedingAttention,
       draftsApproachingCount: input.draftsApproachingCount,

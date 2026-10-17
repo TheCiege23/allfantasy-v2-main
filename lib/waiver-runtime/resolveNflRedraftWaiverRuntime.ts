@@ -1,9 +1,13 @@
+import { assertStealThreeWaiverHoldCleared } from '@/lib/survivor/survivorStealThreeWaivers'
+import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
+import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
 import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import {
   applyNflRedraftFreeAgentAdd,
@@ -163,14 +167,10 @@ async function resolvePlayerMeta(input: {
 }): Promise<NflRedraftWaiverPlayerInput & { warning: string | null }> {
   const playerId = input.playerId.trim()
   const sportKeys = [input.sport.toUpperCase(), input.sport.toLowerCase()]
+  // Our id / Sleeper id first; a provider's own number only when it cannot be a Sleeper id.
   const player = await prisma.sportsPlayer
-    .findFirst({
-      where: {
-        sport: { in: sportKeys },
-        OR: [{ id: playerId }, { externalId: playerId }, { sleeperId: playerId }],
-      },
-      select: { id: true, externalId: true, sleeperId: true, name: true, position: true, team: true },
-    })
+    .findFirst({ where: { id: playerId }, select: { name: true, position: true, team: true } })
+    .then((own) => own ?? findSportsPlayerByLeagueId(input.sport, playerId))
     .catch(() => null)
   if (player) {
     return {
@@ -188,14 +188,7 @@ async function resolvePlayerMeta(input: {
     .findFirst({
       where: {
         sport: { in: sportKeys },
-        OR: [
-          { sleeperId: playerId },
-          { fantasyCalcId: playerId },
-          { rollingInsightsId: playerId },
-          { apiSportsId: playerId },
-          { espnId: playerId },
-          { clearSportsId: playerId },
-        ],
+        ...identityWhereForLeagueId(playerId, input.sport),
       },
       select: { canonicalName: true, position: true, currentTeam: true },
     })
@@ -280,7 +273,7 @@ export async function resolveNflRedraftWaiverRuntime(input: {
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
   const week = positiveWeek(input.week, season.currentWeek || 1)
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
   const rosterConfig = resolveRedraftRosterConfig(season.sport, league?.settings ?? null)
   const activeRosterLimit = Math.max(1, rosterConfig.maxRosterSize - rosterConfig.irSlots - rosterConfig.taxiSlots)
   const rosters = await prisma.redraftRoster.findMany({
@@ -300,6 +293,12 @@ export async function resolveNflRedraftWaiverRuntime(input: {
     leagueSettings: league?.settings ?? null,
     players: storedRosterPlayers,
     now: input.now,
+    // Lock on each player's current club, not the team stored when he was added (lineupLockCurrentTeam.ts).
+    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+      sport: season.sport,
+      platform: league?.platform ?? null,
+      playerIds: storedRosterPlayers.map((p) => p.playerId),
+    }),
   })
   const playersByRosterId = new Map<string, typeof rosterPlayers>()
   for (const player of rosterPlayers) {
@@ -869,6 +868,7 @@ export async function addNflRedraftFreeAgent(input: {
   }
   const move = result.result
   await prisma.$transaction(async (tx) => {
+    await assertStealThreeWaiverHoldCleared(tx, season.leagueId, move.addPlayerId)
     if (move.dropPlayerId) {
       const drop = await tx.redraftRosterPlayer.updateMany({
         where: { rosterId: move.rosterId, playerId: move.dropPlayerId, droppedAt: null },

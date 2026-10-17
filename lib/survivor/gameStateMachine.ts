@@ -17,34 +17,41 @@ import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { scheduleTribalReminders } from '@/lib/survivor/notificationEngine'
 import { publishSurvivorRedraftEvent } from '@/lib/survivor/survivorRedraftStreamHub'
 import { SURVIVOR_SETTINGS_TRIBAL_VOTE_WINDOW_HOURS } from '@/lib/survivor/survivorCommissionerSettings'
+import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { applySurvivorSitOutToScoring } from '@/lib/survivor/SurvivorSitOutEngine'
+import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { openTribalCouncil as openVerifiedCouncil, closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
+import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
+import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
+import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
+import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 
-async function sumRedraftStartersFantasy(
+/** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
+export async function sumRedraftStartersFantasy(
   rosterId: string,
   week: number,
-  season: { season: number },
+  season: { id: string; leagueId: string; season: number },
 ): Promise<{ pts: number; allFinalized: boolean }> {
-  const starters = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId, droppedAt: null, slotType: { notIn: ['bench', 'taxi'] } },
-  })
-  if (starters.length === 0) return { pts: 0, allFinalized: true }
-  let pts = 0
-  let allFinalized = true
-  for (const p of starters) {
-    const row = await prisma.playerWeeklyScore.findUnique({
-      where: {
-        playerId_week_season_sport: {
-          playerId: p.playerId,
-          week,
-          season: season.season,
-          sport: p.sport,
-        },
-      },
-    })
-    pts += row?.fantasyPts ?? 0
-    if (!row?.isFinalized) allFinalized = false
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { sport: true, survivorMode: true, settings: true } })
+  if (league?.survivorMode && league.sport === 'NBA') {
+    const score = { leagueId: season.leagueId, legacyRosterId: rosterId, week, season: season.season }
+    return normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown>).nbaWeeklyScoringMode === 'one_game_per_player'
+      ? scoreNbaSurvivorOneGameRoster(score)
+      : scoreNbaSurvivorAllGamesRoster(score)
   }
-  return { pts, allFinalized }
+  const bridge = await prisma.roster.findFirst({
+    where: { id: rosterId, leagueId: season.leagueId }, select: { redraftRosterId: true },
+  })
+  if (!bridge?.redraftRosterId) return { pts: 0, allFinalized: false }
+  const actual = await prisma.redraftRoster.findFirst({
+    where: { id: bridge.redraftRosterId, seasonId: season.id, leagueId: season.leagueId }, select: { id: true },
+  })
+  if (!actual) return { pts: 0, allFinalized: false }
+  const score = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: actual.id, week, seasonYear: season.season })
+  return { pts: score.points, allFinalized: score.starterCount > 0 && score.scoredStarterCount === score.starterCount && score.missingPlayerIds.length === 0 && score.allFinal }
 }
 
 export async function getOrCreateSurvivorGameState(leagueId: string): Promise<SurvivorGameState> {
@@ -177,18 +184,64 @@ export async function advancePhase(
 
 export async function advanceWeek(leagueId: string): Promise<void> {
   const gs = await getOrCreateSurvivorGameState(leagueId)
-  const next = gs.currentWeek + 1
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const plan = readSurvivorFullSeasonPlan(league?.settings)
+  const next = plan && gs.currentWeek < plan.startWeek ? plan.startWeek : gs.currentWeek + 1
+  if (plan) {
+    const calendarWeek = dailySportWeekForInstant(plan.sport, plan.season, new Date()) ?? 0
+    if (next > plan.endWeek || next > calendarWeek) return
+    if (gs.currentWeek >= plan.startWeek) {
+      if (!gs.weekScoringFinalAt || gs.activeCouncilId) return
+      if (plan.eliminationWeeks.includes(gs.currentWeek)) {
+        const eliminated = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, week: gs.currentWeek, action: { in: ['player_eliminated', 'planned_elimination_skipped_final_three'] } }, select: { id: true } })
+        if (!eliminated) return
+      }
+      if (plan.exileReturnWeek === gs.currentWeek) {
+        const settled = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'scheduled_exile_return_resolved' }, select: { id: true } })
+        if (!settled) return
+      }
+    }
+  }
   await clearWeeklyImmunity(leagueId)
-  await prisma.survivorGameState.update({
-    where: { leagueId },
-    data: {
-      currentWeek: next,
-      weekStartedAt: new Date(),
-      needsChallengeLock: true,
-      needsTribalLock: true,
-      weekScoringFinalAt: null,
-    },
+  const changed = await prisma.$transaction(async tx => {
+    const result = await tx.survivorGameState.updateMany({
+      where: { leagueId, currentWeek: gs.currentWeek },
+      data: {
+        currentWeek: next,
+        weekStartedAt: new Date(),
+        needsChallengeLock: true,
+        needsTribalLock: plan ? plan.eliminationWeeks.includes(next) : true,
+        weekScoringFinalAt: null,
+        activeCouncilId: null,
+        tribalRevealAt: null,
+        tribalCompleteAt: null,
+      },
+    })
+    if (!result.count) return result
+    // A raided team's boost ends with the week. A team that used a claim has
+    // already moved to the back of the waiver order, so its priority stays put.
+    const boosts = await tx.survivorAuditEntry.findMany({
+      where: { leagueId, week: gs.currentWeek, action: 'steal_three_waiver_boost' },
+      orderBy: { createdAt: 'asc' },
+      select: { relatedEntityId: true, data: true },
+    })
+    const restoreByRoster = new Map<string, { previous: number; boosted: number }>()
+    for (const boost of boosts) {
+      const rosterId = boost.relatedEntityId
+      if (!rosterId) continue
+      const data = boost.data && typeof boost.data === 'object' && !Array.isArray(boost.data) ? boost.data : {}
+      const previous = Number(data.previousPriority)
+      const boosted = Number(data.boostedPriority)
+      if (!Number.isInteger(previous) || !Number.isInteger(boosted)) continue
+      const original = restoreByRoster.get(rosterId)?.previous ?? previous
+      restoreByRoster.set(rosterId, { previous: original, boosted })
+    }
+    for (const [rosterId, priorities] of restoreByRoster) {
+      await tx.redraftRoster.updateMany({ where: { id: rosterId, leagueId, waiverPriority: priorities.boosted }, data: { waiverPriority: priorities.previous } })
+    }
+    return result
   })
+  if (!changed.count) return
   await logSurvivorAuditEntry({
     leagueId,
     week: next,
@@ -210,14 +263,15 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
   if (!season) return
 
   const players = await prisma.survivorPlayer.findMany({
-    where: { leagueId, playerState: { in: ['active', 'exile'] } },
+    where: { leagueId, playerState: 'active' },
   })
 
   for (const sp of players) {
     if (!sp.redraftRosterId) continue
     const { pts, allFinalized } = await sumRedraftStartersFantasy(sp.redraftRosterId, week, season)
-    const boost = 0
-    const pen = 0
+    const previous = await prisma.survivorWeeklyScore.findUnique({ where: { leagueId_userId_week: { leagueId, userId: sp.userId, week } }, select: { pointBoostApplied: true, pointPenaltyApplied: true } })
+    const boost = previous?.pointBoostApplied ?? 0
+    const pen = previous?.pointPenaltyApplied ?? 0
     const final = pts + boost - pen
     await prisma.survivorWeeklyScore.upsert({
       where: {
@@ -238,6 +292,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
       update: {
         fantasyScore: pts,
         finalScore: final,
+        tribeId: sp.tribeId,
         isFinalized: allFinalized,
         finalizedAt: allFinalized ? new Date() : null,
       },
@@ -246,7 +301,10 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
 
   await applySurvivorSitOutToScoring(leagueId, week)
 
-  const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week } })
+  // Exile is a separate weekly contest. Historical main-island score rows for
+  // an exiled manager must never win tribe or individual immunity.
+  const activeUserIds = players.map(player => player.userId)
+  const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week, userId: { in: activeUserIds } } })
   const byTribe = new Map<string, number>()
   for (const s of scores) {
     if (!s.tribeId || !s.countedTowardTribeTotal) continue
@@ -254,7 +312,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
   }
   let bestTribe: string | null = null
   let best = -Infinity
-  for (const [tid, tot] of byTribe.entries()) {
+  for (const [tid, tot] of [...byTribe.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (tot > best) {
       best = tot
       bestTribe = tid
@@ -263,7 +321,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
 
   let bestPlayer: string | null = null
   let bestP = -Infinity
-  for (const s of scores) {
+  for (const s of [...scores].sort((a, b) => a.userId.localeCompare(b.userId))) {
     if (s.finalScore > bestP) {
       bestP = s.finalScore
       bestPlayer = s.userId
@@ -275,7 +333,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
     select: { survivorPhase: true },
   })
   const phase = leagueRow?.survivorPhase
-  const postMerge = phase === 'merge' || phase === 'jury' || phase === 'finale'
+  const postMerge = phase === 'merge' || phase === 'post_merge' || phase === 'jury' || phase === 'finale'
 
   await prisma.survivorGameState.update({
     where: { leagueId },
@@ -289,7 +347,7 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
 }
 
 export async function allScoresFinalizedForWeek(leagueId: string, week: number): Promise<boolean> {
-  const season = await prisma.redraftSeason.findFirst({ where: { leagueId } })
+  const season = await prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' } })
   if (!season) return false
   const players = await prisma.survivorPlayer.findMany({
     where: { leagueId, playerState: 'active' },
@@ -305,15 +363,18 @@ export async function allScoresFinalizedForWeek(leagueId: string, week: number):
 }
 
 export async function finalizeWeeklyScores(leagueId: string, week: number): Promise<void> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const plan = readSurvivorFullSeasonPlan(league?.settings)
+  const active = await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true } })
   await prisma.survivorWeeklyScore.updateMany({
-    where: { leagueId, week },
+    where: { leagueId, week, userId: { in: active.map(player => player.userId) } },
     data: { isFinalized: true, finalizedAt: new Date() },
   })
   await prisma.survivorGameState.update({
     where: { leagueId },
     data: {
       weekScoringFinalAt: new Date(),
-      needsTribalLock: true,
+      needsTribalLock: plan ? plan.eliminationWeeks.includes(week) : true,
     },
   })
 }
@@ -335,8 +396,10 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
     where: { id: leagueId },
     select: { settings: true },
   })
+  const plan = readSurvivorFullSeasonPlan(leagueRow?.settings)
+  if (plan && !plan.eliminationWeeks.includes(gs.currentWeek)) return
   const hours = tribalVoteWindowHoursFromLeague(leagueRow?.settings)
-  const deadline = new Date(Date.now() + hours * 60 * 60 * 1000)
+  const deadline = plan ? nextTorchCeremonyDeadline(new Date(), leagueRow?.settings) : new Date(Date.now() + hours * 60 * 60 * 1000)
 
   const immune = gs.immuneTribeId
   const tribes = await prisma.survivorTribe.findMany({
@@ -347,6 +410,21 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
     immune && tribes.some((t) => t.id !== immune)
       ? tribes.find((t) => t.id !== immune)?.id ?? null
       : tribes[0]?.id ?? null
+
+  if (plan) {
+    const prior = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week: gs.currentWeek }, select: { id: true } })
+    if (prior) return
+    // With more than two tribes, the lowest scoring nonimmune tribe attends.
+    const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: gs.currentWeek, isFinalized: true, countedTowardTribeTotal: true, tribeId: { not: null } }, select: { tribeId: true, finalScore: true } })
+    const totals = new Map<string, number>()
+    for (const score of scores) if (score.tribeId) totals.set(score.tribeId, (totals.get(score.tribeId) ?? 0) + score.finalScore)
+    const losingTribe = [...totals.entries()].filter(([id]) => id !== immune).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? tribeId
+    const merged = Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase)
+    const opened = await openVerifiedCouncil(leagueId, { week: gs.currentWeek, attendingTribeId: merged ? null : losingTribe, voteDeadlineAt: deadline })
+    if (!opened.ok) throw new Error(opened.error)
+    await scheduleTribalReminders(leagueId, deadline)
+    return
+  }
 
   const { id: councilId } = await openTribalCouncil(leagueId, gs.currentWeek, tribeId, deadline)
 
@@ -367,9 +445,35 @@ export async function processTribalDeadline(leagueId: string): Promise<void> {
   const gs = await prisma.survivorGameState.findUnique({ where: { leagueId } })
   if (!gs?.activeCouncilId) return
   const council = await prisma.survivorTribalCouncil.findUnique({ where: { id: gs.activeCouncilId } })
-  if (!council || council.status !== 'voting_open') return
+  if (!council) return
   const dl = council.votingDeadline ?? council.voteDeadlineAt
   if (dl && new Date(dl) > new Date()) return
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const plan = readSurvivorFullSeasonPlan(league?.settings)
+  if (plan && plan.eliminationWeeks.includes(council.week)) {
+    // A previous tick may have closed, tallied, or revealed this council before
+    // failing. Resume from that persisted state rather than leaving it stranded.
+    if (!['voting_open', 'closed', 'voting_closed', 'revealed', 'tie_pending'].includes(council.status)) return
+    if (council.status === 'voting_open') {
+      const closed = await closeVoteWindow(leagueId, council.id)
+      if (!closed.ok) throw new Error(closed.error)
+    }
+    const latest = await prisma.survivorTribalCouncil.findUnique({ where: { id: council.id } })
+    if (!latest) return
+    if (!latest.isRevealed && !latest.eliminatedUserId && (!Array.isArray(latest.revealSequence) || latest.revealSequence.length === 0)) {
+      const tallied = await tallyCouncil(leagueId, council.id)
+      if (!tallied.ok) throw new Error(tallied.error)
+    }
+    await resolveAutonomousCouncil(leagueId, council.id)
+    if (normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null).autoReveal === false) return
+    const revealed = await revealCouncil(leagueId, council.id)
+    if (!revealed.ok) throw new Error(revealed.error)
+    if (revealed.isTie || !revealed.eliminatedUserId) return
+    const eliminated = await resolveElimination(leagueId, council.id)
+    if (!eliminated.ok) throw new Error(eliminated.error)
+    return
+  }
+  if (council.status !== 'voting_open') return
   await lockVoting(gs.activeCouncilId)
   await prisma.survivorGameState.update({
     where: { leagueId },
@@ -397,6 +501,7 @@ export async function computeAutomaticNextPhase(leagueId: string): Promise<Phase
       survivorMergeAtCount: true,
       survivorJuryStart: true,
       survivorPhase: true,
+      settings: true,
     },
   })
   if (!league?.survivorMode) return null
@@ -436,7 +541,7 @@ export async function computeAutomaticNextPhase(leagueId: string): Promise<Phase
     const mergeAt = league.survivorMergeAtCount ?? 10
     const trig = league.survivorMergeTrigger ?? 'week'
     const hitWeek = trig === 'week' && week >= mergeWeek
-    const hitCount = trig === 'player_count' && active > 0 && active <= mergeAt
+    const hitCount = (trig === 'player_count' || trig === 'players_remaining') && active > 0 && active <= mergeAt
     if (hitWeek || hitCount) {
       return { toPhase: 'merge', reason: hitWeek ? 'merge_week' : 'merge_player_count' }
     }
@@ -461,6 +566,8 @@ export async function computeAutomaticNextPhase(leagueId: string): Promise<Phase
   }
 
   if ((phase === 'jury' || leaguePhase === 'jury') && active === 3) {
+    const plan = readSurvivorFullSeasonPlan(league.settings)
+    if (plan && week < plan.finaleWeek) return null
     return { toPhase: 'finale', reason: 'final_three' }
   }
 

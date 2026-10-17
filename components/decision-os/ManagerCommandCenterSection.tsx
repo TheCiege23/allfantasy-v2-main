@@ -118,6 +118,7 @@ export default function ManagerCommandCenterSection({
         draftsApproachingCount: snapshot?.draftsApproachingCount ?? 0,
         signals: snapshot?.attentionQueue ?? [],
         leagueTrends: snapshot?.leagueTrends ?? [],
+        legacyLine: snapshot?.legacy?.line ?? null,
       }),
     [snapshot, leagues.length],
   )

@@ -1,0 +1,61 @@
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const h = vi.hoisted(() => ({ config: {} as Record<string, unknown>, reload: vi.fn(), success: vi.fn(), error: vi.fn() }))
+vi.mock('@/hooks/useLeagueSectionData', () => ({ useLeagueSectionData: () => ({ data: h.config, loading: false, error: null, reload: h.reload }) }))
+vi.mock('sonner', () => ({ toast: { success: h.success, error: h.error } }))
+import Panel from '@/components/app/settings/WaiverSettingsPanel'
+const permission = (leagueId: string) => ({ ok: true, json: async () => ({ leagueId, waiverType: 'standard' }) })
+beforeEach(() => { vi.clearAllMocks(); h.config = { waiver_type: 'standard', processing_days: [2], processing_time_utc: '08:00' } })
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+describe('waiver settings scope and recovery', () => {
+  it('ignores a save completed after switching leagues', async () => {
+    let finish!: (value: unknown) => void
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(permission('A'))
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      .mockResolvedValueOnce(permission('B')))
+    const view = render(<Panel leagueId="A" />)
+    await act(async () => {})
+    fireEvent.click(screen.getByTestId('commissioner-waiver-edit-toggle'))
+    fireEvent.click(screen.getByTestId('commissioner-waiver-save'))
+    view.rerender(<Panel leagueId="B" />)
+    await act(async () => { finish(permission('A')) })
+    expect(h.success).not.toHaveBeenCalled()
+    expect(h.reload).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('commissioner-waiver-type-select')).toBeNull()
+  })
+  it('keeps the form open when a successful save cannot be verified', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(permission('A')).mockResolvedValueOnce({ ok: true, json: async () => ({}) }))
+    render(<Panel leagueId="A" />)
+    await act(async () => {})
+    fireEvent.click(screen.getByTestId('commissioner-waiver-edit-toggle'))
+    fireEvent.click(screen.getByTestId('commissioner-waiver-save'))
+    await act(async () => {})
+    expect(h.success).not.toHaveBeenCalled()
+    expect(h.error).toHaveBeenCalledWith(expect.stringContaining('Could not confirm'))
+    expect(screen.getByTestId('commissioner-waiver-type-select')).toBeInTheDocument()
+  })
+  it('clears editing and permission while changing leagues', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(permission('A')).mockImplementationOnce(() => new Promise(() => {})))
+    const view = render(<Panel leagueId="A" />)
+    await act(async () => {})
+    fireEvent.click(screen.getByTestId('commissioner-waiver-edit-toggle'))
+    expect(screen.getByTestId('commissioner-waiver-type-select')).toBeInTheDocument()
+    view.rerender(<Panel leagueId="B" />)
+    expect(screen.queryByTestId('commissioner-waiver-type-select')).toBeNull()
+    expect(screen.queryByTestId('commissioner-waiver-edit-toggle')).toBeNull()
+  })
+  it('does not unlock editing on a malformed permission response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
+    render(<Panel leagueId="A" />)
+    await act(async () => {})
+    expect(screen.queryByTestId('commissioner-waiver-edit-toggle')).toBeNull()
+  })
+  it('shows a recovery message for invalid configuration', async () => {
+    h.config = { waiver_type: 'standard', faab_budget: -1 }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(permission('A')))
+    render(<Panel leagueId="A" />)
+    await act(async () => {})
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not verify')
+    expect(screen.queryByTestId('commissioner-waiver-edit-toggle')).toBeNull()
+  })
+})

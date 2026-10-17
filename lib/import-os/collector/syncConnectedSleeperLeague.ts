@@ -35,6 +35,7 @@ import { EVENT } from '@/lib/events/catalog'
 import { resolveLeagueIdsForConnection } from './enumerate'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
+import { sleeperScoreBackfillWeeks } from '@/lib/sleeper/sync/sleeperScoreBackfillWeeks'
 
 /** NFL regular season + playoffs. The cache only fetches weeks it lacks. */
 const MAX_WEEKS = 18
@@ -414,7 +415,16 @@ export async function syncConnectedLeague(
     try {
       // Shared with the live-game refresh (`lib/live/liveSleeperPointsSync.ts`) so both target the same weeks.
       const targetWeeks = await sleeperScoreTargetWeeks(connection.externalLeagueId, connection.season)
-      for (const week of targetWeeks) {
+      /*
+       * Plus a few finished weeks never ingested at all, so a season figure (lineup efficiency on the
+       * standings page) has every week behind it. Bounded per run; nothing once the backlog is clear.
+       */
+      const backfillWeeks = await sleeperScoreBackfillWeeks(
+        connection.externalLeagueId,
+        connection.season,
+        targetWeeks,
+      ).catch(() => [] as number[])
+      for (const week of [...targetWeeks, ...backfillWeeks]) {
         const scores = await ingestSleeperPlayerScoresForWeek(
           connection.externalLeagueId,
           connection.season,

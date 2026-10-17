@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 320" width="260" height="320" role="img" aria-label="Merged tribe banner">
+<defs>
+<linearGradient id="mb-cl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1d58a"/><stop offset=".5" stop-color="#d9b45a"/><stop offset="1" stop-color="#8a6420"/></linearGradient>
+<linearGradient id="mb-bb" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5a4214"/><stop offset=".4" stop-color="#c9a65a"/><stop offset="1" stop-color="#5a4214"/></linearGradient>
+<radialGradient id="mb-md" cx="45%" cy="40%" r="65%"><stop offset="0" stop-color="#2c3f6a"/><stop offset="1" stop-color="#0f1a30"/></radialGradient>
+<radialGradient id="mb-fl" cx="50%" cy="70%" r="60%"><stop offset="0" stop-color="#fff3b0"/><stop offset=".45" stop-color="#ffb627"/><stop offset="1" stop-color="#e2531b" stop-opacity="0"/></radialGradient>
+</defs>
+<ellipse cx="130" cy="306" rx="100" ry="9" fill="#000" opacity=".35"/>
+<!-- crossed torches behind -->
+<g transform="rotate(-24 130 230)"><rect x="124" y="60" width="12" height="236" rx="4" fill="url(#mb-bb)" stroke="#1a0f06" stroke-width="3"/>
+ <path d="M118,60 h24 l-4,-14 h-16 Z" fill="#6b4a1a" stroke="#1a0f06" stroke-width="3"/>
+ <path d="M130,6 C146,22 148,36 140,46 C136,38 132,36 130,30 C128,36 124,38 120,46 C112,36 114,22 130,6 Z" fill="url(#mb-fl)" stroke="#a8401a" stroke-width="2"/></g>
+<g transform="rotate(24 130 230)"><rect x="124" y="60" width="12" height="236" rx="4" fill="url(#mb-bb)" stroke="#1a0f06" stroke-width="3"/>
+ <path d="M118,60 h24 l-4,-14 h-16 Z" fill="#6b4a1a" stroke="#1a0f06" stroke-width="3"/>
+ <path d="M130,6 C146,22 148,36 140,46 C136,38 132,36 130,30 C128,36 124,38 120,46 C112,36 114,22 130,6 Z" fill="url(#mb-fl)" stroke="#a8401a" stroke-width="2"/></g>
+<!-- crossbar -->
+<rect x="42" y="50" width="176" height="14" rx="6" fill="url(#mb-bb)" stroke="#1a0f06" stroke-width="3"/>
+<circle cx="42" cy="57" r="9" fill="#6b4a1a" stroke="#1a0f06" stroke-width="3"/><circle cx="218" cy="57" r="9" fill="#6b4a1a" stroke="#1a0f06" stroke-width="3"/>
+<path d="M60,50 l0,14 M80,50 l0,14 M180,50 l0,14 M200,50 l0,14" stroke="#1a0f06" stroke-width="2" opacity=".5"/>
+<!-- cloth -->
+<path d="M56,64 L204,64 L204,236 L180,250 L156,236 L130,252 L104,236 L80,250 L56,236 Z" fill="url(#mb-cl)" stroke="#1a0f06" stroke-width="4" stroke-linejoin="round"/>
+<path d="M70,64 l10,12 l10,-12" fill="none" stroke="#1b2a4a" stroke-width="3" opacity=".55"/><path d="M90,64 l10,12 l10,-12" fill="none" stroke="#1b2a4a" stroke-width="3" opacity=".55"/><path d="M110,64 l10,12 l10,-12" fill="none" stroke="#1b2a4a" stroke-width="3" opacity=".55"/><path d="M130,64 l10,12 l10,-12" fill="none" stroke="#1b2a4a" stroke-width="3" opacity=".55"/><path d="M150,64 l10,12 l10,-12" fill="none" stroke="#1b2a4a" stroke-width="3" opacity=".55"/>
+<path d="M64,88 h132 M64,212 h132" stroke="#1b2a4a" stroke-width="3" stroke-dasharray="10 6" opacity=".7"/>
+<path d="M60,70 C60,140 64,200 60,232" stroke="#fff6d0" stroke-width="4" fill="none" opacity=".4"/>
+<!-- medallion -->
+<circle cx="130" cy="150" r="52" fill="url(#mb-md)" stroke="#1a0f06" stroke-width="4"/>
+<circle cx="130" cy="150" r="44" fill="none" stroke="#d9b45a" stroke-width="2.5" stroke-dasharray="3 5"/>
+<!-- two halves joining: left wave, right flame, meeting in a knot -->
+<path d="M96,160 C104,140 116,136 124,148 C118,150 114,156 116,164 C108,170 100,168 96,160 Z" fill="#3fa7b5" stroke="#1a0f06" stroke-width="2"/>
+<path d="M164,160 C158,138 146,128 138,120 C140,134 134,140 136,150 C130,156 136,168 146,170 C156,170 162,166 164,160 Z" fill="#e2563b" stroke="#1a0f06" stroke-width="2"/>
+<path d="M118,170 C124,160 136,160 142,170 C136,180 124,180 118,170 Z" fill="#f2c94c" stroke="#1a0f06" stroke-width="2.5"/>
+<path d="M130,108 l4,10 l10,0 l-8,6 l3,10 l-9,-6 l-9,6 l3,-10 l-8,-6 l10,0 Z" fill="#f2c94c" stroke="#1a0f06" stroke-width="1.5"/>
+<path d="M64,246 l-1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M72,246 l0,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M80,246 l1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M88,246 l-1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M96,246 l0,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M104,246 l1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M112,246 l-1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M120,246 l0,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M128,246 l1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M136,246 l-1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M144,246 l0,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M152,246 l1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M160,246 l-1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M168,246 l0,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M176,246 l1,18" stroke="#b8862b" stroke-width="3" stroke-linecap="round"/><path d="M70,236 c-6,0 -8,8 0,12 c8,-4 6,-12 0,-12 Z" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.4"/><path d="M95,236 c-6,0 -8,8 0,12 c8,-4 6,-12 0,-12 Z" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.4"/><path d="M120,236 c-6,0 -8,8 0,12 c8,-4 6,-12 0,-12 Z" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.4"/><path d="M145,236 c-6,0 -8,8 0,12 c8,-4 6,-12 0,-12 Z" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.4"/><path d="M170,236 c-6,0 -8,8 0,12 c8,-4 6,-12 0,-12 Z" fill="#f3ead6" stroke="#1a0f06" stroke-width="1.4"/>
+</svg>

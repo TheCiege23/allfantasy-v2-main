@@ -26,7 +26,7 @@ const ALL_CACHES = [CACHE_STATIC, CACHE_PAGES, CACHE_IMAGES];
 const PRECACHE_ASSETS = [
   '/offline',
   '/manifest.webmanifest',
-  '/af-crest.png',
+  '/af-crest-transparent.png',
 ];
 
 const NEVER_CACHE = [
@@ -185,8 +185,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: payload.body || 'You have a new update.',
-    icon: payload.icon || '/af-crest.png',
-    badge: payload.badge || '/af-crest.png',
+    icon: payload.icon || '/af-crest-transparent.png',
+    badge: payload.badge || '/af-crest-transparent.png',
     image: payload.image || undefined,
     tag: payload.tag || 'af-notification',
     renotify: payload.renotify ?? false,

@@ -15,6 +15,8 @@ export const nbaAdapter: SportAdapter = {
       threes: raw.threes ?? 0,
       fgm: raw.fgm ?? 0,
       ftm: raw.ftm ?? 0,
+      fga: raw.fga ?? 0,
+      fta: raw.fta ?? 0,
       dbl_dbl: raw.dbl_dbl ?? 0,
       trpl_dbl: raw.trpl_dbl ?? 0,
     }

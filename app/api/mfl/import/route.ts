@@ -1,7 +1,6 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { cookies } from 'next/headers'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import {
@@ -12,16 +11,6 @@ import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-
 import { commissionerGateFailureResponse } from '@/lib/league-import/commissionerGateResponse'
 import { importerManagerIdForRosters } from '@/lib/league-import/importerManagerId'
 
-async function getMFLConnection() {
-  const cookieStore = await cookies()
-  const sessionId = cookieStore.get('mfl_session')?.value
-  if (!sessionId) return null
-  
-  return prisma.mFLConnection.findUnique({
-    where: { sessionId }
-  })
-}
-
 function mapImportErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
   if (code === 'UNAUTHORIZED') return 401
@@ -31,65 +20,6 @@ function mapImportErrorStatus(code: string): number {
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const GET = withApiUsage({ endpoint: "/api/mfl/leagues", tool: "MflLeagues" })(async () => {
-  try {
-    const auth = await requireVerifiedUser()
-    if (!auth.ok) {
-      return auth.response
-    }
-
-    const connection = await getMFLConnection()
-    
-    if (!connection) {
-      return NextResponse.json({ connected: false }, { status: 401 })
-    }
-
-    const year = connection.year || new Date().getFullYear()
-    
-    const leaguesUrl = `https://api.myfantasyleague.com/${year}/export?TYPE=myleagues&JSON=1`
-    const res = await fetch(leaguesUrl, {
-      headers: {
-        'Cookie': `MFL_USER_ID=${connection.mflCookie}`
-      }
-    })
-
-    if (!res.ok) {
-      return NextResponse.json({ error: 'Failed to fetch leagues' }, { status: 500 })
-    }
-
-    const data = await res.json()
-    
-    let leagues: any[] = []
-    if (data.leagues?.league) {
-      const rawLeagues = Array.isArray(data.leagues.league) 
-        ? data.leagues.league 
-        : [data.leagues.league]
-      
-      leagues = rawLeagues.map((lg: any) => ({
-        leagueId: lg.league_id,
-        name: lg.name,
-        url: lg.url,
-        franchiseId: lg.franchise_id,
-        franchiseName: lg.franchise_name
-      }))
-    }
-
-    return NextResponse.json({
-      connected: true,
-      username: connection.mflUsername,
-      year,
-      leagues
-    })
-
-  } catch (error: any) {
-    console.error('MFL leagues error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch leagues' },
-      { status: 500 }
-    )
-  }
-})
-
 export const POST = withApiUsage({ endpoint: "/api/mfl/import", tool: "MflImport" })(async (req: NextRequest) => {
   const auth = await requireVerifiedUser()
   if (!auth.ok) {
@@ -196,16 +126,11 @@ export const POST = withApiUsage({ endpoint: "/api/mfl/import", tool: "MflImport
     }
   }
 
-  const connection = await getMFLConnection()
-  if (!connection) {
-    return NextResponse.json({ connected: false, error: 'Connect your MFL account first.' }, { status: 401 })
-  }
-
-  return NextResponse.json(
-    {
-      error: 'Historical MFL import is not live yet. Right now this connection only supports account authentication and league listing.',
-      supported: false,
-    },
-    { status: 501 }
-  )
+  /*
+   * The MFL username-and-password session (/api/auth/mfl, `mfl_session`) that a request with
+   * no league id used to fall back to is retired (2026-10): it stored MFL's session cookie in
+   * plaintext and its "historical import" was never live. Imports name a league and read it
+   * with the caller's stored MFL API key, above.
+   */
+  return NextResponse.json({ error: 'Choose an MFL league to import.' }, { status: 400 })
 })

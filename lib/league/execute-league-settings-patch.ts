@@ -24,6 +24,20 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import {
+  DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
+  DAILY_WAIVER_SCHEDULE_SETTINGS_KEY,
+  deriveEngineProcessingFromSchedule,
+  parseDailyWaiverSchedule,
+  parsePriorWaiverProcessing,
+  readDailyWaiverScheduleFromSettings,
+  toDayIndexArray,
+  toHhmmOrNull,
+  type DailyWaiverSchedule,
+  type PriorWaiverProcessing,
+} from '@/lib/waivers/dailyWaiverSchedule'
+import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -281,6 +295,58 @@ export async function executeLeagueSettingsPatch(
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
 
+  /*
+   * Per-day waiver schedule (lib/waivers/dailyWaiverSchedule.ts). Stored in `League.settings`, and
+   * DERIVED into the columns the waiver engine already schedules from — UTC processing weekdays,
+   * UTC process time, customDailyWaivers — so the cron only runs on days that process claims. Set
+   * here, before `buildLeagueUpdateFromBody`, so those columns ride the normal column write and the
+   * derived waiver-settings sync below.
+   */
+  let dailyWaiverScheduleToStore: DailyWaiverSchedule | null = null
+  /** undefined = leave the stored prior schedule alone; null = clear it; object = store it. */
+  let priorProcessingToStore: PriorWaiverProcessing | null | undefined = undefined
+  /** Set when the schedule is being turned OFF: the processing schedule to restore. */
+  let processingToRestore: PriorWaiverProcessing | null = null
+  if (body.dailyWaiverSchedule !== undefined) {
+    const schedule = parseDailyWaiverSchedule(body.dailyWaiverSchedule)
+    if (!schedule) return jsonError('Invalid dailyWaiverSchedule', 400)
+    const prevSettings = (league.settings as Record<string, unknown> | null) ?? {}
+    const prevSchedule = readDailyWaiverScheduleFromSettings(prevSettings)
+    const storedPrior = parsePriorWaiverProcessing(prevSettings[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY])
+    const tz = typeof body.timezone === 'string' ? body.timezone : league.timezone
+    body.customDailyWaivers = schedule.enabled
+    if (schedule.enabled) {
+      // First enable: remember the schedule the league ran on before, so turning this off restores it.
+      if (!storedPrior && !prevSchedule?.enabled) {
+        const row = await prisma.leagueWaiverSettings.findUnique({
+          where: { leagueId },
+          select: { processingDays: true, processingTimeUtc: true },
+        })
+        priorProcessingToStore = {
+          processingDays: toDayIndexArray(row?.processingDays),
+          processingTimeUtc: toHhmmOrNull(row?.processingTimeUtc),
+          waiverSchedule: toDayIndexArray(league.waiverSchedule),
+          waiverProcessTime: toHhmmOrNull(league.waiverProcessTime),
+        }
+      }
+      // An all Free-agents / Locked week derives NO days, written as [] so no stale day survives.
+      const derived = deriveEngineProcessingFromSchedule(schedule, tz)
+      body.waiverSchedule = derived.processingDaysUtc
+      body.waiverProcessTime = derived.processingTimeUtc
+    } else if (prevSchedule?.enabled) {
+      processingToRestore = storedPrior ?? {
+        processingDays: null,
+        processingTimeUtc: null,
+        waiverSchedule: null,
+        waiverProcessTime: null,
+      }
+      body.waiverSchedule = processingToRestore.waiverSchedule ?? Prisma.JsonNull
+      if (processingToRestore.waiverProcessTime) body.waiverProcessTime = processingToRestore.waiverProcessTime
+      priorProcessingToStore = null
+    }
+    dailyWaiverScheduleToStore = schedule
+  }
+
   const updatedFieldNames: string[] = []
 
   const { data: leaguePatch, keys: leagueKeys } = buildLeagueUpdateFromBody(body)
@@ -385,6 +451,24 @@ export async function executeLeagueSettingsPatch(
     updatedFieldNames.push('settingsMerge')
   }
 
+  if (dailyWaiverScheduleToStore) {
+    // Fresh read: the blocks above may already have rewritten `settings` this request.
+    const cur = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const prev = { ...((cur?.settings as Record<string, unknown> | null) ?? {}) }
+    if (priorProcessingToStore === null) delete prev[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY]
+    else if (priorProcessingToStore) prev[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY] = priorProcessingToStore
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          [DAILY_WAIVER_SCHEDULE_SETTINGS_KEY]: dailyWaiverScheduleToStore,
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push(DAILY_WAIVER_SCHEDULE_SETTINGS_KEY)
+  }
+
   const derivedSyncKeys = new Set([
     'playoffStartWeek',
     'playoffTeams',
@@ -406,6 +490,23 @@ export async function executeLeagueSettingsPatch(
       updatedFieldNames.push('derived_playoff_waiver_sync')
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncCommissionerDerivedLeagueState', e)
+    }
+  }
+
+  if (dailyWaiverScheduleToStore) {
+    try {
+      // Turning the daily schedule off: the derived sync above keeps the old processing days when
+      // the column is null, so the prior engine schedule is written back explicitly.
+      if (processingToRestore) {
+        await upsertLeagueWaiverSettings(leagueId, {
+          processingDays: processingToRestore.processingDays ?? Prisma.JsonNull,
+          processingTimeUtc: processingToRestore.processingTimeUtc ?? undefined,
+        })
+      }
+      await refreshLeagueWaiverNextRunAt(leagueId)
+      updatedFieldNames.push('waiver_next_run_at')
+    } catch (e) {
+      console.warn('[executeLeagueSettingsPatch] daily waiver schedule follow-up', e)
     }
   }
 

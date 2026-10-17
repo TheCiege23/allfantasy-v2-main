@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getSessionAndProfile } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export const runtime = "nodejs"
 
@@ -17,15 +18,14 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}))
   const code = String(body?.code || "").trim()
-  let phone = String(body?.phone || profile?.phone || "").trim()
+  // Normalize phone to E.164 exactly as /start does — the same function, so the key Twilio holds
+  // the pending verification under and the key stored on the profile cannot diverge.
+  // Without this, Twilio can't find the pending verification and returns 500 → VERIFY_FAILED.
+  const phone = normalizePhoneE164(String(body?.phone || profile?.phone || ""))
 
   if (!phone) return NextResponse.json({ error: "MISSING_PHONE" }, { status: 400 })
   if (!code) return NextResponse.json({ error: "MISSING_CODE" }, { status: 400 })
 
-  // Normalize phone to E.164 to match the /start endpoint (which sends e.g. +12014176692).
-  // Without this, Twilio can't find the pending verification and returns 500 → VERIFY_FAILED.
-  phone = phone.replace(/[\s()-]/g, "")
-  if (!phone.startsWith("+")) phone = "+1" + phone
   if (!/^\+\d{10,15}$/.test(phone)) {
     return NextResponse.json({ error: "INVALID_PHONE", message: "Please enter a valid phone number with country code." }, { status: 400 })
   }

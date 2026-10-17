@@ -13,13 +13,17 @@
  *   1. exact name / short name / "city name" (all pro leagues);
  *   2. the same after dropping "University of", "University", "College", "FC" and punctuation
  *      (college and soccer naming differs by source);
- *   3. soccer's numeric id → that club's name on its Rolling Insights team row → 1 or 2.
+ *   3. soccer's numeric id → that club's name on its Rolling Insights team row → 1 or 2;
+ *   4. for a college name that still missed, CFBD's spelling and then the logo-only spellings
+ *      (`collegeLogoNameCandidates`) — tried after 1–3, so they fill blanks and never move a crest.
+ *      Measured 2026-10-01 on the test DB: 1,065 college football and 2,368 college basketball
+ *      players had no crest; every school with a stored crest under any spelling is now reached.
  * No prefix or fuzzy matching: "Miami University" is not "Miami", and a wrong crest is worse than
  * the placeholder.
  */
 import { prisma } from '@/lib/prisma'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
-import { COLLEGE_NAME_ALIASES, exactKey, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
+import { collegeLogoNameCandidates, exactKey, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
 
 // Re-exported: callers imported it from here before the crosswalk moved to its own module.
 export { looseTeamKey }
@@ -83,12 +87,16 @@ export function buildTeamLogoResolver(rows: readonly TeamRow[]): (team: string |
   return (team) => {
     const raw = String(team ?? '').trim()
     if (!raw) return null
-    const value = COLLEGE_NAME_ALIASES[exactKey(raw)] ?? raw
+    const [value, ...fallbacks] = collegeLogoNameCandidates(raw)
     const direct = byName(value)
     if (direct) return direct
     if (/^\d+$/.test(value)) {
       const name = nameByRiId.get(value)
       return name ? byName(name) : null
+    }
+    for (const name of fallbacks) {
+      const hit = byName(name)
+      if (hit) return hit
     }
     return null
   }

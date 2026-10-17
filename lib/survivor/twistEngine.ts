@@ -121,7 +121,7 @@ export async function shouldBlockTwist(
     if (c && c.leagueId === leagueId) {
       const played = Array.isArray(c.idolsPlayed) ? (c.idolsPlayed as unknown[]).length : 0
       if (played >= 2) {
-        return { blocked: true, reason: 'A third idol play is not allowed at the same Tribal Council.' }
+        return { blocked: true, reason: 'A third idol play is not allowed at the same Elimination Council.' }
       }
     }
   }

@@ -12,6 +12,7 @@ const {
   mockTeamSeasonStatsFindMany,
   mockAdpDataFindFirst,
   mockAdpDataFindMany,
+  mockSportsPlayerFindMany,
 } = vi.hoisted(() => ({
   mockFindMany: vi.fn(),
   mockGetPlayerValuesForNames: vi.fn(),
@@ -24,6 +25,7 @@ const {
   mockTeamSeasonStatsFindMany: vi.fn(),
   mockAdpDataFindFirst: vi.fn(),
   mockAdpDataFindMany: vi.fn(),
+  mockSportsPlayerFindMany: vi.fn(),
 }))
 
 vi.mock("@/lib/prisma", () => ({
@@ -46,6 +48,8 @@ vi.mock("@/lib/prisma", () => ({
     },
     sportsPlayer: {
       findFirst: mockSportsPlayerFindFirst,
+      // RI identity rows (`source: rolling_insights`, externalId = RI id) for shared names.
+      findMany: mockSportsPlayerFindMany,
     },
     sportsGame: {
       findMany: mockSportsGameFindMany,
@@ -100,6 +104,7 @@ describe("PlayerStatsResolver", () => {
     mockSportsInjuryFindMany.mockResolvedValue([])
     mockIdentityFindMany.mockResolvedValue([])
     mockSportsPlayerFindFirst.mockResolvedValue(null)
+    mockSportsPlayerFindMany.mockResolvedValue([])
     mockSportsGameFindMany.mockResolvedValue([])
     mockTeamSeasonStatsFindMany.mockResolvedValue([])
   })
@@ -342,6 +347,77 @@ describe("PlayerStatsResolver", () => {
        * and each materialises the whole consensus board.
        */
       expect(mockAdpDataFindMany).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  /*
+   * 🛑 Production, 2026-10-11: "Lamar Jackson" is RI 3416 (QB, BAL) and RI 5888 (the Falcons CB,
+   * whose season rows are stamped "QB, BAL"); "Byron Young" is RI 7859 (LB, LAR) and 7785 (DT,
+   * PHI). `rows[0]` used to choose the team, position and RI id for the whole resolve.
+   */
+  describe("🛑 a name shared by several Rolling Insights ids", () => {
+    const season = (playerId: string, s: string, position: string, team: string, fantasyPoints: number | null) => ({
+      playerId, season: s, seasonType: "regular", gamesPlayed: 10, fantasyPoints, fantasyPointsPerGame: null,
+      position, team, stats: {},
+    })
+
+    it("binds Lamar Jackson to the QB via FantasyCalc, each season once, and prices HIS career projection", async () => {
+      mockFindMany.mockResolvedValue([
+        season("3416", "2022", "QB", "BAL", 254.08),
+        season("5888", "2022", "QB", "BAL", null),
+        season("5888", "2020", "QB", "BAL", null),
+        season("3416", "2020", "QB", "BAL", 636.56),
+      ])
+      mockSportsPlayerFindMany.mockResolvedValue([
+        { externalId: "3416", position: "QB", team: "Baltimore Ravens" },
+        { externalId: "5888", position: "CB", team: "Atlanta Falcons" },
+      ])
+      mockGetPlayerValuesForNames.mockResolvedValue(
+        new Map([["lamar jackson", { value: 8000, rank: 10, positionRank: 2, position: "QB", team: "BAL" }]]),
+      )
+      mockCareerProjectionFindFirst.mockResolvedValue({ projectedPointsYear1: 333 })
+
+      const result = await resolvePlayerStats("Lamar Jackson", { sport: "nfl" })
+
+      expect(result?.historical.map((h) => h.season)).toEqual(["2022", "2020"])
+      expect(result?.historical.map((h) => h.fantasyPoints)).toEqual([254.08, 636.56])
+      expect(mockCareerProjectionFindFirst.mock.calls[0]?.[0]?.where?.playerId).toBe("3416")
+    })
+
+    it("refuses Byron Young when nothing says which one — no history, and no namesake's projection", async () => {
+      mockFindMany.mockResolvedValue([
+        season("7859", "2025", "LB", "LAR", null),
+        season("7785", "2025", "DT", "PHI", null),
+        season("7859", "2024", "LB", "LAR", null),
+      ])
+      mockSportsPlayerFindMany.mockResolvedValue([
+        { externalId: "7859", position: "LB", team: "Los Angeles Rams" },
+        { externalId: "7785", position: "DT", team: "Philadelphia Eagles" },
+      ])
+      // FantasyCalc does not value IDPs, and the ADP board lists BOTH Byron Youngs.
+      mockGetPlayerValuesForNames.mockResolvedValue(new Map())
+
+      const result = await resolvePlayerStats("Byron Young", { sport: "nfl" })
+
+      expect(result?.historical).toEqual([])
+      expect(mockCareerProjectionFindFirst).not.toHaveBeenCalled()
+    })
+
+    it("a caller's position binds Byron Young to the tackle", async () => {
+      mockFindMany.mockResolvedValue([
+        season("7859", "2025", "LB", "LAR", null),
+        season("7785", "2025", "DT", "PHI", 12),
+      ])
+      mockSportsPlayerFindMany.mockResolvedValue([
+        { externalId: "7859", position: "LB", team: "Los Angeles Rams" },
+        { externalId: "7785", position: "DT", team: "Philadelphia Eagles" },
+      ])
+      mockGetPlayerValuesForNames.mockResolvedValue(new Map())
+
+      const result = await resolvePlayerStats("Byron Young", { sport: "nfl", position: "DT" })
+
+      expect(result?.historical.map((h) => h.fantasyPoints)).toEqual([12])
+      expect(result?.team).toBe("PHI")
     })
   })
 })

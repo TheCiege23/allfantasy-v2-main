@@ -10,13 +10,15 @@
  * payload arrives unchanged. That is the input this module expects.
  *
  * ⚠ ONLY WHAT THE CONFIG SCORES IS MAPPED, AND EVERYTHING ELSE IS NAMED. CFBD reports a great deal
- * that NCAAF fantasy scoring does not use (QBR, averages, longs, tackles, punting, returns). Those are
- * listed in `NON_SCORING_KEYS` so they are neither scored nor reported; a key in NEITHER list is
+ * that NCAAF fantasy scoring does not use (QBR, averages, longs, punting). Return touchdowns
+ * are mapped separately from offensive and defensive touchdowns so a league can score them once.
+ * Known informational fields are listed in `NON_SCORING_KEYS`; a key in NEITHER list is
  * reported as unmapped, which is how a vendor rename shows up as a warning instead of as a week in
  * which every quarterback quietly threw for zero yards.
  *
- * ⚠ WHAT CFBD CANNOT GIVE, AND IS THEREFORE NOT INVENTED: two-point conversions, field-goal distance
- * buckets, and team-defense lines. Those categories stay at zero for the players they belong to.
+ * ⚠ WHAT CFBD CANNOT GIVE, AND IS THEREFORE NOT INVENTED: unenriched two-point conversions, field-goal distance
+ * buckets, and team-defense lines. Explicit ESPN conversion evidence is enriched separately;
+ * missing conversion evidence is not inferred from a score residual.
  */
 
 export interface NcaafGameStats {
@@ -38,14 +40,30 @@ export const NCAAF_STAT_ALIASES: Readonly<Record<string, string>> = {
   'receiving.YDS': 'rec_yds',
   'receiving.TD': 'rec_td',
   'fumbles.LOST': 'fum_lost',
+  'conversions.PASS': 'pass_2pt',
+  'conversions.RUSH': 'rush_2pt',
+  'conversions.REC': 'rec_2pt',
+  'kickReturns.TD': 'kr_td',
+  'puntReturns.TD': 'pr_td',
   'kicking.XPM': 'xp_made',
+  'kicking.FGM': 'fg_made',
+  'defensive.SOLO': 'idp_solo',
+  'defensive.TOT': 'idp_tackle',
+  'defensive.SACKS': 'idp_sack',
+  'defensive.PD': 'idp_pd',
+  'defensive.TFL': 'idp_tfl',
+  'defensive.TD': 'idp_td',
+  'interceptions.INT': 'idp_int',
+  'interceptions.YDS': 'idp_int_return_yards',
 }
 
 /** Categories CFBD reports that NCAAF fantasy scoring does not read, wholesale. */
-const NON_SCORING_CATEGORIES = new Set(['defensive', 'interceptions', 'punting', 'kickReturns', 'puntReturns'])
+const NON_SCORING_CATEGORIES = new Set(['defensive', 'interceptions', 'punting'])
 
 /** Individual keys in scored categories that carry no fantasy points. */
 const NON_SCORING_KEYS = new Set([
+  'kickReturns.NO', 'kickReturns.YDS', 'kickReturns.AVG', 'kickReturns.LONG',
+  'puntReturns.NO', 'puntReturns.YDS', 'puntReturns.AVG', 'puntReturns.LONG',
   'passing.COMPLETIONS',
   'passing.ATT',
   'passing.C/ATT',
@@ -58,7 +76,6 @@ const NON_SCORING_KEYS = new Set([
   'receiving.LONG',
   'fumbles.FUM',
   'fumbles.REC',
-  'kicking.FGM',
   'kicking.FGA',
   'kicking.FG',
   'kicking.XPA',
@@ -102,6 +119,11 @@ export function normalizeCfbdGameStats(raw: unknown): NcaafGameStats {
     const category = key.slice(0, key.indexOf('.'))
     if (NON_SCORING_CATEGORIES.has(category) || NON_SCORING_KEYS.has(key)) continue
     unmapped.push(key)
+  }
+  // Makes/attempts are captured independently; derive misses only when both exist.
+  for (const [made, attempted, missed] of [['kicking.FGM', 'kicking.FGA', 'fg_miss'], ['kicking.XPM', 'kicking.XPA', 'xp_miss']]) {
+    const m = asNumber(record[made]), a = asNumber(record[attempted])
+    if (m != null && a != null && a >= m) stats[missed] = a - m
   }
   return { stats, unmappedKeys: unmapped, appeared }
 }

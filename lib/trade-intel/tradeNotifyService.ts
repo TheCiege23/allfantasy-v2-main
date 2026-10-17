@@ -3,6 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { sendPushToUser } from '@/lib/push-notifications'
+import { tradeCardPath, type TradeCard } from '@/lib/push-notifications/tradeCard'
+import { completedTradeCard, offerTradeCard } from '@/lib/trade-intel/tradePushCard'
 import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { sendTemplatedEmail } from '@/lib/resend-client'
 import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
@@ -296,11 +298,21 @@ type AfLeagueRow = {
   teams: Array<{ claimedByUserId: string | null; platformUserId: string | null }>
 }
 
-type Recipient = { id: string; email: string }
+/**
+ * `emailAllowed` false: this person is still told — by push, under their own push settings — but
+ * gets no email (opted out of trade email, unsubscribed, no address, undeliverable, or a second
+ * account on an address already being emailed).
+ */
+type Recipient = { id: string; email: string; emailAllowed: boolean }
 
 /**
- * The AF users attached to any AF copy of this Sleeper league, minus opt-outs and undeliverable
- * addresses.
+ * The AF users attached to any AF copy of this Sleeper league. Email opt-outs and undeliverable
+ * addresses decide EMAIL only.
+ *
+ * 🛑 THEY USED TO DECIDE EVERYTHING. A user with `tradeAlerts: false` or a mail unsubscribe was
+ * dropped from this list, and push is sent only to people on it — so turning off trade EMAILS also
+ * killed trade PUSHES, which have their own switch (`decidePushForUser`, trade categories). A switch
+ * that silences a different channel is the bypass in reverse (notification-controls 2026-09-14).
  */
 async function resolveRecipients(afLeagues: AfLeagueRow[]): Promise<Recipient[]> {
   const userIds = [
@@ -337,12 +349,11 @@ async function resolveRecipients(afLeagues: AfLeagueRow[]): Promise<Recipient[]>
   const recipients: Recipient[] = []
   const seenEmails = new Set<string>()
   for (const u of users) {
-    const email = u.email
-    if (!email || seenEmails.has(email)) continue
-    seenEmails.add(email)
-    if (blocked.has(email)) continue
-    if (isUndeliverableEmailDomain(email)) continue
-    recipients.push({ id: u.id, email })
+    const email = u.email?.trim() || ''
+    const emailAllowed =
+      Boolean(email) && !seenEmails.has(email) && !blocked.has(email) && !isUndeliverableEmailDomain(email)
+    if (email) seenEmails.add(email)
+    recipients.push({ id: u.id, email, emailAllowed })
   }
   return recipients
 }
@@ -645,6 +656,8 @@ async function deliverPlan(args: {
 
   const { sleeperIdOf } = await sleeperIdResolver(afLeagues, recipients, rowFor)
   const gradeFor = completedGradeCache()
+  // Headshot ids on the push card are Sleeper NFL ids; another sport draws initials instead.
+  const completionIsNfl = String(afLeagues[0].sport ?? 'NFL').toUpperCase() === 'NFL'
 
   for (const trade of newTrades) {
     const transactionId = transactionIdOf(trade.id)
@@ -690,7 +703,8 @@ async function deliverPlan(args: {
           const viewerOwnerId = sleeperIdOf(recipient.id)
           const saved = await captureCompletedEmailEvaluation({ userId: recipient.id, leagueId: row.id, leagueName,
             grader, grade, trade, viewerOwnerId }).catch(() => null)
-          return buildTradeGradeEmail({
+          const card = cardOrNull(() => completedTradeCard({ leagueName, trade, grade, viewerOwnerId, isNfl: completionIsNfl }))
+          const email = buildTradeGradeEmail({
             leagueName,
             trade,
             ledgerUrl: `${getBaseUrl()}${href}`,
@@ -713,6 +727,7 @@ async function deliverPlan(args: {
             leagueId: row.id,
             unsubscribeUrl: unsubscribeUrlFor(recipient.email),
           })
+          return { ...email, card }
         },
       })
       if (outcome.emailed) base.emailsSent += 1
@@ -732,6 +747,20 @@ async function deliverPlan(args: {
  * `compose` runs only when something still needs sending, so a retry does not re-grade the trade
  * for everyone who already has it.
  */
+/**
+ * 🛑 A CARD MUST NEVER COST THE ALERT. Card building runs inside `compose`, and a throw there marks
+ * the whole alert — email included — as not composed, so it would sit owed until a sweep where the
+ * card happens to build. A trade missing a field the picture wanted gets no picture, not no email.
+ */
+function cardOrNull(build: () => TradeCard | null): TradeCard | null {
+  try {
+    return build()
+  } catch (err) {
+    console.warn('[trade-notify] push card skipped', { name: err instanceof Error ? err.name : typeof err })
+    return null
+  }
+}
+
 async function deliverToRecipient(args: {
   sleeperLeagueId: string
   alert: Pick<OwedAlert, 'kind' | 'id'>
@@ -739,11 +768,13 @@ async function deliverToRecipient(args: {
   leagueRowId: string
   pushCategory: 'trade_proposals' | 'trade_accept_reject'
   push: (subject: string) => Parameters<typeof sendPushToUser>[1]
-  compose: () => Promise<{ subject: string; html: string }>
+  /** `card` is the trade as the phone's picture draws it; optional, so a card never costs the alert. */
+  compose: () => Promise<{ subject: string; html: string; card?: TradeCard | null }>
 }): Promise<{ delivered: boolean; emailed: boolean }> {
   const { sleeperLeagueId, alert, recipient } = args
   const emailKey = sentClaimKey(sleeperLeagueId, alert, 'email', recipient.id)
-  const emailClaim = await claimSend(emailKey)
+  // An email opt-out never claims (or owes) an email — and never stops the push below.
+  const emailClaim: ClaimResult = recipient.emailAllowed ? await claimSend(emailKey) : 'taken'
   const needEmail = emailClaim !== 'taken'
 
   const pushGate = await decidePushForUser(recipient.id, {
@@ -757,7 +788,7 @@ async function deliverToRecipient(args: {
 
   if (!needEmail && !needPush) return { delivered: true, emailed: false }
 
-  let message: { subject: string; html: string }
+  let message: { subject: string; html: string; card?: TradeCard | null }
   try {
     message = await args.compose()
   } catch (err) {
@@ -780,7 +811,13 @@ async function deliverToRecipient(args: {
     if (!sent.ok && emailClaim === 'ours') await releaseSend(emailKey)
   }
   if (needPush) {
-    await sendPushToUser(recipient.id, args.push(message.subject)).catch(() => [])
+    let imageUrl: string | null = null
+    try {
+      imageUrl = message.card ? tradeCardPath(message.card) : null
+    } catch {
+      imageUrl = null
+    }
+    await sendPushToUser(recipient.id, { ...args.push(message.subject), imageUrl }).catch(() => [])
   }
   return { delivered: !needEmail || emailed, emailed }
 }
@@ -892,7 +929,17 @@ async function notifyOffers(args: {
           const saved = await captureEmailEvaluation({ userId: recipient.id, leagueId: row.id, leagueName, grader, grade,
             give, get, origin: 'pending_email',
           }).catch(() => null)
-          return buildPendingTradeOfferEmail({
+          const card = cardOrNull(() =>
+            offerTradeCard({
+              leagueName,
+              proposerName: proposerNameOf(offer.creator),
+              youGet: assetsReceived,
+              youGive: assetsGiven,
+              grade,
+              isNfl,
+            }),
+          )
+          const email = buildPendingTradeOfferEmail({
             leagueName,
             proposerName: proposerNameOf(offer.creator),
             youGet: assetsReceived,
@@ -907,6 +954,7 @@ async function notifyOffers(args: {
             leagueId: row.id,
             unsubscribeUrl: unsubscribeUrlFor(recipient.email),
           })
+          return { ...email, card }
         },
       })
       if (outcome.emailed) emailsSent += 1

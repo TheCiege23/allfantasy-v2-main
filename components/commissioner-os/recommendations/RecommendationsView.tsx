@@ -8,6 +8,8 @@ import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanne
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { CommissionerRecommendationContract, CommissionerRecommendationStatus } from '@/lib/commissioner-ui/contracts'
 import { Lightbulb } from 'lucide-react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cardsCopy, cosLoaderText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface RecommendationsViewProps {
   recommendations: CommissionerRecommendationContract[]
@@ -22,9 +24,15 @@ const TERMINAL_STATUSES: CommissionerRecommendationStatus[] = ['completed', 'dis
  * evidence, confidence, status, actions. Default view is flat, sorted by
  * severity, never grouped by category (Recommendations Center §20) —
  * urgency always wins over categorical organization.
+ *
+ * Spanish: the screen's own words through `cardsCopy`; the severity-mix labels come from
+ * `deriveChartSeries` (shared with other screens, so translated here at render, not there).
+ * The cards translate their own fields — see `RecommendationCard`.
  */
 export function RecommendationsView({ recommendations, dataMode }: RecommendationsViewProps) {
   const [showArchive, setShowArchive] = useState(false)
+  const { language } = useOptionalLanguage()
+  const ui = (english: string) => cardsCopy(english, language)
 
   const severityRank = { critical: 0, elevated: 1, standard: 2, advisory: 3, positive: 4 } as const
 
@@ -49,7 +57,10 @@ export function RecommendationsView({ recommendations, dataMode }: Recommendatio
       .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
   }, [recommendations, showArchive])
 
-  const severityMix = useMemo(() => recommendationsBySeverity(visible), [visible])
+  const severityMix = useMemo(
+    () => recommendationsBySeverity(visible).map((slice) => ({ ...slice, label: cosLoaderText(slice.label, language) })),
+    [visible, language],
+  )
 
   return (
     <div>
@@ -62,17 +73,17 @@ export function RecommendationsView({ recommendations, dataMode }: Recommendatio
         */}
       {severityMix.length > 0 ? (
         <div className="mb-6">
-          <InfoCard title="Open queue by severity">
+          <InfoCard title={ui('Open queue by severity')}>
             <ActivityMixDonut
               slices={severityMix}
               height={220}
-              ariaLabel={`${visible.length} recommendation${visible.length === 1 ? '' : 's'} by severity`}
+              ariaLabel={ui(`${visible.length} recommendation${visible.length === 1 ? '' : 's'} by severity`)}
             />
           </InfoCard>
         </div>
       ) : null}
 
-      <div className="mb-4 flex gap-2" role="tablist" aria-label="Recommendation view">
+      <div className="mb-4 flex gap-2" role="tablist" aria-label={ui('Recommendation view')}>
         <button
           type="button"
           role="tab"
@@ -85,7 +96,7 @@ export function RecommendationsView({ recommendations, dataMode }: Recommendatio
             border: '1px solid var(--border)',
           }}
         >
-          Queue
+          {ui('Queue')}
         </button>
         <button
           type="button"
@@ -99,15 +110,15 @@ export function RecommendationsView({ recommendations, dataMode }: Recommendatio
             border: '1px solid var(--border)',
           }}
         >
-          History
+          {ui('History')}
         </button>
       </div>
 
       {visible.length === 0 ? (
         <EmptyState
           icon={Lightbulb}
-          title={showArchive ? 'Nothing archived recently.' : "You're all caught up."}
-          description={showArchive ? '' : 'No open recommendations.'}
+          title={ui(showArchive ? 'Nothing archived recently.' : "You're all caught up.")}
+          description={showArchive ? '' : ui('No open recommendations.')}
         />
       ) : (
         <div className="space-y-3">

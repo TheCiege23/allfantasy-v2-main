@@ -1,10 +1,11 @@
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 /**
  * MLB game card: diamond with runners, balls/strikes/outs, pitcher and batter,
  * and an R-H-E box score. Fixture values from the live MLB scoreboard,
  * 2026-09-13, COL @ DET "Bot 7th".
  */
 import React from 'react'
-import { render, within } from '@testing-library/react'
+import { fireEvent, render, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({}) })))
@@ -149,6 +150,8 @@ describe('baseball presentation for a non-MLB sport', () => {
   it('a final with hits and errors but no live situation still gets R-H-E, and no diamond', () => {
     const g = mlbGame({ sport: 'NCAABASE', isLive: false, completed: true, situation: null })
     const { container } = render(<LiveScores data={page(g)} />)
+    // A final renders as one line under the live games (2026-10-11); its full card is one tap away.
+    fireEvent.click(container.querySelector('.af-live-final-toggle') as HTMLButtonElement)
     expect(container.querySelector('.af-live-diamond')).toBeNull()
     const heads = [...container.querySelectorAll('.af-live-linescore thead th')].map((th) => th.textContent)
     expect(heads.slice(-3)).toEqual(['R', 'H', 'E'])

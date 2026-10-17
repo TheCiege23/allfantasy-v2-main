@@ -24,6 +24,7 @@
 
 import { useEffect, useState } from 'react'
 
+import { useIosAppPush } from '@/lib/push-notifications/useIosAppPush'
 import { useWebPushSubscription } from '@/lib/push-notifications/useWebPushSubscription'
 
 export const PUSH_ASK_DISMISSED_KEY = 'af-push-ask-dismissed-at'
@@ -78,6 +79,26 @@ const COPY = {
     ask: "Want this on your phone? I'll ping you before kickoff when a starter is out or your lineup needs a fix.",
     done: "You're set. This device gets my heads-ups before kickoff.",
   },
+  /*
+   * Under the Career feed — right after "since your last visit", the moment the value is on screen.
+   * It promises only what is sent today: career milestones (`career_milestones`) and results
+   * (`matchup_results`). Same hook, same "Not now" snooze as Chimmy's ask: one "Not now" quiets both,
+   * so nobody is asked twice in a visit.
+   */
+  career: {
+    ask: 'Get your career on your phone: results across every league, and a ping the moment you hit a milestone.',
+    done: "You're set. Results and career milestones will land on this device.",
+  },
+  /*
+   * In an open DM or huddle, under your messages (owner, 2026-10-02: "make sure the phone
+   * notifications are pushed to the user when they receive a message"). Measured that day: every
+   * DM alert was dispatched, and 129 of 132 users had no device to push it to. The ask belongs
+   * where the reason is on screen — a conversation you are waiting on.
+   */
+  messages: {
+    ask: "Get a ping on your phone when someone messages you, with who it's from.",
+    done: "You're set. New messages will ping this device.",
+  },
 } as const
 
 export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: keyof typeof COPY; className?: string }) {
@@ -88,6 +109,13 @@ export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: k
   const [checked, setChecked] = useState(false)
   const [enabled, setEnabled] = useState(false)
   const { supported, permission, busy, error, subscribe } = useWebPushSubscription(vapidKey)
+  /*
+   * Inside the iOS app the web half cannot work (no Push API in the WKWebView), so the ask there is
+   * the app's own permission flow. `registerOnMount: false` — the root `IosAppPushRegistrar`
+   * already re-sends the token; a prompt under every Chimmy answer must not POST it again each time.
+   */
+  const app = useIosAppPush({ registerOnMount: false })
+  const [appTapped, setAppTapped] = useState(false)
 
   useEffect(() => {
     try {
@@ -125,6 +153,54 @@ export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: k
   }
 
   const copy = COPY[variant]
+  const rootClass = ['af-pushask', className].filter(Boolean).join(' ')
+
+  /*
+   * THE iOS APP. `available` is true only inside the app, with the push plugin, on a server that
+   * can reach Apple. iOS shows its system prompt exactly once, so this asks only while the answer
+   * is still "prompt", and never carries `data-hide-in-ios-app` — this IS the in-app door.
+   */
+  if (app.available) {
+    if (appTapped && app.permission === 'granted' && app.registered) {
+      return (
+        <div className={rootClass} role="status" data-state="on">
+          <p className="af-pushask-text">{copy.done}</p>
+        </div>
+      )
+    }
+    if (appTapped && (app.permission === 'denied' || app.error)) {
+      return (
+        <div className={rootClass} role="status">
+          <p className="af-pushask-error">
+            {app.error ??
+              'Notifications are off for AllFantasy. Turn them on in the iPhone Settings app → Notifications → AllFantasy.'}
+          </p>
+        </div>
+      )
+    }
+    if (snoozed || app.permission !== 'prompt') return null
+    return (
+      <div className={rootClass} role="group" aria-label="Phone alerts">
+        <p className="af-pushask-text">{copy.ask}</p>
+        <div className="af-pushask-actions">
+          <button
+            type="button"
+            className="af-pushask-go"
+            disabled={app.busy}
+            onClick={() => {
+              setAppTapped(true)
+              void app.enable()
+            }}
+          >
+            {app.busy ? 'Turning on…' : 'Turn on alerts'}
+          </button>
+          <button type="button" className="af-pushask-later" onClick={dismiss} disabled={app.busy}>
+            Not now
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   /*
    * Every root carries `data-hide-in-ios-app`: this is WEB push, and inside the iOS app (a

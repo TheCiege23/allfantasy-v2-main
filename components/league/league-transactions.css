@@ -1,0 +1,57 @@
+/* Shared league transaction surfaces; semantic verdict and outcome colors stay local. */
+.af-core.af-league-transactions {
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  min-width: 0;
+}
+.af-league-transactions.af-waiver-workspace { padding: 20px; }
+.af-league-transactions.af-waiver-embedded { padding: 0; }
+.af-league-transactions :is(h1, h2, h3) { color: var(--text); font-style: normal; letter-spacing: -.02em; }
+.af-league-transactions h1 { font-size: 24px; font-weight: 750; line-height: 1.25; }
+.af-league-transactions :is(button, select, input:not([type='checkbox']):not([type='radio'])) {
+  min-height: 44px;
+}
+.af-league-transactions button[aria-label='Close waiver claim'],
+.af-league-transactions [data-testid='app-modal-close'] { min-width: 44px; }
+.af-league-transactions button { font-style: normal; }
+.af-league-transactions button:disabled { cursor: not-allowed; }
+.af-league-transactions :is(button, a, input, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.af-league-transactions :is(input, select) { color-scheme: dark; }
+html[data-mode='light'] .af-league-transactions :is(input, select) { color-scheme: light; }
+.af-league-transactions .af-transaction-heading { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.af-league-transactions .af-transaction-actions { align-items: stretch; }
+.af-league-transactions .af-transaction-actions :is(button, a) {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+  text-transform: none; letter-spacing: 0; font-size: 12px; border-radius: 8px;
+}
+.af-league-transactions [data-testid='trades-tab-propose-trade-header'] {
+  background: var(--accent); border-color: var(--accent); color: var(--bg);
+}
+.af-league-transactions .af-waiver-filters { margin-inline: 0; background: var(--surface); border: 1px solid var(--line2); border-radius: 12px; padding: 12px; }
+.af-league-transactions .af-waiver-filter-main { flex-wrap: wrap; }
+.af-league-transactions .af-waiver-filter-main > div:first-child { flex: 1 1 240px; }
+.af-league-transactions .af-waiver-filter-main > div:last-child { flex: 1 1 300px; }
+.af-league-transactions .af-waiver-filter-bottom { flex-wrap: wrap; align-items: flex-start; }
+.af-league-transactions .af-waiver-filter-bottom > div { flex-wrap: wrap; }
+.af-league-transactions .af-waiver-tabs { flex-wrap: wrap; }
+.af-league-transactions .af-waiver-tabs button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.af-league-transactions [data-testid^='waiver-player-row-'] { box-shadow: none; }
+.af-league-transactions [data-testid^='waiver-player-row-'] a { display: inline-flex; align-items: center; min-height: 44px; }
+.af-league-transactions .af-transaction-log-filters { flex-wrap: wrap; }
+.af-league-transactions .af-transaction-block-heading { flex-wrap: wrap; }
+.af-league-transactions .af-transaction-block-heading > span:last-child { flex-basis: 100%; }
+.af-league-transactions.af-transaction-dialog { background: var(--surface); border-color: var(--line2); }
+.af-league-transactions.af-claim-panel { max-height: 85dvh; overflow-y: auto; background: var(--surface); }
+@media (max-width: 560px) {
+  .af-league-transactions .af-transaction-actions { width: 100%; }
+  .af-league-transactions .af-transaction-actions :is(button, a) { flex: 1 1 160px; }
+  .af-league-transactions .af-waiver-filter-main { flex-direction: column; align-items: stretch; }
+  .af-league-transactions .af-waiver-filter-main > div { width: 100%; }
+  .af-league-transactions .af-waiver-filter-main > div:first-child,
+  .af-league-transactions .af-waiver-filter-main > div:last-child { flex-basis: auto; }
+  .af-league-transactions .af-waiver-filter-bottom > div { flex: 1 1 100%; }
+}

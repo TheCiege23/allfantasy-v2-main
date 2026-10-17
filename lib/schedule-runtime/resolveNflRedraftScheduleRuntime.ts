@@ -1,3 +1,4 @@
+import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
@@ -48,6 +49,7 @@ export type NflRedraftScheduleRuntimeResolved =
       rules: NonNullable<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
       state: CanonicalScheduleRuntimeState
       coverage: NflRedraftScheduleRuntimeCoverage
+      sourceReadOnly?: boolean
     }
   | {
       ok: false
@@ -73,6 +75,7 @@ export type PersistedScheduleGenerationResult =
         | 'SCHEDULE_ALREADY_EXISTS'
         | 'SEASON_NOT_FOUND'
         | 'VALIDATION_BLOCKED'
+      | 'IMPORTED_SOURCE_READ_ONLY'
       message: string
     }
 
@@ -213,14 +216,16 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   if (!season.rosters.length) return { ok: false, reason: 'rosters_unavailable' }
 
   const teams = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
+  const imported = await loadFantraxNativePresentation(season, input.now)
   const state = buildCanonicalScheduleRuntimeState({
     rules,
     teams,
-    persistedMatchups: season.schedule.map(toScheduleMatchupInput),
-    currentWeek: season.currentWeek,
+    persistedMatchups: imported ? imported.matchups : season.schedule.map(toScheduleMatchupInput),
+    currentWeek: imported?.currentWeek ?? season.currentWeek,
     status: season.status,
     totalWeeks: season.totalWeeks,
-    playoffStartWeek: season.playoffStartWeek,
+    playoffStartWeek: imported?.playoffStartWeek ?? season.playoffStartWeek,
+    regularSeasonWeeks: imported?.regularSeasonWeeks,
     now: input.now,
   })
 
@@ -229,6 +234,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     rules,
     state,
     coverage: coverage(state),
+    sourceReadOnly: Boolean(imported),
   }
 }
 
@@ -341,6 +347,8 @@ export async function advanceNflRedraftScheduleWeek(input: {
 > {
   const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: input.seasonId })
   if (!resolved.ok) return { ok: false, code: resolved.reason, message: 'Schedule runtime could not be resolved.' }
+
+  if (resolved.sourceReadOnly) return { ok: false, code: 'IMPORTED_SOURCE_READ_ONLY', message: 'Fantrax controls the scoring calendar for this imported league.' }
 
   const rosterRuntime = await resolveNflRedraftRosterRuntime({
     leagueId: resolved.state.leagueId,

@@ -34,6 +34,15 @@ Stamped on the root span (queryable in the spans dataset) and as tags:
 | `af.shell_ms` | ms from the session read until the `/core` shell had everything it renders | server, `/core` only |
 | `core.shell` span | the SAME duration as a span, carrying `af.screen` and `af.device` — see below | server, `/core` only |
 | `af.card` | on `core.card` spans: the read feeding a `/core` card (`dash34`, `career`, `trades`, `urgency-badges`, …) — see `CoreCardRead` in `lib/observability/cardTelemetry.ts` | server, `/core` home + tab badges |
+| `af.loop.busy_pct` | on `core.card` spans: % of the card's wait the server thread spent running code (event-loop utilization), 0–100 — see `lib/observability/loopBusy.ts` | server, `/core` cards |
+| `af.loop.busy_shell_pct` | the same, over the `af.shell_ms` window, on the root span | server, `/core` only |
+
+⚠ **`af.loop.*` measures the PROCESS, not the card.** Requests share one thread, so a high reading
+says the card waited behind CPU work — its own or another request's — not that it did that work. It
+exists because on 2026-10-07 every /core query measured sub-millisecond in Postgres while the app saw
+~30–40 ms per query and Railway showed the service pinned at ~1 core: the wait looked like CPU, and
+this is what proves or refutes that per request. Read it as `p75(tags[af.loop.busy_pct,number])`
+grouped by `af.card`.
 
 ✅ **Numeric `af.*` attributes ARE aggregatable. Write them `tags[name,number]`.**
 `core.shell` was added on the belief that they were not: a bare `p75(af.shell_ms)` fails with

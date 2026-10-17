@@ -5,10 +5,11 @@ const h = vi.hoisted(() => ({
   cached: vi.fn(),
   save: vi.fn(),
   players: vi.fn(),
+  state: vi.fn(),
 }))
 vi.mock('@/lib/db-first-mode', () => ({ dbFirstMode: h.flags }))
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsDataCache: { findUnique: h.cached, upsert: h.save } } }))
-vi.mock('@/lib/sleeper-client', () => ({ getAllPlayers: h.players }))
+vi.mock('@/lib/sleeper-client', () => ({ getAllPlayers: h.players, getNflState: h.state }))
 
 import { loadNflRookieLookup } from '@/lib/draft-room/nflRookieLookup'
 
@@ -22,6 +23,7 @@ beforeEach(() => {
   })
   h.players.mockResolvedValue({})
   h.save.mockResolvedValue({})
+  h.state.mockResolvedValue({season:'2026'})
 })
 
 describe('NFL rookie lookup respects DB-first draft loading', () => {
@@ -33,6 +35,7 @@ describe('NFL rookie lookup respects DB-first draft loading', () => {
       expect(result.fetchSource).toBe('sportsdatacache_compact')
       expect(result.lookup.bySleeperId.get('123')?.yearsExp).toBe(0)
       expect(h.players).not.toHaveBeenCalled()
+      expect(h.state).not.toHaveBeenCalled()
       expect(h.save).not.toHaveBeenCalled()
     },
   )
@@ -55,6 +58,7 @@ describe('NFL rookie lookup respects DB-first draft loading', () => {
     expect(result.fetchSource).toBe('sleeper_live')
     expect(result.lookup.bySleeperId.get('123')?.yearsExp).toBe(0)
     expect(h.players).toHaveBeenCalledOnce()
-    expect(h.save).toHaveBeenCalledOnce()
+    await vi.waitFor(()=>expect(h.save).toHaveBeenCalledOnce())
+    expect(h.save.mock.calls[0][0].create.data).toMatchObject({season:2026,observedAt:expect.any(String)})
   })
 })

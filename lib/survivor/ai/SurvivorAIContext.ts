@@ -18,6 +18,8 @@ import { isMergeTriggered } from '../SurvivorMergeEngine'
 import { canReturnToIsland } from '../SurvivorReturnEngine'
 import { getCurrentlyEliminatedRosterIds } from '../SurvivorRosterState'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
+import { resolveSurvivorAccessContext } from '../survivorAccessControl'
+import { survivorPublicCouncil } from '../survivorPublicCouncil'
 import { prisma } from '@/lib/prisma'
 import type { LeagueSport } from '@prisma/client'
 import { buildHistoricalContext, type HistoricalContext } from '@/lib/ai/historicalContextBuilder'
@@ -94,6 +96,8 @@ export async function buildSurvivorAIContext(args: {
   userId: string
 }): Promise<SurvivorAIDeterministicContext | null> {
   const { leagueId, currentWeek, userId } = args
+  const access = await resolveSurvivorAccessContext(leagueId, userId)
+  if (!access?.isLeagueMember) return null
   const config = await getSurvivorConfig(leagueId)
   if (!config) return null
 
@@ -110,7 +114,7 @@ export async function buildSurvivorAIContext(args: {
     getJuryMembers(leagueId),
     getExileLeagueId(leagueId),
     getExileLeagueId(leagueId).then((id) => (id ? getAllTokenStates(id) : [])),
-    getSurvivorAuditLog(leagueId, { limit: 50, eventTypes: ['eliminated'] }),
+    prisma.survivorTribalCouncil.findMany({ where: { leagueId, isRevealed: true, eliminatedRosterId: { not: null } }, select: { eliminatedRosterId: true, week: true }, orderBy: { week: 'asc' } }),
     isMergeTriggered(leagueId, currentWeek),
     prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }).then((r) => r?.id ?? null),
     getFinaleState(leagueId, currentWeek),
@@ -125,10 +129,7 @@ export async function buildSurvivorAIContext(args: {
     }),
   ])
 
-  const votedOutHistory = audit
-    .filter((e) => e.eventType === 'eliminated')
-    .map((e) => (e.metadata as { rosterId?: string; week?: number }) ?? {})
-    .filter((m): m is { rosterId: string; week: number } => Boolean(m.rosterId && typeof m.week === 'number'))
+  const votedOutHistory = audit.map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
 
   const normalizedTribes = merged
     ? [{
@@ -235,7 +236,7 @@ export async function buildSurvivorAIContext(args: {
           attendingTribeId: council.attendingTribeId,
           voteDeadlineAt: council.voteDeadlineAt,
           closedAt: council.closedAt,
-          eliminatedRosterId: council.eliminatedRosterId,
+          eliminatedRosterId: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes)?.eliminatedRosterId ?? null,
         }
       : null,
     challenges: challenges.map((c) => ({
@@ -248,7 +249,7 @@ export async function buildSurvivorAIContext(args: {
     })),
     jury: jury.map((j) => ({ rosterId: j.rosterId, votedOutWeek: j.votedOutWeek })),
     exileLeagueId,
-    exileTokens: tokenStates,
+    exileTokens: tokenStates.filter(token => access.decisions.canSeeHiddenIdolAssignments || token.rosterId === myExileStatus?.exileRosterId),
     votedOutHistory,
     merged,
     rosterDisplayNames,
@@ -267,6 +268,6 @@ export async function buildSurvivorAIContext(args: {
             winnerRosterId: finaleState.winnerRosterId,
           }
         : null,
-    historical: historical ?? null,
+    historical: access.decisions.canSeeHiddenIdolAssignments ? historical ?? null : null,
   }
 }

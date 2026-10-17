@@ -1,0 +1,35 @@
+.af-core .af-wbp{padding:24px;margin:0 0 24px;border:1px solid var(--line2,#344454);border-radius:18px;background:var(--surface,#121c29);color:var(--text,#eef4fa);overflow-wrap:anywhere}
+.af-core .af-wbp h2{font-size:clamp(1.4rem,3vw,2rem);margin:8px 0}.af-core .af-wbp p,.af-core .af-wbp li{font-size:1rem;line-height:1.6}.af-core .af-wbp h3{font-size:1.1rem}.af-core .af-wbp a{color:var(--accent,#64e4d0)}.af-core .af-wbp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}.af-core .af-wbp-buttons{display:flex;flex-wrap:wrap;gap:10px}.af-core .af-wbp button{min-height:44px;padding:10px 16px;border:1px solid var(--line2,#527080);border-radius:10px;background:var(--surface2,#1c3341);color:inherit;font:inherit;cursor:pointer}.af-core .af-wbp-actions{padding-left:24px}.af-core .af-wbp-actions li{padding:12px 0}.af-core .af-wbp-actions a{display:block;min-height:44px}.af-core .af-wbp-actions span,.af-core .af-wbp-actions small{display:block}.af-core .af-wbp small{font-size:.875rem}.af-core .af-wbp textarea{width:100%;min-height:110px;margin-top:12px;background:var(--surface2,#0b1620);color:inherit;padding:12px;font:inherit}.af-core .af-wbp :is(a,button,summary,textarea):focus-visible{outline:3px solid var(--accent,#64e4d0);outline-offset:4px}.af-core .af-wbp summary{min-height:44px;cursor:pointer;padding:10px 0}.af-core .af-wbp-prob{font-size:2rem;font-variant-numeric:tabular-nums}.af-core .af-wbp-path svg{width:100%;max-height:120px;color:var(--accent,#64e4d0)}.af-core .af-wbp-bar{height:8px;display:block;background:var(--line2,#314553);border-radius:6px;margin:6px 0 14px;overflow:hidden}.af-core .af-wbp-bar i{height:100%;display:block;background:var(--accent,#64e4d0)}.af-core .af-wbp table{width:100%;text-align:left;font-variant-numeric:tabular-nums}.af-core .af-wbp th,.af-core .af-wbp td{padding:8px}
+@media(max-width:700px){.af-core .af-wbp{padding:16px}.af-core .af-wbp-grid{grid-template-columns:minmax(0,1fr);gap:12px}.af-core .af-wbp-buttons button{flex:1}.af-core .af-wbp h2{font-size:1.5rem}}
+.af-core .af-wbp-share { border-top: 1px solid var(--line2); margin-top: 20px; padding-top: 16px; }
+.af-core .af-wbp-share details { margin: 12px 0; }
+.af-core .af-wbp-share summary { min-height: 44px; cursor: pointer; padding: 12px 0; }
+.af-core .af-wbp-share select { min-height: 44px; max-width: 100%; font-size: 16px; background: var(--surface2); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: 8px; }
+.af-core .af-wbp-share .af-wbp-buttons a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 14px; border: 1px solid var(--line2); border-radius: 10px; }
+.af-core .af-wbp-check { display: flex; align-items: center; min-height: 44px; gap: 8px; }
+.af-core .af-wbp-check input[type='checkbox'] { appearance: auto; -webkit-appearance: checkbox; width: 20px; height: 20px; flex: none; accent-color: var(--accent,#64e4d0); }
+.af-core .af-wbp-grid > section > a { display: inline-flex; align-items: center; min-height: 44px; }
+.af-core .af-wbp-share textarea { width: 100%; margin: 12px 0; }
+@media(max-width:700px){.af-core .af-wbp-buttons :is(button,a){flex:1 1 180px;min-width:0}.af-core .af-wbp-buttons a{justify-content:center}}
+.af-core .af-wbp-actions{list-style:none;padding:0;display:grid;gap:12px;counter-reset:weekly-action}
+.af-core .af-wbp-actions li{counter-increment:weekly-action;min-width:0;padding:16px;border:1px solid var(--line2,#344454);border-radius:14px;background:var(--surface2,#1c3341)}
+.af-core .af-wbp-actions li::before{content:counter(weekly-action,decimal-leading-zero);float:right;font-weight:700;color:var(--accent,#64e4d0)}
+.af-core .af-wbp-actions .af-wbp-action-tag{display:inline-block;color:var(--accent,#64e4d0);font-size:.8rem;font-weight:700;margin-bottom:8px}
+.af-core .af-wbp-actions p{margin:8px 0;font-size:.9rem}.af-core .af-wbp-actions button{margin-top:12px}
+.af-core .af-wbp-share-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,340px);gap:24px;align-items:start}
+.af-core .af-wbp-share-workspace>div{min-width:0}.af-core .af-wbp-card-preview{margin:12px 0;min-width:0}
+.af-core .af-wbp-card-preview canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;border:1px solid var(--line2,#344454);border-radius:14px;background:#0b1423}
+.af-core .af-wbp-card-preview figcaption{font-size:.875rem;line-height:1.5;margin-top:8px}
+@media(max-width:1000px){.af-core .af-wbp-share-workspace{grid-template-columns:minmax(0,1fr)}.af-core .af-wbp-card-preview{width:100%;max-width:380px;justify-self:center}}
+
+.af-wbp-calendar{margin-top:1.2rem;padding:1rem;border:1px solid var(--af-border,rgba(148,163,184,.25));border-radius:16px;min-width:0}.af-wbp-calendar label{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}.af-wbp-calendar select{max-width:100%;min-height:44px;background:#111c2f;color:#f8fafc;border:1px solid #536177;border-radius:8px;padding:.5rem}.af-wbp-calendar-events{list-style:none;padding:0;display:grid;gap:.7rem}.af-wbp-calendar-events li{display:grid;grid-template-columns:minmax(150px,.8fr) minmax(0,1.4fr) auto;gap:1rem;padding:.9rem;background:rgba(148,163,184,.06);border-radius:12px;align-items:center;overflow-wrap:anywhere}.af-wbp-calendar-events span,.af-wbp-calendar-events small{display:block}.af-wbp-calendar-events time{font-variant-numeric:tabular-nums}.af-wbp-calendar-events button{min-height:44px}.af-wbp-calendar details{margin:1rem 0}.af-wbp-calendar details li{overflow-wrap:anywhere}@media(max-width:1000px){.af-wbp-calendar-events li{grid-template-columns:1fr}.af-wbp-calendar-events button{justify-self:start}}
+
+/* Native WebKit controls must preserve contrast against the weekly dark panel. */
+.af-wbp-calendar{color-scheme:dark}.af-wbp-calendar select{-webkit-appearance:none;appearance:none;padding-right:2rem;background-image:linear-gradient(45deg,transparent 50%,#f8fafc 50%),linear-gradient(135deg,#f8fafc 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+
+.af-wbp-sports li { margin-block: 12px; overflow-wrap: anywhere; }
+.af-wbp-sports li a { display: inline-block; margin: 4px 12px 4px 0; min-height: 44px; padding-block: 10px; }
+
+/* X publisher: the post result sits on the same row as "Publish now on X". */
+.af-core .af-wbp-x-publish-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.af-core .af-wbp-x-publish-row .af-wbp-x-status { margin: 0; flex: 1 1 220px; font-weight: 600; }

@@ -24,6 +24,7 @@ import {
   type AdminPipelineFreshness,
 } from "@/lib/admin-dashboard/AdminPipelineFreshnessService"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
+import { HighlightAnalyticsPanel } from "@/components/admin/HighlightAnalyticsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
 import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
 import { AiProviderHealthPanel } from "@/components/admin/AiProviderHealthPanel"
@@ -314,6 +315,14 @@ function AdminOverviewDeck({
           >
             <span>Reported chat messages (review and remove)</span>
             <span className="text-rose-100/65">Open</span>
+          </a>
+          {/* Cyan: read-only. Real stories from trusted outlets, with copy-and-paste posts. */}
+          <a
+            href="/admin/social-newsroom"
+            className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/35"
+          >
+            <span>Social newsroom (copy-and-paste posts from real news)</span>
+            <span className="text-cyan-100/65">Open</span>
           </a>
           <a
             href="/api/admin/status"
@@ -1807,6 +1816,13 @@ export default async function AdminPage(
               <a className="af-cc-tab" href="#email-center">
                 Email
               </a>
+              {/*
+                A page, not a section anchor. Its only other link sits in the Fast Paths card,
+                below the verdict, freshness, growth and traffic panels: present, but nobody found it.
+              */}
+              <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
+                Social newsroom
+              </a>
             </nav>
             {/*
               `/core`, not `/dashboard`. The latter was retired on 2026-08-24 (`99e408317`);
@@ -1887,6 +1903,11 @@ export default async function AdminPage(
           <ProductionReadinessPanel data={data.productionReadiness} />
         </div>
         <TrafficGeoPanel data={data.productionReadiness} metrics={data.traffic} />
+        <div id="highlight-analytics">
+          <AccordionSection title="Highlight Engagement" eyebrow="availability & returns">
+            <HighlightAnalyticsPanel />
+          </AccordionSection>
+        </div>
         <div id="social-campaigns">
           <AccordionSection title="Social & Campaigns" eyebrow="attribution">
             <CampaignAttributionPanel />

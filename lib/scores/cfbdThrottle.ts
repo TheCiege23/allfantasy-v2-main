@@ -19,6 +19,10 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
  * 15 minutes, so finals and corrections still land promptly; otherwise at most every 6 hours, which
  * keeps kickoff-time changes current. Expected: ~12k fewer CFBD calls a month.
  *
+ * In December and January one permitted run asks CFBD TWICE — the regular slate and the postseason
+ * (bowls and the Playoff; `cfbPostseasonSeason` in gameScoreProviders.ts). This decision gates both;
+ * there is no second clock.
+ *
  * "Last fetch" is the later of the newest CFBD-sourced SportsGame row (survives a restart) and this
  * process's last ATTEMPT (so a failing or quota-walled CFBD is not retried every tick — a failed
  * call writes no rows, and a DB-only clock would re-fire it forever).

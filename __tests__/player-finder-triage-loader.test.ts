@@ -85,7 +85,7 @@ function wire(leagues: LeagueFixture[]) {
       .map((l) => ({ id: `r-${l.id}`, leagueId: l.id, platformUserId: `pu-${l.id}`, playerData: { starters: l.starters, players: l.starters, ...(l.playerData ?? {}) } })),
   )
   mockSportsPlayerFindMany.mockImplementation(async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
-    where.sleeperId.in.map((id) => ({ sleeperId: id, sport: 'NFL', externalId: `x-${id}`, name: `Player ${id}`, position: 'WR', team: 'NYG', imageUrl: null })),
+    where.sleeperId.in.map((id) => ({ sleeperId: id, sport: 'NFL', externalId: `x-${id}`, source: 'rolling_insights', name: `Player ${id}`, position: 'WR', team: 'NYG', imageUrl: null })),
   )
   // Every player reads Out, so every starter read is a row — the tests count leagues through them.
   mockInjuryFindMany.mockImplementation(async ({ where }: { where: { playerName: { in: string[] } } }) =>
@@ -114,6 +114,8 @@ describe('loadGameDayTriage — leagues with no lineup to fix (559c56580, kept t
     if (!out.available) throw new Error(out.reason)
     expect(out.data.leaguesRead).toBe(1)
     expect(out.data.rows.map((r) => r.player.sleeperId)).toEqual(['1003'])
+    // The row's card ref names the feed of the row it links (playerRef.ts).
+    expect(out.data.rows[0]!.player).toMatchObject({ externalId: 'x-1003', source: 'rolling_insights' })
   })
 
   it('skips a guillotine team already chopped', async () => {

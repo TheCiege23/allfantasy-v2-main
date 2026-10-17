@@ -23,7 +23,8 @@ const FILE = readFileSync(resolve(process.cwd(), 'lib/core-app/draftHq.ts'), 'ut
 
 describe('⚠ an id is only meaningful alongside its provider', () => {
   it('scopes the identity lookup to the league platform', () => {
-    expect(FILE).toContain('where: { provider: scoped, providerPlayerId: { in: playerIds } }')
+    expect(FILE).toContain('where: { provider: scoped, providerPlayerId: { in: playerIds },')
+    expect(FILE).toContain("sportKey: { equals: sport, mode: 'insensitive' as const }")
   })
 
   it('reads the platform from the league rather than assuming one', () => {

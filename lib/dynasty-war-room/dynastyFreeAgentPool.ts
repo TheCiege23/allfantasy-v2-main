@@ -7,7 +7,7 @@
  * context (long-term value), not redraft. NFL/NCAAF never mix. No fabrication.
  */
 import { prisma } from '@/lib/prisma'
-import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { buildPlayerKey, collapseStoredAdpRows } from '@/lib/adp/computeAllFantasyAdp'
 
 export interface DynastyFreeAgent {
   playerKey: string
@@ -40,13 +40,17 @@ export async function fetchDynastyValueByKey(sport: string, season: number): Pro
   const rows = await prisma.allFantasyAdpSnapshot
     .findMany({
       where: { sport: { in: sportVariants(sport) }, leagueType: 'dynasty', season: String(season) },
-      select: { playerKey: true, averageOverallPick: true },
+      select: { playerKey: true, averageOverallPick: true, sampleSize: true, contextHash: true, draftMode: true },
       orderBy: { averageOverallPick: 'asc' },
       take: 4000,
     })
     .catch(() => [])
+  // Best ADP across contexts, after collapsing stored spelling variants (see redraftFreeAgentPool).
   const map = new Map<string, number>()
-  for (const r of rows) if (r.playerKey && !map.has(r.playerKey)) map.set(r.playerKey, r.averageOverallPick)
+  for (const r of collapseStoredAdpRows(rows)) {
+    const prev = map.get(r.playerKey)
+    if (prev == null || r.averageOverallPick < prev) map.set(r.playerKey, r.averageOverallPick)
+  }
   return map
 }
 
@@ -57,14 +61,24 @@ export async function fetchDynastyFreeAgentPool(input: {
   scoringFormat?: string
   limit?: number
 }): Promise<DynastyFreeAgent[]> {
-  const rows = await prisma.allFantasyAdpSnapshot
+  const storedRows = await prisma.allFantasyAdpSnapshot
     .findMany({
       where: { sport: { in: sportVariants(input.sport) }, leagueType: 'dynasty', season: String(input.season) },
-      select: { playerKey: true, playerName: true, scoringFormat: true, averageOverallPick: true },
+      select: {
+        playerKey: true,
+        playerName: true,
+        scoringFormat: true,
+        averageOverallPick: true,
+        sampleSize: true,
+        contextHash: true,
+        draftMode: true,
+      },
       orderBy: { averageOverallPick: 'asc' },
       take: 4000,
     })
     .catch(() => [])
+  // Re-key stored rows so they meet `rosteredKeys` — see computeAllFantasyAdp.buildPlayerKey.
+  const rows = collapseStoredAdpRows(storedRows)
   if (rows.length === 0) return []
 
   const preferred = String(input.scoringFormat ?? '').trim().toLowerCase()

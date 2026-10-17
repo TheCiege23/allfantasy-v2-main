@@ -14,7 +14,7 @@
   "enableNotifications": true,
   "startUrl": "/core",
   "iconUrl": "https://allfantasy.ai/icons/icon-512.png",
-  "maskableIconUrl": "https://allfantasy.ai/icons/icon-512.png",
+  "maskableIconUrl": "https://allfantasy.ai/icons/icon-maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./android.keystore",
@@ -33,6 +33,12 @@
       "name": "Trade Analyzer",
       "shortName": "Trades",
       "url": "https://allfantasy.ai/trade-analyzer",
+      "chosenIconUrl": "https://allfantasy.ai/icons/icon-96.png"
+    },
+    {
+      "name": "Your career",
+      "shortName": "Career",
+      "url": "https://allfantasy.ai/core/career",
       "chosenIconUrl": "https://allfantasy.ai/icons/icon-96.png"
     }
   ],

@@ -19,7 +19,11 @@ export type TestNotificationTone = 'success' | 'info' | 'error'
 
 export type TestNotificationOutcome = {
   tone: TestNotificationTone
+  /** English sentence — the fallback, and what the tests read. */
   message: string
+  /** i18n key for `message`; render with `tInterpolate(messageKey, messageVars)`. */
+  messageKey: string
+  messageVars: Record<string, string>
 }
 
 /**
@@ -38,22 +42,39 @@ export function describeTestNotificationResult(args: {
     .map(([name]) => name)
   const blocked = [...(args.blockedReasons ?? [])]
 
+  /* Channel names and reasons are machine values; only the sentence around them is translated. */
+  const channelList = channels.join(', ')
+  const reasonList = blocked.join(', ')
+
   if (channels.length === 0) {
-    return {
-      tone: 'info',
-      message:
-        blocked.length > 0
-          ? `No test sent. Blocked by: ${blocked.join(', ')}.`
-          : 'No test sent. Check your current category and delivery settings.',
-    }
+    return blocked.length > 0
+      ? {
+          tone: 'info',
+          message: `No test sent. Blocked by: ${reasonList}.`,
+          messageKey: 'settings.notifications.testBlocked',
+          messageVars: { reasons: reasonList },
+        }
+      : {
+          tone: 'info',
+          message: 'No test sent. Check your current category and delivery settings.',
+          messageKey: 'settings.notifications.testNoneSent',
+          messageVars: {},
+        }
   }
 
   if (blocked.length === 0) {
-    return { tone: 'success', message: `Test sent via ${channels.join(', ')}.` }
+    return {
+      tone: 'success',
+      message: `Test sent via ${channelList}.`,
+      messageKey: 'settings.notifications.testSentVia',
+      messageVars: { channels: channelList },
+    }
   }
 
   return {
     tone: 'info',
-    message: `Test sent via ${channels.join(', ')}. Not sent on: ${blocked.join(', ')}.`,
+    message: `Test sent via ${channelList}. Not sent on: ${reasonList}.`,
+    messageKey: 'settings.notifications.testSentPartial',
+    messageVars: { channels: channelList, reasons: reasonList },
   }
 }

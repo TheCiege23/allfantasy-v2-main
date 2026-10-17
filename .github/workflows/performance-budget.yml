@@ -1,12 +1,19 @@
 name: Landing Performance Budget
 
+# ⚠ NO LONGER RUNS ON PULL REQUESTS, as of 2026-10-01. The PR job was a looser "warning
+# profile" with `continue-on-error`, not a required check, so it could never block a merge —
+# yet each run was a full `next build` plus a browser, ~9 runner-minutes per PR, while
+# required lanes queued up to 64 minutes for a runner. The strict profile below, with
+# TIGHTER budgets, is the signal; run it by hand (workflow_dispatch) on a branch you suspect.
 on:
-  pull_request:
-    # No `branches:` filter on purpose. Filtering PR runs to base
-    # main/master silently skipped every stacked PR (a PR based on
-    # another branch), so those merged with no real check coverage.
-  push:
-    branches: [main, master]
+  # The strict profile runs nightly against main, NOT on every push. Measured 2026-10-01: 37
+  # push runs, each a full `next build` plus a browser, 415 runner-minutes, gating nothing
+  # (it is not a required check) while PR jobs waited up to 64 minutes for a runner. A
+  # nightly run still dates a strict-budget regression to one day's merges.
+  schedule:
+    - cron: '23 7 * * *'
+  # So a suspected regression can be checked against main without waiting for the night.
+  workflow_dispatch:
 
 # Cancel this PR's previous run when the branch is updated; never touch a run on main.
 #
@@ -31,7 +38,7 @@ permissions:
 jobs:
   landing-performance-budget-strict:
     name: Landing Perf Budget (strict)
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -78,6 +85,12 @@ jobs:
       - name: Build app
         run: npm run build
 
+      # The same gate Railway builds now pass before they may ship or publish a webpack cache
+      # (scripts/next-build.cjs). Here it runs on a plain Linux build, so a Next upgrade that
+      # changes the manifest shape the gate reads fails THIS job first, not a production deploy.
+      - name: Root layout ships its stylesheet
+        run: node scripts/lib/layout-css-gate.cjs
+
       - name: Start app
         run: |
           nohup npm run start -- -p 3000 > /tmp/next-start.log 2>&1 &
@@ -103,89 +116,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: landing-perf-next-start-log-strict
-          path: /tmp/next-start.log
-          retention-days: 7
-
-  landing-performance-budget-warning:
-    name: Landing Perf Budget (warning profile)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: allfantasy_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d allfantasy_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      NEXTAUTH_SECRET: ci-nextauth-secret
-      NEXTAUTH_URL: http://127.0.0.1:3000
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-      # Dummy key so `next build` can statically evaluate legacy routes that construct OpenAI clients.
-      OPENAI_API_KEY: not-a-real-openai-key-ci-placeholder
-      PERF_BASE_URL: http://127.0.0.1:3000
-      PERF_BUDGET_LCP_MS: "3500"
-      PERF_BUDGET_CLS: "0.15"
-      PERF_BUDGET_INP_MS: "350"
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Prepare DB schema
-        run: npx prisma db push --skip-generate
-
-      - name: Build app
-        run: npm run build
-
-      - name: Start app
-        run: |
-          nohup npm run start -- -p 3000 > /tmp/next-start.log 2>&1 &
-
-      - name: Wait for app
-        run: |
-          for i in {1..60}; do
-            if curl -fsS "http://127.0.0.1:3000" > /dev/null; then
-              echo "App is up"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "App did not start in time"
-          cat /tmp/next-start.log || true
-          exit 1
-
-      - name: Run landing performance budget warning check
-        id: perf_budget_warning
-        continue-on-error: true
-        run: npm run perf:landing-budget
-
-      - name: Report warning budget breach
-        if: steps.perf_budget_warning.outcome == 'failure'
-        run: echo "::warning::Landing performance exceeded warning profile budgets (LCP/CLS/INP)."
-
-      - name: Upload app startup log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: landing-perf-next-start-log-warning
           path: /tmp/next-start.log
           retention-days: 7

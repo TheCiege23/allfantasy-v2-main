@@ -47,3 +47,31 @@ describe("notification preference resolver", () => {
     expect(fingerprintChanged).not.toBe(fingerprintA)
   })
 })
+
+describe("fingerprint covers quiet hours and league overrides (2026-10-02)", () => {
+  const base = getDefaultNotificationPreferences()
+  const fp = getNotificationPreferencesFingerprint
+
+  it("changes when quiet hours are switched on or moved", () => {
+    const on = { ...base, quietHours: { enabled: true, startHour: 22, endHour: 7 } }
+    expect(fp(on)).not.toBe(fp(base))
+    expect(fp({ ...on, quietHours: { enabled: true, startHour: 23, endHour: 7 } })).not.toBe(fp(on))
+  })
+
+  it("treats a switched-off window as no window", () => {
+    expect(fp({ ...base, quietHours: { enabled: false, startHour: 22, endHour: 7 } })).toBe(fp(base))
+  })
+
+  it("changes when a league is muted, and not for a no-opinion override", () => {
+    const muted = { ...base, leagues: { L1: { enabled: false } } }
+    expect(fp(muted)).not.toBe(fp(base))
+    expect(fp({ ...base, leagues: { L1: {} } })).toBe(fp(base))
+    expect(fp({ ...base, leagues: { L1: { mutedCategories: ["trade_proposals" as const] } } })).not.toBe(fp(base))
+  })
+
+  it("does not depend on league order", () => {
+    const a = { ...base, leagues: { L1: { enabled: false }, L2: { enabled: false } } }
+    const b = { ...base, leagues: { L2: { enabled: false }, L1: { enabled: false } } }
+    expect(fp(a)).toBe(fp(b))
+  })
+})

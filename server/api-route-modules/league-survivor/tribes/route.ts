@@ -1,3 +1,4 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 /**
  * POST: Create Survivor tribes (commissioner only). PROMPT 349 QA.
  * Body: { formation: 'random'|'commissioner', rosterToTribeIndex?: Record<string, number>, tribeNames?: string[], seed?: number }
@@ -33,6 +34,9 @@ export async function POST(
 
   const isSurvivor = await isSurvivorLeague(leagueId)
   if (!isSurvivor) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
+
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  if (league && isNativePlatform(league.platform)) return NextResponse.json({ error: 'Native tribes are assigned by the system from the saved tribe setup after the draft.' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
   const formation = body.formation === 'commissioner' ? 'commissioner' : 'random'

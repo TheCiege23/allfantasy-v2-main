@@ -17,6 +17,7 @@
 import { keeperSettingsConfirmedFrom } from '@/lib/league-contract/keeperProvenance'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
+import { IMPOSSIBLE_PICK_MARKER } from './formatNoteBlocking'
 
 export type LeagueConcept =
   | 'redraft'
@@ -618,7 +619,7 @@ export function impossiblePickWarning(args: {
   if (args.rules.futurePicksTradeable === false) {
     return `This is a redraft league and there are ${args.pickCount} future pick${
       args.pickCount === 1 ? '' : 's'
-    } in this deal. Redraft leagues have no future picks — the verdict below is doing arithmetic on an asset that does not exist here.`
+    } in this deal. Redraft leagues have no future picks — the verdict below is doing arithmetic on ${IMPOSSIBLE_PICK_MARKER}.`
   }
   if (args.rules.futurePicksTradeable === null && args.rules.concept === 'keeper') {
     return `There ${args.pickCount === 1 ? 'is' : 'are'} ${args.pickCount} future pick${

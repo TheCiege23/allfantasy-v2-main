@@ -94,7 +94,18 @@ export type FranchiseSide = {
    * our data.
    */
   activity:
-    | { available: true; trades: number; waivers: number; rosterMoves: number; newest: Date | null }
+    | {
+        available: true
+        /** Events, one per trade however many rows hold it — and only from the newest rows read. */
+        trades: number
+        waivers: number
+        rosterMoves: number
+        newest: Date | null
+        /** The read stopped at its row limit: older moves exist and are NOT in the counts. */
+        capped: boolean
+        /** The earliest move the counts reach back to. */
+        since: Date | null
+      }
     | { available: false; reason: string }
     | null
   sync: {
@@ -463,6 +474,8 @@ export async function resolvePairedHalf(
                     waivers: a.counts.waiver,
                     rosterMoves: a.counts.rosterMove,
                     newest: a.newest,
+                    capped: a.countWindow.capped,
+                    since: a.countWindow.oldest,
                   })
                 : ({ available: false as const, reason: 'no transactions are on file for this league' }),
             )

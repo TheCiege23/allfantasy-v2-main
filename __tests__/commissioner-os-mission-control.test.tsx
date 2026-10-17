@@ -187,6 +187,7 @@ describe("commissioner-os — Mission Control", () => {
         notificationsSummary={notificationsSummary.data!}
         activityTrend={activityTrend.data}
         dataMode="stub"
+        canInviteCoCommissioner
       />
     )
 
@@ -198,6 +199,31 @@ describe("commissioner-os — Mission Control", () => {
     expect(screen.getByRole('button', { name: /Send League Digest/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Review Pending Trades/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Invite Co-Commissioner/ })).toBeInTheDocument()
+  })
+
+  // Only a league's owner can add a co-commissioner, and Commissioner OS also admits co-commissioners.
+  it("hides Invite Co-Commissioner from a viewer who does not own the league", async () => {
+    const { health, recs, highlights, kpis, activity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, activityTrend } = await loadMissionControlData()
+
+    render(
+      <MissionControlView
+        leagueHealth={health.data!}
+        recommendations={recs.data!}
+        managerHighlights={highlights.data!}
+        kpis={kpis.data!}
+        recentActivity={activity.data!}
+        automationSummary={automationSummary.data!}
+        analyticsSummary={analyticsSummary.data!}
+        reportsSummary={reportsSummary.data!}
+        notificationsSummary={notificationsSummary.data!}
+        activityTrend={activityTrend.data}
+        dataMode="stub"
+        canInviteCoCommissioner={false}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /Send League Digest/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Invite Co-Commissioner/ })).not.toBeInTheDocument()
   })
 })
 

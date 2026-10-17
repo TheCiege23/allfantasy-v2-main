@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survivor empty, loading and error states</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./exile/exile.css">
+<link rel="stylesheet" href="./kit/kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Cinzel:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080d}
+.ss-g{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.ss-c{display:flex;flex-direction:column;border-radius:12px;background:#0b0d14;border:1px solid rgba(255,255,255,.07);overflow:hidden}
+.ss-c>header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.ss-c>header b{flex:1;font:600 12px 'Archivo';color:#a3a9c2}
+</style>
+</helmet>
+<div class="ex" style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid rgba(255,255,255,.06)">
+    <div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px">
+      <h1 class="ex-h1">Empty, loading and error states</h1>
+      <span class="ex-t2">What Survivor screens show when there's nothing yet, while data loads, or when something fails</span>
+    </div>
+  </header>
+  <div class="ss-g" style="padding: 24px 28px 32px">
+    <div class="ss-c"><header><span class="k-pill">Empty</span><b>Idol vault before the draft</b></header>
+      <div class="k-empty"><img src="survivor/idols/decoy-icon.svg" alt=""><b>No idols yet</b><span>Idols are hidden on players before the draft. If you draft one, AF Host will DM you when the last pick is in.</span></div></div>
+    <div class="ss-c"><header><span class="k-pill">Empty</span><b>Idol vault after the draft</b></header>
+      <div class="k-empty"><img src="survivor/idols/spyglass-icon.svg" alt=""><b>You didn't find an idol</b><span>Nobody but the holders knows where they are. Watch the scroll for idols being played.</span></div></div>
+    <div class="ss-c"><header><span class="k-pill">Empty</span><b>Exile Island before anyone's out</b></header>
+      <div class="k-empty"><img src="exile/token-empty.svg" alt=""><b>Exile Island is empty</b><span>The first manager voted out lands here and starts earning tokens.</span></div></div>
+
+    <div class="ss-c"><header><span class="k-pill" style="color: #7fd3de; border-color: rgba(127,211,222,.4)">Loading</span><b>League home</b></header>
+      <div style="padding: 18px; display: flex; flex-direction: column; gap: 12px; min-height: 220px">
+        <div class="k-skel" style="height: 22px; width: 55%"></div><div class="k-skel" style="height: 14px; width: 80%"></div>
+        <div class="k-row"><div class="k-skel" style="width: 36px; height: 36px; border-radius: 99px"></div><div class="k-skel k-sp" style="height: 14px"></div><div class="k-skel" style="width: 22px; height: 22px"></div></div>
+        <div class="k-row"><div class="k-skel" style="width: 36px; height: 36px; border-radius: 99px"></div><div class="k-skel k-sp" style="height: 14px"></div><div class="k-skel" style="width: 22px; height: 22px"></div></div>
+        <div class="k-row"><div class="k-skel" style="width: 36px; height: 36px; border-radius: 99px"></div><div class="k-skel k-sp" style="height: 14px"></div><div class="k-skel" style="width: 22px; height: 22px"></div></div>
+      </div></div>
+    <div class="ss-c"><header><span class="k-pill" style="color: #7fd3de; border-color: rgba(127,211,222,.4)">Loading</span><b>Scroll waiting to unroll</b></header>
+      <div class="k-empty"><img src="exile/scroll-sealed.svg" alt="" style="width: 150px; height: auto"><b>Counting the votes…</b><span>The scroll opens once every vote is in and idols are resolved.</span></div></div>
+    <div class="ss-c"><header><span class="k-pill" style="color: #ff8a6a; border-color: rgba(255,138,106,.4)">Error</span><b>Scroll failed to load</b></header>
+      <div class="k-empty"><img src="exile/wax-seal-broken.svg" alt=""><b>We couldn't open the scroll</b><span>Your connection dropped. The results are safe and nothing was revealed.</span><button class="ex-btn ex-btn-gold">Try again</button></div></div>
+
+    <div class="ss-c"><header><span class="k-pill">Closed</span><b>Voting closed</b></header>
+      <div class="k-empty"><img src="weekly/urn.svg" alt=""><b>Votes are closed</b><span>Tribal Council results are being read. You'll get a notification when the scroll opens.</span></div></div>
+    <div class="ss-c"><header><span class="k-pill" style="color: #ff9a3c; border-color: rgba(255,154,60,.4)">Missed</span><b>You didn't vote</b></header>
+      <div class="k-empty"><img src="weekly/torch-lit-icon.svg" alt=""><b>Your vote wasn't cast</b><span>Votes closed at 8:00 PM before you voted, so your vote didn't count this week. Turn on reminders so it doesn't happen again.</span><button class="ex-btn">Notification settings</button></div></div>
+    <div class="ss-c"><header><span class="k-pill">Spectator</span><b>Voted out, Exile off</b></header>
+      <div class="k-empty"><img src="weekly/torch-out.svg" alt="" style="height: 96px; width: auto"><b>You're watching from the sidelines</b><span>Your torch is out. You can still read chat, follow the scroll and see the finale.</span></div></div>
+
+    <div class="ss-c"><header><span class="k-pill">Paused</span><b>Commissioner paused the league</b></header>
+      <div class="k-empty"><img src="late/exile-boss-icon.svg" alt="" style="filter: grayscale(1)"><b>The league is paused</b><span>The commissioner paused Survivor events. Lineups and scoring still run. Deadlines move when it resumes.</span></div></div>
+    <div class="ss-c"><header><span class="k-pill">Locked</span><b>Settings after the draft</b></header>
+      <div class="k-empty"><img src="exile/wax-seal.svg" alt=""><b>This setting is locked</b><span>Tribe count and idols lock when the draft starts so nobody can change the game mid-season.</span></div></div>
+    <div class="ss-c"><header><span class="k-pill" style="color: #ff8a6a; border-color: rgba(255,138,106,.4)">Error</span><b>Moment page turned off</b></header>
+      <div class="k-empty"><img src="late/champion-icon.svg" alt="" style="filter: grayscale(1) brightness(.7)"><b>This league is private</b><span>The commissioner turned off public moment pages. Sign in if you're in this league.</span><button class="ex-btn ex-btn-gold">Sign in</button></div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1250}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

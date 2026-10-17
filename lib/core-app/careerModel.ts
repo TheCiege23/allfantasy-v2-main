@@ -260,6 +260,12 @@ export type CareerLeague = {
   seasonCount: number
   championships: number
   lifecycle: LeagueLifecycle
+  /**
+   * Your record in this league across its FINISHED seasons — the career-totals rule (`counted`), so
+   * a season still being played never moves it. Null when no finished season recorded a game.
+   * Optional so leagues built before it existed still type.
+   */
+  record?: { wins: number; losses: number; ties: number } | null
 }
 
 /** A league still being played — the design's "open slot", never career totals. */
@@ -943,6 +949,23 @@ export function buildCareerData(source: CareerSource, filter: CareerFilter = NO_
         isChampion: r.isChampion,
       })),
   )
+  /*
+   * Each league's record over its counted (finished) seasons — the same rows, by the same rule, as
+   * the career totals; keyed on `leagueKey`, the identity `rollUpLeagues` groups by.
+   */
+  const recordByKey = new Map<string, { wins: number; losses: number; ties: number }>()
+  for (const r of rows) {
+    if (!r.counted) continue
+    const acc = recordByKey.get(r.leagueKey) ?? { wins: 0, losses: 0, ties: 0 }
+    acc.wins += r.wins
+    acc.losses += r.losses
+    acc.ties += r.ties
+    recordByKey.set(r.leagueKey, acc)
+  }
+  for (const l of leagues) {
+    const rec = recordByKey.get(l.key)
+    l.record = rec && rec.wins + rec.losses + rec.ties > 0 ? rec : null
+  }
   const leagueCounts = leagues.reduce(
     (acc, l) => {
       acc[l.lifecycle] += 1

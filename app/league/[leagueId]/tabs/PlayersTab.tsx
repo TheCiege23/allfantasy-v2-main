@@ -23,6 +23,8 @@ import { StartVsComparisonLauncher } from '@/components/app/player-comparison/St
 import WaiverWirePage from '@/components/waiver-wire/WaiverWirePage'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { displayPlayerFromUnifiedRow, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
+// Roster codes ("ACT"/"INACT") are not injuries — this used to dot every healthy RI-mapped player.
+import { injuryNeedsAttention } from '@/lib/injuries/injuryStatusDisplay'
 
 type RiBatchEntry = {
   season: string | null
@@ -71,12 +73,6 @@ function readWatchlist(leagueId: string): Set<string> {
 function badgePosition(p: SlimPlayer): string {
   if (p.position === 'DST') return 'DEF'
   return p.position
-}
-
-function injuryNeedsAttention(status: string | null | undefined): boolean {
-  if (status == null || !String(status).trim()) return false
-  const u = status.trim().toLowerCase()
-  return u !== 'active' && u !== 'healthy'
 }
 
 function matchesPosition(sportU: string, p: SlimPlayer, pos: PosFilter): boolean {

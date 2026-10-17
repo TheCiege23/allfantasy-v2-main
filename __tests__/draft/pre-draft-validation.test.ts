@@ -163,6 +163,20 @@ describe('Pre-Draft Validation', () => {
       expect(roster?.status).toBe('fail')
     })
 
+    it('blocks an NBA Survivor draft whose rounds cannot fill the saved roster', async () => {
+      setHappyPathMocks()
+      ;(prisma.league.findUnique as any).mockResolvedValue({
+        id: leagueId, sport: 'NBA', leagueVariant: 'survivor', scoring: 'points',
+      })
+      ;(prisma.draftSession.findUnique as any).mockResolvedValue({
+        id: draftId, slotOrder: [{ rosterId: 'r1' }, { rosterId: 'r2' }],
+        status: 'pre_draft', draftType: 'snake', rounds: 12,
+      })
+      const report = await DraftValidationOrchestrator.validateDraft(leagueId, draftId)
+      expect(report.canStartDraft).toBe(false)
+      expect(report.results.find((result) => result.key === 'roster_slots')).toMatchObject({ status: 'fail' })
+    })
+
     it('reports duplicate users in rosters', async () => {
       setHappyPathMocks()
       ;(prisma.roster.findMany as any).mockResolvedValue([

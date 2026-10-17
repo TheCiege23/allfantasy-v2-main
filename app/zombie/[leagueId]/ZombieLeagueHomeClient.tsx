@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
+import { zombieThemeForLeague } from '@/lib/zombie/zombieHomeSummary'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -339,6 +340,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
             />
           }
           quickActions={quickActions}
+          sceneThemeId={zombieThemeForLeague(data?.league?.backgroundTheme, leagueId)}
         />
 
         <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">

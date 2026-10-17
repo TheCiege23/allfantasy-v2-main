@@ -157,7 +157,8 @@ test.describe('@db Best Ball War Room runtime', () => {
     expect(((await waiversRes.json()) as { waivers: { enabled: boolean } }).waivers.enabled).toBe(false)
     const tradeRes = await page.request.post(`/api/leagues/${seed.leagueId}/best-ball-war-room/trade-analyze`, { data: { incomingPlayerIds: [], outgoingPlayerIds: [] } })
     expect(tradeRes.status()).toBe(200)
-    expect(((await tradeRes.json()) as { tradeAnalysis: { verdict: string } }).tradeAnalysis.verdict).toBe('disabled')
+    expect(((await tradeRes.json()) as { tradeGrade: { graded: boolean; reason: string } }).tradeGrade)
+      .toEqual({ graded: false, reason: 'Trades are disabled in this league.' })
 
     // There is NO start/sit / lineup action — it 404s.
     const noLineup = await page.request.post(`/api/leagues/${seed.leagueId}/best-ball-war-room/lineup`, { data: {} })

@@ -8,6 +8,7 @@ import {
   teamNameToAbbrev,
 } from '@/lib/api-sports'
 import { toApiChainSport, type ApiFetchParams, type ApiProvider } from '@/lib/workers/api-config'
+import { pickHeadshotCandidate } from '@/lib/player-assets/headshotCandidateMatch'
 
 function toSeason(value: unknown): string {
   if (typeof value === 'string' && value.trim()) return value.trim()
@@ -18,14 +19,14 @@ function toSearch(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function namesEqual(left: string | null | undefined, right: string | null | undefined): boolean {
-  return (left ?? '').trim().toLowerCase() === (right ?? '').trim().toLowerCase()
+function isFootballSport(sport: unknown): boolean {
+  return ['nfl', 'ncaaf'].includes(toApiChainSport(String(sport ?? '')) ?? '')
 }
 
 export const apiSportsProvider: ApiProvider = {
   name: 'api_sports',
   supports: ({ sport, dataType }: ApiFetchParams) =>
-    ['nfl', 'ncaaf'].includes(toApiChainSport(sport as string) ?? '') &&
+    isFootballSport(sport) &&
     [
       'teams',
       'players',
@@ -110,12 +111,18 @@ export const apiSportsProvider: ApiProvider = {
       }
       case 'player_headshots': {
         if (!search) return null
+        // This client only knows American football. `chainSport` above falls back to 'nfl' for
+        // any other sport, so without this an NBA name search ran against the NFL player list
+        // and its photo was stored as the NBA player's headshot.
+        if (!isFootballSport(sport)) return null
         const players = await fetchAPISportsPlayerBySearch(search, season, { sport: sportTag })
-        const matched = players.find((player) => {
-          const sameName = namesEqual(player.name, search)
-          const sameTeam = !teamCode || teamNameToAbbrev(player.team?.name ?? null) === teamCode
-          return sameName && sameTeam
-        }) ?? players[0]
+        // No `?? players[0]`: see lib/player-assets/headshotCandidateMatch.ts.
+        const matched = pickHeadshotCandidate(players, {
+          search,
+          nameOf: (player) => player.name,
+          teamCodeOf: (player) => teamNameToAbbrev(player.team?.name ?? null),
+          teamCode,
+        })
         if (!matched?.image) return null
         return {
           playerId: String(matched.id),

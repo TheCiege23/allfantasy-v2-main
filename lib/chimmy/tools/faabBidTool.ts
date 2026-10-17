@@ -120,7 +120,8 @@ export async function computeFaabBidPlan(leagueId: string, userId: string): Prom
   const refuse = (line: string): FaabBidPlan => ({ status: 'refused', line })
   const league = await leagueContextFor(leagueId, userId).league().catch(() => null)
   if (!league) return refuse('FAAB BID PLAN: the league in scope could not be read. Do not estimate bids.')
-  if (isForeignIdSpace(league.platform)) {
+  // A native league of another sport holds Rolling Insights ids, and these values are NFL Sleeper ids.
+  if (isForeignIdSpace(league.platform, league.sport)) {
     return refuse('FAAB BID PLAN: this platform\'s player ids are not readable here, so available players cannot be priced. Say so; do not estimate bids.')
   }
 

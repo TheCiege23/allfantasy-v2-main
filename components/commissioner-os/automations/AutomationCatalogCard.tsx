@@ -8,6 +8,15 @@ import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/
 import { AUTOMATION_STATUS_LABELS, AUTOMATION_CATEGORY_LABELS } from './automationLabels'
 import type { AutomationCatalogEntry } from '@/lib/commissioner-ui/automations/decision-os-client'
 import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  automationText,
+  lastRanText,
+  relatedLinkText,
+  toggleAriaText,
+  toolsText,
+} from '@/lib/commissioner-os/i18n/toolsCopy'
+import { severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface AutomationCatalogCardProps {
   automation: AutomationCatalogEntry
@@ -33,15 +42,17 @@ export interface AutomationCatalogCardProps {
 export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHistory }: AutomationCatalogCardProps) {
   const style = getSeverityStyle(automation.health)
   const titleId = useId()
+  const { language } = useOptionalLanguage()
+  const name = automationText(automation.name, language)
 
   return (
     <Card role="group" aria-labelledby={titleId} style={{ borderColor: style.border }}>
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <CardTitle id={titleId}>{automation.name}</CardTitle>
+            <CardTitle id={titleId}>{name}</CardTitle>
             <p className="mt-1 text-xs" style={{ color: 'var(--muted2)' }}>
-              {AUTOMATION_CATEGORY_LABELS[automation.category]}
+              {toolsText(AUTOMATION_CATEGORY_LABELS[automation.category], language)}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -49,23 +60,22 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
               className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
               style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
             >
-              {AUTOMATION_STATUS_LABELS[enabled ? 'enabled' : 'disabled']}
+              {toolsText(AUTOMATION_STATUS_LABELS[enabled ? 'enabled' : 'disabled'], language)}
             </span>
-            <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>{SEVERITY_LABELS[automation.health]}</Badge>
+            <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>{severityLabelText(automation.health, SEVERITY_LABELS[automation.health], language)}</Badge>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-sm" style={{ color: 'var(--muted)' }}>
-          {automation.description}
+          {automationText(automation.description, language)}
         </p>
         <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-          {automation.schedule.description}
+          {automationText(automation.schedule.description, language)}
         </p>
         {automation.lastRunAt && (
           <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-            Last ran {shortDate(automation.lastRunAt)} · {automation.successRatePercent}%
-            success over {automation.totalRunsCount} runs
+            {lastRanText(shortDate(automation.lastRunAt), automation.successRatePercent, automation.totalRunsCount, language)}
           </p>
         )}
         {automation.relatedLinks.length > 0 && (
@@ -73,7 +83,7 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
             {automation.relatedLinks.map((link) => (
               <li key={link.href + link.label}>
                 <Link href={link.href} className="focus-ring link-themed text-xs">
-                  {link.label}
+                  {relatedLinkText(link.label, language)}
                 </Link>
               </li>
             ))}
@@ -81,9 +91,9 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
         )}
       </CardContent>
       <CardFooter className="items-center justify-between gap-2">
-        <Switch checked={enabled} onCheckedChange={onToggle} aria-label={`${enabled ? 'Disable' : 'Enable'} ${automation.name}`} />
+        <Switch checked={enabled} onCheckedChange={onToggle} aria-label={toggleAriaText(enabled, name, language)} />
         <Button size="sm" variant="outline" onClick={onViewHistory}>
-          View History
+          {toolsText('View History', language)}
         </Button>
       </CardFooter>
     </Card>

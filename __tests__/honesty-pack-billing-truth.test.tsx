@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { render, renderHook, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useTokenBalance } from '@/hooks/useTokenBalance'
+import { __resetTokenBalanceStoreForTests, useTokenBalance } from '@/hooks/useTokenBalance'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { getMonetizationCatalogItemBySku } from '@/lib/monetization/catalog'
 import { SUBSCRIPTION_TOKEN_POLICY_CONFIG } from '@/lib/tokens/subscription-policy'
@@ -45,6 +45,12 @@ vi.mock('sonner', () => ({
 describe('Billing Truth — useTokenBalance never fabricates a zero balance on failure', () => {
   beforeEach(() => {
     fetchMock.mockReset()
+    /*
+     * The hook is ONE shared module-level store since 2cedde325, and it deliberately skips a refetch
+     * that follows a fresh one. Without a reset, the second test read the FIRST test's failed
+     * snapshot (balance null) and never fetched — failing for a reason unrelated to its claim.
+     */
+    __resetTokenBalanceStoreForTests()
   })
 
   it('returns balance: null (not 0) when the balance fetch fails', async () => {
@@ -79,21 +85,30 @@ describe('Billing Truth — useTokenBalance never fabricates a zero balance on f
 })
 
 describe('Billing Truth — AF Supreme token grant consistency', () => {
-  it('the catalog display value matches the real grant policy (regression guard for the 1500 vs 1000 drift)', () => {
+  /*
+   * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS (catalog.ts: `tokenAmount: null`, "this plan does not deal
+   * in tokens"; subscription-policy.ts grants 0). These two tests used to compare catalog and policy
+   * NUMBERS, which went red the day both moved to "none" — null !== 0. The claim they guard is
+   * unchanged: the catalog, the policy and the marketing copy must agree about what a subscriber is
+   * granted. Today that answer is "no tokens", so that is what is pinned.
+   */
+  it('the catalog and the grant policy agree that AF Supreme grants no tokens', () => {
     const monthly = getMonetizationCatalogItemBySku('af_supreme_monthly')
     const yearly = getMonetizationCatalogItemBySku('af_supreme_yearly')
     const policy = SUBSCRIPTION_TOKEN_POLICY_CONFIG.plans.supreme
 
-    expect(monthly?.tokenAmount).toBe(policy.monthlyIncludedPremiumCredits)
-    expect(yearly?.tokenAmount).toBe(policy.yearlyIncludedPremiumCredits)
+    expect(monthly?.tokenAmount ?? 0).toBe(policy.monthlyIncludedPremiumCredits)
+    expect(yearly?.tokenAmount ?? 0).toBe(policy.yearlyIncludedPremiumCredits)
+    expect(policy.monthlyIncludedPremiumCredits).toBe(0)
+    expect(policy.yearlyIncludedPremiumCredits).toBe(0)
   })
 
-  it('the spotlight marketing copy does not hardcode a different number than the catalog', () => {
-    const monthly = getMonetizationCatalogItemBySku('af_supreme_monthly')
-    const yearly = getMonetizationCatalogItemBySku('af_supreme_yearly')
+  it('the spotlight marketing copy promises no token grant the policy does not make', () => {
     const copy = read('components/monetization/AFSupremeBundleSpotlight.tsx')
-    expect(copy).toContain(`Includes ${monthly?.tokenAmount?.toLocaleString()} tokens monthly`)
-    expect(copy).toContain(`${yearly?.tokenAmount?.toLocaleString()} yearly`)
+    // The bug this caught (2026-10-03): the copy still said "Includes 1,000 tokens monthly or
+    // 15,000 yearly" after subscriptions stopped granting any.
+    // Any figure followed by "tokens" is a grant claim; the plan makes none.
+    expect(copy).not.toMatch(/\d[\d,]*\s+tokens/i)
   })
 })
 
