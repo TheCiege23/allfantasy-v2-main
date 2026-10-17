@@ -3530,3 +3530,68 @@ html[data-mode='light'] .af-core {
     border-radius: 8px;
   }
 }
+
+/*
+ * ── Phone league tray: one header row and a close control at the top (2026-10-08) ──────────────────
+ *
+ * Measured on an iPhone screenshot the same day: the crest, the divider and the count row stacked
+ * three high, so the first league started ~150px down the tray, and the only way out was the floating
+ * "Close" pill at the bottom-left, over the list. Now the crest and the count share one row, the
+ * divider goes (it separated a column of crests on desktop and separates nothing here), and the
+ * count row's glyph becomes a ✕ on the right edge (AfCoreShell renders the glyph and its label).
+ *
+ * ⚠ A GRID, NOT A WRAPPER ELEMENT. The rail's five children are the same on every layout; placing them
+ * on phone-only grid areas changes nothing above 720px, where a wrapper would have needed its own
+ * `display: contents` story for desktop.
+ *
+ * ⚠ `minmax(0, max-content)` FOR THE LIST, NOT `1fr`. With `1fr` the list always fills, so three leagues
+ * sit at the top and the Create / Import / Profile foot is pinned at the bottom with a void between.
+ * `max-content` lets a short list end where its leagues end and the foot follow it, while the 0 minimum
+ * still caps a long list at the space left and makes it scroll inside the tray.
+ *
+ * Its own top-level @media, appended, per this file's convention.
+ */
+@media (max-width: 720px) {
+  .af-core.af-shell .af-rail {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, max-content) auto;
+    align-content: start;
+    column-gap: 8px;
+    row-gap: 12px;
+  }
+  .af-core.af-shell .af-rail-logo {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+  .af-core.af-shell .af-rail-divider {
+    display: none;
+  }
+  .af-core.af-shell .af-rail-toggle {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+  .af-core.af-shell .af-rail-scroll {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 0;
+  }
+  .af-core.af-shell .af-rail-foot {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .af-core.af-shell[data-rail-open='true'] .af-rail-toggle-icon {
+    order: 2;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin-left: auto;
+    border-radius: 12px;
+    background: var(--chip);
+    color: var(--text);
+    font-size: 16px;
+  }
+}
