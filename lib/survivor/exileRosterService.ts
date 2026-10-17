@@ -136,7 +136,7 @@ export async function finalizeExileRosterResults(leagueId: string, week: number)
         if (!Number.isFinite(points)) return false
         score += points
       }
-      results.push({ id: entry.id, userId: entry.userId, score })
+      results.push({ id: entry.id, userId: entry.userId, score: Math.round(score * 100) / 100 })
     }
     if (!results.length) return false
     for (const result of results) await db.exileWeeklyEntry.update({ where: { id: result.id }, data: { weeklyScore: result.score } })
