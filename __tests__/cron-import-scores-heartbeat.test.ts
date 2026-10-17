@@ -371,7 +371,10 @@ describe('import-scores CFBD postseason wiring', () => {
   beforeEach(async () => {
     const { __resetCfbdThrottleForTests } = await import('@/lib/scores/cfbdThrottle')
     __resetCfbdThrottleForTests()
-    prismaMock.sportsGame.findFirst.mockResolvedValue({ fetchedAt: new Date(Date.now() - 3_600_000), id: 'g' })
+    // An hour before the clock AT CALL TIME, so it stays outside the 90s gate under the fake dates
+    // below. Stamped from the real clock in beforeEach, it read as "just synced" once the real time
+    // passed 19:00Z on 2026-10-17 — and gated NCAAF out of every test that fakes that date.
+    prismaMock.sportsGame.findFirst.mockImplementation(async () => ({ fetchedAt: new Date(Date.now() - 3_600_000), id: 'g' }))
     prismaMock.sportsGame.findMany.mockResolvedValue([])
     syncAPISportsGamesToDbMock.mockResolvedValue(0)
     fetchGamesForSportMock.mockResolvedValue([{ source: 'cfbd', games: [], error: null }])
