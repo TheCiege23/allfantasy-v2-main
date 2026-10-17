@@ -5,7 +5,8 @@ import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
 import { readScreenshotPreview } from '@/lib/chimmy-chat/screenshotPreview'
 import { useScopedConversation } from './useScopedConversation'
-import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Sparkles, X } from 'lucide-react'
+import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Smile, Sparkles, X } from 'lucide-react'
+import { EmojiPicker } from '@/app/dashboard/components/chat/EmojiPicker'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyRichText } from './ChimmyRichText'
 import { ChimmyScreenshot } from './ChimmyScreenshot'
@@ -658,6 +659,31 @@ export function ChimmyPanel({
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  /*
+   * The league/DM composer's emoji picker, reused as is (ChatComposer.insertChar): the emoji goes in
+   * at the cursor, replacing any selection, and the caret lands after it. Emoji is just text to the
+   * route, so nothing about the request changes.
+   */
+  const insertEmoji = useCallback(
+    (char: string) => {
+      const box = inputRef.current
+      setDraft((prev) => {
+        const start = box?.selectionStart ?? prev.length
+        const end = box?.selectionEnd ?? prev.length
+        const pos = start + char.length
+        if (box) {
+          queueMicrotask(() => {
+            box.setSelectionRange(pos, pos)
+            box.focus()
+          })
+        }
+        return prev.slice(0, start) + char + prev.slice(end)
+      })
+    },
+    [setDraft],
+  )
   const retryRequestRef = useRef<{key:string;file:File|null;form:FormData}|null>(null)
   const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null)
   useEffect(() => {
@@ -1478,10 +1504,12 @@ export function ChimmyPanel({
           <button type="button" className="af-cm-quickbtn" onClick={() => setPendingScreenQuestion(null)}>Keep current message</button>
         </aside>
       )}
+      {emojiOpen ? <EmojiPicker onSelect={insertEmoji} onClose={() => setEmojiOpen(false)} /> : null}
       <form
         className="af-cm-composer"
         onSubmit={(e) => {
           e.preventDefault()
+          setEmojiOpen(false)
           send(draft)
         }}
       >
@@ -1512,10 +1540,26 @@ export function ChimmyPanel({
           <ImagePlus size={18} aria-hidden />
         </button>
         {/*
+          No GIF button, on purpose: a GIF picked here is a remote URL, and /api/chat/chimmy takes text
+          plus an uploaded screenshot file. A GIF-only turn would still be a paid question with nothing
+          for Chimmy to read, and the saved conversation (GET /api/chat/chimmy) would drop it on reload.
+        */}
+        <button
+          type="button"
+          className="af-cm-icon"
+          aria-label="Emoji"
+          title="Emoji"
+          aria-pressed={emojiOpen}
+          onClick={() => setEmojiOpen((open) => !open)}
+        >
+          <Smile size={18} aria-hidden />
+        </button>
+        {/*
           One line that grows as you type (CSS `field-sizing: content`, capped), not a two-line box
           with a resize grip — the grip was the only thing in the composer that looked broken.
         */}
         <textarea
+          ref={inputRef}
           rows={1}
           className="af-cm-input"
           value={draft}
@@ -1528,7 +1572,7 @@ export function ChimmyPanel({
             else { setScreenshot(file); setError(null) }
           }}
           onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(draft) }
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); setEmojiOpen(false); send(draft) }
           }}
           placeholder={publicMode ? 'Ask the league, or @chimmy…' : 'Ask Chimmy…'}
           aria-label="Message"
