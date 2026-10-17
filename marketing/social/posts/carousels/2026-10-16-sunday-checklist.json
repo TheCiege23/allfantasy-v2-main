@@ -1,0 +1,78 @@
+{
+  "date": "carousel-2026-10-16-sunday-checklist",
+  "carousel": true,
+  "name": "Sunday Checklist",
+  "slot": "Fri Oct 16 · 12 PM",
+  "caption": {
+    "instagram": "5 things to check before Sunday 🏈 Save this and run it every week.\n\n1️⃣ The Friday injury report\n2️⃣ Byes in every league\n3️⃣ When waivers clear\n4️⃣ Flex the late game\n5️⃣ Starters set everywhere\n\nWhich one burned you this season? 👇\n\nAllFantasy puts every league on one board, most urgent first. Free, link in bio.\n\n#fantasyfootball #fantasyfootballadvice #startem #waiverwire #fantasyfootballcommunity #allfantasy",
+    "tiktok": "Run this before every Sunday 🏈 5 checks that save your week. Which one burned you this year? 👇\n\n#fantasyfootball #fantasyfootballtok #nfl #allfantasy",
+    "facebook": "5 things to check before Sunday 🏈 Save this one.\n\n1. The Friday injury report\n2. Byes in every league\n3. When waivers clear\n4. Flex the late game\n5. Starters set everywhere\n\nWhich one burned you this season? AllFantasy puts every league on one board, most urgent first: https://allfantasy.ai",
+    "x": "5 things to check before Sunday:\n\n1. Friday injury report\n2. Byes in every league\n3. When waivers clear\n4. Flex the late game\n5. Starters set everywhere\n\nWhich one burned you this year? 👇 #FantasyFootball"
+  },
+  "posts": [
+    {
+      "kind": "hero",
+      "eyebrow": "Fantasy football",
+      "title": "5 things to check\n[before Sunday.]",
+      "lead": "Save this. Run it every week.",
+      "titleSize": "xl",
+      "accent": "cyan"
+    },
+    {
+      "kind": "hero",
+      "big": "1",
+      "title": "The [Friday] injury report.",
+      "lead": "Practice reports run Wednesday to Friday: DNP, limited, full. Friday is when game statuses come out. That’s your real list.",
+      "accent": "cyan"
+    },
+    {
+      "kind": "hero",
+      "big": "2",
+      "title": "Byes in [every] league.",
+      "lead": "A starter on bye is a guaranteed zero. Check all your leagues, not just your main one.",
+      "accent": "cyan"
+    },
+    {
+      "kind": "hero",
+      "big": "3",
+      "title": "When do [waivers] clear?",
+      "lead": "Know whether today is a claim day or an instant-add day, and get your claims in before the run.",
+      "accent": "cyan"
+    },
+    {
+      "kind": "hero",
+      "big": "4",
+      "title": "Flex the [late] game.",
+      "lead": "Put a later kickoff in your flex. If an early starter gets hurt, you still have a swap left.",
+      "accent": "cyan"
+    },
+    {
+      "kind": "hero",
+      "big": "5",
+      "title": "Starters set, [everywhere].",
+      "lead": "One empty slot costs you a week. Check every lineup in every league before the first kickoff.",
+      "accent": "cyan"
+    },
+    {
+      "kind": "list",
+      "title": "Every league.\n[One board.]",
+      "lead": "AllFantasy shows what needs you, most urgent first:",
+      "bullets": [
+        [
+          "Unset lineups",
+          "Tagged with the league and the deadline"
+        ],
+        [
+          "Injured starters",
+          "Across every team you manage"
+        ],
+        [
+          "Waiver runs and trades on the clock",
+          "Before they slip by"
+        ]
+      ],
+      "cta": "START FREE · LINK IN BIO →",
+      "accent": "cyan"
+    }
+  ]
+}
