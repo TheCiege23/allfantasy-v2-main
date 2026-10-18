@@ -6,6 +6,7 @@ import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
+import { leagueSportLabel, leagueSportSections } from '@/lib/core-app/leagueSports'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -93,6 +94,8 @@ export type RailLeague = {
   alertTone?: 'bad' | 'warn'
   /** The viewer commissions this league — draws the blue C (CommissionerBadge). */
   isCommissioner?: boolean
+  /** League sport (NFL / NBA / …). The rail splits into one section per sport when there are two or more. */
+  sport?: string | null
 }
 
 /**
@@ -1702,6 +1705,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     [leagues, archivedLeagueKey, props.selectedLeagueId],
   )
   const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
+  /*
+   * One section per sport, each headed by its sport, once the account plays two or more. Within a
+   * section the rail keeps the account's own order; only the grouping is new.
+   */
+  const railSections = useMemo(() => leagueSportSections(railRows), [railRows])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
   const selectedLeagueName = selectedLeague ? (railLabels.get(selectedLeague.id) ?? selectedLeague.name) : null
@@ -1875,7 +1883,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           second screen.
         */}
         <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
-          {railRows.map((l) => {
+          {railSections.map((section) => [
+            /*
+             * The sport heading. Short form ("NFL", "CBB") so it fits the 42px collapsed rail as well
+             * as the open one, and not a heading element: the rail is a list of links, and seven
+             * <h2>s would crowd the page outline every /core screen shares.
+             */
+            railSections.length > 1 ? (
+              <div
+                key={`sport-${section.key ?? 'other'}`}
+                className="af-rail-sport"
+                title={leagueSportLabel(section.key)}
+                data-testid="rail-sport-heading"
+              >
+                {leagueSportLabel(section.key, { short: true })}
+              </div>
+            ) : null,
+            ...section.rows.map((l) => {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
             const saved = props.railMatchups?.[l.id]
             const live = l.syncPaused ? undefined : liveRail.scores[l.id]
@@ -2075,7 +2099,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 </span>
               </Link>
             )
-          })}
+          }),
+          ])}
         </div>
 
         {/*

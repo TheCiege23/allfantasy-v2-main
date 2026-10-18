@@ -1483,6 +1483,34 @@
   align-items: stretch;
 }
 
+/*
+ * Sport section heading in the league rail (AfCoreShell `railSections`). Drawn only when the
+ * account plays two or more sports. Centred over the 42px tiles when the rail is collapsed,
+ * left-aligned with the rows when it is open.
+ */
+.af-rail-sport {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-top: 6px;
+  /* 11px is this repo's type floor (__tests__/core-app/type-floor.test.ts); "SOCCER" fits the 68px collapsed rail. */
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-rail-sport:first-child {
+  margin-top: 0;
+}
+
+.af-shell[data-rail-open='true'] .af-rail-sport {
+  padding: 0 8px;
+  text-align: left;
+}
+
 .af-shell[data-rail-open='true'] .af-rail-tile {
   display: flex;
   align-items: center;

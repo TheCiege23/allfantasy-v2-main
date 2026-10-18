@@ -882,6 +882,8 @@ export default async function AfCorePage({
     id: l.id,
     name: l.name,
     platform: String(l.platform ?? 'manual').toLowerCase(),
+    // Splits the rail into one section per sport (AfCoreShell `railSections`).
+    sport: l.sport ?? null,
     syncPaused: pausedSyncLeagueIds?.has(l.id) ?? false,
     // The same flag the More menu's "Commissioner N" counts — see CommissionerBadge.
     isCommissioner: Boolean(l.isCommissioner),

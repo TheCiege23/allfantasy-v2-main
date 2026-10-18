@@ -34,6 +34,25 @@ export function leagueSportLabel(key: string | null, opts: { short?: boolean } =
 
 export type LeagueSportCount = { key: string | null; count: number }
 
+export type LeagueSportSection<T> = { key: string | null; rows: T[] }
+
+/**
+ * Rows split into one section per sport, sections in product order with "Other" last.
+ *
+ * ⚠ ORDER INSIDE A SECTION IS THE INPUT'S, UNTOUCHED. The sidebar rail arrives in the account's
+ * own drag order (leaguePreferences.ts), and re-sorting within a sport would undo that silently.
+ */
+export function leagueSportSections<T extends { sport?: string | null }>(rows: readonly T[]): LeagueSportSection<T>[] {
+  const byKey = new Map<string | null, T[]>()
+  for (const row of rows) {
+    const key = leagueSportKey(row.sport)
+    const bucket = byKey.get(key)
+    if (bucket) bucket.push(row)
+    else byKey.set(key, [row])
+  }
+  return leagueSportCounts(rows).map(({ key }) => ({ key, rows: byKey.get(key) ?? [] }))
+}
+
 /**
  * The sports present in `leagues`, in product order (SUPPORTED_SPORTS), with "Other" last.
  * Only sports that actually have a league appear; a tab for a sport you do not play is noise.
