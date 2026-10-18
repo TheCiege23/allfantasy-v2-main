@@ -1,5 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+import {
+  isSurvivorNotificationKind,
+  renderSurvivorNotificationEmail,
+  SURVIVOR_NOTIFICATION_SPECS,
+  survivorNotificationCopy,
+  type SurvivorNotificationInput,
+} from './survivorNotificationCatalog'
 
 export type EnqueueNotificationInput = {
   recipientUserId?: string
@@ -93,6 +101,7 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
 
   let sent = 0
   let failed = 0
+  let leagueFacts: { name: string; sport: string | null } | null = null
 
   for (const n of pending) {
     // Claim the row first so overlapping ticks never deliver it twice.
@@ -102,13 +111,22 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
     })
     if (claimed.count !== 1) continue
     try {
-      const userIds = await resolveRecipientUserIds(leagueId, n.recipientUserId, n.recipientRole)
+      // Vote reminders go only to managers who can vote and have not (survivor-core §5).
+      const userIds = VOTE_REMINDER_TYPES.has(n.type) && !n.recipientUserId
+        ? await resolveVoteReminderRecipients(leagueId)
+        : await resolveRecipientUserIds(leagueId, n.recipientUserId, n.recipientRole)
       const title =
         !n.isSpoilerSafe
           ? 'Something happened on the Island'
           : n.title
       const body =
         !n.isSpoilerSafe ? 'Open the app to find out.' : n.body
+      let emailOverride: { subject: string; html: string } | undefined
+      if (isSurvivorNotificationKind(n.type) && n.isSpoilerSafe) {
+        leagueFacts ??= await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true } })
+          .then(row => ({ name: row?.name ?? 'Survivor league', sport: row?.sport ? String(row.sport) : null }))
+        emailOverride = renderSurvivorNotificationEmail(n.type, { title, body, leagueId, leagueName: leagueFacts.name, sport: leagueFacts.sport, baseUrl: getPublicSiteOrigin() })
+      }
 
       // In-app plus email and push, each gated by the recipient's own notification settings.
       await dispatchNotification({
@@ -123,6 +141,7 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
         severity: n.urgency === 'critical' ? 'high' : n.urgency === 'high' ? 'medium' : 'low',
         dedupePrefix: `survivor:${n.id}`,
         meta: { leagueId, survivorNotificationId: n.id, deepLinkPath: n.deepLinkPath },
+        ...(emailOverride ? { emailOverride } : {}),
       })
 
       await prisma.survivorNotification.update({
@@ -147,6 +166,53 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
 
 const STALE_NOTIFICATION_MS = 24 * 60 * 60 * 1000
 const COMMISSIONER_TYPES = new Set(['draft_cast_incomplete', 'tribe_shuffle_recommendation'])
+const VOTE_REMINDER_TYPES = new Set(['votes_close_soon', 'vote_reminder'])
+
+/**
+ * Who a vote reminder reaches: active managers in the tribe at the open council (everyone active
+ * after the merge) who have not cast a ballot. Ballots are read only to know WHETHER someone voted;
+ * nothing about a ballot reaches the copy. No open council, no reminder.
+ */
+export async function resolveVoteReminderRecipients(leagueId: string): Promise<string[]> {
+  const council = await prisma.survivorTribalCouncil.findFirst({
+    where: { leagueId, closedAt: null, isRevealed: false },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, attendingTribeId: true },
+  })
+  if (!council) return []
+  const [players, ballots] = await Promise.all([
+    prisma.survivorPlayer.findMany({
+      where: { leagueId, playerState: 'active', ...(council.attendingTribeId ? { tribeId: council.attendingTribeId } : {}) },
+      select: { userId: true, redraftRosterId: true },
+    }),
+    prisma.survivorVote.findMany({ where: { councilId: council.id }, select: { voterRosterId: true } }),
+  ])
+  const voted = new Set(ballots.map(b => b.voterRosterId))
+  return [...new Set(players.filter(p => !p.redraftRosterId || !voted.has(p.redraftRosterId)).map(p => p.userId))]
+}
+
+/**
+ * Queue one of the eight survivor-core notifications with its catalogue copy. `scheduledFor` in the
+ * past or omitted means now; a future time is held in the queue like the vote reminders.
+ */
+export async function enqueueSurvivorCoreNotification(
+  leagueId: string,
+  input: SurvivorNotificationInput,
+  recipient: { userId: string } | { role: 'all' | 'active' | 'jury' },
+  scheduledFor?: Date,
+): Promise<string> {
+  const copy = survivorNotificationCopy(input)
+  const spec = SURVIVOR_NOTIFICATION_SPECS[input.kind]
+  return enqueueNotification(leagueId, input.kind, {
+    ...('userId' in recipient ? { recipientUserId: recipient.userId } : { recipientRole: recipient.role }),
+    title: copy.title,
+    body: copy.body,
+    deepLinkPath: spec.path(leagueId),
+    urgency: spec.urgency,
+    isSpoilerSafe: true,
+    scheduledFor,
+  })
+}
 
 /** Runs inside the score-sync cron slot: delivers due Survivor notifications for every league. */
 export async function processDueSurvivorNotifications(now = new Date()): Promise<{ leagues: number; sent: number; failed: number }> {
@@ -188,11 +254,12 @@ async function scheduleIfFuture(
  * Queues 2h and 30m vote reminders before `deadline`. Skips any slot already in the past.
  */
 export async function scheduleTribalReminders(leagueId: string, deadline: Date): Promise<void> {
-  await scheduleIfFuture(leagueId, 'vote_reminder', {
+  const twoHours = survivorNotificationCopy({ kind: 'votes_close_soon' })
+  await scheduleIfFuture(leagueId, 'votes_close_soon', {
     recipientRole: 'active',
-    title: '🗳 Vote closes in 2 hours',
-    body: 'Elimination Council deadline approaching. Cast your vote via @Chimmy.',
-    deepLinkPath: `/survivor/${leagueId}/tribal`,
+    title: twoHours.title,
+    body: twoHours.body,
+    deepLinkPath: SURVIVOR_NOTIFICATION_SPECS.votes_close_soon.path(leagueId),
     urgency: 'high',
     isSpoilerSafe: true,
     scheduledFor: new Date(deadline.getTime() - 2 * 60 * 60 * 1000),
@@ -237,15 +304,9 @@ export async function notifyChallengePosted(
   })
 }
 
+/** "You found an idol" (survivor-core §5): never names the idol, in push or email. */
 export async function notifyIdolAssigned(leagueId: string, userId: string): Promise<void> {
-  await enqueueNotification(leagueId, 'idol_received', {
-    recipientUserId: userId,
-    title: '🔮 You received a secret power',
-    body: 'Check your @Chimmy private chat for details.',
-    deepLinkPath: `/survivor/${leagueId}/chimmy`,
-    urgency: 'high',
-    isSpoilerSafe: true,
-  })
+  await enqueueSurvivorCoreNotification(leagueId, { kind: 'idol_found' }, { userId })
 }
 
 export async function notifyMerge(leagueId: string): Promise<void> {
