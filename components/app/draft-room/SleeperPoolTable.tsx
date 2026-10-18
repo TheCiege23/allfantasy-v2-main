@@ -42,6 +42,7 @@ import {
   type PoolSortState,
 } from './SleeperPoolSort'
 import { aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
+import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -76,6 +77,8 @@ export interface SleeperPoolTableProps {
   sortState?: PoolSortState | null
   onSortChange?: (columnKey: string) => void
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
+  /** Viewer's next pick — adds the LEFT @ column. Null for spectators / idle drafts. */
+  leftAtPick?: { overall: number; label: string } | null
 }
 
 function rowKey(p: PlayerEntry): string {
@@ -156,6 +159,7 @@ interface SleeperRowProps {
   onNominateRequest?: () => void
   testIdBase: string
   aiOverlaySignal?: DraftAiOverlaySignal
+  leftAtOverall: number | null
 }
 
 function SleeperRow(props: SleeperRowProps) {
@@ -181,6 +185,7 @@ function SleeperRow(props: SleeperRowProps) {
     onNominateRequest,
     testIdBase,
     aiOverlaySignal,
+    leftAtOverall,
   } = props
 
   const normalized = useMemo(
@@ -367,6 +372,34 @@ function SleeperRow(props: SleeperRowProps) {
                   {delta > 0 ? '+' : ''}{delta}
                 </span>
               ) : null}
+            </span>
+          </Cell>
+        )
+      }
+      case 'leftAt': {
+        const odds = !drafted && leftAtOverall != null ? survivalProbability(p.adp, leftAtOverall) : null
+        const tone = odds == null ? null : survivalTone(odds)
+        return (
+          <Cell key={col.key} width={col.width} align="right">
+            <span
+              data-testid={`${testIdBase}-left-at`}
+              data-tone={tone ?? 'none'}
+              title={
+                odds == null
+                  ? 'No market ADP — no estimate'
+                  : `About ${formatSurvival(odds)} chance ${p.name} is still available at your next pick`
+              }
+              className={`font-semibold tabular-nums ${
+                tone === 'likely'
+                  ? 'text-emerald-300'
+                  : tone === 'coin_flip'
+                    ? 'text-amber-300'
+                    : tone === 'unlikely'
+                      ? 'text-rose-300'
+                      : 'text-white/35'
+              }`}
+            >
+              {odds == null ? '—' : formatSurvival(odds)}
             </span>
           </Cell>
         )
@@ -577,11 +610,14 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     sortState = null,
     onSortChange,
     aiOverlaySignals,
+    leftAtPick = null,
   } = props
 
+  const leftAtPickLabel = leftAtPick?.label ?? null
+  const leftAtOverall = leftAtPick?.overall ?? null
   const layout = useMemo(
-    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions),
-    [draftSport, statColumnOptions],
+    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel }),
+    [draftSport, statColumnOptions, leftAtPickLabel],
   )
 
   const statByKey = useMemo(() => new Map(layout.statDefs.map((d) => [d.key, d])), [layout.statDefs])
@@ -700,6 +736,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                 onNominateRequest={onNominateRequest ? () => onNominateRequest(p) : undefined}
                 testIdBase={`sleeper-pool-row-${idx}`}
                 aiOverlaySignal={aiOverlaySignals?.[k]}
+                leftAtOverall={leftAtOverall}
               />
             )
           })
@@ -743,6 +780,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                   onDraftRequest={() => onDraftRequest(p)}
                   onNominateRequest={onNominateRequest ? () => onNominateRequest(p) : undefined}
                   testIdBase={`sleeper-pool-row-${virtualRow.index}`}
+                  leftAtOverall={leftAtOverall}
                   aiOverlaySignal={aiOverlaySignals?.[k]}
                 />
               </div>
