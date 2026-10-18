@@ -29,7 +29,14 @@ const DEFAULT_TZ = 'America/New_York'
  * leagues to its own read-only summary), so there is no host platform here: the old
  * "League rules — read-only snapshot · edit on your host platform" block was removed from this tab.
  */
-export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+export function GeneralTab({
+  ctx,
+  canEdit,
+  showWaivers = true,
+}: LeagueSettingsTabProps & {
+  /** The League Settings list opens Waivers as its own row, so its General page omits it. */
+  showWaivers?: boolean
+}) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
@@ -140,7 +147,7 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         ) : null}
       </section>
 
-      <WaiversSection ctx={ctx} canEdit={canEdit} timezone={timezone} />
+      {showWaivers ? <WaiversSection ctx={ctx} canEdit={canEdit} timezone={timezone} /> : null}
     </div>
   )
 }

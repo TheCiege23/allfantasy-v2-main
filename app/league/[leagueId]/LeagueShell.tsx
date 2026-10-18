@@ -75,6 +75,7 @@ import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
+import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
@@ -423,9 +424,12 @@ export function LeagueShell({
         { id: 'league_chat', label: 'League Chat' },
       ]
       if (isCommissioner) core.push({ id: 'commissioner', label: 'Commissioner' })
+      // Native leagues: Settings is the Sleeper-style League Settings page (?view=settings), for
+      // members too (read-only). Elsewhere redraft Settings stays modal-driven.
       if (isCommissioner) core.push({ id: 'settings', label: '⚙ Settings' })
+      else if (nativeWorkspace) core.push({ id: 'settings', label: '⚙ Settings' })
       if (nativeWorkspace) core.unshift({ id: 'native_home', label: 'League home' })
-      return localizeLeagueTabs(core, t).filter((tab) => tab.id !== 'settings').map((tab) => {
+      return localizeLeagueTabs(core, t).filter((tab) => tab.id !== 'settings' || nativeWorkspace).map((tab) => {
         if (tab.id === 'roster') return { ...tab, label: 'My Team' }
         if (tab.id === 'players') return { ...tab, label: 'Players' }
         if (tab.id === 'trades') return { ...tab, label: 'Trades' }
@@ -792,7 +796,7 @@ export function LeagueShell({
 
     // NFL/NCAAF redraft Settings opens the modal. Do not also make it the active tab,
     // or closing the modal can reintroduce ?view=settings and immediately reopen it.
-    if (target === 'settings' && nflRedraftCore) return
+    if (target === 'settings' && nflRedraftCore && !nativeWorkspace) return
 
     const ids = new Set(tabDefs.map((t) => t.id))
     /*
@@ -804,7 +808,7 @@ export function LeagueShell({
      */
     if (target === 'waivers' && !ids.has('waivers')) target = 'players'
     if (ids.has(target)) setActiveTab(target)
-  }, [searchParams, tabDefs, league.sport, shouldUseMatchupPrimary, nflRedraftCore])
+  }, [searchParams, tabDefs, league.sport, shouldUseMatchupPrimary, nflRedraftCore, nativeWorkspace])
 
   useEffect(() => {
     const ids = new Set(tabDefs.map((t) => t.id))
@@ -812,7 +816,7 @@ export function LeagueShell({
 
     // Redraft Settings is modal-driven. Do not persist it as ?view=settings,
     // because the settings deep-link effect treats that URL as "open modal".
-    if (nflRedraftCore && activeTab === 'settings') return
+    if (nflRedraftCore && !nativeWorkspace && activeTab === 'settings') return
 
     // activeTab is the single source of truth; mirror it into ?view= one-way and remember what we
     // wrote so the URL->tab effect ignores this echo (prevents the activeTab<->URL swap flicker).
@@ -1210,9 +1214,12 @@ export function LeagueShell({
   const blockConceptIntroForInvitePrefill =
     defaultShowInvite && inviteAutoOpenedForLeague.current !== league.id
 
-  /** `/league/[id]?view=settings` opens the modal (NFL redraft has no Settings tab). */
+  /**
+   * `/league/[id]?view=settings` opens the modal (NFL redraft has no Settings tab) — except on a
+   * native league, where it is the League Settings page.
+   */
   useEffect(() => {
-    if (!nflRedraftCore) return
+    if (!nflRedraftCore || nativeWorkspace) return
     const raw = (searchParams?.get('view') ?? searchParams?.get('tab') ?? '').trim().toLowerCase()
     if (raw !== 'settings') return
     openLeagueSettingsModal(null)
@@ -1223,7 +1230,7 @@ export function LeagueShell({
     const base = pathname ?? `/league/${league.id}`
     // Shallow — a router.replace here remounted the page and wiped the modal state.
     window.history.replaceState(null, '', q ? `${base}?${q}` : base)
-  }, [nflRedraftCore, searchParams, pathname, league.id, openLeagueSettingsModal])
+  }, [nflRedraftCore, nativeWorkspace, searchParams, pathname, league.id, openLeagueSettingsModal])
 
   const settingsPanelDeepLinkRef = useRef<string | null>(null)
   /** Deep-link from draft room gear: `/league/{id}?settingsPanel=draft` opens Draft settings panel. */
@@ -1417,7 +1424,7 @@ export function LeagueShell({
           activeTab={activeTab}
           isCommissioner={isCommissioner}
           onSelectTab={handleUserTabChange}
-          onOpenSettings={() => openLeagueSettingsModal(null)}
+          onOpenSettings={() => (nativeWorkspace ? handleUserTabChange('settings') : openLeagueSettingsModal(null))}
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
@@ -1653,6 +1660,23 @@ export function LeagueShell({
               platform={league.platform}
             />
 
+            {nativeWorkspace && activeTab === 'settings' ? (
+              <LeagueSettingsHomeContainer
+                ctx={{
+                  league,
+                  displayLeague: selectedLeague,
+                  userId,
+                  userTeam,
+                  sleeperLeagueId: null,
+                  platformLeagueId: league.platformLeagueId,
+                  isCommissioner,
+                  isHeadCommissioner,
+                  sleeperMemberMap: sleeperUsersByPlatformId,
+                  onGoToDraftTab: () => setActiveTab('draft'),
+                }}
+                onExit={() => handleUserTabChange(tabDefs.some((tab) => tab.id === 'native_home') ? 'native_home' : tabDefs[0]?.id ?? 'home')}
+              />
+            ) : (
             <LeagueTabRouter
               activeTab={activeTab}
               tabDefs={tabDefs}
@@ -1679,6 +1703,7 @@ export function LeagueShell({
               draftSetupSession={draftSetupSession}
               hasActiveRedraftSeason={hasActiveRedraftSeason}
             />
+            )}
           </div>
         </main>
         </NativeLeagueWorkspace>

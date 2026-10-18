@@ -30,7 +30,8 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('Draft HQ', 'draft', 'draft'),
     ...item(isSurvivor ? 'Standings' : 'Standings & playoffs', 'standings', 'standings', 'table'),
     ...item('League chat', 'chat', 'league_chat'),
-    ...(commissioner ? item('Commissioner', 'settings', 'commissioner', 'league') : []),
+    // Commissioner lands on the League Settings page (?view=settings); the old commissioner tab stays under More tools.
+    ...(commissioner ? item('Commissioner', 'settings', 'settings', 'commissioner', 'league') : []),
   ]
   const survivor = tabs.filter(tab => tab.id.startsWith('survivor')).map(tab => {
     used.add(tab.id)

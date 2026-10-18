@@ -1,6 +1,10 @@
 /**
  * GET: Guillotine league home summary (survival standings, danger tiers, chopped history, assets).
  * Returns 404 when league is not a guillotine league.
+ *
+ * PATCH: commissioner-only edit of the first chop week (`{ eliminationStartWeek }`). It lives on
+ * this existing path rather than its own route file because the app is at the route-count ceiling
+ * (too_many_routes — see app/api/leagues/join/route.ts). Rules in lib/guillotine/guillotineFirstChopWeek.ts.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,6 +16,8 @@ import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryServ
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
 import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guillotine/guillotineCurrentWeek'
+import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,4 +70,46 @@ export async function GET(
         }
       : null,
   })
+}
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: { params: Promise<{ leagueId: string }> }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { leagueId } = await ctx.params
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+  try {
+    await assertCommissioner(leagueId, userId)
+  } catch {
+    return NextResponse.json({ error: 'Only the commissioner can change the first chop week.' }, { status: 403 })
+  }
+
+  if (!(await isGuillotineLeague(leagueId))) {
+    return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+  }
+
+  const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown } | null
+  if (!body || !('eliminationStartWeek' in body)) {
+    return NextResponse.json({ error: 'eliminationStartWeek is required' }, { status: 400 })
+  }
+
+  try {
+    const result = await updateGuillotineFirstChopWeek(leagueId, body.eliminationStartWeek)
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json({
+      ok: true,
+      config: {
+        eliminationStartWeek: result.eliminationStartWeek,
+        eliminationEndWeek: result.eliminationEndWeek,
+      },
+    })
+  } catch (e) {
+    console.error('[guillotine/summary PATCH]', e)
+    return NextResponse.json({ error: 'Could not save the first chop week' }, { status: 500 })
+  }
 }
