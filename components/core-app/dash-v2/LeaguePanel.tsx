@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
 import { PanelUserMenu } from '@/components/core-app/dash-v2/PanelUserMenu'
+import { leagueSportKey, leagueSportLabel } from '@/lib/core-app/leagueSports'
 
 /**
  * Dashboard v2 left panel (300px) — the league list, grouped by urgency.
@@ -117,6 +118,13 @@ export function LeaguePanel({
         : leagues.filter((l) => (l.sport ?? '').toUpperCase() === sport),
     [leagues, sport],
   )
+
+  /*
+   * Each row names its sport while ALL is showing and the account plays more than one. The urgency
+   * groups mix sports, so without it an NFL and an NBA league in NEEDS YOU look the same. A
+   * single-sport filter already says which sport every row is, so the tag drops there.
+   */
+  const showRowSport = sport === 'ALL' && availableSports.length > 2
 
   const groups: Group[] = useMemo(() => {
     const byKey = new Map<string, Dash34League[]>()
@@ -253,8 +261,16 @@ export function LeaguePanel({
                         {/* League info: season, size, type, scoring — already
                             composed by the loader as "2026 · 12-team · Dynasty ·
                             PPR". This is the line the direction asked for. */}
-                        {league.formatLabel ? (
-                          <span className="af-d2-row-meta af-num">{league.formatLabel}</span>
+                        {showRowSport || league.formatLabel ? (
+                          <span className="af-d2-row-meta af-num">
+                            {showRowSport ? (
+                              <span className="af-d2-row-sport" data-testid="league-panel-row-sport">
+                                {leagueSportLabel(leagueSportKey(league.sport), { short: true })}
+                              </span>
+                            ) : null}
+                            {showRowSport && league.formatLabel ? ' · ' : null}
+                            {league.formatLabel}
+                          </span>
                         ) : null}
                         {league.chips?.[0] ? (
                           <span
