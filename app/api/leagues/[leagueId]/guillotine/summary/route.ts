@@ -18,6 +18,7 @@ import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
 import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guillotine/guillotineCurrentWeek'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
+import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,12 +46,18 @@ export async function GET(
     ? Math.max(1, parseInt(weekParam, 10)) || 1
     : await resolveGuillotineCurrentWeek(leagueId, config)
 
-  const [summary, myEscapes, myRosterId] = await Promise.all([
+  const [summary, myEscapes, myRosterId, home] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
     // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
     getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
     // So a surface can say "you" without a second request. Never fails the summary.
     findViewerRosterId(leagueId, userId).catch(() => null),
+    // The specialty home's hero/chop-line extras (presentation only). Never fails the summary.
+    config
+      ? Promise.resolve()
+          .then(() => buildGuillotineHomeExtras(leagueId, String(config.sport), weekOrPeriod))
+          .catch(() => null)
+      : Promise.resolve(null),
   ])
 
   if (!summary) return NextResponse.json({ error: 'Summary not available' }, { status: 500 })
@@ -59,6 +66,7 @@ export async function GET(
     ...summary,
     myEscapes,
     myRosterId,
+    home,
     config: config
       ? {
           eliminationStartWeek: config.eliminationStartWeek,

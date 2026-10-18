@@ -477,7 +477,7 @@ describe('Guillotine full regression matrix', () => {
     expect(summary!.dangerTiers?.some((d) => d.tier === 'danger')).toBe(true)
   })
 
-  it('home view renders bubble teams, waivers section, settings link, and storyline panel', async () => {
+  it('home view renders the chop line, waivers section, settings link, and storyline panel', async () => {
     const summary = {
       leagueId: 'league-1',
       weekOrPeriod: 4,
@@ -510,12 +510,16 @@ describe('Guillotine full regression matrix', () => {
 
     render(<GuillotineHome leagueId="league-1" sport="NFL" leagueName="Blade League" />)
 
+    // The specialty home (2026-10-18) replaced the Survival Board: the chop line carries the
+    // engine's tiers, with the cut drawn above the chop-zone team.
     await waitFor(() => {
-      expect(screen.getByText('On The Bubble (Bottom 4)')).toBeTruthy()
+      expect(screen.getByTestId('guillotine-chop-line')).toBeTruthy()
     })
+    expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('Team 2')
+    expect(screen.getByTestId('guillotine-row-danger').textContent).toContain('Team 3')
+    expect(screen.getByTestId('guillotine-cut-line')).toBeTruthy()
 
     expect(screen.getByText('Waiver & FAAB')).toBeTruthy()
-    expect(screen.getByTestId('guillotine-bubble-separator')).toBeTruthy()
     expect(screen.getByTestId('guillotine-ai-panel')).toBeTruthy()
     expect(screen.getByTestId('guillotine-open-waivers')).toBeTruthy()
     expect(screen.getByTestId('guillotine-league-settings')).toBeTruthy()
