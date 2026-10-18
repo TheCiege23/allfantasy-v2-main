@@ -164,7 +164,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
           <SvkField title="Tribe names and crests" hint="Picked from the original tribes. Saved on its own; you can swap them before the reveal.">
             <button type="button" className="svk-btn" aria-expanded={panel === 'crests'} onClick={() => setPanel(p => (p === 'crests' ? null : 'crests'))}>{panel === 'crests' ? 'Close crests' : 'Choose crests'}</button>
           </SvkField>
-          {panel === 'crests' && <div className="svt-sub-panel"><SurvivorTribesPanel leagueId={leagueId} canEdit /></div>}
+          {panel === 'crests' && <div className="svt-sub-panel"><SurvivorTribesPanel leagueId={leagueId} canEdit hasAfCommissionerSub={false} /></div>}
         </section>
 
         <section id="svt-tribal" className="svk-card svt-sec" aria-labelledby="svt-tribal-h">
