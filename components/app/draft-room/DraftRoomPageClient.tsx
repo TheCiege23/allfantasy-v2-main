@@ -104,6 +104,7 @@ import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanni
 import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
 import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
 import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
+import type { ManagerHistorySummary } from '@/lib/draft-room/managerDraftHistory'
 import { buildPlayerDraftOutlook, pickYoureUpSuggestion } from '@/lib/draft-room/playerDraftOutlook'
 import { YoureUpAlert } from '@/components/app/draft-room/YoureUpAlert'
 import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
@@ -2951,6 +2952,30 @@ export function DraftRoomPageClient({
     return [...new Set([...fromComm, ...aiOpponentRosterIds])]
   }, [commissionerAiDraft?.assignedAiTeams, aiOpponentRosterIds])
   /** Intel tab — picks other managers make before the viewer's next turn (lib/draft-room/draftIntelLookahead). */
+  /**
+   * Each roster's tendency across its manager's past drafts. Fetched once per league and
+   * draft type, not per poll: it only changes when another draft completes. On any failure
+   * the Intel tab simply reads this draft alone.
+   */
+  const [managerHistoryByRoster, setManagerHistoryByRoster] = useState<
+    Record<string, ManagerHistorySummary | null>
+  >({})
+  const intelHistoryEnabled = Boolean(leagueId) && session != null && session.draftType !== 'auction'
+  useEffect(() => {
+    if (!intelHistoryEnabled) return
+    let cancelled = false
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/manager-history`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled || !body || typeof body.historyByRoster !== 'object' || body.historyByRoster == null) return
+        setManagerHistoryByRoster(body.historyByRoster as Record<string, ManagerHistorySummary | null>)
+      })
+      .catch(() => null)
+    return () => {
+      cancelled = true
+    }
+  }, [leagueId, intelHistoryEnabled])
+
   const intelLookahead = useMemo(() => {
     if (!session || session.draftType === 'auction') return null
     if (session.status !== 'in_progress' && session.status !== 'paused') return null
@@ -2970,8 +2995,9 @@ export function DraftRoomPageClient({
       viewerRosterId: (session as DraftSessionSnapshot).currentUserRosterId ?? null,
       starterSlots: rosterConfig?.starterSlots ?? null,
       autoRosterIds: new Set([...aiManagedRosterIds, ...((session as DraftSessionSnapshot).orphanRosterIds ?? [])]),
+      historyByRoster: managerHistoryByRoster,
     })
-  }, [session, currentPick?.overall, pulseAvailablePlayers, players, rosterConfig?.starterSlots, aiManagedRosterIds])
+  }, [session, currentPick?.overall, pulseAvailablePlayers, players, rosterConfig?.starterSlots, aiManagedRosterIds, managerHistoryByRoster])
   /** Player table LEFT @ column — the viewer's next pick after any picks they make now. */
   const leftAtPick = useMemo(() => {
     const overall = intelLookahead?.viewerNextOverall
@@ -4208,6 +4234,16 @@ export function DraftRoomPageClient({
 
   const auctionSnapshot = (session as any).auction
   const isDraftCompleted = draftRoomState.isDraftCompleted
+  const postDraftViewNode = isDraftCompleted ? (
+    <PostDraftView
+      leagueId={leagueId}
+      leagueName={leagueName}
+      sport={effectiveDraftSport}
+      session={session}
+      currentUserRosterId={currentUserRosterId ?? null}
+      slotOrder={slotOrder}
+    />
+  ) : null
   /** Prevent blank board loop when corrupted API rows have rounds/teamCount = 0 */
   const safeBoardRounds = Math.max(1, session.rounds ?? 1)
   const safeBoardTeamCount = Math.max(1, session.teamCount ?? 1)
@@ -4279,18 +4315,6 @@ export function DraftRoomPageClient({
     }
   }
 
-  const mobileTimerLabel = (() => {
-    const status = session.timer?.status ?? 'none'
-    const remaining = session.timer?.remainingSeconds ?? null
-    if (status === 'paused') return 'Paused'
-    if (status === 'expired') return '0:00'
-    if (status === 'none' || remaining == null || !Number.isFinite(remaining)) return '—'
-    const n = Math.max(0, Math.floor(remaining))
-    const min = Math.floor(n / 60)
-    const sec = String(n % 60).padStart(2, '0')
-    return `${min}:${sec}`
-  })()
-
   // Product decision (Phase 3 Slice 4): mobile draft clock/header stays visible
   // across Board, Players, Queue, Roster, and Chat tabs at all times.
   const showMobileStickyBar = true
@@ -4311,22 +4335,17 @@ export function DraftRoomPageClient({
               Draft room
             </span>
           )}
-          <div className="inline-flex items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold text-cyan-100">
-            <span className="text-cyan-200/80">Clock</span>
-            <span className="font-mono tabular-nums">{mobileTimerLabel}</span>
-          </div>
+          {/* Who is on the clock and the live timer are in the header, which never scrolls
+              away on phones; this bar only adds what the header leaves out. */}
+          {presentationVariant === 'redraft_snake' &&
+          ribbonPicksUntilUser != null &&
+          ribbonPicksUntilUser > 0 &&
+          !isCurrentUserOnClock ? (
+            <span className="truncate text-[11px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
+              ~{ribbonPicksUntilUser} pick{ribbonPicksUntilUser === 1 ? '' : 's'} until your turn
+            </span>
+          ) : null}
         </div>
-        {currentPick != null ? (
-          <p className="truncate text-white/80">On clock: {currentPick.displayName}</p>
-        ) : null}
-        {presentationVariant === 'redraft_snake' &&
-        ribbonPicksUntilUser != null &&
-        ribbonPicksUntilUser > 0 &&
-        !isCurrentUserOnClock ? (
-          <p className="text-[11px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
-            ~{ribbonPicksUntilUser} pick{ribbonPicksUntilUser === 1 ? '' : 's'} until your turn
-          </p>
-        ) : null}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scroll-smooth" data-testid="draft-mobile-quick-actions">
           <button
             type="button"
@@ -4640,14 +4659,7 @@ export function DraftRoomPageClient({
                     Draft is complete — browse the recap below. The live board stays visible above.
                   </div>
                   <div className="min-h-0 flex-1 overflow-auto">
-                    <PostDraftView
-                      leagueId={leagueId}
-                      leagueName={leagueName}
-                      sport={effectiveDraftSport}
-                      session={session}
-                      currentUserRosterId={currentUserRosterId ?? null}
-                      slotOrder={slotOrder}
-                    />
+                    {postDraftViewNode}
                   </div>
                 </>
               )}
@@ -5368,7 +5380,9 @@ export function DraftRoomPageClient({
           />
         ) : undefined
       }
-      playerPanel={playerPoolNode}
+      // A finished draft has no pool to pick from; the phone Players tab (and the
+      // non-premium desktop layout) shows the recap, report card and share instead.
+      playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}
       queuePanel={queueStackNode}
       helperPanel={undefined}
       intelPanel={session.draftType !== 'auction' ? intelPanelNode : undefined}
