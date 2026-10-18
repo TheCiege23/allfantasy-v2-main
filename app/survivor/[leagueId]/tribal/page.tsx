@@ -11,6 +11,7 @@ import { SurvivorVoteCast } from '@/components/survivor/weekly/SurvivorVoteCast'
 import { SurvivorWeeklyMoments } from '@/components/survivor/weekly/SurvivorWeeklyMoments'
 import { SurvivorAvatar, survivorAvatarStatus } from '@/components/survivor/weekly/SurvivorAvatar'
 import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
+import { SurvivorStateCard } from '@/components/survivor/core/SurvivorStateCard'
 
 export default function SurvivorTribalPage() {
   const params = useParams()
@@ -96,10 +97,8 @@ export default function SurvivorTribalPage() {
 
         <div className="mx-auto mt-6 max-w-lg text-center">
           {quiet ? (
-            <div className="space-y-2">
-              <img src="/survivor/exile/scroll-sealed.svg" alt="Council results sealed" width={200} height={140} className="mx-auto" /><p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
-              <p className="text-[13px] text-white/50">Results remain sealed until the Torch Ceremony is published.</p>
-            </div>
+            // survivor-core §7: "Counting the votes" while the read is being prepared, "Votes are closed" otherwise.
+            <SurvivorStateCard state={status === 'revealing' ? 'scroll_counting' : 'votes_closed'} />
           ) : council?.isRevealed ? null : (
             <p className="text-[13px] text-white/45">No open council. Chimmy will announce the next voting window in league chat.</p>
           )}

@@ -5,6 +5,8 @@ import Link from 'next/link'
 import type { TribalCouncilView } from '@/lib/survivor/survivorTribalView'
 import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import { SurvivorAvatar } from './SurvivorAvatar'
+import { SvkSkeleton } from '../core/SurvivorKit'
+import { SurvivorStateCard } from '../core/SurvivorStateCard'
 import './survivor-weekly.css'
 
 const AVATAR_COLORS = ['#3a2410', '#1f2a4d', '#12352a', '#22314f', '#3b1f3f', '#2c3a14']
@@ -159,7 +161,15 @@ export function SurvivorVoteCast({
   }
 
   if (!view) {
-    return <div className="swl-vc" data-testid="survivor-vote-cast"><div className="swl-vc-body"><p className="swl-t2">{loadError ?? 'Loading your ballot…'}</p></div></div>
+    // survivor-core §7: a skeleton while the ballot loads, the kit error card (with retry) if it fails.
+    return <div className="swl-vc" data-testid="survivor-vote-cast"><div className="swl-vc-body">
+      {loadError
+        ? <SurvivorStateCard state="ballot_error"><button type="button" className="svk-btn svk-btn-gold" onClick={() => void refresh(true)}>Try again</button></SurvivorStateCard>
+        : <div role="status" aria-label="Loading your ballot" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <SvkSkeleton height={18} width="50%" />
+          {[0, 1, 2, 3].map(i => <SvkSkeleton key={i} height={52} />)}
+        </div>}
+    </div></div>
   }
 
   const headerSub = `Tribal Council · Week ${week ?? '—'}${tribeName ? ` · Tribe ${tribeName}` : ''}`

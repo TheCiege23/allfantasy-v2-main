@@ -16,6 +16,9 @@ import type { SurvivorSummary, SurvivorSummaryTribe } from './types'
 import { SurvivorAvatar, SurvivorOutChip, SurvivorTorchIcon, survivorAvatarStatus } from './weekly/SurvivorAvatar'
 import { SurvivorWeeklyMoments } from './weekly/SurvivorWeeklyMoments'
 import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
+import { SvkSkeleton } from './core/SurvivorKit'
+import { SURVIVOR_STATES, SurvivorStateCard } from './core/SurvivorStateCard'
+import { hasSeenTribeReveal, SurvivorTribeReveal } from './core/SurvivorTribeReveal'
 import './survivor-home.css'
 
 const TRIBE_COLORS = ['#b8a8ff', '#7fd3de', '#f0a35e', '#8fd694']
@@ -151,7 +154,27 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
 
   const feed = buildFeed(summary, names)
 
+  // First tribe reveal (survivor-core §6): once per viewer per league, as soon as their tribe exists.
+  const myTribe = summary?.myTribeId ? tribes.find(tribe => tribe.id === summary.myTribeId && tribe.id !== 'merged') ?? null : null
+  const [revealOpen, setRevealOpen] = useState(false)
+  useEffect(() => {
+    if (myTribe && !summary?.merged && !hasSeenTribeReveal(league.id)) setRevealOpen(true)
+  }, [myTribe, summary?.merged, league.id])
+  const spectator = Boolean(summary?.myRosterId && votedOut.has(summary.myRosterId) && summary.config?.exileReturnEnabled === false)
+
   return <div className="svh" data-testid="survivor-native-home">
+    {revealOpen && myTribe && <SurvivorTribeReveal
+      leagueId={league.id}
+      sport={league.sport}
+      chatHref={`/survivor/${encodeURIComponent(league.id)}/chat`}
+      onClose={() => setRevealOpen(false)}
+      data={{
+        tribeName: tribeName(myTribe),
+        crestUrl: myTribe.logoUrl ?? null,
+        color: myTribe.colorHex ?? TRIBE_COLORS[(myTribe.slotIndex ?? 0) % TRIBE_COLORS.length],
+        mates: myTribe.members.map(member => ({ key: member.rosterId, name: names[member.rosterId] ?? 'Castaway', you: member.rosterId === summary?.myRosterId })),
+      }}
+    />}
     <section className="svh-hero" data-testid="survivor-home-hero" data-mood={mood}>
       <SurvivorMoodScene className="svh-hero-bg" src={scene} />
       <div className="svh-hero-veil" aria-hidden />
@@ -188,7 +211,14 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
 
     <div className="svh-body">
       <section className="svh-main">
-        {draftPending ? <>
+        {summary?.paused && <div className="svh-card"><SurvivorStateCard state="paused" compact /></div>}
+        {spectator && <div className="svh-card"><SurvivorStateCard state="spectator" compact /></div>}
+        {/* In season, show the home skeleton while the island loads instead of flashing the pre-draft cards. */}
+        {!summary && !loadError && typeof league.currentWeek === 'number' && league.currentWeek > 0 ? <div className="svh-card svh-pad" role="status" aria-label="Loading the island" data-testid="survivor-home-loading">
+          <SvkSkeleton height={18} width="40%" />
+          <SvkSkeleton height={12} width="70%" />
+          {[0, 1, 2].map(i => <div key={i} className="svh-row"><SvkSkeleton height={44} width={44} radius={99} /><SvkSkeleton height={12} /><SvkSkeleton height={22} width={28} /></div>)}
+        </div> : draftPending ? <>
           <LeagueSeatTracker teams={teams} teamCount={league.teamCount} userTeamId={userTeamId} leagueName={league.name} inviteCode={inviteCode} canInvite={isCommissioner} onOpenInviteSettings={() => onOpenSettings('invite')} />
           <div className="svh-card svh-pad">
             <div className="svh-row"><span className="svh-lbl svh-grow">The season</span><span className="svh-faint svh-sm">{plan ? `Weeks ${plan.startWeek}–${plan.endWeek}` : 'Full NBA season'}</span></div>
@@ -252,7 +282,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
             })}
           </div>
         </>}
-        {loadError && !summary && <div className="svh-card svh-pad"><p className="svh-sub">The island didn’t load. <button type="button" className="svh-link" onClick={() => void load()}>Try again</button></p></div>}
+        {loadError && !summary && <div className="svh-card"><SurvivorStateCard state="island_error"><button type="button" className="svh-btn svh-btn-gold" onClick={() => void load()}>Try again</button></SurvivorStateCard></div>}
       </section>
 
       <aside className="svh-rail" aria-label="Your Survivor status">
@@ -266,7 +296,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
             : <div className="svh-row svh-idol">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/survivor/idols/immunity.svg" alt="" style={{ opacity: draftPending ? 0.55 : 0.35 }} />
-              <div className="svh-grow"><span className="svh-lbl svh-gold">Your idols · private</span><strong>{draftPending ? 'Idols hide after the draft' : 'No idols on your roster'}</strong><span className="svh-sub svh-sm">{draftPending ? `${summary?.config?.idolCount ?? 6} idols are attached to drafted NBA players. If one lands on your roster, Chimmy tells you privately.` : 'Idols travel with their player. A trade could bring one to you.'}</span></div>
+              <div className="svh-grow"><span className="svh-lbl svh-gold">Your idols · private</span><strong data-testid="survivor-idols-empty">{SURVIVOR_STATES[draftPending ? 'idols_before_draft' : 'idols_none'].title}</strong><span className="svh-sub svh-sm">{SURVIVOR_STATES[draftPending ? 'idols_before_draft' : 'idols_none'].body}</span></div>
             </div>}
           {!draftPending && <button type="button" className="svh-btn svh-btn-sm" onClick={() => onSelectTab('survivor')}>Vault</button>}
         </div>
@@ -288,7 +318,9 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
                 <span className="svh-num svh-faint">{token.tokens}/{need}</span>
               </div>
             })
-            : <p className="svh-sub svh-sm">{draftPending ? 'Voted-out managers keep playing here for tokens. The top exile returns' + (plan ? ` in week ${plan.exileReturnWeek}.` : '.') : 'Nobody is on Exile yet.'}</p>}
+            : draftPending
+              ? <p className="svh-sub svh-sm">{'Voted-out managers keep playing here for tokens. The top exile returns' + (plan ? ` in week ${plan.exileReturnWeek}.` : '.')}</p>
+              : <SurvivorStateCard state="exile_empty" compact />}
         </div>
 
         <div className="svh-card svh-pad svh-feed-card">

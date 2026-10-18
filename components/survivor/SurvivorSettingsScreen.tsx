@@ -18,6 +18,7 @@ import {
   type SurvivorSettingsKey,
   type SurvivorSettingsLocks,
 } from '@/lib/survivor/survivorSettingsScreen'
+import { SurvivorStateCard } from './core/SurvivorStateCard'
 import { SvkEmpty, SvkField, SvkSegmented, SvkSkeleton, SvkStepper, SvkToggle } from './core/SurvivorKit'
 import './survivor-core.css'
 
@@ -146,6 +147,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
       </nav>
 
       <div className="svt-main">
+        {state.locks.draftStarted && <div className="svk-card"><SurvivorStateCard state="locked" compact /></div>}
         <section id="svt-tribes" className="svk-card svt-sec" aria-labelledby="svt-tribes-h">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <h2 id="svt-tribes-h"><img src={SECTIONS[0].icon} alt="" />Tribes</h2>

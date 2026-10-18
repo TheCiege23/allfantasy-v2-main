@@ -459,6 +459,10 @@ export async function GET(
             tieBreakSeasonPoints: finaleState.closed ? finaleState.tieBreakSeasonPoints : null,
           }
         : null,
+    // survivor-core §7 "The league is paused" state. Only whether, never what was snapshotted.
+    paused: await Promise.resolve().then(() => prisma.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true, lastError: true } }))
+      .then(game => Boolean(game?.pausedSnapshot) || Boolean(game?.lastError?.startsWith('PAUSED:')))
+      .catch(() => false),
     rosterDisplayNames,
   }
 

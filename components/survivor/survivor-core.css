@@ -168,6 +168,30 @@
 .svm-more-art img:first-child{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.75}
 .svm-more-art img:last-child{position:relative;height:120px;filter:drop-shadow(0 10px 14px rgba(0,0,0,.6))}
 
+/* First tribe reveal (MobileTribeReveal) */
+@keyframes svrCrest{0%{transform:scale(.4) rotate(-12deg);opacity:0}60%{transform:scale(1.08) rotate(2deg);opacity:1}100%{transform:none}}
+@keyframes svrBuff{0%{transform:translateY(-60px) rotate(-20deg);opacity:0}70%{transform:translateY(4px) rotate(3deg);opacity:1}100%{transform:none}}
+@keyframes svrUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.svr{position:fixed;inset:0;z-index:80;overflow-y:auto;display:flex;justify-content:center;isolation:isolate}
+.svr-bg{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.svr-veil{position:fixed;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(7,8,13,.35),rgba(7,8,13,.75) 45%,#07080d 75%)}
+.svr-in{width:100%;max-width:440px;min-height:100%;display:flex;flex-direction:column;align-items:center;gap:12px;padding:50px 22px 24px;text-align:center}
+.svr-crest{width:190px;filter:drop-shadow(0 20px 30px rgba(0,0,0,.6));animation:svrCrest .9s cubic-bezier(.2,.8,.2,1) both}
+.svr-buff{width:150px;margin-top:-10px;animation:svrBuff .7s ease-out .8s both}
+.svr-up{animation:svrUp .5s ease-out both}
+.svr-title{margin:0;font:700 34px/1.1 'Cinzel',Georgia,serif;color:#f1d58a}
+.svr-mates{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:10px 0 0;padding:0;list-style:none}
+.svr-mates li{display:flex;flex-direction:column;align-items:center;gap:4px;width:92px;font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.svr-wide{width:100%}
+
+/* How Survivor works (onboarding explainer, kit .k-stepper) */
+.svo{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.svo-steps{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;margin:0;padding:0;list-style:none}
+.svo-steps li{flex:1 1 150px;display:flex;gap:10px;min-width:0}
+.svo-steps li i{flex:none;width:28px;height:28px;border-radius:99px;display:grid;place-items:center;font:700 12px var(--font-jetbrains-mono,'JetBrains Mono',monospace);font-style:normal;border:1.5px solid var(--svk-gold2);color:var(--svk-gold2)}
+.svo-steps li b{display:block;font-size:13px;color:var(--svk-text)}
+.svo-steps li span{font-size:12px;color:var(--svk-faint)}
+
 @media (max-width:1180px){
   .svt-layout{grid-template-columns:200px minmax(0,1fr)}
   .svt-side{grid-column:1 / -1;position:static}
@@ -188,6 +212,6 @@
   .svm-slip-hand{font-size:24px}
 }
 @media (prefers-reduced-motion:reduce){
-  .svk-skel,.svk-float,.svk-fade{animation:none}
+  .svk-skel,.svk-float,.svk-fade,.svr-crest,.svr-buff,.svr-up{animation:none}
   .svk-tg::before,.svk-tg::after,.svk-tl-dot{transition:none}
 }
