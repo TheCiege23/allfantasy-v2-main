@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/survivor/shareCards/momentAccess'
-import { loadPublicShareMoment } from '@/lib/survivor/shareCards/momentStore'
+import { loadMomentPageData } from '@/lib/survivor/shareCards/momentPage'
 import { renderShareCard } from '@/lib/survivor/shareCards/renderCard'
 import { SHARE_CARD_SIZES } from '@/lib/survivor/shareCards/types'
 
@@ -17,7 +17,8 @@ export const alt = 'AllFantasy Survivor moment'
 
 export default async function Image({ params }: { params: Promise<{ leagueSlug: string; momentId: string }> }) {
   const { leagueSlug, momentId } = await params
-  const moment = await loadPublicShareMoment(leagueSlug, momentId)
-  if (!moment) notFound()
-  return renderShareCard(moment, 'link', PUBLIC_IMAGE_CACHE_CONTROL)
+  // A private league (public moment pages off) gets no preview image either.
+  const data = await loadMomentPageData(leagueSlug, momentId, { details: false })
+  if (!data || data.state !== 'public') notFound()
+  return renderShareCard(data.moment, 'link', PUBLIC_IMAGE_CACHE_CONTROL)
 }
