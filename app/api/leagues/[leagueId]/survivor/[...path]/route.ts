@@ -28,6 +28,7 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["config"], load: () => import('@/server/api-route-modules/league-survivor/config/route') },
   { pattern: ["exile"], load: () => import('@/server/api-route-modules/league-survivor/exile/route') },
   { pattern: ["idols"], load: () => import('@/server/api-route-modules/league-survivor/idols/route') },
+  { pattern: ["idol-setup"], load: () => import('@/server/api-route-modules/league-survivor/idol-setup/route') },
   { pattern: ["live"], load: () => import('@/server/api-route-modules/league-survivor/live/route') },
   { pattern: ["return"], load: () => import('@/server/api-route-modules/league-survivor/return/route') },
   { pattern: ["runtime"], load: () => import('@/server/api-route-modules/league-survivor/runtime/route') },

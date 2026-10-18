@@ -1,4 +1,4 @@
-import catalog from '@/design-refs/native-league-handoff/survivor-theme/idols/catalog.json'
+import catalog from './idols/catalog.json'
 
 const aliases: Record<string, string> = {
   vote_shield: 'immunity', protect_self: 'immunity', triple_steal: 'steal-three',

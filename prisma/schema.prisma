@@ -6432,7 +6432,7 @@ model League {
   survivorExileReturnWeek               Int?
   survivorFinal3                        Boolean?                               @default(true)
   survivorIdolConvertRule               String?                                @default("faab")
-  survivorIdolCount                     Int?                                   @default(9)
+  survivorIdolCount                     Int?                                   @default(7)
   survivorIdolsEnabled                  Boolean?                               @default(true)
   survivorIdolsExpireAtMerge            Boolean?                               @default(true)
   survivorIdolsTradable                 Boolean?                               @default(false)
@@ -6589,6 +6589,7 @@ model League {
   survivorHostMessages                  SurvivorHostMessage[]
   jurySession                           JurySession?
   survivorConfig                        SurvivorLeagueConfig?
+  survivorIdolConfig                    SurvivorIdolConfig?
   survivorNotifications                 SurvivorNotification[]
   survivorPhaseTransitions              SurvivorPhaseTransition[]
   survivorPlayers                       SurvivorPlayer[]
@@ -8999,6 +9000,49 @@ model SurvivorIdolLedgerEntry {
   @@index([leagueId, eventType])
   @@index([idolId])
   @@map("survivor_idol_ledger_entries")
+}
+
+/// Idol types (survivor-theme handoff `idols/catalog.json`). New idols are added as rows, not code.
+model SurvivorIdolType {
+  id              String   @id @db.VarChar(48)
+  name            String   @db.VarChar(80)
+  glow            String   @db.VarChar(16)
+  category        String   @db.VarChar(16)
+  tier            Int
+  alwaysIn        Boolean  @default(false)
+  shortText       String
+  powerText       String
+  whenText        String   @db.VarChar(120)
+  targetText      String   @db.VarChar(120)
+  /// Resolution engine power (e.g. vote_shield) when this idol has one; null while it has none.
+  enginePowerType String?  @db.VarChar(64)
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("survivor_idol_types")
+}
+
+/// Commissioner idol setup (IdolSetup). Locks when the draft starts; resolvedTypeIds is the sealed draw.
+model SurvivorIdolConfig {
+  id              String    @id @default(uuid())
+  leagueId        String    @unique @db.VarChar(64)
+  mode            String    @default("random") @db.VarChar(8)
+  count           Int       @default(7)
+  hideFromCommish Boolean   @default(false)
+  pickedTypeIds   String[]  @default([])
+  /// Sealed: the types hidden in this league, drawn on the server at draft lock.
+  resolvedTypeIds String[]  @default([])
+  resolvedAt      DateTime?
+  pointSurgePct   Int       @default(15)
+  tributePct      Int       @default(10)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  league          League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@map("survivor_idol_configs")
 }
 
 /// Tribal Council: one per week (or period). Pre-merge = one tribe attends; merge = all remaining.
