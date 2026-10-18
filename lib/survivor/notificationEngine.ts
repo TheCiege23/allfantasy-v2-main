@@ -123,9 +123,10 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
         !n.isSpoilerSafe ? 'Open the app to find out.' : n.body
       let emailOverride: { subject: string; html: string } | undefined
       if (isSurvivorNotificationKind(n.type) && n.isSpoilerSafe) {
-        leagueFacts ??= await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true } })
+        const facts: { name: string; sport: string | null } = leagueFacts ?? await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true } })
           .then(row => ({ name: row?.name ?? 'Survivor league', sport: row?.sport ? String(row.sport) : null }))
-        emailOverride = renderSurvivorNotificationEmail(n.type, { title, body, leagueId, leagueName: leagueFacts.name, sport: leagueFacts.sport, baseUrl: getPublicSiteOrigin() })
+        leagueFacts = facts
+        emailOverride = renderSurvivorNotificationEmail(n.type, { title, body, leagueId, leagueName: facts.name, sport: facts.sport, baseUrl: getPublicSiteOrigin() })
       }
 
       // In-app plus email and push, each gated by the recipient's own notification settings.
