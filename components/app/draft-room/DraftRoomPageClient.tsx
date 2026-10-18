@@ -2970,6 +2970,12 @@ export function DraftRoomPageClient({
       autoRosterIds: new Set([...aiManagedRosterIds, ...((session as DraftSessionSnapshot).orphanRosterIds ?? [])]),
     })
   }, [session, currentPick?.overall, pulseAvailablePlayers, players, rosterConfig?.starterSlots, aiManagedRosterIds])
+  /** Player table LEFT @ column — the viewer's next pick after any picks they make now. */
+  const leftAtPick = useMemo(() => {
+    const overall = intelLookahead?.viewerNextOverall
+    if (overall == null) return null
+    return { overall, label: formatPickLabel(overall, Math.max(1, session?.teamCount ?? 1)) }
+  }, [intelLookahead?.viewerNextOverall, session?.teamCount])
   const intelPanelNode = (
     <DraftIntelPanel
       lookahead={intelLookahead}
@@ -3751,6 +3757,7 @@ export function DraftRoomPageClient({
         leagueId={leagueId}
         aiRowBadges={aiRowBadges}
         aiOverlaySignals={aiOverlaySignals}
+        leftAtPick={leftAtPick}
         showAiOverlays={showAiOverlays}
         onShowAiOverlaysChange={setShowAiOverlays}
         getDraftCopilotInsight={presentationVariant === 'redraft_snake' ? getDraftCopilotInsight : undefined}
@@ -3771,6 +3778,7 @@ export function DraftRoomPageClient({
       draftedNames,
       draftedPlayerIds,
       queue,
+      leftAtPick,
       effectiveDraftSport,
       draftRoomState.isAuction,
       draftRoomState.canNominate,
@@ -3949,11 +3957,13 @@ export function DraftRoomPageClient({
           aiOverlaySignals={aiOverlaySignals}
           showAiOverlays={showAiOverlays}
           presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+          leftAtPick={leftAtPick}
         />
       </div>
     },
     [
       players,
+      leftAtPick,
       presentationVariant,
       draftIntelLoading,
       draftIntel?.headline,

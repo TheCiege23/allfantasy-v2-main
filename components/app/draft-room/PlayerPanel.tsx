@@ -167,6 +167,8 @@ export type PlayerPanelProps = {
   aiRowBadges?: Record<string, 'ai_pick' | 'value' | 'risky'>
   /** Rich inline AI overlays keyed by `name|position` (lowercase). */
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
+  /** Viewer's next pick — the pool table adds a LEFT @ survival column when set. */
+  leftAtPick?: { overall: number; label: string } | null
   /** Shared AI overlay visibility state from parent surfaces (queue/helper/top bar). */
   showAiOverlays?: boolean
   /** Called when user toggles AI overlays from the pool toolbar. */
@@ -400,6 +402,7 @@ function PlayerPanelInner({
   leagueId,
   aiRowBadges,
   aiOverlaySignals,
+  leftAtPick = null,
   showAiOverlays,
   onShowAiOverlaysChange,
   presentationVariant = 'default',
@@ -1452,6 +1455,7 @@ function PlayerPanelInner({
                     aiOverlaySignals={aiOverlaysEnabled ? aiOverlaySignals : undefined}
                   sortState={{ key: sortBy, direction: sortDirection }}
                   onSortChange={handleColumnHeaderSort}
+                  leftAtPick={leftAtPick}
                 />
               </div>
             )

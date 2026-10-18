@@ -6,11 +6,13 @@ import {
   classifyManagerTendency,
   detectPositionRun,
   formatAdpDelta,
+  formatSurvival,
   pickAdpDelta,
   positionTierRemaining,
   recentPickPositions,
   summarizeDraftValue,
   survivalProbability,
+  survivalTone,
   type PulsePick,
   type PulsePoolPlayer,
 } from '@/lib/draft-room/draftPulse'
@@ -159,5 +161,20 @@ describe('formatAdpDelta', () => {
     expect(formatAdpDelta(4.54)).toBe('+4.5')
     expect(formatAdpDelta(-3)).toBe('−3.0')
     expect(formatAdpDelta(0)).toBe('0.0')
+  })
+})
+
+describe('survivalTone / formatSurvival', () => {
+  it('bands an estimate into likely / coin flip / unlikely', () => {
+    expect(survivalTone(0.6)).toBe('likely')
+    expect(survivalTone(0.59)).toBe('coin_flip')
+    expect(survivalTone(0.3)).toBe('coin_flip')
+    expect(survivalTone(0.29)).toBe('unlikely')
+  })
+
+  it('never prints an estimate as a certainty', () => {
+    expect(formatSurvival(0.634)).toBe('63%')
+    expect(formatSurvival(0.9999)).toBe('99%')
+    expect(formatSurvival(0.0001)).toBe('1%')
   })
 })
