@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { getStealThreePreview } from '@/lib/survivor/survivorStealThree'
 import { idolDefinition, type IdolPlayPreview } from '@/lib/survivor/survivorIdolCatalog'
 import { BUNDLED_SURVIVOR_IDOL_TYPES, survivorIdolTag } from '@/lib/survivor/survivorIdolTypes'
+import { survivorIdolPlayEngine } from '@/lib/survivor/survivorIdolEngines'
 import { survivorIdolGlowStyle } from './SurvivorIdolCard'
 import './survivorIdolPlay.css'
 
@@ -101,7 +102,7 @@ function SurvivorRosterIdolPlay({ leagueId, idolId, powerType, onFinished }: { l
 type IdolPlayProps = { leagueId: string; idolId: string; powerType: string; onFinished: () => void }
 
 export function SurvivorIdolPlay(props: IdolPlayProps) {
-  return ['triple_steal', 'island_raid'].includes(props.powerType)
+  return survivorIdolPlayEngine(props.powerType)?.flow === 'roster'
     ? <SurvivorRosterIdolPlay {...props} /> : <SurvivorCouncilIdolPlay {...props} />
 }
 

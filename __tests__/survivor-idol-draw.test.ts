@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { BUNDLED_SURVIVOR_IDOL_TYPES, survivorIdolCopy, survivorIdolTag, survivorIdolTypeIdForPower } from '@/lib/survivor/survivorIdolTypes'
+import {
+  BUNDLED_SURVIVOR_IDOL_TYPES,
+  isSurvivorIdolTypePlayable,
+  survivorIdolCopy,
+  survivorIdolTag,
+  survivorIdolTypeIdForPower,
+  type SurvivorIdolTypeDef,
+} from '@/lib/survivor/survivorIdolTypes'
+import { SURVIVOR_IDOL_PLAY_ENGINES } from '@/lib/survivor/survivorIdolEngines'
 import {
   balancedDrawViolations,
   drawBalancedIdolTypes,
+  pickRequirement,
   resolveSurvivorIdolTypeIds,
   validatePickedIdolTypes,
   type SurvivorRandomInt,
@@ -20,12 +29,24 @@ function seeded(seed: number): SurvivorRandomInt {
 
 const types = BUNDLED_SURVIVOR_IDOL_TYPES
 const byId = new Map(types.map(type => [type.id, type]))
+const PLAYABLE = ['immunity', 'steal-three', 'vote-steal', 'extra-vote']
+
+/** A catalog where every type has an engine: how the draw behaves once all engines land. */
+const allPlayable: SurvivorIdolTypeDef[] = types.map(type => ({ ...type, enginePowerType: type.enginePowerType ?? 'extra_vote' }))
+const allById = new Map(allPlayable.map(type => [type.id, type]))
 
 describe('idol catalog', () => {
   it('has the 20 handoff idol types with Immunity and Tribe immunity always in', () => {
     expect(types).toHaveLength(20)
     expect(types.filter(type => type.alwaysIn).map(type => type.id)).toEqual(['immunity', 'tribe-immunity'])
     expect(types.map(type => type.id)).toEqual((catalog as Array<{ id: string }>).map(row => row.id))
+  })
+
+  it('derives "playable" from the play-engine registry: exactly the types an engine names', () => {
+    const fromRegistry = Object.values(SURVIVOR_IDOL_PLAY_ENGINES).map(engine => engine.idolTypeId).filter(Boolean)
+    expect(types.filter(isSurvivorIdolTypePlayable).map(type => type.id).sort()).toEqual([...new Set(fromRegistry)].sort())
+    expect(types.filter(isSurvivorIdolTypePlayable).map(type => type.id).sort()).toEqual([...PLAYABLE].sort())
+    expect(isSurvivorIdolTypePlayable(byId.get('tribe-immunity')!)).toBe(false)
   })
 
   it('tags cards with the category and tier dots, or Always in', () => {
@@ -48,28 +69,66 @@ describe('idol catalog', () => {
   })
 })
 
-describe('balanced idol draw', () => {
-  it.each([6, 7, 8])('every %i-idol draw keeps both protection idols and honours every balance rule', (count) => {
-    const seen = new Set<string>()
-    for (let seed = 1; seed <= 400; seed++) {
+describe('draw with today’s engines: playable idols only, repeats fill 6/7/8', () => {
+  it.each([6, 7, 8])('every %i-idol draw over 500 seeds uses only playable types and never fails', (count) => {
+    for (let seed = 1; seed <= 500; seed++) {
       const draw = drawBalancedIdolTypes(types, count, seeded(seed))
       expect(draw.ok).toBe(true)
       if (!draw.ok) return
       expect(draw.typeIds).toHaveLength(count)
+      expect(draw.typeIds.every(id => PLAYABLE.includes(id))).toBe(true)
+      expect(draw.typeIds).not.toContain('tribe-immunity')
+      // Immunity is the only playable always-in idol, so it leads every draw exactly once.
+      expect(draw.typeIds[0]).toBe('immunity')
+      const picks = draw.typeIds.slice(1)
+      expect(picks).not.toContain('immunity')
+      // Every playable type is used before any repeats, the heavy one never repeats, and the
+      // repeats are spread evenly over the lighter ones.
+      expect(new Set(picks)).toEqual(new Set(['steal-three', 'vote-steal', 'extra-vote']))
+      expect(picks.filter(id => id === 'steal-three')).toHaveLength(1)
+      const votes = picks.filter(id => id === 'vote-steal').length
+      const extra = picks.filter(id => id === 'extra-vote').length
+      expect(votes + extra).toBe(count - 2)
+      expect(Math.abs(votes - extra)).toBeLessThanOrEqual(1)
+      // The rules that can still be met are met: one heavy idol, a Votes idol, a Roster idol.
+      const violations = balancedDrawViolations(picks.map(id => byId.get(id)!))
+      expect(violations.filter(rule => !rule.startsWith('more than two'))).toEqual([])
+    }
+  })
+
+  it('preview and seeding use the same draw, so neither can surface a coming-soon idol', () => {
+    const seen = new Set<string>()
+    for (let seed = 1; seed <= 300; seed++) {
+      const draw = drawBalancedIdolTypes(types, 7, seeded(seed))
+      if (draw.ok) draw.typeIds.forEach(id => seen.add(id))
+    }
+    expect([...seen].sort()).toEqual([...PLAYABLE].sort())
+  })
+
+  it('rejects counts outside 6, 7 or 8', () => {
+    expect(drawBalancedIdolTypes(types, 9, seeded(1))).toMatchObject({ ok: false, code: 'invalid_count' })
+    expect(drawBalancedIdolTypes(types, 5, seeded(1))).toMatchObject({ ok: false, code: 'invalid_count' })
+  })
+
+  it('still fills the count when only the always-in idol is playable', () => {
+    const onlyImmunity = types.map(type => (type.id === 'immunity' ? type : { ...type, enginePowerType: null }))
+    expect(drawBalancedIdolTypes(onlyImmunity, 6, seeded(3))).toEqual({ ok: true, typeIds: Array(6).fill('immunity') })
+  })
+})
+
+describe('draw once every engine lands: the full balanced draw comes back automatically', () => {
+  it.each([6, 7, 8])('every %i-idol draw keeps both protection idols, no repeats, and honours every balance rule', (count) => {
+    const seen = new Set<string>()
+    for (let seed = 1; seed <= 300; seed++) {
+      const draw = drawBalancedIdolTypes(allPlayable, count, seeded(seed))
+      expect(draw.ok).toBe(true)
+      if (!draw.ok) return
       expect(new Set(draw.typeIds).size).toBe(count)
       expect(draw.typeIds.slice(0, 2)).toEqual(['immunity', 'tribe-immunity'])
-      const picks = draw.typeIds.slice(2).map(id => byId.get(id)!)
-      expect(picks.every(type => !type.alwaysIn)).toBe(true)
-      expect(picks.filter(type => type.tier === 3).length).toBeLessThanOrEqual(1)
-      const groups = new Map<string, number>()
-      for (const type of picks) groups.set(type.category, (groups.get(type.category) ?? 0) + 1)
-      expect(Math.max(...groups.values())).toBeLessThanOrEqual(2)
-      expect(picks.some(type => type.category === 'Votes')).toBe(true)
-      expect(picks.some(type => type.category === 'Scoring' || type.category === 'Roster')).toBe(true)
+      const picks = draw.typeIds.slice(2).map(id => allById.get(id)!)
       expect(balancedDrawViolations(picks)).toEqual([])
       picks.forEach(type => seen.add(type.id))
     }
-    // The draw reaches the whole pool rather than a fixed subset.
     expect(seen.size).toBe(18)
   })
 
@@ -81,40 +140,43 @@ describe('balanced idol draw', () => {
     expect(balancedDrawViolations(pick('vote-steal', 'decoy', 'defector', 'second-chance'))).toContain('no Scoring or Roster idol')
   })
 
-  it('rejects counts outside 6, 7 or 8', () => {
-    expect(drawBalancedIdolTypes(types, 9, seeded(1))).toMatchObject({ ok: false, code: 'invalid_count' })
-    expect(drawBalancedIdolTypes(types, 5, seeded(1))).toMatchObject({ ok: false, code: 'invalid_count' })
-  })
-
-  it('is fixed by the random source, so the server RNG alone decides the draw', () => {
-    expect(drawBalancedIdolTypes(types, 7, seeded(42))).toEqual(drawBalancedIdolTypes(types, 7, seeded(42)))
-  })
-
   it('stays balanced when the catalog grows past exhaustive enumeration', () => {
-    const extra = Array.from({ length: 30 }, (_, index) => ({ ...byId.get('safety-net')!, id: `extra-${index}`, category: (['Scoring', 'Votes', 'Game'] as const)[index % 3], sortOrder: 100 + index }))
-    const draw = drawBalancedIdolTypes([...types, ...extra], 8, seeded(7))
+    const extra = Array.from({ length: 30 }, (_, index) => ({ ...allById.get('safety-net')!, id: `extra-${index}`, category: (['Scoring', 'Votes', 'Game'] as const)[index % 3], sortOrder: 100 + index }))
+    const pool = [...allPlayable, ...extra]
+    const draw = drawBalancedIdolTypes(pool, 8, seeded(7))
     expect(draw.ok).toBe(true)
-    if (draw.ok) expect(balancedDrawViolations(draw.typeIds.slice(2).map(id => [...types, ...extra].find(type => type.id === id)!))).toEqual([])
+    if (draw.ok) expect(balancedDrawViolations(draw.typeIds.slice(2).map(id => pool.find(type => type.id === id)!))).toEqual([])
   })
 })
 
 describe('commissioner picks', () => {
-  it('accepts exactly count - 2 distinct non-protection types and adds the protection idols', () => {
-    const result = validatePickedIdolTypes(types, 7, ['captain', 'silence', 'second-chance', 'first-claim', 'decoy'])
-    expect(result).toEqual({ ok: true, typeIds: ['immunity', 'tribe-immunity', 'captain', 'silence', 'second-chance', 'first-claim', 'decoy'] })
+  it('with fewer playable types than slots, picks 1 to all of them and repeats them to fill the count', () => {
+    expect(pickRequirement(types, 7)).toEqual({ min: 1, max: 3, slots: 6 })
+    expect(validatePickedIdolTypes(types, 7, ['vote-steal'])).toEqual({ ok: true, typeIds: ['immunity', ...Array(6).fill('vote-steal')] })
+    expect(validatePickedIdolTypes(types, 6, ['vote-steal', 'extra-vote'])).toEqual({ ok: true, typeIds: ['immunity', 'vote-steal', 'vote-steal', 'vote-steal', 'extra-vote', 'extra-vote'] })
   })
 
-  it('refuses short, long, duplicate, unknown and protection picks', () => {
-    expect(validatePickedIdolTypes(types, 7, ['captain', 'silence'])).toMatchObject({ ok: false, error: 'Pick exactly 5 idol types.' })
-    expect(validatePickedIdolTypes(types, 6, ['captain', 'silence', 'decoy', 'revote', 'spyglass'])).toMatchObject({ ok: false })
-    expect(validatePickedIdolTypes(types, 6, ['captain', 'captain', 'decoy', 'revote'])).toMatchObject({ ok: false })
-    expect(validatePickedIdolTypes(types, 6, ['captain', 'nope', 'decoy', 'revote'])).toMatchObject({ ok: false })
-    expect(validatePickedIdolTypes(types, 6, ['immunity', 'captain', 'decoy', 'revote'])).toMatchObject({ ok: false })
+  it('rejects coming-soon (non-playable) idols, even when the count would allow them', () => {
+    expect(validatePickedIdolTypes(types, 7, ['point-surge'])).toMatchObject({ ok: false, code: 'invalid_pick', error: expect.stringMatching(/coming soon/) })
+    expect(validatePickedIdolTypes(types, 7, ['vote-steal', 'captain'])).toMatchObject({ ok: false, code: 'invalid_pick' })
+    expect(validatePickedIdolTypes(types, 7, ['tribe-immunity'])).toMatchObject({ ok: false, code: 'invalid_pick' })
+  })
+
+  it('refuses empty, duplicate and unknown picks', () => {
+    expect(validatePickedIdolTypes(types, 7, [])).toMatchObject({ ok: false, error: 'Pick between 1 and 3 idol types.' })
+    expect(validatePickedIdolTypes(types, 7, ['vote-steal', 'vote-steal'])).toMatchObject({ ok: false })
+    expect(validatePickedIdolTypes(types, 7, ['nope'])).toMatchObject({ ok: false })
+  })
+
+  it('once enough idols are playable, asks for exactly count minus the always-in idols, with no repeats', () => {
+    expect(pickRequirement(allPlayable, 7)).toEqual({ min: 5, max: 5, slots: 5 })
+    expect(validatePickedIdolTypes(allPlayable, 7, ['captain', 'silence', 'second-chance', 'first-claim', 'decoy']))
+      .toEqual({ ok: true, typeIds: ['immunity', 'tribe-immunity', 'captain', 'silence', 'second-chance', 'first-claim', 'decoy'] })
+    expect(validatePickedIdolTypes(allPlayable, 7, ['captain', 'silence'])).toMatchObject({ ok: false, error: 'Pick exactly 5 idol types.' })
   })
 
   it('resolves pick mode from the picks and random mode from the draw', () => {
-    const picks = ['captain', 'silence', 'decoy', 'revote']
-    expect(resolveSurvivorIdolTypeIds(types, { mode: 'pick', count: 6, pickedTypeIds: picks }, seeded(1))).toMatchObject({ ok: true, typeIds: ['immunity', 'tribe-immunity', 'captain', 'silence', 'revote', 'decoy'] })
-    expect(resolveSurvivorIdolTypeIds(types, { mode: 'random', count: 6, pickedTypeIds: picks }, seeded(1))).toMatchObject({ ok: true })
+    expect(resolveSurvivorIdolTypeIds(types, { mode: 'pick', count: 6, pickedTypeIds: ['steal-three'] }, seeded(1))).toEqual({ ok: true, typeIds: ['immunity', ...Array(5).fill('steal-three')] })
+    expect(resolveSurvivorIdolTypeIds(types, { mode: 'random', count: 6, pickedTypeIds: ['steal-three'] }, seeded(1))).toMatchObject({ ok: true })
   })
 })

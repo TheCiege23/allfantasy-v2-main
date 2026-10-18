@@ -25,17 +25,19 @@ type Props = {
   /** Rendered before the art (pick-mode checkbox). */
   lead?: ReactNode
   headingLevel?: 'h3' | 'h4'
+  /** No play engine yet: shows a "Coming soon" tag. */
+  comingSoon?: boolean
 }
 
 /**
  * Idol card (survivor-theme handoff): radial glow in the idol's colour behind the art, Cinzel 700
  * title in the glow colour, and the `Category · ●●○` / "Always in" tag.
  */
-export function SurvivorIdolCard({ type, layout = 'tile', values, selected, dimmed, aside, lead, headingLevel = 'h3' }: Props) {
+export function SurvivorIdolCard({ type, layout = 'tile', values, selected, dimmed, aside, lead, headingLevel = 'h3', comingSoon }: Props) {
   const Heading = headingLevel
   const art = survivorIdolArt(type.id, 'hero')
   return (
-    <div className="svi-card" data-layout={layout} data-selected={selected || undefined} data-dimmed={dimmed || undefined} data-always={type.alwaysIn || undefined} style={survivorIdolGlowStyle(type.glow)}>
+    <div className="svi-card" data-layout={layout} data-selected={selected || undefined} data-dimmed={dimmed || undefined} data-always={type.alwaysIn || undefined} data-soon={comingSoon || undefined} style={survivorIdolGlowStyle(type.glow)}>
       {lead}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {art && <img className="svi-art" src={art} alt="" />}
@@ -43,6 +45,7 @@ export function SurvivorIdolCard({ type, layout = 'tile', values, selected, dimm
         <Heading className="svi-name">{type.name}</Heading>
         <p className="svi-short">{survivorIdolCopy(type.id, type.short, values)}</p>
         {layout === 'tile' && <span className="svi-tag" data-always={type.alwaysIn || undefined}>{survivorIdolTag(type)}</span>}
+        {layout === 'tile' && comingSoon && <span className="svi-tag svi-soon">Coming soon</span>}
       </div>
       {layout === 'row' && !aside && <span className="svi-tag svi-tag-row" data-always={type.alwaysIn || undefined}>{survivorIdolTag(type)}</span>}
       {aside}

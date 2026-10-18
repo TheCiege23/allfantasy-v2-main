@@ -36,8 +36,8 @@ describe('native Survivor idol provisioning', () => {
     expect(db.survivorAuditEntry.create.mock.calls[0][0].data.data).not.toHaveProperty('seed')
   })
 
-  it('seeds exactly the league idol types sealed at draft lock, one idol each', async () => {
-    const resolved = ['immunity', 'tribe-immunity', 'vote-steal', 'point-surge', 'captain', 'first-claim', 'decoy']
+  it('seeds exactly the league idol types sealed at draft lock, one idol per slot, repeats included', async () => {
+    const resolved = ['immunity', 'steal-three', 'vote-steal', 'vote-steal', 'vote-steal', 'extra-vote', 'extra-vote']
     const picks = Array.from({ length: 9 }, (_, index) => ({ playerId: `nba-${index}`, playerName: `Player ${index}`, rosterId: 'generic-1', assetType: 'player' }))
     const db = {
       $queryRaw: vi.fn(async () => [{ t: 'survivor_idol_types', c: 'survivor_idol_configs' }]),
@@ -66,10 +66,44 @@ describe('native Survivor idol provisioning', () => {
     const result = await seedSurvivorIdols('league-1', { db: db as never, seed: 5 })
     expect(result).toMatchObject({ ok: true, seeded: true, voteShieldCount: 7 })
     const created = db.survivorIdol.create.mock.calls.map(([arg]: any) => arg.data)
-    expect(created.map((idol: any) => idol.powerType).sort()).toEqual(['captain', 'decoy', 'first_claim', 'point_surge', 'tribe_immunity', 'vote_shield', 'vote_steal'])
-    expect(created.find((idol: any) => idol.powerType === 'point_surge')).toMatchObject({ powerLabel: 'Point surge', powerCategory: 'scoring', isSecret: true })
+    expect(created.map((idol: any) => idol.powerType).sort()).toEqual(['extra_vote', 'extra_vote', 'triple_steal', 'vote_shield', 'vote_steal', 'vote_steal', 'vote_steal'])
+    expect(created.find((idol: any) => idol.powerType === 'triple_steal')).toMatchObject({ powerLabel: 'Steal 3', powerCategory: 'roster', isSecret: true })
     expect(created.every((idol: any) => typeof idol.auditLog.idolTypeId === 'string')).toBe(true)
     const dm = db.leagueChatMessage.create.mock.calls.map(([arg]: any) => arg.data.metadata)
     expect(dm.map((meta: any) => meta.idolTypeId).sort()).toEqual([...resolved].sort())
+  })
+})
+
+describe('seeding never creates an idol without a play engine', () => {
+  it('redraws a sealed draw holding coming-soon types before seeding', async () => {
+    const stale = ['immunity', 'tribe-immunity', 'vote-steal', 'point-surge', 'captain', 'first-claim', 'decoy']
+    let row: any = { mode: 'random', count: 7, hideFromCommish: false, pickedTypeIds: [], resolvedTypeIds: stale, resolvedAt: new Date(), pointSurgePct: 15, tributePct: 10 }
+    const picks = Array.from({ length: 9 }, (_, index) => ({ playerId: `nba-${index}`, playerName: `Player ${index}`, rosterId: 'generic-1', assetType: 'player' }))
+    const db = {
+      $queryRaw: vi.fn(async () => [{ t: 'survivor_idol_types', c: 'survivor_idol_configs' }]),
+      survivorIdolType: { findMany: vi.fn(async () => []) },
+      survivorIdolConfig: {
+        findUnique: vi.fn(async () => row),
+        updateMany: vi.fn(async ({ data }: any) => { row = { ...row, ...data }; return { count: 1 } }),
+      },
+      survivorIdol: { count: vi.fn(async () => 0), create: vi.fn(async () => ({ id: `idol-${Math.random()}` })) },
+      league: { findUnique: vi.fn(async () => ({ settings: {}, survivorIdolCount: 7, userId: 'commissioner' })) },
+      survivorTribe: { count: vi.fn(async () => 1) },
+      draftSession: { findFirst: vi.fn(async () => ({ id: 'draft-1', status: 'completed', sessionKind: 'real' })) },
+      survivorPlayer: { findMany: vi.fn(async () => [{ userId: 'user-1', redraftRosterId: 'generic-1' }]), findUnique: vi.fn(async () => ({ idolIds: [] })), update: vi.fn(async () => ({})) },
+      roster: { findMany: vi.fn(async () => [{ id: 'generic-1', redraftRosterId: 'season-1' }]) },
+      draftPick: { findMany: vi.fn(async () => picks) },
+      survivorLeagueConfig: { findUnique: vi.fn(async () => ({ id: 'config-1', idolCount: 7, idolPowerPool: null })), update: vi.fn(async () => ({})) },
+      survivorIdolLedgerEntry: { create: vi.fn(async () => ({})) },
+      sportsPlayer: { findFirst: vi.fn(async () => ({ name: 'Player', imageUrl: null })) },
+      leagueChatMessage: { create: vi.fn(async () => ({})) },
+      survivorAuditEntry: { create: vi.fn(async () => ({})) },
+    }
+    const { seedSurvivorIdols } = await import('@/lib/survivor/survivorIdolProvisioning')
+    const result = await seedSurvivorIdols('league-1', { db: db as never, seed: 9 })
+    expect(result).toMatchObject({ ok: true, seeded: true, voteShieldCount: 7 })
+    const powers = db.survivorIdol.create.mock.calls.map(([arg]: any) => arg.data.powerType)
+    expect(powers).toHaveLength(7)
+    expect(powers.every((power: string) => ['vote_shield', 'extra_vote', 'vote_steal', 'triple_steal'].includes(power))).toBe(true)
   })
 })

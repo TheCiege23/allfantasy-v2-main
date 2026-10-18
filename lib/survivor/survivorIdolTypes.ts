@@ -1,4 +1,5 @@
 import catalog from './idols/catalog.json'
+import { survivorIdolEnginePowerFor, survivorIdolPlayEngine } from './survivorIdolEngines'
 
 /**
  * Survivor idol types (survivor-theme handoff, `idols/catalog.json`).
@@ -32,14 +33,6 @@ export const SURVIVOR_IDOL_COUNT_DEFAULT = 7
 export const SURVIVOR_POINT_SURGE_DEFAULT_PCT = 15
 export const SURVIVOR_TRIBUTE_DEFAULT_PCT = 10
 
-/** Catalog ids whose play is resolved by an existing server engine. */
-export const SURVIVOR_IDOL_ENGINE_POWER: Readonly<Record<string, string>> = {
-  immunity: 'vote_shield',
-  'extra-vote': 'extra_vote',
-  'vote-steal': 'vote_steal',
-  'steal-three': 'triple_steal',
-}
-
 type CatalogRow = { id: string; name: string; glow: string; cat: string; tier: number; always?: boolean; short: string; power: string; when: string; target: string }
 
 function toCategory(value: string): SurvivorIdolCategory {
@@ -61,7 +54,7 @@ export const BUNDLED_SURVIVOR_IDOL_TYPES: readonly SurvivorIdolTypeDef[] = (cata
   power: row.power,
   when: row.when,
   target: row.target,
-  enginePowerType: SURVIVOR_IDOL_ENGINE_POWER[row.id] ?? null,
+  enginePowerType: survivorIdolEnginePowerFor(row.id),
   sortOrder: index,
 }))
 
@@ -75,6 +68,14 @@ export function survivorIdolTypeIdForPower(powerType: string | null | undefined)
   if (!powerType) return null
   const mapped = LEGACY_POWER_TO_TYPE[powerType] ?? powerType.replace(/_/g, '-')
   return BUNDLED_SURVIVOR_IDOL_TYPES.some(type => type.id === mapped) ? mapped : null
+}
+
+/**
+ * Whether an idol type can be played today: its engine power is in the play-engine registry
+ * (lib/survivor/survivorIdolEngines.ts). Only playable types are drawn, picked or seeded.
+ */
+export function isSurvivorIdolTypePlayable(type: Pick<SurvivorIdolTypeDef, 'enginePowerType'>): boolean {
+  return survivorIdolPlayEngine(type.enginePowerType) !== null
 }
 
 /** What a seeded idol stores as `powerType`: the engine power when one exists, else the catalog id. */

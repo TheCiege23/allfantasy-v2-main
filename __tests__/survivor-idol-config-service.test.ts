@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { BUNDLED_SURVIVOR_IDOL_TYPES } from '@/lib/survivor/survivorIdolTypes'
+import { BUNDLED_SURVIVOR_IDOL_TYPES, isSurvivorIdolTypePlayable } from '@/lib/survivor/survivorIdolTypes'
 import { balancedDrawViolations } from '@/lib/survivor/survivorIdolDraw'
 
 type Row = {
@@ -97,10 +97,24 @@ describe('saving idol setup', () => {
   it('refuses a pick that is not exactly count - 2 and an out-of-range count', async () => {
     const { saveSurvivorIdolConfig } = await import('@/lib/survivor/survivorIdolConfigService')
     const db = fakeDb()
-    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 7, pickedTypeIds: ['captain'] }, db as never)).toMatchObject({ ok: false, status: 422 })
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 7, pickedTypeIds: [] }, db as never)).toMatchObject({ ok: false, status: 422 })
     expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 9 }, db as never)).toMatchObject({ ok: false, status: 400 })
     expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, tributePct: 80 }, db as never)).toMatchObject({ ok: false, status: 400 })
     expect(db.survivorIdolConfig.upsert).not.toHaveBeenCalled()
+  })
+})
+
+describe('pick mode server-side', () => {
+  beforeEach(() => vi.resetModules())
+
+  it('rejects coming-soon (non-playable) idol ids and saves playable picks', async () => {
+    const { saveSurvivorIdolConfig } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb()
+    for (const id of ['captain', 'point-surge', 'tribute', 'tribe-immunity']) {
+      expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 7, pickedTypeIds: [id] }, db as never)).toMatchObject({ ok: false, status: 422 })
+    }
+    expect(db.survivorIdolConfig.upsert).not.toHaveBeenCalled()
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 7, pickedTypeIds: ['vote-steal', 'steal-three'] }, db as never)).toMatchObject({ ok: true })
   })
 })
 
@@ -115,8 +129,9 @@ describe('the draw at draft lock', () => {
     expect(rng).toHaveBeenCalled()
     expect(first?.drawnNow).toBe(true)
     expect(first?.typeIds).toHaveLength(8)
-    expect(first?.typeIds.slice(0, 2)).toEqual(['immunity', 'tribe-immunity'])
-    expect(balancedDrawViolations(first!.typeIds.slice(2).map(id => typeById.get(id)!))).toEqual([])
+    expect(first?.typeIds[0]).toBe('immunity')
+    expect(first?.typeIds.every(id => isSurvivorIdolTypePlayable(typeById.get(id)!))).toBe(true)
+    expect(balancedDrawViolations(first!.typeIds.slice(1).map(id => typeById.get(id)!)).filter(rule => !rule.startsWith('more than two'))).toEqual([])
     expect(db.row?.resolvedTypeIds).toEqual(first?.typeIds)
 
     const again = await lockSurvivorIdolDraw('league-1', db as never, () => 0)
@@ -125,9 +140,31 @@ describe('the draw at draft lock', () => {
 
   it('uses the commissioner picks in pick mode', async () => {
     const { lockSurvivorIdolDraw } = await import('@/lib/survivor/survivorIdolConfigService')
-    const db = fakeDb({ row: { mode: 'pick', count: 6, pickedTypeIds: ['captain', 'silence', 'decoy', 'revote'] } })
+    const db = fakeDb({ row: { mode: 'pick', count: 6, pickedTypeIds: ['vote-steal', 'extra-vote'] } })
     const locked = await lockSurvivorIdolDraw('league-1', db as never, () => 0)
-    expect(locked?.typeIds).toEqual(['immunity', 'tribe-immunity', 'captain', 'silence', 'revote', 'decoy'])
+    expect(locked?.typeIds).toEqual(['immunity', 'vote-steal', 'vote-steal', 'vote-steal', 'extra-vote', 'extra-vote'])
+  })
+
+  it('never seals a coming-soon idol: saved picks that are no longer playable fall back to the balanced draw', async () => {
+    const { lockSurvivorIdolDraw } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb({ row: { mode: 'pick', count: 7, pickedTypeIds: ['captain', 'silence'] } })
+    const locked = await lockSurvivorIdolDraw('league-1', db as never, () => 0)
+    expect(locked?.typeIds).toHaveLength(7)
+    expect(locked?.typeIds.every(id => isSurvivorIdolTypePlayable(typeById.get(id)!))).toBe(true)
+  })
+
+  it('redraws a sealed draw that holds a type without a play engine', async () => {
+    const { lockSurvivorIdolDraw } = await import('@/lib/survivor/survivorIdolConfigService')
+    const stale = ['immunity', 'tribe-immunity', 'vote-steal', 'captain', 'decoy', 'defector', 'first-claim']
+    const db = fakeDb({ row: { count: 7, resolvedTypeIds: stale, resolvedAt: new Date() } })
+    db.survivorIdolConfig.updateMany.mockImplementationOnce(async ({ where, data }: any) => {
+      expect(where.resolvedTypeIds).toEqual({ equals: stale })
+      Object.assign(db.row!, data)
+      return { count: 1 }
+    })
+    const locked = await lockSurvivorIdolDraw('league-1', db as never, () => 0)
+    expect(locked?.drawnNow).toBe(true)
+    expect(locked?.typeIds.every(id => isSurvivorIdolTypePlayable(typeById.get(id)!))).toBe(true)
   })
 
   it('creates the default setup for a league that never opened it, clamping a legacy count to 6–8', async () => {

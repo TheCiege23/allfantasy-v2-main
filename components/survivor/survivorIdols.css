@@ -8,6 +8,8 @@
 .svi-short{margin:0;font-size:13px;line-height:1.45;color:#a3a9c2}
 .svi-tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:5px;border:1px solid rgba(255,255,255,.14);background:rgba(7,8,13,.55);font-size:11.5px;color:#c9cde0;white-space:nowrap;letter-spacing:.02em}
 .svi-tag[data-always]{border-color:rgba(242,201,76,.55);color:#f1d58a}
+.svi-tag.svi-soon{border-style:dashed;border-color:rgba(255,255,255,.28);color:#c9cde0;font-family:inherit}
+.svs-values label .svi-soon{align-self:flex-start}
 .svi-card[data-layout=row]{flex-direction:row;align-items:center;text-align:left;gap:14px;padding:14px 16px;background:linear-gradient(90deg,var(--glow-soft,rgba(242,201,76,.25)) 0%,transparent 55%),#0d1018}
 .svi-card[data-layout=row] .svi-art{height:64px;flex:none}
 .svi-card[data-layout=row] .svi-copy{align-items:flex-start;flex:1}

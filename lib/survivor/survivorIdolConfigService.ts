@@ -3,9 +3,11 @@ import 'server-only'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { survivorIdolEnginePowerFor } from './survivorIdolEngines'
 import {
   BUNDLED_SURVIVOR_IDOL_TYPES,
   SURVIVOR_IDOL_CATEGORIES,
+  isSurvivorIdolTypePlayable,
   SURVIVOR_IDOL_COUNT_DEFAULT,
   SURVIVOR_POINT_SURGE_DEFAULT_PCT,
   SURVIVOR_TRIBUTE_DEFAULT_PCT,
@@ -73,7 +75,8 @@ function fromRow(row: TypeRow): SurvivorIdolTypeDef {
   return {
     id: row.id, name: row.name, glow: row.glow, category, tier: row.tier >= 3 ? 3 : row.tier <= 1 ? 1 : 2,
     alwaysIn: row.alwaysIn, short: row.shortText, power: row.powerText, when: row.whenText, target: row.targetText,
-    enginePowerType: row.enginePowerType, sortOrder: row.sortOrder,
+    // Playability comes from the play-engine registry, not from the stored column alone.
+    enginePowerType: survivorIdolEnginePowerFor(row.id, row.enginePowerType), sortOrder: row.sortOrder,
   }
 }
 
@@ -261,14 +264,20 @@ export async function lockSurvivorIdolDraw(leagueId: string, db: Db = prisma, rn
       if (!row) return null
     }
     const byId = new Map(types.map(type => [type.id, type]))
-    if (row.resolvedTypeIds.length) {
+    const allPlayable = (ids: string[]) => ids.every(id => { const type = byId.get(id); return Boolean(type && isSurvivorIdolTypePlayable(type)) })
+    // A sealed draw is kept only while every type in it is playable; idols are never seeded
+    // with a type that has no play engine.
+    if (row.resolvedTypeIds.length && allPlayable(row.resolvedTypeIds)) {
       return { typeIds: row.resolvedTypeIds, types: row.resolvedTypeIds.flatMap(id => byId.get(id) ?? []), drawnNow: false }
     }
-    const draw = resolveSurvivorIdolTypeIds(types, row, rng)
+    const stale = row.resolvedTypeIds
+    // Saved picks that are no longer valid fall back to the balanced draw: the draw never fails.
+    let draw = resolveSurvivorIdolTypeIds(types, row, rng)
+    if (!draw.ok && row.mode === 'pick') draw = resolveSurvivorIdolTypeIds(types, { ...row, mode: 'random' }, rng)
     if (!draw.ok) return null
     // Only the first lock writes; a concurrent lock re-reads the winner's draw.
     const written = await (db as typeof prisma).survivorIdolConfig.updateMany({
-      where: { leagueId, resolvedTypeIds: { isEmpty: true } },
+      where: stale.length ? { leagueId, resolvedTypeIds: { equals: stale } } : { leagueId, resolvedTypeIds: { isEmpty: true } },
       data: { resolvedTypeIds: draw.typeIds, resolvedAt: new Date() },
     })
     const typeIds = written.count > 0 ? draw.typeIds : (await readConfigRow(leagueId, db))?.resolvedTypeIds ?? draw.typeIds

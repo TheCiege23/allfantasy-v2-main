@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check } from 'lucide-react'
 import {
   SURVIVOR_IDOL_COUNT_OPTIONS,
+  isSurvivorIdolTypePlayable,
   survivorIdolArt,
   type SurvivorIdolCategory,
   type SurvivorIdolTypeDef,
 } from '@/lib/survivor/survivorIdolTypes'
-import { browserRandomInt, drawBalancedIdolTypes, type SurvivorIdolDrawMode } from '@/lib/survivor/survivorIdolDraw'
+import { browserRandomInt, drawBalancedIdolTypes, pickRequirement, playableIdolPool, validatePickedIdolTypes, type SurvivorIdolDrawMode } from '@/lib/survivor/survivorIdolDraw'
 import { SurvivorIdolCard } from './SurvivorIdolCard'
 import './survivorIdols.css'
 
@@ -32,6 +33,19 @@ export type SurvivorIdolSetupData = {
 }
 
 const PICK_FILTERS: Array<'All' | SurvivorIdolCategory> = ['All', 'Votes', 'Scoring', 'Roster', 'Game', 'Bluff']
+
+/** One card per idol type, with a ×N badge when the draw repeats it. */
+function groupRepeats(types: SurvivorIdolTypeDef[]): Array<{ type: SurvivorIdolTypeDef; copies: number }> {
+  const groups: Array<{ type: SurvivorIdolTypeDef; copies: number }> = []
+  for (const type of types) {
+    const group = groups.find(entry => entry.type.id === type.id)
+    if (group) group.copies += 1
+    else groups.push({ type, copies: 1 })
+  }
+  return groups
+}
+
+const comingSoonTag = <span className="svi-tag svi-tag-row svi-soon">Coming soon</span>
 
 function SealedCard() {
   return <div className="svi-sealed"><span className="svi-sealed-mark" aria-hidden>?</span><div><strong>Sealed idol</strong><span>Revealed when someone plays it</span></div></div>
@@ -68,10 +82,14 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
   useEffect(() => { if (!initialData) void load() }, [initialData, load])
 
   const types = useMemo(() => data?.types ?? [], [data?.types])
-  const always = types.filter(type => type.alwaysIn)
+  // Only playable types (play-engine registry) can be hidden in a league.
+  const always = useMemo(() => playableIdolPool(types).always, [types])
+  const comingSoonAlways = types.filter(type => type.alwaysIn && !isSurvivorIdolTypePlayable(type))
   const others = types.filter(type => !type.alwaysIn)
   const byId = useMemo(() => new Map(types.map(type => [type.id, type])), [types])
   const editable = Boolean(canEdit && data?.isCommissioner && !data.locked)
+  const surgeLive = Boolean(byId.get('point-surge') && isSurvivorIdolTypePlayable(byId.get('point-surge')!))
+  const tributeLive = Boolean(byId.get('tribute') && isSurvivorIdolTypePlayable(byId.get('tribute')!))
 
   // Illustrative only: the real draw happens on the server at draft lock.
   const preview = useMemo(() => {
@@ -84,15 +102,18 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
   if (loadError) return <p role="alert" className="svs-alert">{loadError} <button type="button" className="svs-btn" onClick={() => void load()}>Try again</button></p>
   if (!data || !draft) return <p role="status" className="svs-note">Loading idol setup…</p>
 
-  const extraCount = draft.count - always.length
+  const extraCount = Math.max(0, draft.count - always.length)
   const picked = draft.pickedTypeIds
-  const pickReady = draft.mode !== 'pick' || picked.length === extraCount
+  const need = pickRequirement(types, draft.count)
+  const pickReady = draft.mode !== 'pick' || (need.min > 0 && picked.length >= need.min && picked.length <= need.max)
+  const pickedFill = draft.mode === 'pick' && pickReady ? validatePickedIdolTypes(types, draft.count, picked) : null
   const sealed = draft.mode === 'random' && draft.hideFromCommish
   const update = (patch: Partial<SetupConfig>) => { setDraft(current => current ? { ...current, ...patch } : current); setMessage(null) }
 
   // After lock the server's draw replaces the preview (or stays sealed).
   const lockedDraw = data.resolved && data.resolvedTypeIds ? data.resolvedTypeIds.flatMap(id => byId.get(id) ?? []).filter(type => !type.alwaysIn) : null
-  const drawShown = lockedDraw ?? (draft.mode === 'pick' ? picked.flatMap(id => byId.get(id) ?? []) : preview)
+  const pickedShown = pickedFill?.ok ? pickedFill.typeIds.flatMap(id => byId.get(id) ?? []).filter(type => !type.alwaysIn) : picked.flatMap(id => byId.get(id) ?? [])
+  const drawShown = lockedDraw ?? (draft.mode === 'pick' ? pickedShown : preview)
   const summaryIcons = [...always, ...(sealed || (data.resolved && !data.resolvedTypeIds) ? [] : drawShown)]
   const sealedSlots = Math.max(0, draft.count - summaryIcons.length)
 
@@ -115,7 +136,7 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
 
   const status = data.locked
     ? data.resolved ? (data.resolvedTypeIds ? 'The draft has started. These idols are hidden in this league.' : 'The draft has started. The draw is sealed; you’ll learn what’s in play as idols are played.') : 'The draft has started. Idol settings are locked.'
-    : !pickReady ? `Pick ${extraCount - picked.length} more to lock.`
+    : !pickReady ? (need.min === need.max ? `Pick ${need.min - picked.length} more to lock.` : `Pick at least ${need.min} to lock.`)
       : sealed ? 'The draw is sealed. You’ll find out what’s in play when idols are played, like everyone else.'
         : draft.mode === 'random' ? 'Ready. The server makes the final draw when the draft locks.' : 'Ready to lock.'
 
@@ -141,7 +162,7 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
           <div>
             <span className="svs-lbl" id="svs-count-label">Idols in the draft</span>
             <div className="svs-seg" role="radiogroup" aria-labelledby="svs-count-label" style={{ marginTop: 10 }}>
-              {SURVIVOR_IDOL_COUNT_OPTIONS.map(count => <button key={count} type="button" role="radio" aria-checked={draft.count === count} disabled={!editable} onClick={() => update({ count, pickedTypeIds: picked.slice(0, count - always.length) })}>{count}</button>)}
+              {SURVIVOR_IDOL_COUNT_OPTIONS.map(count => <button key={count} type="button" role="radio" aria-checked={draft.count === count} disabled={!editable} onClick={() => update({ count, pickedTypeIds: picked.slice(0, pickRequirement(types, count).max) })}>{count}</button>)}
             </div>
           </div>
         </section>
@@ -151,6 +172,7 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
           <div className="svs-grid">
             {always.map(type => <SurvivorIdolCard key={type.id} type={type} layout="row" values={draft} headingLevel="h4" aside={<span className="svi-tag svi-tag-row" data-always>Always in</span>} />)}
           </div>
+          {comingSoonAlways.length > 0 && <p className="svs-note">{comingSoonAlways.map(type => type.name).join(' and ')} {comingSoonAlways.length === 1 ? 'is' : 'are'} coming soon. {comingSoonAlways.length === 1 ? 'It joins' : 'They join'} every league once {comingSoonAlways.length === 1 ? 'its' : 'their'} play engine is ready, so {comingSoonAlways.length === 1 ? 'it is' : 'they are'} not included for now.</p>}
         </section>
 
         {draft.mode === 'random' ? (
@@ -163,27 +185,30 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
             <div className="svs-grid">
               {sealed || (data.resolved && !data.resolvedTypeIds)
                 ? Array.from({ length: extraCount }, (_, index) => <SealedCard key={index} />)
-                : drawShown.map(type => <SurvivorIdolCard key={type.id} type={type} layout="row" values={draft} headingLevel="h4" />)}
+                : groupRepeats(drawShown).map(({ type, copies }) => <SurvivorIdolCard key={type.id} type={type} layout="row" values={draft} headingLevel="h4" aside={copies > 1 ? <span className="svi-tag svi-tag-row" aria-label={`${copies} copies`}>×{copies}</span> : undefined} />)}
             </div>
-            <p className="svs-note">Balanced draw: no more than one heavy idol (three dots), no more than two from the same group, and always at least one voting idol and one scoring or roster idol. The final draw happens on the server when the draft locks. {lockedDraw ? '' : 'This preview shows what a draw looks like.'}</p>
+            <p className="svs-note">Only idols that can be played today are drawn. Balanced draw: no more than one heavy idol (three dots), no more than two from the same group, and at least one voting idol and one scoring or roster idol, wherever the playable idols allow it. While fewer idols are playable than there are slots, the draw repeats them (×2) instead. The final draw happens on the server when the draft locks. {lockedDraw ? '' : 'This preview shows what a draw looks like.'}</p>
           </section>
         ) : (
           <section aria-label="Pick idols" className="svs-main" style={{ gap: 10 }}>
             <div className="svs-row">
-              <span className="svs-lbl svs-grow">Pick {extraCount} more · {picked.length} picked</span>
+              <span className="svs-lbl svs-grow">{need.min === need.max ? `Pick ${need.min} more` : `Pick ${need.min} to ${need.max}`} · {picked.length} picked</span>
               <div className="svs-chips" role="group" aria-label="Filter by group">
                 {PICK_FILTERS.map(name => <button key={name} type="button" className="svs-chip" aria-pressed={filter === name} onClick={() => setFilter(name)}>{name}</button>)}
               </div>
             </div>
+            {need.min !== need.max && <p className="svs-note">Only {need.max} idol {need.max === 1 ? 'type can' : 'types can'} be played today, fewer than the {need.slots} open slots. Pick the ones you want; the empty slots repeat your picks in order.</p>}
             <div className="svs-grid">
               {others.filter(type => filter === 'All' || type.category === filter).map(type => {
+                const playable = isSurvivorIdolTypePlayable(type)
                 const checked = picked.includes(type.id)
-                const full = picked.length >= extraCount
+                const full = picked.length >= need.max
                 return <label key={type.id} className="svs-pick">
-                  <input type="checkbox" checked={checked} disabled={!editable || (!checked && full)} aria-label={type.name}
+                  <input type="checkbox" checked={checked} disabled={!editable || !playable || (!checked && full)} aria-label={playable ? type.name : `${type.name} (coming soon)`}
                     onChange={() => update({ pickedTypeIds: checked ? picked.filter(id => id !== type.id) : [...picked, type.id] })} />
-                  <SurvivorIdolCard type={type} layout="row" values={draft} headingLevel="h4" selected={checked} dimmed={!checked && full}
-                    lead={<span className="svs-box" aria-hidden>{checked && <Check size={14} strokeWidth={3} />}</span>} />
+                  <SurvivorIdolCard type={type} layout="row" values={draft} headingLevel="h4" selected={checked} dimmed={!playable || (!checked && full)}
+                    lead={<span className="svs-box" aria-hidden>{checked && <Check size={14} strokeWidth={3} />}</span>}
+                    aside={playable ? undefined : comingSoonTag} />
                 </label>
               })}
             </div>
@@ -196,7 +221,7 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
           <span className="svs-lbl">Summary</span>
           <div className="svs-count"><b>{draft.count}</b><span>idols hidden in the draft</span></div>
           <div className="svs-icons">
-            {summaryIcons.map(type => <span key={type.id} className="svs-icon" title={type.name}>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={survivorIdolArt(type.id, 'icon') ?? ''} alt={type.name} /></span>)}
+            {summaryIcons.map((type, index) => <span key={`${type.id}-${index}`} className="svs-icon" title={type.name}>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={survivorIdolArt(type.id, 'icon') ?? ''} alt={type.name} /></span>)}
             {Array.from({ length: sealedSlots }, (_, index) => <span key={`sealed-${index}`} className="svs-icon" data-sealed aria-label="Sealed idol">?</span>)}
           </div>
           <p className="svs-status" role="status">{status}</p>
@@ -207,19 +232,19 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
         <section className="svs-panel" aria-label="League values">
           <span className="svs-lbl">League values</span>
           <div className="svs-values">
-            <label>Point surge size (%)
-              <input type="number" inputMode="numeric" min={1} max={100} value={draft.pointSurgePct} disabled={!editable} onChange={event => update({ pointSurgePct: Math.round(Number(event.target.value)) })} />
+            <label>Point surge size (%){!surgeLive && <span className="svi-tag svi-soon">Coming soon</span>}
+              <input type="number" inputMode="numeric" min={1} max={100} value={draft.pointSurgePct} disabled={!editable || !surgeLive} onChange={event => update({ pointSurgePct: Math.round(Number(event.target.value)) })} />
             </label>
-            <label>Tribute (% of points)
-              <input type="number" inputMode="numeric" min={1} max={50} value={draft.tributePct} disabled={!editable} onChange={event => update({ tributePct: Math.round(Number(event.target.value)) })} />
+            <label>Tribute (% of points){!tributeLive && <span className="svi-tag svi-soon">Coming soon</span>}
+              <input type="number" inputMode="numeric" min={1} max={50} value={draft.tributePct} disabled={!editable || !tributeLive} onChange={event => update({ tributePct: Math.round(Number(event.target.value)) })} />
             </label>
           </div>
-          <p className="svs-note">Point surge adds this much to a team’s score for one week. Tribute takes this share of one opponent’s points.</p>
+          <p className="svs-note">{surgeLive && tributeLive ? 'Point surge adds this much to a team’s score for one week. Tribute takes this share of one opponent’s points.' : 'These apply once Point surge and Tribute can be played. Until then they are not in any draw.'}</p>
         </section>
 
         <section className="svs-panel svs-know">
           <span className="svs-lbl">Good to know</span>
-          <p>Immunity and Tribe immunity are in every Survivor league.</p>
+          <p>{always.length ? `${always.map(type => type.name).join(' and ')} ${always.length === 1 ? 'is' : 'are'} in every Survivor league.` : 'Every league gets a balanced draw of idols.'}</p>
           <p>Commissioners can see which idol types are in play, but never which players hide them.</p>
           <p>Settings lock when the draft starts. After that, idols only change hands when they’re found or played.</p>
         </section>

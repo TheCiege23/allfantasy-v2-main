@@ -8,6 +8,7 @@ import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import {
   BUNDLED_SURVIVOR_IDOL_TYPES,
   SURVIVOR_IDOL_CATEGORIES,
+  isSurvivorIdolTypePlayable,
   survivorIdolArt,
   survivorIdolCopy,
   survivorIdolTag,
@@ -17,6 +18,7 @@ import {
   type SurvivorIdolTypeDef,
 } from '@/lib/survivor/survivorIdolTypes'
 import { SurvivorIdolPlay } from './SurvivorIdolPlay'
+import { survivorIdolPlayEngine } from '@/lib/survivor/survivorIdolEngines'
 import { SurvivorIdolCard, survivorIdolGlowStyle } from './SurvivorIdolCard'
 import './survivorIdols.css'
 
@@ -86,7 +88,7 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
       <header className="svv-head">
         <div>
           <h2>Idol vault</h2>
-          <p className="svv-sub">{catalog.length} idol types · 6 to 8 hidden per league · random or picked by the commissioner · Immunity and Tribe immunity always in</p>
+          <p className="svv-sub">{catalog.length} idol types · {catalog.filter(isSurvivorIdolTypePlayable).length} playable now, the rest coming soon · 6 to 8 hidden per league · random or picked by the commissioner{catalog.some(type => type.alwaysIn && isSurvivorIdolTypePlayable(type)) ? ` · ${catalog.filter(type => type.alwaysIn && isSurvivorIdolTypePlayable(type)).map(type => type.name).join(' and ')} always in` : ''}</p>
         </div>
         {sealedCount ? <span className="svv-seal">{sealedCount} sealed in {summary.leagueName ?? 'this league'}</span> : null}
       </header>
@@ -101,7 +103,7 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
           <ul className="svv-held">
             {heldIdols.map((idol) => {
               const type = cardTypeFor(idol.powerType, typeById)
-              const button = <button type="button" className="svv-held-btn" onClick={() => setSelectedIdolId(selectedIdolId === idol.id ? null : idol.id)} aria-expanded={selectedIdolId === idol.id}>{selectedIdolId === idol.id ? 'Close' : idol.powerType === 'triple_steal' ? 'Play Steal 3' : 'Play idol'}</button>
+              const button = !survivorIdolPlayEngine(idol.powerType) ? <span className="svi-tag svi-soon">Coming soon</span> : <button type="button" className="svv-held-btn" onClick={() => setSelectedIdolId(selectedIdolId === idol.id ? null : idol.id)} aria-expanded={selectedIdolId === idol.id}>{selectedIdolId === idol.id ? 'Close' : idol.powerType === 'triple_steal' ? 'Play Steal 3' : 'Play idol'}</button>
               const player = <span className="svv-player">
                 {idol.playerImageUrl
                   ? <Image src={idol.playerImageUrl} alt={`${idol.playerName ?? 'Idol player'} headshot`} width={28} height={28} unoptimized />
@@ -134,7 +136,7 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
           <div className="svv-grid">
             {catalog.filter(type => filter === 'All' || type.category === filter).map(type => (
               <button key={type.id} type="button" className="svv-tile" aria-pressed={detail?.id === type.id} onClick={() => setDetailId(type.id)}>
-                <SurvivorIdolCard type={type} values={league.values} selected={detail?.id === type.id} headingLevel="h4" />
+                <SurvivorIdolCard type={type} values={league.values} selected={detail?.id === type.id} headingLevel="h4" comingSoon={!isSurvivorIdolTypePlayable(type)} />
               </button>
             ))}
           </div>
@@ -144,13 +146,14 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
             <h3>{detail.name}</h3>
             <p className="svi-short" style={{ fontSize: 14 }}>{survivorIdolCopy(detail.id, detail.power, league.values)}</p>
             <span className="svi-tag" data-always={detail.alwaysIn || undefined} style={{ alignSelf: 'center' }}>{survivorIdolTag(detail)}</span>
+            {!isSurvivorIdolTypePlayable(detail) && <p className="svi-short" role="note"><span className="svi-tag svi-soon">Coming soon</span> This idol is not hidden in leagues yet. It joins the draw once it can be played.</p>}
             <dl className="svv-facts">
               <div><dt>When</dt><dd>{detail.when}</dd></div>
               <div><dt>Target</dt><dd>{detail.target}</dd></div>
               <div><dt>Uses</dt><dd>Once, then it’s gone</dd></div>
               <div><dt>Visible to</dt><dd>Only the owner until played</dd></div>
             </dl>
-            {heldOfDetail && <button type="button" className="svv-play" onClick={() => setSelectedIdolId(heldOfDetail.id)}>Play {detail.name}</button>}
+            {heldOfDetail && isSurvivorIdolTypePlayable(detail) && <button type="button" className="svv-play" onClick={() => setSelectedIdolId(heldOfDetail.id)}>Play {detail.name}</button>}
           </aside>}
         </div>
       </section>
