@@ -678,6 +678,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lsEd.po.playoffStart": "Playoff start",
     "lsEd.po.playoffWeeks": "Playoff weeks",
     "lsEd.po.championship": "Championship",
+    "lsEd.po.weekN": "Week {{n}}",
+    "lsEd.po.startWeekFromQuick": "Set by \"Playoffs start (week)\" in Quick schedule above. Stages change how long the playoffs run, not when they start.",
     "lsEd.po.saved": "Playoff settings saved. Schedule updated.",
     "lsEd.po.save": "Save playoff settings",
     "lsEd.po.gateLabel": "Advanced Playoff Controls",

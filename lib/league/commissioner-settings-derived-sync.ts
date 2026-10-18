@@ -1,12 +1,18 @@
 /**
  * Keeps derived stores in sync when commissioners edit canonical `League` columns from the settings UI:
  * - `League.settings.playoff_structure` / `playoffSettings` ← playoff columns (bracket resolver reads JSON)
+ * - native leagues: `League.settings.playoffStartWeek` and the stage editor's `playoff_config_data`
+ *   start week ← `playoffStartWeek` (the quick field is the source of truth; see resolvePlayoffStartWeek)
  * - `LeagueWaiverSettings` ← waiver columns (waiver engine prefers this row when present)
  */
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+
+/** The playoff stage editor's config key (lib/playoff-settings/PlayoffConfigService). */
+const PLAYOFF_STAGE_CONFIG_KEY = 'playoff_config_data'
 
 const PLAYOFF_COLUMNS = [
   'playoffStartWeek',
@@ -47,6 +53,7 @@ export async function syncCommissionerDerivedLeagueState(
     where: { id: leagueId },
     select: {
       settings: true,
+      platform: true,
       playoffStartWeek: true,
       playoffTeams: true,
       playoffWeeksPerRound: true,
@@ -107,11 +114,27 @@ export async function syncCommissionerDerivedLeagueState(
       if (mirror(playoffSettings, column, column)) playoffSettings[column] = league[column]
     }
 
+    // Native leagues: the stage/bracket editor's copies follow the chosen week. Its stage config
+    // keeps its playoff length, so the whole bracket shifts with the start week.
+    const startWeekCopies: Record<string, unknown> = {}
+    if (touched('playoffStartWeek') && league.playoffStartWeek != null && isNativePlatform(league.platform)) {
+      startWeekCopies.playoffStartWeek = league.playoffStartWeek
+      const stageConfig = prev[PLAYOFF_STAGE_CONFIG_KEY]
+      if (stageConfig != null && typeof stageConfig === 'object' && !Array.isArray(stageConfig)) {
+        startWeekCopies[PLAYOFF_STAGE_CONFIG_KEY] = {
+          ...(stageConfig as Record<string, unknown>),
+          adjustedPlayoffStartWeek: league.playoffStartWeek,
+          adjustedRegularSeasonEndWeek: league.playoffStartWeek - 1,
+        }
+      }
+    }
+
     await prisma.league.update({
       where: { id: leagueId },
       data: {
         settings: {
           ...prev,
+          ...startWeekCopies,
           playoff_structure: existingStructure,
           playoffSettings,
         } as Prisma.InputJsonValue,

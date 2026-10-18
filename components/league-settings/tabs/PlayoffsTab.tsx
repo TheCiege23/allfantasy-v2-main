@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
@@ -12,12 +14,17 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
 
   const [playoffTeams, setPlayoffTeams] = useState(ctx.league.playoffTeams ?? 6)
-  const [playoffStartWeek, setPlayoffStartWeek] = useState(ctx.league.playoffStartWeek ?? 14)
+  // Native leagues: the quick field is the source of truth for the start week (column, then its JSON
+  // copies, then the sport default) and the stage editor below shows it read-only. Imported leagues
+  // keep the original seed.
+  const native = isNativePlatform(ctx.league.platform)
+  const chosenStartWeek = native ? resolvePlayoffStartWeek(ctx.league).week : (ctx.league.playoffStartWeek ?? 14)
+  const [playoffStartWeek, setPlayoffStartWeek] = useState(chosenStartWeek)
 
   useEffect(() => {
     setPlayoffTeams(ctx.league.playoffTeams ?? 6)
-    setPlayoffStartWeek(ctx.league.playoffStartWeek ?? 14)
-  }, [ctx.league.playoffTeams, ctx.league.playoffStartWeek])
+    setPlayoffStartWeek(chosenStartWeek)
+  }, [ctx.league.playoffTeams, chosenStartWeek])
 
   const teamCap = ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12
 
@@ -68,7 +75,7 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
       <div>
         <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.stages')}</h4>
-        <PlayoffSettingsEditor leagueId={leagueId} />
+        <PlayoffSettingsEditor leagueId={leagueId} playoffStartWeek={native ? playoffStartWeek : undefined} />
       </div>
     </div>
   )

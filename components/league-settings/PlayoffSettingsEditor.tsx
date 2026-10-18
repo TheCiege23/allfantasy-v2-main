@@ -42,7 +42,12 @@ interface ScheduleAdjustment {
   totalWeeksChanged: number
 }
 
-export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
+/**
+ * `playoffStartWeek` (native leagues): the commissioner's chosen week from the quick field. The
+ * start week is then read-only here — stages change the playoff length, never the start week —
+ * and a note points to the quick field. Omitted (imported leagues), the editor is unchanged.
+ */
+export function PlayoffSettingsEditor({ leagueId, playoffStartWeek }: { leagueId: string; playoffStartWeek?: number | null }) {
   const { t } = useLanguage()
   const [stages, setStages] = useState<PlayoffStageOption[]>([])
   const [config, setConfig] = useState<PlayoffConfig | null>(null)
@@ -93,7 +98,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
       .then((r) => r.json())
       .then((data) => setPreview(data.adjustment ?? null))
       .catch(() => {})
-  }, [pendingStages, config, leagueId])
+  }, [pendingStages, config, leagueId, playoffStartWeek])
 
   const toggleStage = useCallback((stageId: string, isPremiumStage: boolean) => {
     if (isPremiumStage && !isPremium) {
@@ -130,6 +135,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
 
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.po.loading')}</div>
 
+  const startWeekReadOnly = typeof playoffStartWeek === 'number' && playoffStartWeek > 0
   const hasChanges = config && JSON.stringify([...pendingStages].sort()) !== JSON.stringify([...config.includedStages].sort())
 
   return (
@@ -148,7 +154,13 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
       {config && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-white/60">
           {t('lsEd.po.current').replace('{{value}}', config.includedStages.length === 0 ? t('lsEd.po.default') : t('lsEd.po.stagesEnabled').replace('{{n}}', String(config.includedStages.length)))}
-          {config.adjustedPlayoffStartWeek && <span className="ml-2">{t('lsEd.po.startsWeek').replace('{{n}}', String(config.adjustedPlayoffStartWeek))}</span>}
+          {startWeekReadOnly ? null : config.adjustedPlayoffStartWeek && <span className="ml-2">{t('lsEd.po.startsWeek').replace('{{n}}', String(config.adjustedPlayoffStartWeek))}</span>}
+        </div>
+      )}
+      {startWeekReadOnly && (
+        <div data-testid="playoff-stage-start-week" className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-white/60">
+          <span className="font-medium text-white/85">{t('lsEd.po.playoffStart')}: {t('lsEd.po.weekN').replace('{{n}}', String(playoffStartWeek))}</span>
+          <p className="mt-1 text-[11px] text-white/45">{t('lsEd.po.startWeekFromQuick')}</p>
         </div>
       )}
 

@@ -2398,6 +2398,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsEd.po.playoffStart": "Inicio de playoffs",
   "lsEd.po.playoffWeeks": "Semanas de playoffs",
   "lsEd.po.championship": "Final",
+  "lsEd.po.weekN": "Semana {{n}}",
+  "lsEd.po.startWeekFromQuick": "Lo fija \"Inicio de playoffs (semana)\" en Calendario rápido arriba. Las etapas cambian cuánto duran los playoffs, no cuándo empiezan.",
   "lsEd.po.saved": "Ajustes de playoffs guardados. Calendario actualizado.",
   "lsEd.po.save": "Guardar ajustes de playoffs",
   "lsEd.po.gateLabel": "Controles avanzados de playoffs",
