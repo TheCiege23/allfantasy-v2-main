@@ -269,5 +269,31 @@ export async function upsertLeagueWaiverSettings(
     create: { leagueId, ...data },
     update: data,
   })
+  // Best-effort: the settings row is saved; a failed seed must not fail the save.
+  await seedNullFaabBalances(leagueId).catch((err) => {
+    console.warn("[waiver-settings] FAAB balance seed failed", { leagueId, error: err instanceof Error ? err.message : String(err) })
+  })
   return row
+}
+
+/**
+ * 🛑 TURNING FAAB ON NEVER GAVE ANY TEAM MONEY. `Roster.faabRemaining` has no default and no native
+ * create, join or settings path set it, while the waiver engine reads NULL as 0 — so every bid in a
+ * native league that enabled FAAB was refused as "Insufficient FAAB" (found 2026-10-18 on a live
+ * NBA guillotine league). This gives each team with NO balance the league's effective budget.
+ *
+ * Only NULL balances are written: a team that already has a number has either been seeded or spent,
+ * and resetting it would refund spending. Returns how many teams were seeded.
+ */
+export async function seedNullFaabBalances(leagueId: string): Promise<{ seeded: number; budget: number | null }> {
+  const effective = await getEffectiveLeagueWaiverSettings(leagueId)
+  const budget = effective.faabBudget
+  if (effective.normalizedWaiverType !== "faab" || budget == null || budget <= 0) {
+    return { seeded: 0, budget: budget ?? null }
+  }
+  const res = await (prisma as any).roster.updateMany({
+    where: { leagueId, faabRemaining: null },
+    data: { faabRemaining: budget },
+  })
+  return { seeded: res?.count ?? 0, budget }
 }
