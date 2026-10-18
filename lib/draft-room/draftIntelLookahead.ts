@@ -18,10 +18,10 @@ import {
   classifyManagerTendency,
   isFilledPick,
   type AdpLookup,
-  type ManagerTendency,
   type PulsePick,
   type PulsePoolPlayer,
 } from './draftPulse'
+import { blendManagerTendency, type BlendedTendency, type ManagerHistorySummary } from './managerDraftHistory'
 
 export type LookaheadInput = {
   picks: readonly PulsePick[]
@@ -45,6 +45,8 @@ export type LookaheadInput = {
   maxRows?: number
   /** How many ADP-ranked players a manager weighs for need. */
   candidatesPerPick?: number
+  /** Each roster's tendency across its manager's PAST drafts, when known. */
+  historyByRoster?: Readonly<Record<string, ManagerHistorySummary | null | undefined>>
 }
 
 export type LookaheadRow = {
@@ -52,7 +54,8 @@ export type LookaheadRow = {
   pickLabel: string
   rosterId: string
   displayName: string
-  tendency: ManagerTendency
+  /** This draft's picks blended with the manager's past drafts (see managerDraftHistory). */
+  tendency: BlendedTendency
   isAuto: boolean
   /** Positions this manager has not yet filled, in pool-relevance order. */
   needs: string[]
@@ -170,7 +173,10 @@ export function buildDraftLookahead(input: LookaheadInput): LookaheadResult {
       pickLabel: formatPickLabel(overall, input.teamCount),
       rosterId: owner.rosterId,
       displayName: owner.displayName,
-      tendency: classifyManagerTendency(filled, owner.rosterId, input.lookup),
+      tendency: blendManagerTendency(
+        classifyManagerTendency(filled, owner.rosterId, input.lookup, { minSample: 1 }),
+        input.historyByRoster?.[owner.rosterId] ?? null,
+      ),
       isAuto: Boolean(input.autoRosterIds?.has(owner.rosterId)),
       needs,
       projected: choice ? { name: choice.name, position: normPos(choice.position), adp: choice.adp as number } : null,
