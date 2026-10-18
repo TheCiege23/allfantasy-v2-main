@@ -55,7 +55,7 @@
 .svh-mem[data-out=true] .svh-av{filter:grayscale(1) brightness(.7)}
 .svh-mem-name{font-weight:600;font-size:14px;flex-direction:row;align-items:center;gap:8px;display:flex}
 .svh-mem-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.svh-you{flex:none;padding:1px 6px;border-radius:4px;background:rgba(34,211,238,.14);color:#7ee6f5;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.svh-you{flex:none;padding:1px 6px;border-radius:4px;background:rgba(34,211,238,.14);color:#7ee6f5;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 .svh-av{position:relative;display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:50%;background:#1f2638;color:#e8eaf2;font-size:13px;font-weight:700;box-shadow:0 0 0 2px #151926,0 0 0 3.5px var(--ring,#9b8ae0)}
 .svh-av-badge{position:absolute;right:-8px;bottom:-8px;width:20px;height:20px}
 .svh-torch{width:22px;height:22px;flex:none}
