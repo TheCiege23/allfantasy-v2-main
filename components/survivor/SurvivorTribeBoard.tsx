@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Users, Trophy } from 'lucide-react'
 import type { SurvivorSummary } from './types'
+import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 
 export interface SurvivorTribeBoardProps {
   leagueId: string
@@ -121,7 +122,7 @@ export function SurvivorTribeBoard({ leagueId, summary, names, onRefresh }: Surv
                 }`}
               >
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 font-semibold text-white">{tribe.logoUrl && <img src={tribe.logoUrl} alt="" width={64} height={64} className="h-16 w-16 object-contain" />}{tribe.name}</h3>
+                  <h3 className="flex items-center gap-2 font-semibold text-white">{tribe.logoUrl && <img src={tribe.logoUrl} alt={tribe.mascot ? tribeCrestAlt(tribe.name, tribe.mascot) : ''} width={64} height={76} className="h-[76px] w-16 object-contain" />}{tribe.name}</h3>
                   {hasImmunity && (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs text-emerald-300">
                       <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="" className="h-5 w-5 object-contain" /> Immunity

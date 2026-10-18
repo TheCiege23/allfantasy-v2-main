@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -88,6 +88,21 @@ export default function LeagueChatPanel({
   }, [searchParams])
   /* A Survivor tribe channel. Read and posted through the shared thread route, which checks membership. */
   const tribeSource = chatSource?.startsWith("tribe_") ? chatSource : null
+  /* Tribe channel icon: the tribe's round emblem mark, read from the Survivor summary (membership-checked). */
+  const [tribeIcon, setTribeIcon] = useState<{ name: string; markUrl: string } | null>(null)
+  useEffect(() => {
+    if (!tribeSource) { setTribeIcon(null); return }
+    const tribeId = tribeSource.slice("tribe_".length)
+    let cancelled = false
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/summary`, { cache: "no-store" })
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: { tribes?: Array<{ id: string; name: string; markUrl?: string | null }> } | null) => {
+        const tribe = data?.tribes?.find(t => t.id === tribeId)
+        if (!cancelled) setTribeIcon(tribe?.markUrl ? { name: tribe.name, markUrl: tribe.markUrl } : null)
+      })
+      .catch(() => { if (!cancelled) setTribeIcon(null) })
+    return () => { cancelled = true }
+  }, [leagueId, tribeSource])
 
   const aiContextFromUrl = useMemo(() => readAIContextFromSearchParams(searchParams ?? undefined), [searchParams])
   const aiContext = useMemo<AIChatContext>(
@@ -134,13 +149,18 @@ export default function LeagueChatPanel({
     >
       <header className="flex items-center justify-between gap-2 border-b px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 items-center gap-2">
-          <MessageCircle className="h-5 w-5 shrink-0" style={{ color: "var(--accent-cyan-strong)" }} />
+          {tribeIcon ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={tribeIcon.markUrl} alt="" width={28} height={28} className="h-7 w-7 shrink-0 rounded-full" data-testid="tribe-chat-channel-icon" />
+          ) : (
+            <MessageCircle className="h-5 w-5 shrink-0" style={{ color: "var(--accent-cyan-strong)" }} />
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
               {leagueName}
             </p>
             <p className="text-[11px]" style={{ color: "var(--muted2)" }}>
-              {tribeSource ? "Tribe chat · Messages · Chimmy" : "League chat · Messages · Chimmy"}
+              {tribeSource ? `${tribeIcon ? `${tribeIcon.name} tribe chat` : "Tribe chat"} · Messages · Chimmy` : "League chat · Messages · Chimmy"}
             </p>
           </div>
         </div>

@@ -7,6 +7,7 @@ import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { TribeMemberCard } from '@/app/survivor/components/TribeMemberCard'
 import type { SurvivorStatusBadgeVariant } from '@/app/survivor/components/SurvivorStatusBadge'
 import type { SurvivorSeasonPlayer } from '@/lib/survivor/survivorUiTypes'
+import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 
 function memberVariant(p: SurvivorSeasonPlayer, councilOpen: boolean): SurvivorStatusBadgeVariant {
   if (p.playerState === 'eliminated' || (p.eliminatedWeek != null && p.eliminatedWeek > 0)) return 'eliminated'
@@ -54,12 +55,22 @@ export default function SurvivorTribePage() {
     <div className="relative px-3 pb-28 pt-4 md:px-6 md:pb-10">
       <header className="survivor-panel rounded-2xl p-4 md:flex md:items-end md:justify-between md:p-6">
         <div className="flex items-start gap-4">
-          <div
+          {!postMerge && tribe?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={tribe.logoUrl}
+              alt={tribeCrestAlt(tribe.name ?? 'Your', tribe.mascot)}
+              width={120}
+              height={142}
+              className="h-[142px] w-[120px] shrink-0 object-contain"
+              data-testid="survivor-your-tribe-crest"
+            />
+          ) : <div
             className="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-black text-black/80"
             style={{ backgroundColor: tribe?.colorHex ?? '#22d3ee' }}
           >
             {(tribe?.name ?? 'T').slice(0, 1)}
-          </div>
+          </div>}
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--survivor-text-dim)]">Your tribe</p>
             <h1

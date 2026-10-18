@@ -15,14 +15,14 @@ export default function SurvivorChatPage() {
   const base = `/survivor/${leagueId}`
   const [tab, setTab] = useState<TabId>('league')
 
-  const tribeName = useMemo(() => {
-    const t = ctx.season?.tribes?.find((x) => x.id === ctx.tribeId)
-    return t?.name ?? 'Tribe'
-  }, [ctx.season?.tribes, ctx.tribeId])
+  const myTribe = useMemo(() => ctx.season?.tribes?.find((x) => x.id === ctx.tribeId) ?? null, [ctx.season?.tribes, ctx.tribeId])
+  const tribeName = myTribe?.name ?? 'Tribe'
+  // Channel icon: the tribe's round mark. Decorative (alt="") because the tribe name is always shown beside it.
+  const tribeMark = myTribe?.markUrl ?? null
 
   const tabs: { id: TabId; label: string; show: boolean; unread?: number }[] = [
     { id: 'league', label: '🌍 League', show: true },
-    { id: 'tribe', label: `🔥 ${tribeName}`, show: ctx.playerState !== 'exile' && ctx.canAccessTribeChat },
+    { id: 'tribe', label: tribeMark ? tribeName : `🔥 ${tribeName}`, show: ctx.playerState !== 'exile' && ctx.canAccessTribeChat },
     { id: 'chimmy', label: '🤖 @Chimmy', show: true },
     { id: 'alliances', label: '🤝 Alliances', show: true },
     { id: 'exile', label: '🏚 Exile', show: ctx.canAccessExileChat },
@@ -53,10 +53,12 @@ export default function SurvivorChatPage() {
             onClick={() => setTab(t.id)}
             aria-label={`${t.label} chat`}
             className={clsx(
-              'shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wide',
+              'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wide',
               tab === t.id ? 'bg-sky-500/20 text-sky-100' : 'bg-white/[0.04] text-white/50',
             )}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {t.id === 'tribe' && tribeMark ? <img src={tribeMark} alt="" width={20} height={20} className="h-5 w-5 rounded-full" data-testid="survivor-tribe-chat-icon" /> : null}
             {t.label}
             {t.unread ? (
               <span className="ml-1 rounded-full bg-red-500 px-1.5 text-[11px] text-white" aria-label={`${t.unread} unread`}>
@@ -90,7 +92,11 @@ export default function SurvivorChatPage() {
 
         {tab === 'tribe' && (
           <>
-            <p className="text-[11px] font-bold uppercase text-sky-200/80">🔒 Private · {tribeName}</p>
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase text-sky-200/80">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {tribeMark ? <img src={tribeMark} alt="" width={32} height={32} className="h-8 w-8 rounded-full" /> : null}
+              {tribeMark ? `Private · ${tribeName}` : `🔒 Private · ${tribeName}`}
+            </p>
             <p className="mt-1 text-[12px] text-white/50">Only your tribe sees this channel.</p>
             <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-[12px] text-amber-100">
               🗳 Elimination Council tonight — vote through @Chimmy before the deadline.
