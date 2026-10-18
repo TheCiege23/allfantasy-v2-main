@@ -12,6 +12,7 @@ import { getRoundNavigationState } from '@/lib/draft-room/DraftBoardRenderer'
 import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
+import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
 
 export type DraftBoardProps = {
   picks: DraftPickSnapshot[]
@@ -56,6 +57,11 @@ export type DraftBoardProps = {
   poolPlayerById?: Record<string, DraftRoomDisplayPlayerLike>
   /** overall → (overall − market ADP), only for picks worth a steal/reach badge. See lib/draft-room/draftPulse. */
   adpDeltaByOverall?: Record<number, number>
+  /**
+   * Team avatars / orphan / bot-personality for the sticky column header. Snake and linear
+   * boards have no separate team strip, so the header is where this lives.
+   */
+  teamMetaByRoster?: Record<string, DraftTeamStripTeamMeta> | null
 }
 
 type SequentialBoardEntry = {
@@ -158,6 +164,7 @@ function DraftBoardInner({
   presentationVariant = 'default',
   poolPlayerById,
   adpDeltaByOverall,
+  teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
@@ -662,33 +669,62 @@ function DraftBoardInner({
               >
                 Rd
               </div>
-              {orderedSlots.map((entry) => (
+              {orderedSlots.map((entry) => {
+                const meta = teamMetaByRoster?.[entry.rosterId] ?? null
+                const isUser = Boolean(currentUserRosterId) && entry.rosterId === currentUserRosterId
+                const headerName = meta?.teamName?.trim() || entry.displayName
+                return (
                 <div
                   key={entry.rosterId}
-                  className={`group relative flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 transition duration-150 ${
+                  data-testid={`draft-board-team-header-slot-${entry.slot}`}
+                  title={meta?.aiArchetypeLabel ? `${headerName} · ${meta.aiArchetypeLabel}` : headerName}
+                  className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
-                  }`}
+                  } ${isUser ? 'bg-cyan-400/[0.08]' : ''}`}
                 >
                   <span
-                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
+                    className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
                       currentOwnerSlot === entry.slot
                         ? 'border-cyan-300/75 bg-cyan-500/20 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.40)]'
-                        : 'border-white/15 bg-white/[0.05] text-white/85'
+                        : isUser
+                          ? 'border-cyan-400/60 bg-cyan-500/10 text-cyan-50'
+                          : 'border-white/15 bg-white/[0.05] text-white/85'
                     }`}
                   >
-                    {managerInitials(entry.displayName)}
+                    {meta?.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={meta.avatarUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                        }}
+                      />
+                    ) : (
+                      managerInitials(headerName)
+                    )}
+                    {meta?.isOrphan ? (
+                      <span
+                        className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#0b1428] bg-amber-400"
+                        title="Orphan roster"
+                        data-testid={`draft-board-team-header-orphan-${entry.slot}`}
+                      />
+                    ) : null}
                   </span>
                   <span
-                    className="w-full truncate text-center text-[11px] font-medium leading-none text-white/72"
-                    title={entry.displayName}
+                    className={`w-full truncate text-center text-[11px] leading-none ${
+                      isUser ? 'font-bold text-cyan-200' : 'font-medium text-white/72'
+                    }`}
                   >
-                    {entry.displayName}
+                    {headerName}
                   </span>
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
                   ) : null}
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="space-y-[3px] pt-0.5">
