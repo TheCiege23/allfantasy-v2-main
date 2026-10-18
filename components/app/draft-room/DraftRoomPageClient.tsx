@@ -5290,16 +5290,20 @@ export function DraftRoomPageClient({
               the on-the-clock cell in DraftBoard now carry that information. */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex min-h-[120px] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
-              <div className="shrink-0">
-                <DraftTeamStrip
-                  teamCount={safeBoardTeamCount}
-                  slotOrder={slotOrder}
-                  teamMetaByRoster={teamMetaByRoster}
-                  currentUserRosterId={currentUserRosterId ?? null}
-                  onClockRosterId={currentPick?.rosterId ?? null}
-                  canInvite={isCommissioner}
-                />
-              </div>
+              {/* Auction only: snake/linear boards carry the same managers in their sticky
+                  column header (avatars, you, on-clock, orphan), so a strip here duplicated it. */}
+              {session.draftType === 'auction' ? (
+                <div className="shrink-0">
+                  <DraftTeamStrip
+                    teamCount={safeBoardTeamCount}
+                    slotOrder={slotOrder}
+                    teamMetaByRoster={teamMetaByRoster}
+                    currentUserRosterId={currentUserRosterId ?? null}
+                    onClockRosterId={currentPick?.rosterId ?? null}
+                    canInvite={isCommissioner}
+                  />
+                </div>
+              ) : null}
               <div className="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none]">
                 <DraftBoard
                   picks={session.picks ?? []}
@@ -5337,6 +5341,7 @@ export function DraftRoomPageClient({
                   }
                   onCommissionerEditPick={isCommissioner ? openCommissionerPickEditor : undefined}
                   adpDeltaByOverall={boardAdpDeltaByOverall}
+                  teamMetaByRoster={teamMetaByRoster}
                 />
               </div>
             </div>
