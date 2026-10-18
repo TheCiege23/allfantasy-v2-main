@@ -6,6 +6,7 @@ import type { SurvivorSummary } from './types'
 import { SurvivorCommandHelp } from './SurvivorCommandHelp'
 import { SurvivorScrollReveal } from './SurvivorScrollReveal'
 import { SurvivorShareCard } from './SurvivorShareCard'
+import { SurvivorAvatar } from './weekly/SurvivorAvatar'
 
 export interface SurvivorTribalCouncilViewProps {
   leagueId: string
@@ -99,8 +100,13 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
           Voting instructions
         </h2>
         <p className="mb-4 text-sm text-white/70">
-          Cast your vote in league or tribe chat using the official command. Only one vote per roster. Self-vote may be disallowed by league settings.
+          Write your vote on the ballot and drop it in the urn, or send the official command to @Chimmy. Both are the same private ballot. Only one vote per roster, and immune managers can&apos;t receive votes.
         </p>
+        {council && !isClosed && (
+          <a href={`/survivor/${encodeURIComponent(leagueId)}/tribal`} className="mb-4 inline-flex min-h-[46px] items-center justify-center rounded-lg bg-gradient-to-b from-[#e7c46a] to-[#d4a94a] px-5 text-sm font-semibold text-[#1d1406]" data-testid="survivor-open-ballot">
+            Cast your vote
+          </a>
+        )}
         <SurvivorCommandHelp compact />
       </section>
 
@@ -158,13 +164,27 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
             <button type="button" onClick={() => setOutCardOpen(true)} className="min-h-[44px] rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-200">Make a share card</button>
           </section>)}
 
-      {/* Immunity markers (placeholder – backend can expose who has immunity) */}
+      {/* Weekly necklace: top score in each tribe headed to Tribal Council */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-white">
-          <Shield className="h-5 w-5 text-emerald-400" />
+          <Shield className="h-5 w-5 text-amber-300" />
           Immunity
         </h2>
-        <p className="text-sm text-white/50">Individual immunity (from challenges) and tribe immunity are shown on the Tribe Board when active.</p>
+        {summary.immunity?.length ? (
+          <ul className="space-y-2">
+            {summary.immunity.map(row => {
+              const name = names[row.rosterId] ?? row.displayName ?? 'A manager'
+              return <li key={`${row.week}-${row.tribeId}`} className="flex items-center gap-3 rounded-lg border border-amber-300/25 bg-amber-400/[0.07] px-3 py-2 text-sm" data-immune="true">
+                <SurvivorAvatar name={name} size={32} status="immune" gapColor="#10131c" />
+                <span className="min-w-0 flex-1 truncate font-semibold text-white">{name}</span>
+                <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="Immune" className="h-5 w-5" />
+                <span className="font-mono tabular-nums text-white/80">{row.score.toFixed(1)}</span>
+              </li>
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-white/50">The top score in each tribe going to Tribal Council wins immunity once the week&apos;s scores are final. It is worn until the next lineup lock.</p>
+        )}
       </section>
 
       {/* Voted-out history (scroll reveal) */}

@@ -50,11 +50,11 @@
 .svh-crest-emoji{display:grid;place-items:center;font-size:28px;border-radius:12px;background:#151926}
 .svh-tribe-title{font-size:18px}
 .svh-mem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:#151926;border:1px solid rgba(255,255,255,.05)}
-.svh-mem[data-immune=true]{border-color:rgba(242,201,76,.35)}
+.svh-mem[data-immune=true]{border-color:rgba(242,201,76,.25);background:rgba(242,201,76,.07)}
+.svh-mem-necklace{width:22px;height:22px;flex:none}
 .svh-mem[data-you=true]{background:#181d2c}
-.svh-mem[data-out=true]{opacity:.55}
-.svh-mem[data-out=true] .svh-mem-name{text-decoration:line-through}
-.svh-mem[data-out=true] .svh-av{filter:grayscale(1) brightness(.7)}
+.svh-mem[data-out=true]{color:#6f7590;background:#0b0d14}
+.svh-mem[data-out=true] .svh-mem-name{text-decoration:line-through;color:#6f7590}
 .svh-mem-name{font-weight:600;font-size:14px;flex-direction:row;align-items:center;gap:8px;display:flex}
 .svh-mem-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .svh-you{flex:none;padding:1px 6px;border-radius:4px;background:rgba(34,211,238,.14);color:#7ee6f5;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}

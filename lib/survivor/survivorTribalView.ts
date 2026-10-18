@@ -38,7 +38,19 @@ export interface TribalCouncilView {
     playableIdols: Array<{ idolId: string; powerType: string; label: string; alreadyPlayed: boolean }>
     additionalVotes?: Array<{ idolId: string; targetName: string | null; locked: boolean }>
     isSafeFromVote: boolean
+    /** True while the league lets a ballot be changed until votes close. */
+    voteChangeAllowed?: boolean
   }
+  /**
+   * Public ballot sheet for the vote screen: who is at council, this week's score, and public
+   * immunity only. Never another manager's ballot or any idol effect.
+   */
+  ballot?: {
+    selfVotesAllowed: boolean
+    candidates: Array<{ userId: string; rosterId: string; displayName: string; weekScore: number | null; isSelf: boolean; isImmune: boolean; canReceiveYourVote: boolean }>
+  } | null
+  /** Count-only progress for every viewer: "N of M managers have voted". No names, no targets. */
+  votesIn?: { submittedCount: number; eligibleVoterCount: number } | null
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
   revote: { candidates: Array<{ userId: string; displayName: string; firstRoundVotes: number }>; deadline: string; originalCouncilId: string | null } | null
   reveal: {
@@ -72,6 +84,8 @@ const EMPTY: TribalCouncilView = {
     playableIdols: [],
     isSafeFromVote: false,
   },
+  ballot: null,
+  votesIn: null,
   host: null,
   revote: null,
   reveal: null,
@@ -79,6 +93,16 @@ const EMPTY: TribalCouncilView = {
 
 function iso(d: Date | null | undefined): string | null {
   return d ? d.toISOString() : null
+}
+
+/** This week's public score per manager. Scores are public; a missing table or row reads as null. */
+async function loadWeekScores(leagueId: string, week: number, userIds: string[]): Promise<Map<string, number>> {
+  try {
+    const rows = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week, userId: { in: userIds } }, select: { userId: true, finalScore: true } })
+    return new Map(rows.map((row) => [row.userId, row.finalScore]))
+  } catch {
+    return new Map()
+  }
 }
 
 export async function buildTribalCouncilView(access: SurvivorAccessContext): Promise<TribalCouncilView> {
@@ -118,6 +142,30 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
     })
     const firstScroll = Array.isArray(original?.revealSequence) ? original.revealSequence as Array<{ targetUserId?: string; status?: string }> : []
     revote = { candidates: council.tiePlayerIds.map(candidateId => ({ userId: candidateId, displayName: nameByUser.get(candidateId) ?? 'Manager', firstRoundVotes: firstScroll.filter(scroll => scroll.targetUserId === candidateId && scroll.status === 'counts').length })), deadline: council.voteDeadlineAt.toISOString(), originalCouncilId: original?.id ?? null }
+  }
+
+  // Count-only progress while the ballot is open: every viewer sees "N of M managers have voted".
+  // Counted over current eligible voters only, so nothing about who voted or for whom leaks.
+  let votesIn: TribalCouncilView['votesIn'] = null
+  if (!council.isRevealed && ['voting_open', 'closed', 'voting_closed', 'tie_pending'].includes(council.status)) {
+    const eligibleVoterCount = eligibility.voterUserIds.length
+    const counted = await prisma.survivorVote.count({ where: { councilId: council.id, doesNotCount: false, voterUserId: { in: eligibility.voterUserIds } } })
+    votesIn = { submittedCount: Math.min(eligibleVoterCount, Number(counted) || 0), eligibleVoterCount }
+  }
+
+  const immune = new Set(ctx.immuneUserIds ?? [])
+  const weekScores = await loadWeekScores(access.leagueId, council.week, scopePlayers.map((p) => p.userId))
+  const ballot: TribalCouncilView['ballot'] = {
+    selfVotesAllowed: Boolean(access.settings.selfVotesAllowed),
+    candidates: scopePlayers.map((p) => ({
+      userId: p.userId,
+      rosterId: p.rosterId,
+      displayName: p.displayName,
+      weekScore: weekScores.get(p.userId) ?? null,
+      isSelf: p.userId === userId,
+      isImmune: immune.has(p.userId),
+      canReceiveYourVote: eligibleTargetUserIds.includes(p.userId),
+    })),
   }
 
   // Host operational view: missing-vote count only (no ballot contents), full hosts only.
@@ -173,7 +221,10 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
       playableIdols,
       additionalVotes: council.idolsPlayed.filter(p => p.playerUserId === userId && ['vote_steal', 'extra_vote'].includes(p.powerType)).map(p => ({ idolId: p.idolId, targetName: p.extraTargetUserId ? nameByUser.get(p.extraTargetUserId) ?? null : null, locked: Boolean(p.extraTargetUserId) && access.settings.voteChangePolicy === 'first_valid_locks' })),
       isSafeFromVote,
+      voteChangeAllowed: access.settings.voteChangePolicy !== 'first_valid_locks',
     },
+    ballot,
+    votesIn,
     host,
     revote,
     reveal,

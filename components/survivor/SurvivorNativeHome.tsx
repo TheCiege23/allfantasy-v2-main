@@ -10,6 +10,8 @@ import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPla
 import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import { getSurvivorThemeById, stripLeadingTribeIcon, survivorSceneArtwork } from '@/lib/survivor/survivorVisuals'
 import type { SurvivorSummary, SurvivorSummaryTribe } from './types'
+import { SurvivorAvatar, SurvivorOutChip, SurvivorTorchIcon, survivorAvatarStatus } from './weekly/SurvivorAvatar'
+import { SurvivorWeeklyMoments } from './weekly/SurvivorWeeklyMoments'
 import './survivor-home.css'
 
 const TRIBE_COLORS = ['#b8a8ff', '#7fd3de', '#f0a35e', '#8fd694']
@@ -35,16 +37,6 @@ type Props = {
   onOpenSettings: (panel?: string | null) => void
   onSelectTab: (id: string) => void
   inviteCode?: string
-}
-
-function initials(name: string): string {
-  const words = name.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean)
-  if (!words.length) return '?'
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
-  const last = words[words.length - 1]
-  // "Open Team 12" reads as O12, the way the seat list numbers it.
-  if (/^\d+$/.test(last)) return `${words[0][0]}${last}`.toUpperCase()
-  return (words[0][0] + last[0]).toUpperCase()
 }
 
 function useCountdown(targetIso: string | null): string | null {
@@ -186,12 +178,13 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
               <li><strong>Draft</strong><span>{league.teamCount}-team snake draft. Build your queue; autopick uses it when your clock runs out.</span></li>
               <li><strong>Tribes</strong><span>{summary?.config?.tribeCount ?? 4} tribes are drawn at random when the draft ends, each with a private chat.</span></li>
               <li><strong>Idols</strong><span>{summary?.config?.idolCount ?? 6} idols hide on drafted NBA players. Chimmy tells holders privately.</span></li>
-              <li><strong>Tribal Council</strong><span>{plan ? `${plan.eliminationWeeks.length} votes, the first in week ${plan.eliminationWeeks[0]}.` : 'The lowest-scoring tribe votes someone out.'} Vote privately with @Chimmy.</span></li>
+              <li><strong>Tribal Council</strong><span>{plan ? `${plan.eliminationWeeks.length} votes, the first in week ${plan.eliminationWeeks[0]}.` : 'The lowest-scoring tribe votes someone out.'} Vote privately on the ballot screen or with @Chimmy. The top score in each tribe going to Tribal Council wins immunity.</span></li>
               <li><strong>Exile, merge, jury</strong><span>{plan ? `One exile returns in week ${plan.exileReturnWeek}. The jury crowns a winner from the final ${plan.finalistCount} in week ${plan.finaleWeek}.` : 'Voted-out managers fight on from Exile Island; the jury picks the winner.'}</span></li>
             </ol>
           </div>
           {isCommissioner && <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />}
         </> : <>
+          <SurvivorWeeklyMoments leagueId={league.id} exileHref={`/survivor/${encodeURIComponent(league.id)}/exile`} />
           {raced.length > 1 && <div className="svh-card svh-pad svh-race-card" data-testid="survivor-tribe-race">
             <div className="svh-row"><span className="svh-lbl svh-grow">Tribe race · week {week}</span><span className="svh-faint svh-sm">Lowest tribe total goes to Tribal Council</span></div>
             <div className="svh-race-legend">{raced.map((tribe, index) => <span key={tribe.id} style={{ color: tribeColor(tribe, index) }}><b className="svh-tribe-name">{tribeName(tribe)}</b> <span className="svh-num">{(scores[tribe.id] ?? 0).toFixed(1)}</span></span>)}</div>
@@ -220,14 +213,21 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
                   const out = votedOut.has(member.rosterId)
                   const score = memberScores[member.rosterId]
                   return <div key={member.rosterId} className="svh-mem" data-immune={isImmune} data-out={out} data-you={member.rosterId === summary?.myRosterId}>
-                    <span className="svh-av" style={{ ['--ring' as string]: isImmune ? '#f2c94c' : out ? '#4a4f5c' : color }}>{initials(name)}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {isImmune && <img className="svh-av-badge" src="/survivor/weekly/immunity-necklace-icon.svg" alt="Immunity" />}
-                    </span>
+                    <SurvivorAvatar name={name} size={38} ringColor={color} gapColor="#151926" status={survivorAvatarStatus({ immune: isImmune, out })} />
                     <span className="svh-grow svh-mem-name"><span className="svh-mem-text">{name}</span>{member.rosterId === summary?.myRosterId && <span className="svh-you">You</span>}</span>
-                    <span className="svh-num svh-sub svh-sm">{typeof score === 'number' ? score.toFixed(1) : '—'}</span>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="svh-torch" src={out ? '/survivor/weekly/torch-out-icon.svg' : '/survivor/weekly/torch-lit-icon.svg'} alt={out ? 'Torch out' : 'Torch lit'} />
+                    {isImmune && <img className="svh-mem-necklace" src="/survivor/weekly/immunity-necklace-icon.svg" alt="Immune" />}
+                    <span className="svh-num svh-sub svh-sm">{typeof score === 'number' ? score.toFixed(1) : '—'}</span>
+                    <SurvivorTorchIcon out={out} />
+                  </div>
+                })}
+                {(tribe.outMembers ?? []).map(member => {
+                  const name = names[member.rosterId] ?? 'Castaway'
+                  return <div key={`out-${member.rosterId}`} className="svh-mem" data-out="true" data-testid="survivor-out-member">
+                    <SurvivorAvatar name={name} size={38} gapColor="#151926" status="out" />
+                    <span className="svh-grow svh-mem-name"><span className="svh-mem-text">{name}</span></span>
+                    <SurvivorOutChip week={member.week} />
+                    <SurvivorTorchIcon out />
                   </div>
                 })}
               </div>

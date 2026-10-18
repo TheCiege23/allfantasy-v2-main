@@ -65,6 +65,8 @@ export interface SurvivorSummaryTribe {
   emoji?: string | null
   slotIndex: number
   members: { rosterId: string; isLeader: boolean }[]
+  /** Voted-out castaways from this tribe, for the struck-through "Out · Wk N" rows. */
+  outMembers?: { rosterId: string; week: number | null }[]
 }
 
 export interface SurvivorSummaryCouncil {
@@ -108,6 +110,8 @@ export interface SurvivorSummary {
   memberScores?: Record<string, number>
   /** Main rosters holding individual immunity this week. */
   immunityRosterIds?: string[]
+  /** Weekly necklaces still worn (top score in each tribe headed to Tribal Council). */
+  immunity?: { rosterId: string; tribeId: string; week: number; score: number; displayName: string | null; expiresAt: string | null }[]
   scoresFinalized?: boolean
   nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]

@@ -29,6 +29,8 @@ import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedu
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 import { applySurvivorMergeCast } from './survivorMergeCast'
+import { awardTribeImmunity, clearExpiredTribeImmunity } from './survivorTribeImmunity'
+import { postImmunityWinLine } from './leagueChatPoster'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
 export async function sumRedraftStartersFantasy(
@@ -270,6 +272,9 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
   // pause marker in lastError stays put until the commissioner resumes.
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
   if (game?.pausedSnapshot != null) return
+  // No lineup-lock hook exists in Survivor; the first score sync after the lock takes the
+  // necklace off (each row carries the lock instant it expires at).
+  await clearExpiredTribeImmunity(leagueId)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { createdAt: 'desc' },
@@ -391,6 +396,8 @@ export async function finalizeWeeklyScores(leagueId: string, week: number): Prom
       needsTribalLock: plan ? plan.eliminationWeeks.includes(week) : true,
     },
   })
+  // Final scores decide the necklace: top score in each tribe headed to Tribal Council.
+  await awardTribeImmunity(leagueId, week, { post: (winner, awardWeek) => postImmunityWinLine(leagueId, winner, awardWeek) }).catch(() => {})
 }
 
 function tribalVoteWindowHoursFromLeague(settings: unknown): number {
