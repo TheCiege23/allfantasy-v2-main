@@ -94,7 +94,7 @@
 .nls-player small { overflow: hidden; color: var(--muted); font: 12px var(--nl-mono); text-overflow: ellipsis; white-space: nowrap; }
 .nls-player small[data-live=true] { color: var(--accent); }
 .nls-player .nls-player-pos { color: var(--muted); font-weight: 500; }
-.nls-flag { display: inline-grid; place-items: center; min-width: 22px; height: 20px; margin-left: 8px; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent); border-radius: 4px; color: var(--warn); font: 600 10px/1 var(--nl-mono); vertical-align: 2px; }
+.nls-flag { display: inline-grid; place-items: center; min-width: 22px; height: 20px; margin-left: 8px; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent); border-radius: 4px; color: var(--warn); font: 600 11px/1 var(--nl-mono); vertical-align: 2px; }
 .nls-flag[data-tone=bad] { border-color: color-mix(in srgb, var(--bad) 50%, transparent); color: var(--bad); }
 
 /* ── Matchup ─────────────────────────────────────────────────────────── */
