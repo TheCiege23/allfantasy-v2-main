@@ -34,6 +34,7 @@
  *   NFL:   16 cast (2 tribes × 8), merge at 8, ~17 fantasy weeks → safe room for tribal pre-merge
  *   NCAAF: 14 cast (2 tribes × 7), merge at 7, ~14 college weeks → mirrors season length
  */
+import { NEW_LEAGUE_EXILE_BOSS_MODE } from '@/lib/survivor/lateSeasonSettings'
 import type { LeagueSport } from '@prisma/client'
 import { getRosterDefaults, getScoringDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import {
@@ -707,6 +708,8 @@ export function buildSurvivorSettingsSnapshot(input: {
 
   return {
     survivorDefaultsVersion: 1,
+    // New leagues use the score boss; existing leagues were backfilled to the Chimmy roster boss.
+    exileBossMode: NEW_LEAGUE_EXILE_BOSS_MODE,
     sport: contract.sport,
     sport_type: contract.sport,
     leagueType: 'survivor',

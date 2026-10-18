@@ -181,7 +181,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
       return `**Exile Island:**\n• Voted-out players go to Exile\n• NO draft on Exile — waiver claims only!\n• Claim the ${keyPos} (key position) to win the entire team\n• Team with most points earns 1 token\n• ${fullLeague?.survivorBossResetEnabled !== false ? 'Boss wins = ALL tokens reset to 0' : 'No boss reset'}\n• Random mini-games for bonus tokens\n• Most tokens at return week = back to main island`
     }
     if (lower.includes('jury') || lower.includes('finale') || lower.includes('final')) {
-      return `**Jury & Finale:**\n• Jury starts: ${(fullLeague?.survivorJuryStart ?? 'after merge').replace(/_/g, ' ')}\n• Eliminated post-jury-start players become Jurors\n• Final 3 face Jury questions + closing statements\n• Jury votes privately for the Sole Survivor`
+      return `**Jury & Finale:**\n• Jury starts: ${(fullLeague?.survivorJuryStart ?? 'after merge').replace(/_/g, ' ')}\n• Eliminated post-jury-start players become Jurors\n• Final 3 face Jury questions + closing statements\n• Jury votes privately for the season winner`
     }
     if (lower.includes('challenge') || lower.includes('mini')) {
       const sched = getSportSchedule(fullLeague?.sport ?? 'NFL')
@@ -210,7 +210,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
       active: 'You are ACTIVE on the main island.',
       immune: 'You have IMMUNITY this week — you cannot be voted out.',
       exile: 'You are on EXILE ISLAND. Compete to earn tokens and return.',
-      jury: 'You are a JURY MEMBER. You will vote for the Sole Survivor.',
+      jury: 'You are a JURY MEMBER. You will vote for the season winner.',
       finalist: 'You are a FINALIST — prepare for Final Elimination Council!',
       eliminated: 'You have been eliminated from the game.',
     }

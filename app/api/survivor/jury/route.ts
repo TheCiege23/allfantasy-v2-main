@@ -9,10 +9,26 @@ import {
   openJuryPhase,
   openJuryVoting,
 } from '@/lib/survivor/juryEngine'
-import { getFinaleState, recordCrownedWinner, submitJuryVote } from '@/lib/survivor/SurvivorFinaleEngine'
+import { recordCrownedWinner, settleFinaleIfDue, submitJuryVote } from '@/lib/survivor/SurvivorFinaleEngine'
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
+import { getFinaleRevealView } from '@/lib/survivor/finaleView'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * GET: Final Tribal Council view (jury bench, finalist records, sealed/revealed jury vote).
+ * The jury tally and reveal sequence are withheld until every juror has voted or the deadline passes.
+ */
+export async function GET(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  const gate = await assertLeagueMember(leagueId, userId)
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  return NextResponse.json({ view: await getFinaleRevealView(leagueId, userId) })
+}
 
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -99,16 +115,18 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error ?? 'Final jury vote failed' }, { status: 400 })
     }
-    return NextResponse.json({ ok: true, state: result.state })
+    // Never echo the finale state: it carries every juror's ballot. The client re-reads the sealed view.
+    return NextResponse.json({ ok: true, closed: Boolean(result.state?.closed) })
   }
 
   if (body.intent === 'reveal') {
     const gate = await assertLeagueCommissioner(body.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     // The winner is decided only by the jury votes the finale engine counted.
-    const state = await getFinaleState(body.leagueId, await resolveSurvivorCurrentWeek(body.leagueId))
+    // Settles first when the jury deadline has passed with ballots missing.
+    const state = await settleFinaleIfDue(body.leagueId, await resolveSurvivorCurrentWeek(body.leagueId))
     if (!state.closed || !state.winnerRosterId) {
-      return NextResponse.json({ error: `The jury has not finished voting (${state.votesSubmitted} of ${state.votesRequired} votes).` }, { status: 409 })
+      return NextResponse.json({ error: 'The jury vote is still sealed: not every juror has voted and the deadline has not passed.' }, { status: 409 })
     }
     const { winnerUserId } = await recordCrownedWinner(body.leagueId, state)
     return NextResponse.json({ winnerId: winnerUserId })

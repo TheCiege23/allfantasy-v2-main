@@ -233,7 +233,7 @@ export async function postWinnerAnnouncement(
   voteCount: number,
   totalJurors: number,
 ): Promise<void> {
-  const content = `**The Sole Survivor is ${winnerName}!**\nWinning with ${voteCount} out of ${totalJurors} jury votes.`
+  const content = `**${winnerName} is the last one standing.**\nWinning with ${voteCount} out of ${totalJurors} jury votes.`
 
   await postToLeagueChat(leagueId, content, 'announcement', {
     type: 'winner',

@@ -21,6 +21,8 @@ import {
   awardWeeklyExileTeamToken,
 } from '@/lib/survivor/exileTeamDraft'
 
+import { revealDueTribeSwap } from '@/lib/survivor/tribeSwapService'
+
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
@@ -91,6 +93,8 @@ async function runAutomation(req: NextRequest) {
       }
 
       await tryAutomaticPhaseAdvance(leagueId)
+      // A sealed tribe swap is revealed (and tribe chats switch over) at the lineup lock.
+      await revealDueTribeSwap(leagueId).catch(() => {})
 
       let gsMid = await prisma.survivorGameState.findUnique({ where: { leagueId } })
       if (

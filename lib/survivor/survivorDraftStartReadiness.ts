@@ -102,6 +102,7 @@ export async function getSurvivorDraftStartReadiness(
         endWeek: savedPlan.endWeek,
         exileEnabled: savedPlan.exileReturnSlots === 1,
         exileReturnWeek: savedPlan.exileReturnWeek,
+        finalistCount: savedPlan.finalistCount,
       })
     } catch (error) {
       return { ready: false, error: error instanceof Error ? error.message : 'The Survivor season calendar needs review before drafting.' }

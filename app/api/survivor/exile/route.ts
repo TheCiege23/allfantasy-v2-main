@@ -16,6 +16,8 @@ import {
 } from '@/lib/survivor/exileTeamDraft'
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
+import { getExileBossBoard } from '@/lib/survivor/exileBossBoard'
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -39,13 +41,21 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
+  if (req.nextUrl.searchParams?.get('view') === 'boss') {
+    const weekParam = Number.parseInt(req.nextUrl.searchParams.get('week') ?? '', 10)
+    const result = await getExileBossBoard(leagueId, userId, { week: Number.isFinite(weekParam) ? weekParam : null })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json({ board: result.board })
+  }
+
   const island = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const me = await prisma.survivorPlayer.findFirst({ where: { leagueId, userId } })
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, sport: true, season: true } })
   const settings = normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null)
   const resolved = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'scheduled_exile_return_resolved' }, select: { id: true } })
   let bossContest: { status: 'pending' | 'locked' | 'final'; week: number; team?: string; players?: { name: string; position: string; slot: string }[]; score?: number } | null = null
-  if (island?.isActive && island.bossWinsEnabled && me?.playerState === 'exile') {
+  const bossMode = readSurvivorLateSeasonSettings(league?.settings).exileBossMode
+  if (island?.isActive && island.bossWinsEnabled && bossMode === 'chimmy_roster' && me?.playerState === 'exile') {
     const week = league ? dailySportWeekForInstant(league.sport, league.season, new Date()) ?? island.currentWeek : island.currentWeek
     const [locked, finalized] = await Promise.all([
       prisma.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_boss_roster_locked' }, select: { data: true } }),
@@ -65,7 +75,7 @@ export async function GET(req: NextRequest) {
       ...(locked && typeof rosterData?.team === 'string' ? { team: rosterData.team, players } : {}),
       ...(score != null ? { score } : {}) }
   }
-  return NextResponse.json({ island, user: me, bossContest, returnRules: { enabled: settings.exileIslandEnabled, week: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens, resolved: Boolean(resolved), slots: 1 } })
+  return NextResponse.json({ island, user: me, bossContest, bossMode, returnRules: { enabled: settings.exileIslandEnabled, week: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens, resolved: Boolean(resolved), slots: 1 } })
 }
 
 export async function POST(req: NextRequest) {

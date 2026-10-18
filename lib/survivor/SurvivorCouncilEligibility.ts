@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getWeeklyEffectState } from './SurvivorEffectEngine'
 import { getActiveRosterIdsForLeague } from './SurvivorRosterState'
+import { excludeJuryRosterIds } from './juryGuards'
 
 async function getCouncilContext(councilId: string) {
   return prisma.survivorTribalCouncil.findUnique({
@@ -18,7 +19,9 @@ export async function getEligibleRosterIdsForCouncil(councilId: string): Promise
   const council = await getCouncilContext(councilId)
   if (!council) return []
 
-  const activeRosterIds = await getActiveRosterIdsForLeague(council.leagueId)
+  // Jurors are out of the game: never voters or targets, whatever the elimination ledger says.
+  const juryRosterIds = (await prisma.survivorJuryMember.findMany({ where: { leagueId: council.leagueId }, select: { rosterId: true } })).map((row) => row.rosterId)
+  const activeRosterIds = excludeJuryRosterIds(await getActiveRosterIdsForLeague(council.leagueId), juryRosterIds)
   if (council.phase !== 'pre_merge' || !council.attendingTribeId) {
     return activeRosterIds
   }
