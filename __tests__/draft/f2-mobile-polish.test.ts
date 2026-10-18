@@ -79,11 +79,27 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
     expect(src).toMatch(/rosterPanel && mobileTab === 'roster' && rosterPanel/)
   })
 
-  it('mobile sticky bar is always enabled and includes a clock chip', () => {
+  /*
+   * The clock must stay visible on every mobile tab. It used to be a second, non-ticking
+   * "Clock" chip in this sticky bar; it now comes from the header's live timer, which
+   * sits outside the mobile scroll root and so never scrolls away. Guard both halves.
+   */
+  it('mobile sticky bar is always enabled; the live clock stays visible on phones via the header', () => {
     expect(pageSrc).toMatch(/const showMobileStickyBar = true/)
     expect(pageSrc).toMatch(/showMobileStickyBar \? \(/)
-    expect(pageSrc).toMatch(/>Clock<|Clock<\/span>/)
     expect(pageSrc).toMatch(/data-testid="draft-mobile-current-pick"/)
+
+    const shellSrc = read('components/app/draft-room/DraftRoomShell.tsx')
+    const topBarAt = shellSrc.indexOf('{topBar}')
+    const scrollRootAt = shellSrc.indexOf('data-testid="draft-mobile-scroll-root"')
+    expect(topBarAt).toBeGreaterThan(-1)
+    expect(scrollRootAt).toBeGreaterThan(topBarAt)
+
+    const topBarSrc = read('components/app/draft-room/DraftTopBar.tsx')
+    const centerSlot = topBarSrc.match(/className="([^"]*)"\s*data-testid="draft-topbar-center-slot"/)
+    expect(centerSlot).not.toBeNull()
+    expect(centerSlot![1].split(/\s+/)).not.toContain('hidden')
+    expect(topBarSrc).toMatch(/\{centerCta\}/)
   })
 })
 
