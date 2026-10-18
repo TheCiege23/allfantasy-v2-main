@@ -265,15 +265,13 @@ export function SurvivorSetupStep({ state, setState }: LeagueCreateStepProps) {
         {state.survivorIdolsEnabled && (
           <div className="w-40">
             <label className="mb-2 block text-xs font-medium text-white/60">Total Idol Count</label>
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              value={state.survivorIdolCount}
-              onChange={(e) =>
-                setState((c) => ({ ...c, survivorIdolCount: Math.min(24, Math.max(1, Number(e.target.value) || 24)) }))
-              }
-            />
+            <select
+              value={[6, 7, 8].includes(state.survivorIdolCount) ? state.survivorIdolCount : 7}
+              onChange={(e) => setState((c) => ({ ...c, survivorIdolCount: Number(e.target.value) }))}
+              className="h-10 w-full rounded-md border border-white/15 bg-transparent px-2 text-sm text-white"
+            >
+              {[6, 7, 8].map((count) => <option key={count} value={count}>{count}</option>)}
+            </select>
           </div>
         )}
       </div>

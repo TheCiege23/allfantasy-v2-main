@@ -81,6 +81,8 @@ export interface SurvivorSummaryCouncil {
   closedAt: string | null
   eliminatedRosterId: string | null
   revealSequence?: SurvivorScrollRevealStep[] | null
+  /** When the read-out began; set only once the council is revealed. Drives the night mood. */
+  revealStartsAt?: string | null
   isRevealed?: boolean
   revealMode?: 'one_at_a_time' | 'all_at_once'
   revealTotalSteps?: number | null

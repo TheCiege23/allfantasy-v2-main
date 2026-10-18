@@ -48,6 +48,8 @@ export function survivorPublicCouncil<T extends object>(council: T | null, _canS
     : row.status
   publicRow.votes = []
   publicRow.revealSequence = started ? gate.steps : null
+  // When the read starts is not a result (theme-idols' island mood counts down to it); published councils only.
+  publicRow.revealStartsAt = row.isRevealed === true ? row.revealStartsAt ?? null : null
   publicRow.revealMode = gate.mode
   publicRow.revealTotalSteps = gate.totalSteps
   publicRow.revealComplete = complete

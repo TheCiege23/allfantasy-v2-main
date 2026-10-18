@@ -8,7 +8,10 @@ import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetu
 import { LeagueSeatTracker } from '@/components/league/native/LeagueSeatTracker'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
-import { getSurvivorThemeById, stripLeadingTribeIcon, survivorSceneArtwork } from '@/lib/survivor/survivorVisuals'
+import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
+import { SURVIVOR_MOOD_TAG, resolveSurvivorMood, survivorBackgroundSrc } from '@/lib/survivor/survivorMood'
+import { survivorIdolArt, survivorIdolTypeIdForPower } from '@/lib/survivor/survivorIdolTypes'
+import { SurvivorMoodScene } from './SurvivorMoodScene'
 import type { SurvivorSummary, SurvivorSummaryTribe } from './types'
 import { SurvivorAvatar, SurvivorOutChip, SurvivorTorchIcon, survivorAvatarStatus } from './weekly/SurvivorAvatar'
 import { SurvivorWeeklyMoments } from './weekly/SurvivorWeeklyMoments'
@@ -22,11 +25,6 @@ const TRIBE_BARS = [
   'linear-gradient(90deg,#a8592a,#e0894a)',
   'linear-gradient(90deg,#3f8a4a,#6fbf7a)',
 ]
-const IDOL_ART: Record<string, string> = {
-  protect_self: 'immunity', vote_shield: 'immunity', extra_vote: 'extra-vote',
-  vote_nullifier: 'idol-nullifier', skip_tribal: 'safety-net',
-  triple_steal: 'steal-three', island_raid: 'steal-three', vote_steal: 'vote-steal',
-}
 
 type Props = {
   league: UserLeague
@@ -54,6 +52,16 @@ function useCountdown(targetIso: string | null): string | null {
   const pad = (n: number) => String(n).padStart(2, '0')
   const clock = `${pad(Math.floor((left % 86400) / 3600))}:${pad(Math.floor((left % 3600) / 60))}:${pad(left % 60)}`
   return days > 0 ? `${days}d ${clock}` : clock
+}
+
+/** Re-reads the clock once a minute so the island mood turns over on its own (dusk → day, night → day). */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+  return now
 }
 
 function easternLabel(iso: string | null): string | null {
@@ -107,9 +115,15 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
   const trailer = attending ?? (hasScores && sortedRace.length > 1 ? sortedRace[sortedRace.length - 1] : null)
   const raceTotal = raced.reduce((sum, tribe) => sum + Math.max(0, scores[tribe.id] ?? 0), 0)
 
-  const theme = getSurvivorThemeById(summary?.config?.visualThemeId, league.id)
-  // Vote day reads at dusk; everything else keeps the league's chosen scene.
-  const scene = council ? survivorSceneArtwork(league.sport, 'volcanic-tribal') : survivorSceneArtwork(league.sport, theme.id)
+  // The mood follows league state (survivor-theme handoff): dusk on vote-deadline day, night while
+  // the votes are read, day otherwise. Exile screens set their own.
+  const minute = useMinuteClock()
+  const mood = resolveSurvivorMood({
+    now: minute,
+    voteDeadlineAt: council?.voteDeadlineAt,
+    revealStartsAt: summary?.council?.isRevealed ? summary.council.revealStartsAt : null,
+  })
+  const scene = survivorBackgroundSrc(mood, league.sport)
   const tribeColor = (tribe: SurvivorSummaryTribe, index: number) => tribe.colorHex || TRIBE_COLORS[(tribe.slotIndex ?? index) % TRIBE_COLORS.length]
   const tribeName = (tribe: SurvivorSummaryTribe) => stripLeadingTribeIcon(tribe.name) || tribe.name
 
@@ -138,9 +152,8 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
   const feed = buildFeed(summary, names)
 
   return <div className="svh" data-testid="survivor-native-home">
-    <section className="svh-hero" data-testid="survivor-home-hero">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="svh-hero-bg" src={scene} alt="" aria-hidden />
+    <section className="svh-hero" data-testid="survivor-home-hero" data-mood={mood}>
+      <SurvivorMoodScene className="svh-hero-bg" src={scene} />
       <div className="svh-hero-veil" aria-hidden />
       <div className="svh-hero-in">
         <div className="svh-hero-copy">
@@ -150,6 +163,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
             <span>Survivor</span>
             <span>{castLeft == null ? `${claimedSeats} of ${league.teamCount} seats claimed` : `${league.teamCount} managers · ${castLeft} left`}</span>
           </div>
+          <span className="svh-kicker" data-testid="survivor-mood-tag">{SURVIVOR_MOOD_TAG[mood]}</span>
           <h1 className="svh-title">{league.name}</h1>
           <p className="svh-headline">{headline}</p>
           <div className="svh-actions">
@@ -243,8 +257,8 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
           {summary?.myIdols?.length
             ? summary.myIdols.slice(0, 2).map(idol => <div key={idol.id} className="svh-row svh-idol">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/survivor/idols/${IDOL_ART[idol.powerType] ?? 'immunity'}.svg`} alt="" />
-              <div className="svh-grow"><span className="svh-lbl svh-gold">Your idols · private</span><strong>{idolDefinition(idol.powerType).name}</strong><span className="svh-sub svh-sm">{idol.playerName ? `Hidden on ${idol.playerName}. It moves with him if he changes teams.` : 'Only you can see this.'}</span></div>
+              <img src={survivorIdolArt(survivorIdolTypeIdForPower(idol.powerType) ?? 'immunity') ?? '/survivor/idols/immunity.svg'} alt="" />
+              <div className="svh-grow"><span className="svh-lbl svh-gold">Your idols · private</span><strong className="svh-idol-name" style={{ color: idolDefinition(idol.powerType).glow }}>{idolDefinition(idol.powerType).name}</strong><span className="svh-sub svh-sm">{idol.playerName ? `Hidden on ${idol.playerName}. It moves with him if he changes teams.` : 'Only you can see this.'}</span></div>
             </div>)
             : <div className="svh-row svh-idol">
               {/* eslint-disable-next-line @next/next/no-img-element */}

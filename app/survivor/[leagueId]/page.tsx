@@ -148,6 +148,7 @@ export default function SurvivorIslandHomePage() {
         week={ctx.currentWeek}
         phase={phase}
         visualThemeId={ctx.season?.visualThemeId}
+        voteDeadlineAt={council && !council.isRevealed ? council.voteDeadlineAt ?? council.votingDeadline ?? null : null}
         headline={heroTitle}
         description={heroSubtext}
         primaryAction={primaryAction}

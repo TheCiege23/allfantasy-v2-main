@@ -365,6 +365,7 @@ export async function GET(
           eliminatedName: publicCouncil?.eliminatedName ?? null,
           isTie: publicCouncil?.isTie ?? false,
           isRevealed: publicCouncil.isRevealed,
+          revealStartsAt: (publicCouncil as { revealStartsAt?: Date | null }).revealStartsAt ?? null,
         }
       : null,
     challenges: challenges.map((c) => ({

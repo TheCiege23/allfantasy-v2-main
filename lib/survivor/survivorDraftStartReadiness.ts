@@ -6,6 +6,7 @@ import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { buildSurvivorFullSeasonPlan, readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { loadNbaSurvivorRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
+import { lockSurvivorIdolDraw } from './survivorIdolConfigService'
 
 type DraftSeat = { id: string; platformUserId: string }
 
@@ -108,5 +109,8 @@ export async function getSurvivorDraftStartReadiness(
       return { ready: false, error: error instanceof Error ? error.message : 'The Survivor season calendar needs review before drafting.' }
     }
   }
+  // Draft lock: the league's idol types are drawn now with a secure RNG and sealed. Idempotent and
+  // non-fatal; seeding after the draft draws them if this was missed.
+  await lockSurvivorIdolDraw(leagueId).catch(() => null)
   return { ready: true }
 }

@@ -25,19 +25,25 @@
   gap:24px
 }
 .idol-card {
-  border:1px solid #e5484d60;
+  border:1px solid var(--glow-line,#e5484d60);
   border-radius:12px;
   padding:18px;
   text-align:center;
-  background:radial-gradient(circle at 50% 25%,#e5484d30,transparent 65%)
+  background:radial-gradient(circle at 50% 25%,var(--glow-soft,#e5484d30),transparent 65%)
 }
 .idol-card>img {
   height:190px;
   margin:auto
 }
 .idol-card h3 {
-  color:#ff7a7f;
-  margin:12px
+  color:var(--glow,#ff7a7f);
+  margin:12px;
+  font-family:'Cinzel',Georgia,serif;
+  font-weight:700;
+  letter-spacing:.04em
+}
+.idol-card .svi-tag {
+  margin-bottom:6px
 }
 .idol-card dl {
   text-align:left;
@@ -160,12 +166,14 @@
 .idol-played {
   text-align:center;
   padding:24px;
-  border:1px solid #e5484d60;
+  border:1px solid var(--glow-line,#e5484d60);
   border-radius:12px;
-  background:radial-gradient(circle at 50% 30%,#e5484d35,transparent 75%)
+  background:radial-gradient(circle at 50% 30%,var(--glow-soft,#e5484d35),transparent 75%)
 }
 .idol-played h4 {
-  font-size:28px
+  font-size:28px;
+  font-family:'Cinzel',Georgia,serif;
+  color:var(--glow,#e8eaf2)
 }
 .idol-played p {
   margin:12px 0
