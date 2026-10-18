@@ -14,6 +14,7 @@
  */
 
 import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
+import { selectCurrentDepthRows } from '@/lib/depthChartRows'
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -406,7 +407,11 @@ export async function writeAfProjectionSnapshotsForSeason(
   // --- depth-chart role, indexed by player name --------------------------------------
   // Depth charts are RI-keyed and carry names, not canonical ids; name is the only bridge
   // available here. A miss costs confidence, never correctness.
-  const depthRows = await prisma.depthChart.findMany({ where: { sport } })
+  // selectCurrentDepthRows: one row per team/position, the freshest. MLB/NBA/NHL carry a
+  // second, months-old writer's rows beside the weekly REST ones, and with no order the first
+  // name seen could come from either. Plain-string entries (that old writer's shape) are still
+  // skipped below, as before.
+  const depthRows = selectCurrentDepthRows(await prisma.depthChart.findMany({ where: { sport } }))
   const slotByName = new Map<string, string>()
   for (const row of depthRows) {
     const players = Array.isArray(row.players) ? row.players : []

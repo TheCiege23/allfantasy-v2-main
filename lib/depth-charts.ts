@@ -1,10 +1,12 @@
 import 'server-only'
 
+import { depthChartPlayerNames, selectCurrentDepthRows } from '@/lib/depthChartRows'
 import { prisma } from '@/lib/prisma'
 
 export type DepthChartEntry = {
   team: string
   position: string
+  /** Player names in depth order, starter first. */
   players: string[]
   source: string
 }
@@ -20,10 +22,12 @@ export async function getDepthCharts(sport: string, options?: { team?: string })
       orderBy: [{ team: 'asc' }, { position: 'asc' }],
     })
     if (rows.length > 0) {
-      return rows.map((r) => ({
+      // One row per team/position (freshest wins), and names rather than the raw stored entries:
+      // object-shaped rows were cast to string[] here, so name comparisons downstream matched nothing.
+      return selectCurrentDepthRows(rows).map((r) => ({
         team: r.team,
         position: r.position,
-        players: Array.isArray(r.players) ? (r.players as string[]) : [],
+        players: depthChartPlayerNames(r.players),
         source: r.source,
       }))
     }
