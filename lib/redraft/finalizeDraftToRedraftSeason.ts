@@ -1,4 +1,5 @@
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { seedNullFaabBalances } from '@/lib/waiver-wire/settings-service'
 import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
@@ -439,6 +440,10 @@ export async function syncCompletedDraftToRedraftSeason(
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
   if (seasonSetupBlocked(league.settings)) return { ...EMPTY_SUMMARY, reason: 'season_tournament_managed' }
+
+  // A FAAB league's teams carry its budget into the season. Without this, a roster that was never
+  // seeded entered the season with the hardcoded 100 below instead of the commissioner's budget.
+  await seedNullFaabBalances(leagueId).catch(() => undefined)
 
   /*
    * 🛑 THIS GATE READ `leagueType === 'redraft' || isDynasty === false`, WHICH IS NOT A
