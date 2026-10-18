@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Users, Scale, Calendar } from 'lucide-react'
 import type { SurvivorSummary } from './types'
-import { SurvivorShareCard } from './SurvivorShareCard'
+import { SurvivorShareCardsButton } from './share/SurvivorShareCards'
 
 export interface SurvivorMergeJuryViewProps {
   leagueId: string
@@ -191,7 +191,7 @@ export function SurvivorMergeJuryView({ leagueId, summary, names, onRefresh }: S
         )}
       </section>
 
-      {finale?.closed && finale.winnerRosterId && <SurvivorShareCard moment="champion" sport={summary.seasonCalendar?.sport ?? 'NFL'} leagueName={summary.config.seasonThemeLabel ?? 'Survivor League'} week={summary.currentWeek} headline={`${names[finale.winnerRosterId] ?? 'A manager'} is the champion`} caption="The jury has crowned this season’s winner." />}
+      {finale?.closed && finale.winnerRosterId && <SurvivorShareCardsButton leagueId={leagueId} type="champ" label="Share the champion card" />}
     </div>
   )
 }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { SurvivorTribalCouncilView } from '@/components/survivor/SurvivorTribalCouncilView'
 import type { SurvivorSummary } from '@/components/survivor/types'
 
@@ -12,10 +12,12 @@ function summary(isRevealed: boolean, myRosterId?: string): SurvivorSummary {
 }
 
 describe('published Survivor share privacy', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
   it('hides the result, vote scroll and share action before the Torch Ceremony', () => {
     const { unmount } = render(<SurvivorTribalCouncilView leagueId="league-1" summary={summary(false)} names={{ 'secret-roster': 'Secret manager' }} />)
     expect(screen.getByText(/Chimmy will reveal the result/)).toBeTruthy()
-    expect(screen.queryByText(/Share this published moment/)).toBeNull()
+    expect(screen.queryByText(/Make a share card/)).toBeNull()
     expect(screen.queryByText(/Private voter/)).toBeNull()
     expect(screen.queryByText(/Eliminated: Secret manager/)).toBeNull()
     unmount()
@@ -25,18 +27,30 @@ describe('published Survivor share privacy', () => {
     for (const viewer of [undefined, 'someone-else']) {
       const { unmount } = render(<SurvivorTribalCouncilView leagueId="league-1" summary={summary(true, viewer)} names={{ 'secret-roster': 'Secret manager' }} />)
       expect(screen.queryByText(/Make a share card/)).toBeNull()
-      expect(screen.queryByText(/Share this published moment/)).toBeNull()
-      expect(screen.queryByText(/Secret manager has left the island/)).toBeNull()
+      expect(screen.queryByText(/Share your exit/)).toBeNull()
+      expect(screen.queryByRole('dialog')).toBeNull()
       unmount()
     }
   })
 
-  it('offers the eliminated manager an opt-in card after the public result is released', () => {
+  it('offers the eliminated manager an opt-in card after the public result is released', async () => {
+    const outMoment = {
+      id: 'm-out', type: 'out', week: 5, title: 'Voted out', subtitle: 'Week 5', iconPath: '/survivor/weekly/torch-out-icon.svg',
+      headline: 'Secret manager’s torch is out', offeredNote: '', published: false, pageUrl: 'https://www.allfantasy.ai/l/league-1/moment/m-out',
+      imageUrl: { post: '/api/share/survivor/m-out?f=post', story: '/api/share/survivor/m-out?f=story', link: '/api/share/survivor/m-out?f=link' }, isSubject: true,
+    }
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(String(url).startsWith('/api/share/survivor?') ? { enabled: true, moments: [outMoment] } : {}), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
     const { unmount } = render(<SurvivorTribalCouncilView leagueId="league-1" summary={summary(true, 'secret-roster')} names={{ 'secret-roster': 'Secret manager' }} />)
-    expect(screen.queryByText(/Share this published moment/)).toBeNull()
+    // Nothing is fetched or shown until the manager opts in.
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/share/survivor'))).toBe(false)
+    expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Make a share card/ }))
-    expect(screen.getByText(/Share this published moment/)).toBeTruthy()
-    expect(screen.getByText(/Secret manager has left the island/)).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    expect(fetchMock).toHaveBeenCalledWith('/api/share/survivor?leagueId=league-1', expect.anything())
+    expect(screen.getByRole('img', { name: /Voted out card/ }).getAttribute('src')).toBe('/api/share/survivor/m-out?f=post')
+    // The share UI itself never carries ballot data.
+    expect(within(screen.getByRole('dialog')).queryByText(/Private voter/)).toBeNull()
     unmount()
   })
 
