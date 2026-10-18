@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { resolveGuillotineEffectiveSeats } from '@/lib/guillotine/lateStartSeats'
 
 /**
  * Tells the league owner a manager joined, with the fill count: "Steve joined The Ciege NBA Guilly —
@@ -17,12 +18,15 @@ export async function notifyCommissionerOfJoin(params: { leagueId: string; joine
   })
   if (!league?.userId || league.userId === joinerUserId) return
 
-  const [filled, totalTeams, profile] = await Promise.all([
+  const [filled, totalTeams, profile, guillotineSeats] = await Promise.all([
     prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }),
     prisma.leagueTeam.count({ where: { leagueId } }),
     prisma.userProfile.findFirst({ where: { userId: joinerUserId }, select: { displayName: true, sleeperUsername: true } }),
+    // A native guillotine league's size is the seats its remaining chop weeks support at the
+    // scheduled draft time, which can be fewer than the configured size on a late start.
+    resolveGuillotineEffectiveSeats(leagueId).catch(() => null),
   ])
-  const size = league.leagueSize ?? totalTeams
+  const size = guillotineSeats ?? league.leagueSize ?? totalTeams
   const who = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'A new manager'
   const leagueName = league.name?.trim() || 'your league'
   const count = size > 0 ? `${filled}/${size} spots filled` : `${filled} managers joined`
