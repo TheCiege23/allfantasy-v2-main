@@ -15,6 +15,8 @@ const m = vi.hoisted(() => ({
     survivorTribeImmunity: { findMany: vi.fn() },
     survivorMomentSeen: { findMany: vi.fn(), upsert: vi.fn() },
     survivorIdol: { findMany: vi.fn() },
+    // Read by the reveal gate (exile-scroll) in the tribal view and the torch-out.
+    league: { findUnique: vi.fn() },
   },
 }))
 vi.mock('server-only', () => ({}))
@@ -50,6 +52,7 @@ beforeEach(() => {
   }
   m.context.mockImplementation(async () => ctx)
   m.db.survivorVote.findUnique.mockResolvedValue(null)
+  m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: null })
   m.db.survivorVote.count.mockResolvedValue(2)
   m.db.survivorWeeklyScore.findMany.mockResolvedValue([{ userId: 'b', finalScore: 96.2 }, { userId: 'immune', finalScore: 142.6 }])
 })
@@ -111,7 +114,8 @@ describe('weekly moments', () => {
   })
 
   it('plays once per user: the seen key is stored and read back for that user only', async () => {
-    m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ id: 'c6', week: 6, eliminatedUserId: 'b', eliminatedRosterId: 'r-b', eliminatedName: 'Open Team 8' })
+    // A finished read (published, every ballot released) — the torch-out waits for the reveal gate.
+    m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ id: 'c6', week: 6, eliminatedUserId: 'b', eliminatedRosterId: 'r-b', eliminatedName: 'Open Team 8', isRevealed: true, revealStartsAt: new Date(Date.now() - 60_000), revealStep: 0, revealSequence: [] })
     m.db.survivorMomentSeen.findMany.mockResolvedValue([{ momentKey: 'torch:c6' }])
     const moments = await buildWeeklyMoments(access('b'))
     expect(moments.torchOut).toMatchObject({ key: 'torch:c6', name: 'Open Team 8', isYou: true, exileEnabled: true, seen: true })
