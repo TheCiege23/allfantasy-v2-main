@@ -123,3 +123,23 @@ describe('buildDraftLookahead — needs and projections', () => {
     expect(res.rows.map((r) => r.isAuto)).toEqual([true, true, false])
   })
 })
+
+describe('buildDraftLookahead — manager history', () => {
+  it('reads a manager from past drafts when this draft has too little to go on', () => {
+    // r4 has one pick in this draft (Luka at 4 on ADP 4: on ADP). Alone that is "Too early".
+    const withoutHistory = buildDraftLookahead(input()).rows.find((r) => r.rosterId === 'r4')!
+    expect(withoutHistory.tendency.kind).toBe('unknown')
+
+    const withHistory = buildDraftLookahead(
+      input({ historyByRoster: { r4: { averageDelta: -8, sample: 20, drafts: 3 } } }),
+    ).rows.find((r) => r.rosterId === 'r4')!
+    expect(withHistory.tendency.kind).toBe('reacher')
+    expect(withHistory.tendency.basis).toBe('blend')
+    expect(withHistory.tendency.historyDrafts).toBe(3)
+  })
+
+  it('leaves managers without history on this draft alone', () => {
+    const row = buildDraftLookahead(input({ historyByRoster: { r4: null } })).rows.find((r) => r.rosterId === 'r4')!
+    expect(row.tendency.basis).toBe('none')
+  })
+})

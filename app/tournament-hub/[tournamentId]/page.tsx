@@ -5,6 +5,8 @@ import { loadSeasonBlueprint } from '@/lib/tournament/seasonBlueprintStore'
 import { SeasonTournamentPlanner } from '@/components/tournament/SeasonTournamentPlanner'
 import { getTournamentStandingsBoard } from '@/lib/tournament/standingsBoard'
 import { TournamentStandingsBoard } from './TournamentStandingsBoard'
+import { loadDivisionsHub } from '@/lib/tournament/divisions/divisionsStore'
+import { DivisionsHub } from '@/components/tournament/divisions/DivisionsHub'
 
 /**
  * The multi-league commissioner hub, for a `TournamentShell`.
@@ -38,6 +40,11 @@ export default async function TournamentHubPage({
   if (!userId) {
     redirect(`/api/auth/signin?callbackUrl=${encodeURIComponent(`/tournament-hub/${tournamentId}`)}`)
   }
+
+  // Divisions & conferences tournaments have their own screens (record standings,
+  // wildcard pool, regional brackets). Null for any other format, or no access.
+  const divisions = await loadDivisionsHub(tournamentId, userId)
+  if (divisions) return <DivisionsHub view={divisions} />
 
   const blueprint = await loadSeasonBlueprint(tournamentId, userId)
   if (blueprint) return <SeasonTournamentPlanner key={blueprint.tournamentId + blueprint.revision} saved={blueprint} />
