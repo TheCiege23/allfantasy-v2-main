@@ -9317,9 +9317,14 @@ model SurvivorTribeSwap {
   newTribes              Json?
   originalTribesRetained Boolean  @default(true)
   executedAt             DateTime @default(now())
+  /// Sealed swap: the draw is stored at executedAt and applied/revealed at revealAt (next lineup lock).
+  /// Null on legacy rows, which were applied immediately.
+  revealAt               DateTime?
+  revealedAt             DateTime?
   league                 League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@index([leagueId])
+  @@index([leagueId, revealedAt])
   @@map("survivor_tribe_swaps")
 }
 
