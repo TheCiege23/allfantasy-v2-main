@@ -48,6 +48,21 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   return [{ title: 'This league', items: primary }, { title: 'Survivor', items: survivor }, { title: 'This week', items: weekly }, { title: 'More tools', items: more }].filter(group => group.items.length)
 }
 
+/**
+ * Handoff §2's third nav group, "Your record". These are /core screens, not league tabs, so they are
+ * links (the same hrefs /core's own rail builds: `/core/career?league=…`, `/core/rankings?league=…`).
+ *
+ * "This week" keeps Decision OS where the handoff drew "Season Outlook": Decision OS replaced the
+ * outlook screen on 2026-10 and is the live surface; this group is added beside it, not instead of it.
+ */
+export function nativeLeagueRecordLinks(leagueId: string): Array<{ id: string; label: string; href: string; icon: string }> {
+  const q = `?league=${encodeURIComponent(leagueId)}`
+  return [
+    { id: 'career', label: 'Your career', href: `/core/career${q}`, icon: 'career' },
+    { id: 'rankings', label: 'Rankings', href: `/core/rankings${q}`, icon: 'rankings' },
+  ]
+}
+
 export function leagueSectionHref(league: UserLeague, view: string) {
   const href = resolveLeagueHomeHrefFromListRow(league)
   if (!href.startsWith('/league/')) return href

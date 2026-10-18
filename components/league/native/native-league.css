@@ -98,7 +98,7 @@
 .nl-next h2{font-size:28px}
 .nl-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:20px}
 .nl-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
-.nl-quick-grid>:is(a,button){padding:16px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);text-align:left}
+.nl-quick-grid>:is(a,button,div){padding:16px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);text-align:left}
 .nl-quick-grid h3{font-size:13px;margin:0 0 8px}
 .nl-quick-grid p{font-size:12px;margin:0}
 .nl-team-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}
@@ -168,7 +168,7 @@
   .nl-actions{gap:8px;margin-top:16px}
   .nl-actions>.nl-button{flex:1}
   .nl-quick-grid{grid-template-columns:minmax(0,1fr);gap:8px}
-  .nl-quick-grid>:is(a,button){padding:12px}
+  .nl-quick-grid>:is(a,button,div){padding:12px}
   .nl-workspace .af-setup-checklist{padding:16px}
   .nl-home-secondary{display:flex}
   .nl-bottom-nav{display:flex;justify-content:space-around;min-height:72px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface2);flex:none}
@@ -256,3 +256,43 @@
 .nl-activity-picker{display:inline-flex;gap:4px;padding:2px;border:1px solid var(--line2);border-radius:999px;background:var(--raised)}
 .nl-activity-picker button{border:0!important;padding:0 6px!important}
 .nl-activity-error{color:var(--bad)!important;font-size:12px}
+/* Rail ring, record line, platform tag and unread badge (2026-10-18, handoff §2). All colours are
+ * /core tokens: green = --good, red = --bad, amber (needs you) = --warn. */
+.nl-rail-crest{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;align-self:flex-start}
+.nl-workspace .nl-rail-art{position:relative;overflow:visible}
+.nl-workspace .nl-rail-art>img{border-radius:inherit}
+.nl-workspace .nl-rail-art[data-ring]{outline:2px solid var(--line2);outline-offset:2px}
+.nl-workspace .nl-rail-art[data-ring=good]{outline-color:var(--good)}
+.nl-workspace .nl-rail-art[data-ring=bad]{outline-color:var(--bad)}
+.nl-workspace .nl-rail-art[data-ring=needs]{outline-color:var(--warn)}
+.nl-rail-unread{position:absolute;top:-7px;right:-7px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad);color:var(--accent-ink);font:700 10px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px var(--rail)}
+.nl-rail-tag{position:absolute;right:-6px;bottom:-5px;padding:1px 4px;border-radius:4px;background:var(--surface2);border:1px solid var(--line2);color:var(--muted);font:700 9px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.04em}
+.nl-rail-tag[data-platform=native]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.nl-rail-mini{max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font:700 10px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.nl-rail-mini[data-tone=good]{color:var(--good)}
+.nl-rail-mini[data-tone=bad]{color:var(--bad)}
+.nl-rail-mini[data-tone=needs]{color:var(--warn)}
+.nl-rail:not([data-expanded=true]) .nl-rail-tile{padding:8px 4px 4px}
+.nl-rail-leagues{padding-top:6px}
+/* Nav: unread count beside League chat, and the "Your record" links (handoff §2 nav groups). */
+.nl-nav-count{margin-left:auto;min-width:22px;padding:2px 6px;border:1px solid var(--line2);border-radius:6px;color:var(--text2);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;text-align:center}
+.nl-nav-group>a{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:0 10px;border:1px solid transparent;border-radius:10px;color:var(--text2);font-size:13.5px;font-weight:700}
+.nl-nav-group>a:hover{background:var(--chip)}
+/* Phone pill: ‹ league › (handoff §2 phone). */
+.nl-mobile-pill{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.nl-mobile-step{display:grid;place-items:center;flex:none;min-width:44px;min-height:44px;border:1px solid var(--line2);border-radius:6px;color:var(--text2)}
+.nl-workspace .nl-mobile-top .nl-mobile-league{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:44px;padding:0 10px;border:1px solid var(--line2);border-radius:10px;color:var(--text)}
+.nl-mobile-crest{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;outline:2px solid var(--line2);outline-offset:1px}
+.nl-mobile-crest[data-ring=good]{outline-color:var(--good)}
+.nl-mobile-crest[data-ring=bad]{outline-color:var(--bad)}
+.nl-mobile-crest[data-ring=needs]{outline-color:var(--warn)}
+.nl-mobile-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left}
+.nl-workspace .nl-mobile-tag{position:static}
+/* Switcher sheet groups: Needs you / Live now · Wk N (handoff MobileSwitcher). */
+.nl-switcher-brand{display:grid;place-items:center;flex:none;width:40px;height:40px;margin-right:12px;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+.nl-switcher-title{justify-content:flex-start}
+.nl-switcher-title button{margin-left:auto}
+.nl-switcher-group{margin-top:14px}
+.nl-switcher-group h3{margin:0 0 6px;color:var(--faint);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+.nl-switcher-group[data-group=needs] h3{color:var(--warn)}
+.nl-switcher-group[data-group=live] h3{color:var(--good)}
