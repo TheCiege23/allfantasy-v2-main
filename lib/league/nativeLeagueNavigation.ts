@@ -34,7 +34,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   ]
   const survivor = tabs.filter(tab => tab.id.startsWith('survivor')).map(tab => {
     used.add(tab.id)
-    const labels: Record<string, string> = { survivor: 'Island', survivor_tribal: 'Elimination Council', survivor_challenges: 'Challenges', survivor_ai: 'Chimmy', survivor_exile: 'Exile', survivor_jury: 'Jury & finale', survivor_commissioner: 'Survivor command' }
+    const labels: Record<string, string> = { survivor: 'Island', survivor_tribal: 'Elimination Council', survivor_challenges: 'Challenges', survivor_ai: 'Chimmy', survivor_chimmy: 'Chimmy', survivor_exile: 'Exile', survivor_jury: 'Jury & finale', survivor_commissioner: 'Survivor command', survivor_command: 'Commissioner hub' }
     return { ...tab, label: labels[tab.id] ?? tab.label.replace(/^[^\p{L}\p{N}]+/u, ''), icon: 'survivor' }
   })
   const weekly = [

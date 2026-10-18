@@ -63,7 +63,7 @@ export async function GET(
   const currentWeek = await resolveSurvivorCurrentWeek(leagueId, requestedWeek)
   const weeklyScoreRows = currentWeek > 0 ? await prisma.survivorWeeklyScore.findMany({
     where: { leagueId, week: currentWeek, countedTowardTribeTotal: true },
-    select: { tribeId: true, finalScore: true, isFinalized: true },
+    select: { userId: true, tribeId: true, finalScore: true, isFinalized: true, wonIndividualImmunity: true },
   }) : []
   const tribeScores: Record<string, number> = {}
   for (const score of weeklyScoreRows) {
@@ -293,12 +293,23 @@ export async function GET(
     seasonCalendar,
     currentWeek,
     tribeScores,
+    // Weekly scores are public; keyed by main roster so the home can show each castaway's points.
+    memberScores: Object.fromEntries(weeklyScoreRows.flatMap(row => {
+      const rosterId = mainRosterByPlatformUserId.get(row.userId)
+      return rosterId ? [[rosterId, row.finalScore]] : []
+    })),
+    immunityRosterIds: weeklyScoreRows.flatMap(row => {
+      const rosterId = row.wonIndividualImmunity ? mainRosterByPlatformUserId.get(row.userId) : undefined
+      return rosterId ? [rosterId] : []
+    }),
     scoresFinalized: weeklyScoreRows.length > 0 && weeklyScoreRows.every(row => row.isFinalized),
     tribes: tribes.map((t) => ({
       id: t.id,
       name: t.name,
       emoji: extractLeadingTribeIcon(t.name),
       slotIndex: t.slotIndex,
+      logoUrl: 'logoUrl' in t ? t.logoUrl ?? null : null,
+      colorHex: 'colorHex' in t ? t.colorHex ?? null : null,
       members: t.members.map((m) => ({ rosterId: m.rosterId, isLeader: m.isLeader })),
     })),
     council: publicCouncil
