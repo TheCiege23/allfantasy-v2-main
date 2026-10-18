@@ -200,7 +200,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       if (!saved.ok) return { ok: false as const, status: saved.status, error: saved.error }
     }
 
-    const snapshot = Object.keys(foundationPatch).length ? buildSurvivorSettingsSnapshotPatch(nextFoundation) : {}
+    const snapshot = Object.keys(foundationPatch).length ? buildSurvivorSettingsSnapshotPatch(nextFoundation as unknown as Rec) : {}
     await tx.league.update({
       where: { id: leagueId },
       data: { settings: { ...current, ...snapshot, ...foundationPatch, ...latePatch } as Prisma.InputJsonValue, ...columns },
