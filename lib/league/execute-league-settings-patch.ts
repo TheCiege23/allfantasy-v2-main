@@ -461,6 +461,27 @@ export async function executeLeagueSettingsPatch(
     updatedFieldNames.push('settingsMerge')
   }
 
+  /*
+   * Draft rounds are stored three times: `LeagueSettings.rounds` (the row below), the pre-draft
+   * `DraftSession.rounds` (syncDraftSessionFromLeagueSettings below) and `League.settings.draft_rounds`,
+   * which the draft-room config resolver reads. The draft settings PATCH writes all three; this
+   * path wrote only the first two, so a rounds change saved here read back differently in the draft
+   * room. Same read-modify-write as the blocks above.
+   */
+  if (body.rounds != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          draft_rounds: Math.max(1, Math.min(50, Math.round(Number(body.rounds)))),
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push('draft_rounds')
+  }
+
   if (dailyWaiverScheduleToStore) {
     // Fresh read: the blocks above may already have rewritten `settings` this request.
     const prev = await readCurrentLeagueSettings(leagueId)

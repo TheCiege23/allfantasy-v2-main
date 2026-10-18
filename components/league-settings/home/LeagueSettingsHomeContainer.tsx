@@ -47,9 +47,12 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 export function LeagueSettingsHomeContainer({
   ctx,
   onExit,
+  initialSubPage = null,
 }: {
   ctx: SubPanelContext
   onExit?: () => void
+  /** Opens straight into this sub-page (an old settings link routed here); members get the list. */
+  initialSubPage?: SettingsSubPageId | null
 }) {
   const league = ctx.league
   const leagueId = league.id
@@ -163,6 +166,7 @@ export function LeagueSettingsHomeContainer({
       renderSubPage={renderSubPage}
       onExit={onExit}
       onSubPageClosed={() => setReloadKey((k) => k + 1)}
+      initialSubPage={ctx.isCommissioner ? initialSubPage : null}
     />
   )
 }

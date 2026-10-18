@@ -13,6 +13,7 @@ import { DraftTab } from '@/components/league-settings/tabs/DraftTab'
 import { WaiversTab } from '@/components/league-settings/tabs/WaiversTab'
 import { TradesTab } from '@/components/league-settings/tabs/TradesTab'
 import { PlayoffsTab } from '@/components/league-settings/tabs/PlayoffsTab'
+import { AISettingsTab } from '@/components/league-settings/tabs/AISettingsTab'
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
 import { CoOwnerSettingsPanel } from '@/components/league-settings/CoOwnerSettingsPanel'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
@@ -72,6 +73,9 @@ export function LeagueSettingsSubPageBody({
       break
     case 'divisions':
       body = <DivisionSettingsCommissionerPanel leagueId={leagueId} />
+      break
+    case 'ai':
+      body = <AISettingsTab {...props} />
       break
     case 'commissioner-tools':
       body = (

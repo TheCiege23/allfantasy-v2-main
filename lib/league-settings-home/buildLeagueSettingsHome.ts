@@ -23,6 +23,7 @@ export type SettingsSubPageId =
   | 'members'
   | 'co-commissioners'
   | 'divisions'
+  | 'ai'
   | 'commissioner-tools'
 
 export type SettingsHomeRow = {
@@ -98,6 +99,17 @@ export type BuildSettingsHomeInput = {
 }
 
 const LOADING = '…'
+
+/**
+ * Values longer than this sit UNDER their label on a phone instead of beside it (the row renders
+ * `data-layout="stacked"`; league-settings-home.css applies it below 480px). Short values stay
+ * right-aligned like Sleeper. Nothing is ever truncated: a long value wraps.
+ */
+export const LONG_SETTINGS_VALUE_CHARS = 24
+
+export function isLongSettingsValue(value: string | null | undefined): boolean {
+  return String(value ?? '').length > LONG_SETTINGS_VALUE_CHARS
+}
 
 function settingsRecord(settings: unknown): Record<string, unknown> {
   return settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
@@ -345,7 +357,10 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     sections.push({
       id: 'commissioner',
       title: 'Commissioner tools',
-      rows: [{ id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' }],
+      rows: [
+        { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
+        { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+      ],
     })
   }
 

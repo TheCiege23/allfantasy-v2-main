@@ -14,5 +14,6 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   members: 'Managers',
   'co-commissioners': 'Co-commissioners',
   divisions: 'Divisions',
+  ai: 'League AI',
   'commissioner-tools': 'Commissioner tools',
 }
