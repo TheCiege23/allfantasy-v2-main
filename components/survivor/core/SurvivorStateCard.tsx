@@ -8,9 +8,8 @@ import '../survivor-core.css'
  * The SurvivorStates cards (survivor-core handoff §7): empty, loading and error states with fixed,
  * original copy. Screens pick a state by key so wording and art stay identical everywhere.
  *
- * The missed-vote rule is the implemented one: votes not cast by the deadline simply don't count
- * (lib/survivor/SurvivorFinaleEngine "jurors who did not vote simply do not count"; council ballots
- * the same way). No penalty is applied.
+ * The missed-vote rule (confirmed by the owner on #2484): a vote not cast by the deadline simply
+ * doesn't count. There is no other penalty, and no self-vote is cast on the manager's behalf.
  */
 export type SurvivorStateKey =
   | 'idols_before_draft'
@@ -40,7 +39,7 @@ export const SURVIVOR_STATES: Record<SurvivorStateKey, StateSpec> = {
   ballot_error: { tone: 'error', icon: '/survivor/exile/wax-seal-broken.svg', title: "Your ballot didn't load", body: 'Nothing was sent. Check your connection and try again before votes close.' },
   island_error: { tone: 'error', icon: '/survivor/exile/wax-seal-broken.svg', title: "The island didn't load", body: 'Check your connection and try again. Nothing in your league changed.' },
   votes_closed: { tone: 'closed', icon: '/survivor/weekly/urn.svg', title: 'Votes are closed', body: "Tribal Council results are being read. You'll get a notification when the scroll opens." },
-  missed_vote: { tone: 'missed', icon: '/survivor/weekly/torch-lit-icon.svg', title: "Your vote wasn't cast", body: "Votes closed before you voted, so your vote didn't count this week. Turn on reminders so it doesn't happen again." },
+  missed_vote: { tone: 'missed', icon: '/survivor/weekly/torch-lit-icon.svg', title: "Your vote wasn't cast", body: "Votes closed before you voted, so you had no vote this week. Nothing else counts against you. Turn on reminders so it doesn't happen again." },
   spectator: { tone: 'spectator', icon: '/survivor/weekly/torch-out-icon.svg', title: "You're watching from the sidelines", body: 'Your torch is out. You can still read chat, follow the scroll and see the finale.' },
   paused: { tone: 'paused', icon: '/survivor/late/exile-boss-icon.svg', title: 'The league is paused', body: 'The commissioner paused Survivor events. Lineups and scoring still run. Deadlines move when it resumes.' },
   locked: { tone: 'locked', icon: '/survivor/exile/wax-seal.svg', title: 'This setting is locked', body: 'Tribe count and idols lock when the draft starts so nobody can change the game mid-season.' },
