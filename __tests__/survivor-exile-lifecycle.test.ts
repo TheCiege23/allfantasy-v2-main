@@ -110,9 +110,10 @@ describe('voted-out manager moves to Exile', () => {
   })
 })
 
-describe('Exile weekly settlement against a score boss (median default)', () => {
+describe('Exile weekly settlement against a score boss (new leagues: median)', () => {
   const finalizedOnly = async ({ where }: { where: { action: string } }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null
   beforeEach(() => {
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileBossMode: 'median' } })
     m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
     m.db.survivorAuditEntry.findFirst.mockImplementation(finalizedOnly)
     m.db.survivorPlayer.findUnique.mockImplementation(async ({ where }) => ({ ...players.find(p => p.userId === where.leagueId_userId.userId), playerState: 'exile' }))
@@ -147,6 +148,15 @@ describe('Exile weekly settlement against a score boss (median default)', () => 
 })
 
 describe('Exile weekly award settlement (legacy Chimmy roster boss)', () => {
+  it('a league with no stored boss mode keeps the Chimmy boss (waits for its verified score)', async () => {
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true } })
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry', userId: 'b', weeklyScore: 50 }])
+    expect(await scoreExileWeek('league', 10)).toBe(false)
+    expect(m.db.survivorWeeklyScore.findMany).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4, exileBossMode: 'chimmy_roster' } })
     m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })

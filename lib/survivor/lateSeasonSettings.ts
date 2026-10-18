@@ -6,9 +6,19 @@
  *   then the legacy `League.survivorFinal3` column (false → 2), then 3.
  * - `mergeNamingMode`: 'commissioner' picks the merged tribe's name, 'manager_vote' lets the
  *   remaining managers vote on three suggested names.
- * - `exileBossMode`: how the weekly Exile boss score is set. 'median' (default) = median of all
- *   active managers' week scores, 'fixed' = commissioner number, 'topN' = mean of the top N
- *   active scores, 'chimmy_roster' = legacy Chimmy locked NBA roster (lib/survivor/exileChimmyBoss).
+ * - `exileBossMode`: how the weekly Exile boss score is set. 'median' = median of all active
+ *   managers' week scores, 'fixed' = commissioner number, 'topN' = mean of the top N active scores,
+ *   'chimmy_roster' = legacy Chimmy locked NBA roster (lib/survivor/exileChimmyBoss).
+ *
+ *   DEFAULTS (owner decision on #2470): leagues that existed before the score boss KEEP the Chimmy
+ *   roster boss; only NEW leagues default to 'median'.
+ *   - New leagues get `exileBossMode: 'median'` written into League.settings at creation
+ *     (NEW_LEAGUE_EXILE_BOSS_MODE, via buildSurvivorSettingsSnapshot / createCanonicalLeague).
+ *   - Migration 20261018160000 backfills `exileBossMode: 'chimmy_roster'` into every existing
+ *     Survivor league's settings that has no value.
+ *   - A league with NO stored value at read time resolves to 'chimmy_roster' (LEGACY_EXILE_BOSS_MODE):
+ *     no stored value means the league predates this setting, so the safe fallback is the behaviour
+ *     it was created with. A median boss only ever comes from an explicit value.
  */
 
 export type SurvivorFinalistCount = 2 | 3
@@ -23,10 +33,15 @@ export interface SurvivorLateSeasonSettings {
   exileBossTopN: number
 }
 
+/** Written into a new league's settings at creation. */
+export const NEW_LEAGUE_EXILE_BOSS_MODE = 'median' as const
+/** Read-time fallback when nothing is stored: the pre-existing (Chimmy roster) behaviour. */
+export const LEGACY_EXILE_BOSS_MODE = 'chimmy_roster' as const
+
 export const SURVIVOR_LATE_SEASON_DEFAULTS: SurvivorLateSeasonSettings = {
   finalistCount: 3,
   mergeNamingMode: 'commissioner',
-  exileBossMode: 'median',
+  exileBossMode: LEGACY_EXILE_BOSS_MODE,
   exileBossFixedScore: null,
   exileBossTopN: 3,
 }
@@ -62,7 +77,9 @@ export function readSurvivorLateSeasonSettings(
 
   const modeRaw = typeof s.exileBossMode === 'string' ? s.exileBossMode.trim() : ''
   const exileBossMode: SurvivorExileBossMode =
-    modeRaw === 'fixed' || modeRaw === 'topN' || modeRaw === 'chimmy_roster' ? modeRaw : modeRaw.toLowerCase() === 'topn' ? 'topN' : 'median'
+    modeRaw === 'median' || modeRaw === 'fixed' || modeRaw === 'topN' || modeRaw === 'chimmy_roster' ? modeRaw
+      : modeRaw.toLowerCase() === 'topn' ? 'topN'
+      : base.exileBossMode // nothing (or junk) stored: keep the league's original Chimmy boss
 
   const fixed = num(s.exileBossFixedScore)
   const topN = num(s.exileBossTopN)
@@ -74,6 +91,12 @@ export function readSurvivorLateSeasonSettings(
     exileBossFixedScore: fixed != null && fixed >= 0 ? Math.round(fixed * 100) / 100 : null,
     exileBossTopN: topN != null && topN >= 1 ? Math.min(20, Math.floor(topN)) : base.exileBossTopN,
   }
+}
+
+/** Stamp late-season defaults onto a NEW league's settings (never overwrites a stored value). */
+export function withNewLeagueLateSeasonDefaults<T extends Record<string, unknown>>(settings: T): T & { exileBossMode: SurvivorExileBossMode } {
+  const stored = typeof settings.exileBossMode === 'string' && settings.exileBossMode ? (settings.exileBossMode as SurvivorExileBossMode) : NEW_LEAGUE_EXILE_BOSS_MODE
+  return { ...settings, exileBossMode: stored }
 }
 
 /** Validate a commissioner patch. Returns the keys to merge into League.settings, or an error. */

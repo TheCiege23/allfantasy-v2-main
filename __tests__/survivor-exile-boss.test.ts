@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { buildExileBoard, canViewExileBoard, computeExileBossScore, settleExileBossWeek } from '@/lib/survivor/exileBoss'
-import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch } from '@/lib/survivor/lateSeasonSettings'
+import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
+import { buildSurvivorSettingsSnapshot } from '@/lib/league-concepts/survivorDefaults'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 describe('computeExileBossScore', () => {
   it('median of active scores (odd and even counts)', () => {
@@ -70,8 +73,26 @@ describe('buildExileBoard', () => {
 })
 
 describe('late-season settings', () => {
-  it('defaults: 3 finalists, commissioner naming, median boss', () => {
-    expect(readSurvivorLateSeasonSettings(null)).toMatchObject({ finalistCount: 3, mergeNamingMode: 'commissioner', exileBossMode: 'median' })
+  it('defaults: 3 finalists, commissioner naming; no stored boss mode = legacy Chimmy boss', () => {
+    expect(readSurvivorLateSeasonSettings(null)).toMatchObject({ finalistCount: 3, mergeNamingMode: 'commissioner', exileBossMode: 'chimmy_roster' })
+    expect(readSurvivorLateSeasonSettings({ exileBossMode: 'nonsense' }).exileBossMode).toBe('chimmy_roster')
+  })
+  it('an existing league resolves to chimmy_roster after the migration backfill', () => {
+    const sql = readFileSync(path.join(process.cwd(), 'prisma/migrations/20261018160000_survivor_sealed_tribe_swap/migration.sql'), 'utf8')
+    expect(sql).toMatch(/UPDATE "leagues"[\s\S]*'\{exileBossMode\}', '"chimmy_roster"'::jsonb[\s\S]*WHERE "survivorMode" = true/)
+    // Never overwrites a stored value.
+    expect(sql).toMatch(/NOT \("settings" \? 'exileBossMode'\)/)
+    // The settings an existing league ends up with after the backfill:
+    const backfilled = { exileIslandEnabled: true, survivorFoundationSettingsVersion: 1, exileBossMode: 'chimmy_roster' }
+    expect(readSurvivorLateSeasonSettings(backfilled).exileBossMode).toBe('chimmy_roster')
+  })
+  it('a new league defaults to the median boss', () => {
+    const snapshot = buildSurvivorSettingsSnapshot({ sport: 'NBA', teamCount: 18 })!
+    expect(snapshot.exileBossMode).toBe('median')
+    expect(readSurvivorLateSeasonSettings(snapshot).exileBossMode).toBe('median')
+    expect(readSurvivorLateSeasonSettings(withNewLeagueLateSeasonDefaults({ exileIslandEnabled: true })).exileBossMode).toBe('median')
+    // An explicit choice made during creation is kept.
+    expect(withNewLeagueLateSeasonDefaults({ exileBossMode: 'fixed' }).exileBossMode).toBe('fixed')
   })
   it('reads finalistCount from settings, plan or the legacy final-3 column', () => {
     expect(readSurvivorLateSeasonSettings({ finalistCount: 2 }).finalistCount).toBe(2)
@@ -83,6 +104,7 @@ describe('late-season settings', () => {
   })
   it('a fixed boss with no number falls back to the median', () => {
     expect(readSurvivorLateSeasonSettings({ exileBossMode: 'fixed' }).exileBossMode).toBe('median')
+    expect(readSurvivorLateSeasonSettings({ exileBossMode: 'median' }).exileBossMode).toBe('median')
     expect(readSurvivorLateSeasonSettings({ exileBossMode: 'fixed', exileBossFixedScore: '110.5' })).toMatchObject({ exileBossMode: 'fixed', exileBossFixedScore: 110.5 })
   })
   it('validates commissioner patches', () => {

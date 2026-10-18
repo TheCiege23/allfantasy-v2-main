@@ -1,4 +1,4 @@
-import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
+import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
@@ -441,6 +441,8 @@ export async function createCanonicalLeagueInTransaction(
     const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup, defaultTeamCount: managerCount,
       tribeCount: setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount })
     Object.assign(mergedSettings, buildSurvivorSettingsSnapshotPatch({ ...settings }))
+    // A new league defaults to the score boss (median); a missing value would read as legacy Chimmy.
+    Object.assign(mergedSettings, withNewLeagueLateSeasonDefaults(mergedSettings))
   }
 
   if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
