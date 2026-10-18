@@ -3,13 +3,15 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import type { SurvivorAccessContext } from './survivorAccessControl'
 import { getActiveTribeImmunity } from './survivorTribeImmunity'
+import { isCouncilReadComplete } from './survivorRevealGate'
 
 /**
  * SURVIVOR WEEKLY MOMENTS (weekly-loop handoff, sections 2 and 3).
  *
  * The immunity win and the torch-out are public results, so every league member sees them. The
- * torch-out only exists after the read (isRevealed + an eliminated manager): nothing here can
- * surface a result before reveal. Seen state is stored per user so a moment plays once.
+ * torch-out only exists once the read is COMPLETE (survivorRevealGate: published, and the last ballot
+ * released) with an eliminated manager — the same gate that holds the chat verdict and the
+ * elimination — so nothing here can surface a result while the scroll is still being read. Seen state is stored per user so a moment plays once.
  */
 
 export interface TorchOutMoment {
@@ -79,12 +81,15 @@ async function loadSeenKeys(leagueId: string, userId: string, keys: string[]): P
 
 export async function buildWeeklyMoments(access: SurvivorAccessContext): Promise<WeeklyMomentsPayload> {
   const { leagueId, userId } = access
-  // Only a council that has been read can produce a torch-out.
-  const council = await prisma.survivorTribalCouncil.findFirst({
+  // Only a council whose read has finished can produce a torch-out. eliminatedUserId is set at tally,
+  // before the read, so isRevealed alone would name the manager while the scroll is mid-read.
+  const latest = await prisma.survivorTribalCouncil.findFirst({
     where: { leagueId, isRevealed: true, eliminatedUserId: { not: null } },
     orderBy: [{ week: 'desc' }, { councilNumber: 'desc' }, { createdAt: 'desc' }],
-    select: { id: true, week: true, eliminatedUserId: true, eliminatedRosterId: true, eliminatedName: true },
+    select: { id: true, week: true, eliminatedUserId: true, eliminatedRosterId: true, eliminatedName: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true },
   })
+  const league = latest ? await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } }) : null
+  const council = latest && isCouncilReadComplete(latest, league?.survivorRevealMode) ? latest : null
   const necklaces = await getActiveTribeImmunity(leagueId)
   const tribeIds = [...new Set(necklaces.map(row => row.tribeId))]
   const tribes = tribeIds.length

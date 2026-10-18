@@ -5,6 +5,7 @@ import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import { SURVIVOR_TRIBE_CATALOG, tribeCatalogIdFor, tribeSportKey } from '@/lib/survivor/survivorTribeIdentity'
 import { getTribeImmunityForWeek, isTribeImmunityTableAvailable, MERGED_IMMUNITY_TRIBE } from '@/lib/survivor/survivorTribeImmunity'
 import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
+import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { safeIdolId } from './cardContent'
 import { countImmunityMoments, createShareMomentOnce } from './momentStore'
 import type { ShareMomentPayload } from './types'
@@ -25,10 +26,12 @@ interface LeagueFacts {
   season: number
   settings: ReturnType<typeof normalizeSurvivorFoundationSettings>
   phase: string | null
+  /** League.survivorRevealMode — paces the Tribal Council read (exile-scroll reveal gate). */
+  revealMode: string | null
 }
 
 async function leagueFacts(leagueId: string): Promise<LeagueFacts | null> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true, season: true, settings: true, survivorPhase: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true, season: true, settings: true, survivorPhase: true, survivorRevealMode: true } })
   if (!league) return null
   const raw = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : {}
   const config = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { seasonThemeLabel: true } }).catch(() => null)
@@ -38,6 +41,7 @@ async function leagueFacts(leagueId: string): Promise<LeagueFacts | null> {
     season: league.season ?? new Date().getUTCFullYear(),
     settings: normalizeSurvivorFoundationSettings(raw),
     phase: league.survivorPhase ?? null,
+    revealMode: league.survivorRevealMode ?? null,
   }
 }
 
@@ -131,6 +135,9 @@ export async function captureCouncilShareMoments(leagueId: string, councilId: st
   if (!council || !council.isRevealed) return 0
   const facts = await leagueFacts(leagueId)
   if (!facts) return 0
+  // The out and idol cards name a result, so they wait until the last ballot of the read is released —
+  // the same gate that holds the chat verdict and the elimination. The lazy backstop retries later.
+  if (!isCouncilReadComplete(council, facts.revealMode)) return 0
   const scrolls = scrollsOf(council.revealSequence)
   let created = 0
 

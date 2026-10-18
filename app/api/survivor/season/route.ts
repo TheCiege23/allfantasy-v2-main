@@ -99,6 +99,7 @@ export async function GET(req: NextRequest) {
       survivorMode: true,
       survivorTribeCount: true,
       survivorMergeWeek: true,
+      survivorRevealMode: true,
       settings: true,
       sport: true,
     },
@@ -144,7 +145,7 @@ export async function GET(req: NextRequest) {
       isJuryMember: p.isJuryMember, isFinalist: p.isFinalist,
       hasImmunityThisWeek: p.hasImmunityThisWeek,
     })),
-    activeCouncil: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
+    activeCouncil: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes, { revealMode: league?.survivorRevealMode }),
     currentChallenge: access.decisions.canSeeHiddenIdolAssignments ? challenge : challenge && {
       id: challenge.id, week: challenge.week, title: challenge.title, description: challenge.description,
       instructions: challenge.instructions, scope: challenge.scope, status: challenge.status,
@@ -153,6 +154,7 @@ export async function GET(req: NextRequest) {
       resultSummary: challenge.status === 'resolved' ? challenge.resultSummary : null,
     },
     exileStatus: exile,
+    exileEnabled: access.settings.exileIslandEnabled !== false,
     juryStatus: access.decisions.canSeePrivateVotes ? jury : jury && {
       id: jury.id, status: jury.status, finalistUserIds: jury.finalistUserIds,
       jurorUserIds: jury.jurorUserIds, questionsDeadline: jury.questionsDeadline, votingDeadline: jury.votingDeadline,

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
-import { revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
+import { publishCouncilVerdictIfComplete, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { prisma } from '@/lib/prisma'
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
@@ -36,5 +36,7 @@ export async function POST(
 
   const result = await revealCouncil(leagueId, council.id, userId)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
-  return NextResponse.json({ ok: true, councilId: council.id, eliminatedName: result.eliminatedName, isTie: result.isTie })
+  // The outcome is not echoed here: it is published only when the last ballot has been read.
+  await publishCouncilVerdictIfComplete(leagueId, council.id)
+  return NextResponse.json({ ok: true, councilId: council.id })
 }

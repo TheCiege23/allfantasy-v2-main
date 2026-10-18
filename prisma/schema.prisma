@@ -9065,6 +9065,8 @@ model SurvivorTribalCouncil {
   nullifiersPlayed     Json?
   revealSequence       Json?
   revealStartsAt       DateTime?
+  /// Steps a commissioner has released with reveal_next. The sequence itself is never mutated.
+  revealStep           Int                  @default(0)
   rockDrawerUserId     String?              @db.VarChar(64)
   status               String               @default("pending") @db.VarChar(24)
   tiePhase             String?              @db.VarChar(32)

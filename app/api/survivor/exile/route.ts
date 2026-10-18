@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
 
   const island = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const me = await prisma.survivorPlayer.findFirst({ where: { leagueId, userId } })
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, sport: true, season: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, sport: true, season: true, survivorTokenCap: true } })
   const settings = normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null)
   const resolved = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'scheduled_exile_return_resolved' }, select: { id: true } })
   let bossContest: { status: 'pending' | 'locked' | 'final'; week: number; team?: string; players?: { name: string; position: string; slot: string }[]; score?: number } | null = null
@@ -75,7 +75,18 @@ export async function GET(req: NextRequest) {
       ...(locked && typeof rosterData?.team === 'string' ? { team: rosterData.team, players } : {}),
       ...(score != null ? { score } : {}) }
   }
-  return NextResponse.json({ island, user: me, bossContest, bossMode, returnRules: { enabled: settings.exileIslandEnabled, week: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens, resolved: Boolean(resolved), slots: 1 } })
+  // The caller's own entry for the most recent SCORED Exile week drives the token earned / wiped
+  // toast (scoreExileWeek writes an exile_week_scored marker per week; open weeks are not final).
+  // Owner-only: filtered to the session user, never another manager's entry.
+  const scored = island && me ? await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'exile_week_scored', week: { not: null } }, orderBy: { week: 'desc' }, select: { week: true } }) : null
+  const latestEntry = island && me && scored?.week != null ? await prisma.exileWeeklyEntry.findFirst({
+    where: { exileId: island.id, userId, week: scored.week },
+    orderBy: { week: 'desc' },
+    select: { id: true, week: true, weeklyScore: true, bossScore: true, tokenEarned: true, tokenWiped: true },
+  }) : null
+  const latest = latestEntry && (latestEntry.tokenEarned > 0 || latestEntry.tokenWiped) ? latestEntry : null
+  const latestResult = latest ? { id: latest.id, week: latest.week, weeklyScore: latest.weeklyScore, bossScore: latest.bossScore, tokenEarned: latest.tokenEarned, tokenWiped: latest.tokenWiped } : null
+  return NextResponse.json({ island, user: me, bossContest, bossMode, latestResult, tokenCap: league?.survivorTokenCap ?? null, returnRules: { enabled: settings.exileIslandEnabled, week: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens, resolved: Boolean(resolved), slots: 1 } })
 }
 
 export async function POST(req: NextRequest) {

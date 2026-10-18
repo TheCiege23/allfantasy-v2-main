@@ -28,6 +28,7 @@ import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteComm
 import { playVoteShield, playExtraVote, playSkipTribal, playVoteSteal, getCouncilIdolPreview } from '@/lib/survivor/survivorIdolResolutionService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
+import { finishCouncilReadIfComplete } from '@/lib/survivor/survivorCouncilReadFinish'
 import { sendPushToUser } from '@/lib/push-notifications'
 import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
 import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick } from '@/lib/survivor/survivorNbaWeeklyScoring'
@@ -649,9 +650,11 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if (!councilId) return NextResponse.json({ error: 'No council', action }, { status: 404 })
     const result = await revealCouncil(leagueId, councilId, userId)
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
-    // Continue the existing elimination pipeline; ballots never travel back to this control page.
-    const aftermath = !result.isTie && result.eliminatedUserId ? await resolveElimination(leagueId, councilId, userId) : null
-    return NextResponse.json({ ok: true, action, aftermathPending: aftermath != null && !aftermath.ok })
+    // The verdict and elimination follow when the last ballot is read (now, for all-at-once pacing;
+    // otherwise reveal_next or the next automation tick). Ballots never travel back to this page.
+    const finished = await finishCouncilReadIfComplete(leagueId, councilId, userId)
+    const aftermathPending = !finished.ok || !finished.complete || (finished.elimination != null && !finished.elimination.ok)
+    return NextResponse.json({ ok: true, action, aftermathPending, readInProgress: finished.ok && !finished.complete })
   }
 
   if (action === 'resolve-elimination') {

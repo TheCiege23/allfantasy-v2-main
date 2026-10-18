@@ -38,6 +38,7 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSur
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
+import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
 
@@ -86,7 +87,7 @@ export async function GET(
     getJuryMembers(leagueId),
     getExileLeagueId(leagueId),
     getExileLeagueId(leagueId).then((id) => (id ? getAllTokenStates(id) : [])),
-    prisma.survivorTribalCouncil.findMany({ where: { leagueId, isRevealed: true, eliminatedRosterId: { not: null } }, select: { eliminatedRosterId: true, week: true }, orderBy: { week: 'asc' } }),
+    prisma.survivorTribalCouncil.findMany({ where: { leagueId, isRevealed: true, eliminatedRosterId: { not: null } }, select: { eliminatedRosterId: true, week: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true }, orderBy: { week: 'asc' } }),
     isMergeTriggered(leagueId, currentWeek),
     getCurrentUserRosterIdForLeague(leagueId, userId),
     getCurrentlyEliminatedRosterIds(leagueId),
@@ -104,11 +105,12 @@ export async function GET(
 
   const leagueMeta = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, name: true },
+    select: { sport: true, name: true, survivorRevealMode: true },
   })
   const seasonCalendar = seasonWeekBoundsForSport(leagueMeta?.sport, config.regularSeasonEndWeek ?? null)
 
-  const votedOutHistory = audit.map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
+  // Only councils whose read has finished name a voted-out manager (see survivorRevealGate).
+  const votedOutHistory = audit.filter(row => isCouncilReadComplete(row, leagueMeta?.survivorRevealMode)).map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
   // Weekly necklaces still being worn (until the next lineup lock). Public by design.
   const activeNecklaces = await getActiveTribeImmunity(leagueId)
 
@@ -279,7 +281,7 @@ export async function GET(
 
   const privacy = await resolveSurvivorAccessContext(leagueId, userId)
   if (!privacy?.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes)
+  const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes, { revealMode: leagueMeta?.survivorRevealMode })
 
   const body = {
     leagueName: leagueMeta?.name ?? 'Survivor League',
@@ -356,6 +358,12 @@ export async function GET(
           closedAt: publicCouncil.closedAt,
           eliminatedRosterId: publicCouncil?.eliminatedRosterId ?? null,
           revealSequence: publicCouncil?.revealSequence ?? null,
+          revealMode: publicCouncil?.revealMode ?? 'one_at_a_time',
+          revealTotalSteps: publicCouncil?.revealTotalSteps ?? null,
+          revealComplete: publicCouncil?.revealComplete ?? false,
+          revealNextStepAt: publicCouncil?.revealNextStepAt ?? null,
+          eliminatedName: publicCouncil?.eliminatedName ?? null,
+          isTie: publicCouncil?.isTie ?? false,
           isRevealed: publicCouncil.isRevealed,
         }
       : null,
