@@ -29,7 +29,8 @@ import { expect, test, type Page } from "@playwright/test"
 
 const ROOT = resolve(__dirname, "../..")
 const STYLESHEETS = ["components/core-app/af-core.css", "components/core-app/af-core-shell.css"]
-const SHELL_SOURCE = "components/core-app/AfCoreShell.tsx"
+// The tray lives in AfCoreShell; each row's body moved to RailRowBody (shared with the league page rail).
+const SHELL_SOURCES = ["components/core-app/AfCoreShell.tsx", "components/core-app/RailRowBody.tsx"]
 
 /*
  * Tailwind's preflight is compiled into the app's global CSS and is not readable as a plain file here.
@@ -150,13 +151,13 @@ function expectNoSidewaysPan(g: TrayGeometry, where: string): void {
 
 test.describe("@mobile league tray layout", () => {
   test("the markup under test still matches AfCoreShell", () => {
-    const source = readFileSync(resolve(ROOT, SHELL_SOURCE), "utf8")
+    const source = SHELL_SOURCES.map((f) => readFileSync(resolve(ROOT, f), "utf8")).join("\n")
     const used = new Set<string>()
     for (const m of trayMarkup(1, "image").matchAll(/class="([^"]+)"/g)) {
       for (const c of m[1].split(/\s+/)) used.add(c)
     }
     const missing = [...used].filter((c) => !source.includes(c))
-    expect(missing, `classes this spec renders that ${SHELL_SOURCE} no longer uses — update the markup`).toEqual([])
+    expect(missing, `classes this spec renders that ${SHELL_SOURCES.join(" + ")} no longer use — update the markup`).toEqual([])
   })
 
   for (const avatar of ["letter", "image"] as const) {
