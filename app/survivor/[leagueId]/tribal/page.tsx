@@ -12,6 +12,7 @@ import { SurvivorWeeklyMoments } from '@/components/survivor/weekly/SurvivorWeek
 import { SurvivorAvatar, survivorAvatarStatus } from '@/components/survivor/weekly/SurvivorAvatar'
 import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { SurvivorStateCard } from '@/components/survivor/core/SurvivorStateCard'
+import { SurvivorMissedVoteNotice } from '@/components/survivor/core/SurvivorMissedVoteNotice'
 
 export default function SurvivorTribalPage() {
   const params = useParams()
@@ -107,6 +108,8 @@ export default function SurvivorTribalPage() {
 
       {council?.isRevealed ? (
         <div className="relative mx-auto mt-6 max-w-2xl">
+          {/* Only the viewer's own "you didn't vote" card, and only once the read has started. */}
+          <SurvivorMissedVoteNotice leagueId={leagueId} councilId={council.id} />
           <SurvivorVoteRevealScrolls
             key={council.id}
             scrolls={revealSteps}
