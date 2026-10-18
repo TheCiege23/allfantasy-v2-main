@@ -20,10 +20,10 @@ export function DivisionCrest({ art, size = 160, label }: { art: CrestArt; size?
           <img src={art.emblem} alt="" width={200} height={200} className="absolute" draggable={false}
             style={{ left: pct(CREST_GEOMETRY.emblem.left), top: pct(CREST_GEOMETRY.emblem.top), width: pct(CREST_GEOMETRY.emblem.width) }} />
           {showText && <>
-            <span className="absolute flex items-center justify-center overflow-hidden whitespace-nowrap font-black uppercase tracking-wide"
-              style={{ left: pct(CREST_GEOMETRY.tab.left), top: pct(CREST_GEOMETRY.tab.top), width: pct(CREST_GEOMETRY.tab.width), height: pct(CREST_GEOMETRY.tab.height), color: art.ink, fontSize: Math.max(11, Math.round(size * 0.05)) }}>{art.tab}</span>
-            <span className="absolute flex items-center justify-center overflow-hidden whitespace-nowrap font-black uppercase tracking-wider"
-              style={{ left: pct(CREST_GEOMETRY.ribbon.left), top: pct(CREST_GEOMETRY.ribbon.top), width: pct(CREST_GEOMETRY.ribbon.width), height: pct(CREST_GEOMETRY.ribbon.height), color: art.ink, fontSize: Math.max(11, Math.round(size * 0.075)) }}>{art.ribbon}</span>
+            <span className="absolute block whitespace-nowrap text-center font-black uppercase tracking-wide"
+              style={{ left: pct(CREST_GEOMETRY.tab.left), top: pct(CREST_GEOMETRY.tab.top), width: pct(CREST_GEOMETRY.tab.width), height: pct(CREST_GEOMETRY.tab.height), lineHeight: `${Math.round(height * CREST_GEOMETRY.tab.height / 100)}px`, color: art.ink, fontSize: Math.max(11, Math.round(size * 0.05)) }}>{art.tab}</span>
+            <span className="absolute block whitespace-nowrap text-center font-black uppercase tracking-wider"
+              style={{ left: pct(CREST_GEOMETRY.ribbon.left), top: pct(CREST_GEOMETRY.ribbon.top), width: pct(CREST_GEOMETRY.ribbon.width), height: pct(CREST_GEOMETRY.ribbon.height), lineHeight: `${Math.round(height * CREST_GEOMETRY.ribbon.height / 100)}px`, color: art.ink, fontSize: Math.max(11, Math.round(size * 0.075)) }}>{art.ribbon}</span>
           </>}
         </>
       )}
