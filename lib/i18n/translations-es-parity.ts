@@ -295,6 +295,7 @@ export const translationsEsParity: Record<string, string> = {
   "draftRoom.shell.mobile.board": "Tablero",
   "draftRoom.shell.mobile.players": "Jugadores",
   "draftRoom.shell.mobile.queue": "Cola",
+  "draftRoom.shell.mobile.intel": "Intel",
   "draftRoom.shell.mobile.ai": "IA",
   "draftRoom.shell.mobile.roster": "Mi equipo",
   "draftRoom.shell.mobile.keepers": "Keepers",

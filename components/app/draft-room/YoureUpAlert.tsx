@@ -5,6 +5,11 @@
  * viewer, offers a one-tap draft of the top queued (else best available)
  * player, and warns about back-to-back picks at the turn. Dismissal is per
  * pick, so the next turn shows it again.
+ *
+ * Anchored to the bottom, never the top: the top is where the header's pick
+ * clock lives, and covering the countdown at the one moment it matters most is
+ * worse than covering a few rows of the player list. On phones it sits above
+ * the bottom docks.
  */
 
 import React from 'react'
@@ -39,7 +44,7 @@ export function YoureUpAlert({
     <div
       role="alert"
       data-testid="draft-youre-up-alert"
-      className="pointer-events-auto fixed inset-x-3 top-3 z-[70] mx-auto max-w-md rounded-2xl bg-amber-400 px-4 py-3 text-[#0a111d] shadow-[0_16px_40px_rgba(0,0,0,0.55)]"
+      className="pointer-events-auto fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+132px)] z-[70] mx-auto max-w-md rounded-2xl md:bottom-6 bg-amber-400 px-4 py-3 text-[#0a111d] shadow-[0_16px_40px_rgba(0,0,0,0.55)]"
     >
       <div className="flex items-center gap-3">
         <Bell className="h-5 w-5 shrink-0" aria-hidden />
