@@ -102,6 +102,8 @@ const spanish: Record<string, string> = {
   'Sync & connect': 'Sincronizar y conectar',
   'Search leagues': 'Buscar ligas',
   'All platforms': 'Todas las plataformas',
+  'All sports': 'Todos los deportes',
+  'Filter by sport': 'Filtrar por deporte',
   'Clear filter': 'Quitar filtro',
   Grid: 'Cuadrícula',
   List: 'Lista',
