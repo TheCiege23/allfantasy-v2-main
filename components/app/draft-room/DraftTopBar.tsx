@@ -565,7 +565,12 @@ export function DraftTopBar({
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent"
         aria-hidden
       />
-      <div className="grid gap-1.5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-2">
+      {/*
+        Phones get two rows, not six: row 1 is back · league · controls, row 2 is the on-clock
+        card (who + timer). The meta line and the Format/Status/Current/Clock card are md+ only;
+        the sticky bar under the header carries the pick number, and the menu carries Invite.
+      */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
         <div className="min-w-0">
           <div className="flex items-start gap-2">
             {backHref ? (
@@ -621,7 +626,12 @@ export function DraftTopBar({
                   inline meta line below (`{teamCount} Teams · {rounds} Rounds ·
                   {sport} · {draftTypeLabel}`). Removing them de-clutters the
                   draft-room header without losing any information. */}
-          <div className="mt-0 flex flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7]">
+              {poolReadinessLabel && !poolReadiness?.ready ? (
+                <p className="mt-0 truncate text-[11px] text-amber-200 md:hidden" data-testid="draft-topbar-pool-readiness-mobile">
+                  {poolReadinessLabel}
+                </p>
+              ) : null}
+          <div className="mt-0 hidden flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7] md:flex">
                 <span>{timerSummary}</span>
                 <span className="text-white/24">·</span>
                 <span>{teamCount} Teams</span>
@@ -667,29 +677,6 @@ export function DraftTopBar({
                   <Copy className="h-3.5 w-3.5" />
                 </button>
                 {copyFeedback === 'copied' ? <span className="text-cyan-300">Copied</span> : null}
-              </div>
-              <div
-                className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg border border-white/10 bg-black/20 p-2 text-[11px] text-white/75 md:hidden"
-                data-testid="draft-topbar-mobile-compact"
-              >
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Format</span>
-                  <span className="block font-semibold text-cyan-100">{draftFormatLabel}</span>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Status</span>
-                  <span className="block font-semibold text-white">{statusLabel}</span>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Current</span>
-                  <span className="block font-semibold text-white">{pickLabel ?? '—'}</span>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Clock</span>
-                  <span className="block font-semibold text-cyan-100" data-testid="draft-topbar-mobile-timer-value">
-                    {timerDisplay}
-                  </span>
-                </div>
               </div>
             </div>
           </div>
@@ -738,12 +725,12 @@ export function DraftTopBar({
           These chips used to sit under the league name, away from the timer.
         */}
         <div
-          className="flex min-h-[36px] w-full flex-wrap items-center justify-center gap-1.5 lg:w-auto lg:min-w-[9.5rem] lg:flex-nowrap"
+          className="order-3 col-span-2 flex min-h-[36px] w-full flex-nowrap items-center justify-center gap-1.5 md:flex-wrap lg:order-none lg:col-span-1 lg:w-auto lg:min-w-[9.5rem] lg:flex-nowrap"
           data-testid="draft-topbar-center-slot"
         >
           {pickLabel ? (
             <div
-              className={`inline-flex items-center gap-2 rounded-lg border px-2 py-1 shadow-[0_4px_24px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/15 ${
+              className={`hidden items-center gap-2 rounded-lg border px-2 py-1 shadow-[0_4px_24px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/15 md:inline-flex ${
                 rs
                   ? 'border-cyan-400/35 bg-gradient-to-br from-cyan-500/18 via-[#0c1828]/95 to-[#081018]/98 shadow-[0_8px_36px_rgba(34,211,238,0.18)]'
                   : 'border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.12] to-[#0a1528]/90'
@@ -777,7 +764,7 @@ export function DraftTopBar({
               half-done.
             */
             <div
-              className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 ring-1 ${
+              className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 ring-1 ${
                 isCurrentUserOnClock
                   ? 'animate-pulse border-amber-400/60 bg-[radial-gradient(ellipse_at_30%_0%,rgba(251,191,36,0.30),transparent),linear-gradient(145deg,rgba(180,83,9,0.28),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(251,191,36,0.28)] ring-amber-400/35'
                   : rs
@@ -831,7 +818,7 @@ export function DraftTopBar({
           {centerCta}
         </div>
 
-        <div className="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
+        <div className="order-2 flex flex-wrap items-center justify-end gap-1 lg:order-none">
           {isCommissioner && (draftStatus === 'in_progress' || draftStatus === 'paused') && ((draftStatus === 'in_progress' && onPause) || (draftStatus === 'paused' && onResume)) ? (
             <button
               type="button"
@@ -865,7 +852,9 @@ export function DraftTopBar({
               className={`h-2 w-2 rounded-full ${autoPickEnabled ? 'bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-white/35'}`}
               aria-hidden
             />
-            Auto-pick {autoPickEnabled ? 'On' : 'Off'}
+            <span className="hidden sm:inline">Auto-pick </span>
+            <span className="sm:hidden">Auto </span>
+            {autoPickEnabled ? 'On' : 'Off'}
           </button>
 
           <button

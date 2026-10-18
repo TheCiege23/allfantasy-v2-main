@@ -4279,18 +4279,6 @@ export function DraftRoomPageClient({
     }
   }
 
-  const mobileTimerLabel = (() => {
-    const status = session.timer?.status ?? 'none'
-    const remaining = session.timer?.remainingSeconds ?? null
-    if (status === 'paused') return 'Paused'
-    if (status === 'expired') return '0:00'
-    if (status === 'none' || remaining == null || !Number.isFinite(remaining)) return '—'
-    const n = Math.max(0, Math.floor(remaining))
-    const min = Math.floor(n / 60)
-    const sec = String(n % 60).padStart(2, '0')
-    return `${min}:${sec}`
-  })()
-
   // Product decision (Phase 3 Slice 4): mobile draft clock/header stays visible
   // across Board, Players, Queue, Roster, and Chat tabs at all times.
   const showMobileStickyBar = true
@@ -4311,22 +4299,17 @@ export function DraftRoomPageClient({
               Draft room
             </span>
           )}
-          <div className="inline-flex items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold text-cyan-100">
-            <span className="text-cyan-200/80">Clock</span>
-            <span className="font-mono tabular-nums">{mobileTimerLabel}</span>
-          </div>
+          {/* Who is on the clock and the live timer are in the header, which never scrolls
+              away on phones; this bar only adds what the header leaves out. */}
+          {presentationVariant === 'redraft_snake' &&
+          ribbonPicksUntilUser != null &&
+          ribbonPicksUntilUser > 0 &&
+          !isCurrentUserOnClock ? (
+            <span className="truncate text-[11px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
+              ~{ribbonPicksUntilUser} pick{ribbonPicksUntilUser === 1 ? '' : 's'} until your turn
+            </span>
+          ) : null}
         </div>
-        {currentPick != null ? (
-          <p className="truncate text-white/80">On clock: {currentPick.displayName}</p>
-        ) : null}
-        {presentationVariant === 'redraft_snake' &&
-        ribbonPicksUntilUser != null &&
-        ribbonPicksUntilUser > 0 &&
-        !isCurrentUserOnClock ? (
-          <p className="text-[11px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
-            ~{ribbonPicksUntilUser} pick{ribbonPicksUntilUser === 1 ? '' : 's'} until your turn
-          </p>
-        ) : null}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scroll-smooth" data-testid="draft-mobile-quick-actions">
           <button
             type="button"

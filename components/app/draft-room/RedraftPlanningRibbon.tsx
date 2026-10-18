@@ -70,19 +70,20 @@ export function RedraftPlanningRibbon({
         </span>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 border-l border-white/10 pl-3">
-        <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
+      <div className="flex min-w-0 basis-full items-center gap-x-3 gap-y-1 sm:flex-1 sm:basis-auto sm:flex-wrap sm:border-l sm:border-white/10 sm:pl-3">
+        <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
           <Users className="h-3 w-3" aria-hidden />
           Next up
         </span>
-        <ol className="flex flex-wrap gap-2">
+        {/* One sideways-scrolling row on phones; wrapping here stacked four chips into a column. */}
+        <ol className="flex min-w-0 gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">
           {onDeck.length === 0 ? (
             <li className="text-[11px] text-white/38">Draft finishing…</li>
           ) : (
             onDeck.slice(0, 4).map((u, i) => (
               <li
                 key={`${u.slot}-${i}`}
-                className="flex items-center gap-1 rounded-md border border-white/10 bg-black/25 px-2 py-0.5"
+                className="flex shrink-0 items-center gap-1 rounded-md border border-white/10 bg-black/25 px-2 py-0.5"
               >
                 <span className="font-mono text-[11px] text-cyan-200/80">T{u.slot}</span>
                 <span className="max-w-[120px] truncate text-[11px] text-white/80">{u.displayName}</span>
@@ -92,7 +93,7 @@ export function RedraftPlanningRibbon({
         </ol>
       </div>
 
-      <p className="text-[11px] text-white/42 sm:pl-2">
+      <p className="hidden text-[11px] text-white/42 sm:block sm:pl-2">
         Snake: pick order reverses each round
         {thirdRoundReversal ? ' · 3rd-round reversal on' : ''}.
       </p>
