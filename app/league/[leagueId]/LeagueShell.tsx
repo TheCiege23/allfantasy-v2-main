@@ -75,6 +75,7 @@ import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
+import type { LeagueRailData } from '@/components/league/native/LeagueRail'
 import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
@@ -264,6 +265,8 @@ export type LeagueShellProps = {
   /** Head commissioner only (reset draft, co-comm management). */
   isHeadCommissioner: boolean
   allLeagues: League[]
+  /** /core's rail data (this week's matchup + crest) per league in `allLeagues`. Null draws names only. */
+  leagueRail?: LeagueRailData | null
   userId: string
   userName: string
   userImage?: string | null
@@ -300,6 +303,7 @@ export function LeagueShell({
   isCommissioner,
   isHeadCommissioner,
   allLeagues,
+  leagueRail = null,
   userId,
   userName,
   userImage = null,
@@ -1447,6 +1451,7 @@ export function LeagueShell({
           onSelectTab={handleUserTabChange}
           onOpenSettings={() => (nativeWorkspace ? handleUserTabChange('settings') : openLeagueSettingsModal(null))}
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
+          rail={leagueRail}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}

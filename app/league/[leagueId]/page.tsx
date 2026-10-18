@@ -21,6 +21,9 @@ import { isAppRouterRedirectError } from '@/lib/next/is-app-router-redirect-erro
 import { resolveBracketPoolRedirectUrl } from '@/lib/league/bracketPoolGuard'
 import { LeagueShellClient } from './LeagueShellClient'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { getRailMatchups } from '@/lib/core-app/railMatchups'
+import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
+import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 
 export const dynamic = 'force-dynamic'
 
@@ -363,11 +366,54 @@ export default async function LeaguePage(
           }
                       : null
 
-      const draftSetupSession = await prisma.draftSession.findFirst({
-        where: { leagueId },
-        orderBy: CURRENT_DRAFT_SESSION_ORDER,
-        select: { rounds: true, timerSeconds: true },
-      }).catch(() => null)
+      /*
+       * The league rail's per-league week: your team v opponent, scores, SLPR/AF projections. The SAME
+       * DB-first loader /core's rail uses (lib/core-app/railMatchups.ts — set-based reads, no provider
+       * call), read beside the draft session rather than in front of it. A failure is null and the
+       * rail draws names and crests only, exactly as /core's does.
+       */
+      const railTypeKeys = new Map(
+        allLeagues.map((l) => [
+          l.id,
+          resolveLeagueCardTypeKey({
+            leagueType: l.leagueType,
+            leagueVariant: l.leagueVariant,
+            settings: (l.settings as Record<string, unknown> | null) ?? undefined,
+            isDynasty: l.isDynasty,
+            guillotineMode: l.guillotineMode,
+          }),
+        ]),
+      )
+      const [draftSetupSession, railMatchups] = await Promise.all([
+        prisma.draftSession.findFirst({
+          where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
+          select: { rounds: true, timerSeconds: true },
+        }).catch(() => null),
+        getRailMatchups(
+          userId,
+          allLeagues.map((l) => ({
+            id: l.id,
+            platformLeagueId: l.platformLeagueId ?? null,
+            elimination: railTypeKeys.get(l.id) === 'guillotine',
+          })),
+        ).catch((err) => {
+          console.error('[league page] rail matchups failed', { userId, err })
+          return null
+        }),
+      ])
+      const leagueRail = {
+        matchups: railMatchups?.byLeague ?? {},
+        // /core's crest rule: commissioner logo, else Sleeper avatar, else the league type's own artwork.
+        imageUrls: Object.fromEntries(
+          allLeagues.map((l) => [
+            l.id,
+            imageOf(l as unknown as Dash34LeagueRow) ??
+              getLeagueTypeMedia(railTypeKeys.get(l.id)).defaultLeagueImageUrl ??
+              null,
+          ]),
+        ),
+      }
 
       return (
         <div className="flex min-h-0 flex-1 flex-col" data-league-id={leagueId}>
@@ -378,6 +424,7 @@ export default async function LeaguePage(
             isCommissioner={isCommissioner}
             isHeadCommissioner={isHeadCommissioner}
             allLeagues={allLeagues}
+            leagueRail={leagueRail}
             userId={userId}
             userName={session.user.name ?? session.user.email ?? 'Manager'}
             userImage={userImage}

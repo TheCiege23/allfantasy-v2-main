@@ -21,3 +21,8 @@ export function resolveCreatedSeasonWeeks(league: {
   const rounds = teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
   return Number(regularWeeks) + rounds * Math.max(1, league.playoffWeeksPerRound ?? 1)
 }
+
+/** A guillotine season ends at its last chop week; without one, the created length stands. */
+export function resolveGuillotineSeasonWeeks(eliminationEndWeek: number | null | undefined, createdWeeks: number): number {
+  return Number.isInteger(eliminationEndWeek) && Number(eliminationEndWeek) >= 1 ? Number(eliminationEndWeek) : createdWeeks
+}

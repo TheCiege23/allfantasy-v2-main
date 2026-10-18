@@ -2626,7 +2626,13 @@
   overflow-wrap: anywhere;
   -webkit-tap-highlight-color: transparent;
 }
-.af-cm-bubble-text { margin: 0; white-space: pre-wrap; }
+/*
+ * `color: inherit` is load-bearing: the text is a <p>, and a host stylesheet that colours paragraphs
+ * (the /league workspace set `.nl-workspace p { color: var(--text2) }`) otherwise beats the bubble's
+ * inherited colour — your own message rendered #a3a9c2 on the #22d3ee accent, 1.29:1 (reported
+ * 2026-10-18). Inherited from `.af-cm-bubble` it is --accent-ink on --accent: 11.26:1 dark, white on #096d8e light.
+ */
+.af-cm-bubble-text { margin: 0; white-space: pre-wrap; color: inherit; }
 .af-cm-bubble .af-cm-rich { margin-top: 6px; }
 .af-cm-bubble .af-cm-rich:first-child { margin-top: 0; }
 /* A GIF or photo on its own needs no bubble around it. */
