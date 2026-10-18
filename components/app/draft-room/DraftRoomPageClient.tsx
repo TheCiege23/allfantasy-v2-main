@@ -69,7 +69,7 @@ import {
   isPickCommitAllowed,
   isPickCommitAllowedByName,
 } from '@/lib/live-draft-engine'
-import { getUpcomingPickOwners } from '@/lib/live-draft-engine/DraftOrderService'
+import { formatPickLabel, getUpcomingPickOwners } from '@/lib/live-draft-engine/DraftOrderService'
 import type { DraftIntelState, DraftIntelQueueEntry } from '@/lib/draft-intelligence'
 import type { DraftUISettings } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { normalizeDraftQueueSizeLimit, trimDraftQueue } from '@/lib/draft-defaults/DraftQueueLimitResolver'
@@ -101,6 +101,8 @@ import { buildDraftRoomClientDiagnostics } from '@/lib/draft-room/player-pool-au
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import { detectSnakeBackToBackSoon, computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
 import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanningRibbon'
+import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
+import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
 import {
   buildAssistantFeedByPlayerName,
   getAssistantFeedForPlayer,
@@ -652,6 +654,16 @@ export function DraftRoomPageClient({
           }
         })
   }, [draftPool, draftData, aiAdpLookupMaps, draftUISettings?.aiAdpEnabled, useAllFantasyAdp])
+
+  /** Draft pulse strip + board steal/reach badges — market ADP only (see lib/draft-room/draftPulse). */
+  const pulseAvailablePlayers = useMemo(
+    () => filterPlayersAvailableForDraftAi(players, draftedNames, draftedPlayerIds),
+    [players, draftedNames, draftedPlayerIds],
+  )
+  const boardAdpDeltaByOverall = useMemo(
+    () => buildAdpDeltaByOverall(session?.picks ?? [], buildAdpLookup(players)),
+    [session?.picks, players],
+  )
 
   const playerAuditFingerprintRef = useRef('')
   useEffect(() => {
@@ -5064,6 +5076,18 @@ export function DraftRoomPageClient({
               />
             </div>
           ) : null}
+          {session.draftType !== 'auction' ? (
+            <DraftPulseStrip
+              picks={session.picks ?? []}
+              pool={players}
+              available={pulseAvailablePlayers}
+              teamCount={safeBoardTeamCount}
+              currentOverall={currentPick?.overall ?? null}
+              viewerRosterId={currentUserRosterId ?? null}
+              sport={effectiveDraftSport}
+              formatPickLabel={(overall) => formatPickLabel(overall, safeBoardTeamCount)}
+            />
+          ) : null}
           {draftUISettings?.executionMode === 'offline' ? (
             <div
               className="w-full shrink-0 rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"
@@ -5176,6 +5200,7 @@ export function DraftRoomPageClient({
                     isCommissioner && session?.status === 'paused' && session?.draftType !== 'auction'
                   }
                   onCommissionerEditPick={isCommissioner ? openCommissionerPickEditor : undefined}
+                  adpDeltaByOverall={boardAdpDeltaByOverall}
                 />
               </div>
             </div>

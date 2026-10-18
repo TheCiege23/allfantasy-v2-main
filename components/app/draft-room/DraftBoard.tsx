@@ -54,6 +54,8 @@ export type DraftBoardProps = {
   onCommissionerEditPick?: (overall: number) => void
   /** Live draft pool rows by player id — enriches tiles only; does not change stored picks */
   poolPlayerById?: Record<string, DraftRoomDisplayPlayerLike>
+  /** overall → (overall − market ADP), only for picks worth a steal/reach badge. See lib/draft-room/draftPulse. */
+  adpDeltaByOverall?: Record<number, number>
 }
 
 type SequentialBoardEntry = {
@@ -155,6 +157,7 @@ function DraftBoardInner({
   onCommissionerEditPick,
   presentationVariant = 'default',
   poolPlayerById,
+  adpDeltaByOverall,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
@@ -301,6 +304,7 @@ function DraftBoardInner({
         isPromotedFromDevy: isPromotedFromDevy || undefined,
         source: source || undefined,
         ownerRosterId,
+        adpDelta: existing?.playerName ? adpDeltaByOverall?.[overall] ?? null : null,
       }
       const pid = existing?.playerId ? String(existing.playerId).trim() : ''
       const poolEntry = pid && poolPlayerById ? poolPlayerById[pid] : undefined
@@ -331,6 +335,7 @@ function DraftBoardInner({
     c2cCollegeRounds,
     sport,
     poolPlayerById,
+    adpDeltaByOverall,
   ])
 
   const auctionColumns = useMemo(() => {
