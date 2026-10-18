@@ -20,12 +20,14 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
-export type DraftRightDockTab = 'queue' | 'roster' | 'war_room' | 'activity' | 'chat'
+export type DraftRightDockTab = 'queue' | 'intel' | 'roster' | 'war_room' | 'activity' | 'chat'
 
 const TAB_PREF_KEY = 'af:draft-right-dock-active-tab'
 
 export interface DraftRightDockTabsProps {
   queueBody: ReactNode
+  /** "Before your next pick" lookahead. Optional — the tab appears only when a body is supplied. */
+  intelBody?: ReactNode
   rosterBody: ReactNode
   warRoomBody?: ReactNode
   /**
@@ -45,6 +47,7 @@ export interface DraftRightDockTabsProps {
 
 const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
+  { id: 'intel', label: 'Intel' },
   { id: 'roster', label: 'Roster' },
   { id: 'war_room', label: 'AF Legacy' },
   { id: 'activity', label: 'Activity' },
@@ -53,6 +56,7 @@ const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
 
 export function DraftRightDockTabs({
   queueBody,
+  intelBody = null,
   rosterBody,
   warRoomBody = null,
   activityBody = null,
@@ -70,6 +74,7 @@ export function DraftRightDockTabs({
       const v = window.localStorage.getItem(TAB_PREF_KEY)
       if (
         v === 'queue' ||
+        v === 'intel' ||
         v === 'roster' ||
         v === 'war_room' ||
         v === 'activity' ||
@@ -97,6 +102,7 @@ export function DraftRightDockTabs({
    */
   const tabs = BASE_TABS.filter(
     (tab) =>
+      (tab.id !== 'intel' || Boolean(intelBody)) &&
       (tab.id !== 'war_room' || Boolean(warRoomBody)) &&
       (tab.id !== 'activity' || Boolean(activityBody)),
   )
@@ -182,6 +188,18 @@ export function DraftRightDockTabs({
         >
           {queueBody}
         </div>
+        {intelBody ? (
+          <div
+            role="tabpanel"
+            id={`${testIdBase}-panel-intel`}
+            aria-labelledby={`${testIdBase}-tab-intel`}
+            data-testid={`${testIdBase}-panel-intel`}
+            aria-hidden={effectiveTab !== 'intel'}
+            className={effectiveTab === 'intel' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
+          >
+            {intelBody}
+          </div>
+        ) : null}
         <div
           role="tabpanel"
           id={`${testIdBase}-panel-roster`}
