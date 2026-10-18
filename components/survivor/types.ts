@@ -58,7 +58,11 @@ export interface SurvivorSeasonCalendar {
 }
 
 export interface SurvivorSummaryTribe {
+  /** Full crest with the tribe's current name in the banner. */
   logoUrl?: string | null
+  /** Round mark for small placements (decorative next to a visible name). */
+  markUrl?: string | null
+  mascot?: string | null
   colorHex?: string | null
   id: string
   name: string

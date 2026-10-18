@@ -8916,6 +8916,11 @@ model SurvivorTribe {
   isMerged        Boolean                   @default(false)
   logoUrl         String?
   phase           String                    @default("pre_merge") @db.VarChar(24)
+  /// Tribe emblem catalogue id (lib/survivor/tribeCatalog.json). Crest is composed from it at render time.
+  catalogId       String?                   @db.VarChar(32)
+  /// Commissioner colour overrides (#rrggbb); null = catalogue default. colorHex stays the UI accent.
+  primaryColor    String?                   @db.VarChar(7)
+  secondaryColor  String?                   @db.VarChar(7)
   survivorPlayers SurvivorPlayer[]
   councils        SurvivorTribalCouncil[]
   chatMembers     SurvivorTribeChatMember[]

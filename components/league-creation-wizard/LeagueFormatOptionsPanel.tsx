@@ -62,7 +62,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
   useEffect(() => {
     if (previousCast.current !== survivorCast && v.survivorTribeSlots) {
       const defaults = defaultTribeSlots(survivorCast, tribePick)
-      onChange({ survivorTribeSlots: defaults.map((slot, index) => ({ ...slot, catalogId: v.survivorTribeSlots?.[index]?.catalogId ?? slot.catalogId })) })
+      onChange({ survivorTribeSlots: defaults.map((slot, index) => { const prev = v.survivorTribeSlots?.[index]; return prev ? { ...prev, managerCount: slot.managerCount } : slot }) })
     }
     previousCast.current = survivorCast
   }, [survivorCast, tribePick, v.survivorTribeSlots, onChange])
