@@ -40,7 +40,7 @@ const RUN_DOTS = 8
 function PositionChip({ pos, sport }: { pos: string; sport?: string }) {
   return (
     <span
-      className="inline-flex h-4 items-center rounded px-1 text-[10px] font-bold tracking-wide text-[#0a111d]"
+      className="inline-flex h-[18px] items-center rounded px-1 text-[11px] font-bold tracking-wide text-[#0a111d]"
       style={{ backgroundColor: positionColor(pos, sport) }}
     >
       {pos}
@@ -99,7 +99,7 @@ function DraftPulseStripInner({
       className="flex w-full shrink-0 flex-wrap gap-1.5 lg:gap-2"
     >
       <div className="min-w-0 flex-[2_1_360px] rounded-lg border border-white/8 bg-[#0d1524]/90 px-2.5 py-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">Recent picks</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/50">Recent picks</p>
         <ol className="mt-1.5 flex gap-1.5 overflow-hidden">
           {recent.map(({ pick, delta }) => (
             <li
@@ -109,7 +109,7 @@ function DraftPulseStripInner({
             >
               <span className="flex items-center justify-between gap-1">
                 <PositionChip pos={pick.position} sport={sport} />
-                <span className="text-[10px] text-white/45">{formatPickLabel(pick.overall)}</span>
+                <span className="text-[11px] text-white/45">{formatPickLabel(pick.overall)}</span>
               </span>
               <span className="truncate text-[12px] font-semibold text-white" title={pick.playerName}>
                 {pick.playerName}
@@ -128,7 +128,7 @@ function DraftPulseStripInner({
         role={run ? 'status' : undefined}
       >
         <div className="flex items-center justify-between gap-2">
-          <p className={`text-[10px] font-bold uppercase tracking-[0.12em] ${run ? 'text-amber-300' : 'text-white/50'}`}>
+          <p className={`text-[11px] font-bold uppercase tracking-[0.12em] ${run ? 'text-amber-300' : 'text-white/50'}`}>
             Position run
           </p>
           <span className="flex gap-0.5" aria-hidden>
@@ -157,7 +157,7 @@ function DraftPulseStripInner({
       </div>
 
       <div className="min-w-0 flex-[1_1_200px] rounded-lg border border-white/8 bg-[#0d1524]/90 px-2.5 py-2" data-testid="draft-pulse-value">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">Your picks vs ADP</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/50">Your picks vs ADP</p>
         <p className={`mt-1 text-[18px] font-bold ${deltaTone(value.viewerTotal)}`}>
           {value.viewerTotal == null ? '—' : formatAdpDelta(value.viewerTotal)}
         </p>
