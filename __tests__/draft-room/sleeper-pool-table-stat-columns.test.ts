@@ -151,3 +151,19 @@ describe('wrong sport columns do not overlap keys', () => {
     expect(nba.has('pass_yds')).toBe(false)
   })
 })
+
+describe('buildSleeperPoolTableLayout — LEFT @ column', () => {
+  it('is absent unless a next-pick label is supplied', () => {
+    expect(buildSleeperPoolTableLayout('NBA').columns.map((c) => c.key)).not.toContain('leftAt')
+    expect(buildSleeperPoolTableLayout('NBA', undefined, { leftAtPickLabel: null }).columns.map((c) => c.key)).not.toContain('leftAt')
+  })
+
+  it('follows AI ADP, carries the pick label, and widens the table', () => {
+    const plain = buildSleeperPoolTableLayout('NFL')
+    const withLeft = buildSleeperPoolTableLayout('NFL', undefined, { leftAtPickLabel: '4.16' })
+    const keys = withLeft.columns.map((c) => c.key)
+    expect(keys.indexOf('leftAt')).toBe(keys.indexOf('aiAdp') + 1)
+    expect(withLeft.columns.find((c) => c.key === 'leftAt')?.label).toBe('LEFT @ 4.16')
+    expect(withLeft.minWidth).toBe(plain.minWidth + 76)
+  })
+})

@@ -18,6 +18,7 @@ import {
 // NflDraftPoolStatsGroupHeader import removed in Slice D.1.5 Path B; re-add when D.2 ships the
 // Sleeper-style table mode and rows actually align to those columns.
 import { PlayerDetailModal, type DraftAssistantRoomContext } from './PlayerDetailModal'
+import type { PlayerDraftOutlook } from '@/lib/draft-room/playerDraftOutlook'
 import type { PlayerDisplayModel } from '@/lib/draft-sports-models/types'
 import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
@@ -167,6 +168,10 @@ export type PlayerPanelProps = {
   aiRowBadges?: Record<string, 'ai_pick' | 'value' | 'risky'>
   /** Rich inline AI overlays keyed by `name|position` (lowercase). */
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
+  /** Viewer's next pick — the pool table adds a LEFT @ survival column when set. */
+  leftAtPick?: { overall: number; label: string } | null
+  /** Player card "draft outlook" for the selected player; null when the draft is not running. */
+  getDraftOutlook?: (player: PlayerEntry) => PlayerDraftOutlook | null
   /** Shared AI overlay visibility state from parent surfaces (queue/helper/top bar). */
   showAiOverlays?: boolean
   /** Called when user toggles AI overlays from the pool toolbar. */
@@ -400,6 +405,8 @@ function PlayerPanelInner({
   leagueId,
   aiRowBadges,
   aiOverlaySignals,
+  leftAtPick = null,
+  getDraftOutlook,
   showAiOverlays,
   onShowAiOverlaysChange,
   presentationVariant = 'default',
@@ -1165,6 +1172,7 @@ function PlayerPanelInner({
         <PlayerDetailModal
           open={true}
           onClose={() => setSelectedPlayer(null)}
+          draftOutlook={getDraftOutlook?.(selectedPlayer) ?? null}
           normalized={selectedNormalized}
           player={{
             id: (() => {
@@ -1452,6 +1460,7 @@ function PlayerPanelInner({
                     aiOverlaySignals={aiOverlaysEnabled ? aiOverlaySignals : undefined}
                   sortState={{ key: sortBy, direction: sortDirection }}
                   onSortChange={handleColumnHeaderSort}
+                  leftAtPick={leftAtPick}
                 />
               </div>
             )

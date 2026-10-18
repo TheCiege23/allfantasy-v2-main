@@ -34,6 +34,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
   const [shotPending, setShotPending] = useState(false)
   const [shotConfirm, setShotConfirm] = useState(false)
   const [shotError, setShotError] = useState<string | null>(null)
+  const [outCardOpen, setOutCardOpen] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -69,6 +70,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
   const deadline = council?.voteDeadlineAt ? new Date(council.voteDeadlineAt) : null
   const isClosed = !!council?.closedAt
   const eliminated = council?.eliminatedRosterId
+  const isMyTorch = !!eliminated && summary.myRosterId === eliminated
 
   return (
     <div className="space-y-6">
@@ -162,7 +164,13 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
           </section>
         )}
 
-      {council?.isRevealed && eliminated && <SurvivorShareCard moment="voted_out" sport={summary.seasonCalendar?.sport ?? 'NFL'} leagueName={summary.config.seasonThemeLabel ?? 'Survivor League'} week={council.week} headline={`${names[eliminated] ?? 'A manager'} has left the island`} caption="The Torch Ceremony result is final." />}
+      {/* The "out" card is opt-in and offered only to the eliminated manager — never to anyone else. */}
+      {council?.isRevealed && eliminated && isMyTorch && (outCardOpen
+        ? <SurvivorShareCard moment="voted_out" sport={summary.seasonCalendar?.sport ?? 'NFL'} leagueName={summary.config.seasonThemeLabel ?? 'Survivor League'} week={council.week} headline={`${names[eliminated] ?? 'A manager'} has left the island`} caption="The Torch Ceremony result is final." />
+        : <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/20 bg-[#080b11] p-4 text-white">
+            <p className="text-sm text-white/70">Want to share your exit? Only you can see this.</p>
+            <button type="button" onClick={() => setOutCardOpen(true)} className="min-h-[44px] rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-200">Make a share card</button>
+          </section>)}
 
       {/* Immunity markers (placeholder – backend can expose who has immunity) */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
