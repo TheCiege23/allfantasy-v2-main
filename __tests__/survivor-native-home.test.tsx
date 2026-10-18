@@ -38,6 +38,18 @@ describe('SurvivorNativeHome', () => {
     expect(screen.getByRole('link', { name: /Enter the draft room/ }).getAttribute('href')).toBe('/league/L1/draft')
   })
 
+  it('in season links the season story, and sends the commissioner to the Survivor settings screen', async () => {
+    mockSummary({ ...base, currentWeek: 3, tribes: [{ id: 'a', name: 'Koa', slotIndex: 0, members: [{ rosterId: 'r0', isLeader: true }] }], council: null, rosterDisplayNames: { r0: 'Me' } })
+    const { unmount } = render(<SurvivorNativeHome {...props} isCommissioner />)
+    await waitFor(() => expect(screen.getByTestId('survivor-home-season-story')).toBeTruthy())
+    expect(screen.getByTestId('survivor-home-season-story').getAttribute('href')).toBe('/survivor/L1/story')
+    expect(screen.getByTestId('survivor-home-settings').getAttribute('href')).toBe('/survivor/L1/settings')
+    unmount()
+    render(<SurvivorNativeHome {...props} isCommissioner={false} />)
+    await waitFor(() => expect(screen.getByTestId('survivor-home-season-story')).toBeTruthy())
+    expect(screen.queryByTestId('survivor-home-settings')).toBeNull()
+  })
+
   it('hides the commissioner hub from managers', () => {
     mockSummary({ ...base, currentWeek: 0, tribes: [], council: null })
     render(<SurvivorNativeHome {...props} isCommissioner={false} />)

@@ -171,8 +171,11 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
               ? <Link className="svh-btn svh-btn-gold" href={primary.href}>{primary.label}<ArrowRight size={16} aria-hidden /></Link>
               : <button type="button" className="svh-btn svh-btn-gold" onClick={primary.onClick}>{primary.label}<ArrowRight size={16} aria-hidden /></button>}
             {!draftPending && <button type="button" className="svh-btn" onClick={() => onSelectTab('survivor')}>Island</button>}
+            {!draftPending && <Link className="svh-btn" href={`/survivor/${encodeURIComponent(league.id)}/story`} data-testid="survivor-home-season-story">Season story</Link>}
             {isCommissioner && <Link className="svh-btn" href={`/survivor/${encodeURIComponent(league.id)}/commissioner`} data-testid="survivor-home-commissioner-hub"><Shield size={16} aria-hidden />Commissioner hub</Link>}
-            <button type="button" className="svh-btn" onClick={() => onOpenSettings(isCommissioner ? 'survivor_setup' : null)}><Settings size={16} aria-hidden />Settings</button>
+            {isCommissioner
+              ? <Link className="svh-btn" href={`/survivor/${encodeURIComponent(league.id)}/settings`} data-testid="survivor-home-settings"><Settings size={16} aria-hidden />Settings</Link>
+              : <button type="button" className="svh-btn" onClick={() => onOpenSettings(null)}><Settings size={16} aria-hidden />Settings</button>}
           </div>
         </div>
         {clock && <div className="svh-clock" role="timer" aria-live="off">
