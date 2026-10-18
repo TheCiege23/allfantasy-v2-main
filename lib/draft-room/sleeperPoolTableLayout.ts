@@ -50,9 +50,18 @@ function statColumnWidth(def: DraftStatColumnDef, sport: ReturnType<typeof norma
   return Math.min(78, Math.max(44, 36 + def.label.length * 5))
 }
 
+export type SleeperPoolTableLayoutExtras = {
+  /**
+   * Pick label (e.g. "4.16") for the viewer's next pick. When set, a LEFT @ column follows
+   * AI ADP with each player's estimated chance of still being on the board there.
+   */
+  leftAtPickLabel?: string | null
+}
+
 export function buildSleeperPoolTableLayout(
   draftSport: string,
   statOpts?: DraftStatColumnOptions,
+  extras?: SleeperPoolTableLayoutExtras,
 ): SleeperPoolTableLayout {
   const sport = normalizeToSupportedSport(draftSport)
   const statDefs = buildSleeperPoolStatColumnDefs(draftSport, statOpts)
@@ -91,6 +100,17 @@ export function buildSleeperPoolTableLayout(
       statLabel: 'AI ADP',
     },
   ]
+
+  if (extras?.leftAtPickLabel) {
+    base.push({
+      key: 'leftAt',
+      label: `LEFT @ ${extras.leftAtPickLabel}`,
+      width: 76,
+      align: 'right',
+      title: `Estimated chance this player is still available at your next pick (${extras.leftAtPickLabel}), from market ADP`,
+      statLabel: 'chance available at your next pick',
+    })
+  }
 
   if (showBye) {
     base.push({

@@ -26,6 +26,8 @@ type Props = AppShellProps & {
   onOpenChimmy?: () => void
   /** /core's rail data for every league in the list — see LeagueRail.tsx. */
   rail?: LeagueRailData | null
+  /** Native guillotine leagues: the header becomes the guillotine banner (see useGuillotineAtmosphere). */
+  guillotineBanner?: { line: string; mood: string } | null
 }
 const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, war: Swords, scores: Zap, insight: Bot, more: CircleHelp }
 const memoryKey = (id: string) => `af:league-section:${id}`
@@ -52,7 +54,7 @@ function useLeagueUnread(enabled: boolean, refreshKey: unknown) {
 
 const SWITCHER_GROUP_ORDER = ['needs', 'live', 'other'] as const
 
-export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, rail, children, ...shell }: Props) {
+export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, rail, guillotineBanner = null, children, ...shell }: Props) {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -133,7 +135,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const liveWeek = switcherRows.find(item => item.view.status.group === 'live')?.view.weekLabel
   const groupTitle = { needs: 'Needs you', live: liveWeek ? `Live now · ${liveWeek}` : 'Live now', other: 'Your other leagues' } as const
 
-  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace" data-rail-collapsed={railCollapse.collapsed ? 'true' : undefined}>
+  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace" data-rail-collapsed={railCollapse.collapsed ? 'true' : undefined} data-format={guillotineBanner ? 'guillotine' : undefined} data-guillotine-mood={guillotineBanner?.mood}>
     {!shell.embedCenterOnly && <>
       <aside className="nl-rail" aria-label="Your leagues" data-expanded={railExpanded ? 'true' : undefined}>
         <div className="nl-rail-head"><Link className="nl-brand" href={ALL_LEAGUES_DASHBOARD_HREF} aria-label="AllFantasy dashboard">AF</Link><button type="button" className="af-rail-toggle nl-rail-toggle" aria-expanded={railExpanded} aria-controls="nl-rail-leagues" onClick={railCollapse.toggle} title={railCollapse.collapsed ? 'Expand the league rail' : 'Collapse the league rail'}><span className="af-rail-toggle-icon" aria-hidden>{railCollapse.collapsed ? '»' : '«'}</span><span className="nl-rail-toggle-text">{leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}</span></button></div>
@@ -154,7 +156,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>Viewing</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>Jump to a league</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">Hosted on AF · Beta</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · Wk ${league.currentWeek}` : ` · ${league.season ?? ''}`}</span></header>}
       <div className="nl-mobile-rail">{leagues.map(row => leagueTile(row))}</div>
       <div className="nl-content">
-        <header className="nl-league-heading"><span className="nl-heading-avatar">{initials(league.name)}</span><div className="nl-heading-name"><div className="nl-badges"><span className="nl-chip nl-accent">Native on AllFantasy</span>{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1><p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button><ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol></header>
+        <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : undefined}>{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar">{initials(league.name)}</span><div className="nl-heading-name"><div className="nl-badges"><span className="nl-chip nl-accent">Native on AllFantasy</span>{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guillotine</span>}{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button><ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol></header>
         <nav className="nl-mobile-tabs" aria-label="League sections">{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
         <div className="nl-tab-content">{children}</div>
       </div>
