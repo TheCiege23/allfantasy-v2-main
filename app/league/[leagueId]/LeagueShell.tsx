@@ -76,6 +76,8 @@ import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
 import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
+import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
+import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
@@ -838,6 +840,11 @@ export function LeagueShell({
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialPanel, setSettingsInitialPanel] = useState<string | null>(null)
+  /** Native leagues: which League Settings sub-page an old settings entry asked for (nonce remounts). */
+  const [settingsHomeRequest, setSettingsHomeRequest] = useState<{ subPage: SettingsSubPageId | null; nonce: number }>({
+    subPage: null,
+    nonce: 0,
+  })
   /*
    * The settings modal mounts on FIRST open and then stays mounted, so its code is fetched only
    * when someone asks for settings and its close animation still plays afterwards. Set during
@@ -1109,9 +1116,21 @@ export function LeagueShell({
 
   const openLeagueSettingsModal = useCallback((initialPanel: string | null = null) => {
     setCommissionerSettingsOpen(false)
+    // Native leagues: every settings entry (header gear, commissioner workspace, setup checklist,
+    // ?settingsPanel= deep links, the draft-room fix event) lands on the ONE League Settings page.
+    // Only panels that are not league settings (my team, invite sheet, notifications…) keep the modal.
+    if (nativeWorkspace) {
+      const target = resolveLegacySettingsPanel(initialPanel)
+      if (target !== undefined) {
+        setSettingsOpen(false)
+        setSettingsHomeRequest((prev) => ({ subPage: target, nonce: prev.nonce + 1 }))
+        setActiveTab('settings')
+        return
+      }
+    }
     setSettingsInitialPanel(initialPanel)
     setSettingsOpen(true)
-  }, [])
+  }, [nativeWorkspace])
 
   const inviteAutoOpenedForLeague = useRef<string | null>(null)
   useEffect(() => {
@@ -1127,7 +1146,9 @@ export function LeagueShell({
     setSettingsInitialPanel(null)
     setCommissionerSettingsOpen(false)
 
-    if (activeTab === 'settings') {
+    // A native league's Settings tab is the League Settings page, not this modal: closing a personal
+    // panel opened over it must not leave the page.
+    if (activeTab === 'settings' && !nativeWorkspace) {
       const ids = new Set(tabDefs.map((tab) => tab.id))
       const fallback = nflRedraftCore
         ? ids.has('league')
@@ -1143,12 +1164,12 @@ export function LeagueShell({
     const params = new URLSearchParams(searchParams?.toString() ?? '')
     let changed = false
 
-    if (params.get('view')?.trim().toLowerCase() === 'settings') {
+    if (!nativeWorkspace && params.get('view')?.trim().toLowerCase() === 'settings') {
       params.delete('view')
       changed = true
     }
 
-    if (params.get('tab')?.trim().toLowerCase() === 'settings') {
+    if (!nativeWorkspace && params.get('tab')?.trim().toLowerCase() === 'settings') {
       params.delete('tab')
       changed = true
     }
@@ -1164,7 +1185,7 @@ export function LeagueShell({
       // Shallow — a router.replace here remounts the force-dynamic page.
       window.history.replaceState(null, '', q ? `${base}?${q}` : base)
     }
-  }, [activeTab, league.id, nflRedraftCore, pathname, searchParams, tabDefs])
+  }, [activeTab, league.id, nflRedraftCore, nativeWorkspace, pathname, searchParams, tabDefs])
 
   /*
    * The settings code could not be fetched. The lazy loader caches its failure, so a retry needs a
@@ -1662,6 +1683,8 @@ export function LeagueShell({
 
             {nativeWorkspace && activeTab === 'settings' ? (
               <LeagueSettingsHomeContainer
+                key={`settings-home-${settingsHomeRequest.nonce}`}
+                initialSubPage={settingsHomeRequest.subPage}
                 ctx={{
                   league,
                   displayLeague: selectedLeague,
@@ -1925,6 +1948,15 @@ export function LeagueShell({
               isHeadCommissioner={isHeadCommissioner}
               sleeperMemberMap={sleeperUsersByPlatformId}
               initialActivePanel={settingsInitialPanel}
+              onOpenSettingsHome={
+                nativeWorkspace
+                  ? (subPage) => {
+                      closeLeagueSettingsModal()
+                      setSettingsHomeRequest((prev) => ({ subPage, nonce: prev.nonce + 1 }))
+                      setActiveTab('settings')
+                    }
+                  : undefined
+              }
               onGoToDraftTab={() => {
                 closeLeagueSettingsModal()
                 setActiveTab(nflRedraftCore ? 'draft' : tabDefs[0]?.id ?? 'draft')

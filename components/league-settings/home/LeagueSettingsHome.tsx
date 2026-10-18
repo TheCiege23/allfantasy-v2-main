@@ -5,7 +5,12 @@ import './league-settings-home.css'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Check, ChevronRight, Copy } from 'lucide-react'
-import type { SettingsHomeRow, SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+import {
+  isLongSettingsValue,
+  type SettingsHomeRow,
+  type SettingsHomeSection,
+  type SettingsSubPageId,
+} from '@/lib/league-settings-home/buildLeagueSettingsHome'
 
 export type SettingsSubPageRender = {
   title: string
@@ -53,6 +58,9 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 function Row({ row, onOpen }: { row: SettingsHomeRow; onOpen: (target: SettingsSubPageId) => void }) {
+  // Long values (the chop & waiver schedule, the invite link) drop under the label on a phone and
+  // wrap; nothing in this list is truncated with an ellipsis.
+  const layout = isLongSettingsValue(row.value) ? 'stacked' : 'inline'
   const value = (
     <span className="lsh-value" data-pending={row.pending ? 'true' : undefined} title={row.value}>
       {row.value}
@@ -61,7 +69,7 @@ function Row({ row, onOpen }: { row: SettingsHomeRow; onOpen: (target: SettingsS
   if (row.target) {
     const target = row.target
     return (
-      <button type="button" className="lsh-row" onClick={() => onOpen(target)} data-testid={`lsh-row-${row.id}`}>
+      <button type="button" className="lsh-row" data-layout={layout} onClick={() => onOpen(target)} data-testid={`lsh-row-${row.id}`}>
         <span className="lsh-label">{row.label}</span>
         {value}
         <ChevronRight size={18} className="lsh-chevron" aria-hidden />
@@ -69,7 +77,7 @@ function Row({ row, onOpen }: { row: SettingsHomeRow; onOpen: (target: SettingsS
     )
   }
   return (
-    <div className="lsh-row" data-testid={`lsh-row-${row.id}`} data-readonly="true">
+    <div className="lsh-row" data-layout={layout} data-testid={`lsh-row-${row.id}`} data-readonly="true">
       <span className="lsh-label">{row.label}</span>
       {value}
       {row.copyText ? <CopyButton text={row.copyText} label={row.label} /> : null}

@@ -137,10 +137,30 @@
   min-width: 0;
   text-align: right;
   font-size: 14px;
+  line-height: 1.35;
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Wrap, never truncate: a long value (chop & waiver schedule, invite link) gets a second line. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A long value on a phone sits UNDER its label, left-aligned, instead of squeezing beside it.
+ * Grid rather than flex-wrap so the chevron / copy button stays on the right of both lines.
+ * Short values keep the Sleeper layout (label left, value right) at every width.
+ */
+@media (max-width: 479.98px) {
+  .af-core .lsh-row[data-layout='stacked'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 2px;
+    align-items: center;
+  }
+  .af-core .lsh-row[data-layout='stacked'] .lsh-label { grid-column: 1; grid-row: 1; }
+  .af-core .lsh-row[data-layout='stacked'] .lsh-value { grid-column: 1; grid-row: 2; text-align: left; }
+  .af-core .lsh-row[data-layout='stacked'] .lsh-chevron,
+  .af-core .lsh-row[data-layout='stacked'] .lsh-copy { grid-column: 2; grid-row: 1 / span 2; }
 }
 
 .af-core .lsh-value[data-pending='true'] { color: var(--faint); }
