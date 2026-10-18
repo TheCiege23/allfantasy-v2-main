@@ -104,6 +104,8 @@ import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanni
 import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
 import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
 import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
+import { buildPlayerDraftOutlook, pickYoureUpSuggestion } from '@/lib/draft-room/playerDraftOutlook'
+import { YoureUpAlert } from '@/components/app/draft-room/YoureUpAlert'
 import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
 import {
   buildAssistantFeedByPlayerName,
@@ -2976,6 +2978,33 @@ export function DraftRoomPageClient({
     if (overall == null) return null
     return { overall, label: formatPickLabel(overall, Math.max(1, session?.teamCount ?? 1)) }
   }, [intelLookahead?.viewerNextOverall, session?.teamCount])
+  /** Player card "draft outlook" — survival to the next pick, falling, who's circling. */
+  const getDraftOutlook = useCallback(
+    (player: PlayerEntry) =>
+      intelLookahead
+        ? buildPlayerDraftOutlook({
+            player: { name: player.name, position: player.position, adp: player.adp ?? null },
+            lookahead: intelLookahead,
+            currentOverall: currentPick?.overall ?? null,
+            leftAtPick,
+          })
+        : null,
+    [intelLookahead, currentPick?.overall, leftAtPick],
+  )
+  /** "You're up" alert — shown once per pick when the clock reaches the viewer. */
+  const [youreUpDismissedOverall, setYoureUpDismissedOverall] = useState<number | null>(null)
+  const youreUpSuggestion = useMemo(() => {
+    if (!isCurrentUserOnClock) return null
+    const byKey = new Map(players.map((p) => [`${normalizeDraftedPlayerName(p.name)}|${p.position.trim().toUpperCase()}`, p]))
+    const queuedPlayers = (queue ?? [])
+      .map((q) => byKey.get(`${normalizeDraftedPlayerName(q.playerName)}|${String(q.position).trim().toUpperCase()}`))
+      .filter((p): p is PlayerEntry => Boolean(p))
+    return pickYoureUpSuggestion({
+      queue: queuedPlayers,
+      available: pulseAvailablePlayers,
+      isAvailable: (p) => pulseAvailablePlayers.includes(p),
+    })
+  }, [isCurrentUserOnClock, players, queue, pulseAvailablePlayers])
   const intelPanelNode = (
     <DraftIntelPanel
       lookahead={intelLookahead}
@@ -3758,6 +3787,7 @@ export function DraftRoomPageClient({
         aiRowBadges={aiRowBadges}
         aiOverlaySignals={aiOverlaySignals}
         leftAtPick={leftAtPick}
+        getDraftOutlook={getDraftOutlook}
         showAiOverlays={showAiOverlays}
         onShowAiOverlaysChange={setShowAiOverlays}
         getDraftCopilotInsight={presentationVariant === 'redraft_snake' ? getDraftCopilotInsight : undefined}
@@ -3779,6 +3809,7 @@ export function DraftRoomPageClient({
       draftedPlayerIds,
       queue,
       leftAtPick,
+      getDraftOutlook,
       effectiveDraftSport,
       draftRoomState.isAuction,
       draftRoomState.canNominate,
@@ -4541,6 +4572,42 @@ export function DraftRoomPageClient({
         sportLabel={typeof sport === 'string' ? sport.toUpperCase() : ''}
         queue={roundOneAnnouncementQueue}
         onDismissFront={dismissRoundOneAnnouncement}
+      />
+    ) : null}
+    {isCurrentUserOnClock &&
+    !draftRoomState.isAuction &&
+    session.status === 'in_progress' &&
+    currentPick?.overall != null &&
+    youreUpDismissedOverall !== currentPick.overall ? (
+      <YoureUpAlert
+        pickLabel={formatPickLabel(currentPick.overall, Math.max(1, session.teamCount ?? 1))}
+        timed={session.timer?.status === 'running'}
+        suggestion={
+          youreUpSuggestion
+            ? {
+                name: youreUpSuggestion.player.name,
+                position: youreUpSuggestion.player.position,
+                source: youreUpSuggestion.source,
+              }
+            : null
+        }
+        backToBackLabel={
+          intelLookahead && intelLookahead.startOverall > currentPick.overall + 1
+            ? formatPickLabel(currentPick.overall + 1, Math.max(1, session.teamCount ?? 1))
+            : null
+        }
+        drafting={pickSubmitting}
+        canDraft={canDraft}
+        onDraftSuggestion={() => {
+          if (!youreUpSuggestion) return
+          setYoureUpDismissedOverall(currentPick.overall)
+          void handleMakePick(youreUpSuggestion.player)
+        }}
+        onSeePlayers={() => {
+          setYoureUpDismissedOverall(currentPick.overall)
+          openMobilePlayerSearch()
+        }}
+        onDismiss={() => setYoureUpDismissedOverall(currentPick.overall)}
       />
     ) : null}
     <DraftRoomShell
