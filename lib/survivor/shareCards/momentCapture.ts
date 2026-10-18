@@ -178,42 +178,61 @@ export async function captureCouncilShareMoments(leagueId: string, councilId: st
   return created
 }
 
+type NecklaceScore = { userId: string; finalScore: number; tribeId: string | null }
+
 /**
- * The immunity winner for a finalized week. Post-merge that is the island's top scorer; pre-merge
- * the whole winning tribe is safe, and the card goes to that tribe's top scorer.
+ * Immunity necklace winners for a finalized week (product rule, per weekly-loop PR #2468):
+ * pre-merge, the top scorer in EACH tribe wins an individual necklace; post-merge, the single top
+ * score in the league wins. Ties break by user id so the result is stable. Pure, for tests.
+ */
+export function necklaceWinners(scores: NecklaceScore[], merged: boolean): Array<NecklaceScore & { scope: 'tribe' | 'island' }> {
+  const ordered = [...scores].sort((a, b) => b.finalScore - a.finalScore || a.userId.localeCompare(b.userId))
+  if (merged) return ordered.length ? [{ ...ordered[0], scope: 'island' }] : []
+  const byTribe = new Map<string, NecklaceScore>()
+  for (const score of ordered) if (score.tribeId && !byTribe.has(score.tribeId)) byTribe.set(score.tribeId, score)
+  return [...byTribe.values()].map(score => ({ ...score, scope: 'tribe' as const }))
+}
+
+/**
+ * One immunity moment per necklace winner for a finalized week, offered only to that winner.
+ *
+ * TODO(share-cards): once #2468 lands, read the winners from its SurvivorTribeImmunity table
+ * instead of recomputing them here from the same final weekly scores.
  */
 export async function captureImmunityShareMoment(leagueId: string, week: number): Promise<number> {
-  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true, immuneTribeId: true, weekScoringFinalAt: true } })
+  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { weekScoringFinalAt: true, mergeTriggeredAt: true, phase: true } })
   if (!game?.weekScoringFinalAt) return 0
-  const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week, isFinalized: true }, select: { userId: true, finalScore: true, tribeId: true } })
+  const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week, isFinalized: true }, select: { userId: true, finalScore: true, tribeId: true, countedTowardTribeTotal: true } })
   if (scores.length === 0) return 0
-  let winner: { userId: string; finalScore: number; tribeId: string | null } | undefined
-  let scope: 'tribe' | 'island' = 'island'
-  if (game.immunePlayerId) {
-    winner = scores.find(score => score.userId === game.immunePlayerId)
-  } else if (game.immuneTribeId) {
-    scope = 'tribe'
-    winner = scores.filter(score => score.tribeId === game.immuneTribeId).sort((a, b) => b.finalScore - a.finalScore || a.userId.localeCompare(b.userId))[0]
-  }
-  if (!winner) return 0
+  // Only managers who were on the main island that week can wear a necklace (never Exile rows).
+  const players = await prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, playerState: true, eliminatedWeek: true } })
+  const onIsland = new Set(players
+    .filter(player => player.playerState === 'active' || player.playerState === 'survivor_winner' || (player.eliminatedWeek != null && player.eliminatedWeek >= week))
+    .map(player => player.userId))
   const facts = await leagueFacts(leagueId)
   if (!facts) return 0
-  const subject = await resolveSubject(leagueId, winner.userId, null)
-  if (!subject) return 0
-  const tribe = await tribeFacts(scope === 'tribe' ? game.immuneTribeId : subject.tribeId, facts.sport)
-  const prior = await countImmunityMoments(leagueId, subject.userId)
-  const result = await createShareMomentOnce({
-    leagueId, type: 'immunity', week, subjectUserId: subject.userId, subjectRosterId: subject.redraftRosterId ?? null,
-    dedupeKey: `immunity:${week}`,
-    payload: {
-      ...basePayload(facts, subject.displayName || 'A manager', tribe),
-      points: Math.round(winner.finalScore * 10) / 10,
-      rank: 1,
-      rankScope: scope,
-      immunityWins: prior + 1,
-    },
-  })
-  return result.created ? 1 : 0
+  const merged = Boolean(game.mergeTriggeredAt) || JURY_PHASES.has(game.phase) || JURY_PHASES.has(facts.phase ?? '')
+  const eligible = scores.filter(score => onIsland.has(score.userId) && (merged || score.countedTowardTribeTotal))
+  let created = 0
+  for (const winner of necklaceWinners(eligible, merged)) {
+    const subject = await resolveSubject(leagueId, winner.userId, null)
+    if (!subject) continue
+    const tribe = await tribeFacts(winner.scope === 'tribe' ? winner.tribeId : subject.tribeId, facts.sport)
+    const prior = await countImmunityMoments(leagueId, subject.userId)
+    const result = await createShareMomentOnce({
+      leagueId, type: 'immunity', week, subjectUserId: subject.userId, subjectRosterId: subject.redraftRosterId ?? null,
+      dedupeKey: `immunity:${week}:${subject.userId}`,
+      payload: {
+        ...basePayload(facts, subject.displayName || 'A manager', tribe),
+        points: Math.round(winner.finalScore * 10) / 10,
+        rank: 1,
+        rankScope: winner.scope,
+        immunityWins: prior + 1,
+      },
+    })
+    if (result.created) created++
+  }
+  return created
 }
 
 /** Public Exile returns, from the audit entries the return engines write. */
@@ -283,8 +302,8 @@ export async function captureChampionShareMoment(leagueId: string): Promise<numb
 /**
  * Backstop for every hook: derive any missing moments from durable engine state. Runs when the
  * share UI opens, so a moment whose hook was skipped (a legacy reveal path, a crash between commit
- * and capture) still appears. Immunity is only derivable for the current finalized week, because
- * the game state keeps the immune player/tribe for that week alone.
+ * and capture) still appears. Immunity is backfilled for the current finalized week only: whether
+ * a past week was pre- or post-merge is not recorded per week, so the score-final hook owns history.
  */
 export async function syncLeagueShareMoments(leagueId: string): Promise<void> {
   const [councils, existing] = await Promise.all([
@@ -306,7 +325,7 @@ export async function syncLeagueShareMoments(leagueId: string): Promise<void> {
     if (wants.some(key => !have.has(key))) await captureCouncilShareMoments(leagueId, council.id)
   }
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true, weekScoringFinalAt: true } })
-  if (game?.weekScoringFinalAt && game.currentWeek > 0 && !have.has(`immunity:${game.currentWeek}`)) await captureImmunityShareMoment(leagueId, game.currentWeek)
+  if (game?.weekScoringFinalAt && game.currentWeek > 0) await captureImmunityShareMoment(leagueId, game.currentWeek)
   await captureExileReturnShareMoments(leagueId)
   if (!have.has('champ')) await captureChampionShareMoment(leagueId)
 }
