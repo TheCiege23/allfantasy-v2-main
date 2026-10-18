@@ -176,5 +176,7 @@ export interface SurvivorSummary {
     bonusVotesByFinalist: Record<string, number> | null
     tieBreakSeasonPoints: Record<string, number> | null
   } | null
+  /** The commissioner paused Survivor events (survivor-core §7). */
+  paused?: boolean
   rosterDisplayNames?: Record<string, string>
 }

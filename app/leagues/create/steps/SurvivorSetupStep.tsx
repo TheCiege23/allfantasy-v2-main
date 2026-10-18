@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { LeagueCreateStepProps } from '../types'
+import { SurvivorHowItWorks } from '@/components/survivor/core/SurvivorHowItWorks'
 
 const TRIBE_FORMATIONS = ['schoolyard', 'random', 'manual'] as const
 const TRIBE_NAMING_MODES = ['auto', 'custom'] as const
@@ -41,6 +42,7 @@ export function SurvivorSetupStep({ state, setState }: LeagueCreateStepProps) {
 
   return (
     <div className="space-y-5">
+      <SurvivorHowItWorks />
       {/* Section: Commissioner Participation */}
       <div>
         <div className="mb-3 text-sm font-medium text-white/80">Commissioner Role</div>
