@@ -9,6 +9,7 @@ import { getActiveRosterIdsForLeague } from './SurvivorRosterState'
 import { getSeasonPointsFromRosterPerformance } from './SurvivorVoteEngine'
 import { readSurvivorLateSeasonSettings } from './lateSeasonSettings'
 import { isFinaleVoteComplete } from './finaleReveal'
+import { afterWinnerCrowned } from './shareCards/hooks'
 
 export interface SurvivorFinaleVote {
   jurorRosterId: string
@@ -368,6 +369,8 @@ export async function recordCrownedWinner(leagueId: string, state: SurvivorFinal
   await writeChampionToHistory(leagueId, { winnerUserId, winnerName, winnerRosterId: state.winnerRosterId, voteCount: state.voteCount, crownedAt: session.revealedAt }).catch(error => {
     console.error('[survivor-finale] champion history write failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
   })
+  // Share cards: the champion card, offered to the winner and to the league as a recap.
+  afterWinnerCrowned(leagueId)
   return { winnerUserId }
 }
 

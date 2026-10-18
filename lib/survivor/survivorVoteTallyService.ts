@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
 import { getCouncilShots } from './survivorShotInTheDark'
+import { afterCouncilRevealed } from './shareCards/hooks'
 
 /**
  * SURVIVOR VOTE TALLY (canonical Phase 3) — deterministic, no fabrication.
@@ -259,6 +260,13 @@ export type RevealOutcome =
 
 /** Publish the public ceremony and reveal flag in one commit. Retries never announce twice. */
 export async function revealCouncil(leagueId: string, councilId: string, actorUserId?: string): Promise<RevealOutcome> {
+  const outcome = await revealCouncilInTransaction(leagueId, councilId, actorUserId)
+  // Share cards: the out card and played-idol cards exist only once the ceremony is public.
+  if (outcome.ok && !outcome.alreadyRevealed) afterCouncilRevealed(leagueId, councilId)
+  return outcome
+}
+
+async function revealCouncilInTransaction(leagueId: string, councilId: string, actorUserId?: string): Promise<RevealOutcome> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<RevealOutcome> => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
     const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })

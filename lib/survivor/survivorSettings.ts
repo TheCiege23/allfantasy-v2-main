@@ -53,6 +53,8 @@ export interface SurvivorFoundationSettings {
   survivorDraftVideoEnabled: boolean
   screenshotsPolicy: SurvivorScreenshotsPolicy
   conductPolicy: SurvivorConductPolicy
+  /** Share cards (images + public moment pages). A private league can turn them off. */
+  shareCardsEnabled: boolean
 }
 
 type SettingsRecord = Record<string, unknown>
@@ -113,6 +115,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   survivorDraftVideoEnabled: true,
   screenshotsPolicy: 'host_dm_private',
   conductPolicy: 'game_deception_allowed_platform_abuse_banned',
+  shareCardsEnabled: true,
 }
 
 function readNumber(input: SettingsRecord, keys: string[], fallback: number): number {
@@ -288,6 +291,7 @@ export function normalizeSurvivorFoundationSettings(
     survivorDraftVideoEnabled: readBoolean(s, ['survivorDraftVideoEnabled'], base.survivorDraftVideoEnabled),
     screenshotsPolicy: readString(s, ['screenshotsPolicy'], base.screenshotsPolicy) as SurvivorScreenshotsPolicy,
     conductPolicy: readString(s, ['conductPolicy'], base.conductPolicy) as SurvivorConductPolicy,
+    shareCardsEnabled: readBoolean(s, ['shareCardsEnabled'], base.shareCardsEnabled),
   }
 }
 

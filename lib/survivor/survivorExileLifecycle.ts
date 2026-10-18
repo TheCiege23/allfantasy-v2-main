@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
+import { afterExileReturnResolved } from './shareCards/hooks'
 
 export interface ExileReturnCandidate {
   userId: string; tokenBalance: number; totalTokensEarned: number; eliminatedWeek: number | null
@@ -19,7 +20,7 @@ export function selectExileReturnCandidate(players: ExileReturnCandidate[], toke
 /** One scheduled return per season. Called only after the return week's results are final. */
 export async function resolveScheduledExileReturn(leagueId: string, completedWeek: number): Promise<string | null> {
   if (!Number.isInteger(completedWeek) || completedWeek < 1) return null
-  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  const winnerUserId = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
     const league = await tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
     if (!league || !isNativePlatform(league.platform)) return null
@@ -77,4 +78,7 @@ export async function resolveScheduledExileReturn(leagueId: string, completedWee
       content: winner ? `Exile return results: ${players.find(p => p.userId === winner.userId)?.displayName ?? 'A manager'} earned a return to the main island. Their roster can now be rebuilt through waivers.` : 'The Exile return deadline has passed. No manager reached the required token balance.' } })
     return winner?.userId ?? null
   }, { timeout: 30_000, maxWait: 10_000 })
+  // Share cards: the returning manager's "back from Exile" card.
+  if (winnerUserId) afterExileReturnResolved(leagueId)
+  return winnerUserId
 }

@@ -119,6 +119,11 @@ function immunityTable(): {
   return delegate && typeof delegate === 'object' ? (delegate as ReturnType<typeof immunityTable>) : null
 }
 
+/** False only on a Prisma client generated before the immunity table existed. */
+export function isTribeImmunityTableAvailable(): boolean {
+  return immunityTable() !== null
+}
+
 /** Rows for a week (all tribes), oldest tribe first. Empty when the table is not migrated. */
 export async function getTribeImmunityForWeek(leagueId: string, week: number): Promise<TribeImmunityRow[]> {
   const table = immunityTable()

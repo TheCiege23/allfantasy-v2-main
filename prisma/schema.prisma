@@ -9763,6 +9763,33 @@ model SurvivorWeeklyScore {
   @@map("survivor_weekly_scores")
 }
 
+/// A shareable Survivor moment (share cards handoff). `id` is the public moment id used by
+/// `/api/share/survivor/[momentId]` and `/l/[leagueSlug]/moment/[momentId]`. `payload` holds
+/// published facts only (display names, final tallies, points) — never ballots, voters or
+/// unplayed idols. A moment is immutable once `final`; it is public only after its subject
+/// (or, for the champion recap, any league member) publishes it.
+model SurvivorShareMoment {
+  id              String    @id @default(uuid())
+  leagueId        String    @db.VarChar(64)
+  /// immunity | out | idol | exile | champ
+  type            String    @db.VarChar(16)
+  week            Int
+  subjectUserId   String    @db.VarChar(64)
+  subjectRosterId String?   @db.VarChar(64)
+  /// Idempotency key per league, e.g. `out:<councilId>` — capture hooks may run more than once.
+  dedupeKey       String    @db.VarChar(191)
+  payload         Json
+  final           Boolean   @default(true)
+  publishedAt     DateTime?
+  publishedBy     String?   @db.VarChar(64)
+  createdAt       DateTime  @default(now())
+
+  @@unique([leagueId, dedupeKey])
+  @@index([leagueId, createdAt])
+  @@index([subjectUserId])
+  @@map("survivor_share_moments")
+}
+
 /// Big Brother league config: HOH, nomination, veto, vote, eviction, jury, finale settings.
 model BigBrotherLeagueConfig {
   id                                  String                 @id @default(uuid())

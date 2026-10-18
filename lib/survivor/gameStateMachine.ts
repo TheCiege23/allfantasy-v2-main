@@ -24,6 +24,7 @@ import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStar
 import { openTribalCouncil as openVerifiedCouncil, closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
+import { afterWeeklyScoresFinalized } from '@/lib/survivor/shareCards/hooks'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
@@ -398,6 +399,9 @@ export async function finalizeWeeklyScores(leagueId: string, week: number): Prom
   })
   // Final scores decide the necklace: top score in each tribe headed to Tribal Council.
   await awardTribeImmunity(leagueId, week, { post: (winner, awardWeek) => postImmunityWinLine(leagueId, winner, awardWeek) }).catch(() => {})
+  // Share cards: the immunity winner's card, once scores are final. Runs AFTER the award above so
+  // the capture reads the SurvivorTribeImmunity rows it just wrote.
+  afterWeeklyScoresFinalized(leagueId, week)
 }
 
 function tribalVoteWindowHoursFromLeague(settings: unknown): number {
