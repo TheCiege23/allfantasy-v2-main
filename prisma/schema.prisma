@@ -8942,6 +8942,40 @@ model SurvivorTribeMember {
   @@map("survivor_tribe_members")
 }
 
+/// Weekly individual immunity: the top score in each tribe headed to Tribal Council.
+/// One row per tribe per week ("merge" is the tribeId once the tribes have merged).
+/// Worn until the next lineup lock (expiresAt), then clearedAt is stamped.
+model SurvivorTribeImmunity {
+  id                     String    @id @default(cuid())
+  leagueId               String    @db.VarChar(64)
+  week                   Int
+  tribeId                String    @db.VarChar(64)
+  immunityWinnerRosterId String    @db.VarChar(64)
+  immunityWinnerUserId   String    @db.VarChar(64)
+  winnerName             String?   @db.VarChar(160)
+  score                  Float     @default(0)
+  awardedAt              DateTime  @default(now())
+  expiresAt              DateTime?
+  clearedAt              DateTime?
+  announcedAt            DateTime?
+
+  @@unique([leagueId, week, tribeId])
+  @@index([leagueId, clearedAt])
+  @@map("survivor_tribe_immunities")
+}
+
+/// A weekly moment (torch-out, immunity win) a user has already watched, so it plays once.
+model SurvivorMomentSeen {
+  id        String   @id @default(cuid())
+  leagueId  String   @db.VarChar(64)
+  userId    String   @db.VarChar(64)
+  momentKey String   @db.VarChar(160)
+  seenAt    DateTime @default(now())
+
+  @@unique([leagueId, userId, momentKey])
+  @@map("survivor_moments_seen")
+}
+
 /// Hidden idol: player-bound, one-time use. Ownership = current controlling rosterId.
 model SurvivorIdol {
   id                  String                    @id @default(uuid())

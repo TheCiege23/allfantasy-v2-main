@@ -244,6 +244,24 @@ export async function postWinnerAnnouncement(
 }
 
 /**
+ * Weekly immunity system line ("{Manager} won immunity") in the winner's tribe channel and league
+ * chat. Deterministic message ids keep a re-run from posting twice.
+ */
+export async function postImmunityWinLine(
+  leagueId: string,
+  winner: { tribeId: string; userId: string; displayName: string; score: number },
+  week: number,
+): Promise<void> {
+  const content = `${winner.displayName} won immunity`
+  const cardData = { type: 'immunity_won', userId: winner.userId, displayName: winner.displayName, tribeId: winner.tribeId, score: winner.score, week }
+  const baseId = `survivor-immunity:${leagueId}:${week}:${winner.tribeId}:${winner.userId}`
+  const tribeChannelId = winner.tribeId && winner.tribeId !== 'merge' ? await getTribeChatChannelId(leagueId, winner.tribeId) : null
+  if (tribeChannelId) await postToChannel(leagueId, tribeChannelId, 'tribe', content, 'system', cardData, `${baseId}:tribe`)
+  const leagueChannelId = await getLeagueChatChannelId(leagueId)
+  if (leagueChannelId) await postToChannel(leagueId, leagueChannelId, 'league', content, 'system', cardData, `${baseId}:league`)
+}
+
+/**
  * Post idol play announcement to league chat.
  */
 export async function postIdolPlayAnnouncement(
