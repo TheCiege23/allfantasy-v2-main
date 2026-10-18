@@ -11,7 +11,10 @@
  * And the two rule sets that DO exist disagree: the design handoff's "proposed" King of the Hill
  * (weekly challenger vs King, most weeks wearing the crown wins) is not the house rule priced in
  * `kingOfTheHill.ts` (+10 a week, a dethroned King forfeits that week's top three scorers). So this
- * module states ONLY what both sides agree on, and nothing that would read as a settled rule. Do not
+ * module states ONLY what both sides agree on, and nothing that would read as a settled rule.
+ * (The fuller Pirate package of 2026-10 — parley, bounty, plank, Pirate King — is also marked
+ * "proposed" and adds rules the repo does not have; the user kept Pirate "coming soon", so only its
+ * ART was taken.) Do not
  * add a numbered rules list here until the user picks a rule set and an engine exists.
  */
 
@@ -62,8 +65,8 @@ export const SPECIALTY_PREVIEW_FORMATS: Record<SpecialtyPreviewSlug, SpecialtyPr
     art: { banner: '/specialty/pirate/banner.svg', emblem: '/specialty/pirate/emblem.svg' },
     tagline: 'Win your matchup and take a player off the crew you beat.',
     points: [
-      { icon: '/specialty/pirate/icon-plunder.svg', label: 'Plunder', body: 'Beat a crew head to head and you take a player from their roster.' },
-      { label: 'Protected', body: 'Every crew shields a few players nobody can take. Everyone else is fair game.' },
+      { icon: '/specialty/pirate/plunder-chest.svg', label: 'Plunder', body: 'Beat a crew head to head and you take a player from their roster.' },
+      { icon: '/specialty/pirate/anchor.svg', label: 'Protected', body: 'Every crew shields a few players nobody can take. Everyone else is fair game.' },
     ],
     today:
       'Native Pirate leagues are not live yet. If you run one on Sleeper, confirm it as Pirate in League settings: AllFantasy labels each steal and never grades it as a trade.',

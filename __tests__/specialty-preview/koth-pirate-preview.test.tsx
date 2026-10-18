@@ -37,9 +37,18 @@ describe('King of the Hill + Pirate previews (no engine: assets, tokens, static 
     }
   })
 
+  it('Pirate uses the newer full art set (2026-10 package), not the replaced icon-* drafts', () => {
+    const p = SPECIALTY_PREVIEW_FORMATS.pirate
+    expect(p.points.map((x) => x.icon)).toEqual(['/specialty/pirate/plunder-chest.svg', '/specialty/pirate/anchor.svg'])
+    for (const old of ['icon-plunder', 'icon-plank', 'icon-doubloon']) {
+      expect(existsSync(resolve(ROOT, 'public/specialty/pirate', `${old}.svg`)), old).toBe(false)
+    }
+    expect(readFileSync(resolve(ROOT, 'public/specialty/pirate/emblem.svg'), 'utf8')).toContain('viewBox="0 0 300 300"')
+  })
+
   it('🛑 states no rule that only ONE of the two disagreeing rule sets holds', () => {
     // Handoff-only (proposed) and kingOfTheHill.ts/pirate.ts-only house rules. None may be shown as fact.
-    const forbidden = [/\+10/, /three scorers/i, /top scorer/i, /ties go/i, /most weeks/i, /5 doubloons/i, /plank/i, /bounty/i, /thursday/i, /anchor/i]
+    const forbidden = [/\+10/, /three scorers/i, /top scorer/i, /ties go/i, /most weeks/i, /5 doubloons/i, /plank/i, /bounty/i, /thursday/i, /anchor/i, /parley/i, /ransom/i, /pirate king/i, /kraken/i]
     for (const f of formats) {
       const { container } = render(<SpecialtyFormatPreview format={f} />)
       const text = container.textContent ?? ''
