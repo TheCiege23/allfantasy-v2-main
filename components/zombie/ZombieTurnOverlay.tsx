@@ -39,16 +39,48 @@ export type ZombieTurnContext = {
   zombieTradeBlocked: boolean
 }
 
+/**
+ * Share the moment as text — the device's share sheet, else the clipboard. No image card: those are
+ * rendered by dedicated share routes, and this repo adds no API routes. The link is the league page, which
+ * only members can open; it never carries an invite code. Returns what happened.
+ */
+export async function shareMoment(
+  moment: ZombieTurnMoment,
+  leagueId: string,
+  leagueName?: string | null,
+): Promise<'shared' | 'copied' | 'failed'> {
+  const where = leagueName ? ` in ${leagueName}` : ''
+  const text = {
+    turned: `I turned in week ${moment.week}${where}. The horde grows. 🧟`,
+    survived: `Still human after week ${moment.week}${where}. 🧍`,
+    revived: `Back from the dead${where}. 🧪`,
+  }[moment.kind]
+  const url = `${window.location.origin}/league/${encodeURIComponent(leagueId)}`
+  try {
+    if (typeof navigator.share === 'function') {
+      await navigator.share({ title: 'Zombie league', text, url })
+      return 'shared'
+    }
+    await navigator.clipboard.writeText(`${text} ${url}`)
+    return 'copied'
+  } catch {
+    return 'failed'
+  }
+}
+
 export function ZombieTurnOverlay({
   leagueId,
+  leagueName,
   moment,
   ctx,
 }: {
   leagueId: string
+  leagueName?: string | null
   moment: ZombieTurnMoment | null | undefined
   ctx: ZombieTurnContext
 }) {
   const [open, setOpen] = useState(false)
+  const [shared, setShared] = useState<'shared' | 'copied' | 'failed' | null>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -140,14 +172,23 @@ export function ZombieTurnOverlay({
             </li>
           ))}
         </ol>
-        <button
-          ref={closeRef}
-          type="button"
-          onClick={close}
-          className="mt-6 min-h-[44px] w-full rounded-xl bg-lime-400 px-5 font-bold text-black hover:bg-lime-300"
-        >
-          {moment.kind === 'turned' ? 'Join the horde' : 'Back to the outbreak'}
-        </button>
+        <div className="mt-6 grid gap-2 sm:grid-cols-2">
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={close}
+            className="min-h-[44px] rounded-xl bg-lime-400 px-5 font-bold text-black hover:bg-lime-300"
+          >
+            {moment.kind === 'turned' ? 'Join the horde' : 'Back to the outbreak'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void shareMoment(moment, leagueId, leagueName).then(setShared)}
+            className="min-h-[44px] rounded-xl border border-white/20 bg-white/[0.06] px-5 font-semibold text-white hover:bg-white/10"
+          >
+            {shared === 'copied' ? 'Copied' : 'Share this'}
+          </button>
+        </div>
       </div>
     </div>
   )

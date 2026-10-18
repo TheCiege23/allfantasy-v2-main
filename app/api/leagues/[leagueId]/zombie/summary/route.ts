@@ -78,6 +78,7 @@ export async function GET(
             totalWeeks: true,
             themeLabel: true,
             status: true,
+            whispererIsPublic: true,
           },
         },
       },
@@ -277,6 +278,12 @@ export async function GET(
     myMatchupView: views.find((v) => v.mySide) ?? null,
     lastResolvedWeek,
     turnMoment,
+    /**
+     * The teams the viewer turned — their own deeds, so no secrecy question for the viewer. The Whisperer's
+     * lair lists its horde from this; it is empty for anyone who has bitten nobody.
+     */
+    myInfections: myRosterId ? zombieTeams.filter((t) => t.killedByRosterId === myRosterId).map((t) => t.rosterId) : [],
+    whispererPublic: zl?.whispererIsPublic !== false,
     rules: {
       bashingMargin: rules.bashingThreshold,
       maulingMargin: rules.maulingThreshold,
