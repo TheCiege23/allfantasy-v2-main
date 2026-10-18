@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Home, Calendar, Vote, Users, Settings, MessageSquare, Sparkles, ChevronDown } from 'lucide-react'
-import type { BigBrotherSummary, BigBrotherView } from './types'
+import type { BigBrotherView } from './types'
 import { BigBrotherStatusBadge } from './BigBrotherStatusBadge'
 import { BigBrotherCeremonyCenter } from './BigBrotherCeremonyCenter'
 import { BigBrotherVotingBallot } from './BigBrotherVotingBallot'
@@ -15,8 +15,8 @@ import { BigBrotherJuryCenter } from './BigBrotherJuryCenter'
 import { BigBrotherCommissionerPanel } from './BigBrotherCommissionerPanel'
 import { BigBrotherTwistsPanel } from './BigBrotherTwistsPanel'
 import { BigBrotherHistoryPanel } from './BigBrotherHistoryPanel'
-import { BigBrotherMemoryWall } from './BigBrotherMemoryWall'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
+import { BigBrotherSpecialtyHome, type BigBrotherSpecialtySummary } from './BigBrotherSpecialtyHome'
 
 const VIEW_LABELS: Record<BigBrotherView, string> = {
   house: 'House',
@@ -39,7 +39,7 @@ export interface BigBrotherHomeProps {
 
 export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house' }: BigBrotherHomeProps) {
   const { formatInTimezone } = useUserTimezone()
-  const [summary, setSummary] = useState<BigBrotherSummary | null>(null)
+  const [summary, setSummary] = useState<BigBrotherSpecialtySummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<BigBrotherView>(initialView)
@@ -104,6 +104,11 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
     <div className="relative space-y-6 overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#0c1428]/95 via-[#070b18] to-[#040915] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-6">
       <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-amber-500/[0.07] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-28 left-0 h-48 w-48 rounded-full bg-cyan-500/[0.06] blur-3xl" />
+      {/* The house view opens with the specialty-league home (2026-10-18), which carries the title and your status. */}
+      {view === 'house' && summary ? (
+        <BigBrotherSpecialtyHome leagueId={leagueId} summary={summary} onChanged={load} />
+      ) : null}
+      {view !== 'house' ? (
       <header className="relative flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4 backdrop-blur-sm sm:p-6">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-amber-500/35 bg-gradient-to-br from-amber-950/50 to-[#0a1228] shadow-[0_0_24px_rgba(245,158,11,0.12)] sm:h-16 sm:w-16">
@@ -120,6 +125,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
           <BigBrotherStatusBadge status={summary.myStatus} />
         )}
       </header>
+      ) : null}
 
       {summary?.sportCalendar?.scoringWindowDisclaimer ? (
         <div className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm text-amber-200/90">
@@ -192,12 +198,6 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
               </p>
             </div>
           )}
-          {/* Phase & Week */}
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <h3 className="text-sm font-medium text-white/80">Week {cycle?.week ?? '—'}</h3>
-            <p className="text-xs text-white/50">Phase: {phase}</p>
-          </div>
-
           {/* Competition engine (deterministic; AI themes only) */}
           {summary.config.challengeMode ? (
             <div className="rounded-xl border border-sky-500/20 bg-gradient-to-br from-sky-950/30 to-[#0a1228]/80 p-4 shadow-[0_8px_32px_rgba(14,165,233,0.08)]">
@@ -221,39 +221,6 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
             </div>
           ) : null}
 
-          <BigBrotherMemoryWall entries={summary.memoryWall ?? []} myRosterId={summary.myRosterId} />
-
-          {/* HOH Card */}
-          {cycle?.hohRosterId && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4">
-              <h3 className="text-xs font-medium uppercase text-amber-300/80">Head of Household</h3>
-              <p className="mt-1 text-lg font-semibold text-amber-200">{names[cycle.hohRosterId] ?? cycle.hohRosterId}</p>
-            </div>
-          )}
-
-          {/* Nominees (On the Block) */}
-          {summary.finalNomineeRosterIds.length > 0 && (
-            <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-4">
-              <h3 className="text-xs font-medium uppercase text-red-300/80">On the Block</h3>
-              <ul className="mt-2 space-y-1">
-                {summary.finalNomineeRosterIds.map((id) => (
-                  <li key={id} className="text-red-200">{names[id] ?? id}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Veto */}
-          {cycle?.vetoWinnerRosterId && (
-            <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4">
-              <h3 className="text-xs font-medium uppercase text-cyan-300/80">Veto Winner</h3>
-              <p className="mt-1 text-cyan-200">{names[cycle.vetoWinnerRosterId] ?? cycle.vetoWinnerRosterId}</p>
-              {cycle.vetoUsed && (
-                <p className="mt-1 text-xs text-cyan-300/80">Veto was used. Replacement nominee: {cycle.replacementNomineeRosterId ? names[cycle.replacementNomineeRosterId] ?? cycle.replacementNomineeRosterId : '—'}</p>
-              )}
-            </div>
-          )}
-
           {/* Countdowns */}
           {summary.ballot && !summary.ballot.closed && summary.ballot.voteDeadlineAt && (
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -262,28 +229,6 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
             </div>
           )}
 
-          {/* Jury tracker */}
-          {summary.jury.length > 0 && (
-            <div className="rounded-xl border border-purple-500/20 bg-purple-950/20 p-4">
-              <h3 className="text-xs font-medium uppercase text-purple-300/80">Jury ({summary.jury.length})</h3>
-              <p className="mt-1 text-sm text-purple-200">
-                {summary.jury.slice(0, 5).map((j) => names[j.rosterId] ?? j.rosterId).join(', ')}
-                {summary.jury.length > 5 && ` +${summary.jury.length - 5} more`}
-              </p>
-            </div>
-          )}
-
-          {/* Eliminated list */}
-          {summary.eligibility?.eliminatedRosterIds.length ? (
-            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="text-xs font-medium uppercase text-white/50">Evicted</h3>
-              <ul className="mt-1 flex flex-wrap gap-2 text-sm text-white/60">
-                {summary.eligibility.eliminatedRosterIds.map((id) => (
-                  <li key={id}>{names[id] ?? id}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </div>
       )}
 
