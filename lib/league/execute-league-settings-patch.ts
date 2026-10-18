@@ -132,6 +132,17 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })
 }
 
+/**
+ * `League.settings` as it is NOW. This patch writes `settings` in several separate blocks, so each
+ * block must merge onto the latest stored copy: spreading the one read at the top of the request
+ * silently reverted whatever an earlier block in the same save had just written.
+ */
+async function readCurrentLeagueSettings(leagueId: string): Promise<Record<string, unknown>> {
+  const cur = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const s = cur?.settings
+  return s && typeof s === 'object' && !Array.isArray(s) ? { ...(s as Record<string, unknown>) } : {}
+}
+
 function hasLeagueSettingsRowPatch(body: Record<string, unknown>): boolean {
   return Object.keys(body).some((k) => LEAGUE_SETTINGS_ROW_PATCH_KEYS.has(k))
 }
@@ -366,14 +377,13 @@ export async function executeLeagueSettingsPatch(
    * unchanged. Submitting the field is the evidence — comparing values would
    * miss exactly the case this exists for.
    *
-   * ⚠ WRITTEN AS A READ-MODIFY-WRITE ON `settings`, matching the sportConfig and
-   * devyLeagueConfig blocks below. `league.settings` was loaded before the
-   * column update above and the column update does not touch `settings`, so it
-   * is still current.
+   * ⚠ WRITTEN AS A READ-MODIFY-WRITE ON `settings`, like the sportConfig,
+   * devyLeagueConfig and settingsMerge blocks below — each one re-reads the
+   * stored copy first, so no block reverts another's write in the same save.
    */
   const keeperProv = keeperProvenanceFromCommissionerSave({ submittedKeys: leagueKeys, body })
   if (keeperProv) {
-    const prevSettings = (league.settings as Record<string, unknown> | null) ?? {}
+    const prevSettings = await readCurrentLeagueSettings(leagueId)
     const prevConcept =
       prevSettings.conceptRules && typeof prevSettings.conceptRules === 'object' && !Array.isArray(prevSettings.conceptRules)
         ? (prevSettings.conceptRules as Record<string, unknown>)
@@ -401,7 +411,7 @@ export async function executeLeagueSettingsPatch(
     if (body.sportConfig !== null && typeof body.sportConfig !== 'object') {
       return jsonError('sportConfig must be an object or null', 400)
     }
-    const prev = (league.settings as Record<string, unknown> | null) ?? {}
+    const prev = await readCurrentLeagueSettings(leagueId)
     await prisma.league.update({
       where: { id: leagueId },
       data: {
@@ -419,7 +429,7 @@ export async function executeLeagueSettingsPatch(
     if (body.devyLeagueConfig !== null && typeof body.devyLeagueConfig !== 'object') {
       return jsonError('devyLeagueConfig must be an object or null', 400)
     }
-    const prev = (league.settings as Record<string, unknown> | null) ?? {}
+    const prev = await readCurrentLeagueSettings(leagueId)
     await prisma.league.update({
       where: { id: leagueId },
       data: {
@@ -438,7 +448,7 @@ export async function executeLeagueSettingsPatch(
     if (body.settingsMerge === null || typeof body.settingsMerge !== 'object' || Array.isArray(body.settingsMerge)) {
       return jsonError('settingsMerge must be a plain object', 400)
     }
-    const prev = (league.settings as Record<string, unknown> | null) ?? {}
+    const prev = await readCurrentLeagueSettings(leagueId)
     await prisma.league.update({
       where: { id: leagueId },
       data: {
@@ -453,8 +463,7 @@ export async function executeLeagueSettingsPatch(
 
   if (dailyWaiverScheduleToStore) {
     // Fresh read: the blocks above may already have rewritten `settings` this request.
-    const cur = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-    const prev = { ...((cur?.settings as Record<string, unknown> | null) ?? {}) }
+    const prev = await readCurrentLeagueSettings(leagueId)
     if (priorProcessingToStore === null) delete prev[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY]
     else if (priorProcessingToStore) prev[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY] = priorProcessingToStore
     await prisma.league.update({
@@ -486,7 +495,9 @@ export async function executeLeagueSettingsPatch(
   ])
   if (leagueKeys.some((k) => derivedSyncKeys.has(k))) {
     try {
-      await syncCommissionerDerivedLeagueState(leagueId)
+      // Only the columns this save wrote: the playoffs and waivers panels write the derived copies
+      // directly, and mirroring an untouched (stale) column would revert what they saved.
+      await syncCommissionerDerivedLeagueState(leagueId, leagueKeys)
       updatedFieldNames.push('derived_playoff_waiver_sync')
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncCommissionerDerivedLeagueState', e)
