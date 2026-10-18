@@ -33,10 +33,13 @@ import { BASH_TRANSFER_SHARE, MAUL_TRANSFER_SHARE } from '@/lib/zombie/winningsS
 import {
   buildZombieWeeklyBoard,
   pickMyMatchup,
+  pickTurnMoment,
   resolveSummaryWeek,
+  withBoardDetail,
   zombieRosterDisplayNames,
   zombieThemeForLeague,
 } from '@/lib/zombie/zombieHomeSummary'
+import { buildZombieMatchups, infectionPairsForWeek } from '@/lib/zombie/zombieMatchupBoard'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +70,7 @@ export async function GET(
         name: true,
         zombieLeague: {
           select: {
+            id: true,
             universeId: true,
             sport: true,
             season: true,
@@ -181,13 +185,50 @@ export async function GET(
   // Statuses only ever come from the redacted list, so a hidden Whisperer reads as a Survivor here too.
   const statusOf = (rosterId: string) => shownStatuses.find((s) => s.rosterId === rosterId)?.status ?? 'Survivor'
   const mine = pickMyMatchup(weekResults, myRosterId)
-  const weeklyBoard = buildZombieWeeklyBoard({
-    week,
+  const hiddenRoster = (rosterId: string) => !viewer.canSee && identity.rosterIds.has(rosterId)
+  const nameOf = (rosterId: string) => rosterDisplayNames[rosterId] ?? 'A team'
+  const lossToZombieInfects = config.infectionLossToZombie !== false
+  const views = buildZombieMatchups({
     results: weekResults,
-    teams: zombieTeams,
-    bashingMargin: rules.bashingThreshold,
-    maulingMargin: rules.maulingThreshold,
-    hiddenInfector: (rosterId) => !viewer.canSee && identity.rosterIds.has(rosterId),
+    statusOf,
+    nameOf,
+    infected: infectionPairsForWeek(zombieTeams, week),
+    rules,
+    lossToZombieInfects,
+    myRosterId,
+  })
+  const weeklyBoard = withBoardDetail(
+    buildZombieWeeklyBoard({
+      week,
+      results: weekResults,
+      teams: zombieTeams,
+      bashingMargin: rules.bashingThreshold,
+      maulingMargin: rules.maulingThreshold,
+      hiddenInfector: hiddenRoster,
+    }),
+    views,
+  )
+
+  // The overlay announces the latest RESOLVED week's change, whichever week the viewer is browsing.
+  const lastResolved = zl?.id
+    ? await prisma.zombieWeeklyResolution.findFirst({
+        where: { zombieLeagueId: zl.id, status: 'complete' },
+        orderBy: { week: 'desc' },
+        select: { week: true },
+      }).catch(() => null) // the overlay is optional; it must never take the home down
+    : null
+  const lastResolvedWeek = lastResolved?.week ?? null
+  const turnResults =
+    lastResolvedWeek == null ? null : lastResolvedWeek === week ? weekResults : await loadNativeWeekResults(leagueId, lastResolvedWeek, season).catch(() => null)
+  const meRow = myRosterId ? zombieTeams.find((t) => t.rosterId === myRosterId) ?? null : null
+  const turnMoment = pickTurnMoment({
+    lastResolvedWeek,
+    // My own status, as I may see it: a Whisperer viewer always can.
+    me: meRow ? { ...meRow, status: statusOf(meRow.rosterId) } : null,
+    results: turnResults,
+    statusOf,
+    nameOf,
+    hiddenRoster,
   })
 
   return NextResponse.json({
@@ -232,6 +273,10 @@ export async function GET(
         }
       : null,
     myWinnings,
+    /** My matchup as the Bashing card draws it (scores, lines, what moved). */
+    myMatchupView: views.find((v) => v.mySide) ?? null,
+    lastResolvedWeek,
+    turnMoment,
     rules: {
       bashingMargin: rules.bashingThreshold,
       maulingMargin: rules.maulingThreshold,

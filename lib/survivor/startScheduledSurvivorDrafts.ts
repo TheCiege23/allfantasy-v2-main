@@ -6,6 +6,8 @@ import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/
 import { withControlLock } from '@/lib/draft/draftLock'
 import { startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
+import { enqueueNotification } from './notificationEngine'
 
 export interface ScheduledSurvivorDraftSummary {
   scanned: number
@@ -14,13 +16,17 @@ export interface ScheduledSurvivorDraftSummary {
   errors: Array<{ leagueId: string; error: string }>
 }
 
-/** Called by the minute draft tick; only native Survivor leagues that opted into autostart qualify. */
+/**
+ * Called by the minute draft tick; native Survivor and Guillotine leagues that opted into autostart
+ * qualify. Guillotine saved the "Autostart Draft" toggle but nothing read it, so the commissioner had
+ * to press Start by hand at draft time.
+ */
 export async function startScheduledSurvivorDrafts(now: Date = new Date()): Promise<ScheduledSurvivorDraftSummary> {
   const due = await prisma.leagueSettings.findMany({
     where: {
       autostart: true,
       draftDateUtc: { lte: now, gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
-      league: { is: { survivorMode: true } },
+      league: { is: { OR: [{ survivorMode: true }, { guillotineMode: true }, { leagueVariant: 'guillotine' }] } },
     },
     select: { leagueId: true, league: { select: { platform: true } } },
     orderBy: { draftDateUtc: 'asc' },
@@ -59,9 +65,12 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
         summary.skipped++
       } else if (locked.value.ok) {
         summary.started++
+        // A manual start notifies from the controls route; a scheduled one has no caller to do it.
+        await notifyDraftStartingSoon(leagueId).catch(() => {})
       } else if (locked.value.reason === 'SURVIVOR_CAST_INCOMPLETE') {
         // A commissioner can claim the remaining seats and the next tick retries.
         summary.skipped++
+        await noticeCastIncompleteOnce(leagueId, locked.value.error).catch(() => {})
       } else {
         summary.errors.push({ leagueId, error: locked.value.error ?? locked.value.reason })
       }
@@ -70,4 +79,19 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
     }
   }
   return summary
+}
+
+/** Tells the commissioner, once per league, why the scheduled draft is waiting. */
+async function noticeCastIncompleteOnce(leagueId: string, reason?: string) {
+  const type = 'draft_cast_incomplete'
+  if (await prisma.survivorNotification.findFirst({ where: { leagueId, type }, select: { id: true } })) return
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
+  if (!league?.userId) return
+  await enqueueNotification(leagueId, type, {
+    recipientUserId: league.userId,
+    title: 'Your draft is waiting on open seats',
+    body: `${reason ?? 'Every seat must be claimed before the draft can start.'} The draft starts automatically once the cast is complete.`,
+    deepLinkPath: `/league/${leagueId}/draft`,
+    urgency: 'high',
+  })
 }

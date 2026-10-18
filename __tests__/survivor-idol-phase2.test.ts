@@ -3,7 +3,7 @@ const m = vi.hoisted(() => ({
   context: vi.fn(),
   db: { $transaction: vi.fn(), $queryRaw: vi.fn(), survivorGameState: { findUnique: vi.fn() }, survivorPlayer: { count: vi.fn() },
     survivorIdol: { findFirst: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() }, survivorTribalCouncil: { update: vi.fn(), findUnique: vi.fn() },
-    survivorIdolLedgerEntry: { create: vi.fn() }, survivorAuditEntry: { create: vi.fn() }, survivorVote: { findUnique: vi.fn(), count: vi.fn() } },
+    survivorIdolLedgerEntry: { create: vi.fn() }, survivorAuditEntry: { create: vi.fn(), findUnique: vi.fn() }, survivorVote: { findUnique: vi.fn(), count: vi.fn() } },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.db }))
 vi.mock('@/lib/survivor/survivorCouncilService', () => ({ loadCouncilContext: m.context }))
@@ -25,6 +25,7 @@ beforeEach(() => {
   m.db.survivorIdol.findFirst.mockResolvedValue({ id: 'idol', powerType: 'vote_steal' })
   m.db.survivorIdol.updateMany.mockResolvedValue({ count: 1 })
   m.db.survivorIdol.findMany.mockResolvedValue([])
+  m.db.survivorAuditEntry.findUnique.mockResolvedValue(null)
   m.db.survivorVote.findUnique.mockResolvedValue({ targetUserId: 'other', targetName: 'other', doesNotCount: false, isLateVote: false })
   m.db.survivorVote.count.mockResolvedValue(2)
 })

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => {
   const db = {
     $queryRaw: vi.fn(), league: { findUnique: vi.fn() },
-    survivorAuditEntry: { findFirst: vi.fn(), create: vi.fn() },
+    survivorAuditEntry: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+    survivorNotification: { create: vi.fn() },
     survivorGameState: { findUnique: vi.fn(), update: vi.fn(), upsert: vi.fn(), updateMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     roster: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
@@ -10,8 +11,8 @@ const m = vi.hoisted(() => {
     survivorIdol: { findMany: vi.fn() },
     redraftRosterMoveHistory: { create: vi.fn() }, waiverClaim: { updateMany: vi.fn() },
     survivorTribe: { findFirst: vi.fn() }, survivorTribeMember: { upsert: vi.fn(), deleteMany: vi.fn() },
-    survivorJuryMember: { deleteMany: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-    survivorChatMessage: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
+    survivorJuryMember: { deleteMany: vi.fn(), upsert: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    survivorChatMessage: { create: vi.fn() }, survivorNotification: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
     survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn() },
   }
   return { db, transaction: vi.fn() }
@@ -30,6 +31,7 @@ beforeEach(() => {
   m.transaction.mockImplementation(fn => fn(m.db))
   m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4 } })
   m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_week_scored' ? { id: 'scored', data: { balances: players } } : null)
+  m.db.survivorAuditEntry.findMany.mockResolvedValue([])
   m.db.survivorGameState.findUnique.mockResolvedValue({ phase: 'merge', mergeTriggeredAt: new Date(), activeCouncilId: null })
   m.db.survivorPlayer.findMany.mockResolvedValue(players)
   m.db.roster.findFirst.mockResolvedValue({ id: 'legacy-b', redraftRosterId: 'actual-b', playerData: ['athlete'] })
@@ -91,6 +93,10 @@ describe('voted-out manager moves to Exile', () => {
     expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerState: 'exile', canAccessExileChat: true, canAccessTribeChat: false }) }))
     expect(m.db.exileIsland.upsert).toHaveBeenCalledOnce()
   })
+  it('queues one spoiler-safe elimination alert for the league', async () => {
+    await resolveElimination('league', 'council')
+    expect(m.db.survivorNotification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'elimination', recipientRole: 'all', isSpoilerSafe: false }) }))
+  })
   it('does not move anyone based on an unrevealed vote tally', async () => {
     m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ isRevealed: false })
     expect(await resolveElimination('league', 'council')).toMatchObject({ ok: false, code: 'not_revealed' })
@@ -105,7 +111,7 @@ describe('voted-out manager moves to Exile', () => {
 
 describe('Exile weekly award settlement', () => {
   beforeEach(() => {
-    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true })
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
     m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry', userId: 'b', weeklyScore: 0 }])
     m.db.survivorPlayer.findUnique.mockResolvedValue({ ...players[1], playerState: 'exile' })
   })
@@ -119,18 +125,39 @@ describe('Exile weekly award settlement', () => {
     expect(await scoreExileWeek('league', 10)).toBe(true)
     expect(m.db.survivorPlayer.update).not.toHaveBeenCalled()
   })
-  it('a verified zero score is valid and commits its token with the deadline snapshot', async () => {
+  it('does not settle even a finalized zero score before Chimmy has a verified score', async () => {
     m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
-    expect(await scoreExileWeek('league', 10)).toBe(true)
-    expect(m.db.survivorPlayer.update).toHaveBeenCalledOnce()
-    expect(m.db.survivorAuditEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'exile_week_scored', isVisibleToPublic: false, data: expect.objectContaining({ balances: players }) }) }))
+    expect(await scoreExileWeek('league', 10)).toBe(false)
+    expect(m.db.survivorPlayer.update).not.toHaveBeenCalled()
   })
   it('ignores an inactive manager when selecting the weekly winner', async () => {
-    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } :
+      where.action === 'exile_boss_result_finalized' ? { id: 'boss', data: { source: 'locked_chimmy_nba_roster_v1', score: 5 } } : null)
     m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'old', userId: 'a', weeklyScore: 99 }, { id: 'entry', userId: 'b', weeklyScore: 10 }])
     m.db.survivorPlayer.findUnique.mockImplementation(async ({ where }) => ({ ...players.find(p => p.userId === where.leagueId_userId.userId), playerState: where.leagueId_userId.userId === 'a' ? 'active' : 'exile' }))
     expect(await scoreExileWeek('league', 10)).toBe(true)
-    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry' }, data: { tokenEarned: 1 } })
+    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry' }, data: expect.objectContaining({ bossScore: 5, bossWon: false, tokenEarned: 1 }) })
+  })
+
+  it('resets Exile tokens when Chimmy ties or beats the top score', async () => {
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } :
+      where.action === 'exile_boss_result_finalized' ? { id: 'boss', data: { source: 'locked_chimmy_nba_roster_v1', score: 10 } } : null)
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry', userId: 'b', weeklyScore: 10 }])
+    expect(await scoreExileWeek('league', 10)).toBe(true)
+    expect(m.db.survivorPlayer.updateMany).toHaveBeenCalledWith({ where: { leagueId: 'league', playerState: 'exile', userId: { notIn: [] } }, data: { tokenBalance: 0 } })
+    expect(m.db.survivorPlayer.update).not.toHaveBeenCalled()
+    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry' }, data: expect.objectContaining({ bossWon: true, tokenEarned: 0, tokenWiped: true }) })
+  })
+
+  it('awards exactly one token when Exile leaders tie above Chimmy', async () => {
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } :
+      where.action === 'exile_boss_result_finalized' ? { id: 'boss', data: { source: 'locked_chimmy_nba_roster_v1', score: 0 } } : null)
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry-a', userId: 'a', weeklyScore: 12 }, { id: 'entry-b', userId: 'b', weeklyScore: 12 }])
+    m.db.survivorPlayer.findUnique.mockImplementation(async ({ where }) => ({ ...players.find(p => p.userId === where.leagueId_userId.userId), playerState: 'exile' }))
+    expect(await scoreExileWeek('league', 10)).toBe(true)
+    expect(m.db.survivorPlayer.update).toHaveBeenCalledOnce()
+    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledTimes(2)
+    expect(m.db.exileWeeklyEntry.update.mock.calls.filter(([call]) => call.data.tokenEarned === 1)).toHaveLength(1)
   })
 
 })
@@ -143,6 +170,12 @@ describe('public Torch Ceremony commit', () => {
     expect(m.db.survivorChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ senderName: 'Chimmy', content: expect.stringContaining('Ballot 1: Bob.') }) }))
     expect(m.db.survivorTribalCouncil.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isRevealed: true }) }))
   })
+  it('reveals Shot results only in the committed public ceremony', async () => {
+    m.db.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'a', data: { draw: 1, success: true } }])
+    expect(await revealCouncil('league', 'council')).toMatchObject({ ok: true, alreadyRevealed: false })
+    expect(m.db.survivorChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ content: expect.stringContaining('Shot in the Dark: Alice drew Safe') }) }))
+    expect(m.db.survivorTribalCouncil.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isRevealed: true }) }))
+  })
   it('does not reveal when league chat cannot receive the ceremony', async () => {
     m.db.survivorChatChannel.findFirst.mockResolvedValue(null)
     expect(await revealCouncil('league', 'council')).toMatchObject({ ok: false, code: 'chat_missing' })
@@ -152,5 +185,22 @@ describe('public Torch Ceremony commit', () => {
     m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ id: 'council', isRevealed: true, revealSequence: [] })
     expect(await revealCouncil('league', 'council')).toMatchObject({ ok: true, alreadyRevealed: true })
     expect(m.db.survivorChatMessage.create).not.toHaveBeenCalled()
+  })
+})
+describe('jury seating at elimination', () => {
+  beforeEach(() => {
+    m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ id: 'council', isRevealed: true, status: 'revealed', isTie: false, eliminatedUserId: 'b', week: 3, phase: 'merge' })
+    m.db.survivorPlayer.findUnique.mockResolvedValue({ ...players[1], playerState: 'active' })
+  })
+  it('seats a manager voted out after the merge on the jury', async () => {
+    await resolveElimination('league', 'council')
+    expect(m.db.survivorJuryMember.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { leagueId: 'league', rosterId: 'legacy-b', votedOutWeek: 3 } }))
+    expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isJuryMember: true, canAccessJuryChat: true }) }))
+  })
+  it('keeps pre-merge boots off the jury', async () => {
+    m.db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', activeCouncilId: null })
+    await resolveElimination('league', 'council')
+    expect(m.db.survivorJuryMember.upsert).not.toHaveBeenCalled()
+    expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.not.objectContaining({ isJuryMember: true }) }))
   })
 })

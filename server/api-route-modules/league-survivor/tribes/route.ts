@@ -15,6 +15,7 @@ import { bootstrapTribeChatMembers } from '@/lib/survivor/SurvivorChatMembership
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { composeTribeName, extractLeadingTribeIcon, stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
+import { respondToTribeRedraw } from '@/lib/survivor/survivorTribeRedrawDecision'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,6 +109,12 @@ export async function PATCH(
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  if (body.action === 'approve_redraw' || body.action === 'postpone_redraw') {
+    const recommendationId = typeof body.recommendationId === 'string' ? body.recommendationId.trim() : ''
+    if (!recommendationId) return NextResponse.json({ error: 'recommendationId required' }, { status: 400 })
+    const result = await respondToTribeRedraw(leagueId, userId, recommendationId, body.action === 'approve_redraw' ? 'approve' : 'postpone')
+    return NextResponse.json(result, { status: result.ok ? 200 : result.status })
+  }
   const tribeId = typeof body.tribeId === 'string' ? body.tribeId.trim() : ''
   const name = typeof body.name === 'string' ? body.name : ''
   const emoji = typeof body.emoji === 'string' ? body.emoji : null

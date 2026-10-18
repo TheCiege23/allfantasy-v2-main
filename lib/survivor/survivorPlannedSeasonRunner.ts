@@ -33,7 +33,10 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   const plan = readSurvivorFullSeasonPlan(league?.settings)
   if (!league?.survivorMode || !isNativePlatform(league.platform) || !plan || league.sport !== plan.sport || league.season !== plan.season) return 'not_planned'
   const game = await getOrCreateSurvivorGameState(leagueId)
+  if (game.pausedSnapshot != null) return 'paused'
   if (['pre_draft', 'drafting', 'complete', 'paused'].includes(game.phase)) return game.phase
+  // The commissioner's pause writes pausedSnapshot and leaves phase alone.
+  if (game.pausedSnapshot != null) return 'paused'
   const calendarWeek = dailySportWeekForInstant(plan.sport, plan.season, now)
   if (!calendarWeek || calendarWeek < plan.startWeek) return 'awaiting_opening'
 

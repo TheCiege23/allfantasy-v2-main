@@ -328,6 +328,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
       // which the service answers with "Command not implemented", so "@chimmy immunity rules" stays a question.
       const SURVIVOR_CHIMMY_COMMAND_INTENTS: ReadonlySet<SurvivorCommandIntent> = new Set<SurvivorCommandIntent>([
         'vote',
+        'shot_in_the_dark',
         'jury_vote',
         'play_idol',
         'sit_out_nominate',
@@ -345,7 +346,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
       const voteAttempt = /^vote(?:\s|$)/i.test(chimmyCommandText)
       // Votes entered in a league or tribe composer are submitted through the private
       // ballot authority. The original text and Chimmy's answer are visible only to the voter.
-      const privateVote = voteAttempt || (survivorIntent === 'vote' && (
+      // Shot in the Dark is as secret as a ballot, so it takes the same private path.
+      const privateVote = voteAttempt || survivorIntent === 'shot_in_the_dark' || (survivorIntent === 'vote' && (
         looksLikeOfficialCommand(chimmyCommandText) || /^@(?:[A-Za-z0-9_.-]+|<@[A-Za-z0-9_-]+>)/.test(chimmyCommandText)
       ))
       const survivorChimmyCommand =

@@ -334,44 +334,52 @@ export type CloseWindowOutcome =
 
 /** Close the vote window: lock the council, flag any post-deadline ballots per the late policy. */
 export async function closeVoteWindow(leagueId: string, councilId: string, actorUserId?: string): Promise<CloseWindowOutcome> {
-  const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
-  if (!council) return { ok: false, status: 404, code: 'not_found', error: 'Council not found.' }
-  if (council.isRevealed) return { ok: false, status: 409, code: 'already_revealed', error: 'Council already revealed.' }
-  if (council.status === 'closed') {
-    const late = await prisma.survivorVote.count({ where: { councilId, isLateVote: true } })
-    return { ok: true, councilId, status: 'closed', lateVotesFlagged: late }
-  }
+  return prisma.$transaction(async (tx): Promise<CloseWindowOutcome> => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
+    const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
+    if (game?.pausedSnapshot != null) return { ok: false, status: 409, code: 'league_paused', error: 'The league is paused.' }
+    const council = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
+    if (!council) return { ok: false, status: 404, code: 'not_found', error: 'Council not found.' }
+    if (council.isRevealed) return { ok: false, status: 409, code: 'already_revealed', error: 'Council already revealed.' }
+    if (council.status === 'closed' || council.status === 'tie_pending') {
+      const late = await tx.survivorVote.count({ where: { councilId, isLateVote: true } })
+      return { ok: true, councilId, status: 'closed', lateVotesFlagged: late }
+    }
 
-  const settings = await loadSettings(leagueId)
-  const deadline = council.voteDeadlineAt
-  const lateVotes = await prisma.survivorVote.findMany({
-    where: { councilId, submittedAt: { gt: deadline } },
-    select: { id: true },
-  })
-  const lateIds = (lateVotes as Array<{ id: string }>).map((v) => v.id)
-  if (lateIds.length) {
-    await prisma.survivorVote.updateMany({
-      where: { id: { in: lateIds } },
-      data: { isLateVote: true, doesNotCount: !settings.lateVotesAllowed },
+    const settings = await loadSettings(leagueId, tx)
+    if (!['voting_open', 'voting_closed'].includes(council.status)) return { ok: false, status: 409, code: 'not_open', error: 'Voting is not open.' }
+    const now = new Date()
+    const closedEarly = now < council.voteDeadlineAt
+    const deadline = new Date(Math.min(now.getTime(), council.voteDeadlineAt.getTime()))
+    const lateVotes = await tx.survivorVote.findMany({
+      where: { councilId, submittedAt: { gt: deadline } },
+      select: { id: true },
     })
-  }
+    const lateIds = (lateVotes as Array<{ id: string }>).map((v) => v.id)
+    if (lateIds.length) {
+      await tx.survivorVote.updateMany({
+        where: { id: { in: lateIds } },
+        data: { isLateVote: true, doesNotCount: !settings.lateVotesAllowed },
+      })
+    }
 
-  await prisma.survivorTribalCouncil.update({ where: { id: councilId }, data: { status: 'closed', closedAt: new Date() } })
-  await prisma.survivorAuditEntry.create({
-    data: {
-      leagueId,
-      week: council.week,
-      category: 'tribal',
-      action: 'council_closed',
-      actorUserId: actorUserId ?? null,
-      relatedEntityId: councilId,
-      relatedEntityType: 'council',
-      data: { lateVotesFlagged: lateIds.length, lateVotesAllowed: settings.lateVotesAllowed },
-      isVisibleToCommissioner: true,
-      isVisibleToPublic: true,
-    },
+    await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { status: 'closed', closedAt: now, voteDeadlineAt: deadline, votingDeadline: deadline } })
+    await tx.survivorAuditEntry.create({
+      data: {
+        leagueId,
+        week: council.week,
+        category: 'tribal',
+        action: 'council_closed',
+        actorUserId: actorUserId ?? null,
+        relatedEntityId: councilId,
+        relatedEntityType: 'council',
+        data: { closedEarly, lateVotesFlagged: lateIds.length, lateVotesAllowed: settings.lateVotesAllowed },
+        isVisibleToCommissioner: true,
+        isVisibleToPublic: true,
+      },
+    })
+    return { ok: true, councilId, status: 'closed', lateVotesFlagged: lateIds.length }
   })
-  return { ok: true, councilId, status: 'closed', lateVotesFlagged: lateIds.length }
 }
 
 /** Cancel a council (commissioner/host). Voids the window; no elimination occurs. */

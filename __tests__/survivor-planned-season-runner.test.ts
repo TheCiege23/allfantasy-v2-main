@@ -52,6 +52,15 @@ beforeEach(() => {
 })
 
 describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport => {
+  it('stops every planned season step while the pause snapshot exists', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    await setup(sport, 3, { finalized: true })
+    state.game.pausedSnapshot = { needsTribalLock: true }
+    expect(await runPlannedSurvivorLeague('league-1', later)).toBe('paused')
+    expect(engine.processTribalDeadline).not.toHaveBeenCalled()
+    expect(engine.advanceWeek).not.toHaveBeenCalled()
+    expect(engine.triggerTribalOpen).not.toHaveBeenCalled()
+  })
   it.each([true, false])('replays saved weekly state through a crowned Final 3 (Exile qualifies: %s)', async qualifies => {
     const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
     const plan = await setup(sport, 1, { exile: true })
@@ -187,4 +196,16 @@ it('does not activate autonomous hosting merely because a league has a saved sea
   expect(await runPlannedSurvivorSeasonBatch(later)).toEqual({ considered: 0, failed: 0, outcomes: { disabled: 1 } })
   expect(db.league.findMany).not.toHaveBeenCalled()
   expect(engine.advanceWeek).not.toHaveBeenCalled()
+})
+
+it('freezes a league the commissioner paused, even though its phase is unchanged', async () => {
+  const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+  const plan = await setup('NBA', 1, { finalized: true })
+  state.game.currentWeek = plan.eliminationWeeks[0]
+  state.game.pausedSnapshot = { needsTribalLock: true }
+  expect(await runPlannedSurvivorLeague('league-1', later)).toBe('paused')
+  expect(engine.triggerTribalOpen).not.toHaveBeenCalled()
+  expect(engine.processTribalDeadline).not.toHaveBeenCalled()
+  expect(engine.advanceWeek).not.toHaveBeenCalled()
+  expect(engine.syncWeeklyScores).not.toHaveBeenCalled()
 })

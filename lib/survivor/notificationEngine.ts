@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 
 export type EnqueueNotificationInput = {
   recipientUserId?: string
@@ -75,6 +76,12 @@ async function resolveRecipientUserIds(
  */
 export async function processNotificationQueue(leagueId: string): Promise<{ sent: number; failed: number }> {
   const now = new Date()
+  // A reminder that missed its moment ("votes close in 30 minutes") is worse
+  // than none, so anything this far past due is retired instead of sent.
+  await prisma.survivorNotification.updateMany({
+    where: { leagueId, status: 'pending', scheduledFor: { lt: new Date(now.getTime() - STALE_NOTIFICATION_MS) } },
+    data: { status: 'expired' },
+  })
   const pending = await prisma.survivorNotification.findMany({
     where: {
       leagueId,
@@ -88,6 +95,12 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
   let failed = 0
 
   for (const n of pending) {
+    // Claim the row first so overlapping ticks never deliver it twice.
+    const claimed = await prisma.survivorNotification.updateMany({
+      where: { id: n.id, status: 'pending' },
+      data: { status: 'sending' },
+    })
+    if (claimed.count !== 1) continue
     try {
       const userIds = await resolveRecipientUserIds(leagueId, n.recipientUserId, n.recipientRole)
       const title =
@@ -97,23 +110,20 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
       const body =
         !n.isSpoilerSafe ? 'Open the app to find out.' : n.body
 
-      for (const uid of userIds) {
-        await prisma.platformNotification.create({
-          data: {
-            userId: uid,
-            type: `survivor:${n.type}`,
-            title,
-            body,
-            severity: n.urgency === 'critical' ? 'high' : n.urgency === 'high' ? 'medium' : 'low',
-            productType: 'sports',
-            meta: {
-              leagueId,
-              survivorNotificationId: n.id,
-              deepLinkPath: n.deepLinkPath,
-            } as object,
-          },
-        })
-      }
+      // In-app plus email and push, each gated by the recipient's own notification settings.
+      await dispatchNotification({
+        userIds,
+        category: n.recipientRole === 'commissioner' || COMMISSIONER_TYPES.has(n.type) ? 'commissioner_alerts' : 'league_announcements',
+        type: `survivor:${n.type}`,
+        title,
+        body,
+        actionHref: n.deepLinkPath ?? `/survivor/${leagueId}`,
+        actionLabel: 'Open Survivor',
+        leagueId,
+        severity: n.urgency === 'critical' ? 'high' : n.urgency === 'high' ? 'medium' : 'low',
+        dedupePrefix: `survivor:${n.id}`,
+        meta: { leagueId, survivorNotificationId: n.id, deepLinkPath: n.deepLinkPath },
+      })
 
       await prisma.survivorNotification.update({
         where: { id: n.id },
@@ -133,6 +143,31 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
   }
 
   return { sent, failed }
+}
+
+const STALE_NOTIFICATION_MS = 24 * 60 * 60 * 1000
+const COMMISSIONER_TYPES = new Set(['draft_cast_incomplete', 'tribe_shuffle_recommendation'])
+
+/** Runs inside the score-sync cron slot: delivers due Survivor notifications for every league. */
+export async function processDueSurvivorNotifications(now = new Date()): Promise<{ leagues: number; sent: number; failed: number }> {
+  const due = await prisma.survivorNotification.findMany({
+    where: { status: 'pending', OR: [{ scheduledFor: { lte: now } }, { scheduledFor: null }] },
+    select: { leagueId: true },
+    distinct: ['leagueId'],
+    take: 50,
+  })
+  let sent = 0
+  let failed = 0
+  for (const { leagueId } of due) {
+    try {
+      const result = await processNotificationQueue(leagueId)
+      sent += result.sent
+      failed += result.failed
+    } catch {
+      failed++
+    }
+  }
+  return { leagues: due.length, sent, failed }
 }
 
 const REMINDER_BUFFER_MS = 60_000

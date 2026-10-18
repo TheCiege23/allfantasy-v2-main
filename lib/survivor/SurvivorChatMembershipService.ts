@@ -27,7 +27,7 @@ async function syncChannelMembersForTribe(leagueId: string, tribeId: string, ros
   const memberUserIds = await rosterIdsToUserIds(rosterIds)
   const deduped = [...new Set([...memberUserIds, AI_HOST_USER_ID])]
   const channel = await prisma.survivorChatChannel.findFirst({
-    where: { leagueId, channelType: 'tribe', tribeId },
+    where: { leagueId, channelType: 'tribe', tribeId, isArchived: false },
   })
   if (!channel) return
   await prisma.survivorChatChannel.update({

@@ -24,6 +24,7 @@ import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } f
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
 import { runNbaTribeSitOutDeadlineBatch } from '@/lib/survivor/SurvivorSitOutEngine'
+import { processDueSurvivorNotifications } from '@/lib/survivor/notificationEngine'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -523,8 +524,10 @@ export async function GET(request: Request) {
         error: error instanceof Error ? error.message : String(error),
       }))
       const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(() => ({ considered: 0, failed: 1, outcomes: { batch_error: 1 } }))
+      // After the season step, so councils it just opened send their notices this tick.
+      const survivorNotifications = await processDueSurvivorNotifications().catch(() => ({ leagues: 0, sent: 0, failed: 1 }))
       const redraft = await runRedraftReconciliation()
-      return { ...legacy, redraft, survivorSeason, survivorSitOuts, updated: redraft.reconciled }
+      return { ...legacy, redraft, survivorSeason, survivorSitOuts, survivorNotifications, updated: redraft.reconciled }
     },
     (r) => ({
       rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
@@ -535,6 +538,7 @@ export async function GET(request: Request) {
         r.survivorBridge.failed > 0 ||
         r.survivorSeason.failed > 0 ||
         r.survivorSitOuts.failed > 0 ||
+        r.survivorNotifications.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
@@ -550,6 +554,7 @@ export async function GET(request: Request) {
         survivorFailed: r.survivorBridge.failed,
         survivorSeason: r.survivorSeason,
         survivorSitOuts: r.survivorSitOuts,
+        survivorNotifications: r.survivorNotifications,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
         zombieWeeksWaiting: r.zombieWeeksWaiting.length,

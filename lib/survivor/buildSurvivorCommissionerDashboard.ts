@@ -1,5 +1,4 @@
 import 'server-only'
-import { survivorPublicCouncil } from './survivorPublicCouncil'
 
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
@@ -19,6 +18,7 @@ import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { getPendingTribeRedraw } from './survivorTribeRedrawDecision'
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -59,8 +59,9 @@ export type SurvivorCommissionerDashboardResult =
       config: Awaited<ReturnType<typeof getSurvivorConfig>>
       week: number
       tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
-      council: Awaited<ReturnType<typeof getCouncil>>
-      privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+      tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
+      council: { id: string; week: number; status: string; isRevealed: boolean } | null
+      privateBallots: []
       privateIdols: { id: string; ownerName: string; powerLabel: string }[]
       juryCount: number
       merged: boolean
@@ -137,6 +138,7 @@ export async function buildSurvivorCommissionerDashboard(
     exileIsland,
     activeChallenges,
     nbaAdpRows,
+    tribeRedraw,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -158,6 +160,7 @@ export async function buildSurvivorCommissionerDashboard(
     prisma.exileIsland.findUnique({ where: { leagueId }, select: { isActive: true } }),
     prisma.survivorChallenge.count({ where: { leagueId, status: { in: ['active', 'open'] } } }),
     league.sport === 'NBA' ? prisma.adpDataRecord.count({ where: { sport: 'NBA', season: nbaSeason } }) : Promise.resolve(null),
+    getPendingTribeRedraw(leagueId),
   ])
 
   const tribes = tribeRows.map((tribe: Awaited<ReturnType<typeof getTribesWithMembers>>[number]) => ({
@@ -172,7 +175,7 @@ export async function buildSurvivorCommissionerDashboard(
   }
 
   const gs = gameState
-  const privateIdolRows = access.isNonParticipatingCommissionerHost
+  const privateIdolRows = access.decisions.canSeeHiddenIdolAssignments
     ? await prisma.survivorIdol.findMany({
         where: { leagueId, status: { in: ['hidden', 'revealed'] }, isUsed: false },
         select: { id: true, currentOwnerUserId: true, powerLabel: true, powerType: true },
@@ -241,15 +244,10 @@ export async function buildSurvivorCommissionerDashboard(
     config,
     week,
     tribes,
-    council: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
-    privateBallots: access.isNonParticipatingCommissionerHost
-      ? (council?.votes ?? []).map(vote => ({
-          voterName: vote.voterName ?? vote.voterUserId ?? 'Manager',
-          targetName: vote.targetName ?? vote.targetUserId ?? 'Manager',
-          submittedAt: vote.submittedAt.toISOString(),
-          doesNotCount: vote.doesNotCount,
-        }))
-      : [],
+    tribeRedraw,
+    // This dashboard embeds Council control. It never transports individual choices.
+    council: council ? { id: council.id, week: council.week, status: !council.isRevealed && council.status === 'tie_pending' ? 'closed' : council.status, isRevealed: council.isRevealed } : null,
+    privateBallots: [],
     privateIdols: privateIdolRows.map(idol => ({
       id: idol.id,
       ownerName: ownerNames.get(idol.currentOwnerUserId ?? '') ?? 'Manager',
@@ -259,13 +257,13 @@ export async function buildSurvivorCommissionerDashboard(
     merged,
     rosterCount,
     eliminatedCount: eliminatedIds.size,
-    auditTail,
+    auditTail: auditTail.map(entry => ({ eventType: entry.eventType, createdAt: entry.createdAt, metadata: {} })),
     privacy: {
       commissionerParticipationMode: access.settings.commissionerParticipationMode,
       blindModeActive: access.isParticipatingCommissioner,
       canSeeHiddenIdolAssignments: access.decisions.canSeeHiddenIdolAssignments,
-      canSeePrivateVotes: access.decisions.canSeePrivateVotes,
-      canSeeVoteTallyBeforeReveal: access.decisions.canSeeVoteTallyBeforeReveal,
+      canSeePrivateVotes: false,
+      canSeeVoteTallyBeforeReveal: false,
       warnings: access.privacyWarnings,
     },
     monetization: {
