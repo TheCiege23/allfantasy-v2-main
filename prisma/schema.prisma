@@ -7820,6 +7820,11 @@ model TournamentDivision {
   sideId         String
   /// Library image id (e.g. "angel").
   emblem         String
+  /// Committed seeding snapshot (seed lines, regions, records). Written once by "Commit seeding".
+  seeding            Json?
+  seedingCommittedAt DateTime?
+  /// Committed bracket rounds: { round, scores, overrides } per advanced round.
+  bracketState       Json?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   tournament     TournamentShell    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -7914,6 +7919,14 @@ model TournamentParticipant {
   advancementHistory   Json?
   roundRosterIds       Json?
   roundFaabBalances    Json?
+  /// Divisions format: when this entrant first watched their league reveal (it plays once).
+  revealSeenAt         DateTime?
+  /// Divisions format: preferred division number (1 or 2), honoured only while divisions stay balanced.
+  divisionPreference   Int?
+  /// Divisions format: when this entrant joined the waitlist. Strict FIFO order; never updatedAt.
+  queuedAt             DateTime?
+  /// Divisions format: who shared the personal invite link. Affects placement only if the commissioner allows grouping.
+  invitedByUserId      String?
   createdAt            DateTime                      @default(now())
   updatedAt            DateTime                      @updatedAt
   leagueParticipations TournamentLeagueParticipant[]
