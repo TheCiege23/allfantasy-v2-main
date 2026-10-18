@@ -495,7 +495,9 @@ export async function executeLeagueSettingsPatch(
   ])
   if (leagueKeys.some((k) => derivedSyncKeys.has(k))) {
     try {
-      await syncCommissionerDerivedLeagueState(leagueId)
+      // Only the columns this save wrote: the playoffs and waivers panels write the derived copies
+      // directly, and mirroring an untouched (stale) column would revert what they saved.
+      await syncCommissionerDerivedLeagueState(leagueId, leagueKeys)
       updatedFieldNames.push('derived_playoff_waiver_sync')
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncCommissionerDerivedLeagueState', e)
