@@ -40,7 +40,21 @@ import {
   shareCardsFor,
   type SGVisualInput,
 } from '@/lib/survivor-guillotine/visual-model'
+import {
+  buildBladeMeter, buildMultiRace, buildReversals, buildTribeDraw, buildTribeSetupView, sgChopCardFromHistory,
+  type SGOwnPlayer, type SGReleasedPlayer, type SGReversalRow,
+} from '@/lib/survivor-guillotine/visual-boards'
+import { SGChopCardView, SGLineupMeter, SGMultiRaceBoard, SGReversalCard, SGTribeDrawCard, SGTribeSetupCard, SGWaiversCard } from './SGBoards'
 import s from './survguil.module.css'
+
+export type SGVisualExtras = {
+  ownPlayers?: SGOwnPlayer[]
+  releasedPlayers?: SGReleasedPlayer[]
+  reversals?: SGReversalRow[]
+  faabRemaining?: number | null
+  /** Opens the private Chimmy power panel for this power (the existing control below the set). */
+  onPlayPower?: (powerId: string) => void
+}
 
 function cx(...p: Array<string | false | null | undefined>) {
   return p.filter(Boolean).join(' ')
@@ -67,10 +81,12 @@ export function SGVisualSet({
   input,
   leagueId,
   isCommissioner,
+  extras = {},
 }: {
   input: SGVisualInput
   leagueId: string
   isCommissioner: boolean
+  extras?: SGVisualExtras
 }) {
   const { season } = input
   const reduced = usePrefersReducedMotion()
@@ -82,6 +98,13 @@ export function SGVisualSet({
   const timeline = useMemo(() => buildTimeline(input), [input])
   const shares = useMemo(() => shareCardsFor(input), [input])
   const mergeAt = sgMergePeriod(season.config)
+  const meter = useMemo(() => buildBladeMeter(input, race), [input, race])
+  const multi = useMemo(() => buildMultiRace(race), [race])
+  const draw = useMemo(() => buildTribeDraw(input, extras.ownPlayers ?? []), [input, extras.ownPlayers])
+  const setupView = useMemo(() => buildTribeSetupView(season.config), [season.config])
+  const reversals = useMemo(() => buildReversals(extras.reversals ?? [], input.teams, season.periodHistory), [extras.reversals, input.teams, season.periodHistory])
+  const heldImmunity = vault.mine.find((p) => p.status === 'held' && (p.kind === 'personal_immunity' || p.kind === 'ally_immunity')) ?? null
+  const teamName = (id: string) => input.teams.find((t) => t.legacyRosterId === id)?.teamName ?? 'A chopped team'
   const alive = torches.filter((t) => t.lit).length
 
   const completed = useMemo(() => Object.entries(season.periodHistory)
@@ -123,6 +146,8 @@ export function SGVisualSet({
 
   const main = (
     <>
+      {meter ? <SGLineupMeter meter={meter} heldIdolId={heldImmunity?.id ?? null} idolLabel={heldImmunity?.label ?? null}
+        onPlayIdol={extras.onPlayPower} lockText={lockAt ? new Date(lockAt).toLocaleString() : null} /> : null}
       <SpecialtyCard id="sg-race" label={`Tribe race · ${season.currentPeriod ? `period ${season.currentPeriod}` : 'before period 1'}`} testId="sg-race">
         <div className={s.scene}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -149,11 +174,7 @@ export function SGVisualSet({
               </div>
             ) : (
               <>
-                <ol className={s.timeline} aria-label="Tribe standings">
-                  {[...race.tribes].sort((a, b) => (b.metric ?? b.totalPoints) - (a.metric ?? a.totalPoints)).map((t, i) => (
-                    <li key={t.tribeId}><b>#{i + 1}</b><span><span className={s.cinzel} style={{ color: t.color }}>{t.name}</span> · {t.metricLabel} <span className={s.mono}>{fmt(t.metric ?? t.totalPoints, t.metricLabel)}</span></span></li>
-                  ))}
-                </ol>
+                <SGMultiRaceBoard rows={multi} />
                 <p className={s.raceSummary}>{race.summary}</p>
               </>
             )}
@@ -243,6 +264,11 @@ export function SGVisualSet({
         )}
       </SpecialtyCard>
 
+      {latest ? <SGChopCardView card={sgChopCardFromHistory(Number(latest[0]), latest[1], input.teams)} /> : null}
+      <SGReversalCard rows={reversals} />
+      <SGWaiversCard players={extras.releasedPlayers ?? []} faab={extras.faabRemaining ?? null}
+        waiverHref={`/waiver-wire?leagueId=${encodeURIComponent(leagueId)}`} teamName={teamName} />
+
       <SpecialtyCard label={`Torches · ${alive} of ${torches.length} still lit`} icon={`${SG_ART}/torch-lit.svg`} testId="sg-torches">
         {torches.length === 0 ? <p style={{ margin: 0, color: '#b9c0d0' }}>Managers appear here once teams are claimed.</p> : (
           <div className={s.torches}>
@@ -281,6 +307,7 @@ export function SGVisualSet({
 
   const rail = (
     <>
+      <SGTribeDrawCard draw={draw} />
       <SpecialtyCard id="sg-vault" label="Your hidden powers" testId="sg-vault" borderColor="rgba(59,179,184,.45)">
         {vault.mine.length === 0 ? <p style={{ margin: 0, color: '#b9c0d0' }}>No powers on your team. Hidden powers are visible only to their owner.</p> : vault.mine.map((p) => (
           <div key={p.id} className={s.idol}>
@@ -297,6 +324,7 @@ export function SGVisualSet({
         <p style={{ marginTop: 10, fontSize: 13, color: '#9aa3b8' }}>Use a power privately with Chimmy from the powers panel below. Nobody else is told until the reveal.</p>
       </SpecialtyCard>
 
+      <SGTribeSetupCard view={setupView} rulesHref={isCommissioner ? `/survivor-guillotine/setup?leagueId=${encodeURIComponent(leagueId)}` : null} />
       <SpecialtyCard label="How it works">
         <SpecialtyRules rules={[
           'Tribes race each period: Match Play counts matchup wins; Tribe Champion compares each tribe\'s champion.',
