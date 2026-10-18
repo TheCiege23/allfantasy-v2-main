@@ -44,6 +44,8 @@ export interface ZombieSummary {
     status: string | null
     backgroundTheme: string
     teamCount: number
+    /** Null when the league is not part of a universe. */
+    universeId?: string | null
   }
   /** Already redacted: a hidden Whisperer is a Survivor here, as everywhere else in this payload. */
   myStatus?: string | null

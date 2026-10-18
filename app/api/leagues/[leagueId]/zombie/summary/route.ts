@@ -259,6 +259,8 @@ export async function GET(
       status: zl?.status ?? null,
       backgroundTheme: zombieThemeForLeague(zl?.themeLabel, leagueId),
       teamCount: rosters.length,
+      /** For the universe map on the home (null when the league is not in a universe). */
+      universeId: zl?.universeId ?? null,
     },
     myStatus: myRosterId ? statusOf(myRosterId) : null,
     // A Whisperer is never revived, so this list cannot single one out.
