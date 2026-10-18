@@ -191,6 +191,7 @@ export default function LeagueChatSurface({
             leagueName={leagueName}
             isCommissioner={isCommissioner}
             defaultOpen
+            channels
             className="h-full min-h-[520px]"
           />
         </div>
