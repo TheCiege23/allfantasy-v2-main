@@ -59,6 +59,7 @@ export interface SurvivorSeasonCalendar {
 
 export interface SurvivorSummaryTribe {
   logoUrl?: string | null
+  colorHex?: string | null
   id: string
   name: string
   emoji?: string | null
@@ -103,6 +104,10 @@ export interface SurvivorSummary {
   seasonCalendar?: SurvivorSeasonCalendar
   currentWeek: number
   tribeScores?: Record<string, number>
+  /** This week's counted score per main roster. */
+  memberScores?: Record<string, number>
+  /** Main rosters holding individual immunity this week. */
+  immunityRosterIds?: string[]
   scoresFinalized?: boolean
   nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]

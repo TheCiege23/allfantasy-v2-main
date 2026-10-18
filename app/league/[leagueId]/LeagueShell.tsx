@@ -139,6 +139,7 @@ import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
+import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
 import { SurvivorLeagueDeepLinkPanel } from '@/components/survivor/SurvivorLeagueDeepLinkPanel'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
 import { BigBrotherFirstEntryModal } from '@/components/big-brother/BigBrotherFirstEntryModal'
@@ -2166,6 +2167,9 @@ function LeagueTabRouter({
 
   switch (activeTab) {
     case 'native_home':
+      if (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor') {
+        return <SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} />
+      }
       return <NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} />
     case 'home':
       return (

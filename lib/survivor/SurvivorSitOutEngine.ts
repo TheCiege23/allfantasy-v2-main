@@ -130,7 +130,7 @@ export async function settleNbaTribeSitOutDeadline(leagueId: string, week: numbe
     await enqueueNotification(leagueId, 'tribe_shuffle_recommendation', {
       recipientRole: 'commissioner', title: 'Tribe balance needs a redraw',
       body: 'No eligible sit-out rotation can balance tribe totals this week. Review the tribe switch.',
-      deepLinkPath: `/league/${leagueId}/survivor/commissioner`, urgency: 'high', isSpoilerSafe: true,
+      deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`, urgency: 'high', isSpoilerSafe: true,
     })
   }
   return result.status
