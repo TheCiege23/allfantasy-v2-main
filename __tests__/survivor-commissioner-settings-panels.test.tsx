@@ -47,11 +47,16 @@ describe('Survivor commissioner settings panels', () => {
     expect(JSON.parse(String(call?.[1]?.body)).settings).toEqual({ exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4 })
   })
 
-  it('loads idol count and implemented power choices from the existing state route', async () => {
+  it('opens the commissioner idol setup from the idol-setup route', async () => {
+    const { BUNDLED_SURVIVOR_IDOL_TYPES } = await import('@/lib/survivor/survivorIdolTypes')
+    fetchMock.mockImplementation(async () => ({ ok: true, json: async () => ({
+      types: BUNDLED_SURVIVOR_IDOL_TYPES, isCommissioner: true, locked: false, resolvedTypeIds: null, resolved: false, saved: true,
+      config: { mode: 'random', count: 8, hideFromCommish: false, pickedTypeIds: [], pointSurgePct: 15, tributePct: 10 },
+    }) }))
     render(<SurvivorIdolsPanel leagueId="nba-1" canEdit hasAfCommissionerSub={false} />)
-    await screen.findByText('Idols assigned after draft')
-    expect(screen.getByRole('spinbutton')).toHaveValue(8)
-    expect(screen.getByText('Vote Steal')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledWith('/api/leagues/nba-1/survivor/state', expect.any(Object))
+    await screen.findByText('Hidden idols')
+    expect(screen.getByRole('radio', { name: '8' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: 'Lock idols for the draft' })).toBeEnabled()
+    expect(fetchMock).toHaveBeenCalledWith('/api/leagues/nba-1/survivor/idol-setup', expect.any(Object))
   })
 })

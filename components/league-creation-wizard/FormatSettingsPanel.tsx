@@ -62,8 +62,11 @@ export function SurvivorSettingsPanel({ settings, onChange, sport }: SurvivorSet
       {settings.idolsEnabled && (
         <div className="w-32">
           <label className="mb-1 block text-xs text-white/50">Idol count</label>
-          <Input type="number" min={1} max={20} value={settings.idolCount}
-            onChange={(e) => onChange({ idolCount: Number(e.target.value) || 9 })} />
+          <select value={[6, 7, 8].includes(settings.idolCount) ? settings.idolCount : 7}
+            onChange={(e) => onChange({ idolCount: Number(e.target.value) })}
+            className="h-10 w-full rounded-md border border-white/15 bg-transparent px-2 text-sm text-white">
+            {[6, 7, 8].map(count => <option key={count} value={count}>{count}</option>)}
+          </select>
         </div>
       )}
     </div>
