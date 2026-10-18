@@ -34,10 +34,22 @@ const MIN_RAIL_REFRESH_MS = 10_000
  * four times quieter when it does not. The caller owns the decision, so there is one authority
  * for "is anything live" rather than a second copy here.
  */
-export function useLiveRailScores(leagues: RailLeague[], enabled: boolean, refreshMs: number) {
+export function useLiveRailScores(
+  leagues: RailLeague[],
+  enabled: boolean,
+  refreshMs: number,
+  /**
+   * Native leagues whose server snapshot carries a native row (`RailMatchupSummary.native`) — a
+   * guillotine line or a native head-to-head. The route answers them from the database, not a provider.
+   */
+  nativeIds: readonly string[] = [],
+) {
   const [scores, setScores] = useState<Record<string, LiveRailScore>>({})
   const [delayed, setDelayed] = useState<string[]>([])
-  const idsKey = JSON.stringify(leagues.filter(league => league.platform.toLowerCase() === 'sleeper' && !league.syncPaused).map(league => league.id))
+  const idsKey = JSON.stringify([...new Set([
+    ...leagues.filter(league => league.platform.toLowerCase() === 'sleeper' && !league.syncPaused).map(league => league.id),
+    ...nativeIds.filter(id => leagues.some(league => league.id === id && !league.syncPaused)),
+  ])])
   useEffect(() => {
     if (!enabled) return
     const ids: string[] = JSON.parse(idsKey)

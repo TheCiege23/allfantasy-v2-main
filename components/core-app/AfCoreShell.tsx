@@ -29,6 +29,7 @@ import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
+import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
@@ -155,6 +156,10 @@ export type RailMatchupSummary = {
   scored: boolean
   freshAt?: string | null
   source?: 'live_cache' | 'history_fallback'
+  /** A native guillotine league's score line (lib/core-app/railGuillotineLine.ts). Drawn instead of `standing`. */
+  guillotine?: RailGuillotineLine | null
+  /** Built from the native tables; polled through /api/core/rail-scores like a Sleeper row. */
+  native?: boolean
 }
 
 export type CoreNavKey =
@@ -1436,12 +1441,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * is `railOpen` — whether the list is expanded — which says nothing about whether a game is
    * on, so the CADENCE is what has to answer that. See the note on `useLiveRailScores`.
    */
+  /* Native rows (guillotine line, native head-to-head) refresh through the same route — DB-first there. */
+  const nativeRailIds = useMemo(
+    () => Object.entries(props.railMatchups ?? {}).filter(([, m]) => m.native).map(([id]) => id),
+    [props.railMatchups],
+  )
   const liveRail = useLiveRailScores(
     leagues,
     railOpen,
     coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0),
+    nativeRailIds,
   )
-  const liveWeek = Object.values(liveRail.scores)[0]?.week
+  /* The heading names the NFL provider week; a native row runs on its own league's calendar. */
+  const liveWeek = Object.values(liveRail.scores).find((s) => !s.native)?.week
   const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
   const railRef = useRef<HTMLElement>(null)
   const railHandleRef = useRef<HTMLButtonElement>(null)
