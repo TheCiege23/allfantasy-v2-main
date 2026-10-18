@@ -7,6 +7,7 @@ import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { isMergeTriggered } from './SurvivorMergeEngine'
 import { getActiveRosterIdsForLeague } from './SurvivorRosterState'
 import { getSeasonPointsFromRosterPerformance } from './SurvivorVoteEngine'
+import { afterWinnerCrowned } from './shareCards/hooks'
 
 const MAX_FINALISTS = 3
 
@@ -327,5 +328,7 @@ export async function recordCrownedWinner(leagueId: string, state: SurvivorFinal
   const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
   if (channel) await prisma.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
     contentType: 'host_announcement', content: `The jury has spoken. ${winnerName} is the Sole Survivor.` } })
+  // Share cards: the champion card, offered to the winner and to the league as a recap.
+  afterWinnerCrowned(leagueId)
   return { winnerUserId }
 }

@@ -24,6 +24,7 @@ import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStar
 import { openTribalCouncil as openVerifiedCouncil, closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
+import { afterWeeklyScoresFinalized } from '@/lib/survivor/shareCards/hooks'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
@@ -391,6 +392,8 @@ export async function finalizeWeeklyScores(leagueId: string, week: number): Prom
       needsTribalLock: plan ? plan.eliminationWeeks.includes(week) : true,
     },
   })
+  // Share cards: the immunity winner's card, once scores are final.
+  afterWeeklyScoresFinalized(leagueId, week)
 }
 
 function tribalVoteWindowHoursFromLeague(settings: unknown): number {
