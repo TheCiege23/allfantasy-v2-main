@@ -47,14 +47,22 @@ function initials(name: string): string {
   return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase()
 }
 
+function basisNote(row: LookaheadRow): string {
+  const t = row.tendency
+  if (t.basis === 'history') return ` · from ${t.historyDrafts} past draft${t.historyDrafts === 1 ? '' : 's'}`
+  if (t.basis === 'blend') return ` · this draft + ${t.historyDrafts} past draft${t.historyDrafts === 1 ? '' : 's'}`
+  return ''
+}
+
 function habitLine(row: LookaheadRow): string {
   const t = row.tendency
   if (row.isAuto && t.kind === 'unknown') return 'Auto-drafting · follows best available'
   if (t.kind === 'unknown' || t.averageDelta == null) return 'Not enough picks with ADP to read yet'
   const avg = Math.abs(t.averageDelta).toFixed(1)
-  if (t.kind === 'reacher') return `Picks ${avg} spots before ADP on average`
-  if (t.kind === 'value_hunter') return `Picks ${avg} spots after ADP on average`
-  return `Picks within 2 spots of ADP (${formatAdpDelta(t.averageDelta)})`
+  const note = basisNote(row)
+  if (t.kind === 'reacher') return `Picks ${avg} spots before ADP on average${note}`
+  if (t.kind === 'value_hunter') return `Picks ${avg} spots after ADP on average${note}`
+  return `Picks within 2 spots of ADP (${formatAdpDelta(t.averageDelta)})${note}`
 }
 
 function IntelRow({ row, sport }: { row: LookaheadRow; sport?: string }) {
@@ -136,7 +144,7 @@ function DraftIntelPanelInner({ lookahead, idle, sport, formatPickLabel }: Draft
           {windowLabel ? ` · ${windowLabel}` : ''}
         </p>
         <p className="mt-0.5 text-[11px] text-white/55">
-          Style comes from this draft&apos;s picks vs ADP. &ldquo;Likely&rdquo; is an estimate: best ADP that fills a need.
+          Style comes from picks vs ADP in this draft and the manager&apos;s past drafts. &ldquo;Likely&rdquo; is an estimate: best ADP that fills a need.
         </p>
       </div>
       {rows.length === 0 ? (

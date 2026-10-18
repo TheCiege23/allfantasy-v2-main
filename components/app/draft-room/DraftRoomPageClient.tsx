@@ -104,6 +104,7 @@ import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanni
 import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
 import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
 import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
+import type { ManagerHistorySummary } from '@/lib/draft-room/managerDraftHistory'
 import { buildPlayerDraftOutlook, pickYoureUpSuggestion } from '@/lib/draft-room/playerDraftOutlook'
 import { YoureUpAlert } from '@/components/app/draft-room/YoureUpAlert'
 import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
@@ -2951,6 +2952,30 @@ export function DraftRoomPageClient({
     return [...new Set([...fromComm, ...aiOpponentRosterIds])]
   }, [commissionerAiDraft?.assignedAiTeams, aiOpponentRosterIds])
   /** Intel tab — picks other managers make before the viewer's next turn (lib/draft-room/draftIntelLookahead). */
+  /**
+   * Each roster's tendency across its manager's past drafts. Fetched once per league and
+   * draft type, not per poll: it only changes when another draft completes. On any failure
+   * the Intel tab simply reads this draft alone.
+   */
+  const [managerHistoryByRoster, setManagerHistoryByRoster] = useState<
+    Record<string, ManagerHistorySummary | null>
+  >({})
+  const intelHistoryEnabled = Boolean(leagueId) && session != null && session.draftType !== 'auction'
+  useEffect(() => {
+    if (!intelHistoryEnabled) return
+    let cancelled = false
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/manager-history`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled || !body || typeof body.historyByRoster !== 'object' || body.historyByRoster == null) return
+        setManagerHistoryByRoster(body.historyByRoster as Record<string, ManagerHistorySummary | null>)
+      })
+      .catch(() => null)
+    return () => {
+      cancelled = true
+    }
+  }, [leagueId, intelHistoryEnabled])
+
   const intelLookahead = useMemo(() => {
     if (!session || session.draftType === 'auction') return null
     if (session.status !== 'in_progress' && session.status !== 'paused') return null
@@ -2970,8 +2995,9 @@ export function DraftRoomPageClient({
       viewerRosterId: (session as DraftSessionSnapshot).currentUserRosterId ?? null,
       starterSlots: rosterConfig?.starterSlots ?? null,
       autoRosterIds: new Set([...aiManagedRosterIds, ...((session as DraftSessionSnapshot).orphanRosterIds ?? [])]),
+      historyByRoster: managerHistoryByRoster,
     })
-  }, [session, currentPick?.overall, pulseAvailablePlayers, players, rosterConfig?.starterSlots, aiManagedRosterIds])
+  }, [session, currentPick?.overall, pulseAvailablePlayers, players, rosterConfig?.starterSlots, aiManagedRosterIds, managerHistoryByRoster])
   /** Player table LEFT @ column — the viewer's next pick after any picks they make now. */
   const leftAtPick = useMemo(() => {
     const overall = intelLookahead?.viewerNextOverall

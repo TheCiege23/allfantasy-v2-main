@@ -66,3 +66,101 @@ describe('blendManagerTendency', () => {
     expect(t.averageDelta).toBeCloseTo(-5, 5)
   })
 })
+
+describe('buildManagerHistoryByRoster', async () => {
+  const { buildManagerHistoryByRoster, managerIdentity, adpFromPickMetadata } = await import(
+    '@/lib/draft-room/managerHistoryReads'
+  )
+  const { buildAdpLookup } = await import('@/lib/draft-room/draftPulse')
+
+  const day = (n: number) => new Date(Date.UTC(2026, 0, n))
+  const roster = (id: string, leagueId: string, platformUserId: string) => ({ id, leagueId, platformUserId })
+  const pick = (sessionId: string, rosterId: string, overall: number, adp: number | null, name = `P${overall}`) => ({
+    sessionId,
+    rosterId,
+    overall,
+    playerId: null,
+    playerName: name,
+    position: 'RB',
+    pickMetadata: adp == null ? { archive: {} } : { adpAtPick: adp },
+  })
+
+  it('links a manager across leagues by platform user id and maps it back to this draft’s roster', () => {
+    const out = buildManagerHistoryByRoster({
+      currentRosters: [roster('cur-1', 'L0', 'u-alice'), roster('cur-2', 'L0', 'u-bob')],
+      identityRosters: [roster('old-a', 'L1', 'u-alice'), roster('old-b', 'L1', 'u-bob')],
+      pastSessions: [{ id: 's1', leagueId: 'L1', updatedAt: day(1) }],
+      picks: [pick('s1', 'old-a', 10, 16), pick('s1', 'old-a', 20, 24), pick('s1', 'old-b', 11, 8)],
+      lookupByLeague: new Map(),
+    })
+    expect(out['cur-1']).toEqual({ averageDelta: -5, sample: 2, drafts: 1 })
+    expect(out['cur-2']).toEqual({ averageDelta: 3, sample: 1, drafts: 1 })
+  })
+
+  it('falls back to the league pool when a past pick did not record its ADP, and skips it when neither exists', () => {
+    const out = buildManagerHistoryByRoster({
+      currentRosters: [roster('cur', 'L0', 'u')],
+      identityRosters: [roster('old', 'L1', 'u'), roster('old2', 'L2', 'u')],
+      pastSessions: [
+        { id: 's1', leagueId: 'L1', updatedAt: day(1) },
+        { id: 's2', leagueId: 'L2', updatedAt: day(2) },
+      ],
+      picks: [pick('s1', 'old', 10, null, 'Pooled Guy'), pick('s2', 'old2', 30, null, 'Nobody')],
+      lookupByLeague: new Map([['L1', buildAdpLookup([{ name: 'Pooled Guy', position: 'RB', adp: 4 }])]]),
+    })
+    expect(out.cur).toEqual({ averageDelta: 6, sample: 1, drafts: 1 })
+  })
+
+  it('keeps only the newest drafts per manager', () => {
+    const out = buildManagerHistoryByRoster({
+      currentRosters: [roster('cur', 'L0', 'u')],
+      identityRosters: [roster('old', 'L1', 'u')],
+      pastSessions: [
+        { id: 'old-draft', leagueId: 'L1', updatedAt: day(1) },
+        { id: 'new-draft', leagueId: 'L1', updatedAt: day(9) },
+      ],
+      picks: [pick('old-draft', 'old', 10, 30), pick('new-draft', 'old', 10, 6)],
+      lookupByLeague: new Map(),
+      maxDraftsPerManager: 1,
+    })
+    expect(out.cur).toEqual({ averageDelta: 4, sample: 1, drafts: 1 })
+  })
+
+  it('never builds history for orphan or AI-manager rosters, whose ids are generated', () => {
+    expect(managerIdentity('orphan-3')).toBeNull()
+    expect(managerIdentity('ai-manager-7')).toBeNull()
+    expect(managerIdentity('  ')).toBeNull()
+    expect(managerIdentity('u-real')).toBe('u-real')
+    const out = buildManagerHistoryByRoster({
+      currentRosters: [roster('cur', 'L0', 'orphan-1')],
+      identityRosters: [roster('old', 'L1', 'orphan-1')],
+      pastSessions: [{ id: 's1', leagueId: 'L1', updatedAt: day(1) }],
+      picks: [pick('s1', 'old', 10, 2)],
+      lookupByLeague: new Map(),
+    })
+    expect(out.cur).toBeNull()
+  })
+
+  it('reads adpAtPick from pick metadata only when it is a positive number', () => {
+    expect(adpFromPickMetadata({ adpAtPick: 12.5 })).toBe(12.5)
+    expect(adpFromPickMetadata({ adpAtPick: 0 })).toBeNull()
+    expect(adpFromPickMetadata({ adpAtPick: '12' })).toBeNull()
+    expect(adpFromPickMetadata(null)).toBeNull()
+  })
+})
+
+describe('poolEntriesFromPayload', async () => {
+  const { poolEntriesFromPayload } = await import('@/lib/draft-room/adpAtPick')
+  it('reads name / position / playerId / adp and drops malformed entries', () => {
+    expect(
+      poolEntriesFromPayload({
+        entries: [{ name: 'A', position: 'QB', playerId: 'p1', adp: 3 }, { name: 'B' }, null, { name: 'C', position: 'WR', adp: 'x' }],
+      }),
+    ).toEqual([
+      { name: 'A', position: 'QB', playerId: 'p1', adp: 3 },
+      { name: 'C', position: 'WR', playerId: null, adp: null },
+    ])
+    expect(poolEntriesFromPayload(null)).toEqual([])
+    expect(poolEntriesFromPayload({ entries: 'nope' })).toEqual([])
+  })
+})
