@@ -57,6 +57,11 @@ export async function sealTribeSwap(leagueId: string, week: number, swapType = '
   // The audit carries no assignment: the draw stays sealed even from audit readers.
   await prisma.survivorAuditEntry.create({ data: { leagueId, week, category: 'tribe', action: 'tribe_swap_sealed', data: { swapId: swap.id, swapType, revealAt: revealAt.toISOString() }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
   await postLeagueAnnouncement(prisma, leagueId, 'Drop your buffs. The tribes have been redrawn, and the new tribes stay sealed until the next lineup lock.').catch(() => {})
+  // survivor-core §5 "Tribe swap": 24h before the reveal (now, if the reveal is closer). No assignment in it.
+  const dayBefore = new Date(revealAt.getTime() - 24 * 60 * 60 * 1000)
+  await import('./notificationEngine')
+    .then(({ enqueueSurvivorCoreNotification }) => enqueueSurvivorCoreNotification(leagueId, { kind: 'tribe_swap' }, { role: 'active' }, dayBefore > now ? dayBefore : undefined))
+    .catch(() => {})
   return { id: swap.id, revealAt }
 }
 

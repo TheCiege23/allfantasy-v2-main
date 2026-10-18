@@ -17,6 +17,26 @@ import type { ShareMomentPayload } from './types'
  * and the lazy `syncLeagueShareMoments` backstop can both run without double-creating.
  */
 
+/**
+ * survivor-core §5: the moment a capture CREATES its moment is the moment the league has been shown
+ * the fact (read complete, scores final, return resolved, winner crowned), so the matching
+ * notification is queued there, once per event. The lazy backstop passes `notify: false`: a moment
+ * it fills in late is not news any more.
+ */
+export interface CaptureOptions { notify?: boolean }
+
+type CoreNotificationArgs = Parameters<typeof import('@/lib/survivor/notificationEngine').enqueueSurvivorCoreNotification>
+
+async function notifyCore(opts: CaptureOptions, ...args: CoreNotificationArgs): Promise<void> {
+  if (opts.notify === false) return
+  try {
+    const { enqueueSurvivorCoreNotification } = await import('@/lib/survivor/notificationEngine')
+    await enqueueSurvivorCoreNotification(...args)
+  } catch (error) {
+    console.warn('[survivor-notify] could not queue notification:', error instanceof Error ? error.message : 'unknown error')
+  }
+}
+
 const JURY_PHASES = new Set(['merge', 'post_merge', 'jury', 'finale'])
 const PROTECTIVE_POWERS = new Set(['vote_shield', 'protect_self', 'immunity'])
 
@@ -130,7 +150,7 @@ async function resolveSubject(leagueId: string, userId: string | null, rosterId:
 }
 
 /** Out + idol moments for a revealed council. Called after `revealCouncil` commits. */
-export async function captureCouncilShareMoments(leagueId: string, councilId: string): Promise<number> {
+export async function captureCouncilShareMoments(leagueId: string, councilId: string, opts: CaptureOptions = {}): Promise<number> {
   const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
   if (!council || !council.isRevealed) return 0
   const facts = await leagueFacts(leagueId)
@@ -161,7 +181,10 @@ export async function captureCouncilShareMoments(leagueId: string, councilId: st
           next,
         },
       })
-      if (result.created) created++
+      if (result.created) {
+        created++
+        await notifyCore(opts, leagueId, { kind: 'torch_out', week: council.week, next }, { userId: subject.userId })
+      }
     }
   }
 
@@ -236,7 +259,7 @@ async function recomputedNecklaceWinners(
  * been awarded and nothing is created (the lazy backstop picks it up later). Only on a client
  * generated before that table was migrated does it fall back to recomputing from final scores.
  */
-export async function captureImmunityShareMoment(leagueId: string, week: number): Promise<number> {
+export async function captureImmunityShareMoment(leagueId: string, week: number, opts: CaptureOptions = {}): Promise<number> {
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { weekScoringFinalAt: true, mergeTriggeredAt: true, phase: true } })
   if (!game?.weekScoringFinalAt) return 0
   const facts = await leagueFacts(leagueId)
@@ -266,13 +289,16 @@ export async function captureImmunityShareMoment(leagueId: string, week: number)
         immunityWins: prior + 1,
       },
     })
-    if (result.created) created++
+    if (result.created) {
+      created++
+      await notifyCore(opts, leagueId, { kind: 'immunity_won', week }, { userId: subject.userId })
+    }
   }
   return created
 }
 
 /** Public Exile returns, from the audit entries the return engines write. */
-export async function captureExileReturnShareMoments(leagueId: string): Promise<number> {
+export async function captureExileReturnShareMoments(leagueId: string, opts: CaptureOptions = {}): Promise<number> {
   const entries = await prisma.survivorAuditEntry.findMany({
     where: { leagueId, action: 'return_to_island', isVisibleToPublic: true, targetUserId: { not: null } },
     select: { id: true, week: true, targetUserId: true, data: true },
@@ -300,13 +326,16 @@ export async function captureExileReturnShareMoments(leagueId: string): Promise<
         rejoinWeek: week + 1,
       },
     })
-    if (result.created) created++
+    if (result.created) {
+      created++
+      await notifyCore(opts, leagueId, { kind: 'back_from_exile' }, { userId: subject.userId })
+    }
   }
   return created
 }
 
 /** The champion card, once the jury session records a revealed winner. */
-export async function captureChampionShareMoment(leagueId: string): Promise<number> {
+export async function captureChampionShareMoment(leagueId: string, opts: CaptureOptions = {}): Promise<number> {
   const session = await prisma.jurySession.findUnique({ where: { leagueId }, select: { winnerId: true, winnerName: true, revealedAt: true } })
   if (!session?.winnerId || !session.revealedAt) return 0
   const facts = await leagueFacts(leagueId)
@@ -332,7 +361,9 @@ export async function captureChampionShareMoment(leagueId: string): Promise<numb
       points: await seasonPoints(leagueId, subject.userId),
     },
   })
-  return result.created ? 1 : 0
+  if (!result.created) return 0
+  await notifyCore(opts, leagueId, { kind: 'season_champion', championName: subject.displayName || session.winnerName || 'The champion', leagueName: facts.leagueName }, { role: 'all' })
+  return 1
 }
 
 /**
@@ -341,6 +372,8 @@ export async function captureChampionShareMoment(leagueId: string): Promise<numb
  * and capture) still appears. Immunity is backfilled for the current finalized week only: whether
  * a past week was pre- or post-merge is not recorded per week, so the score-final hook owns history.
  */
+const LATE: CaptureOptions = { notify: false }
+
 export async function syncLeagueShareMoments(leagueId: string): Promise<void> {
   const [councils, existing] = await Promise.all([
     prisma.survivorTribalCouncil.findMany({
@@ -358,10 +391,10 @@ export async function syncLeagueShareMoments(leagueId: string): Promise<void> {
       ...(!council.isTie && (council.eliminatedUserId || council.eliminatedRosterId) ? [`out:${council.id}`] : []),
       ...playsOf(council.idolsPlayed).map(play => `idol:${council.id}:${play.idolId}`),
     ]
-    if (wants.some(key => !have.has(key))) await captureCouncilShareMoments(leagueId, council.id)
+    if (wants.some(key => !have.has(key))) await captureCouncilShareMoments(leagueId, council.id, LATE)
   }
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true, weekScoringFinalAt: true } })
-  if (game?.weekScoringFinalAt && game.currentWeek > 0) await captureImmunityShareMoment(leagueId, game.currentWeek)
-  await captureExileReturnShareMoments(leagueId)
-  if (!have.has('champ')) await captureChampionShareMoment(leagueId)
+  if (game?.weekScoringFinalAt && game.currentWeek > 0) await captureImmunityShareMoment(leagueId, game.currentWeek, LATE)
+  await captureExileReturnShareMoments(leagueId, LATE)
+  if (!have.has('champ')) await captureChampionShareMoment(leagueId, LATE)
 }
