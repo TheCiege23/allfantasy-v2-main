@@ -98,6 +98,7 @@ export async function GET(req: NextRequest) {
       survivorMode: true,
       survivorTribeCount: true,
       survivorMergeWeek: true,
+      survivorRevealMode: true,
       settings: true,
     },
   })
@@ -142,7 +143,7 @@ export async function GET(req: NextRequest) {
       isJuryMember: p.isJuryMember, isFinalist: p.isFinalist,
       hasImmunityThisWeek: p.hasImmunityThisWeek,
     })),
-    activeCouncil: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
+    activeCouncil: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes, { revealMode: league?.survivorRevealMode }),
     currentChallenge: access.decisions.canSeeHiddenIdolAssignments ? challenge : challenge && {
       id: challenge.id, week: challenge.week, title: challenge.title, description: challenge.description,
       instructions: challenge.instructions, scope: challenge.scope, status: challenge.status,

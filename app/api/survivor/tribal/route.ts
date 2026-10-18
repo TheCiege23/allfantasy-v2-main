@@ -17,6 +17,7 @@ import { enrollJuryMember, shouldJoinJury } from '@/lib/survivor/SurvivorJuryEng
 import { postLeagueRevealFollowUp, postScrollRevealToTribeChat } from '@/lib/survivor/leagueChatPoster'
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
+import { normalizeRevealPacing, revealVisibleCount, toPublicRevealSteps } from '@/lib/survivor/survivorRevealGate'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -121,20 +122,24 @@ export async function POST(req: NextRequest) {
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
     const council = await prisma.survivorTribalCouncil.findUnique({
       where: { id: councilId, leagueId },
-      select: { revealSequence: true },
+      select: { revealSequence: true, isRevealed: true, revealStartsAt: true, revealStep: true },
     })
     if (!council) return NextResponse.json({ error: 'Council not found' }, { status: 404 })
-    const seq = Array.isArray(council.revealSequence) ? (council.revealSequence as unknown[]) : []
-    if (seq.length === 0) return NextResponse.json({ step: null, remaining: 0 })
-    const [step, ...remainingSeq] = seq
+    // Publishing the read (chat post, notification, revote) belongs to revealCouncil; this only
+    // paces a read that has started. The stored sequence is never mutated, so Replay keeps working.
+    if (!council.isRevealed) return NextResponse.json({ error: 'Publish the Torch Ceremony before reading votes.' }, { status: 409 })
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } })
+    const total = toPublicRevealSteps(council.revealSequence).length
+    const pacing = normalizeRevealPacing(league?.survivorRevealMode)
+    const now = new Date()
+    const visible = revealVisibleCount({ isRevealed: true, revealStartsAt: council.revealStartsAt, revealStep: council.revealStep, total, pacing, now })
+    if (visible >= total) return NextResponse.json({ revealStep: total, visibleSteps: total, totalSteps: total, remaining: 0 })
+    const revealStep = visible + 1
     await prisma.survivorTribalCouncil.update({
       where: { id: councilId },
-      data: {
-        revealSequence: remainingSeq as object,
-        ...(remainingSeq.length === 0 && { isRevealed: true }),
-      },
+      data: { revealStep },
     })
-    return NextResponse.json({ step, remaining: remainingSeq.length })
+    return NextResponse.json({ revealStep, visibleSteps: revealStep, totalSteps: total, remaining: total - revealStep })
   }
 
   if (action === 'eliminate') {

@@ -96,7 +96,7 @@ export async function GET(
 
   const leagueMeta = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, name: true },
+    select: { sport: true, name: true, survivorRevealMode: true },
   })
   const seasonCalendar = seasonWeekBoundsForSport(leagueMeta?.sport, config.regularSeasonEndWeek ?? null)
 
@@ -258,7 +258,7 @@ export async function GET(
 
   const privacy = await resolveSurvivorAccessContext(leagueId, userId)
   if (!privacy?.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes)
+  const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes, { revealMode: leagueMeta?.survivorRevealMode })
 
   const body = {
     leagueName: leagueMeta?.name ?? 'Survivor League',
@@ -322,6 +322,12 @@ export async function GET(
           closedAt: publicCouncil.closedAt,
           eliminatedRosterId: publicCouncil?.eliminatedRosterId ?? null,
           revealSequence: publicCouncil?.revealSequence ?? null,
+          revealMode: publicCouncil?.revealMode ?? 'one_at_a_time',
+          revealTotalSteps: publicCouncil?.revealTotalSteps ?? null,
+          revealComplete: publicCouncil?.revealComplete ?? false,
+          revealNextStepAt: publicCouncil?.revealNextStepAt ?? null,
+          eliminatedName: publicCouncil?.eliminatedName ?? null,
+          isTie: publicCouncil?.isTie ?? false,
           isRevealed: publicCouncil.isRevealed,
         }
       : null,

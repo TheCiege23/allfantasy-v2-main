@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import type { SurvivorAccessContext } from './survivorAccessControl'
 import { loadCouncilContext, getLatestCouncil } from './survivorCouncilService'
 import { getPlayableIdolsForUser } from './survivorIdolResolutionService'
-import type { RevealScroll } from './survivorVoteTallyService'
+import { gateRevealPayload, type PublicRevealStep } from './survivorRevealGate'
 
 /**
  * SURVIVOR TRIBAL COUNCIL VIEW (canonical Phase 3, privacy-aware).
@@ -41,12 +41,19 @@ export interface TribalCouncilView {
   }
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
   revote: { candidates: Array<{ userId: string; displayName: string; firstRoundVotes: number }>; deadline: string; originalCouncilId: string | null } | null
+  /** Gated read: only the steps released so far, and the verdict only once every step is out. */
   reveal: {
-    revealSequence: RevealScroll[]
+    revealSequence: PublicRevealStep[]
     countsByTargetName: Record<string, number>
     eliminatedName: string | null
     isTie: boolean
     tiePhase: string | null
+    mode: 'one_at_a_time' | 'all_at_once'
+    totalSteps: number
+    visibleSteps: number
+    complete: boolean
+    nextStepAt: string | null
+    exileEnabled: boolean
   } | null
 }
 
@@ -128,25 +135,46 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
     host = { eligibleVoterCount, submittedCount, missingVoteCount: Math.max(0, eligibleVoterCount - submittedCount) }
   }
 
-  // The scroll stays sealed for every client until the read, including non-playing hosts.
+  // The scroll stays sealed for every client until the read, including non-playing hosts, and the
+  // read itself is released step by step (see survivorRevealGate).
   let reveal: TribalCouncilView['reveal'] = null
+  let readStarted = false
   if (council.isRevealed) {
-    const full = await prisma.survivorTribalCouncil.findUnique({
-      where: { id: council.id },
-      select: { revealSequence: true, eliminatedName: true, isTie: true, tiePhase: true },
+    const [full, league] = await Promise.all([
+      prisma.survivorTribalCouncil.findUnique({
+        where: { id: council.id },
+        select: { revealSequence: true, revealStartsAt: true, revealStep: true, eliminatedName: true, isTie: true, tiePhase: true },
+      }),
+      prisma.league.findUnique({ where: { id: access.leagueId }, select: { survivorRevealMode: true } }),
+    ])
+    const gate = gateRevealPayload({
+      isRevealed: true,
+      revealStartsAt: full?.revealStartsAt ?? null,
+      revealStep: full?.revealStep ?? 0,
+      revealSequence: full?.revealSequence,
+      revealMode: league?.survivorRevealMode,
+      eliminatedName: full?.eliminatedName ?? null,
+      isTie: Boolean(full?.isTie),
+      tiePhase: full?.tiePhase ?? null,
     })
-    const seq = Array.isArray(full?.revealSequence) ? (full!.revealSequence as unknown as RevealScroll[]) : []
-    if (seq.length > 0 || council.isRevealed) {
+    readStarted = gate.started
+    if (gate.started) {
       const countsByTargetName: Record<string, number> = {}
-      for (const s of seq) {
+      for (const s of gate.steps) {
         if (s.status === 'counts' && s.targetName) countsByTargetName[s.targetName] = (countsByTargetName[s.targetName] ?? 0) + 1
       }
       reveal = {
-        revealSequence: seq,
+        revealSequence: gate.steps,
         countsByTargetName,
-        eliminatedName: full?.eliminatedName ?? null,
-        isTie: Boolean(full?.isTie),
-        tiePhase: full?.tiePhase ?? null,
+        eliminatedName: gate.eliminatedName,
+        isTie: gate.isTie,
+        tiePhase: gate.tiePhase,
+        mode: gate.mode,
+        totalSteps: gate.totalSteps ?? 0,
+        visibleSteps: gate.visibleSteps,
+        complete: gate.complete,
+        nextStepAt: gate.nextStepAt,
+        exileEnabled: access.settings.exileIslandEnabled !== false,
       }
     }
   }
@@ -160,7 +188,7 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
     attendingTribeId: council.attendingTribeId,
     votingOpensAt: iso(council.votingOpensAt),
     votingDeadline: iso(council.votingDeadline ?? council.voteDeadlineAt),
-    isRevealed: council.isRevealed,
+    isRevealed: readStarted,
     you: {
       isEligibleVoter: eligibility.voterUserIds.includes(userId),
       hasVoted: Boolean(ownVote),
