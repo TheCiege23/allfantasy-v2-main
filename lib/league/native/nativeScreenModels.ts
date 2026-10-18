@@ -262,7 +262,7 @@ export function signed(n: number): string {
 
 /* ── Lineup ──────────────────────────────────────────────────────────── */
 
-export type LineupPlayerInfo = { position: string | null | undefined; projectedPoints: number | null | undefined }
+export type LineupPlayerInfo = { position?: string | null; projectedPoints?: number | null }
 
 /**
  * AF "optimal lineup": the exact optimiser (`computeOptimalLineup`, the same primitive Max PF uses)
