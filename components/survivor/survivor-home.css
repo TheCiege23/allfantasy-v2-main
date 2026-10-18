@@ -1,5 +1,7 @@
 /* Survivor league home (survivor-core handoff, SurvivorHome). Uses the native workspace tokens. */
-.svh{--svh-gold:#f1d58a;--svh-ember:#ff9a3c;--svh-surface:var(--surface,#10131c);--svh-line:var(--line,rgba(255,255,255,.06));display:flex;flex-direction:column;gap:0;color:var(--text,#e8eaf2)}
+.svh{--svh-gold:#f1d58a;--svh-ember:#ff9a3c;--svh-surface:var(--surface,#10131c);--svh-line:var(--line,rgba(255,255,255,.06));display:flex;flex-direction:column;gap:0;color:var(--text,#e8eaf2);
+  /* The AF and Chimmy launchers float over the bottom-right corner; let the last card scroll clear of both. */
+  padding-bottom:var(--af-fab-slot-2,160px)}
 .svh p{margin:0}
 /* Island header (survivor-theme handoff): the scene sits only behind the header, 420px desktop /
    330px phone, fades into the page, and the cards overlap its bottom by 64px on solid surfaces. */

@@ -102,6 +102,10 @@ import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import { detectSnakeBackToBackSoon, computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
 import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanningRibbon'
 import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
+import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
+import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
+import { buildPlayerDraftOutlook, pickYoureUpSuggestion } from '@/lib/draft-room/playerDraftOutlook'
+import { YoureUpAlert } from '@/components/app/draft-room/YoureUpAlert'
 import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
 import {
   buildAssistantFeedByPlayerName,
@@ -260,7 +264,7 @@ export function DraftRoomPageClient({
   initialSnapshot,
   initialPoolReadiness = null,
 }: DraftRoomPageClientProps) {
-  type CenterDockTab = 'queue' | 'chat' | 'ai' | 'commish'
+  type CenterDockTab = 'queue' | 'intel' | 'chat' | 'ai' | 'commish'
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
   const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
@@ -2946,6 +2950,69 @@ export function DraftRoomPageClient({
     const fromComm = commissionerAiDraft?.assignedAiTeams?.filter((t) => t.active).map((t) => t.teamId) ?? []
     return [...new Set([...fromComm, ...aiOpponentRosterIds])]
   }, [commissionerAiDraft?.assignedAiTeams, aiOpponentRosterIds])
+  /** Intel tab — picks other managers make before the viewer's next turn (lib/draft-room/draftIntelLookahead). */
+  const intelLookahead = useMemo(() => {
+    if (!session || session.draftType === 'auction') return null
+    if (session.status !== 'in_progress' && session.status !== 'paused') return null
+    if (currentPick?.overall == null) return null
+    const teamCount = Math.max(1, session.teamCount ?? 1)
+    return buildDraftLookahead({
+      picks: session.picks ?? [],
+      available: pulseAvailablePlayers,
+      lookup: buildAdpLookup(players),
+      slotOrder: session.slotOrder ?? [],
+      tradedPicks: session.tradedPicks ?? [],
+      teamCount,
+      rounds: Math.max(1, session.rounds ?? 1),
+      draftType: session.draftType,
+      thirdRoundReversal: session.thirdRoundReversal,
+      currentOverall: currentPick.overall,
+      viewerRosterId: (session as DraftSessionSnapshot).currentUserRosterId ?? null,
+      starterSlots: rosterConfig?.starterSlots ?? null,
+      autoRosterIds: new Set([...aiManagedRosterIds, ...((session as DraftSessionSnapshot).orphanRosterIds ?? [])]),
+    })
+  }, [session, currentPick?.overall, pulseAvailablePlayers, players, rosterConfig?.starterSlots, aiManagedRosterIds])
+  /** Player table LEFT @ column — the viewer's next pick after any picks they make now. */
+  const leftAtPick = useMemo(() => {
+    const overall = intelLookahead?.viewerNextOverall
+    if (overall == null) return null
+    return { overall, label: formatPickLabel(overall, Math.max(1, session?.teamCount ?? 1)) }
+  }, [intelLookahead?.viewerNextOverall, session?.teamCount])
+  /** Player card "draft outlook" — survival to the next pick, falling, who's circling. */
+  const getDraftOutlook = useCallback(
+    (player: PlayerEntry) =>
+      intelLookahead
+        ? buildPlayerDraftOutlook({
+            player: { name: player.name, position: player.position, adp: player.adp ?? null },
+            lookahead: intelLookahead,
+            currentOverall: currentPick?.overall ?? null,
+            leftAtPick,
+          })
+        : null,
+    [intelLookahead, currentPick?.overall, leftAtPick],
+  )
+  /** "You're up" alert — shown once per pick when the clock reaches the viewer. */
+  const [youreUpDismissedOverall, setYoureUpDismissedOverall] = useState<number | null>(null)
+  const youreUpSuggestion = useMemo(() => {
+    if (!isCurrentUserOnClock) return null
+    const byKey = new Map(players.map((p) => [`${normalizeDraftedPlayerName(p.name)}|${p.position.trim().toUpperCase()}`, p]))
+    const queuedPlayers = (queue ?? [])
+      .map((q) => byKey.get(`${normalizeDraftedPlayerName(q.playerName)}|${String(q.position).trim().toUpperCase()}`))
+      .filter((p): p is PlayerEntry => Boolean(p))
+    return pickYoureUpSuggestion({
+      queue: queuedPlayers,
+      available: pulseAvailablePlayers,
+      isAvailable: (p) => pulseAvailablePlayers.includes(p),
+    })
+  }, [isCurrentUserOnClock, players, queue, pulseAvailablePlayers])
+  const intelPanelNode = (
+    <DraftIntelPanel
+      lookahead={intelLookahead}
+      idle={!intelLookahead}
+      sport={effectiveDraftSport}
+      formatPickLabel={(overall) => formatPickLabel(overall, Math.max(1, session?.teamCount ?? 1))}
+    />
+  )
   const draftTeamPanelProps = useMemo(() => {
     const devyRoundsSet = new Set<number>(
       ((session as DraftSessionSnapshot | null)?.c2c?.enabled
@@ -3719,6 +3786,8 @@ export function DraftRoomPageClient({
         leagueId={leagueId}
         aiRowBadges={aiRowBadges}
         aiOverlaySignals={aiOverlaySignals}
+        leftAtPick={leftAtPick}
+        getDraftOutlook={getDraftOutlook}
         showAiOverlays={showAiOverlays}
         onShowAiOverlaysChange={setShowAiOverlays}
         getDraftCopilotInsight={presentationVariant === 'redraft_snake' ? getDraftCopilotInsight : undefined}
@@ -3739,6 +3808,8 @@ export function DraftRoomPageClient({
       draftedNames,
       draftedPlayerIds,
       queue,
+      leftAtPick,
+      getDraftOutlook,
       effectiveDraftSport,
       draftRoomState.isAuction,
       draftRoomState.canNominate,
@@ -3917,11 +3988,13 @@ export function DraftRoomPageClient({
           aiOverlaySignals={aiOverlaySignals}
           showAiOverlays={showAiOverlays}
           presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+          leftAtPick={leftAtPick}
         />
       </div>
     },
     [
       players,
+      leftAtPick,
       presentationVariant,
       draftIntelLoading,
       draftIntel?.headline,
@@ -4501,6 +4574,42 @@ export function DraftRoomPageClient({
         onDismissFront={dismissRoundOneAnnouncement}
       />
     ) : null}
+    {isCurrentUserOnClock &&
+    !draftRoomState.isAuction &&
+    session.status === 'in_progress' &&
+    currentPick?.overall != null &&
+    youreUpDismissedOverall !== currentPick.overall ? (
+      <YoureUpAlert
+        pickLabel={formatPickLabel(currentPick.overall, Math.max(1, session.teamCount ?? 1))}
+        timed={session.timer?.status === 'running'}
+        suggestion={
+          youreUpSuggestion
+            ? {
+                name: youreUpSuggestion.player.name,
+                position: youreUpSuggestion.player.position,
+                source: youreUpSuggestion.source,
+              }
+            : null
+        }
+        backToBackLabel={
+          intelLookahead && intelLookahead.startOverall > currentPick.overall + 1
+            ? formatPickLabel(currentPick.overall + 1, Math.max(1, session.teamCount ?? 1))
+            : null
+        }
+        drafting={pickSubmitting}
+        canDraft={canDraft}
+        onDraftSuggestion={() => {
+          if (!youreUpSuggestion) return
+          setYoureUpDismissedOverall(currentPick.overall)
+          void handleMakePick(youreUpSuggestion.player)
+        }}
+        onSeePlayers={() => {
+          setYoureUpDismissedOverall(currentPick.overall)
+          openMobilePlayerSearch()
+        }}
+        onDismiss={() => setYoureUpDismissedOverall(currentPick.overall)}
+      />
+    ) : null}
     <DraftRoomShell
       layout="premium"
       surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
@@ -4573,6 +4682,7 @@ export function DraftRoomPageClient({
                   </div>
                 }
                 queueBody={<div className="flex h-full min-h-0 flex-col overflow-auto bg-[linear-gradient(180deg,rgba(7,14,28,0.65),rgba(6,12,24,0.88))] px-1 py-1">{queueStackNode}</div>}
+                intelBody={session.draftType !== 'auction' ? intelPanelNode : null}
                 rosterBody={
                   <ResultsRosterPanel
                     teams={resultsRosterTeams}
@@ -4597,7 +4707,13 @@ export function DraftRoomPageClient({
             <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden xl:hidden">
               <div className="flex h-full min-h-0 w-full flex-col" data-testid="draft-bottom-dock-tabs">
                 <div
-                  className={`grid ${isCommissioner ? 'grid-cols-4' : 'grid-cols-3'} gap-1 border-b px-2 py-1.5 ${
+                  className={`grid ${
+                    (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 2
+                      ? 'grid-cols-5'
+                      : (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 1
+                        ? 'grid-cols-4'
+                        : 'grid-cols-3'
+                  } gap-1 border-b px-2 py-1.5 ${
                     presentationVariant === 'redraft_snake'
                       ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(5,12,24,0.98))] shadow-[inset_0_1px_0_rgba(34,211,238,0.08)]'
                       : 'border-white/8 bg-[#0a1228]'
@@ -4617,6 +4733,22 @@ export function DraftRoomPageClient({
                   >
                     Queue
                   </button>
+                  {session.draftType !== 'auction' ? (
+                    <button
+                      type="button"
+                      onClick={() => setCenterDockTab('intel')}
+                      data-testid="draft-bottom-tab-intel"
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                        centerDockTab === 'intel'
+                          ? presentationVariant === 'redraft_snake'
+                            ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
+                            : 'bg-white/12 text-cyan-100'
+                          : 'text-white/55 hover:bg-white/5'
+                      }`}
+                    >
+                      Intel
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => setCenterDockTab('chat')}
@@ -4664,6 +4796,10 @@ export function DraftRoomPageClient({
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {centerDockTab === 'queue' ? (
                     <div className="h-full overflow-auto px-1.5 py-1">{queueStackNode}</div>
+                  ) : null}
+
+                  {centerDockTab === 'intel' ? (
+                    <div className="h-full overflow-hidden" data-testid="draft-bottom-intel-panel">{intelPanelNode}</div>
                   ) : null}
 
                   {centerDockTab === 'chat' ? (
@@ -5154,16 +5290,20 @@ export function DraftRoomPageClient({
               the on-the-clock cell in DraftBoard now carry that information. */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex min-h-[120px] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
-              <div className="shrink-0">
-                <DraftTeamStrip
-                  teamCount={safeBoardTeamCount}
-                  slotOrder={slotOrder}
-                  teamMetaByRoster={teamMetaByRoster}
-                  currentUserRosterId={currentUserRosterId ?? null}
-                  onClockRosterId={currentPick?.rosterId ?? null}
-                  canInvite={isCommissioner}
-                />
-              </div>
+              {/* Auction only: snake/linear boards carry the same managers in their sticky
+                  column header (avatars, you, on-clock, orphan), so a strip here duplicated it. */}
+              {session.draftType === 'auction' ? (
+                <div className="shrink-0">
+                  <DraftTeamStrip
+                    teamCount={safeBoardTeamCount}
+                    slotOrder={slotOrder}
+                    teamMetaByRoster={teamMetaByRoster}
+                    currentUserRosterId={currentUserRosterId ?? null}
+                    onClockRosterId={currentPick?.rosterId ?? null}
+                    canInvite={isCommissioner}
+                  />
+                </div>
+              ) : null}
               <div className="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none]">
                 <DraftBoard
                   picks={session.picks ?? []}
@@ -5201,6 +5341,7 @@ export function DraftRoomPageClient({
                   }
                   onCommissionerEditPick={isCommissioner ? openCommissionerPickEditor : undefined}
                   adpDeltaByOverall={boardAdpDeltaByOverall}
+                  teamMetaByRoster={teamMetaByRoster}
                 />
               </div>
             </div>
