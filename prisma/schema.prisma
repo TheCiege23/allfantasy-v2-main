@@ -7728,6 +7728,10 @@ model TournamentShell {
   simultaneousDrafts      Boolean                      @default(true)
   tiebreakerMode          String                       @default("points_for")
   standingsVisibility     String                       @default("conference")
+  /// 'points_race' (the original format) or 'divisions' (divisions & conferences).
+  format                  String                       @default("points_race")
+  /// Divisions format: { sport, conferencesPerDivision, teamsPerConference, autoBids, wildcardSpots, regions, seasonLength }.
+  formatSettings          Json?
   commissionerId          String
   createdBy               String
   createdAt               DateTime                     @default(now())
@@ -7736,6 +7740,7 @@ model TournamentShell {
   announcements           TournamentAnnouncement[]
   auditLogs               TournamentAuditLog[]
   conferences             TournamentConference[]
+  divisions               TournamentDivision[]
   tournamentLeagues       TournamentLeague[]
   nameRecords             TournamentNameRecord[]
   participants            TournamentParticipant[]
@@ -7788,6 +7793,8 @@ model TournamentConference {
   colorHex          String?
   logoUrl           String?
   bannerUrl         String?
+  /// Division identity library image id (e.g. "smoke"). Shared by this conference's league in every division.
+  imagePath         String?
   conferenceNumber  Int
   isActive          Boolean                      @default(true)
   standingsCache    Json?
@@ -7800,6 +7807,27 @@ model TournamentConference {
   @@unique([tournamentId, slug])
   @@index([tournamentId])
   @@map("tournament_shell_conferences")
+}
+
+/// A named division in the divisions & conferences format (two per tournament).
+/// A league is one conference x one division: TournamentLeague.divisionId + conferenceId.
+model TournamentDivision {
+  id             String             @id @default(cuid())
+  tournamentId   String
+  divisionNumber Int
+  name           String
+  /// Palette side id from the division identity manifest (e.g. "angelic").
+  sideId         String
+  /// Library image id (e.g. "angel").
+  emblem         String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  tournament     TournamentShell    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  leagues        TournamentLeague[]
+
+  @@unique([tournamentId, divisionNumber])
+  @@index([tournamentId])
+  @@map("tournament_shell_divisions")
 }
 
 model TournamentRound {
@@ -7832,6 +7860,7 @@ model TournamentLeague {
   id                 String                        @id @default(cuid())
   tournamentId       String
   conferenceId       String?
+  divisionId         String?
   roundId            String
   leagueId           String?                       @unique
   name               String
@@ -7852,6 +7881,7 @@ model TournamentLeague {
   participants       TournamentLeagueParticipant[]
   advancementGroup   TournamentAdvancementGroup?   @relation("ShellAdvancementGroupLeagues", fields: [advancementGroupId], references: [id])
   conference         TournamentConference?         @relation(fields: [conferenceId], references: [id])
+  division           TournamentDivision?           @relation(fields: [divisionId], references: [id])
   league             League?                       @relation(fields: [leagueId], references: [id])
   round              TournamentRound               @relation(fields: [roundId], references: [id], onDelete: Cascade)
   tournament         TournamentShell               @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -7860,6 +7890,7 @@ model TournamentLeague {
   @@unique([tournamentId, slug])
   @@index([tournamentId, roundId])
   @@index([conferenceId])
+  @@index([divisionId])
   @@map("tournament_shell_leagues")
 }
 

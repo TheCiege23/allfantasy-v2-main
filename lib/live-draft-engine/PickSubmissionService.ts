@@ -38,6 +38,7 @@ import { logStructured } from '@/lib/logging/structured'
 import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEvent'
 import { ENGINE } from '@/lib/analytics/eventNames'
 import { withPickLock } from '@/lib/draft/draftLock'
+import { resolveAdpAtPick } from '@/lib/draft-room/adpAtPick'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
@@ -322,6 +323,16 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     input.commissionerOverride === true || input.source === 'commissioner'
   const keepPaused = isCommissionerCorrection && session.status === 'paused'
   const picksCountAtSubmit = session.picks.length
+  // Market ADP at this moment, so a manager's reach / value history can be read later.
+  // Looked up before the transaction (it is a read of the cached pool) and never throws.
+  const adpAtPick =
+    assetType === 'player'
+      ? await resolveAdpAtPick(input.leagueId, {
+          playerId: input.playerId ?? null,
+          playerName: input.playerName.trim(),
+          position: input.position,
+        })
+      : null
 
   let pick: any
   try {
@@ -412,6 +423,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       }, selectedAt)
       await tx.draftPick.update({where:{id:created.id},data:{pickedAt:selectedAt,pickMetadata:json({
         ...input.pickMetadata,
+        ...(adpAtPick != null ? { adpAtPick } : {}),
         archive:{eventId:archived.eventId,context:archived.context,timing:archived.selected,clockAllowanceSeconds:timerSeconds,
           selectionRosterId:effectiveRosterId,originalRosterId:slotOriginalRosterId,actorUserId:input.madeByUserId??null},
       })}})
