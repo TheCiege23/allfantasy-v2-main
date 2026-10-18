@@ -142,11 +142,20 @@ function parseArgs(argv) {
   return args
 }
 
-function selectJobs(crons, args) {
+/**
+ * `--path` selects a registered slow-tier job by its path, and a query string on it is SENT.
+ *
+ * It used to be stripped for matching and then dropped, so `--path /api/cron/compute-projections?sport=MLB`
+ * fired the registered all-sports rotation instead -- which, on a day NFL leads, spends the whole
+ * budget on NFL and never reaches MLB. The base path must still be a registered slow-tier job, so
+ * this cannot reach a route the registry does not already list.
+ */
+export function selectJobs(crons, args) {
   if (args.all) return classifyCrons(crons).slow
   if (args.path) {
-    const wanted = args.path.split('?')[0]
-    return classifyCrons(crons).slow.filter((c) => c.path.split('?')[0] === wanted)
+    const [wanted, query] = args.path.split('?')
+    const matched = classifyCrons(crons).slow.filter((c) => c.path.split('?')[0] === wanted)
+    return query ? matched.map((c) => ({ ...c, path: args.path })) : matched
   }
   if (args.schedule) return slowTierJobsForSchedule(crons, args.schedule)
   return []
