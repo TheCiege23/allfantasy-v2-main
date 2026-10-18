@@ -10,6 +10,7 @@ import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStar
 import { addExilePlayer, emptyExileRoster, isExileAnchor, readExileRoster } from './exileRosterRules'
 import { exileWeekWindow } from './exileRosterService'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+import { readSurvivorLateSeasonSettings } from './lateSeasonSettings'
 
 const rosterId = (leagueId: string, week: number) => `exile-chimmy-roster:${leagueId}:${week}`
 const scoreId = (leagueId: string, week: number) => `exile-chimmy-score:${leagueId}:${week}`
@@ -21,6 +22,8 @@ export async function lockChimmyExileRoster(leagueId: string, now = new Date()):
     const league = await db.league.findUnique({ where: { id: leagueId }, select: { platform: true, sport: true, season: true, settings: true, survivorMode: true } })
     const island = await db.exileIsland.findUnique({ where: { leagueId }, select: { isActive: true, bossWinsEnabled: true } })
     if (!league?.survivorMode || !isNativePlatform(league.platform) || league.sport !== 'NBA' || !island?.isActive || !island.bossWinsEnabled) return false
+    // Legacy boss mode only: the default Exile boss is a score (median/fixed/topN), see exileBoss.ts.
+    if (readSurvivorLateSeasonSettings(league.settings).exileBossMode !== 'chimmy_roster') return false
     const game = await db.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true } })
     if (!game || ['pre_draft', 'drafting', 'complete'].includes(game.phase)) return false
     // Chimmy is the automatic score-to-beat in either commissioner mode.
