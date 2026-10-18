@@ -1,6 +1,6 @@
 import 'server-only'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
-import { readTribeSlots, tribeCrestUrl, SURVIVOR_TRIBE_CATALOG } from './survivorTribeIdentity'
+import { isTribeHex, readTribeSlots, tribeCatalogIdFor, tribeCrestUrl, SURVIVOR_TRIBE_CATALOG } from './survivorTribeIdentity'
 
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 
@@ -147,13 +147,22 @@ export async function assignSurvivorTribes(
       const slot = tribe.slotIndex
       const meta = opts.tribeMeta?.[slot]
       const preserved = existingBySlot.get(slot)
-      const identity = SURVIVOR_TRIBE_CATALOG.find(tribe => tribe.id === slots[slot]?.catalogId)
+      const slotChoice = slots[slot]
+      const identity = SURVIVOR_TRIBE_CATALOG.find(tribe => tribe.id === slotChoice?.catalogId)
       const name = meta?.name ?? preserved?.name ?? identity?.name ?? defaultTribeName(slot)
-      const colorHex = meta?.colorHex ?? preserved?.colorHex ?? identity?.primary ?? defaultTribeColor(slot)
-      const logoUrl = meta?.logoUrl ?? preserved?.logoUrl ?? tribeCrestUrl(identity?.id ?? '', String(league?.sport ?? 'NFL'))
+      const primaryColor = identity && isTribeHex(slotChoice?.primaryColor) ? slotChoice.primaryColor.toLowerCase() : null
+      const secondaryColor = identity && isTribeHex(slotChoice?.secondaryColor) ? slotChoice.secondaryColor.toLowerCase() : null
+      const colorHex = meta?.colorHex ?? primaryColor ?? preserved?.colorHex ?? identity?.primary ?? defaultTribeColor(slot)
+      // Catalogue tribes are composed at render time from catalogId + current name/colours; logoUrl
+      // keeps a composed URL for older readers. A custom (non-catalogue) logo is never overwritten.
+      const preservedCustomLogo = preserved?.logoUrl && !tribeCatalogIdFor({ logoUrl: preserved.logoUrl }) && !preserved.logoUrl.startsWith('/api/survivor/tribe-emblem/') ? preserved.logoUrl : null
+      const logoUrl = meta?.logoUrl ?? preservedCustomLogo ?? (identity ? tribeCrestUrl(identity.id, String(league?.sport ?? 'NFL'), { name, primaryColor, secondaryColor }) : preserved?.logoUrl ?? null)
 
       const row = await tx.survivorTribe.create({
-        data: { leagueId, configId: config.id, name, slotIndex: slot, colorHex, logoUrl, isActive: true, phase: 'pre_merge' },
+        data: {
+          leagueId, configId: config.id, name, slotIndex: slot, colorHex, logoUrl, isActive: true, phase: 'pre_merge',
+          catalogId: identity?.id ?? null, primaryColor, secondaryColor,
+        },
         select: { id: true },
       })
 

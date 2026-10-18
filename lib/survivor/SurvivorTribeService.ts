@@ -142,6 +142,9 @@ export async function getTribesWithMembers(leagueId: string): Promise<SurvivorTr
     slotIndex: t.slotIndex,
     logoUrl: t.logoUrl,
     colorHex: t.colorHex,
+    catalogId: t.catalogId,
+    primaryColor: t.primaryColor,
+    secondaryColor: t.secondaryColor,
     members: t.members.map((m): SurvivorTribeMemberRow => ({
       id: m.id,
       tribeId: m.tribeId,

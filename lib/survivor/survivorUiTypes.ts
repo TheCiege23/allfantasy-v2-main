@@ -18,6 +18,8 @@ export type SurvivorSeasonTribeMember = {
 
 export type SurvivorSeasonTribe = {
   logoUrl?: string | null
+  markUrl?: string | null
+  mascot?: string | null
   id: string
   name?: string
   emoji?: string | null

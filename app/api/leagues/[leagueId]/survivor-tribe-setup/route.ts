@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { normalizeSurvivorFoundationSettings, buildSurvivorSettingsSnapshotPatch } from '@/lib/survivor/survivorSettings'
-import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
+import { canonicalTribeSlots, validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import type { Prisma } from '@prisma/client'
 import { normalizeTribePlan } from '@/lib/survivor/survivorTribePlan'
@@ -58,7 +58,7 @@ export async function PUT(req: NextRequest, ctx: Context) {
     const assigned = await db.survivorTribeMember.count({ where: { tribe: { leagueId } } })
     if ((draft && ['in_progress', 'paused', 'completed'].includes(draft.status)) || assigned) return NextResponse.json({ error: 'Tribe identities and capacities are locked once drafting or tribe assignment starts.' }, { status: 409 })
     if (readStoredTribePlan(snapshot)?.lockedAt) return NextResponse.json({ error: 'Tribes are locked and announced. They can no longer change.' }, { status: 409 })
-    const next = { ...settings, tribeCount: body.tribeCount, survivorTribeSlots: body.slots }
+    const next = { ...settings, tribeCount: body.tribeCount, survivorTribeSlots: canonicalTribeSlots(body.slots) }
     /* An unlocked draft of the tribe plan rides along when the panel saves (handoff §5.4). */
     const draftPlan = body.plan === undefined ? undefined : normalizeTribePlan(body.plan)
     await db.league.update({ where: { id: leagueId }, data: {

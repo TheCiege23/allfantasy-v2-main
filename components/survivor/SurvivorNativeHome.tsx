@@ -12,6 +12,7 @@ import { getSurvivorThemeById, stripLeadingTribeIcon, survivorSceneArtwork } fro
 import type { SurvivorSummary, SurvivorSummaryTribe } from './types'
 import { SurvivorAvatar, SurvivorOutChip, SurvivorTorchIcon, survivorAvatarStatus } from './weekly/SurvivorAvatar'
 import { SurvivorWeeklyMoments } from './weekly/SurvivorWeeklyMoments'
+import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 import './survivor-home.css'
 
 const TRIBE_COLORS = ['#b8a8ff', '#7fd3de', '#f0a35e', '#8fd694']
@@ -202,7 +203,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
                 <div className="svh-row">
                   {tribe.logoUrl
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img className="svh-crest" src={tribe.logoUrl} alt="" />
+                    ? <img className="svh-crest" src={tribe.logoUrl} alt={tribe.mascot ? tribeCrestAlt(tribeName(tribe), tribe.mascot) : ''} />
                     : <span className="svh-crest svh-crest-emoji" aria-hidden>{tribe.emoji ?? '🔥'}</span>}
                   <div className="svh-grow"><span className="svh-tribe-title" style={{ color }}>{tribeName(tribe)}</span><span className="svh-faint svh-sm">{summary?.merged ? 'Merged tribe' : going ? (council ? 'Going to Tribal Council' : 'Last in the race') : leader?.id === tribe.id ? 'Leading the race' : 'Safe this week'}</span></div>
                   {!summary?.merged && hasScores && <span className="svh-num svh-sub">{(scores[tribe.id] ?? 0).toFixed(1)}</span>}

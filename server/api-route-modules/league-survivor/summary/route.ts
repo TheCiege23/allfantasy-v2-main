@@ -39,8 +39,15 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSur
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
+import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
 
 export const dynamic = 'force-dynamic'
+
+/** Crest (current name + colours) and decorative mark for a summary tribe; the merged pseudo-tribe has neither. */
+function summaryTribeEmblem(t: { name: string; logoUrl?: string | null; catalogId?: string | null; primaryColor?: string | null; secondaryColor?: string | null }, sport: string | null | undefined) {
+  const emblem = resolveTribeEmblem({ name: t.name, logoUrl: t.logoUrl ?? null, catalogId: t.catalogId, primaryColor: t.primaryColor, secondaryColor: t.secondaryColor }, sport ?? 'NFL')
+  return { logoUrl: emblem.crestUrl, markUrl: emblem.markUrl, mascot: emblem.mascot }
+}
 
 export async function GET(
   req: NextRequest,
@@ -333,7 +340,7 @@ export async function GET(
       name: t.name,
       emoji: extractLeadingTribeIcon(t.name),
       slotIndex: t.slotIndex,
-      logoUrl: 'logoUrl' in t ? t.logoUrl ?? null : null,
+      ...summaryTribeEmblem(t, leagueMeta?.sport),
       colorHex: 'colorHex' in t ? t.colorHex ?? null : null,
       members: t.members.map((m) => ({ rosterId: m.rosterId, isLeader: m.isLeader })),
       // Voted-out castaways stay listed (struck through, "Out · Wk N") with a snuffed torch.
