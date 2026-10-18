@@ -49,6 +49,9 @@ const {
     survivorTribalCouncil: {
       findUnique: vi.fn(),
     },
+    league: {
+      findUnique: vi.fn(async () => ({ survivorRevealMode: 'dramatic_sequential' })),
+    },
     roster: {
       findFirst: vi.fn(),
     },
@@ -77,6 +80,10 @@ vi.mock('@/app/api/cron/_auth', () => ({
 vi.mock('@/lib/league/league-access', () => ({
   assertLeagueCommissioner: assertLeagueCommissionerMock,
   assertLeagueMember: assertLeagueMemberMock,
+}))
+
+vi.mock('@/lib/survivor/survivorCouncilReadFinish', () => ({
+  finishCouncilReadIfComplete: vi.fn(async () => ({ ok: true, complete: true, elimination: null })),
 }))
 
 vi.mock('@/lib/survivor/votingEngine', () => ({
@@ -132,6 +139,7 @@ describe('Survivor tribal eliminate route behavior', () => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: 'u-1' } })
     assertLeagueCommissionerMock.mockResolvedValue({ ok: true })
+    lockVotingMock.mockResolvedValue({ ok: true, readOpened: true, complete: true })
   })
 
   it('wires eliminate action to real lock/elimination pipeline', async () => {
@@ -147,6 +155,10 @@ describe('Survivor tribal eliminate route behavior', () => {
         eliminatedRosterId: 'roster-x',
         closedAt: now,
         status: 'completed',
+        isRevealed: true,
+        revealStartsAt: null,
+        revealStep: 0,
+        revealSequence: [],
       })
 
     const { POST } = await import('@/app/api/survivor/tribal/route')
@@ -172,12 +184,17 @@ describe('Survivor tribal eliminate route behavior', () => {
 
   it('returns alreadyClosed payload without re-locking', async () => {
     const closedAt = new Date('2026-04-20T13:00:00.000Z')
-    ;(prismaMock.survivorTribalCouncil.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    const row = {
       leagueId: 'league-1',
       closedAt,
       eliminatedRosterId: 'roster-y',
       status: 'completed',
-    })
+      isRevealed: true,
+      revealStartsAt: null,
+      revealStep: 0,
+      revealSequence: [],
+    }
+    ;(prismaMock.survivorTribalCouncil.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce(row).mockResolvedValueOnce(row)
 
     const { POST } = await import('@/app/api/survivor/tribal/route')
     const req = new Request('http://localhost/api/survivor/tribal', {

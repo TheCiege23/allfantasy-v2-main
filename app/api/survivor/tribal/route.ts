@@ -17,7 +17,7 @@ import { enrollJuryMember, shouldJoinJury } from '@/lib/survivor/SurvivorJuryEng
 import { postLeagueRevealFollowUp, postScrollRevealToTribeChat } from '@/lib/survivor/leagueChatPoster'
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
-import { normalizeRevealPacing, revealVisibleCount, toPublicRevealSteps } from '@/lib/survivor/survivorRevealGate'
+import { isCouncilReadComplete, normalizeRevealPacing, revealVisibleCount, toPublicRevealSteps } from '@/lib/survivor/survivorRevealGate'
 import { finishCouncilReadIfComplete } from '@/lib/survivor/survivorCouncilReadFinish'
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +36,16 @@ export async function GET(req: NextRequest) {
   for (const c of due) {
     await lockVoting(c.id).catch(() => {})
   }
-  return NextResponse.json({ ok: true, locked: due.length })
+  // Reads opened earlier publish their verdict and elimination only once the last ballot is out.
+  const reading = await prisma.survivorTribalCouncil.findMany({
+    where: { isRevealed: true, status: { in: ['revealed', 'tie_pending'] }, revealStartsAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+    select: { id: true, leagueId: true },
+    take: 50,
+  })
+  for (const c of reading) {
+    await finishCouncilReadIfComplete(c.leagueId, c.id).catch(() => {})
+  }
+  return NextResponse.json({ ok: true, locked: due.length, reading: reading.length })
 }
 
 export async function POST(req: NextRequest) {
@@ -110,8 +119,10 @@ export async function POST(req: NextRequest) {
     if (!council || council.leagueId !== leagueId) {
       return NextResponse.json({ error: 'Council not found' }, { status: 404 })
     }
-    await lockVoting(councilId)
-    return NextResponse.json({ ok: true })
+    const locked = await lockVoting(councilId)
+    if (!locked.ok) return NextResponse.json({ error: locked.error, code: locked.code }, { status: 409 })
+    // No outcome here: the verdict is published when the last ballot of the read is released.
+    return NextResponse.json({ ok: true, readInProgress: !locked.complete })
   }
 
   if (action === 'reveal_next') {
@@ -161,28 +172,40 @@ export async function POST(req: NextRequest) {
     if (!current || current.leagueId !== leagueId) {
       return NextResponse.json({ error: 'Council not found' }, { status: 404 })
     }
+    // The eliminated roster is named only once the council read is complete (survivorRevealGate).
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } })
+    const readState = async () => {
+      const row = await prisma.survivorTribalCouncil.findUnique({
+        where: { id: councilId },
+        select: { eliminatedRosterId: true, closedAt: true, status: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true },
+      })
+      const complete = row ? isCouncilReadComplete(row, league?.survivorRevealMode) : false
+      return { complete, eliminatedRosterId: complete ? row?.eliminatedRosterId ?? null : null, closedAt: row?.closedAt ?? null, status: row?.status ?? null }
+    }
 
     if (current.closedAt) {
+      await finishCouncilReadIfComplete(leagueId, councilId, userId).catch(() => null)
+      const state = await readState()
       return NextResponse.json({
         ok: true,
         alreadyClosed: true,
-        eliminatedRosterId: current.eliminatedRosterId,
-        closedAt: current.closedAt,
-        status: current.status,
+        eliminatedRosterId: state.eliminatedRosterId,
+        closedAt: state.closedAt,
+        status: state.status,
+        readInProgress: !state.complete,
       })
     }
 
     try {
-      await lockVoting(councilId)
-      const updated = await prisma.survivorTribalCouncil.findUnique({
-        where: { id: councilId },
-        select: { eliminatedRosterId: true, closedAt: true, status: true },
-      })
+      const locked = await lockVoting(councilId)
+      if (!locked.ok) return NextResponse.json({ error: locked.error, code: locked.code }, { status: 409 })
+      const state = await readState()
       return NextResponse.json({
         ok: true,
-        eliminatedRosterId: updated?.eliminatedRosterId ?? null,
-        closedAt: updated?.closedAt ?? null,
-        status: updated?.status ?? 'completed',
+        eliminatedRosterId: state.eliminatedRosterId,
+        closedAt: state.closedAt,
+        status: state.status ?? 'completed',
+        readInProgress: !state.complete,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to eliminate'

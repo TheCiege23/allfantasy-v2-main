@@ -89,7 +89,11 @@ export function toPublicRevealSteps(raw: unknown): PublicRevealStep[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const row = item as Record<string, unknown>
-    const status = typeof row.status === 'string' && STATUSES.has(row.status) ? (row.status as RevealStepStatus) : 'counts'
+    // Older sequences (votingEngine.buildScrollRevealSequence) mix in pauses and host lines and carry a
+    // voter name; only ballots become steps, and the voter is never copied.
+    if (row.type === 'pause' || row.type === 'elimination' || row.type === 'idol_play') continue
+    const status = typeof row.status === 'string' && STATUSES.has(row.status) ? (row.status as RevealStepStatus)
+      : row.type === 'does_not_count' ? 'late_does_not_count' : 'counts'
     out.push({
       order: out.length + 1,
       targetName: typeof row.targetName === 'string' && row.targetName.trim() ? row.targetName : null,

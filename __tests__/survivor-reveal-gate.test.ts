@@ -117,3 +117,15 @@ describe('isCouncilReadComplete (history, recap, Chimmy, elimination)', () => {
     expect(isCouncilReadComplete(council, 'simultaneous', at(0))).toBe(true)
   })
 })
+
+describe('older reveal sequences', () => {
+  it('keeps ballots only and never copies the voter', () => {
+    const legacy = [{ type: 'vote', voterName: 'Secret Voter', targetName: 'Alpha' }, { type: 'pause' }, { type: 'does_not_count', voterName: 'Other Voter' }, { type: 'elimination', userName: 'Alpha' }]
+    const gate = gateRevealPayload({ isRevealed: true, revealStartsAt: null, revealSequence: legacy, revealMode: 'simultaneous' })
+    expect(gate.steps).toEqual([
+      { order: 1, targetName: 'Alpha', status: 'counts', isExtraVote: false },
+      { order: 2, targetName: null, status: 'late_does_not_count', isExtraVote: false },
+    ])
+    expect(JSON.stringify(gate)).not.toMatch(/Voter/)
+  })
+})

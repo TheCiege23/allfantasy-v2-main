@@ -489,12 +489,16 @@ export async function processTribalDeadline(leagueId: string): Promise<void> {
     if (finished.complete && finished.elimination && !finished.elimination.ok) throw new Error(finished.elimination.error)
     return
   }
+  // Leagues without a full-season plan: lockVoting opens the read; a later tick finishes it (verdict,
+  // elimination) once the last ballot has been released.
+  if (council.isRevealed) {
+    const finished = await finishCouncilReadIfComplete(leagueId, council.id)
+    if (!finished.ok) throw new Error(finished.error)
+    return
+  }
   if (council.status !== 'voting_open') return
-  await lockVoting(gs.activeCouncilId)
-  await prisma.survivorGameState.update({
-    where: { leagueId },
-    data: { tribalRevealAt: new Date() },
-  })
+  const locked = await lockVoting(gs.activeCouncilId)
+  if (!locked.ok) throw new Error(locked.error)
 }
 
 export type PhaseAdvanceSuggestion = {
