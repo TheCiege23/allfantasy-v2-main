@@ -69,6 +69,16 @@ describe('King of the Hill + Pirate previews (no engine: assets, tokens, static 
     expect(getByRole('link', { name: 'My leagues' }).getAttribute('href')).toBe('/leagues')
   })
 
+  it('crops the Pirate banner at 80% 50% (package note); every other format stays centred', () => {
+    const pirate = render(<SpecialtyFormatPreview format={SPECIALTY_PREVIEW_FORMATS.pirate} />)
+    expect(pirate.getByTestId('specialty-hero-banner').style.objectPosition).toBe('80% 50%')
+    pirate.unmount()
+    const koth = render(<SpecialtyFormatPreview format={SPECIALTY_PREVIEW_FORMATS['king-of-the-hill']} />)
+    expect(koth.getByTestId('specialty-hero-banner').getAttribute('style')).toBeNull()
+    const positioned = Object.entries(SPECIALTY_THEMES).filter(([, t]) => t.bannerPosition).map(([f]) => f)
+    expect(positioned).toEqual(['pirate'])
+  })
+
   it('loads Cinzel and Pirata One from the shared Google Fonts link', () => {
     const layout = readFileSync(resolve(ROOT, 'app/layout.tsx'), 'utf8')
     const href = layout.match(/https:\/\/fonts\.googleapis\.com\/css2\?[^"]+/)?.[0] ?? ''
