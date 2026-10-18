@@ -335,7 +335,40 @@ export function triggerDraftPoolPrewarmBackground(leagueId: string): void {
     })
 }
 
-export async function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraftPoolReadyResult> {
+/**
+ * 🛑 ONE COLD BUILD PER LEAGUE PER PROCESS, SHARED BY EVERY CALLER.
+ *
+ * The cron, the draft-room open (`triggerDraftPoolPrewarmBackground`) and autopick all call this,
+ * and its only race guard was a DB read — which sees nothing until a build FINISHES. Meanwhile a
+ * cold build is 60-90s on a quiet container and was logged at `{ ms: 522060 }` on a loaded one,
+ * and `draft-pool-prewarm` abandons its wait at 120s (`withTimeout` races; it does not cancel). So
+ * an overrunning build stayed alive and the next caller — the next 30-minute tick, a second user,
+ * autopick — started ANOTHER full build of the same league beside it. Measured on production
+ * `sync_job_runs` 2026-10-11..17: `cron-draft-pool-prewarm` ran past 5 minutes 46 times, and 115 of
+ * 587 stalls of normally sub-second crons began while it was running. Piling identical builds onto
+ * one thread is how a slow container becomes a stalled one.
+ *
+ * Callers that arrive while a build is in flight now await THAT build. Per process only: with two
+ * worker replicas, each can still run one — bounded, rather than one per caller per tick.
+ */
+const inFlightPoolBuilds = new Map<string, Promise<EnsureDraftPoolReadyResult>>()
+
+export function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraftPoolReadyResult> {
+  const existing = inFlightPoolBuilds.get(leagueId)
+  if (existing) return existing
+  const build = ensureDraftPoolReadyOnce(leagueId).finally(() => {
+    if (inFlightPoolBuilds.get(leagueId) === build) inFlightPoolBuilds.delete(leagueId)
+  })
+  inFlightPoolBuilds.set(leagueId, build)
+  return build
+}
+
+/** Test seam: how many league builds this process is running right now. */
+export function inFlightDraftPoolBuildCount(): number {
+  return inFlightPoolBuilds.size
+}
+
+async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPoolReadyResult> {
   const model = getDraftPoolCacheModel()
 
   const readiness = await getDraftPoolReadiness(leagueId)

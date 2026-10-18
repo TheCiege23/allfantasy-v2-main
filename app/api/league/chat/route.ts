@@ -401,7 +401,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
     let decision: ReturnType<typeof decisionAnswerMeta> | undefined
-    const survivorVote = (parseSurvivorCommand(message).intent === 'vote' || /^@chimmy\s+vote(?:\s|$)/i.test(message)) && await isSurvivorLeague(leagueId)
+    const survivorVote = (['vote', 'shot_in_the_dark'].includes(parseSurvivorCommand(message).intent) || /^@chimmy\s+vote(?:\s|$)/i.test(message)) && await isSurvivorLeague(leagueId)
     const voteResult = survivorVote
       ? await processSurvivorOfficialCommand({ leagueId, userId, command: message, source: 'private_chimmy' })
       : null

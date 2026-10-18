@@ -244,7 +244,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
       messageSubtype: 'chimmy_private', parentMessageId,
     })
     if (!prompt) return NextResponse.json({ error: 'Failed to send privately' }, { status: 500 })
-    const voteAttempt = parseSurvivorCommand(typedText).intent === 'vote' || /^@chimmy\s+vote(?:\s|$)/i.test(typedText)
+    const voteAttempt = ['vote', 'shot_in_the_dark'].includes(parseSurvivorCommand(typedText).intent) || /^@chimmy\s+vote(?:\s|$)/i.test(typedText)
     const voteResult = voteAttempt && await isSurvivorLeague(leagueId)
       ? await processSurvivorOfficialCommand({ leagueId, userId, command: typedText, source: 'private_chimmy' })
       : null

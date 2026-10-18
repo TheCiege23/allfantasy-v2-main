@@ -8,10 +8,8 @@ import {
   openFinale,
   openJuryPhase,
   openJuryVoting,
-  revealWinner,
-  tallyJuryVotes,
 } from '@/lib/survivor/juryEngine'
-import { submitJuryVote } from '@/lib/survivor/SurvivorFinaleEngine'
+import { getFinaleState, recordCrownedWinner, submitJuryVote } from '@/lib/survivor/SurvivorFinaleEngine'
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 
 export const dynamic = 'force-dynamic'
@@ -107,9 +105,13 @@ export async function POST(req: NextRequest) {
   if (body.intent === 'reveal') {
     const gate = await assertLeagueCommissioner(body.leagueId, userId)
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    const winner = await tallyJuryVotes(body.leagueId)
-    await revealWinner(body.leagueId)
-    return NextResponse.json({ winnerId: winner })
+    // The winner is decided only by the jury votes the finale engine counted.
+    const state = await getFinaleState(body.leagueId, await resolveSurvivorCurrentWeek(body.leagueId))
+    if (!state.closed || !state.winnerRosterId) {
+      return NextResponse.json({ error: `The jury has not finished voting (${state.votesSubmitted} of ${state.votesRequired} votes).` }, { status: 409 })
+    }
+    const { winnerUserId } = await recordCrownedWinner(body.leagueId, state)
+    return NextResponse.json({ winnerId: winnerUserId })
   }
 
   return NextResponse.json({ error: 'Invalid intent' }, { status: 400 })
