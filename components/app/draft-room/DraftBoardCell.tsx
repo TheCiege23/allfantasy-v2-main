@@ -45,6 +45,8 @@ export type DraftBoardCellPick = {
   ownerRosterId?: string | null
   /** From live pool merge — Rookie / N YOE */
   experienceBadge?: string | null
+  /** overall − market ADP, rounded; set only when large enough to badge (+ steal, − reach). */
+  adpDelta?: number | null
 }
 
 function TinyHeadshot({
@@ -424,9 +426,26 @@ function DraftBoardCellInner({
                   </span>
                 ) : null}
               </div>
-              <p className="truncate text-[11px] text-white/44">
-                {(pick.team ?? '—').toString()}
-                {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}
+              <p className="flex min-w-0 items-center gap-1 text-[11px] text-white/44">
+                <span className="truncate">
+                  {(pick.team ?? '—').toString()}
+                  {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}
+                </span>
+                {pick.adpDelta != null && pick.adpDelta !== 0 ? (
+                  <span
+                    className={`ml-auto shrink-0 rounded px-1 text-[11px] font-bold tabular-nums ${
+                      pick.adpDelta > 0 ? 'bg-emerald-500/18 text-emerald-200' : 'bg-rose-500/18 text-rose-200'
+                    }`}
+                    title={
+                      pick.adpDelta > 0
+                        ? `Taken ${pick.adpDelta} picks after ADP`
+                        : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
+                    }
+                    data-testid="draft-board-cell-adp-delta"
+                  >
+                    {pick.adpDelta > 0 ? `+${pick.adpDelta}` : `\u2212${Math.abs(pick.adpDelta)}`}
+                  </span>
+                ) : null}
               </p>
             </div>
           </div>
