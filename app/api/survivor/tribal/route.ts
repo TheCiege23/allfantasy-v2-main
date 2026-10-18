@@ -18,6 +18,7 @@ import { postLeagueRevealFollowUp, postScrollRevealToTribeChat } from '@/lib/sur
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { normalizeRevealPacing, revealVisibleCount, toPublicRevealSteps } from '@/lib/survivor/survivorRevealGate'
+import { finishCouncilReadIfComplete } from '@/lib/survivor/survivorCouncilReadFinish'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -133,12 +134,18 @@ export async function POST(req: NextRequest) {
     const pacing = normalizeRevealPacing(league?.survivorRevealMode)
     const now = new Date()
     const visible = revealVisibleCount({ isRevealed: true, revealStartsAt: council.revealStartsAt, revealStep: council.revealStep, total, pacing, now })
-    if (visible >= total) return NextResponse.json({ revealStep: total, visibleSteps: total, totalSteps: total, remaining: 0 })
+    if (visible >= total) {
+      // Catch up a read whose verdict has not gone out yet (idempotent).
+      await finishCouncilReadIfComplete(leagueId, councilId, userId)
+      return NextResponse.json({ revealStep: total, visibleSteps: total, totalSteps: total, remaining: 0 })
+    }
     const revealStep = visible + 1
     await prisma.survivorTribalCouncil.update({
       where: { id: councilId },
       data: { revealStep },
     })
+    // The last ballot is out: only now do the verdict (chat, revote) and the elimination go out.
+    if (revealStep >= total) await finishCouncilReadIfComplete(leagueId, councilId, userId)
     return NextResponse.json({ revealStep, visibleSteps: revealStep, totalSteps: total, remaining: total - revealStep })
   }
 

@@ -37,6 +37,7 @@ import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/l
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
+import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 
 export const dynamic = 'force-dynamic'
@@ -78,7 +79,7 @@ export async function GET(
     getJuryMembers(leagueId),
     getExileLeagueId(leagueId),
     getExileLeagueId(leagueId).then((id) => (id ? getAllTokenStates(id) : [])),
-    prisma.survivorTribalCouncil.findMany({ where: { leagueId, isRevealed: true, eliminatedRosterId: { not: null } }, select: { eliminatedRosterId: true, week: true }, orderBy: { week: 'asc' } }),
+    prisma.survivorTribalCouncil.findMany({ where: { leagueId, isRevealed: true, eliminatedRosterId: { not: null } }, select: { eliminatedRosterId: true, week: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true }, orderBy: { week: 'asc' } }),
     isMergeTriggered(leagueId, currentWeek),
     getCurrentUserRosterIdForLeague(leagueId, userId),
     getCurrentlyEliminatedRosterIds(leagueId),
@@ -100,7 +101,8 @@ export async function GET(
   })
   const seasonCalendar = seasonWeekBoundsForSport(leagueMeta?.sport, config.regularSeasonEndWeek ?? null)
 
-  const votedOutHistory = audit.map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
+  // Only councils whose read has finished name a voted-out manager (see survivorRevealGate).
+  const votedOutHistory = audit.filter(row => isCouncilReadComplete(row, leagueMeta?.survivorRevealMode)).map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
 
   const tribes = merged
     ? [

@@ -8,6 +8,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
 import { maybeTriggerSurvivorTribeShuffleRecommendation } from './SurvivorSitOutEngine'
+import { isCouncilReadComplete } from './survivorRevealGate'
 
 const JURY_PHASES = new Set(['merge', 'post_merge', 'jury', 'finale'])
 
@@ -25,8 +26,10 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
     if (!council.isRevealed) return { ok: false, status: 409, code: 'not_revealed', error: 'Reveal the votes before resolving elimination.' }
     if (!council.eliminatedUserId) return { ok: false, status: 409, code: 'no_eliminated', error: 'No eliminated player on this council.' }
     const userId = council.eliminatedUserId
-    const league = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true, platform: true } })
+    const league = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true, platform: true, survivorRevealMode: true } })
     if (!league || !isNativePlatform(league.platform)) return { ok: false, status: 409, code: 'not_native', error: 'Roster elimination is available only for leagues hosted on AllFantasy.' }
+    // The torch goes out only after the last ballot has been read; until then nobody is named anywhere.
+    if (!isCouncilReadComplete(council, league.survivorRevealMode)) return { ok: false, status: 409, code: 'read_in_progress', error: 'The votes are still being read.' }
     const settings = normalizeSurvivorFoundationSettings(league.settings && typeof league.settings === 'object' ? league.settings as Record<string, unknown> : {})
     let outcome = settings.exileIslandEnabled ? 'exile_island' as const : 'removed_to_waivers' as const
     const previous = await tx.survivorAuditEntry.findFirst({ where: { leagueId, action: 'player_eliminated', relatedEntityId: councilId }, select: { id: true, data: true } })

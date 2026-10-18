@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gateRevealPayload, normalizeRevealPacing, REVEAL_STEP_MS, revealVisibleCount } from '@/lib/survivor/survivorRevealGate'
+import { gateRevealPayload, isCouncilReadComplete, normalizeRevealPacing, REVEAL_STEP_MS, revealVisibleCount } from '@/lib/survivor/survivorRevealGate'
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 
 const start = new Date('2026-10-20T20:00:00.000Z')
@@ -103,5 +103,17 @@ describe('public council projection', () => {
     const done = survivorPublicCouncil(council, false, { revealMode: 'dramatic_sequential', now: at(REVEAL_STEP_MS * 10) })!
     expect(done).toMatchObject({ status: 'revealed', eliminatedName: 'Alpha', eliminatedRosterId: 'roster-alpha', revealComplete: true })
     expect(done.revealSequence).toHaveLength(4)
+  })
+})
+
+describe('isCouncilReadComplete (history, recap, Chimmy, elimination)', () => {
+  it('is false before publication, before revealStartsAt and mid-read; true after the last step', () => {
+    expect(isCouncilReadComplete({ ...council, isRevealed: false }, 'simultaneous', at(60_000))).toBe(false)
+    expect(isCouncilReadComplete(council, 'simultaneous', at(-1))).toBe(false)
+    expect(isCouncilReadComplete(council, 'dramatic_sequential', at(REVEAL_STEP_MS * 3 - 1))).toBe(false)
+    expect(isCouncilReadComplete(council, 'dramatic_sequential', at(REVEAL_STEP_MS * 3))).toBe(true)
+    expect(isCouncilReadComplete(council, 'commissioner', at(86_400_000))).toBe(false)
+    expect(isCouncilReadComplete({ ...council, revealStep: 4 }, 'commissioner', at(0))).toBe(true)
+    expect(isCouncilReadComplete(council, 'simultaneous', at(0))).toBe(true)
   })
 })

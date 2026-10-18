@@ -154,3 +154,24 @@ export function gateRevealPayload(input: RevealGateInput): GatedReveal {
     tiePhase: complete ? input.tiePhase ?? null : null,
   }
 }
+
+/** The stored council fields the gate needs. */
+export interface RevealStateRow {
+  isRevealed: boolean
+  revealStartsAt?: Date | string | null
+  revealStep?: number | null
+  revealSequence?: unknown
+}
+
+/**
+ * True once every ballot of a published read has been released, i.e. the verdict may be shown.
+ * Anything that names who was voted out (history, AI/Chimmy context, chat verdict, elimination)
+ * must wait for this.
+ */
+export function isCouncilReadComplete(row: RevealStateRow, revealMode: string | null | undefined, now: Date = new Date()): boolean {
+  if (!row.isRevealed) return false
+  const start = toDate(row.revealStartsAt)
+  if (start && now.getTime() < start.getTime()) return false
+  const total = toPublicRevealSteps(row.revealSequence).length
+  return revealVisibleCount({ isRevealed: true, revealStartsAt: row.revealStartsAt, revealStep: row.revealStep, total, pacing: normalizeRevealPacing(revealMode), now }) >= total
+}

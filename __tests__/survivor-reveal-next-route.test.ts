@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const m = vi.hoisted(() => ({
-  session: vi.fn(), commissioner: vi.fn(), hostGuard: vi.fn(),
+  session: vi.fn(), commissioner: vi.fn(), hostGuard: vi.fn(), finish: vi.fn(),
   db: {
     league: { findUnique: vi.fn() },
     survivorTribalCouncil: { findUnique: vi.fn(), update: vi.fn() },
@@ -22,6 +22,7 @@ vi.mock('@/lib/survivor/rocksEngine', () => ({ executeRocksDraw: vi.fn() }))
 vi.mock('@/lib/survivor/SurvivorChatMembershipService', () => ({ removeRosterFromTribeChat: vi.fn() }))
 vi.mock('@/lib/survivor/SurvivorExileEngine', () => ({ enrollInExile: vi.fn() }))
 vi.mock('@/lib/survivor/SurvivorJuryEngine', () => ({ enrollJuryMember: vi.fn(), shouldJoinJury: vi.fn() }))
+vi.mock('@/lib/survivor/survivorCouncilReadFinish', () => ({ finishCouncilReadIfComplete: m.finish }))
 vi.mock('@/lib/survivor/leagueChatPoster', () => ({ postLeagueRevealFollowUp: vi.fn(), postScrollRevealToTribeChat: vi.fn() }))
 import { POST } from '@/app/api/survivor/tribal/route'
 
@@ -50,6 +51,15 @@ describe('reveal_next paces the read without mutating the sequence', () => {
     expect(data).toEqual({ revealStep: 2 })
     expect(data).not.toHaveProperty('revealSequence')
     expect(data).not.toHaveProperty('isRevealed')
+    // Not the last ballot: the verdict and the elimination stay unpublished.
+    expect(m.finish).not.toHaveBeenCalled()
+  })
+
+  it('publishes the verdict and resolves the elimination only when the last ballot is released', async () => {
+    m.db.survivorTribalCouncil.findUnique.mockResolvedValue({ revealSequence: sequence, isRevealed: true, revealStartsAt: new Date(Date.now() - 1000), revealStep: 2 })
+    const res = await post({ leagueId: 'l1', action: 'reveal_next', councilId: 'c1' })
+    expect(await res.json()).toMatchObject({ revealStep: 3, remaining: 0 })
+    expect(m.finish).toHaveBeenCalledWith('l1', 'c1', 'host')
   })
 
   it('refuses to start an unpublished read', async () => {
