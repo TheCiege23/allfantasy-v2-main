@@ -5371,6 +5371,7 @@ export function DraftRoomPageClient({
       playerPanel={playerPoolNode}
       queuePanel={queueStackNode}
       helperPanel={undefined}
+      intelPanel={session.draftType !== 'auction' ? intelPanelNode : undefined}
       chatPanel={chatPanelNode}
       rosterPanel={rosterPanel}
       keeperPanel={keeperPanel}

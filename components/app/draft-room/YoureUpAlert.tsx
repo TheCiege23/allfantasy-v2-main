@@ -5,6 +5,13 @@
  * viewer, offers a one-tap draft of the top queued (else best available)
  * player, and warns about back-to-back picks at the turn. Dismissal is per
  * pick, so the next turn shows it again.
+ *
+ * Placement avoids the two things you need while on the clock: the header's
+ * pick clock (top) and the player list (bottom on desktop, where you draft and
+ * queue). On desktop it sits just under the header, over the display-only
+ * recent-picks strip; on phones and tablets it sits above the bottom docks.
+ * z-[45]: above the room (header is z-30) but below every dialog (z-50 / z-60),
+ * so an open trade panel or player card is never covered by it.
  */
 
 import React from 'react'
@@ -39,7 +46,7 @@ export function YoureUpAlert({
     <div
       role="alert"
       data-testid="draft-youre-up-alert"
-      className="pointer-events-auto fixed inset-x-3 top-3 z-[70] mx-auto max-w-md rounded-2xl bg-amber-400 px-4 py-3 text-[#0a111d] shadow-[0_16px_40px_rgba(0,0,0,0.55)]"
+      className="pointer-events-auto fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+132px)] z-[45] mx-auto max-w-md rounded-2xl md:bottom-6 lg:bottom-auto lg:top-24 bg-amber-400 px-4 py-3 text-[#0a111d] shadow-[0_16px_40px_rgba(0,0,0,0.55)]"
     >
       <div className="flex items-center gap-3">
         <Bell className="h-5 w-5 shrink-0" aria-hidden />
