@@ -102,6 +102,8 @@ import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import { detectSnakeBackToBackSoon, computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
 import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanningRibbon'
 import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
+import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
+import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
 import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
 import {
   buildAssistantFeedByPlayerName,
@@ -260,7 +262,7 @@ export function DraftRoomPageClient({
   initialSnapshot,
   initialPoolReadiness = null,
 }: DraftRoomPageClientProps) {
-  type CenterDockTab = 'queue' | 'chat' | 'ai' | 'commish'
+  type CenterDockTab = 'queue' | 'intel' | 'chat' | 'ai' | 'commish'
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
   const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
@@ -2946,6 +2948,36 @@ export function DraftRoomPageClient({
     const fromComm = commissionerAiDraft?.assignedAiTeams?.filter((t) => t.active).map((t) => t.teamId) ?? []
     return [...new Set([...fromComm, ...aiOpponentRosterIds])]
   }, [commissionerAiDraft?.assignedAiTeams, aiOpponentRosterIds])
+  /** Intel tab — picks other managers make before the viewer's next turn (lib/draft-room/draftIntelLookahead). */
+  const intelLookahead = useMemo(() => {
+    if (!session || session.draftType === 'auction') return null
+    if (session.status !== 'in_progress' && session.status !== 'paused') return null
+    if (currentPick?.overall == null) return null
+    const teamCount = Math.max(1, session.teamCount ?? 1)
+    return buildDraftLookahead({
+      picks: session.picks ?? [],
+      available: pulseAvailablePlayers,
+      lookup: buildAdpLookup(players),
+      slotOrder: session.slotOrder ?? [],
+      tradedPicks: session.tradedPicks ?? [],
+      teamCount,
+      rounds: Math.max(1, session.rounds ?? 1),
+      draftType: session.draftType,
+      thirdRoundReversal: session.thirdRoundReversal,
+      currentOverall: currentPick.overall,
+      viewerRosterId: (session as DraftSessionSnapshot).currentUserRosterId ?? null,
+      starterSlots: rosterConfig?.starterSlots ?? null,
+      autoRosterIds: new Set([...aiManagedRosterIds, ...((session as DraftSessionSnapshot).orphanRosterIds ?? [])]),
+    })
+  }, [session, currentPick?.overall, pulseAvailablePlayers, players, rosterConfig?.starterSlots, aiManagedRosterIds])
+  const intelPanelNode = (
+    <DraftIntelPanel
+      lookahead={intelLookahead}
+      idle={!intelLookahead}
+      sport={effectiveDraftSport}
+      formatPickLabel={(overall) => formatPickLabel(overall, Math.max(1, session?.teamCount ?? 1))}
+    />
+  )
   const draftTeamPanelProps = useMemo(() => {
     const devyRoundsSet = new Set<number>(
       ((session as DraftSessionSnapshot | null)?.c2c?.enabled
@@ -4573,6 +4605,7 @@ export function DraftRoomPageClient({
                   </div>
                 }
                 queueBody={<div className="flex h-full min-h-0 flex-col overflow-auto bg-[linear-gradient(180deg,rgba(7,14,28,0.65),rgba(6,12,24,0.88))] px-1 py-1">{queueStackNode}</div>}
+                intelBody={session.draftType !== 'auction' ? intelPanelNode : null}
                 rosterBody={
                   <ResultsRosterPanel
                     teams={resultsRosterTeams}
@@ -4597,7 +4630,13 @@ export function DraftRoomPageClient({
             <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden xl:hidden">
               <div className="flex h-full min-h-0 w-full flex-col" data-testid="draft-bottom-dock-tabs">
                 <div
-                  className={`grid ${isCommissioner ? 'grid-cols-4' : 'grid-cols-3'} gap-1 border-b px-2 py-1.5 ${
+                  className={`grid ${
+                    (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 2
+                      ? 'grid-cols-5'
+                      : (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 1
+                        ? 'grid-cols-4'
+                        : 'grid-cols-3'
+                  } gap-1 border-b px-2 py-1.5 ${
                     presentationVariant === 'redraft_snake'
                       ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(5,12,24,0.98))] shadow-[inset_0_1px_0_rgba(34,211,238,0.08)]'
                       : 'border-white/8 bg-[#0a1228]'
@@ -4617,6 +4656,22 @@ export function DraftRoomPageClient({
                   >
                     Queue
                   </button>
+                  {session.draftType !== 'auction' ? (
+                    <button
+                      type="button"
+                      onClick={() => setCenterDockTab('intel')}
+                      data-testid="draft-bottom-tab-intel"
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                        centerDockTab === 'intel'
+                          ? presentationVariant === 'redraft_snake'
+                            ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
+                            : 'bg-white/12 text-cyan-100'
+                          : 'text-white/55 hover:bg-white/5'
+                      }`}
+                    >
+                      Intel
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => setCenterDockTab('chat')}
@@ -4664,6 +4719,10 @@ export function DraftRoomPageClient({
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {centerDockTab === 'queue' ? (
                     <div className="h-full overflow-auto px-1.5 py-1">{queueStackNode}</div>
+                  ) : null}
+
+                  {centerDockTab === 'intel' ? (
+                    <div className="h-full overflow-hidden" data-testid="draft-bottom-intel-panel">{intelPanelNode}</div>
                   ) : null}
 
                   {centerDockTab === 'chat' ? (
