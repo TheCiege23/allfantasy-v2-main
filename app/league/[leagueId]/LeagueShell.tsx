@@ -75,6 +75,7 @@ import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
+import type { LeagueRailData } from '@/components/league/native/LeagueRail'
 import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
@@ -177,6 +178,9 @@ import { getLeagueTypeMedia, resolveLeagueConceptIntroKey } from '@/lib/league-m
 import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-presets'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
+import { useGuillotineAtmosphere } from '@/components/league-atmosphere/useGuillotineAtmosphere'
+import { isGuillotineAtmosphereLeague } from '@/lib/guillotine/guillotineAtmosphere'
+import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { TournamentIntroVideoOverlay } from '@/components/tournament/TournamentIntroVideoOverlay'
 import {
   SpecialtyLeagueHomeHero,
@@ -264,6 +268,8 @@ export type LeagueShellProps = {
   /** Head commissioner only (reset draft, co-comm management). */
   isHeadCommissioner: boolean
   allLeagues: League[]
+  /** /core's rail data (this week's matchup + crest) per league in `allLeagues`. Null draws names only. */
+  leagueRail?: LeagueRailData | null
   userId: string
   userName: string
   userImage?: string | null
@@ -300,6 +306,7 @@ export function LeagueShell({
   isCommissioner,
   isHeadCommissioner,
   allLeagues,
+  leagueRail = null,
   userId,
   userName,
   userImage = null,
@@ -1357,6 +1364,19 @@ export function LeagueShell({
     Boolean(tournamentHeroContext)
   )
 
+  // Native guillotine leagues get the ember atmosphere and banner; the mood follows the chop
+  // calendar and the viewer's survival (lib/guillotine/guillotineAtmosphere.ts).
+  const guillotineAtmosphereEnabled = nativeWorkspace && isGuillotineAtmosphereLeague(league)
+  const guillotineLeaguePhase = nativeLeaguePhase(selectedLeague)
+  const guillotineAtmosphere = useGuillotineAtmosphere({
+    leagueId: league.id,
+    enabled: guillotineAtmosphereEnabled,
+    predraft: guillotineLeaguePhase === 'Setup' || guillotineLeaguePhase === 'Draft',
+    teamCount: league.leagueSize ?? selectedLeague.teamCount ?? null,
+    leagueWeek: typeof selectedLeague.currentWeek === 'number' ? selectedLeague.currentWeek : null,
+    settings: (league.settings as Record<string, unknown> | null | undefined) ?? null,
+  })
+
   // Only the /api/devy config fetch (fail-closed in prod, where the /devy tree
   // is build-excluded) may enable the hero — `leagueType === 'devy'` alone let
   // API-created devy leagues render a hero whose surfaces 404.
@@ -1397,6 +1417,8 @@ export function LeagueShell({
           }
           mood={specialtyAtmosphereMood}
         />
+      ) : guillotineAtmosphere ? (
+        <SpecialtyLeagueAtmosphere variant="guillotine" mood={guillotineAtmosphere.mood} />
       ) : null}
       {tournamentHeroContext ? (
         <TournamentIntroVideoOverlay
@@ -1447,6 +1469,8 @@ export function LeagueShell({
           onSelectTab={handleUserTabChange}
           onOpenSettings={() => (nativeWorkspace ? handleUserTabChange('settings') : openLeagueSettingsModal(null))}
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
+          rail={leagueRail}
+          guillotineBanner={guillotineAtmosphere ? { line: guillotineAtmosphere.line, mood: guillotineAtmosphere.mood } : null}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}
