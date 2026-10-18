@@ -433,7 +433,7 @@ function DraftBoardCellInner({
                 </span>
                 {pick.adpDelta != null && pick.adpDelta !== 0 ? (
                   <span
-                    className={`ml-auto shrink-0 rounded px-1 text-[10px] font-bold tabular-nums ${
+                    className={`ml-auto shrink-0 rounded px-1 text-[11px] font-bold tabular-nums ${
                       pick.adpDelta > 0 ? 'bg-emerald-500/18 text-emerald-200' : 'bg-rose-500/18 text-rose-200'
                     }`}
                     title={
