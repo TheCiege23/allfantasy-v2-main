@@ -7,6 +7,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { RailMatchupSummary, RailSideProjectionSummary, RailStandingSummary } from './AfCoreShell'
 import type { LiveRailScore } from './useLiveRailScores'
+import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 
 /**
  * The expanded body of one league row in the league rail: name, freshness, the
@@ -35,6 +36,10 @@ export function mergeRailMatchup(
   const sameWeek = saved?.season === live.season && saved?.week === live.week
   const fieldRace = saved?.standing?.elimination === true
   const standing = fieldRace ? live.fieldStanding : live.standing
+  /* A native row is read from the database with its own projection and its own data stamp. */
+  if (live.native) {
+    return { ...live, freshAt: live.freshAt ?? null, source: 'live_cache' as const }
+  }
   return {
     ...live,
     freshAt: live.updatedAt,
@@ -189,6 +194,80 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
   )
 }
 
+/** "Mon 8pm" in the viewer's own zone. */
+function draftWhen(iso: string, es: boolean): string {
+  const at = new Date(iso)
+  if (!Number.isFinite(at.getTime())) return ''
+  const day = at.toLocaleDateString(es ? 'es' : 'en-US', { weekday: 'short' })
+  const time = at.toLocaleTimeString(es ? 'es' : 'en-US', { hour: 'numeric', minute: at.getMinutes() ? '2-digit' : undefined })
+  return `${day} ${es ? time : time.replace(/\s?([AP])M$/i, (_, h: string) => `${h.toLowerCase()}m`)}`
+}
+
+/**
+ * A native guillotine league's line, in the slot a head-to-head opponent would take.
+ *
+ * ⚠ THE SAME FOUR CLASSES AS `RailStanding`, ON PURPOSE: the tray layout check
+ * (e2e/mobile/league-tray-layout.spec.ts) requires every class the row uses to exist in this file or
+ * the shell, and the line is the same shape — a position, the distance to the cut, the space, the basis.
+ */
+function RailGuillotine({ line }: { line: RailGuillotineLine }) {
+  const es = useOptionalLanguage().language === 'es'
+  const chopWeek = line.firstChopWeek
+  let pos: ReactNode
+  let cut: string
+  let space: string | null = null
+  let tone: 'bad' | 'warn' | undefined
+  const basis = line.basis == null ? null : line.basis === 'points' ? (es ? 'por puntos' : 'on points') : es ? 'por proyección' : 'on projection'
+  const aliveRank = line.rank != null ? (
+    <>
+      {es ? `#${line.rank}` : ordinal(line.rank)}
+      <span className="af-rail-row-rank-of">{es ? ` de ${line.aliveCount} vivos` : ` of ${line.aliveCount} alive`}</span>
+    </>
+  ) : null
+  switch (line.state) {
+    case 'eliminated':
+      tone = 'bad'
+      pos = line.choppedWeek != null ? (es ? `Eliminado sem ${line.choppedWeek}` : `Chopped wk ${line.choppedWeek}`) : es ? 'Eliminado' : 'Chopped'
+      cut = es ? 'fuera de la liga' : 'eliminated'
+      break
+    case 'preseason':
+      pos = line.draftAt ? `${es ? 'Draft' : 'Draft'} ${draftWhen(line.draftAt, es)}` : es ? 'Temporada sin empezar' : 'Season not started'
+      cut = chopWeek != null ? (es ? `primer corte sem ${chopWeek}` : `first chop wk ${chopWeek}`) : es ? 'guillotina' : 'guillotine'
+      break
+    case 'before_first_chop':
+      pos = aliveRank ?? (es ? `${line.aliveCount} vivos` : `${line.aliveCount} alive`)
+      cut = chopWeek != null ? (es ? `Primer corte sem ${chopWeek}` : `First chop wk ${chopWeek}`) : es ? 'sin cortes aún' : 'no chops yet'
+      break
+    case 'no_scores':
+      pos = es ? `${line.aliveCount} vivos` : `${line.aliveCount} alive`
+      cut = es ? 'sin puntos todavía' : 'no scores yet'
+      break
+    case 'chop_zone':
+      tone = 'bad'
+      pos = aliveRank
+      cut = es ? 'en zona de corte' : 'in the chop zone'
+      space = line.chopMargin != null && line.chopMargin < 0
+        ? es ? `${line.chopMargin.toFixed(1)} para salvarse` : `${line.chopMargin.toFixed(1)} to safety`
+        : es ? 'empatado en la línea' : 'tied at the line'
+      break
+    default:
+      tone = line.rank != null && line.rank > line.aliveCount * 0.75 ? 'warn' : undefined
+      pos = aliveRank
+      cut = line.chopMargin != null
+        ? es ? `+${line.chopMargin.toFixed(1)} sobre el corte` : `+${line.chopMargin.toFixed(1)} above chop`
+        : es ? 'vivo' : 'alive'
+  }
+  return (
+    <span className="af-rail-row-rank" data-tone={tone} data-guillotine={line.state}>
+      <span className="af-rail-row-rank-pos" suppressHydrationWarning>{pos}</span>
+      <span className="af-rail-row-rank-cut">{cut}</span>
+      {space ? <span className="af-rail-row-rank-space">{space}</span> : null}
+      {basis && (line.state === 'alive' || line.state === 'chop_zone' || line.state === 'before_first_chop')
+        ? <span className="af-rail-row-rank-basis">{basis}</span>
+        : null}
+    </span>
+  )
+}
 
 export type RailRowBodyProps = {
   name: string
@@ -276,7 +355,7 @@ export function RailRowBody({
               printing them says the game was played and finished
               nil-all.
             */
-            score={m.scored ? m.yourScore : null}
+            score={m.guillotine ? (m.guillotine.state === 'eliminated' ? null : m.guillotine.points) : m.scored ? m.yourScore : null}
             projection={m.yourProjection ?? null}
           />
 
@@ -287,7 +366,9 @@ export function RailRowBody({
             not ask. What its manager wants is the distance between
             them and the cut.
           */}
-          {m.unpaired ? (
+          {m.guillotine ? (
+            <RailGuillotine line={m.guillotine} />
+          ) : m.unpaired ? (
             <RailStanding standing={m.standing ?? null} />
           ) : (
             <RailSide

@@ -109,7 +109,12 @@ export function useLeagueRail(leagues: UserLeague[], rail: LeagueRailData | null
     return Object.values(rail?.matchups ?? {}).some(m =>
       m.source === 'live_cache' && m.scored && m.freshAt != null && clock - Date.parse(m.freshAt) < 15 * 60_000)
   }, [rail, clock])
-  const liveState = useLiveRailScores(railLeagues, enabled, coreRefreshIntervalMs(gameDay, 0))
+  /* Native rows (a guillotine line, a native head-to-head) poll the same route, answered from the database. */
+  const nativeIds = useMemo(
+    () => Object.entries(rail?.matchups ?? {}).filter(([, m]) => m.native).map(([id]) => id),
+    [rail],
+  )
+  const liveState = useLiveRailScores(railLeagues, enabled, coreRefreshIntervalMs(gameDay, 0), nativeIds)
   return (row: UserLeague) => leagueRailRowView(row, rail, liveState, clock)
 }
 
