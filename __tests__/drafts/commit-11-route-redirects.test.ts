@@ -26,6 +26,7 @@ const prismaMock = vi.hoisted(() => ({
   draftSession: {
     findFirst: vi.fn(async () => null as any),
     upsert: vi.fn(async () => ({ id: 'session-ds' })),
+    update: vi.fn(async () => ({ id: 'session-ds', status: 'in_progress' })),
   },
   league: {
     findFirst: vi.fn(async () => null as any),
@@ -35,6 +36,10 @@ const prismaMock = vi.hoisted(() => ({
 const canAccessLeagueMock = vi.hoisted(() => vi.fn(async () => true))
 const getDraftIdFromSettingsMock = vi.hoisted(() => vi.fn(() => null as string | null))
 const draftBoardMock = vi.hoisted(() => vi.fn((_props: unknown) => null))
+const getOrCreateDraftSessionMock = vi.hoisted(() =>
+  vi.fn(async () => ({ session: { id: 'session-ds', status: 'in_progress' } })),
+)
+const autoMaterializeMock = vi.hoisted(() => vi.fn(async () => undefined))
 
 class RedirectError extends Error {
   constructor(public to: string) {
@@ -65,6 +70,17 @@ vi.mock('@/app/league/[leagueId]/components/league-settings-modal-utils', () => 
 vi.mock('@/components/draft/DraftBoard', () => ({
   DraftBoard: (props: unknown) => draftBoardMock(props),
 }))
+// /league/[leagueId]/draft creates its DraftSession through the service and runs
+// repair / pool-warm side effects before redirecting; none of them may touch a DB here.
+vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({
+  getOrCreateDraftSession: (...a: unknown[]) => getOrCreateDraftSessionMock(...a),
+}))
+vi.mock('@/lib/league-setup/autoMaterializeDraftForLeague', () => ({
+  autoMaterializeDraftForLeague: (...a: unknown[]) => autoMaterializeMock(...a),
+}))
+vi.mock('@/lib/redraft-core-contract', () => ({ ensureRedraftLeagueContract: async () => undefined }))
+vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({ triggerDraftPoolPrewarmBackground: () => undefined }))
+vi.mock('@/lib/sleeper/sync/backfillSleeperDraftIds', () => ({ fetchDraftIdForLeague: async () => null }))
 
 // ---------------------------------------------------------------------------
 // Page imports (after mocks are registered)
@@ -264,7 +280,7 @@ describe('/draft/live/[draftId]', () => {
     expect((err as RedirectError).to).not.toBe('/drafts/league-xyz')
   })
 
-  it('redirects to /dashboard when no DraftSession found for league', async () => {
+  it('redirects to /core when no DraftSession found for league', async () => {
     prismaMock.draftSession.findFirst
       .mockResolvedValueOnce(null) // not a session id
       .mockResolvedValueOnce(null) // no session for league
@@ -272,16 +288,16 @@ describe('/draft/live/[draftId]', () => {
 
     await expect(
       LiveDraftPage({ params: { draftId: 'league-abc' } })
-    ).rejects.toMatchObject({ to: '/dashboard' })
+    ).rejects.toMatchObject({ to: '/core' })
   })
 
-  it('redirects to /dashboard when param resolves to nothing', async () => {
+  it('redirects to /core when param resolves to nothing', async () => {
     prismaMock.draftSession.findFirst.mockResolvedValueOnce(null)
     prismaMock.league.findFirst.mockResolvedValueOnce(null)
 
     await expect(
       LiveDraftPage({ params: { draftId: 'unknown' } })
-    ).rejects.toMatchObject({ to: '/dashboard' })
+    ).rejects.toMatchObject({ to: '/core' })
   })
 
   it('redirects to login when unauthenticated', async () => {
@@ -308,13 +324,36 @@ describe('/league/[leagueId]/draft', () => {
       leagueSize: 12,
       settings: {},
     })
-    prismaMock.draftSession.upsert.mockResolvedValue({ id: 'ds-league-1' })
+    getOrCreateDraftSessionMock.mockResolvedValue({ session: { id: 'ds-league-1', status: 'pre_draft' } })
+    prismaMock.draftSession.update.mockResolvedValue({ id: 'ds-league-1', status: 'pre_draft' })
   })
 
   it('redirects to /drafts/[sessionId]', async () => {
     await expect(
       LeagueDraftPage({ params: Promise.resolve({ leagueId: 'league-1' }) })
     ).rejects.toMatchObject({ to: '/drafts/ds-league-1' })
+    expect(getOrCreateDraftSessionMock).toHaveBeenCalledWith('league-1')
+  })
+
+  it('seats the room before a draft we run starts, but never for a Sleeper-hosted draft', async () => {
+    await LeagueDraftPage({ params: Promise.resolve({ leagueId: 'league-1' }) }).catch(() => null)
+    expect(autoMaterializeMock).toHaveBeenCalledWith('league-1')
+
+    autoMaterializeMock.mockClear()
+    prismaMock.league.findFirst.mockResolvedValue({
+      id: 'league-1', sport: 'NFL', leagueSize: 12, settings: {}, platform: 'sleeper', platformLeagueId: 'sl-1',
+    })
+    getDraftIdFromSettingsMock.mockReturnValue('sleeper-draft-1')
+    await LeagueDraftPage({ params: Promise.resolve({ leagueId: 'league-1' }) }).catch(() => null)
+    expect(autoMaterializeMock).not.toHaveBeenCalled()
+  })
+
+  it('redirects to /core when the viewer cannot access the league', async () => {
+    canAccessLeagueMock.mockResolvedValue(false)
+    await expect(
+      LeagueDraftPage({ params: Promise.resolve({ leagueId: 'league-1' }) })
+    ).rejects.toMatchObject({ to: '/core' })
+    expect(getOrCreateDraftSessionMock).not.toHaveBeenCalled()
   })
 
   it('redirects to login when unauthenticated', async () => {
@@ -365,7 +404,7 @@ describe('Source invariants — all legacy entry points redirect to /drafts/', (
 
   it('app/league/[leagueId]/draft/page.tsx redirects to /drafts/', () => {
     const src = readFileSync(resolve(root, 'app/league/[leagueId]/draft/page.tsx'), 'utf8')
-    expect(src).toMatch(/redirect\(`\/drafts\/\$\{ds\.id\}`\)/)
-    expect(src).not.toMatch(/redirect\(`\/draft\/\$\{ds\.id\}`\)/)
+    expect(src).toMatch(/redirect\(`\/drafts\/\$\{encodeURIComponent\(updatedDraftSession\.id\)\}`\)/)
+    expect(src).not.toMatch(/redirect\(`\/draft\/\$\{/)
   })
 })
