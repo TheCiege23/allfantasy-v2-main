@@ -8,11 +8,19 @@ import { startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
 import { enqueueNotification } from './notificationEngine'
+import {
+  holdGuillotineScheduledDraft,
+  loadGuillotineSeatState,
+  planGuillotineScheduledDraft,
+  prepareGuillotineSeatsForStart,
+} from '@/lib/guillotine/lateStartSeats'
 
 export interface ScheduledSurvivorDraftSummary {
   scanned: number
   started: number
   skipped: number
+  /** Native guillotine drafts that were not full and moved a week. */
+  rolled?: number
   errors: Array<{ leagueId: string; error: string }>
 }
 
@@ -20,6 +28,10 @@ export interface ScheduledSurvivorDraftSummary {
  * Called by the minute draft tick; native Survivor and Guillotine leagues that opted into autostart
  * qualify. Guillotine saved the "Autostart Draft" toggle but nothing read it, so the commissioner had
  * to press Start by hand at draft time.
+ *
+ * A native guillotine league starts only when it is full at the seat count its remaining chop weeks
+ * support; otherwise the draft moves a week (see `lib/guillotine/lateStartSeats.ts`). Before that
+ * rule it started on time with every open seat drafted by the CPU.
  */
 export async function startScheduledSurvivorDrafts(now: Date = new Date()): Promise<ScheduledSurvivorDraftSummary> {
   const due = await prisma.leagueSettings.findMany({
@@ -47,6 +59,16 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
         summary.skipped++
         continue
       }
+      // Native guillotine: start only when every seat the remaining season can chop is claimed.
+      // Not full -> the draft waits a week with fewer seats (lib/guillotine/lateStartSeats.ts).
+      const seatState = await loadGuillotineSeatState(leagueId)
+      const seatPlan = seatState ? await planGuillotineScheduledDraft(seatState) : null
+      if (seatState && seatPlan && seatPlan.action !== 'start') {
+        const held = await withControlLock(leagueId, () => holdGuillotineScheduledDraft(seatState, seatPlan))
+        if (held.acquired && held.value === 'rolled') summary.rolled = (summary.rolled ?? 0) + 1
+        summary.skipped++
+        continue
+      }
       const pool = await getDraftPoolReadiness(leagueId)
       if (!pool.ready) {
         triggerDraftPoolPrewarmBackground(leagueId)
@@ -59,6 +81,10 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
           select: { status: true, sessionKind: true, sleeperDraftId: true },
         })
         if (!current || current.status !== 'pre_draft' || current.sessionKind === 'mock' || current.sleeperDraftId) return null
+        if (seatState && seatPlan?.action === 'start') {
+          const seats = await prepareGuillotineSeatsForStart(seatState, seatPlan)
+          if (seats && !seats.ok) return { ok: false as const, reason: 'GUILLOTINE_SEATS' as const, error: `guillotine seats not reduced: ${seats.reason}` }
+        }
         return startDraftSession(leagueId)
       })
       if (!locked.acquired || !locked.value) {
