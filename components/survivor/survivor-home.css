@@ -1,5 +1,7 @@
 /* Survivor league home (survivor-core handoff, SurvivorHome). Uses the native workspace tokens. */
-.svh{--svh-gold:#f1d58a;--svh-ember:#ff9a3c;--svh-surface:var(--surface,#10131c);--svh-line:var(--line,rgba(255,255,255,.06));display:flex;flex-direction:column;gap:20px;color:var(--text,#e8eaf2)}
+.svh{--svh-gold:#f1d58a;--svh-ember:#ff9a3c;--svh-surface:var(--surface,#10131c);--svh-line:var(--line,rgba(255,255,255,.06));display:flex;flex-direction:column;gap:20px;color:var(--text,#e8eaf2);
+  /* The AF and Chimmy launchers float over the bottom-right corner; let the last card scroll clear of both. */
+  padding-bottom:var(--af-fab-slot-2,160px)}
 .svh p{margin:0}
 .svh-hero{position:relative;isolation:isolate;overflow:hidden;min-height:250px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:#0b0d14}
 .svh-hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:62% 60%;z-index:-2}

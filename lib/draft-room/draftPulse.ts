@@ -208,6 +208,21 @@ export function survivalProbability(
   return 1 / (1 + Math.exp(-(adp - targetOverall) / spread))
 }
 
+export type SurvivalTone = 'likely' | 'coin_flip' | 'unlikely'
+
+/** Bands for presenting a survival estimate: >= 60% likely, >= 30% coin flip, else unlikely. */
+export function survivalTone(probability: number): SurvivalTone {
+  if (probability >= 0.6) return 'likely'
+  if (probability >= 0.3) return 'coin_flip'
+  return 'unlikely'
+}
+
+/** "63%", clamped to 1–99 so an estimate never reads as a certainty. */
+export function formatSurvival(probability: number): string {
+  const pct = Math.round(probability * 100)
+  return `${Math.min(99, Math.max(1, pct))}%`
+}
+
 export type ManagerTendencyKind = 'reacher' | 'value_hunter' | 'adp_loyal' | 'unknown'
 
 export type ManagerTendency = {

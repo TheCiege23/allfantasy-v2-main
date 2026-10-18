@@ -178,6 +178,9 @@ import { getLeagueTypeMedia, resolveLeagueConceptIntroKey } from '@/lib/league-m
 import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-presets'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
+import { useGuillotineAtmosphere } from '@/components/league-atmosphere/useGuillotineAtmosphere'
+import { isGuillotineAtmosphereLeague } from '@/lib/guillotine/guillotineAtmosphere'
+import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { TournamentIntroVideoOverlay } from '@/components/tournament/TournamentIntroVideoOverlay'
 import {
   SpecialtyLeagueHomeHero,
@@ -1361,6 +1364,19 @@ export function LeagueShell({
     Boolean(tournamentHeroContext)
   )
 
+  // Native guillotine leagues get the ember atmosphere and banner; the mood follows the chop
+  // calendar and the viewer's survival (lib/guillotine/guillotineAtmosphere.ts).
+  const guillotineAtmosphereEnabled = nativeWorkspace && isGuillotineAtmosphereLeague(league)
+  const guillotineLeaguePhase = nativeLeaguePhase(selectedLeague)
+  const guillotineAtmosphere = useGuillotineAtmosphere({
+    leagueId: league.id,
+    enabled: guillotineAtmosphereEnabled,
+    predraft: guillotineLeaguePhase === 'Setup' || guillotineLeaguePhase === 'Draft',
+    teamCount: league.leagueSize ?? selectedLeague.teamCount ?? null,
+    leagueWeek: typeof selectedLeague.currentWeek === 'number' ? selectedLeague.currentWeek : null,
+    settings: (league.settings as Record<string, unknown> | null | undefined) ?? null,
+  })
+
   // Only the /api/devy config fetch (fail-closed in prod, where the /devy tree
   // is build-excluded) may enable the hero — `leagueType === 'devy'` alone let
   // API-created devy leagues render a hero whose surfaces 404.
@@ -1401,6 +1417,8 @@ export function LeagueShell({
           }
           mood={specialtyAtmosphereMood}
         />
+      ) : guillotineAtmosphere ? (
+        <SpecialtyLeagueAtmosphere variant="guillotine" mood={guillotineAtmosphere.mood} />
       ) : null}
       {tournamentHeroContext ? (
         <TournamentIntroVideoOverlay
@@ -1452,6 +1470,7 @@ export function LeagueShell({
           onOpenSettings={() => (nativeWorkspace ? handleUserTabChange('settings') : openLeagueSettingsModal(null))}
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
           rail={leagueRail}
+          guillotineBanner={guillotineAtmosphere ? { line: guillotineAtmosphere.line, mood: guillotineAtmosphere.mood } : null}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}
