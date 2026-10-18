@@ -20,6 +20,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Lock, AlertTriangle, Info, RotateCcw } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
 import { ScoringPresetSelect, pickInitialPreset } from '@/components/league-settings/scoring/ScoringPresetSelect'
+import { ScoringLabel } from '@/components/league-labels/ScoringLabel'
+import { scoringLabelIdForNba } from '@/lib/league-labels/liveValues'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { translateStat } from '@/lib/i18n/scoring-stats'
 import { BASKETBALL_STATS_ES } from '@/lib/i18n/scoring-stats/basketball'
@@ -143,6 +145,12 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const currentPreset = useMemo(() => presets.find((p) => p.key === selectedPreset), [presets, selectedPreset])
   const activeCategory = useMemo(() => allCategories.find((c) => c.id === activeTab), [allCategories, activeTab])
 
+  // The plate for the current choice: an edited table always reads CUSTOM.
+  const scoringLabelId = useMemo(() => scoringLabelIdForNba({
+    presetKey: selectedPreset,
+    rulesMatchPreset: !currentPreset || Object.entries(currentPreset.rules).every(([k, v]) => (editedRules[k] ?? 0) === v),
+  }), [selectedPreset, currentPreset, editedRules])
+
   const hasChanges = useMemo(() => {
     if (!config) return false
     return JSON.stringify(editedRules) !== JSON.stringify(config.rules)
@@ -232,6 +240,9 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
             : t('lsScore.subtitle.readOnly')}
         </p>
       </div>
+
+      {/* Plate only: the translated preset select below names the option. */}
+      <ScoringLabel id={scoringLabelId} size="md" showText={false} />
 
       {/* Preset selector — one dropdown of THIS sport's presets, Sleeper-style first (default). */}
       <ScoringPresetSelect<PresetKey>

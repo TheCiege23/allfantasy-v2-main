@@ -42,6 +42,8 @@ import { timezoneLabel, timezoneOptions } from '@/lib/create-league-v2/device-ti
 import { CheckBox, HelpTip } from '@/components/create-league-v2/WizardControls'
 import { TE_PREMIUM_POINT_OPTIONS } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
+import { ScoringLabel } from '@/components/league-labels/ScoringLabel'
+import { scoringLabelIdForWizard } from '@/lib/league-labels/liveValues'
 import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
 type WizardStep = 'sport' | 'basics' | 'draft' | 'review'
@@ -1046,6 +1048,14 @@ export function DraftStep({
             ))}
           </select>
         </label>
+        {/* The chosen option's label plate. TE premium is part of the label (Full PPR + 0.5 = TE+). */}
+        <ScoringLabel
+          id={scoringLabelIdForWizard({
+            scoringPresetId: state.scoringPresetId,
+            tePremiumPoints: state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints === 'number' ? state.tePremiumPoints : null,
+          })}
+          size="md"
+        />
       </div>
 
       {/* NFL scoring add-ons. TE premium has to say its amount — the commissioner picks it. */}

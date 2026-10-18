@@ -21,6 +21,8 @@ import { alignSlotsToSport, buildRosterGroups, isFootballSport } from './roster/
 import type { RosterConfig, SlotDef, UnifiedRosterSection } from './roster/types'
 import { emitLeagueDraftRoomRevalidate } from '@/lib/draft-room/emitLeagueDraftRoomRevalidate'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { RosterLabel } from '@/components/league-labels/RosterLabel'
+import { matchRosterLabel } from '@/lib/league-labels/liveValues'
 
 interface RosterTemplateOption {
   key: string
@@ -300,6 +302,17 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
           {t('lsEd.ro.noMatch')}
         </div>
       )}
+
+      {(() => {
+        // The roster label whose starters match. Bench and IR/IL are the league's own counts.
+        const sport = sportLabel(rosterSport)
+        const match = !foreignRoster && (sport === 'NFL' || sport === 'NBA') ? matchRosterLabel(sport, pendingSlots) : null
+        return match ? (
+          <div className="af-ls-card text-white" data-testid="roster-settings-label">
+            <RosterLabel id={match.label.id} size="md" bench={match.shape.bench} injured={match.shape.injured} showText={false} />
+          </div>
+        ) : null
+      })()}
 
       {canEdit && templates.length > 0 && (
         <div className="af-ls-card space-y-2">
