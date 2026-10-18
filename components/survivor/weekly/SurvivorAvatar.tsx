@@ -53,7 +53,7 @@ export function SurvivorAvatar({
   const style: CSSProperties & Record<string, string | number> = {
     width: size,
     height: size,
-    fontSize: Math.max(10, Math.round(size * 0.32)),
+    fontSize: Math.max(11, Math.round(size * 0.32)),
   }
   if (ringColor && status === 'active') style['--swl-ring'] = ringColor
   if (gapColor) style['--swl-gap'] = gapColor
