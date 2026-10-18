@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { dashDraftsBandMessages } from '@/lib/core-app/messages/dashDraftsBand'
 
 /**
  * The words of DashDraftsBand, in the reader's language (2026-10-04).
@@ -28,47 +30,44 @@ export type DraftsBandCard = {
 /** Draft statuses the shared table does not hold; the rest go through `coreUiCopy` ("paused", "in progress"). */
 const STATUS_ES: Record<string, string> = { drafting: 'en curso', live: 'en vivo' }
 
-function statusText(raw: string, es: boolean): string {
+type DraftsMessages = typeof dashDraftsBandMessages.en
+
+function statusText(raw: string, es: boolean, m: DraftsMessages): string {
   const s = raw.trim().replace(/_/g, ' ')
-  if (s.length === 0) return es ? 'EN VIVO' : 'LIVE'
+  if (s.length === 0) return m.live
   if (!es) return s.toUpperCase()
   const key = s.toLowerCase()
   return (STATUS_ES[key] ?? coreUiCopy(key, 'es')).toUpperCase()
 }
 
 /** Coarse pick-clock label. Server paint only — the page does not tick, so seconds would be precisely stale. */
-function pickClockText(ms: number, es: boolean): string {
-  if (ms <= 0) return es ? 'Se agotó el tiempo para elegir' : 'Pick timer expired'
-  if (ms < 60_000) return es ? 'Menos de 1 min en el reloj' : 'Under 1 min on the pick clock'
+function pickClockText(ms: number, m: DraftsMessages): string {
+  if (ms <= 0) return m.pickTimerExpired
+  if (ms < 60_000) return m.underOneMin
   const totalMins = Math.floor(ms / 60_000)
-  if (totalMins < 60) return es ? `${totalMins} min en el reloj` : `${totalMins} min on the pick clock`
+  if (totalMins < 60) return m.minsOnClock(totalMins)
   const hours = Math.floor(totalMins / 60)
   const mins = String(totalMins % 60).padStart(2, '0')
-  return es ? `${hours} h ${mins} min en el reloj` : `${hours}h ${mins}m on the pick clock`
+  return m.hoursOnClock(hours, mins)
 }
 
 export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount: number; visible: DraftsBandCard[]; overflow: number }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
+  const m = useMessages(dashDraftsBandMessages)
 
   return (
-    <section className="af-core af-drafts" aria-label={es ? 'Drafts en marcha' : 'Drafts on the clock'}>
+    <section className="af-core af-drafts" aria-label={m.title}>
       <div className="af-drafts-head">
-        <span className="af-label af-drafts-kicker">{es ? 'Drafts en marcha' : 'Drafts on the clock'}</span>
+        <span className="af-label af-drafts-kicker">{m.title}</span>
         <span className="af-drafts-count af-num">
-          {es
-            ? liveCount === 1
-              ? '1 draft en vivo ahora'
-              : `${liveCount} drafts en vivo ahora`
-            : liveCount === 1
-              ? '1 draft live now'
-              : `${liveCount} drafts live now`}
+          {liveCount === 1 ? m.oneDraftLive : m.draftsLive(liveCount)}
         </span>
       </div>
 
       <div className="af-drafts-grid">
         {visible.map((row) => {
-          const clock = row.clockMs != null ? pickClockText(row.clockMs, es) : null
+          const clock = row.clockMs != null ? pickClockText(row.clockMs, m) : null
           return (
             <article key={row.leagueId} className="af-drafts-card">
               <div className="af-drafts-id">
@@ -84,30 +83,24 @@ export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount
                   )}
                 </span>
                 <h3 className="af-drafts-name">{row.leagueName}</h3>
-                <span className="af-drafts-state af-num">{statusText(row.rawStatus, es)}</span>
+                <span className="af-drafts-state af-num">{statusText(row.rawStatus, es, m)}</span>
               </div>
 
               <p className="af-drafts-meta af-num">
                 {[
-                  row.yourSlot != null ? (es ? `Tu posición ${row.yourSlot}` : `Your slot ${row.yourSlot}`) : null,
-                  row.picksMade != null
-                    ? es
-                      ? `${row.picksMade} ${row.picksMade === 1 ? 'selección hecha' : 'selecciones hechas'}`
-                      : `${row.picksMade} ${row.picksMade === 1 ? 'pick' : 'picks'} made`
-                    : es
-                      ? 'Aún no hay selecciones registradas'
-                      : 'No picks recorded yet',
+                  row.yourSlot != null ? m.yourSlot(row.yourSlot) : null,
+                  row.picksMade != null ? m.picksMade(row.picksMade) : m.noPicks,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
 
               <p className="af-drafts-clock af-num" data-known={clock ? 'true' : 'false'}>
-                {clock ?? (es ? 'En el reloj: no se informó un tiempo para elegir' : 'On the clock — no pick timer reported')}
+                {clock ?? m.noTimer}
               </p>
 
               <Link className="af-drafts-open" href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}>
-                {es ? 'Abrir la sala del draft' : 'Open draft room'}
+                {m.openDraftRoom}
               </Link>
             </article>
           )
@@ -116,7 +109,7 @@ export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount
 
       {overflow > 0 ? (
         <Link className="af-drafts-more" href="/core/draft-hq">
-          {es ? `+${overflow} más en ${coreUiCopy('Draft HQ', 'es')}` : `+${overflow} more in Draft HQ`}
+          {m.moreInDraftHq(overflow)}
         </Link>
       ) : null}
     </section>
