@@ -32,7 +32,7 @@ const TENDENCY_STYLE: Record<ManagerTendencyKind, { label: string; className: st
 function PositionChip({ pos, sport }: { pos: string; sport?: string }) {
   return (
     <span
-      className="inline-flex h-4 items-center rounded px-1 text-[10px] font-bold tracking-wide text-[#0a111d]"
+      className="inline-flex h-[18px] items-center rounded px-1 text-[11px] font-bold tracking-wide text-[#0a111d]"
       style={{ backgroundColor: positionColor(pos, sport) }}
     >
       {pos}
@@ -67,36 +67,36 @@ function IntelRow({ row, sport }: { row: LookaheadRow; sport?: string }) {
       data-testid="draft-intel-row"
     >
       <div className="flex w-9 shrink-0 flex-col items-center gap-1">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-white/85">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/85">
           {initials(row.displayName)}
         </span>
-        <span className="text-[10px] font-semibold text-white/50">{row.pickLabel}</span>
+        <span className="text-[11px] font-semibold text-white/50">{row.pickLabel}</span>
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1">
           <span className="truncate text-[12px] font-semibold text-white">{row.displayName}</span>
           {row.isAuto ? (
-            <span className="rounded border border-violet-400/30 bg-violet-500/12 px-1 text-[10px] font-bold uppercase tracking-wide text-violet-200">
+            <span className="rounded border border-violet-400/30 bg-violet-500/12 px-1 text-[11px] font-bold uppercase tracking-wide text-violet-200">
               Auto
             </span>
           ) : null}
-          <span className={`rounded border px-1 text-[10px] font-bold uppercase tracking-wide ${tendency.className}`}>
+          <span className={`rounded border px-1 text-[11px] font-bold uppercase tracking-wide ${tendency.className}`}>
             {tendency.label}
           </span>
         </div>
         <p className="mt-0.5 text-[11px] text-white/55">{habitLine(row)}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-white/45">Needs</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/45">Needs</span>
           {needs.length > 0 ? (
             needs.map((pos) => <PositionChip key={pos} pos={pos} sport={sport} />)
           ) : (
             <span className="text-[11px] text-white/55">Depth</span>
           )}
-          {moreNeeds > 0 ? <span className="text-[10px] text-white/45">+{moreNeeds}</span> : null}
+          {moreNeeds > 0 ? <span className="text-[11px] text-white/45">+{moreNeeds}</span> : null}
         </div>
       </div>
       <div className="w-[96px] shrink-0 text-right">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-white/45">Likely</p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Likely</p>
         {row.projected ? (
           <>
             <p className="truncate text-[12px] font-semibold text-white" title={row.projected.name}>
@@ -104,7 +104,7 @@ function IntelRow({ row, sport }: { row: LookaheadRow; sport?: string }) {
             </p>
             <span className="inline-flex items-center gap-1">
               <PositionChip pos={row.projected.position} sport={sport} />
-              <span className="text-[10px] text-white/45">ADP {row.projected.adp.toFixed(1)}</span>
+              <span className="text-[11px] text-white/45">ADP {row.projected.adp.toFixed(1)}</span>
             </span>
           </>
         ) : (
@@ -131,7 +131,7 @@ function DraftIntelPanelInner({ lookahead, idle, sport, formatPickLabel }: Draft
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="draft-intel-panel">
       <div className="shrink-0 px-2.5 pb-1.5 pt-2.5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-200/90">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-200/90">
           {viewerNextOverall != null ? 'Before your next pick' : 'Next picks'}
           {windowLabel ? ` · ${windowLabel}` : ''}
         </p>
