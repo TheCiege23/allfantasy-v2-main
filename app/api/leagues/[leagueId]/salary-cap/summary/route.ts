@@ -37,9 +37,10 @@ export async function GET(
   const myRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
   const capYear = new Date().getFullYear()
 
-  const [ledger, futureProjection, contracts, events, lotteryRow] = await Promise.all([
+  const [ledger, futureProjection, contracts, events, lotteryRow, leagueRow] = await Promise.all([
     myRosterId ? getOrCreateLedger(config, myRosterId, capYear) : null,
-    myRosterId ? getFutureCapProjection(leagueId, myRosterId, [capYear, capYear + 1, capYear + 2]) : [],
+    // Four years: the specialty home's future-years columns (handoff salary/SalaryCapHome).
+    myRosterId ? getFutureCapProjection(leagueId, myRosterId, [capYear, capYear + 1, capYear + 2, capYear + 3]) : [],
     myRosterId
       ? prisma.playerContract.findMany({
           where: { configId: config.configId, rosterId: myRosterId },
@@ -71,6 +72,7 @@ export async function GET(
           select: { seed: true, order: true },
         })
       : null,
+    prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true, season: true, leagueSize: true } }),
   ])
 
   const activeContracts = contracts.filter(
@@ -154,6 +156,16 @@ export async function GET(
       metadata: e.metadata,
       createdAt: e.createdAt,
     })),
+    league: leagueRow
+      ? { name: leagueRow.name, sport: String(leagueRow.sport), season: leagueRow.season, teamCount: leagueRow.leagueSize, capYear }
+      : null,
+    deadContracts: contracts
+      .filter((c) => c.status === 'cut' && c.deadMoneyRemaining)
+      .map((c) => {
+        const dm = c.deadMoneyRemaining as Record<string, number> | null
+        return { id: c.id, playerName: c.playerName, position: c.position, deadThisYear: dm && typeof dm[String(capYear)] === 'number' ? dm[String(capYear)] : 0 }
+      })
+      .filter((c) => c.deadThisYear > 0),
     lottery: lotteryRow
       ? { seed: lotteryRow.seed, order: lotteryRow.order }
       : null,
