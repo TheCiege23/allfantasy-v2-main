@@ -245,7 +245,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       */}
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Cinzel:wght@600;700&family=JetBrains+Mono:wght@400;500;700;800&family=Bebas+Neue&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Cinzel:wght@600;700&family=JetBrains+Mono:wght@400;500;700;800&family=Bebas+Neue&family=Creepster&display=swap"
         precedence="default"
       />
       <body
