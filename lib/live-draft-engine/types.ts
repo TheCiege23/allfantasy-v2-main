@@ -158,6 +158,8 @@ export interface DraftPickSnapshot {
   pickLabel: string
   /** Auction: winning bid amount. */
   amount?: number | null
+  /** Market ADP when the pick was made (`pickMetadata.adpAtPick`); absent on older picks. */
+  adpAtPick?: number | null
   createdAt: string
 }
 

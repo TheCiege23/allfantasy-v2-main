@@ -56,6 +56,13 @@ import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagu
 import { COMPLETED_DRAFT_SESSION_STATUS, CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
 
+/** `pickMetadata.adpAtPick` when it is a positive number (recorded at pick time since #2475). */
+function adpAtPickFromMetadata(meta: unknown): number | null {
+  if (!meta || typeof meta !== 'object') return null
+  const v = (meta as { adpAtPick?: unknown }).adpAtPick
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+}
+
 /**
  * Same rules as session creation: LeagueSettings pick timer wins when present; else draft config + UI slow-draft mode.
  * Returns null for untimed drafts (`timerMode === 'none'`) or when no positive timer can be resolved.
@@ -495,6 +502,9 @@ export async function buildSessionSnapshot(
     source: p.source ?? 'user',
     pickLabel: formatPickLabel(p.overall, teamCount),
     amount: (p as any).amount ?? undefined,
+    ...(adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) != null
+      ? { adpAtPick: adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
+      : {}),
     createdAt: p.createdAt.toISOString(),
     }
   })

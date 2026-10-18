@@ -16,6 +16,11 @@ export interface PickScoreEntry {
   byeWeek: number | null
   /** ADP used (from AI ADP or fallback). */
   adp: number
+  /**
+   * Where `adp` came from: `at_pick` = market ADP recorded when the pick was made,
+   * `current` = today's AI ADP for the format, `none` = no match (adp = overall, neutral).
+   */
+  adpSource?: 'at_pick' | 'current' | 'none'
   /** value_score = adp - actual_pick (positive = value, negative = reach). */
   valueScore: number
 }

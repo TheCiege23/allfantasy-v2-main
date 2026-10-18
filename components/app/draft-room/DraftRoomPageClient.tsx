@@ -4208,6 +4208,16 @@ export function DraftRoomPageClient({
 
   const auctionSnapshot = (session as any).auction
   const isDraftCompleted = draftRoomState.isDraftCompleted
+  const postDraftViewNode = isDraftCompleted ? (
+    <PostDraftView
+      leagueId={leagueId}
+      leagueName={leagueName}
+      sport={effectiveDraftSport}
+      session={session}
+      currentUserRosterId={currentUserRosterId ?? null}
+      slotOrder={slotOrder}
+    />
+  ) : null
   /** Prevent blank board loop when corrupted API rows have rounds/teamCount = 0 */
   const safeBoardRounds = Math.max(1, session.rounds ?? 1)
   const safeBoardTeamCount = Math.max(1, session.teamCount ?? 1)
@@ -4623,14 +4633,7 @@ export function DraftRoomPageClient({
                     Draft is complete — browse the recap below. The live board stays visible above.
                   </div>
                   <div className="min-h-0 flex-1 overflow-auto">
-                    <PostDraftView
-                      leagueId={leagueId}
-                      leagueName={leagueName}
-                      sport={effectiveDraftSport}
-                      session={session}
-                      currentUserRosterId={currentUserRosterId ?? null}
-                      slotOrder={slotOrder}
-                    />
+                    {postDraftViewNode}
                   </div>
                 </>
               )}
@@ -5351,7 +5354,9 @@ export function DraftRoomPageClient({
           />
         ) : undefined
       }
-      playerPanel={playerPoolNode}
+      // A finished draft has no pool to pick from; the phone Players tab (and the
+      // non-premium desktop layout) shows the recap, report card and share instead.
+      playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}
       queuePanel={queueStackNode}
       helperPanel={undefined}
       intelPanel={session.draftType !== 'auction' ? intelPanelNode : undefined}
