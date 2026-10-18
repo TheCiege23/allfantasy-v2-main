@@ -13,6 +13,7 @@ import {
   savePlayoffConfig,
   getPlayoffStagesBySport,
   calculateScheduleAdjustment,
+  stageEditorPlayoffStartWeek,
 } from '@/lib/playoff-settings'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 
@@ -63,7 +64,7 @@ export async function PUT(
   const { leagueId } = await params
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { userId: true, sport: true, leagueVariant: true },
+    select: { userId: true, sport: true, leagueVariant: true, platform: true, playoffStartWeek: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
@@ -82,7 +83,10 @@ export async function PUT(
   // Preview mode: return adjustment without saving
   if (body.preview === true) {
     const currentConfig = await getPlayoffConfig(leagueId)
-    const adjustment = calculateScheduleAdjustment(league.sport, currentConfig, includedStages, league.leagueVariant)
+    // Native: the preview keeps the commissioner's chosen start week (never a sport default).
+    const adjustment = calculateScheduleAdjustment(league.sport, currentConfig, includedStages, league.leagueVariant, {
+      playoffStartWeek: stageEditorPlayoffStartWeek(league),
+    })
     return NextResponse.json({ preview: true, adjustment, isPremium })
   }
 

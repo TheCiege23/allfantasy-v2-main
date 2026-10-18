@@ -1,0 +1,74 @@
+/**
+ * Native League Settings → Playoffs: the stage/bracket editor shows the commissioner's chosen
+ * playoff start week (from the quick field) read-only, never a computed sport default.
+ */
+import React from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+
+vi.mock('@/components/i18n/LanguageProviderClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/i18n/LanguageProviderClient')>()
+  return { ...actual, useLanguage: () => actual.defaultLanguageValue }
+})
+vi.mock('@/components/subscription/SubscriptionGateModal', () => ({ SubscriptionGateModal: () => null }))
+vi.mock('@/hooks/useLeagueSettingsSectionAutosave', () => ({
+  useLeagueSettingsSectionAutosave: () => ({ queuePatch: vi.fn(), saving: false }),
+}))
+
+import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
+import { PlayoffsTab } from '@/components/league-settings/tabs/PlayoffsTab'
+
+const fetchMock = vi.fn()
+
+beforeEach(() => {
+  fetchMock.mockReset()
+  // The stored stage config still holds an old sport-default week (14).
+  fetchMock.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      stages: [],
+      sport: 'NFL',
+      isPremium: true,
+      config: { sport: 'NFL', includedStages: [], startMode: 'default', adjustedPlayoffStartWeek: 14, adjustedPlayoffWeeks: 3, premiumFeaturesUsed: false },
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+})
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+describe('PlayoffSettingsEditor start week', () => {
+  it('🛑 native: shows the chosen week read-only with a pointer to the quick field', async () => {
+    render(<PlayoffSettingsEditor leagueId="L" playoffStartWeek={12} />)
+    const row = await screen.findByTestId('playoff-stage-start-week')
+    expect(row.textContent).toContain('Week 12')
+    expect(row.textContent).toContain('Quick schedule')
+    expect(screen.queryByText(/Playoffs start Week 14/)).toBeNull()
+  })
+
+  it('imported (no prop): unchanged — no read-only row', async () => {
+    render(<PlayoffSettingsEditor leagueId="L" />)
+    await waitFor(() => expect(screen.queryByText(/Playoffs start Week 14/)).not.toBeNull())
+    expect(screen.queryByTestId('playoff-stage-start-week')).toBeNull()
+  })
+})
+
+describe('PlayoffsTab seeds both editors from the chosen week', () => {
+  const ctx = (league: Record<string, unknown>) =>
+    ({ league: { id: 'L', sport: 'NFL', teams: [], leagueSize: 12, playoffTeams: 6, ...league } }) as never
+
+  it('🛑 native: the quick field and the stage editor both show the column week', async () => {
+    render(<PlayoffsTab ctx={ctx({ platform: 'manual', playoffStartWeek: 13, settings: { playoffStartWeek: 14 } })} canEdit hasAfCommissionerSub={false} />)
+    expect((screen.getByRole('spinbutton', { name: /Playoffs start/i }) as HTMLInputElement).value).toBe('13')
+    const row = await screen.findByTestId('playoff-stage-start-week')
+    expect(row.textContent).toContain('Week 13')
+  })
+
+  it('native with no column: falls back to the JSON copy, not 14', async () => {
+    render(<PlayoffsTab ctx={ctx({ platform: 'manual', playoffStartWeek: null, settings: { playoff_structure: { playoff_start_week: 16 } } })} canEdit hasAfCommissionerSub={false} />)
+    expect((screen.getByRole('spinbutton', { name: /Playoffs start/i }) as HTMLInputElement).value).toBe('16')
+    expect((await screen.findByTestId('playoff-stage-start-week')).textContent).toContain('Week 16')
+  })
+})
