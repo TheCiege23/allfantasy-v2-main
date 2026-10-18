@@ -1,0 +1,164 @@
+'use client'
+
+import '@/components/core-app/af-core.css'
+import './league-settings-home.css'
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowLeft, Check, ChevronRight, Copy } from 'lucide-react'
+import type { SettingsHomeRow, SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+
+export type SettingsSubPageRender = {
+  title: string
+  content: ReactNode
+}
+
+/** Sticky footer for sub-pages whose editor saves explicitly. */
+export function SettingsSubPageFooter({ children }: { children: ReactNode }) {
+  return <div className="lsh-footer">{children}</div>
+}
+
+function SettingsHeader({ title, onBack, backLabel }: { title: string; onBack?: () => void; backLabel: string }) {
+  return (
+    <header className="lsh-header">
+      {onBack ? (
+        <button type="button" className="lsh-icon-btn" onClick={onBack} aria-label={backLabel} data-testid="lsh-back">
+          <ArrowLeft size={20} aria-hidden />
+        </button>
+      ) : null}
+      <h1>{title}</h1>
+    </header>
+  )
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+  const copy = async () => {
+    try {
+      await navigator.clipboard?.writeText(text)
+      setCopied(true)
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setCopied(false)
+    }
+  }
+  return (
+    <button type="button" className="lsh-copy" onClick={copy} aria-label={`Copy ${label}`} data-testid="lsh-copy-invite">
+      {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
+
+function Row({ row, onOpen }: { row: SettingsHomeRow; onOpen: (target: SettingsSubPageId) => void }) {
+  const value = (
+    <span className="lsh-value" data-pending={row.pending ? 'true' : undefined} title={row.value}>
+      {row.value}
+    </span>
+  )
+  if (row.target) {
+    const target = row.target
+    return (
+      <button type="button" className="lsh-row" onClick={() => onOpen(target)} data-testid={`lsh-row-${row.id}`}>
+        <span className="lsh-label">{row.label}</span>
+        {value}
+        <ChevronRight size={18} className="lsh-chevron" aria-hidden />
+      </button>
+    )
+  }
+  return (
+    <div className="lsh-row" data-testid={`lsh-row-${row.id}`} data-readonly="true">
+      <span className="lsh-label">{row.label}</span>
+      {value}
+      {row.copyText ? <CopyButton text={row.copyText} label={row.label} /> : null}
+    </div>
+  )
+}
+
+export type LeagueSettingsHomeProps = {
+  leagueName?: string | null
+  sections: SettingsHomeSection[]
+  canEdit: boolean
+  /** Builds the sub-page for a row target. Returning null keeps the list. */
+  renderSubPage: (id: SettingsSubPageId) => SettingsSubPageRender | null
+  /** Leaves settings (back to the league). Omit to hide the list's back arrow. */
+  onExit?: () => void
+  /** Fired when a sub-page closes, so the caller can refetch the values it shows. */
+  onSubPageClosed?: (id: SettingsSubPageId) => void
+  initialSubPage?: SettingsSubPageId | null
+}
+
+/**
+ * The Sleeper-style League Settings page: one scrollable list grouped into sections; tapping a row
+ * opens a focused sub-page with its own back arrow. Presentational — the caller supplies the rows
+ * (lib/league-settings-home/buildLeagueSettingsHome) and the editors.
+ */
+export function LeagueSettingsHome({
+  leagueName,
+  sections,
+  canEdit,
+  renderSubPage,
+  onExit,
+  onSubPageClosed,
+  initialSubPage = null,
+}: LeagueSettingsHomeProps) {
+  const [open, setOpen] = useState<SettingsSubPageId | null>(initialSubPage)
+  const listScroll = useRef(0)
+
+  const openSubPage = useCallback((id: SettingsSubPageId) => {
+    if (typeof window !== 'undefined') listScroll.current = window.scrollY
+    setOpen(id)
+    if (typeof window !== 'undefined') window.scrollTo?.({ top: 0 })
+  }, [])
+
+  const closeSubPage = useCallback(() => {
+    const closing = open
+    setOpen(null)
+    if (closing) onSubPageClosed?.(closing)
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      const y = listScroll.current
+      window.requestAnimationFrame(() => window.scrollTo?.({ top: y }))
+    }
+  }, [open, onSubPageClosed])
+
+  const sub = open ? renderSubPage(open) : null
+
+  if (open && sub) {
+    return (
+      <div className="af-core lsh-root" data-testid="league-settings-subpage" data-subpage={open}>
+        <SettingsHeader title={sub.title} onBack={closeSubPage} backLabel="Back to league settings" />
+        <div className="lsh-column">
+          <div className="lsh-subpage-body">{sub.content}</div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="af-core lsh-root" data-testid="league-settings-home">
+      <SettingsHeader title="League Settings" onBack={onExit} backLabel="Back to league" />
+      <div className="lsh-column">
+        {leagueName ? <p className="lsh-subtitle">{leagueName}</p> : null}
+        {!canEdit ? (
+          <p className="lsh-readonly-note" data-testid="lsh-readonly-note">
+            Only the commissioner can change these settings.
+          </p>
+        ) : null}
+        {sections.map((section) => (
+          <section key={section.id} className="lsh-section" aria-labelledby={`lsh-section-${section.id}`} data-testid={`lsh-section-${section.id}`}>
+            <h2 id={`lsh-section-${section.id}`}>{section.title}</h2>
+            <ul className="lsh-list">
+              {section.rows.map((row) => (
+                <li key={row.id}>
+                  <Row row={row} onOpen={openSubPage} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
