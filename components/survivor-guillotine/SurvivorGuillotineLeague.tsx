@@ -8,6 +8,7 @@ import type { SGConfig, SGPower } from '@/lib/survivor-guillotine/types'
 import type { SGLivePeriod, SGTribeMember } from '@/lib/survivor-guillotine/live'
 import type { SGCalendarEntry, SGTribeDraftState } from '@/lib/survivor-guillotine/operations'
 import styles from './league.module.css'
+import { SGVisualSet } from './SGVisualSet'
 
 type Team = { legacyRosterId: string | null; teamName: string; ownerName: string; eliminatedAt: string | null }
 type Player = { id: string; name: string; position: string; team: string | null }
@@ -160,9 +161,11 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
     ? pickPlace : captainDraft.leaders.length * 2 - pickPlace - 1]
   if (!data) return <main className={styles.page}><p role="status">{notice || 'Loading Survivor Guillotine…'}</p></main>
   return <main className={styles.page}>
-    <header className={styles.hero}><div><span className={styles.eyebrow}>ALLFANTASY · SURVIVOR GUILLOTINE</span><h1>The island</h1>
-      <p>{season?.status === 'completed' ? 'The Sole Survivor has been crowned.' : `Period ${season?.currentPeriod || 1} · ${current ? SG_MODE_LABELS[current.mode] : 'Season setup'}`}</p></div>
-      <div className={styles.heroActions}><span>{alive.length} managers standing</span>{isCommissioner && <a href={`/survivor-guillotine/setup?leagueId=${encodeURIComponent(leagueId)}`}>League rules</a>}</div></header>
+    <SGVisualSet leagueId={leagueId} isCommissioner={isCommissioner} input={{ season: { config: data.season.config,
+      tribes: data.season.tribes, periodState: data.season.periodState, currentPeriod: data.season.currentPeriod,
+      status: data.season.status, periodHistory: data.season.periodHistory }, ownRosterId: data.ownRoster?.id ?? null,
+      teams: data.teams, scores: data.scores, powers: data.powers }} />
+    <h2 className={styles.opsHeading}>Island operations</h2>
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     <div className={styles.grid}><div>
       <section className={styles.card}><h2>Your lineup</h2><p>{season?.config.sport === 'NBA' && season.config.nbaScoring === 'capped_games'
