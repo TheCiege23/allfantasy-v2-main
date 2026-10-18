@@ -158,6 +158,28 @@ describe('runNativeGuillotineWeek', () => {
     expect(m.release).toHaveBeenCalled()
   })
 
+  it('hands the tiebreak bench points and last week\'s points, which the native path never filled', async () => {
+    arrange()
+    db.guillotinePeriodScore.findMany.mockResolvedValue([
+      { rosterId: 'R-a', periodPoints: 100, weekOrPeriod: 2 },
+      { rosterId: 'R-b', periodPoints: 90, weekOrPeriod: 2 },
+      { rosterId: 'R-b', periodPoints: 80, weekOrPeriod: 1 },
+    ])
+    m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({
+      points: 90,
+      benchPoints: rosterId === 'rr-b' ? 4 : 20,
+    }))
+
+    await run()
+
+    expect(m.scoreRosterForWeek.mock.calls[0]![0]).toMatchObject({ includeBench: true })
+    const rows = m.runElimination.mock.calls[0]![0].periodScores as Array<Record<string, unknown>>
+    expect(rows.find((r) => r.rosterId === 'R-b')).toMatchObject({ benchPoints: 4, previousPeriodPoints: 90, seasonPointsCumul: 260 })
+    expect(rows.find((r) => r.rosterId === 'R-a')).toMatchObject({ benchPoints: 20, previousPeriodPoints: 100 })
+    // No week-2 row for R-c: no previous-period figure rather than a made-up 0.
+    expect(rows.find((r) => r.rosterId === 'R-c')).not.toHaveProperty('previousPeriodPoints')
+  })
+
   it('a league with no owner is chopped but not announced (a chat post needs a real author)', async () => {
     arrange()
     db.league.findUnique.mockResolvedValue({ userId: null })

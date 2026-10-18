@@ -14,8 +14,8 @@ export const dynamic = 'force-dynamic'
 /**
  * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
  *
- * ⚠ UNLIKE `cron-waivers`, THIS ONE IS NOT CONDITIONAL. Every league with imported activity is in
- * scope every day — a healthy league still needs the scan that closes yesterday's findings — so an
+ * ⚠ UNLIKE `cron-waivers`, THIS ONE IS NOT CONDITIONAL. Every league with imported activity (and
+ * every native league in season) is in scope every day — a healthy league still needs the scan that closes yesterday's findings — so an
  * output probe on `automation_runs` is a valid liveness signal here, not merely a seasonal one.
  * The `sync_job_runs` row is still written on every fire, for the same reason the waiver sweep
  * writes one: it is what proves the scheduler is alive independently of whether work was found.
@@ -72,7 +72,8 @@ export async function GET(request: Request) {
         discovered: rows.length,
         results: rows.map((r) => ({
           leagueId: r.leagueId,
-          lastActivityAt: r.lastActivityAt.toISOString(),
+          lastActivityAt: r.lastActivityAt?.toISOString() ?? null,
+          native: r.native,
         })),
       })
     } catch (error) {

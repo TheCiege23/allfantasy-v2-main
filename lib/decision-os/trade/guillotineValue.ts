@@ -24,19 +24,41 @@
  * One team is chopped per week. With T teams alive and an even chance for each, a live team is still
  * alive after week j with probability (T − j) / T, so it expects W(0) = Σ_{j=1..C} (T − j)/T more weeks —
  * (T − 1)/2 when the season outlasts the field (`lib/trade-intel/guillotine.ts` `guillotineHorizon`).
- * C is the chops left: one fewer than the teams alive, and never more than the NFL weeks left. A player
- * released by the k-th chop is first usable in week k + 1, so he is worth W(k) = Σ_{j=k+1..C} (T − j)/T
- * weeks to whoever buys him. Equal odds is a stated assumption: a team well clear of the chop line
- * survives longer than this and one sitting on it does not.
+ * C is the chops left: one fewer than the teams alive, and never more than the regular-season weeks left
+ * (`weeksLeft`). A player released by the k-th chop is first usable in week k + 1, so he is worth
+ * W(k) = Σ_{j=k+1..C} (T − j)/T weeks to whoever buys him. Equal odds is a stated assumption: a team well
+ * clear of the chop line survives longer than this and one sitting on it does not.
+ *
+ * ── NBA ────────────────────────────────────────────────────────────────────────────────────────────────
+ * The same model, with three inputs that are NOT the NFL's (`./guillotineContext.ts` loads them):
+ *   - WEEKS LEFT come from the NBA period calendar the guillotine engine itself chops on — seven Eastern
+ *     days from the recorded opener (`lib/season-week/dailySportSeasonStarts.ts`), 24 regular-season weeks
+ *     (`lib/guillotine/sportConfig.ts`) — counting the week in progress, as the NFL's projections do.
+ *   - The board is the NBA points board (`./sportPointsContext.ts`), scored per GAME on the league's rules.
+ *     A guillotine chops on the WEEK, and a team plays three or four games in one, so every player's line
+ *     is put on the week first: per game × the games a team has left ÷ the weeks left (`gamesPerWeek`).
+ *     One multiplier on every player — it sizes the numbers, it cannot move the letter.
+ *   - A free agent sets a replacement level only on MIN_SAMPLE_GAMES (10) games, not three: three NBA
+ *     games is one week, which is the NFL's bar in weeks, not in evidence.
+ * Everything on a guillotine board below is therefore points per scoring WEEK, whatever the field is
+ * called (`perGame`): for the NFL one game is one week.
  */
 
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
-import { indexBoard, resolveBoardPlayer, type BoardPlayer } from './sportPointsValue'
+import { indexBoard, meetsSampleBar, MIN_SAMPLE_GAMES, resolveBoardPlayer, type BoardPlayer } from './sportPointsValue'
 
-/** An NFL guillotine league — graded here, never on the market chart. Not `survivor_guillotine`: no trades. */
+/** Sports whose guillotine trades are graded here. Every other sport's guillotine stays on its own grade. */
+export type GuillotineTradeSport = 'NFL' | 'NBA'
+
+export function guillotineTradeSport(sport: string | null | undefined): GuillotineTradeSport | null {
+  const s = String(sport ?? '').trim().toUpperCase()
+  return s === 'NFL' || s === 'NBA' ? s : null
+}
+
+/** An NFL or NBA guillotine league — graded here, never on the market chart. Not `survivor_guillotine`: no trades. */
 export function isGuillotineTradeLeague(args: { sport: string | null | undefined; leagueType: string | null | undefined; leagueVariant?: string | null }): boolean {
-  if (String(args.sport ?? '').trim().toUpperCase() !== 'NFL') return false
+  if (!guillotineTradeSport(args.sport)) return false
   return String(args.leagueType ?? '').trim().toLowerCase() === 'guillotine' || String(args.leagueVariant ?? '').trim().toLowerCase() === 'guillotine'
 }
 
@@ -49,8 +71,13 @@ export function isGuillotineBasisGrade(grade: { lines?: ReadonlyArray<{ valueSou
 /** One starting slot of the league's lineup and the positions it takes. */
 export type GuillotineSeat = { slot: string; eligible: readonly string[] }
 
-/** A free agent good enough to set a slot's replacement level must have played this many games. */
+/** A free agent good enough to set a slot's replacement level must have played this many games (NFL). */
 export const MIN_REPLACEMENT_GAMES = 3
+
+/** The replacement-level games bar per sport: NFL three games (three weeks), NBA the points grade's ten. */
+export function minReplacementGamesFor(sport: GuillotineTradeSport): number {
+  return sport === 'NBA' ? MIN_SAMPLE_GAMES : MIN_REPLACEMENT_GAMES
+}
 
 export type GuillotineRoster = {
   /** Board ids of the players on it. */
@@ -60,14 +87,21 @@ export type GuillotineRoster = {
 }
 
 export type GuillotineContext = {
+  /** Absent means NFL (every context built before NBA was graded here). */
+  sport?: GuillotineTradeSport
+  /** Points per scoring WEEK, in `perGame` (see the header). */
   board: readonly BoardPlayer[]
   seats: readonly GuillotineSeat[]
   /** Best free agent each starting slot could take, by slot token. */
   replacementBySlot: ReadonlyMap<string, { name: string; perGame: number }>
   teamsAlive: number
   startingTeams: number
-  /** NFL regular-season weeks left to play. */
-  nflWeeksLeft: number
+  /** Regular-season weeks left to play, the week in progress included (NFL projections; NBA period calendar). */
+  weeksLeft: number
+  /** Games a team plays in a scoring week, when that is not one (NBA); the board is already scaled by it. */
+  gamesPerWeek?: number | null
+  /** Games a free agent needs behind him to set a replacement level (`minReplacementGamesFor`). */
+  minReplacementGames?: number
   /** W(k) for k = 0..C — see the header. */
   survival: readonly number[]
   /** FAAB the live teams hold between them. */
@@ -84,9 +118,9 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 const pos = (p: string | null | undefined) => String(p ?? '').trim().toUpperCase()
 
 /** W(k) for k = 0..C. */
-export function survivalCurve(teamsAlive: number, nflWeeksLeft: number): number[] {
+export function survivalCurve(teamsAlive: number, weeksLeft: number): number[] {
   const t = Math.max(0, Math.floor(teamsAlive))
-  const chops = Math.max(0, Math.min(t - 1, Math.floor(nflWeeksLeft)))
+  const chops = Math.max(0, Math.min(t - 1, Math.floor(weeksLeft)))
   const alive = (j: number) => (t - j) / t
   const out: number[] = []
   for (let k = 0; k <= chops; k++) {
@@ -113,6 +147,7 @@ export function slotReplacement(
   rostered: ReadonlySet<string>,
   seats: readonly GuillotineSeat[],
   depth: number,
+  minGames: number = MIN_REPLACEMENT_GAMES,
 ): Map<string, { name: string; perGame: number }> {
   const out = new Map<string, { name: string; perGame: number }>()
   const skip = Math.max(0, Math.floor(depth))
@@ -121,7 +156,7 @@ export function slotReplacement(
     const eligible = new Set(seat.eligible.map(pos))
     const free = board
       .filter((p) => !rostered.has(p.id) && eligible.has(pos(p.position)))
-      .filter((p) => p.sampleGames == null || p.sampleGames >= MIN_REPLACEMENT_GAMES)
+      .filter((p) => p.sampleGames == null || p.sampleGames >= minGames)
       .sort((a, b) => b.perGame - a.perGame)
     // A wire too thin for every team to take one leaves nothing free: the level is zero.
     const left = free[skip]
@@ -140,12 +175,14 @@ export function wireValue(args: {
   seats: readonly GuillotineSeat[]
   replacementBySlot: ReadonlyMap<string, { perGame: number }>
   survival: readonly number[]
+  minGames?: number
 }): number {
   const weeks = args.survival[0] ?? 0
+  const minGames = args.minGames ?? MIN_REPLACEMENT_GAMES
   let total = 0
   for (const p of args.board) {
     if (args.rostered.has(p.id)) continue
-    if (p.sampleGames != null && p.sampleGames < MIN_REPLACEMENT_GAMES) continue
+    if (p.sampleGames != null && p.sampleGames < minGames) continue
     total += pointsOverReplacement(p, args.seats, args.replacementBySlot) * weeks
   }
   return total
@@ -228,13 +265,18 @@ export function faabWorth(amount: number, ctx: Pick<GuillotineContext, 'liveFaab
 
 export function guillotineBasis(ctx: GuillotineContext): string {
   const weeks = ctx.survival[0] ?? 0
+  const perWeek =
+    ctx.sport === 'NBA' && ctx.gamesPerWeek != null
+      ? ` An NBA week is about ${round1(ctx.gamesPerWeek)} games a team (the games left over the ${ctx.weeksLeft} chop weeks left), so a player’s points a week are his points a game times that.`
+      : ''
   return (
     `Guillotine value: projected points per week above the free agent a team can still add for the same starting slot ` +
     `in this league’s lineup (${ctx.lineupLabel}) once every live team has claimed one, scored on this league’s rules, ` +
     `over the ${round1(weeks)} weeks a team can expect to survive with ${ctx.teamsAlive} of ${ctx.startingTeams} teams left ` +
     `(an even chance of the chop each week). FAAB is worth its share of the $${Math.round(ctx.liveFaab).toLocaleString('en-US')} ` +
     `the live teams hold, times the players on the wire now and those the remaining chops will release, each counted for ` +
-    `the weeks left after he can be added.`
+    `the weeks left after he can be added.` +
+    perWeek
   )
 }
 
@@ -265,6 +307,12 @@ export function gradeGuillotineDeal(args: {
       }
       const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
       if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
+      // The NBA board carries thin early-season lines; as on the NBA points grade, a thin one is not a price.
+      if (ctx.sport === 'NBA' && !meetsSampleBar(found.player)) {
+        return {
+          withheld: `${found.player.name}’s projection rests on ${found.player.sampleGames} game${found.player.sampleGames === 1 ? '' : 's'}, too few to price — grades start at ${MIN_SAMPLE_GAMES} games. This deal is not graded.`,
+        }
+      }
       const value = pointsOverReplacement(found.player, ctx.seats, ctx.replacementBySlot) * weeks
       total += value
       lines.push({ side, name: found.player.name, marketValue: round1(value), leagueValue: round1(value), source: 'guillotine-vorp', valueSource: 'guillotine_points', valueAsOf: null })

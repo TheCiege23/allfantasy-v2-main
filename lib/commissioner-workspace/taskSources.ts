@@ -2,6 +2,8 @@ import { readOperationalTasks } from './operationalTasks'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
 import { readOrphanTeamCounts } from './rosterReads'
+import { prisma } from '@/lib/prisma'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
 /**
  * What Commissioner Workspace's tasks are DERIVED from.
@@ -295,6 +297,24 @@ export function withSilentManagers<T extends { managerName: string; currentCount
  * task can never disagree with the panel a commissioner would check to verify it.
  */
 export async function detectLeagueTasks(leagueId: string, now = new Date()): Promise<WorkspaceTaskCandidate[]> {
+  /*
+   * 🛑 THE FEED CHECKS ARE FOR IMPORTED LEAGUES. A league native to AllFantasy has no import feed, so
+   * it always holds zero imported events and `detectNeverImported` told its commissioner "connected
+   * but has never sent any data" — false, and filed on every scan once the daily refresh began
+   * discovering native leagues. Orphan seats and the operational checks still apply to it.
+   */
+  let platform: string | null | undefined
+  try {
+    platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform
+  } catch {
+    platform = undefined // unknown: fall through to the feed checks, as before
+  }
+  if (platform !== undefined && resolveWriteAuthority(platform) === 'NATIVE') {
+    const roster = await readOrphanTeamCounts(leagueId)
+    const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
+    return [...(orphans ? [orphans] : []), ...await readOperationalTasks(leagueId, now)]
+  }
+
   const window = await readActivityWindow(leagueId)
 
   /*

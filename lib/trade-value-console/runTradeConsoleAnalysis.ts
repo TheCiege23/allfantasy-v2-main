@@ -402,26 +402,15 @@ export async function runTradeConsoleAnalysis(
    * replace the console's (which had no value for these sports at all), through the same rewrite the
    * college grade uses, so the letter and the values beside it are one basis.
    */
-  const sportPointsGrader = collegeView
-    ? null
-    : createSportPointsGrader({
-        sport: effectiveSport,
-        league:
-          leagueRow && consoleLeagueType && input.leagueId
-            ? { id: input.leagueId.trim(), settings: leagueRow.settings, leagueType: consoleLeagueType.type, leagueSize: leagueRow.leagueSize ?? null }
-            : null,
-        // The open analyzer's scoring choice (points, 9-cat, 8-cat); a league is scored by its own settings.
-        format: input.scoringFormat ?? null,
-      })
-  const sportView = sportPointsGrader ? await sportPointsGrader.grade(input.sideGive, input.sideGet) : null
-  if (sportView) applyCollegeGrade(leagueGrade, sportView)
   /*
-   * An NFL guillotine league takes the guillotine grade `createLeagueTradeGrader` gives it (points over the
-   * free agent for the same lineup slot, FAAB at its purchasing power — Guap, 2026-10-11), rewritten into
-   * the console's numbers the same way, so the console never shows a market letter the other surfaces do not.
+   * A guillotine league (NFL or NBA) takes the guillotine grade `createLeagueTradeGrader` gives it (points
+   * over the free agent for the same lineup slot, over the weeks a team can expect to survive, FAAB at its
+   * purchasing power — Guap, 2026-10-11), rewritten into the console's numbers the same way, so the console
+   * never shows a letter the other surfaces do not. Decided BEFORE the NBA points grade below, which would
+   * otherwise take an NBA guillotine league on the whole-season basis with FAAB refused.
    */
   const guillotineGrader =
-    !collegeView && !sportView && leagueRow && consoleLeagueType && input.leagueId
+    !collegeView && leagueRow && consoleLeagueType && input.leagueId
       ? createGuillotineGrader({
           sport: effectiveSport,
           leagueType: consoleLeagueType.type,
@@ -429,6 +418,20 @@ export async function runTradeConsoleAnalysis(
           league: { id: input.leagueId.trim(), settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
         })
       : null
+  const sportPointsGrader =
+    collegeView || guillotineGrader
+      ? null
+      : createSportPointsGrader({
+          sport: effectiveSport,
+          league:
+            leagueRow && consoleLeagueType && input.leagueId
+              ? { id: input.leagueId.trim(), settings: leagueRow.settings, leagueType: consoleLeagueType.type, leagueSize: leagueRow.leagueSize ?? null }
+              : null,
+          // The open analyzer's scoring choice (points, 9-cat, 8-cat); a league is scored by its own settings.
+          format: input.scoringFormat ?? null,
+        })
+  const sportView = sportPointsGrader ? await sportPointsGrader.grade(input.sideGive, input.sideGet) : null
+  if (sportView) applyCollegeGrade(leagueGrade, sportView)
   const guillotineView = guillotineGrader ? await guillotineGrader.grade(input.sideGive, input.sideGet) : null
   if (guillotineView) applyCollegeGrade(leagueGrade, guillotineView)
   /**
