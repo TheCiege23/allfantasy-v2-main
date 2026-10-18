@@ -30,7 +30,11 @@ export type TribalCouncilView = {
     isSafeFromVote: boolean
   }
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
-  reveal: { revealSequence: RevealScroll[]; countsByTargetName: Record<string, number>; eliminatedName: string | null; isTie: boolean; tiePhase: string | null } | null
+  /** Server-gated read (lib/survivor/survivorRevealGate.ts): released steps only; verdict once complete. */
+  reveal: {
+    revealSequence: RevealScroll[]; countsByTargetName: Record<string, number>; eliminatedName: string | null; isTie: boolean; tiePhase: string | null
+    mode?: 'one_at_a_time' | 'all_at_once'; totalSteps?: number; visibleSteps?: number; complete?: boolean; nextStepAt?: string | null; exileEnabled?: boolean
+  } | null
 }
 
 type Access = {
