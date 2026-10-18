@@ -7,6 +7,10 @@ import clsx from 'clsx'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { SurvivorVoteRevealScrolls, type RevealScroll } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
 import { SurvivorRevote } from '@/components/survivor/SurvivorRevote'
+import { SurvivorVoteCast } from '@/components/survivor/weekly/SurvivorVoteCast'
+import { SurvivorWeeklyMoments } from '@/components/survivor/weekly/SurvivorWeeklyMoments'
+import { SurvivorAvatar, survivorAvatarStatus } from '@/components/survivor/weekly/SurvivorAvatar'
+import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 
 export default function SurvivorTribalPage() {
   const params = useParams()
@@ -35,6 +39,22 @@ export default function SurvivorTribalPage() {
 
   if (council?.phase === 'revote') return <SurvivorRevote leagueId={leagueId} />
 
+  if (status === 'voting_open') {
+    return (
+      <div className="relative px-0 pb-28 pt-0 md:px-6 md:pb-10 md:pt-4" data-testid="survivor-tribal-vote">
+        <SurvivorVoteCast
+          leagueId={leagueId}
+          tribeName={tribe?.name ? stripLeadingTribeIcon(tribe.name) || tribe.name : null}
+          backHref={base}
+          idolHref={`/league/${encodeURIComponent(leagueId)}?tab=survivor`}
+        />
+        <p className="mx-auto mt-4 max-w-lg px-3 text-center text-[12px] text-white/45">
+          Prefer chat? You can still vote privately with <Link href={`${base}/chimmy`} className="text-amber-200 underline">@Chimmy</Link>. It is the same ballot.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="relative min-h-[75vh] px-3 pb-32 pt-4 md:px-6">
       <div
@@ -44,14 +64,16 @@ export default function SurvivorTribalPage() {
         }}
       />
       <div className="relative">
+        <div className="mx-auto mb-6 max-w-3xl"><SurvivorWeeklyMoments leagueId={leagueId} exileHref={`${base}/exile`} /></div>
         <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-red-300/80">Elimination Council</p>
         <h1 className="mt-2 text-center text-2xl font-black uppercase tracking-[0.15em] text-white">
           Week {week} · {tribe?.name ?? 'Tribe'} beach
         </h1>
 
         {attendingPlayers.some((p) => p.hasImmunityThisWeek) ? (
-          <div className="mx-auto mt-4 max-w-lg rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-4 py-3 text-center text-[13px] text-cyan-100">
-            🛡 {(attendingPlayers.find((p) => p.hasImmunityThisWeek)?.displayName ?? 'A player')} is immune this week.
+          <div className="mx-auto mt-4 max-w-lg rounded-xl border border-amber-400/35 bg-amber-400/10 px-4 py-3 text-center text-[13px] text-amber-100">
+            <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="" width={20} height={20} className="mr-1 inline-block h-5 w-5 align-[-4px]" />
+            {(attendingPlayers.find((p) => p.hasImmunityThisWeek)?.displayName ?? 'A player')} is immune this week.
           </div>
         ) : null}
 
@@ -61,12 +83,10 @@ export default function SurvivorTribalPage() {
               key={p.userId}
               className={clsx(
                 'survivor-panel flex flex-col items-center rounded-xl p-3 text-center',
-                p.hasImmunityThisWeek && 'ring-1 ring-cyan-400/40',
+                p.hasImmunityThisWeek && 'bg-amber-400/[0.07] ring-1 ring-amber-300/40',
               )}
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-sm font-bold text-white/80">
-                {p.displayName.slice(0, 1)}
-              </div>
+              <SurvivorAvatar name={p.displayName} size={48} status={survivorAvatarStatus({ immune: p.hasImmunityThisWeek, out: p.playerState === 'eliminated' })} imageUrl={p.avatarUrl ?? null} />
               <p className="mt-2 truncate text-[12px] font-semibold text-white">{p.displayName}</p>
               <p className="mt-1 text-[11px] uppercase tracking-wide text-white/40">
                 {p.hasImmunityThisWeek ? 'Immune' : status === 'voting_open' ? 'Voting' : '—'}
@@ -76,17 +96,7 @@ export default function SurvivorTribalPage() {
         </div>
 
         <div className="mx-auto mt-6 max-w-lg text-center">
-          {status === 'voting_open' ? (
-            <>
-              <p className="font-mono text-[13px] tabular-nums text-orange-200">Vote before the commissioner&apos;s deadline.</p>
-              <Link
-                href={`${base}/chimmy`}
-                className="mt-4 inline-flex min-h-[56px] w-full items-center justify-center rounded-xl bg-red-600/80 text-[15px] font-bold uppercase tracking-wide text-white shadow-lg shadow-red-900/40"
-              >
-                🗳 Vote now via @Chimmy
-              </Link>
-            </>
-          ) : quiet ? (
+          {quiet ? (
             <div className="space-y-2">
               <img src="/survivor/exile/scroll-sealed.svg" alt="Council results sealed" width={200} height={140} className="mx-auto" /><p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
               <p className="text-[13px] text-white/50">Results remain sealed until the Torch Ceremony is published.</p>

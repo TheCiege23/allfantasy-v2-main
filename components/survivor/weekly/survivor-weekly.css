@@ -1,0 +1,154 @@
+/* Weekly Survivor loop (weekly-loop handoff): vote casting, immunity necklace, torch-out. */
+
+/* ---------- Avatar + status (reused wherever a Survivor manager appears) ---------- */
+.swl-av{--swl-ring:#9b8ae0;--swl-gap:#07080d;position:relative;display:inline-grid;place-items:center;flex:none;border-radius:999px;background:#1f2638;color:#fff;font-weight:700;font-family:inherit;line-height:1;box-shadow:0 0 0 2px var(--swl-gap),0 0 0 4px var(--swl-ring)}
+.swl-av[data-status='immune']{--swl-ring:#f2c94c;box-shadow:0 0 0 2px var(--swl-gap),0 0 0 4px #f2c94c,0 0 18px rgba(242,201,76,.45)}
+.swl-av[data-status='out']{--swl-ring:#4a4f5c}
+.swl-av[data-status='out'] .swl-av-face{filter:grayscale(1) brightness(.6)}
+.swl-av-face{display:grid;place-items:center;width:100%;height:100%;border-radius:inherit;background:inherit;overflow:hidden}
+.swl-av-face img{width:100%;height:100%;object-fit:cover}
+.swl-av-badge{position:absolute;right:-22%;bottom:-22%;width:56%;height:56%;min-width:16px;min-height:16px;pointer-events:none}
+.swl-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.swl-out-chip{display:inline-flex;align-items:center;flex:none;padding:3px 9px;border-radius:6px;border:1px solid rgba(255,154,60,.35);color:#ff9a3c;font-size:12px;font-weight:600;white-space:nowrap}
+.swl-out-name{text-decoration:line-through;color:#6f7590}
+.swl-torch{width:22px;height:22px;flex:none}
+
+/* ---------- Vote cast (VoteCast desktop + MobileVoteCast) ---------- */
+.swl-vc{display:flex;flex-direction:column;min-height:100%;background:#07080d;color:#e8eaf2;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+.swl-vc p{margin:0}
+.swl-vc-head{display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:18px 28px;border-bottom:1px solid rgba(255,255,255,.06)}
+.swl-vc-back{display:inline-grid;place-items:center;min-width:44px;min-height:44px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#10131c;color:#e8eaf2!important;font-size:18px}
+.swl-vc-title{flex:1 1 280px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.swl-vc-title h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-.01em}
+.swl-t2{color:#a3a9c2}
+.swl-t3{color:#6f7590}
+.swl-lbl{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#6f7590}
+.swl-gold{color:#d9b45a}
+.swl-num{font-family:var(--font-jetbrains-mono,'JetBrains Mono',monospace);font-variant-numeric:tabular-nums}
+.swl-vc-clock{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.swl-vc-clock .swl-num{font-size:22px;color:#d9b45a}
+.swl-vc-mclock{display:none}
+.swl-vc-body{display:flex;flex-wrap:wrap;gap:28px;padding:28px;align-items:flex-start;justify-content:center}
+.swl-vc-list{flex:1 1 300px;max-width:360px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.swl-vc-picks{display:flex;flex-direction:column;gap:10px}
+.swl-pick{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;color:#e8eaf2;font:inherit;text-align:left;cursor:pointer;min-height:60px}
+.swl-pick[aria-pressed='true']{border-color:#d9b45a;background:#151926}
+.swl-pick:disabled{cursor:default;opacity:.55}
+.swl-pick:focus-visible{outline:2px solid #f2c94c;outline-offset:2px}
+.swl-pick-text{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.swl-pick-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.swl-pick-sub{font-size:12px;color:#6f7590}
+.swl-pick-sub[data-immune='true']{color:#d9b45a}
+.swl-pick-pts{font-size:12px;color:#a3a9c2}
+.swl-vc-note{font-size:12px;color:#6f7590;line-height:1.5}
+.swl-vc-center{flex:0 1 520px;min-width:0;display:flex;flex-direction:column;align-items:center;gap:18px}
+.swl-vc-stage{position:relative;width:100%;min-height:330px;display:flex;justify-content:center;align-items:flex-start;padding-top:10px}
+.swl-slip{position:relative;width:min(440px,100%);aspect-ratio:1.55;padding:26px 30px;border-radius:4px;background:url(/survivor/exile/parchment-texture.svg),linear-gradient(#fbf3dc,#efdcae);background-size:cover;box-shadow:0 18px 40px rgba(0,0,0,.45),inset 0 0 40px rgba(120,70,20,.35),inset 0 0 0 1px rgba(120,80,30,.35);color:#2a1a08;transform:rotate(-2deg);display:flex;flex-direction:column;justify-content:space-between}
+.swl-slip-top{display:flex;justify-content:space-between;font:700 11px 'Cinzel',Georgia,serif;letter-spacing:.16em;color:#7a5528;text-transform:uppercase}
+.swl-slip-line{height:1px;background:#8a6330;opacity:.5}
+.swl-slip-foot{font:600 11px 'Cinzel',Georgia,serif;letter-spacing:.12em;color:#8a6330;text-align:right;text-transform:uppercase}
+.swl-slip-ink-wrap{min-height:64px;display:flex;align-items:center}
+.swl-ink{font:700 54px/1.05 'Caveat','Segoe Print','Bradley Hand',cursive;color:#1d1206;overflow-wrap:anywhere;animation:swlWrite 1.1s steps(18,end) both}
+.swl-ink-empty{font:600 26px 'Caveat','Segoe Print','Bradley Hand',cursive;color:#a08055}
+@keyframes swlWrite{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes swlDrop{0%{transform:rotate(-2deg) translateY(0) scale(1);opacity:1}35%{transform:rotate(0) translateY(-10px) scale(.62,.5);opacity:1}100%{transform:rotate(4deg) translateY(250px) scale(.18,.12);opacity:0}}
+.swl-slip.is-dropping{animation:swlDrop 1.1s cubic-bezier(.5,0,.7,1) both}
+.swl-slip.is-gone{visibility:hidden}
+@keyframes swlBump{0%{transform:scale(1)}40%{transform:scale(1.06) rotate(-2deg)}70%{transform:scale(.98) rotate(1deg)}100%{transform:scale(1)}}
+.swl-urn{width:200px;display:block;margin-top:-40px}
+.swl-urn.is-bumping{animation:swlBump .5s ease-out 1s both}
+@keyframes swlPop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+.swl-vc-confirm{position:absolute;top:40px;left:0;right:0;text-align:center;display:flex;flex-direction:column;gap:6px;padding:0 12px;animation:swlPop .5s ease-out both}
+.swl-vc-confirm.is-instant{animation:none}
+.swl-vc-confirm strong{font:700 20px 'Cinzel',Georgia,serif;letter-spacing:.06em;color:#f1d58a}
+.swl-vc-actions{display:flex;gap:10px;justify-content:center}
+.swl-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 22px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#10131c;color:#e8eaf2!important;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none}
+.swl-btn:disabled{opacity:.5;cursor:default}
+.swl-btn-gold{background:linear-gradient(180deg,#e7c46a,#d4a94a);border-color:transparent;color:#1d1406!important}
+.swl-btn:focus-visible{outline:2px solid #f2c94c;outline-offset:2px}
+.swl-vc-rail{flex:1 1 280px;max-width:320px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.swl-card{border-radius:12px;border:1px solid rgba(255,255,255,.06);background:#0b0d14;padding:16px;display:flex;flex-direction:column;gap:10px}
+.swl-card-gold{background:#10131c;border-color:rgba(242,201,76,.35);flex-direction:row;align-items:center;gap:12px}
+.swl-idol-art{height:84px;width:auto;flex:none}
+.swl-idol-text{display:flex;flex-direction:column;gap:4px;min-width:0}
+.swl-idol-link{color:#d9b45a!important;font-weight:600;font-size:12.5px;text-decoration:none;min-height:32px;display:inline-flex;align-items:center}
+.swl-idol-mobile{display:none}
+.swl-tally{display:flex;gap:6px}
+.swl-tally span{flex:1;height:8px;border-radius:99px;background:#151926}
+.swl-tally span[data-on='true']{background:#d9b45a}
+.swl-vc-alert{margin:0 28px;padding:10px 12px;border-radius:9px;border:1px solid rgba(244,63,94,.35);background:rgba(76,5,25,.35);color:#fecdd3;font-size:13px}
+.swl-vc-bar{display:none}
+
+@media (max-width:760px){
+  .swl-vc{border-radius:0;border-left:0;border-right:0}
+  .swl-vc-head{padding:10px 14px;gap:10px}
+  .swl-vc-title h1{font-size:17px}
+  .swl-vc-dtitle,.swl-vc-clock{display:none}
+  .swl-vc-mclock{display:block;font-size:12px;color:#6f7590}
+  .swl-vc-body{padding:16px 14px 110px;gap:16px;flex-direction:column;align-items:stretch}
+  .swl-vc-list,.swl-vc-rail,.swl-vc-center{max-width:none;flex:none;width:100%}
+  .swl-vc-list>.swl-lbl,.swl-vc-note{display:none}
+  .swl-vc-picks{flex-direction:row;gap:8px}
+  .swl-pick{flex:1;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;min-height:96px;text-align:center;min-width:0}
+  .swl-pick-text{align-items:center;width:100%}
+  .swl-pick-name{font-size:12px;max-width:100%}
+  .swl-pick-sub{font-size:10.5px}
+  .swl-pick-pts{display:none}
+  .swl-vc-stage{min-height:170px;padding:6px 8px}
+  .swl-slip{aspect-ratio:auto;padding:18px 20px;gap:10px}
+  .swl-ink{font-size:44px}
+  .swl-urn{width:150px;margin-top:-20px}
+  .swl-vc-center .swl-vc-actions{display:none}
+  .swl-idol-desktop{display:none}
+  .swl-idol-mobile{display:flex;flex-direction:row;align-items:center;gap:10px;padding:12px}
+  .swl-idol-mobile img{width:36px;height:36px;flex:none}
+  .swl-vc-bar{display:flex;gap:8px;position:fixed;left:0;right:0;bottom:0;z-index:40;padding:12px 14px calc(14px + env(safe-area-inset-bottom));border-top:1px solid rgba(255,255,255,.06);background:#0b0d14}
+  .swl-vc-bar .swl-btn{flex:1;min-height:48px}
+  .swl-vc-alert{margin:0 14px}
+}
+
+/* ---------- Weekly moments: immunity win + torch-out ---------- */
+.swl-moments{display:flex;flex-direction:column;gap:16px}
+.swl-moment{position:relative;border-radius:14px;border:1px solid rgba(255,255,255,.06);padding:24px;display:flex;flex-wrap:wrap;gap:28px;align-items:center;color:#e8eaf2}
+.swl-moment p{margin:0}
+.swl-moment-immunity{background:radial-gradient(ellipse at 22% 55%,rgba(242,201,76,.14),transparent 55%),#0b0d14}
+.swl-moment-torch{background:radial-gradient(ellipse at 20% 50%,rgba(255,122,42,.12),transparent 55%),#0b0d14}
+.swl-moment-copy{flex:1 1 260px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.swl-moment-title{font:700 clamp(22px,3vw,28px)/1.15 'Cinzel',Georgia,serif;margin:0}
+.swl-moment-immunity .swl-moment-title{color:#f1d58a}
+.swl-chips{display:flex;gap:10px;flex-wrap:wrap}
+.swl-chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.14);font-size:12.5px;color:#a3a9c2}
+.swl-chip-gold{color:#d9b45a;border-color:rgba(217,180,90,.4)}
+@keyframes swlSway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+.swl-neck{width:220px;flex:none;transform-origin:50% 8%;animation:swlSway 4s ease-in-out infinite}
+.swl-moment[data-compact='true']{padding:16px;gap:16px}
+.swl-moment[data-compact='true'] .swl-neck{width:96px}
+.swl-moment[data-compact='true'] .swl-moment-title{font-size:20px}
+.swl-stage{position:relative;width:240px;height:300px;flex:none}
+.swl-stage img{position:absolute;inset:0;width:100%;height:100%}
+.swl-stage .swl-smoke{opacity:0}
+@keyframes swlSnuff{0%{opacity:1;transform:scale(1)}60%{opacity:1;transform:scale(1,.4) translateY(20px)}100%{opacity:0;transform:scale(.2,.1) translateY(40px)}}
+@keyframes swlSmoke{0%{opacity:0;transform:translateY(16px)}30%{opacity:1}100%{opacity:1;transform:translateY(0)}}
+@keyframes swlDim{to{filter:grayscale(1) brightness(.6)}}
+.swl-stage.is-playing .swl-lit{animation:swlSnuff 1.4s ease-in both;transform-origin:50% 45%}
+.swl-stage.is-playing .swl-smoke{animation:swlSmoke 1.2s ease-out 1s both}
+.swl-stage.is-done .swl-lit{opacity:0}
+.swl-stage.is-done .swl-smoke{opacity:1}
+.swl-torch-av{display:flex;align-items:center;gap:12px}
+.swl-torch-av.is-playing .swl-av-face{animation:swlDim .8s ease-out 2.2s both}
+.swl-torch-av.is-done .swl-av-face{filter:grayscale(1) brightness(.6)}
+.swl-moment-actions{display:flex;gap:10px;flex-wrap:wrap}
+@media (max-width:640px){
+  .swl-moment{padding:18px;gap:18px}
+  .swl-neck{width:150px}
+  .swl-stage{width:160px;height:200px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .swl-ink,.swl-slip.is-dropping,.swl-urn.is-bumping,.swl-vc-confirm,.swl-neck,
+  .swl-stage.is-playing .swl-lit,.swl-stage.is-playing .swl-smoke,.swl-torch-av.is-playing .swl-av-face{animation:none!important}
+  .swl-slip.is-dropping{visibility:hidden}
+  .swl-stage.is-playing .swl-lit{opacity:0}
+  .swl-stage.is-playing .swl-smoke{opacity:1}
+  .swl-torch-av.is-playing .swl-av-face{filter:grayscale(1) brightness(.6)}
+}

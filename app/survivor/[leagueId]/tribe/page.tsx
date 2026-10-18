@@ -95,6 +95,8 @@ export default function SurvivorTribePage() {
             <TribeMemberCard
               key={p.userId}
               name={p.displayName}
+              avatarUrl={p.avatarUrl ?? null}
+              outWeek={p.eliminatedWeek ?? null}
               weeklyScore={undefined}
               statusVariant={memberVariant(p, Boolean(councilOpen))}
               ringClass={
