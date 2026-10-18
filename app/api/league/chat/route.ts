@@ -39,6 +39,7 @@ import { filterMessagesByBlocked } from '@/lib/moderation/SafetyVisibilityResolv
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
 import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
+import { messageInLeagueChannel, parseLeagueChatChannel, withLeagueChannel } from '@/lib/league-chat/leagueChatChannels'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -201,9 +202,18 @@ export async function GET(req: NextRequest) {
    */
   const withoutPins = messages.filter((message) => (message.messageType ?? 'text') !== 'pin')
 
+  /*
+   * League channels (#general / #trash-talk / #trades / #waivers — lib/league-chat/leagueChatChannels.ts).
+   * Only when the reader names one, and never in a Big Brother league, whose rooms are its own. A
+   * request without `leagueChannel` gets the whole transcript, exactly as before, so the comms drawer
+   * and every older caller are unchanged.
+   */
+  const leagueChannel = bbAccess ? null : parseLeagueChatChannel(req.nextUrl.searchParams?.get('leagueChannel'))
   const inRoom = selectedBbChannel
     ? withoutPins.filter((message) => bbChannelOfMessage(message) === selectedBbChannel)
-    : withoutPins
+    : leagueChannel
+      ? withoutPins.filter((message) => messageInLeagueChannel(message, leagueChannel))
+      : withoutPins
   const filteredMessages = filterMessagesByBlocked(inRoom, blockSet)
 
   /*
@@ -337,7 +347,11 @@ export async function POST(req: NextRequest) {
   const selectedBbChannel: BigBrotherChannelKey | null = bbWrite.channel
   const bigBrotherLeague = selectedBbChannel !== null
 
-  const finalMetadata = selectedBbChannel ? { ...(metadata ?? {}), bbChannel: selectedBbChannel } : metadata
+  /* The league channel is server-stamped from a validated body field; a Big Brother room wins. */
+  const leagueChannel = bigBrotherLeague ? null : parseLeagueChatChannel(body?.leagueChannel)
+  const finalMetadata = selectedBbChannel
+    ? { ...(metadata ?? {}), bbChannel: selectedBbChannel }
+    : withLeagueChannel(metadata as Record<string, unknown> | undefined, leagueChannel)
 
   let bbProcessed: Awaited<ReturnType<typeof processBigBrotherLeagueChatInput>> | null = null
   if (!hasRich && message.trim() && bigBrotherLeague) {
@@ -514,6 +528,7 @@ export async function POST(req: NextRequest) {
             ...(devyProcessed?.outcome === 'post_user_and_chimmy' ? { devy: true } : {}),
             ...(idpProcessed?.outcome === 'post_user_and_chimmy' ? { idp: true } : {}),
             ...(bigBrotherLeague && selectedBbChannel ? { bbChannel: selectedBbChannel } : {}),
+            ...(leagueChannel && leagueChannel !== 'general' ? { leagueChannel } : {}),
             ...(chimmy.metadata ?? {}),
           },
         })

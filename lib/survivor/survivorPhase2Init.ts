@@ -6,6 +6,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { prepareSurvivorDraftParticipants } from './survivorDraftParticipants'
+import { readLockedTribePlanMapping } from './survivorTribePlan'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
@@ -136,8 +137,9 @@ async function initializeSurvivorPhase2Locked(
     league?.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {},
   )
 
-  // 1. Tribes.
-  const tribesOutcome = await assignSurvivorTribes(leagueId, {
+  // 1. Tribes. A tribe plan the commissioner locked before the draft (handoff §5.4,
+  // survivorTribePlanServer.ts) wins over the league's default mode unless the caller overrides.
+  const baseTribeOpts = {
     mode: opts.mode ?? settings.tribeAssignmentMode,
     tribeCount: opts.tribeCount ?? settings.tribeCount,
     seed: opts.seed ?? null,
@@ -147,7 +149,14 @@ async function initializeSurvivorPhase2Locked(
     allowReassign: opts.allowReassign ?? false,
     actorUserId: opts.actorUserId,
     db,
-  })
+  }
+  const lockedPlan = opts.mode || opts.manualMapping ? null : readLockedTribePlanMapping(league?.settings)
+  let tribesOutcome = await assignSurvivorTribes(
+    leagueId,
+    lockedPlan ? { ...baseTribeOpts, mode: 'commissioner_manual', manualMapping: lockedPlan } : baseTribeOpts,
+  )
+  // The locked plan no longer fits the cast (a seat changed hands after the lock): use the default.
+  if (!tribesOutcome.ok && lockedPlan) tribesOutcome = await assignSurvivorTribes(leagueId, baseTribeOpts)
 
   if (!tribesOutcome.ok) {
     blockers.push(`tribe_assignment:${tribesOutcome.code}`)

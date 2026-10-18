@@ -21,6 +21,7 @@ import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMenti
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { isDraftRoomSource, type LeagueDraftLink } from '@/lib/league-chat/draftChatLink'
 import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
+import type { LeagueChatChannelId } from '@/lib/league-chat/leagueChatChannels'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import '@/components/core-app/af-comms.css'
 
@@ -78,6 +79,11 @@ export type LeagueConversationProps = {
    * A prop rather than a session hook, which throws outside a SessionProvider.
    */
   viewerId?: string | null
+  /**
+   * A league channel (#general / #trash-talk / #trades / #waivers, lib/league-chat/leagueChatChannels.ts).
+   * Absent = the whole league transcript, as the drawer has always read it.
+   */
+  channel?: LeagueChatChannelId | null
 }
 
 type LeagueMessage = {
@@ -185,6 +191,7 @@ export function LeagueConversation({
   surface = 'drawer',
   source = null,
   viewerId = null,
+  channel = null,
 }: LeagueConversationProps) {
   const tribe = typeof source === 'string' && source.startsWith('tribe_') ? source : null
   const room = `league:${leagueId}`
@@ -274,8 +281,9 @@ export function LeagueConversation({
          */
         const seen = typeof document !== 'undefined' && document.visibilityState === 'visible'
         const draftParam = includeDraftChoice === null ? '' : `&includeDraft=${includeDraftChoice ? '1' : '0'}`
+        const channelParam = channel ? `&leagueChannel=${encodeURIComponent(channel)}` : ''
         const res = await fetch(
-          `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${draftParam}${seen ? '&markRead=1' : ''}`,
+          `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${draftParam}${channelParam}${seen ? '&markRead=1' : ''}`,
         )
         if (!res.ok) throw new Error(`Chat returned ${res.status}`)
         /*
@@ -324,7 +332,7 @@ export function LeagueConversation({
       }
       /* Flipping the draft-room view has to re-fetch, so it belongs in here. */
     },
-    [leagueId, room, tribe, includeDraftChoice],
+    [leagueId, room, tribe, includeDraftChoice, channel],
   )
 
   const loadPins = useCallback(async () => {
@@ -726,6 +734,7 @@ export function LeagueConversation({
                 message: displayText,
                 ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
                 ...(replyTo ? { parentMessageId: replyTo.id } : {}),
+                ...(channel ? { leagueChannel: channel } : {}),
               }),
             })
         if (!res.ok) throw new Error(`Send returned ${res.status}`)
@@ -762,7 +771,7 @@ export function LeagueConversation({
         setSending(false)
       }
     },
-    [load, leagueId, room, tribe, sending, replyTo, viewerUserId, viewerId],
+    [load, leagueId, room, tribe, sending, replyTo, viewerUserId, viewerId, channel],
   )
 
   const commissionerLeagues = useMemo(

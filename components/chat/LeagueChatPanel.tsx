@@ -16,6 +16,8 @@ import type { AIChatContext } from "@/lib/chimmy-chat"
 import { buildChimmyToolDisplayContext } from "@/lib/chimmy-interface"
 import { useAIAssistantAvailability } from "@/hooks/useAIAssistantAvailability"
 import "@/components/core-app/af-comms.css"
+import "./league-chat-channels.css"
+import { LEAGUE_CHAT_CHANNELS, type LeagueChatChannelId } from "@/lib/league-chat/leagueChatChannels"
 
 /**
  * The league page's chat: League chat · Messages · Chimmy.
@@ -44,6 +46,11 @@ type Props = {
   defaultOpen?: boolean
   onClose?: () => void
   className?: string
+  /**
+   * Native league handoff §6: the channel strip (#general, #trash-talk, #trades, #waivers, and the
+   * gold #chimmy that opens the Chimmy thread). Opt-in so the dock and harnesses are unchanged.
+   */
+  channels?: boolean
 }
 
 function buildDmChimmyPrompt(ask: ThreadAskChimmy): string {
@@ -67,6 +74,7 @@ export default function LeagueChatPanel({
   isCommissioner = false,
   onClose,
   className = "",
+  channels = false,
 }: Props) {
   const { data: session } = useSession()
   const { enabled: aiAssistantEnabled, loading: aiAvailabilityLoading } = useAIAssistantAvailability()
@@ -81,6 +89,7 @@ export default function LeagueChatPanel({
    * shows it straight away instead of on the next poll.
    */
   const [conversationEpoch, setConversationEpoch] = useState(0)
+  const [channel, setChannel] = useState<LeagueChatChannelId>("general")
 
   const chatSource = useMemo(() => {
     const value = searchParams?.get("source")?.trim()
@@ -196,16 +205,48 @@ export default function LeagueChatPanel({
         ))}
       </div>
 
+      {channels && !tribeSource && (activeTab === "league" || activeTab === "ai") ? (
+        <nav className="lcc-strip" aria-label="Chat channels" data-testid="league-chat-channels">
+          {LEAGUE_CHAT_CHANNELS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="lcc-chip"
+              aria-pressed={activeTab === "league" && channel === c.id}
+              title={c.description}
+              onClick={() => {
+                setChannel(c.id)
+                setActiveTab("league")
+              }}
+              data-testid={`league-chat-channel-${c.id}`}
+            >
+              <span aria-hidden>#</span> {c.id}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="lcc-chip lcc-chimmy"
+            aria-pressed={activeTab === "ai"}
+            title="Chimmy, the AF assistant — private to you"
+            onClick={() => setActiveTab("ai")}
+            data-testid="league-chat-channel-chimmy"
+          >
+            <span aria-hidden>#</span> chimmy
+          </button>
+        </nav>
+      ) : null}
+
       {activeTab === "league" ? (
         <div className="af-cm af-cm-embed" data-testid="league-chat-conversation">
           <LeagueConversation
-            key={`${leagueId}:${tribeSource ?? ""}:${conversationEpoch}`}
+            key={`${leagueId}:${tribeSource ?? ""}:${channels ? channel : ""}:${conversationEpoch}`}
             leagueId={leagueId}
             leagueName={leagueName}
             isCommissioner={isCommissioner}
             viewerId={currentUserId}
             surface="page"
             source={tribeSource}
+            channel={channels && !tribeSource ? channel : null}
           />
         </div>
       ) : null}

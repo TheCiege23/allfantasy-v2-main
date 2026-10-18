@@ -12,6 +12,7 @@ import { LeagueYourWeekStrip } from '@/components/league/native/LeagueYourWeekSt
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { isLeagueEligibleForDispersalDraft } from '@/lib/league/dispersal-draft-eligibility'
 import { sortTeamsForManagerListing, type LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 
 export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, draftDateIso, snapshot, settingsOpen, onOpenSettings, onSelectTab, inviteCode = '' }: {
@@ -41,6 +42,21 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
   const stakesFormat = stakesFormatFor(league)
   const standings = sortTeamsForManagerListing(teams, league, snapshot).slice(0, 6)
   const date = draftDateIso ? new Date(draftDateIso) : null
+  /*
+   * Handoff §3: the third pre-draft tile is the Supplemental draft — late joiners and dispersal
+   * pools, commissioner-run. In this repo that is the dispersal draft (specs 02–05_SUPPLEMENTAL_DRAFT_*
+   * named /supplemental-draft/setup; what shipped is /league/:id/dispersal-draft/setup, gated to
+   * dynasty-style leagues by isLeagueEligibleForDispersalDraft). A redraft league cannot run one, so
+   * its commissioner keeps the Draft settings tile rather than a link to a page that refuses them.
+   */
+  const supplementalEligible = isLeagueEligibleForDispersalDraft({ isDynasty: Boolean(league.isDynasty), leagueType: league.leagueType ?? null, leagueVariant: league.leagueVariant ?? null })
+  const supplementalTile = supplementalEligible
+    ? isCommissioner
+      ? <Link href={`/league/${encodeURIComponent(league.id)}/dispersal-draft/setup`} data-testid="native-home-supplemental"><h3>Supplemental draft</h3><p>Late joiners and dispersal pools. Commissioner-run.</p></Link>
+      : <div data-testid="native-home-supplemental"><h3>Supplemental draft</h3><p>Late joiners and dispersal pools. Your commissioner runs it.</p></div>
+    : isCommissioner
+      ? <button type="button" onClick={() => onOpenSettings('draft')}><h3>Draft settings</h3><p>Order, clock, and manager readiness.</p></button>
+      : null
   const draftLabel = date && Number.isFinite(date.getTime()) ? date.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Schedule or start manually'
   return <div className="nl-home" data-testid="native-league-home">
     <div className="nl-home-primary">
@@ -49,7 +65,7 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
         <h2>{predraft ? `Draft · ${draftLabel}` : survivor ? 'Your island this week' : phase === 'Offseason' ? 'Your season archive' : `Week ${league.currentWeek ?? '—'}`}</h2>
         <p>{predraft ? `${league.teamCount}-team ${league.format}. Review your settings and queue before the draft.` : survivor ? 'Check the challenge, immunity, Elimination Council, and your private powers.' : phase === 'Offseason' ? 'Review final standings and prepare for the next season.' : 'Set your lineup and follow the latest matchup scores.'}</p>
         <div className="nl-actions">{predraft ? <><button type="button" className="nl-button nl-primary" onClick={() => onSelectTab('draft')}>Enter Draft HQ <ArrowRight size={16} aria-hidden /></button><Link className="nl-button" href={`/league/${encodeURIComponent(league.id)}/draft`}>Draft board</Link></> : <button type="button" className="nl-button nl-primary" onClick={() => onSelectTab(survivor ? 'survivor' : phase === 'Offseason' ? 'standings' : 'matchups')}>{survivor ? 'Open Survivor' : phase === 'Offseason' ? 'Final standings' : 'Open matchup'}<ArrowRight size={16} aria-hidden /></button>}</div>
-        {predraft && <div className="nl-quick-grid"><Link href={`/mock-draft?leagueId=${encodeURIComponent(league.id)}&sport=${encodeURIComponent(league.sport)}&teams=${league.teamCount}`}><h3>Mock draft</h3><p>Practice with this league’s settings.</p></Link><Link href={`/league/${encodeURIComponent(league.id)}/draft`}><h3>Queue & rankings</h3><p>Prepare your picks in the draft room.</p></Link>{isCommissioner && <button type="button" onClick={() => onOpenSettings('draft')}><h3>Draft settings</h3><p>Order, clock, and manager readiness.</p></button>}</div>}
+        {predraft && <div className="nl-quick-grid"><Link href={`/mock-draft?leagueId=${encodeURIComponent(league.id)}&sport=${encodeURIComponent(league.sport)}&teams=${league.teamCount}`}><h3>Mock draft</h3><p>Practice with this league’s exact settings.</p></Link><Link href={`/league/${encodeURIComponent(league.id)}/draft`}><h3>Queue & rankings</h3><p>Rank players and build your queue before the draft.</p></Link>{supplementalTile}</div>}
       </section>
       {stakesFormat && <LeagueStakesCard leagueId={league.id} format={stakesFormat} onSelectTab={onSelectTab} />}
       {showSeats && <LeagueSeatTracker teams={teams} teamCount={league.teamCount} userTeamId={userTeamId} leagueName={league.name} inviteCode={inviteCode} canInvite={isCommissioner} onOpenInviteSettings={() => onOpenSettings('invite')} />}
