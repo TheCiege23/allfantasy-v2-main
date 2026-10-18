@@ -1,8 +1,13 @@
+import { ImageResponse } from 'next/og'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getDraftGrades } from '@/lib/rankings-engine/draft-grades'
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { getDraftResults } from '@/lib/post-draft-manager-ranking'
+import { buildDraftReportCard } from '@/lib/post-draft-manager-ranking/reportCard'
+import { DraftReportShareCard, REPORT_CARD_SIZE } from '@/components/draft-sharing/DraftReportShareCard'
 import type {
   DraftShareVariant,
   DraftShareCardPayload,
@@ -13,8 +18,41 @@ import type {
 } from '@/lib/draft-sharing/types'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 const DRAFT_SHARE_TYPES: DraftShareVariant[] = ['draft_grade', 'draft_rankings', 'draft_winner']
+
+/**
+ * GET `?card=report&leagueId=…&rosterId=…` — the post-draft report card as a
+ * 1080×1080 PNG. Folded into this route rather than given its own because the repo
+ * sits against Vercel's 2048-route ceiling. Auth-gated to league members; shared
+ * as an image file, never as a public URL.
+ */
+export async function GET(req: Request) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const params = new URL(req.url).searchParams
+  if (params.get('card') !== 'report') return NextResponse.json({ error: 'Unknown card' }, { status: 400 })
+  const leagueId = (params.get('leagueId') ?? '').trim()
+  const rosterId = (params.get('rosterId') ?? '').trim()
+  if (!leagueId || !rosterId) return NextResponse.json({ error: 'Missing leagueId or rosterId' }, { status: 400 })
+
+  if (!(await canAccessLeagueDraft(leagueId, userId))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const results = await getDraftResults(leagueId).catch(() => null)
+  const card = results ? buildDraftReportCard(results, rosterId) : null
+  if (!card) return NextResponse.json({ error: 'No report card for this draft yet' }, { status: 404 })
+
+  return new ImageResponse(<DraftReportShareCard card={card} />, {
+    width: REPORT_CARD_SIZE.width,
+    height: REPORT_CARD_SIZE.height,
+    headers: { 'Cache-Control': 'private, max-age=300' },
+  })
+}
 
 export async function POST(req: Request) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
