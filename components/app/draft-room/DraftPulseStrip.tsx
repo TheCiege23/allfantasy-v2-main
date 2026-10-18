@@ -70,6 +70,12 @@ function DraftPulseStripInner({
   formatPickLabel,
 }: DraftPulseStripProps) {
   const lookup = useMemo(() => buildAdpLookup(pool), [pool])
+  // While the pool is still loading (or a sport has no market ADP at all) every
+  // lookup misses; labelling each pick "No ADP" then reads as bad data. Show none.
+  const poolHasAdp = useMemo(
+    () => pool.some((p) => typeof p.adp === 'number' && Number.isFinite(p.adp) && p.adp > 0),
+    [pool],
+  )
 
   const recent = useMemo(
     () =>
@@ -114,7 +120,9 @@ function DraftPulseStripInner({
               <span className="truncate text-[12px] font-semibold text-white" title={pick.playerName}>
                 {pick.playerName}
               </span>
-              <span className={`text-[11px] font-semibold ${deltaTone(delta)}`}>{deltaLabel(delta)}</span>
+              {poolHasAdp ? (
+                <span className={`text-[11px] font-semibold ${deltaTone(delta)}`}>{deltaLabel(delta)}</span>
+              ) : null}
             </li>
           ))}
         </ol>

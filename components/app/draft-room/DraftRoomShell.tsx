@@ -1,13 +1,13 @@
 'use client'
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield } from 'lucide-react'
+import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield, Radar } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
 
-export type MobileDraftTab = 'board' | 'players' | 'queue' | 'helper' | 'roster' | 'keepers' | 'chat'
+export type MobileDraftTab = 'board' | 'players' | 'queue' | 'intel' | 'helper' | 'roster' | 'keepers' | 'chat'
 
 export type DraftRoomShellProps = {
   /** Premium ambient gradient for `/draft/[id]/snake` redraft room. */
@@ -20,6 +20,8 @@ export type DraftRoomShellProps = {
   queuePanel: ReactNode
   chatPanel: ReactNode
   helperPanel?: ReactNode
+  /** "Before your next pick" lookahead. Omitted for auctions, which have no pick order. */
+  intelPanel?: ReactNode
   rosterPanel?: ReactNode
   keeperPanel?: ReactNode
   mobileStickyBar?: ReactNode
@@ -44,6 +46,7 @@ const MOBILE_TAB_I18N: Record<MobileDraftTab, string> = {
   board: 'draftRoom.shell.mobile.board',
   players: 'draftRoom.shell.mobile.players',
   queue: 'draftRoom.shell.mobile.queue',
+  intel: 'draftRoom.shell.mobile.intel',
   helper: 'draftRoom.shell.mobile.ai',
   roster: 'draftRoom.shell.mobile.roster',
   keepers: 'draftRoom.shell.mobile.keepers',
@@ -55,6 +58,7 @@ const MOBILE_TABS = [
   { id: 'players' as const, icon: User },
   { id: 'chat' as const, icon: MessageCircle },
   { id: 'queue' as const, icon: ListOrdered },
+  { id: 'intel' as const, icon: Radar },
   { id: 'helper' as const, icon: Sparkles },
   { id: 'roster' as const, icon: Users },
   { id: 'keepers' as const, icon: Shield },
@@ -69,6 +73,7 @@ export function DraftRoomShell({
   queuePanel,
   chatPanel,
   helperPanel,
+  intelPanel,
   rosterPanel,
   keeperPanel,
   mobileStickyBar,
@@ -128,6 +133,7 @@ export function DraftRoomShell({
       const tabs = MOBILE_TABS.filter(
         (tab) =>
           (tab.id !== 'helper' || helperPanel) &&
+          (tab.id !== 'intel' || intelPanel) &&
           (tab.id !== 'roster' || rosterPanel) &&
           (tab.id !== 'keepers' || keeperPanel)
       )
@@ -136,12 +142,13 @@ export function DraftRoomShell({
       const nextIdx = dx < 0 ? Math.min(idx + 1, tabs.length - 1) : Math.max(idx - 1, 0)
       if (nextIdx !== idx) onMobileTabChange(tabs[nextIdx]!.id)
     },
-    [helperPanel, rosterPanel, keeperPanel, mobileTab, onMobileTabChange]
+    [helperPanel, intelPanel, rosterPanel, keeperPanel, mobileTab, onMobileTabChange]
   )
 
   const visibleTabs = MOBILE_TABS.filter(
     (tab) =>
       (tab.id !== 'helper' || helperPanel) &&
+      (tab.id !== 'intel' || intelPanel) &&
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
@@ -405,6 +412,7 @@ export function DraftRoomShell({
             )}
             {mobileTab === 'queue' && queuePanel}
             {mobileTab === 'chat' && chatPanel}
+            {intelPanel && mobileTab === 'intel' && intelPanel}
             {helperPanel && mobileTab === 'helper' && helperPanel}
             {rosterPanel && mobileTab === 'roster' && rosterPanel}
             {keeperPanel && mobileTab === 'keepers' && keeperPanel}

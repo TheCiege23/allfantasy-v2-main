@@ -420,20 +420,11 @@ function DraftBoardCellInner({
                   {pick.playerName}
                 </span>
                 <PositionBadge pos={pick.position} />
-                {pick.experienceBadge ? (
-                  <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/95">
-                    {pick.experienceBadge}
-                  </span>
-                ) : null}
-              </div>
-              <p className="flex min-w-0 items-center gap-1 text-[11px] text-white/44">
-                <span className="truncate">
-                  {(pick.team ?? '—').toString()}
-                  {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}
-                </span>
+                {/* On the name row, not the team/bye row: at normal board density the cell
+                    clips everything below the first line, which hid this badge entirely. */}
                 {pick.adpDelta != null && pick.adpDelta !== 0 ? (
                   <span
-                    className={`ml-auto shrink-0 rounded px-1 text-[11px] font-bold tabular-nums ${
+                    className={`shrink-0 rounded px-1 text-[11px] font-bold tabular-nums ${
                       pick.adpDelta > 0 ? 'bg-emerald-500/18 text-emerald-200' : 'bg-rose-500/18 text-rose-200'
                     }`}
                     title={
@@ -446,6 +437,17 @@ function DraftBoardCellInner({
                     {pick.adpDelta > 0 ? `+${pick.adpDelta}` : `\u2212${Math.abs(pick.adpDelta)}`}
                   </span>
                 ) : null}
+                {pick.experienceBadge ? (
+                  <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/95">
+                    {pick.experienceBadge}
+                  </span>
+                ) : null}
+              </div>
+              <p className="flex min-w-0 items-center gap-1 text-[11px] text-white/44">
+                <span className="truncate">
+                  {(pick.team ?? '—').toString()}
+                  {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}
+                </span>
               </p>
             </div>
           </div>

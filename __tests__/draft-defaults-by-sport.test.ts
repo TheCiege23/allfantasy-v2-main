@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getDraftDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
+import { getDraftDefaults, getRosterDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import {
   getDraftPreset,
   getDraftPresetDefinitions,
@@ -13,6 +13,13 @@ const { leagueFindUniqueMock, leagueUpdateMock } = vi.hoisted(() => ({
   leagueFindUniqueMock: vi.fn(),
   leagueUpdateMock: vi.fn(),
 }))
+
+/** Starter + bench slots in the sport's default roster — what a default draft must fill. */
+function rosterSlots(sport: 'NFL' | 'NCAAF'): number {
+  const roster = getRosterDefaults(sport)
+  const starters = Object.values(roster.starter_slots ?? {}).reduce((a, b) => a + Number(b), 0)
+  return starters + Number(roster.bench_slots ?? 0)
+}
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -51,7 +58,9 @@ describe('Prompt 17 draft defaults by sport and variant', () => {
     const idp = getDraftDefaults('NFL', 'IDP')
     const dynastyIdp = getDraftDefaults('NFL', 'DYNASTY_IDP')
 
-    expect(standard.rounds_default).toBe(15)
+    // Base rounds fill the default roster (starters + bench) — 12 for NFL today. The old
+    // hard-coded 15 predates the roster defaults this is now derived alongside.
+    expect(standard.rounds_default).toBeGreaterThanOrEqual(rosterSlots('NFL'))
     expect(ppr.pre_draft_ranking_source).toBe('ecr')
 
     expect(superflex.rounds_default).toBeGreaterThanOrEqual(standard.rounds_default)
@@ -75,7 +84,7 @@ describe('Prompt 17 draft defaults by sport and variant', () => {
 
     expect(nhl.position_filter_behavior).toBe('by_eligibility')
 
-    expect(ncaaf.rounds_default).toBeGreaterThanOrEqual(18)
+    expect(ncaaf.rounds_default).toBeGreaterThanOrEqual(rosterSlots('NCAAF'))
     expect(ncaab.rounds_default).toBeGreaterThanOrEqual(12)
 
     expect(soccer.pre_draft_ranking_source).toBe('sport_default')

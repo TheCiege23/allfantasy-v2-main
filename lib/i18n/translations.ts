@@ -2296,6 +2296,7 @@ export const translations: Record<string, Record<string, string>> = {
     "draftRoom.shell.mobile.board": "Board",
     "draftRoom.shell.mobile.players": "Players",
     "draftRoom.shell.mobile.queue": "Queue",
+    "draftRoom.shell.mobile.intel": "Intel",
     "draftRoom.shell.mobile.ai": "AI",
     "draftRoom.shell.mobile.roster": "My team",
     "draftRoom.shell.mobile.keepers": "Keepers",
