@@ -18,8 +18,8 @@ const {
   openFinaleMock,
   openJuryPhaseMock,
   openJuryVotingMock,
-  revealWinnerMock,
-  tallyJuryVotesMock,
+  getFinaleStateMock,
+  recordCrownedWinnerMock,
   submitJuryVoteMock,
   resolveSurvivorCurrentWeekMock,
   prismaMock,
@@ -41,8 +41,8 @@ const {
   openFinaleMock: vi.fn(),
   openJuryPhaseMock: vi.fn(),
   openJuryVotingMock: vi.fn(),
-  revealWinnerMock: vi.fn(),
-  tallyJuryVotesMock: vi.fn(),
+  getFinaleStateMock: vi.fn(),
+  recordCrownedWinnerMock: vi.fn(),
   submitJuryVoteMock: vi.fn(),
   resolveSurvivorCurrentWeekMock: vi.fn(),
   prismaMock: {
@@ -115,12 +115,12 @@ vi.mock('@/lib/survivor/juryEngine', () => ({
   openFinale: openFinaleMock,
   openJuryPhase: openJuryPhaseMock,
   openJuryVoting: openJuryVotingMock,
-  revealWinner: revealWinnerMock,
-  tallyJuryVotes: tallyJuryVotesMock,
 }))
 
 vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({
   submitJuryVote: submitJuryVoteMock,
+  getFinaleState: getFinaleStateMock,
+  recordCrownedWinner: recordCrownedWinnerMock,
 }))
 
 vi.mock('@/lib/survivor/SurvivorTimelineResolver', () => ({
@@ -252,6 +252,22 @@ describe('Survivor jury vote route normalization', () => {
       }),
     )
     expect(json).toEqual(expect.objectContaining({ ok: true }))
+  })
+
+  it('reveals only the winner the finale engine crowned', async () => {
+    const { POST } = await import('@/app/api/survivor/jury/route')
+    const reveal = () => POST(new Request('http://localhost/api/survivor/jury', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intent: 'reveal', leagueId: 'league-1' }),
+    }) as never)
+    getFinaleStateMock.mockResolvedValueOnce({ closed: false, winnerRosterId: null, votesSubmitted: 3, votesRequired: 7 })
+    const pending = await reveal()
+    expect(pending.status).toBe(409)
+    expect(recordCrownedWinnerMock).not.toHaveBeenCalled()
+    getFinaleStateMock.mockResolvedValueOnce({ closed: true, winnerRosterId: 'finalist-roster', votesSubmitted: 7, votesRequired: 7 })
+    recordCrownedWinnerMock.mockResolvedValueOnce({ winnerUserId: 'finalist-user' })
+    const done = await reveal()
+    expect(await done.json()).toEqual({ winnerId: 'finalist-user' })
   })
 
   it('surfaces strict finale validation errors as 400', async () => {

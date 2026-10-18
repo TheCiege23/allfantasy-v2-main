@@ -11,8 +11,8 @@ const m = vi.hoisted(() => {
     survivorIdol: { findMany: vi.fn() },
     redraftRosterMoveHistory: { create: vi.fn() }, waiverClaim: { updateMany: vi.fn() },
     survivorTribe: { findFirst: vi.fn() }, survivorTribeMember: { upsert: vi.fn(), deleteMany: vi.fn() },
-    survivorJuryMember: { deleteMany: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-    survivorChatMessage: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
+    survivorJuryMember: { deleteMany: vi.fn(), upsert: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    survivorChatMessage: { create: vi.fn() }, survivorNotification: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
     survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn() },
   }
   return { db, transaction: vi.fn() }
@@ -92,6 +92,10 @@ describe('voted-out manager moves to Exile', () => {
     expect(m.db.redraftRosterPlayer.updateMany).toHaveBeenCalledOnce()
     expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerState: 'exile', canAccessExileChat: true, canAccessTribeChat: false }) }))
     expect(m.db.exileIsland.upsert).toHaveBeenCalledOnce()
+  })
+  it('queues one spoiler-safe elimination alert for the league', async () => {
+    await resolveElimination('league', 'council')
+    expect(m.db.survivorNotification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'elimination', recipientRole: 'all', isSpoilerSafe: false }) }))
   })
   it('does not move anyone based on an unrevealed vote tally', async () => {
     m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ isRevealed: false })
@@ -181,5 +185,22 @@ describe('public Torch Ceremony commit', () => {
     m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ id: 'council', isRevealed: true, revealSequence: [] })
     expect(await revealCouncil('league', 'council')).toMatchObject({ ok: true, alreadyRevealed: true })
     expect(m.db.survivorChatMessage.create).not.toHaveBeenCalled()
+  })
+})
+describe('jury seating at elimination', () => {
+  beforeEach(() => {
+    m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ id: 'council', isRevealed: true, status: 'revealed', isTie: false, eliminatedUserId: 'b', week: 3, phase: 'merge' })
+    m.db.survivorPlayer.findUnique.mockResolvedValue({ ...players[1], playerState: 'active' })
+  })
+  it('seats a manager voted out after the merge on the jury', async () => {
+    await resolveElimination('league', 'council')
+    expect(m.db.survivorJuryMember.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { leagueId: 'league', rosterId: 'legacy-b', votedOutWeek: 3 } }))
+    expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isJuryMember: true, canAccessJuryChat: true }) }))
+  })
+  it('keeps pre-merge boots off the jury', async () => {
+    m.db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', activeCouncilId: null })
+    await resolveElimination('league', 'council')
+    expect(m.db.survivorJuryMember.upsert).not.toHaveBeenCalled()
+    expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.not.objectContaining({ isJuryMember: true }) }))
   })
 })

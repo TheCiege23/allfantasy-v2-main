@@ -175,7 +175,11 @@ export async function POST(req: NextRequest) {
       where: { leagueId_userId_week: { leagueId, userId: targetUserId, week } },
     })
     const prev = existing ? { finalScore: existing.finalScore } : {}
-    const nextFinal = (existing?.finalScore ?? 0) + adjustmentAmount
+    // syncWeeklyScores recomputes finalScore as fantasy + boost - penalty on
+    // every tick, so the adjustment must live in boost/penalty to survive it.
+    const boost = (existing?.pointBoostApplied ?? 0) + Math.max(0, adjustmentAmount)
+    const penalty = (existing?.pointPenaltyApplied ?? 0) + Math.max(0, -adjustmentAmount)
+    const nextFinal = (existing?.fantasyScore ?? 0) + boost - penalty
     await prisma.survivorWeeklyScore.upsert({
       where: { leagueId_userId_week: { leagueId, userId: targetUserId, week } },
       create: {
@@ -184,10 +188,14 @@ export async function POST(req: NextRequest) {
         week,
         finalScore: nextFinal,
         fantasyScore: 0,
+        pointBoostApplied: boost,
+        pointPenaltyApplied: penalty,
         correctionApplied: true,
       },
       update: {
         finalScore: nextFinal,
+        pointBoostApplied: boost,
+        pointPenaltyApplied: penalty,
         correctionApplied: true,
       },
     })
