@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { SURVIVOR_TRIBE_CATALOG, tribeCrestUrl } from '@/lib/survivor/survivorTribeIdentity'
 import { getZombieJoinPreview } from '@/lib/zombie/zombieJoinPreview'
+import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
       zombie: await getZombieJoinPreview(result.preview.leagueId),
+      guillotineSeats: await resolveGuillotineSeatSummary(result.preview.leagueId).catch(() => null),
     })
   }
 
@@ -93,6 +95,7 @@ export async function GET(req: NextRequest) {
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
       zombie: await getZombieJoinPreview(result.preview.leagueId),
+      guillotineSeats: await resolveGuillotineSeatSummary(result.preview.leagueId).catch(() => null),
     })
   }
 

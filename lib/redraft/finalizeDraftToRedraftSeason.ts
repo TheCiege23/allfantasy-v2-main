@@ -4,7 +4,7 @@ import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraf
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
-import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
+import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
@@ -14,7 +14,7 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
-import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
 import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
 
@@ -154,7 +154,7 @@ function inferSlotTypeFromGenericRosterPlayerData(
   return 'bench'
 }
 
-async function ensureRedraftSeason(leagueId: string) {
+export async function ensureRedraftSeason(leagueId: string) {
   const existing = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { createdAt: 'desc' },
@@ -182,12 +182,18 @@ async function ensureRedraftSeason(leagueId: string) {
   const sportKey = leagueSportToConfigSport(String(league.sport ?? 'NFL'))
   const cfg = tryGetSportConfig(sportKey)
   const seasonYear = Number(league.season ?? currentSeasonYear()) || currentSeasonYear()
-  const totalWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
+  // A guillotine league runs until its last chop and has no playoffs. The sport default (NBA 22)
+  // would end the season before a week-24 final chop and open playoffs mid-elimination.
+  const guillotine = (await isGuillotineLeague(leagueId).catch(() => false))
+    ? await getGuillotineConfig(leagueId).catch(() => null)
+    : null
+  const createdWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
+  const totalWeeks = guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks
   // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek = readSurvivorFullSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
       ? leaguePlayoffStart
       : cfg?.defaultPlayoffStartWeek ?? 15

@@ -2,12 +2,14 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Swords, Trophy, Users, X, Zap, ArrowLeftRight } from 'lucide-react'
+import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
+import { BarChart3, Bot, ChevronDown, ChevronLeft, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Swords, Trophy, Users, X, Zap, ArrowLeftRight } from 'lucide-react'
 import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import type { UserLeague } from '@/app/dashboard/types'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref } from '@/lib/league/league-workspace-navigation'
 import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
+import { LeagueRailRow, useLeagueRail, type LeagueRailData } from './LeagueRail'
 import './native-league.css'
 
 type Props = AppShellProps & {
@@ -20,12 +22,14 @@ type Props = AppShellProps & {
   onSelectTab: (id: string) => void
   onOpenSettings: () => void
   onOpenChimmy: () => void
+  /** /core's rail data for every league in the list — see LeagueRail.tsx. */
+  rail?: LeagueRailData | null
 }
 const icons = { home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, war: Swords, scores: Zap, insight: Bot, more: CircleHelp }
 const memoryKey = (id: string) => `af:league-section:${id}`
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase() || 'AF'
 
-export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, onOpenChimmy, children, ...shell }: Props) {
+export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, onOpenChimmy, rail, children, ...shell }: Props) {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -37,6 +41,19 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const primary = groups[0]?.items ?? []
   const restoredLeague = useRef<string | null>(null)
   const phase = nativeLeaguePhase(league)
+  /* The full league list is the desktop default, as on /core; collapsing to crests is remembered per tab session. */
+  const railCollapse = useMyLeaguesRailCollapse({ storageKey: 'af-league-native-rail-collapsed', defaultCollapsed: false })
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1200px)')
+    const sync = () => setWide(query.matches)
+    sync()
+    query.addEventListener('change', sync)
+    return () => query.removeEventListener('change', sync)
+  }, [])
+  const railExpanded = wide && !railCollapse.collapsed
+  // Poll live scores only while an expanded list is on screen — /core's `railOpen` gate.
+  const railView = useLeagueRail(leagues, rail, native && !shell.embedCenterOnly && (railExpanded || switcherOpen))
 
   useEffect(() => {
     if (!native) return
@@ -71,18 +88,19 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
     const hosted = isNativePlatform(row.platform)
     return row.name.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || filter === 'On AF' && hosted || filter === 'Synced' && !hosted || filter === 'Live' && nativeLeaguePhase(row) === 'Regular season')
   })
-  const leagueTile = (row: UserLeague) => <Link key={row.id} href={leagueSectionHref(row, activeTab)} className="nl-league-tile" aria-label={`Open ${row.name}`} aria-current={row.id === league.id ? 'page' : undefined} title={`${row.name} · ${nativeLeaguePhase(row)}`}>
-    <span className="nl-avatar" data-needs-setup={nativeLeaguePhase(row) === 'Setup'}>{initials(row.name)}<span className="nl-platform">{isNativePlatform(row.platform) ? 'AF' : row.platform.slice(0, 3).toUpperCase()}</span></span>
-    <span className="nl-league-meta">{nativeLeaguePhase(row) === 'Regular season' ? row.currentWeek ? `WK ${row.currentWeek}` : 'LIVE' : nativeLeaguePhase(row)}</span>
-  </Link>
+  const leagueTile = (row: UserLeague, expanded = false, onClick?: () => void) => <LeagueRailRow key={row.id} view={railView(row)} href={leagueSectionHref(row, activeTab)} active={row.id === league.id} expanded={expanded} isCommissioner={row.isCommissioner} onClick={onClick} />
   const navGroup = (title: string, items: typeof primary) => <section key={title} className="nl-nav-group"><h2>{title}</h2>{items.map(item => {
     const Icon = icons[item.icon as keyof typeof icons] ?? CircleHelp
     return <button key={item.id} type="button" onClick={() => choose(item.id)} aria-current={activeTab === item.id ? 'page' : undefined}><Icon size={16} aria-hidden /><span>{item.label}</span></button>
   })}</section>
 
-  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace">
+  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace" data-rail-collapsed={railCollapse.collapsed ? 'true' : undefined}>
     {!shell.embedCenterOnly && <>
-      <aside className="nl-rail" aria-label="Your leagues"><Link className="nl-brand" href={ALL_LEAGUES_DASHBOARD_HREF} aria-label="AllFantasy dashboard">AF</Link><div className="nl-rail-leagues">{leagues.map(leagueTile)}</div><Link className="nl-add" href="/create-league" aria-label="Create a league"><Plus aria-hidden /></Link></aside>
+      <aside className="nl-rail" aria-label="Your leagues" data-expanded={railExpanded ? 'true' : undefined}>
+        <div className="nl-rail-head"><Link className="nl-brand" href={ALL_LEAGUES_DASHBOARD_HREF} aria-label="AllFantasy dashboard">AF</Link><button type="button" className="af-rail-toggle nl-rail-toggle" aria-expanded={railExpanded} aria-controls="nl-rail-leagues" onClick={railCollapse.toggle} title={railCollapse.collapsed ? 'Expand the league rail' : 'Collapse the league rail'}><span className="af-rail-toggle-icon" aria-hidden>{railCollapse.collapsed ? '»' : '«'}</span><span className="nl-rail-toggle-text">{leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}</span></button></div>
+        <div className="nl-rail-leagues" id="nl-rail-leagues">{leagues.map(row => leagueTile(row, railExpanded))}</div>
+        <Link className="nl-add" href="/create-league" aria-label="Create a league"><Plus aria-hidden /><span className="nl-rail-toggle-text">Create a league</span></Link>
+      </aside>
       <aside className={`nl-sidebar ${menuOpen ? 'nl-menu-open' : ''}`} aria-label="League navigation">
         <Link className="nl-back" href={ALL_LEAGUES_DASHBOARD_HREF}><ChevronLeft size={16} aria-hidden /> All leagues</Link>
         <div className="nl-nav-league"><span className="nl-initial">{initials(league.name)}</span><div><strong>{league.name}</strong><span className="nl-eyebrow">{phase}</span></div></div>
@@ -94,7 +112,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
     </>}
     <div className="nl-main">
       {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>Viewing</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>Jump to a league</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">Hosted on AF · Beta</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · Wk ${league.currentWeek}` : ` · ${league.season ?? ''}`}</span></header>}
-      <div className="nl-mobile-rail">{leagues.map(leagueTile)}</div>
+      <div className="nl-mobile-rail">{leagues.map(row => leagueTile(row))}</div>
       <div className="nl-content">
         <header className="nl-league-heading"><span className="nl-heading-avatar">{initials(league.name)}</span><div className="nl-heading-name"><div className="nl-badges"><span className="nl-chip nl-accent">Native on AllFantasy</span>{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1><p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button><ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol></header>
         <nav className="nl-mobile-tabs" aria-label="League sections">{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
@@ -112,7 +130,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       <div className="nl-switcher-title"><h2>My leagues</h2><button type="button" onClick={() => setSwitcherOpen(false)} aria-label="Close league switcher"><X aria-hidden /></button></div>
       <label className="nl-switcher-search"><Search size={18} aria-hidden /><input ref={searchRef} autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your leagues" aria-label="Search your leagues" /></label>
       <div className="nl-switcher-filters" aria-label="League filters">{['All', 'On AF', 'Synced', 'Live'].map(value => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{value}</button>)}</div>
-      <div className="nl-switcher-list">{visibleLeagues.length ? visibleLeagues.map(row => <Link key={row.id} href={leagueSectionHref(row, activeTab)} onClick={() => setSwitcherOpen(false)} aria-current={row.id === league.id ? 'page' : undefined}><span className="nl-avatar">{initials(row.name)}</span><div><strong>{row.name}</strong><p>{row.sport} · {row.teamCount} teams · {isNativePlatform(row.platform) ? 'On AllFantasy' : `Hosted on ${row.platform}`}</p><span>{nativeLeaguePhase(row)}</span></div><ChevronRight size={16} aria-hidden /></Link>) : <p role="status">No leagues match your search.</p>}</div>
+      <div className="nl-switcher-list">{visibleLeagues.length ? visibleLeagues.map(row => leagueTile(row, true, () => setSwitcherOpen(false))) : <p role="status">No leagues match your search.</p>}</div>
       <footer><Link className="nl-button nl-primary" href="/create-league">Create league</Link><Link className="nl-button" href="/import">Import league</Link></footer>
     </dialog>
   </div>
