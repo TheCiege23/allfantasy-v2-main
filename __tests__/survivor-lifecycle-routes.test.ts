@@ -120,8 +120,11 @@ vi.mock('@/lib/survivor/juryEngine', () => ({
 vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({
   submitJuryVote: submitJuryVoteMock,
   getFinaleState: getFinaleStateMock,
+  settleFinaleIfDue: getFinaleStateMock,
   recordCrownedWinner: recordCrownedWinnerMock,
 }))
+
+vi.mock('@/lib/survivor/finaleView', () => ({ getFinaleRevealView: vi.fn() }))
 
 vi.mock('@/lib/survivor/SurvivorTimelineResolver', () => ({
   resolveSurvivorCurrentWeek: resolveSurvivorCurrentWeekMock,
@@ -225,7 +228,7 @@ describe('Survivor jury vote route normalization', () => {
     ;(prismaMock.roster.findFirst as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ id: 'juror-roster' })
       .mockResolvedValueOnce({ id: 'finalist-roster' })
-    submitJuryVoteMock.mockResolvedValue({ ok: true, state: { open: true } })
+    submitJuryVoteMock.mockResolvedValue({ ok: true, state: { open: true, votes: [{ jurorRosterId: 'other-juror', finalistRosterId: 'f' }], voteCount: { f: 1 } } })
 
     const { POST } = await import('@/app/api/survivor/jury/route')
     const req = new Request('http://localhost/api/survivor/jury', {
@@ -252,6 +255,9 @@ describe('Survivor jury vote route normalization', () => {
       }),
     )
     expect(json).toEqual(expect.objectContaining({ ok: true }))
+    // A juror's submit must not receive anyone else's ballot or the running tally.
+    expect(JSON.stringify(json)).not.toContain('other-juror')
+    expect(json).not.toHaveProperty('state')
   })
 
   it('reveals only the winner the finale engine crowned', async () => {

@@ -78,6 +78,8 @@ describe('late-season settings', () => {
     expect(readSurvivorLateSeasonSettings({ survivorFoundationSettings: { finalistCount: 2 } }).finalistCount).toBe(2)
     expect(readSurvivorLateSeasonSettings({}, { survivorFinal3: false }).finalistCount).toBe(2)
     expect(readSurvivorLateSeasonSettings({ finalistCount: 7 }).finalistCount).toBe(3)
+    // The saved plan scheduled its eliminations for its own count, so it wins over a later edit.
+    expect(readSurvivorLateSeasonSettings({ finalistCount: 2, survivor_full_season_plan: { finalistCount: 3 } }).finalistCount).toBe(3)
   })
   it('a fixed boss with no number falls back to the median', () => {
     expect(readSurvivorLateSeasonSettings({ exileBossMode: 'fixed' }).exileBossMode).toBe('median')

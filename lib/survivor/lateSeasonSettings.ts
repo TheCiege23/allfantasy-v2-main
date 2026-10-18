@@ -52,7 +52,8 @@ export function readSurvivorLateSeasonSettings(
   const plan = rec(top.survivor_full_season_plan)
   const base = SURVIVOR_LATE_SEASON_DEFAULTS
 
-  const rawFinalists = num(s.finalistCount) ?? num(plan.finalistCount)
+  // A saved full-season plan scheduled its eliminations for its finalist count, so it wins.
+  const rawFinalists = num(plan.finalistCount) ?? num(s.finalistCount)
   const finalistCount: SurvivorFinalistCount =
     rawFinalists === 2 || rawFinalists === 3 ? rawFinalists : columns?.survivorFinal3 === false ? 2 : base.finalistCount
 

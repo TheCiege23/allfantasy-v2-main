@@ -73,6 +73,14 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
     expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: p })).toEqual(p)
     expect(20 - p.eliminationWeeks.length + p.exileReturnSlots!).toBe(3)
   })
+  it.each(['NBA', 'NHL'])('%s schedules one more elimination for a Final 2 (finalistCount = 2)', sport => {
+    const p = buildSurvivorFullSeasonPlan({ sport, season: 2026, castSize: 18, now, finalistCount: 2 })
+    expect(p.finalistCount).toBe(2)
+    expect(p.eliminationWeeks).toHaveLength(16)
+    expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: p })).toEqual(p)
+    // A plan whose schedule does not match its finalist count is rejected.
+    expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: { ...p, finalistCount: 3 } })).toBeNull()
+  })
   it('NHL created after opening night starts at the next unplayed period', () => {
     const p = buildSurvivorFullSeasonPlan({ sport: 'NHL', season: 2026, castSize: 20, now: new Date('2026-10-11T12:00:00Z') })
     expect(p.startWeek).toBe(3)

@@ -1,3 +1,4 @@
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
@@ -415,7 +416,7 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
       const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
       if (draftAt && draftAt.getTime() <= Date.now()) throw new Error('Choose a future Survivor draft date and time.')
       const exileSettings = normalizeSurvivorFoundationSettings(schedule)
-      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
+      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, finalistCount: readSurvivorLateSeasonSettings(schedule).finalistCount, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
         endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid Survivor season calendar'

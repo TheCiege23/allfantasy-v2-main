@@ -1,3 +1,4 @@
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
@@ -447,7 +448,7 @@ export async function createCanonicalLeagueInTransaction(
     const draftAt = typeof setup.draftDate === 'string' && typeof setup.draftTime === 'string'
       ? toUtc(setup.draftDate, setup.draftTime, String(setup.draftTimezone ?? body.timezone ?? 'America/New_York')) : undefined
     const exileSettings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup })
-    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: seasonYear, castSize: managerCount, draftAt,
+    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, finalistCount: readSurvivorLateSeasonSettings({ ...mergedSettings, ...setup }).finalistCount, sport, season: seasonYear, castSize: managerCount, draftAt,
       endWeek: typeof setup.survivorSeasonEndWeek === 'number' ? setup.survivorSeasonEndWeek : undefined })
     // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver.
     mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
