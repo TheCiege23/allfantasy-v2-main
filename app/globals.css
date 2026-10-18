@@ -2986,6 +2986,181 @@ select, option {
   }
 }
 
+/* Guillotine (2026-10-18): ember/orange, the format's --afh hue (#ff7a45 dark, #b33f17 light).
+ * Moods come from league state (lib/guillotine/guillotineAtmosphere.ts): calm by default, a darker
+ * red tint while a chop is pending, a spotlight on the final chop, dimmed once you are chopped.
+ * Kept low-contrast on purpose: cards sit on --surface over it and must read exactly as before. */
+.af-atmo-guillotine {
+  background-color: #0b0607;
+  background-image:
+    radial-gradient(ellipse 95% 60% at 50% -12%, rgba(255, 122, 69, 0.16), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 10% 100%, rgba(163, 52, 28, 0.16), transparent 60%),
+    radial-gradient(ellipse 55% 38% at 92% 96%, rgba(255, 122, 69, 0.08), transparent 60%),
+    linear-gradient(185deg, #120809 0%, #0b0607 45%, #060304 100%);
+  animation: af-atmo-guillotine-glow 14s ease-in-out infinite alternate;
+}
+
+.af-atmo-guillotine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
+  pointer-events: none;
+}
+
+/* The frame silhouette: posts, crossbeam, angled blade. Inline so it costs no request. */
+.af-atmo-guillotine::after {
+  content: '';
+  position: absolute;
+  right: 4%;
+  bottom: 0;
+  width: min(34vw, 420px);
+  height: min(72vh, 640px);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 320'%3E%3Cg fill='%23ff7a45'%3E%3Crect x='30' y='20' width='16' height='300'/%3E%3Crect x='154' y='20' width='16' height='300'/%3E%3Crect x='18' y='6' width='164' height='18' rx='3'/%3E%3Cpath d='M46 60 H154 V92 L46 128 Z'/%3E%3Crect x='10' y='300' width='180' height='20'/%3E%3C/g%3E%3C/svg%3E")
+    bottom center / contain no-repeat;
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+.af-atmo-mood--chop_week.af-atmo-guillotine,
+.af-atmo-layer.af-atmo-mood--chop_week.af-atmo-guillotine {
+  background-color: #0d0304;
+  background-image:
+    radial-gradient(ellipse 100% 65% at 50% -10%, rgba(220, 38, 38, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 50% 105%, rgba(127, 18, 18, 0.28), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 8% 70%, rgba(255, 90, 50, 0.08), transparent 60%),
+    linear-gradient(185deg, #160405 0%, #0d0304 45%, #050102 100%);
+}
+
+.af-atmo-mood--chop_week.af-atmo-guillotine::after {
+  opacity: 0.07;
+}
+
+.af-atmo-mood--final.af-atmo-guillotine,
+.af-atmo-layer.af-atmo-mood--final.af-atmo-guillotine {
+  background-color: #070404;
+  background-image:
+    radial-gradient(ellipse 34% 90% at 50% -8%, rgba(255, 214, 170, 0.2), rgba(255, 122, 69, 0.07) 55%, transparent 75%),
+    radial-gradient(ellipse 60% 22% at 50% 102%, rgba(255, 122, 69, 0.16), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(185deg, #0e0706 0%, #070404 50%, #030202 100%);
+}
+
+.af-atmo-mood--final.af-atmo-guillotine::after {
+  right: 50%;
+  transform: translateX(50%);
+  opacity: 0.06;
+}
+
+.af-atmo-mood--eliminated.af-atmo-guillotine,
+.af-atmo-layer.af-atmo-mood--eliminated.af-atmo-guillotine {
+  background-color: #070607;
+  background-image:
+    radial-gradient(ellipse 90% 55% at 50% -12%, rgba(150, 120, 110, 0.08), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 10% 100%, rgba(90, 40, 34, 0.12), transparent 60%),
+    linear-gradient(185deg, #0b0a0b 0%, #070607 45%, #040304 100%);
+  animation: none;
+}
+
+.af-atmo-mood--eliminated.af-atmo-guillotine::after {
+  opacity: 0.035;
+  filter: grayscale(1);
+}
+
+.af-atmo-guillotine-embers {
+  background-image:
+    radial-gradient(1px 1px at 8% 88%, rgba(255, 160, 100, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 24% 72%, rgba(255, 122, 69, 0.42), transparent),
+    radial-gradient(1px 1px at 41% 94%, rgba(255, 190, 130, 0.38), transparent),
+    radial-gradient(1px 1px at 66% 80%, rgba(255, 140, 80, 0.45), transparent),
+    radial-gradient(1.5px 1.5px at 83% 90%, rgba(255, 122, 69, 0.4), transparent),
+    radial-gradient(1px 1px at 93% 70%, rgba(255, 170, 110, 0.35), transparent);
+  background-size: 100% 100%;
+  opacity: 0.45;
+  mix-blend-mode: screen;
+  animation: af-atmo-ember-rise 16s linear infinite;
+}
+
+/* A chopped team sees no embers; the fire went on without them. */
+.af-atmo-mood--eliminated ~ .af-atmo-guillotine-embers {
+  display: none;
+}
+
+html[data-mode='light'] .af-atmo-guillotine {
+  background-color: #fbf6f2;
+  background-image:
+    radial-gradient(ellipse 95% 55% at 50% -12%, rgba(179, 63, 23, 0.1), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 10% 100%, rgba(179, 63, 23, 0.07), transparent 60%),
+    linear-gradient(185deg, #fdf8f4 0%, #fbf6f2 45%, #f6eee8 100%);
+}
+
+html[data-mode='light'] .af-atmo-guillotine::before {
+  background: none;
+}
+
+html[data-mode='light'] .af-atmo-guillotine::after {
+  filter: hue-rotate(-8deg) brightness(0.7);
+  opacity: 0.06;
+}
+
+html[data-mode='light'] .af-atmo-mood--chop_week.af-atmo-guillotine {
+  background-color: #fbf1ef;
+  background-image:
+    radial-gradient(ellipse 100% 60% at 50% -10%, rgba(185, 28, 28, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 50% 105%, rgba(153, 27, 27, 0.1), transparent 60%),
+    linear-gradient(185deg, #fcf2f0 0%, #fbf1ef 45%, #f5e4e1 100%);
+}
+
+html[data-mode='light'] .af-atmo-mood--final.af-atmo-guillotine {
+  background-color: #f7f1ec;
+  background-image:
+    radial-gradient(ellipse 34% 90% at 50% -8%, rgba(255, 196, 140, 0.35), rgba(179, 63, 23, 0.05) 55%, transparent 75%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, transparent 60%, rgba(90, 50, 30, 0.08) 100%),
+    linear-gradient(185deg, #faf5f0 0%, #f7f1ec 50%, #f1e8e1 100%);
+}
+
+html[data-mode='light'] .af-atmo-mood--eliminated.af-atmo-guillotine {
+  background-color: #f3f2f2;
+  background-image: linear-gradient(185deg, #f6f5f5 0%, #f3f2f2 50%, #ecebeb 100%);
+}
+
+html[data-mode='light'] .af-atmo-guillotine-embers {
+  display: none;
+}
+
+.af-atmo-static.af-atmo-guillotine {
+  animation: none;
+}
+
+@keyframes af-atmo-guillotine-glow {
+  0% {
+    filter: brightness(1);
+  }
+  100% {
+    filter: brightness(1.08);
+  }
+}
+
+@media (max-width: 768px) {
+  .af-atmo-guillotine::after {
+    width: 60vw;
+    height: 46vh;
+    right: -6%;
+  }
+  .af-atmo-guillotine-embers {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-atmo-guillotine {
+    animation: none !important;
+  }
+  .af-atmo-guillotine-embers {
+    display: none;
+  }
+}
+
 /* ── AI Tools — Tactical Decision Room (shared with start_sit_tactical_decision_room.html) ── */
 .ai-tools-tactical {
   --at-bg: #0f1117;

@@ -29,6 +29,7 @@ import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
+import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
@@ -46,9 +47,8 @@ import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { ageText, badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
-import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
-import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
+import { RailRowBody, mergeRailMatchup } from '@/components/core-app/RailRowBody'
 import {
   currentRailCareerLines,
   RAIL_CAREER_EVENT,
@@ -156,6 +156,10 @@ export type RailMatchupSummary = {
   scored: boolean
   freshAt?: string | null
   source?: 'live_cache' | 'history_fallback'
+  /** A native guillotine league's score line (lib/core-app/railGuillotineLine.ts). Drawn instead of `standing`. */
+  guillotine?: RailGuillotineLine | null
+  /** Built from the native tables; polled through /api/core/rail-scores like a Sleeper row. */
+  native?: boolean
 }
 
 export type CoreNavKey =
@@ -1127,149 +1131,6 @@ function RailMark({ src, letter }: { src: string | null | undefined; letter: str
   return <LeagueMark src={src} letter={letter} className="af-rail-tile-img" />
 }
 
-/**
- * One team in a rail row: their platform avatar, their name, their score, and
- * the two projected totals under it.
- *
- * ⚠ THE AVATAR IS THE MANAGER'S, NOT THE LEAGUE'S. The league crest is already
- * the 42px mark at the head of the row; repeating it here would say nothing. The
- * loader resolves both sides' `avatarUrl` through `managerArtUrl` — Sleeper
- * stores an avatar *id* where other platforms store a link, and 85 of this
- * account's 94 claimed teams have one.
- *
- * ⚠ AND THE INITIAL IS `Array.from`, NOT `slice`. A team name starting with an
- * emoji sliced mid-surrogate serialises differently on server and client and
- * takes hydration down — the same trap the profile mark in the rail foot
- * carries a note about, and half this account's league names begin with 🪓.
- */
-function RailSide({
-  name,
-  avatarUrl,
-  score,
-  projection,
-  them,
-}: {
-  name: string
-  avatarUrl: string | null
-  /** Null while the fixture is unplayed, which draws a dash rather than 0.0. */
-  score: number | null
-  projection: RailSideProjectionSummary | null
-  them?: boolean
-}) {
-  const { language } = useOptionalLanguage()
-  const initial = (Array.from(name.trim() || '•')[0] ?? '•').toUpperCase()
-  /*
-   * ⚠ `pricedFrom > 0` MATTERS: a side where NOTHING priced already draws a dash,
-   * and marking that dash as partial rendered it as a dotted "⋯" that read like a
-   * third state. Partial means "some of the lineup", which is the only case the
-   * mark has anything to add.
-   */
-  const partial =
-    projection != null &&
-    projection.pricedFrom > 0 &&
-    projection.pricedFrom < projection.starterCount
-  /* Two projections, side by side: the provider's (Sleeper) line under this league's rules, and
-     AllFantasy's own engine. Neither replaces the other — the user asked to see both. */
-  const projected = projection?.afProjected ?? projection?.projected ?? null
-  const afEngine = projection?.afEngine ?? null
-
-  return (
-    <span
-      className="af-rail-row-side"
-      data-side={them ? 'them' : undefined}
-      data-partial={partial ? 'true' : undefined}
-      title={projection
-        ? language === 'es'
-          ? `Proyección base semanal — ${PROJECTION_PROVIDER_LABEL} (SLPR): proyección de ${PROJECTION_PROVIDER_LABEL} con ${projection.pricedFrom} de ${projection.starterCount} titulares${
-              projection.afProjected == null
-                ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
-                : ', recalculada con la configuración de esta liga'
-            } · AF: motor de AllFantasy con ${projection.afEngineFrom ?? 0} de ${projection.starterCount} titulares · el marcador en vivo se muestra aparte`
-          : `Weekly baseline projection — ${PROJECTION_PROVIDER_LABEL} (SLPR): ${PROJECTION_PROVIDER_LABEL}’s projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
-              projection.afProjected == null
-                ? ', generic PPR because this league’s scoring could not be re-scored'
-                : ', re-scored with this league’s settings'
-            } · AF: AllFantasy engine from ${projection.afEngineFrom ?? 0} of ${projection.starterCount} starters · live score is shown separately`
-        : undefined}
-    >
-      <span className="af-rail-row-av" aria-hidden>
-        <RailMark src={avatarUrl} letter={initial} />
-      </span>
-      <span className="af-rail-row-team">{name}</span>
-      <span className="af-rail-row-score">{score == null ? '—' : score.toFixed(1)}</span>
-      <span className="af-rail-row-projected">{projected == null ? '—' : projected.toFixed(1)}</span>
-      <span className="af-rail-row-projected" data-kind="af">{afEngine == null ? '—' : afEngine.toFixed(1)}</span>
-    </span>
-  )
-}
-
-/** 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones a naive rule gets wrong. */
-function ordinal(n: number): string {
-  const teens = n % 100
-  if (teens >= 11 && teens <= 13) return `${n}th`
-  const unit = n % 10
-  if (unit === 1) return `${n}st`
-  if (unit === 2) return `${n}nd`
-  if (unit === 3) return `${n}rd`
-  return `${n}th`
-}
-
-/**
- * The rank block that replaces the opponent in a league with no head-to-head.
- *
- * ⚠ IT SAYS WHAT THE NUMBER IS MEASURED FROM, because before kickoff it is not
- * measured from points — every score in the league is 0 in that window and the
- * order comes entirely from the projections. Printing "14th of 18" without
- * saying so would present a projected ordering as a played one.
- */
-function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
-  const es = useOptionalLanguage().language === 'es'
-  if (!standing) {
-    return (
-      <span className="af-rail-row-side" data-side="them">
-        <span className="af-rail-row-team">
-          {es ? 'sin enfrentamiento directo: posición aún no medible' : 'no head-to-head — rank not yet measurable'}
-        </span>
-      </span>
-    )
-  }
-
-  const last = standing.overCut == null
-  const tone = last ? 'bad' : standing.rank > standing.outOf * 0.75 ? 'warn' : undefined
-
-  return (
-    <span className="af-rail-row-rank" data-tone={tone}>
-      <span className="af-rail-row-rank-pos">
-        {standing.tied ? (es ? 'E-' : 'T-') : ''}{es ? `#${standing.rank}` : ordinal(standing.rank)}
-        <span className="af-rail-row-rank-of">{es ? ' de ' : ' of '}{standing.outOf}</span>
-      </span>
-      <span className="af-rail-row-rank-cut">
-        {es
-          ? standing.overCut == null
-            ? standing.tied ? 'empatado en el último lugar' : standing.elimination
-              ? 'en la línea de corte'
-              : 'último de la liga'
-            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'sobre el corte' : 'sobre el último'}`
-          : standing.overCut == null
-            ? standing.tied ? 'tied lowest' : standing.elimination
-              ? 'on the block'
-              : 'bottom of the league'
-            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
-      </span>
-      <span className="af-rail-row-rank-space">
-        {standing.placesAboveCut === 0
-          ? es ? 'posición de corte' : 'cut position'
-          : es
-            ? `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'puesto' : 'puestos'} de margen`
-            : `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'place' : 'places'} clear`}
-      </span>
-      <span className="af-rail-row-rank-basis">
-        {standing.basis === 'points' ? (es ? 'por puntos' : 'on points') : es ? 'por proyección' : 'on projection'}
-      </span>
-    </span>
-  )
-}
-
 function HelpDot({ title, body }: { title: string; body: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -1580,12 +1441,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * is `railOpen` — whether the list is expanded — which says nothing about whether a game is
    * on, so the CADENCE is what has to answer that. See the note on `useLiveRailScores`.
    */
+  /* Native rows (guillotine line, native head-to-head) refresh through the same route — DB-first there. */
+  const nativeRailIds = useMemo(
+    () => Object.entries(props.railMatchups ?? {}).filter(([, m]) => m.native).map(([id]) => id),
+    [props.railMatchups],
+  )
   const liveRail = useLiveRailScores(
     leagues,
     railOpen,
     coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0),
+    nativeRailIds,
   )
-  const liveWeek = Object.values(liveRail.scores)[0]?.week
+  /* The heading names the NFL provider week; a native row runs on its own league's calendar. */
+  const liveWeek = Object.values(liveRail.scores).find((s) => !s.native)?.week
   const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
   const railRef = useRef<HTMLElement>(null)
   const railHandleRef = useRef<HTMLButtonElement>(null)
@@ -1903,18 +1771,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
             const saved = props.railMatchups?.[l.id]
             const live = l.syncPaused ? undefined : liveRail.scores[l.id]
-            const sameWeek = live && saved?.season === live.season && saved?.week === live.week
-            const fieldRace = saved?.standing?.elimination === true
-            const standing = fieldRace ? live?.fieldStanding : live?.standing
-            const m = live ? {
-              ...live,
-              freshAt: live.updatedAt,
-              source: 'live_cache' as const,
-              unpaired: fieldRace || live.unpaired,
-              yourProjection: sameWeek ? saved?.yourProjection : null,
-              opponentProjection: sameWeek && saved?.opponentTeam === live.opponentTeam ? saved?.opponentProjection : null,
-              standing: standing ? { ...standing, elimination: fieldRace || standing.elimination } : null,
-            } : saved
+            // The live poll overlaid on the server snapshot — shared with the /league rail (RailRowBody.tsx).
+            const m = mergeRailMatchup(saved, live)
             const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
             const mFreshAt = m?.freshAt ? Date.parse(m.freshAt) : Number.NaN
             const mFreshMinutes = railClock != null && Number.isFinite(mFreshAt)
@@ -2009,94 +1867,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   rail then costs no re-render of sixty rows, and the row keeps
                   one accessible name either way.
                 */}
-                <span className="af-rail-row">
-                  <span className="af-rail-row-headline">
-                    <span className="af-rail-row-name">{railName}</span>
-                    {l.isCommissioner ? <CommissionerBadge /> : null}
-                    {railSwings[l.id] != null ? (
-                      <span className="af-rail-swing">
-                        {railSwings[l.id] > 0 ? '+' : ''}{railSwings[l.id].toFixed(1)} swing
-                      </span>
-                    ) : null}
-                    {m ? (
-                      <span className="af-rail-row-fresh" data-stale={m.source === 'history_fallback' || (mFreshMinutes != null && mFreshMinutes > 10) ? 'true' : undefined}>
-                        {m.source === 'history_fallback'
-                          ? language === 'es' ? 'última importación' : 'last import'
-                          : mFreshMinutes == null
-                            ? language === 'es' ? 'antigüedad desconocida' : 'sync age unknown'
-                            : mFreshMinutes < 1 ? (language === 'es' ? 'ahora' : 'now') : `${mFreshMinutes}m`}
-                      </span>
-                    ) : null}
-                  </span>
-                  {/* On the Career screen only: your finished-season record and titles in this league. */}
-                  {careerLine ? <span className="af-rail-row-career">{careerLine}</span> : null}
-                  {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
-                    <span className="af-rail-score-status" data-delayed={!l.syncPaused && delayed || undefined}>
-                      {language === 'es'
-                        ? l.syncPaused ? 'Sincronización de la cuenta en pausa' : delayed ? 'Actualización de marcadores con retraso' : live ? `Marcadores S${live.week} actualizados ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Actualizando marcadores...'
-                        : l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
-                    </span>
-                  ) : null}
-                  {m ? (
-                    <span className="af-rail-row-line">
-                      <span className="af-rail-row-labels" aria-hidden>
-                        <span />
-                        <span>{m.source === 'history_fallback' ? (language === 'es' ? 'ÚLT' : 'LAST') : language === 'es' ? 'PTS' : 'SCORE'}</span>
-                        {/*
-                          "SLPR", not "API" (2026-10-03) and not "SLEEPER": the column is 38px of
-                          11px monospace, where the full word measures ~52px. The tooltip spells it.
-                        */}
-                        <span title={language === 'es' ? `Proyección de ${PROJECTION_PROVIDER_LABEL}` : `${PROJECTION_PROVIDER_LABEL} projection`}>SLPR</span>
-                        <span title={language === 'es' ? 'Proyección del motor de AllFantasy' : 'AllFantasy engine projection'}>AF</span>
-                      </span>
-                      <RailSide
-                        name={m.yourTeam ?? (language === 'es' ? 'Tu equipo' : 'Your team')}
-                        avatarUrl={m.yourAvatarUrl}
-                        /*
-                          ⚠ A DASH, NOT 0.00, ON AN UNPLAYED FIXTURE. A scheduled
-                          row carries zeroes as soon as the schedule exists;
-                          printing them says the game was played and finished
-                          nil-all.
-                        */
-                        score={m.scored ? m.yourScore : null}
-                        projection={m.yourProjection ?? null}
-                      />
-
-                      {/*
-                        An elimination league has no opponent BY DESIGN — every
-                        roster writes its own matchupId — so "v opponent not
-                        named" was an honest answer to a question the league does
-                        not ask. What its manager wants is the distance between
-                        them and the cut.
-                      */}
-                      {m.unpaired ? (
-                        <RailStanding standing={m.standing ?? null} />
-                      ) : (
-                        <>
-                          <RailSide
-                            them
-                            name={m.opponentTeam ?? (language === 'es' ? 'rival sin nombre' : 'opponent not named')}
-                            avatarUrl={m.opponentAvatarUrl}
-                            score={m.scored ? m.opponentScore : null}
-                            projection={m.opponentProjection ?? null}
-                          />
-                        </>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="af-rail-row-line">
-                      <span className="af-rail-row-team">
-                        {String(l.platform).toLowerCase() === 'espn'
-                          ? language === 'es'
-                            ? 'ESPN no devolvió un calendario de enfrentamientos para esta liga'
-                            : 'ESPN did not return a matchup schedule for this league'
-                          : language === 'es'
-                            ? 'sin enfrentamiento directo registrado esta semana'
-                            : 'no head-to-head on file this week'}
-                      </span>
-                    </span>
-                  )}
-                </span>
+                <RailRowBody
+                  name={railName}
+                  platform={String(l.platform)}
+                  m={m}
+                  live={live}
+                  isCommissioner={l.isCommissioner}
+                  syncPaused={l.syncPaused}
+                  delayed={delayed}
+                  freshMinutes={mFreshMinutes}
+                  showScoreStatus={railOpen}
+                  swing={railSwings[l.id]}
+                  careerLine={careerLine}
+                />
               </Link>
             )
           }),

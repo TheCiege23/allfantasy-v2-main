@@ -21,6 +21,7 @@ import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
 import { notifyCommissionerOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
@@ -545,9 +546,11 @@ export async function GET(req: NextRequest) {
 
   // Claim progress — how many of the league's teams have a real AF member
   // behind them. Powers the "N of M teams claimed" bar next to the invite link.
-  const [teamCount, claimedCount] = await Promise.all([
+  const [teamCount, claimedCount, guillotineSeats] = await Promise.all([
     prisma.leagueTeam.count({ where: { leagueId } }).catch(() => 0),
     prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }).catch(() => 0),
+    // Native guillotine only: seats left in the season, the draft time, and what happens if not full.
+    resolveGuillotineSeatSummary(leagueId).catch(() => null),
   ])
 
   return NextResponse.json({
@@ -556,5 +559,6 @@ export async function GET(req: NextRequest) {
     inviteLink: result.inviteLink,
     inviteExpiresAt: result.inviteExpiresAt,
     claim: { teamCount, claimedCount },
+    guillotineSeats,
   })
 }

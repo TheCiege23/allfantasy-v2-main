@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 
-export type SpecialtyLeagueVariant = 'tournament' | 'survivor' | 'big_brother'
+export type SpecialtyLeagueVariant = 'tournament' | 'survivor' | 'big_brother' | 'guillotine'
 
 export type SpecialtyLeagueMood =
   | 'hoh'
@@ -15,6 +15,9 @@ export type SpecialtyLeagueMood =
   | 'exile'
   | 'championship'
   | 'bracket'
+  | 'chop_week'
+  | 'final'
+  | 'eliminated'
   | 'default'
 
 type Props = {
@@ -52,6 +55,7 @@ export function SpecialtyLeagueAtmosphere({ variant, mood, className }: Props) {
           variant === 'tournament' && 'af-atmo-tournament',
           variant === 'survivor' && 'af-atmo-survivor',
           variant === 'big_brother' && 'af-atmo-big-brother',
+          variant === 'guillotine' && 'af-atmo-guillotine',
           mood && mood !== 'default' && `af-atmo-mood--${String(mood).replace(/[^a-z0-9_-]/gi, '')}`,
           reduceMotion && 'af-atmo-static',
         )}
@@ -64,6 +68,9 @@ export function SpecialtyLeagueAtmosphere({ variant, mood, className }: Props) {
       ) : null}
       {!reduceMotion && variant === 'big_brother' ? (
         <div className="af-atmo-bb-particles absolute inset-0" />
+      ) : null}
+      {!reduceMotion && variant === 'guillotine' ? (
+        <div className="af-atmo-guillotine-embers absolute inset-0" />
       ) : null}
     </div>
   )
