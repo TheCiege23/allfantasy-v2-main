@@ -20,6 +20,7 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
+import { notifyCommissionerOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
@@ -477,6 +478,13 @@ export async function POST(req: NextRequest) {
       { error: joinResult.error, ...(code ? { code } : {}) },
       { status: joinResult.status },
     )
+  }
+
+  if (!joinResult.alreadyMember) {
+    // After the commit, and never awaited by the response: the join stands whatever the alert does.
+    void notifyCommissionerOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] commissioner join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
   }
 
   return NextResponse.json(
