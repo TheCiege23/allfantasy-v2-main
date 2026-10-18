@@ -27,7 +27,7 @@
 .head { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .title { font: 700 22px/1.1 'Cinzel', serif; letter-spacing: .14em; color: #4a2e10; text-align: center; margin: 0; text-transform: uppercase; }
 .sub { font: 600 11px 'Cinzel', serif; letter-spacing: .16em; color: #7a5528; text-align: center; text-transform: uppercase; }
-.rule { display: flex; align-items: center; gap: 10px; color: #8a6330; width: 100%; font: 700 10px 'Cinzel', serif; letter-spacing: .16em; text-transform: uppercase; }
+.rule { display: flex; align-items: center; gap: 10px; color: #8a6330; width: 100%; font: 700 11px 'Cinzel', serif; letter-spacing: .16em; text-transform: uppercase; }
 .rule::before, .rule::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #8a6330, transparent); }
 .ruleShort { width: 70%; font-size: 12px; }
 
@@ -39,8 +39,8 @@
   box-shadow: 0 1px 0 rgba(0, 0, 0, .08), 0 4px 10px rgba(80, 50, 15, .25), inset 0 0 0 1px rgba(120, 80, 30, .25);
   animation: exPop .5s ease-out both;
 }
-.ord { display: flex; flex-direction: column; gap: 2px; font: 700 10px 'Cinzel', serif; letter-spacing: .14em; color: #8a6330; text-transform: uppercase; min-width: 64px; flex: none; }
-.extra { font: 700 9px 'Cinzel', serif; letter-spacing: .12em; color: #a3241f; }
+.ord { display: flex; flex-direction: column; gap: 2px; font: 700 11px 'Cinzel', serif; letter-spacing: .14em; color: #8a6330; text-transform: uppercase; min-width: 64px; flex: none; }
+.extra { font: 700 11px 'Cinzel', serif; letter-spacing: .12em; color: #a3241f; }
 .hand { font: 600 30px/1 'Caveat', cursive; color: #23160a; overflow-wrap: anywhere; min-width: 0; }
 .void .hand { text-decoration: line-through; text-decoration-color: #a3241f; text-decoration-thickness: 3px; opacity: .7; }
 .stamp {
@@ -83,9 +83,9 @@
   .paper { padding: 26px 22px 30px; }
   .hand { font-size: 26px !important; }
   .out { font-size: 38px; }
-  .ord { min-width: 54px; font-size: 9px; }
+  .ord { min-width: 54px; font-size: 11px; }
   /* The stamp drops under the name instead of covering it. */
-  .stamp { font-size: 9px; right: 8px; top: auto; bottom: -9px; transform: rotate(-5deg); }
+  .stamp { font-size: 11px; right: 8px; top: auto; bottom: -9px; transform: rotate(-5deg); }
   .void { margin-bottom: 8px; }
   .actions {
     position: sticky; bottom: 0; z-index: 5; flex-wrap: nowrap; gap: 8px; margin: 0 -12px;
