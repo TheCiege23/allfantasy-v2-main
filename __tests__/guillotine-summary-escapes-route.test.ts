@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ session: vi.fn(), access: vi.fn(), isG: vi.fn(), config: vi.fn(), summary: vi.fn(), escapes: vi.fn(), week: vi.fn(), roster: vi.fn() }))
+const h = vi.hoisted(() => ({ session: vi.fn(), access: vi.fn(), isG: vi.fn(), config: vi.fn(), summary: vi.fn(), escapes: vi.fn(), week: vi.fn(), roster: vi.fn(), home: vi.fn() }))
 
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -14,6 +14,7 @@ vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({ isGuillotineLeague: 
 vi.mock('@/lib/guillotine/GuillotineWeeklySummaryService', () => ({ buildWeeklySummary: h.summary }))
 vi.mock('@/lib/share/guillotineEscape', () => ({ getGuillotineEscapesForUser: h.escapes }))
 // The route now resolves the current week and the viewer's roster (2026-10-13); never reach a real DB.
+vi.mock('@/lib/league-specialty/guillotineHome', () => ({ buildGuillotineHomeExtras: h.home }))
 vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: h.week, findViewerRosterId: h.roster }))
 
 import { NextRequest } from 'next/server'
@@ -82,5 +83,32 @@ describe('GET /api/leagues/[leagueId]/guillotine/summary — the current week an
     const res = await call()
     expect(res.status).toBe(200)
     expect((await res.json()).myRosterId).toBeNull()
+  })
+})
+
+describe('GET /api/leagues/[leagueId]/guillotine/summary — specialty home extras (2026-10-18)', () => {
+  beforeEach(() => h.escapes.mockResolvedValue([]))
+  const cfg = { sport: 'NFL', eliminationStartWeek: 1, eliminationEndWeek: null, teamsPerChop: 1, tiebreakerOrder: [], dangerMarginPoints: 12, rosterReleaseTiming: 'next_waiver_run' }
+
+  it('carries the home extras, built for the league sport', async () => {
+    h.config.mockResolvedValue(cfg)
+    h.home.mockResolvedValue({ teamCount: 14, aliveCount: 9 })
+    const body = await (await call()).json()
+    expect(body.home).toEqual({ teamCount: 14, aliveCount: 9 })
+    expect(h.home).toHaveBeenCalledWith('lg1', 'NFL', 5)
+  })
+
+  it('🛑 a failed extras read is null — the summary still returns', async () => {
+    h.config.mockResolvedValue(cfg)
+    h.home.mockRejectedValue(new Error('db'))
+    const res = await call()
+    expect(res.status).toBe(200)
+    expect((await res.json()).home).toBeNull()
+  })
+
+  it('no config, no extras read', async () => {
+    const body = await (await call()).json()
+    expect(body.home).toBeNull()
+    expect(h.home).not.toHaveBeenCalled()
   })
 })
