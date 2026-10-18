@@ -152,6 +152,7 @@ export async function GET(req: NextRequest) {
       resultSummary: challenge.status === 'resolved' ? challenge.resultSummary : null,
     },
     exileStatus: exile,
+    exileEnabled: access.settings.exileIslandEnabled !== false,
     juryStatus: access.decisions.canSeePrivateVotes ? jury : jury && {
       id: jury.id, status: jury.status, finalistUserIds: jury.finalistUserIds,
       jurorUserIds: jury.jurorUserIds, questionsDeadline: jury.questionsDeadline, votingDeadline: jury.votingDeadline,

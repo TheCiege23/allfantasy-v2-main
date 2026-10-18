@@ -41,14 +41,13 @@ export interface SurvivorSummaryConfig {
   faqSeededAt?: string | null
 }
 
-/** Matches `ScrollRevealStep` from `lib/survivor/votingEngine.ts` (JSON on council). */
-export type SurvivorScrollRevealStep =
-  | { type: 'vote'; voterName: string; targetName: string }
-  | { type: 'ballot'; targetName: string; stamp: string }
-  | { type: 'pause' }
-  | { type: 'does_not_count'; voterName: string }
-  | { type: 'elimination'; userName: string }
-  | { type: 'idol_play'; powerLabel: string }
+/** One released ballot on the Tribal Council scroll (server-gated; see lib/survivor/survivorRevealGate.ts). */
+export type SurvivorScrollRevealStep = {
+  order: number
+  targetName: string | null
+  status: 'counts' | 'late_does_not_count' | 'forfeited_by_shot' | 'blocked_by_idol' | 'blocked_by_shot' | 'target_safe' | 'taken_by_vote_steal'
+  isExtraVote: boolean
+}
 
 export interface SurvivorSeasonCalendar {
   firstWeek: number
@@ -77,6 +76,12 @@ export interface SurvivorSummaryCouncil {
   eliminatedRosterId: string | null
   revealSequence?: SurvivorScrollRevealStep[] | null
   isRevealed?: boolean
+  revealMode?: 'one_at_a_time' | 'all_at_once'
+  revealTotalSteps?: number | null
+  revealComplete?: boolean
+  revealNextStepAt?: string | null
+  eliminatedName?: string | null
+  isTie?: boolean
 }
 
 export interface SurvivorSummaryChallenge {

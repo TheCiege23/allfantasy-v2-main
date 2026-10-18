@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Clock, ScrollText, Shield, Skull, Vote } from 'lucide-react'
-import type { SurvivorSummary } from './types'
+import type { SurvivorSummary, SurvivorSummaryCouncil } from './types'
 import { SurvivorCommandHelp } from './SurvivorCommandHelp'
-import { SurvivorScrollReveal } from './SurvivorScrollReveal'
+import { SurvivorVoteRevealScrolls } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
 import { SurvivorShareCard } from './SurvivorShareCard'
 
 export interface SurvivorTribalCouncilViewProps {
@@ -19,7 +19,17 @@ export interface SurvivorTribalCouncilViewProps {
 type ShotStatus = { available: boolean; used: boolean; success: boolean | null; councilId: string | null }
 
 export function SurvivorTribalCouncilView({ leagueId, summary, names }: SurvivorTribalCouncilViewProps) {
-  const { council, votedOutHistory, currentWeek } = summary
+  const { votedOutHistory, currentWeek } = summary
+  // The read is released step by step by the server; the scroll asks for the next steps here
+  // without reloading the whole home (which would unmount the scroll mid-read).
+  const [liveCouncil, setLiveCouncil] = useState<SurvivorSummaryCouncil | null>(null)
+  const council = liveCouncil && liveCouncil.id === summary.council?.id ? liveCouncil : summary.council
+  const refreshCouncil = useCallback(() => {
+    void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/summary`, { cache: 'no-store' })
+      .then(async response => response.ok ? (await response.json() as SurvivorSummary).council : null)
+      .then(next => { if (next) setLiveCouncil(next) })
+      .catch(() => {})
+  }, [leagueId])
   const [shot, setShot] = useState<ShotStatus | null>(null)
   const [shotPending, setShotPending] = useState(false)
   const [shotConfirm, setShotConfirm] = useState(false)
@@ -79,7 +89,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
             </p>
             {isClosed ? (
               <p className="rounded-lg border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-sm text-rose-200">
-                {council.isRevealed ? (eliminated ? `Torch Ceremony complete. Eliminated: ${names[eliminated] ?? eliminated}` : 'Torch Ceremony complete.') : 'Voting has closed. Chimmy will reveal the result at the Torch Ceremony.'}
+                {council.isRevealed ? council.revealComplete === false ? 'The votes are being read.' : (eliminated ? `Torch Ceremony complete. Eliminated: ${names[eliminated] ?? eliminated}` : 'Torch Ceremony complete.') : 'Voting has closed. Chimmy will reveal the result at the Torch Ceremony.'}
               </p>
             ) : deadline ? (
               <p className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-200">
@@ -128,22 +138,26 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
         {shotError && <p role="alert" className="mt-2 text-sm text-rose-200">{shotError}</p>}
       </section>
 
-      {/* Vote scroll (sequence from server when council closes / votes tallied) */}
-      {council?.isRevealed &&
-        Array.isArray(council.revealSequence) &&
-        (council.revealSequence as unknown[]).length > 0 && (
+      {/* Vote scroll: only the steps the server has released so far. */}
+      {council?.isRevealed && (
           <section className="rounded-2xl border border-amber-500/20 bg-[#0a1228]/80 p-4 sm:p-6">
             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-amber-100">
               <ScrollText className="h-5 w-5 text-amber-400" />
-              Torch Ceremony · vote scroll
+              Tribal Council · the votes
             </h2>
-            <p className="mb-4 text-sm text-white/55">
-              Votes are read in scroll order — same sequence the host uses when the council closes.
-            </p>
-            <SurvivorScrollReveal
-              councilWeek={council.week}
-              revealSequence={council.revealSequence}
-              autoPlayMs={1400}
+            <SurvivorVoteRevealScrolls
+              key={council.id}
+              scrolls={council.revealSequence ?? []}
+              totalSteps={council.revealTotalSteps ?? council.revealSequence?.length ?? 0}
+              eliminatedName={council.eliminatedName ?? null}
+              isTie={council.isTie === true}
+              tiePhase={null}
+              revealMode={council.revealMode ?? 'one_at_a_time'}
+              nextStepAt={council.revealNextStepAt ?? null}
+              onRequestMore={refreshCouncil}
+              exileEnabled={summary.config.exileReturnEnabled}
+              week={council.week}
+              tribeName={summary.tribes.find(t => t.id === council.attendingTribeId)?.name ?? null}
             />
           </section>
         )}

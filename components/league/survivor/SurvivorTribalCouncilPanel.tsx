@@ -178,10 +178,17 @@ export function SurvivorTribalCouncilPanel({
             <div className="space-y-2">
               <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">The votes</div>
               <SurvivorVoteRevealScrolls
+                key={council.councilId ?? 'council'}
                 scrolls={council.reveal.revealSequence}
+                totalSteps={council.reveal.totalSteps}
                 eliminatedName={council.reveal.eliminatedName}
                 isTie={council.reveal.isTie}
                 tiePhase={council.reveal.tiePhase}
+                revealMode={council.reveal.mode}
+                nextStepAt={council.reveal.nextStepAt}
+                onRequestMore={onRefresh}
+                exileEnabled={council.reveal.exileEnabled}
+                week={council.week}
                 autoPlay={council.isRevealed}
                 isPublished={council.isRevealed}
               />

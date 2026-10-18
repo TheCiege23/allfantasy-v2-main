@@ -1,18 +1,102 @@
-.scroll { max-width: 42rem; margin: 0 auto; color: #3a2810; }
-.roller { width:100%; height:36px; position:relative; z-index:2; object-fit:fill; }
-.paper { margin:-8px 16px; padding:32px 20px; background: url('/survivor/exile/parchment-texture.svg'), radial-gradient(ellipse at 50% 35%,#f8edd0,#efdcae 55%,#dcc08a); box-shadow:inset 0 0 50px #78461455; animation:unroll 600ms ease-out; }
-.title { font:700 20px Georgia,serif; letter-spacing:.12em; text-align:center; }
-.slip { position:relative; display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:12px; padding:12px; background:linear-gradient(#fbf3dc,#f1e2bb); box-shadow:0 3px 10px #50320f40; border:1px solid #78501e40; }
-.name { font:italic 600 26px Georgia,serif; overflow-wrap:anywhere; }
-.ordinal { font:700 11px Georgia,serif; letter-spacing:.1em; text-transform:uppercase; color:#78501e; }
-.invalid .name { text-decoration:line-through; text-decoration-color:#a3241f; opacity:.7; }
-.stamp { border:3px double #a3241f; border-radius:3px; padding:3px 8px; color:#a3241f; font:700 11px Georgia,serif; text-transform:uppercase; transform:rotate(-4deg); }
-.verdict { margin-top:24px; text-align:center; }
-.tally { margin-top:20px; border-top:1px solid #78501e55; padding-top:12px; }
-.controls { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; margin-top:20px; }
-.controls button { min-height:44px; padding:8px 16px; border:1px solid #ffffff30; border-radius:8px; color:#e8eaf2; background:#151926; }
-.controls button:disabled { opacity:.4; }
-.sealed { width:200px; height:140px; object-fit:contain; margin:auto; }
-@keyframes unroll { from { opacity:0; transform:scaleY(.85); transform-origin:top; } to { opacity:1; transform:scaleY(1); } }
-@media(prefers-reduced-motion:reduce) { .paper { animation:none; } }
-@media(min-width:640px) { .paper { padding:36px 40px; } }
+/* Tribal Council scroll — ported from the exile handoff's exile.css (scoped as a CSS module).
+   Fonts: Cinzel (headings, stamps) and Caveat (handwriting), both from the Google Fonts link in app/layout.tsx. */
+
+.root { width: 100%; max-width: 36rem; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+/* Sealed */
+.sealed { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 0; width: 100%; }
+.sealedImg { width: 100%; max-width: 420px; height: auto; display: block; animation: exPop .5s ease-out both; }
+.sealedLabel { font: 700 13px 'Cinzel', serif; letter-spacing: .16em; color: #d9b45a; text-transform: uppercase; }
+.sealedNote { font-size: 12px; color: #a3a9c2; text-align: center; max-width: 22rem; }
+
+/* Scroll */
+.sc { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; padding: 0 28px; }
+.roll { width: calc(100% + 56px); max-width: none; height: 44px; display: block; position: relative; z-index: 2; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, .45)); }
+.body { position: relative; width: 100%; margin: -14px 0; overflow: hidden; z-index: 1; animation: scUnroll 1.6s cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes scUnroll { from { max-height: 0; } to { max-height: 2400px; } }
+.paper {
+  position: relative; display: flex; flex-direction: column; gap: 18px;
+  clip-path: polygon(0.60% 0.00%, 0.28% 4.17%, 0.12% 8.33%, 0.48% 12.50%, 0.19% 16.67%, 0.08% 20.83%, 0.48% 25.00%, 1.10% 29.17%, 0.96% 33.33%, 0.92% 37.50%, 0.27% 41.67%, 0.64% 45.83%, 0.33% 50.00%, 0.21% 54.17%, 0.13% 58.33%, 0.26% 62.50%, 1.11% 66.67%, 0.99% 70.83%, 0.97% 75.00%, 0.96% 79.17%, 0.23% 83.33%, 0.37% 87.50%, 0.75% 91.67%, 0.88% 95.83%, 0.60% 100.00%, 7.66% 100.00%, 14.71% 100.00%, 21.77% 100.00%, 28.83% 100.00%, 35.89% 100.00%, 42.94% 100.00%, 50.00% 100.00%, 57.06% 100.00%, 64.11% 100.00%, 71.17% 100.00%, 78.23% 100.00%, 85.29% 100.00%, 92.34% 100.00%, 99.40% 100.00%, 99.89% 95.83%, 99.49% 91.67%, 99.86% 87.50%, 99.82% 83.33%, 99.41% 79.17%, 99.30% 75.00%, 99.52% 70.83%, 99.32% 66.67%, 98.99% 62.50%, 99.17% 58.33%, 99.78% 54.17%, 98.85% 50.00%, 98.86% 45.83%, 99.55% 41.67%, 99.14% 37.50%, 99.44% 33.33%, 99.37% 29.17%, 99.21% 25.00%, 100.00% 20.83%, 99.03% 16.67%, 99.30% 12.50%, 99.04% 8.33%, 99.56% 4.17%, 99.40% 0.00%);
+  background: url('/survivor/exile/parchment-texture.svg'), radial-gradient(ellipse at 50% 35%, #f8edd0 0%, #efdcae 55%, #dcc08a 100%);
+  box-shadow: inset 0 0 0 1px rgba(90, 60, 20, .35), inset 0 0 60px rgba(120, 70, 20, .38), inset 0 0 10px rgba(60, 30, 5, .45);
+  color: #3a2810; padding: 34px 40px 40px;
+}
+.curl { position: absolute; left: 0; right: 0; height: 22px; pointer-events: none; }
+.curlTop { top: 0; background: linear-gradient(#7a5528aa, transparent); }
+.curlBottom { bottom: 0; background: linear-gradient(transparent, #7a5528aa); }
+.head { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.title { font: 700 22px/1.1 'Cinzel', serif; letter-spacing: .14em; color: #4a2e10; text-align: center; margin: 0; text-transform: uppercase; }
+.sub { font: 600 11px 'Cinzel', serif; letter-spacing: .16em; color: #7a5528; text-align: center; text-transform: uppercase; }
+.rule { display: flex; align-items: center; gap: 10px; color: #8a6330; width: 100%; font: 700 10px 'Cinzel', serif; letter-spacing: .16em; text-transform: uppercase; }
+.rule::before, .rule::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #8a6330, transparent); }
+.ruleShort { width: 70%; font-size: 12px; }
+
+.slips { display: flex; flex-direction: column; gap: 10px; min-height: 60px; }
+.waiting { text-align: center; font: 600 22px 'Caveat', cursive; color: #8a6330; }
+.slip {
+  position: relative; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 3px;
+  background: linear-gradient(#fbf3dc, #f1e2bb);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .08), 0 4px 10px rgba(80, 50, 15, .25), inset 0 0 0 1px rgba(120, 80, 30, .25);
+  animation: exPop .5s ease-out both;
+}
+.ord { display: flex; flex-direction: column; gap: 2px; font: 700 10px 'Cinzel', serif; letter-spacing: .14em; color: #8a6330; text-transform: uppercase; min-width: 64px; flex: none; }
+.extra { font: 700 9px 'Cinzel', serif; letter-spacing: .12em; color: #a3241f; }
+.hand { font: 600 30px/1 'Caveat', cursive; color: #23160a; overflow-wrap: anywhere; min-width: 0; }
+.void .hand { text-decoration: line-through; text-decoration-color: #a3241f; text-decoration-thickness: 3px; opacity: .7; }
+.stamp {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%) rotate(-8deg); padding: 3px 8px;
+  border: 2.5px double #a3241f; color: #a3241f; font: 700 11px 'Cinzel', serif; letter-spacing: .12em; text-transform: uppercase;
+  border-radius: 3px; background: rgba(255, 240, 230, .4); mix-blend-mode: multiply; white-space: nowrap;
+}
+.idol { text-align: center; font: 600 12px 'Cinzel', serif; letter-spacing: .1em; color: #a3241f; text-transform: uppercase; animation: exPop .5s ease-out both; }
+
+.tally { display: flex; flex-direction: column; gap: 6px; }
+.tallyRow { display: flex; align-items: baseline; gap: 12px; }
+.tallyName { flex: 1; font: 600 22px 'Caveat', cursive; color: #3a2810; overflow-wrap: anywhere; min-width: 0; }
+.marks { font: 600 26px/1 'Caveat', cursive; color: #23160a; letter-spacing: .05em; white-space: nowrap; }
+.tallyCount { font: 700 12px 'Cinzel', serif; color: #7a5528; min-width: 18px; text-align: right; }
+
+.verdict { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 6px; text-align: center; animation: exPop .6s ease-out both; }
+.verdictStamp { display: inline-block; padding: 5px 14px; border: 3px double #a3241f; color: #a3241f; font: 700 15px 'Cinzel', serif; letter-spacing: .2em; transform: rotate(-5deg); border-radius: 4px; mix-blend-mode: multiply; text-transform: uppercase; }
+.out { font: 700 46px/1 'Caveat', cursive; color: #23160a; text-align: center; overflow-wrap: anywhere; }
+.margin { font: 600 12px 'Cinzel', serif; letter-spacing: .12em; color: #7a5528; text-transform: uppercase; }
+.exile { display: flex; align-items: center; gap: 8px; margin-top: 4px; font: 600 13px 'Archivo', system-ui, sans-serif; color: #4a2e10; }
+.note { font: 600 13px 'Archivo', system-ui, sans-serif; color: #4a2e10; }
+.seal { display: flex; justify-content: center; margin-bottom: -10px; }
+
+/* Actions: inline on desktop, a sticky bottom bar on phones */
+.actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 100%; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, .10); background: #151926; color: #e8eaf2; font: 600 14px 'Archivo', system-ui, sans-serif; cursor: pointer;
+}
+.btn:focus-visible { outline: 2px solid #d9b45a; outline-offset: 2px; }
+.btnGold { background: #d9b45a; border-color: #d9b45a; color: #1a1204; }
+.btn:disabled { opacity: .45; cursor: default; }
+
+@keyframes exPop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes exFade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 640px) {
+  .sc { padding: 0 14px; }
+  .roll { width: calc(100% + 28px); }
+  .paper { padding: 26px 22px 30px; }
+  .hand { font-size: 26px !important; }
+  .out { font-size: 38px; }
+  .ord { min-width: 54px; font-size: 9px; }
+  /* The stamp drops under the name instead of covering it. */
+  .stamp { font-size: 9px; right: 8px; top: auto; bottom: -9px; transform: rotate(-5deg); }
+  .void { margin-bottom: 8px; }
+  .actions {
+    position: sticky; bottom: 0; z-index: 5; flex-wrap: nowrap; gap: 8px; margin: 0 -12px;
+    width: calc(100% + 24px); padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+    background: #0b0d14; border-top: 1px solid rgba(255, 255, 255, .06);
+  }
+  .actions .btn { min-height: 46px; }
+  .actions .btnGold { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body { animation: exFade .4s ease-out both; }
+  .slip, .idol, .verdict, .sealedImg { animation: exFade .3s ease-out both; }
+}

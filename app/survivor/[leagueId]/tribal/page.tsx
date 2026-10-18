@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import clsx from 'clsx'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { SurvivorVoteRevealScrolls, type RevealScroll } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
@@ -17,7 +17,6 @@ export default function SurvivorTribalPage() {
   const week = council?.week ?? ctx.currentWeek
   const tribe = ctx.season?.tribes?.find((t) => t.id === council?.attendingTribeId)
 
-  const [revealOpen, setRevealOpen] = useState(false)
   const attendingPlayers = useMemo(() => {
     const tid = council?.attendingTribeId
     const all = ctx.season?.players ?? []
@@ -27,11 +26,11 @@ export default function SurvivorTribalPage() {
 
   const revealSteps: RevealScroll[] = useMemo(() => {
     if (!council?.isRevealed || !Array.isArray(council.revealSequence)) return []
-    return council.revealSequence.map((step, index) => ({ order: index + 1, targetUserId: null, targetName: step.targetName ?? null, status: (step.status ?? 'counts') as RevealScroll['status'], isExtraVote: step.isExtraVote === true }))
+    return council.revealSequence.map((step, index) => ({ order: index + 1, targetName: step.targetName ?? null, status: (step.status ?? 'counts') as RevealScroll['status'], isExtraVote: step.isExtraVote === true }))
   }, [council?.isRevealed, council?.revealSequence])
 
   const status = council?.status
-  const quiet = status === 'revealing' || status === 'voting_closed' || status === 'closed'
+  const quiet = !council?.isRevealed && (status === 'revealing' || status === 'voting_closed' || status === 'closed')
 
   if (council?.phase === 'revote') return <SurvivorRevote leagueId={leagueId} />
 
@@ -91,26 +90,29 @@ export default function SurvivorTribalPage() {
               <img src="/survivor/exile/scroll-sealed.svg" alt="Council results sealed" width={200} height={140} className="mx-auto" /><p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
               <p className="text-[13px] text-white/50">Results remain sealed until the Torch Ceremony is published.</p>
             </div>
-          ) : council?.isRevealed ? (
-            <p className="text-[13px] text-white/65">The Torch Ceremony has been published. Replay the sealed scrolls below.</p>
-          ) : (
+          ) : council?.isRevealed ? null : (
             <p className="text-[13px] text-white/45">No open council. Chimmy will announce the next voting window in league chat.</p>
           )}
         </div>
-
-        <div className="mx-auto mt-6 flex max-w-lg flex-col gap-2">
-          {council?.isRevealed && revealSteps.length > 0 ? <button
-            type="button"
-            className="min-h-[48px] rounded-xl border border-white/15 text-[12px] text-white/70"
-            onClick={() => setRevealOpen(true)}
-          >
-            Replay Torch Ceremony
-          </button> : null}
-        </div>
       </div>
 
-      {revealOpen ? (
-        <div className="relative mx-auto mt-6 max-w-2xl"><SurvivorVoteRevealScrolls scrolls={revealSteps} eliminatedName={council?.eliminatedName ?? null} isTie={council?.isTie === true} tiePhase={null} /></div>
+      {council?.isRevealed ? (
+        <div className="relative mx-auto mt-6 max-w-2xl">
+          <SurvivorVoteRevealScrolls
+            key={council.id}
+            scrolls={revealSteps}
+            totalSteps={council.revealTotalSteps ?? revealSteps.length}
+            eliminatedName={council.eliminatedName ?? null}
+            isTie={council.isTie === true}
+            tiePhase={null}
+            revealMode={council.revealMode ?? 'one_at_a_time'}
+            nextStepAt={council.revealNextStepAt ?? null}
+            onRequestMore={ctx.refetch}
+            exileEnabled={ctx.season?.exileEnabled !== false}
+            week={council.week}
+            tribeName={tribe?.name ?? null}
+          />
+        </div>
       ) : null}
     </div>
   )
