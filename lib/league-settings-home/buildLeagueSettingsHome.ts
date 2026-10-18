@@ -25,6 +25,8 @@ export type SettingsSubPageId =
   | 'divisions'
   | 'ai'
   | 'commissioner-tools'
+  /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
+  | 'survivor-tribes'
 
 export type SettingsHomeRow = {
   id: string
@@ -46,6 +48,7 @@ export type SettingsHomeLeague = {
   sport?: string | null
   leagueSize?: number | null
   leagueVariant?: string | null
+  survivorMode?: boolean | null
   guillotineMode?: boolean | null
   guillotineEndgame?: string | null
   waiverType?: string | null
@@ -113,6 +116,10 @@ export function isLongSettingsValue(value: string | null | undefined): boolean {
 
 function settingsRecord(settings: unknown): Record<string, unknown> {
   return settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
+}
+
+export function isSurvivorSettingsLeague(league: Pick<SettingsHomeLeague, 'leagueVariant' | 'survivorMode'>): boolean {
+  return String(league.leagueVariant ?? '').toLowerCase() === 'survivor' || league.survivorMode === true
 }
 
 export function isGuillotineSettingsLeague(league: Pick<SettingsHomeLeague, 'leagueVariant' | 'guillotineMode'>): boolean {
@@ -360,6 +367,9 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       rows: [
         { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
         { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+        ...(isSurvivorSettingsLeague(league)
+          ? [{ id: 'survivor-tribes', label: 'Survivor tribes', value: 'Tribes, assignment & announce', target: 'survivor-tribes' as const }]
+          : []),
       ],
     })
   }

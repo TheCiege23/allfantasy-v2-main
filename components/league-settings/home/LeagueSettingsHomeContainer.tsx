@@ -18,6 +18,23 @@ import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettingsHome'
 import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
+import { CommissionerCenter } from './CommissionerCenter'
+import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
+import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+
+/** The Commissioner center needs room for its two columns; phones keep the list → sub-page flow. */
+function useWideLayout(): boolean {
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia('(min-width: 1024px)')
+    const sync = () => setWide(query.matches)
+    sync()
+    query.addEventListener?.('change', sync)
+    return () => query.removeEventListener?.('change', sync)
+  }, [])
+  return wide
+}
 
 // The editors carry most of the old settings tree; load them only when a row is opened.
 const LeagueSettingsSubPageBody = dynamic(() => import('./LeagueSettingsSubPageBody'), {
@@ -133,6 +150,12 @@ export function LeagueSettingsHomeContainer({
   const renderSubPage = useCallback(
     (id: SettingsSubPageId): SettingsSubPageRender | null => {
       if (!ctx.isCommissioner) return null
+      if (id === 'survivor-tribes') {
+        return {
+          title: SUB_PAGE_TITLES[id],
+          content: <SurvivorTribesPanel leagueId={leagueId} canEdit={ctx.isCommissioner} hasAfCommissionerSub={hasAfCommissionerSub} />,
+        }
+      }
       if (id === 'guillotine-first-chop') {
         if (!guillotineState) return null
         const profile = getGuillotineSportConfig(String(league.sport ?? 'NFL'))
@@ -157,6 +180,29 @@ export function LeagueSettingsHomeContainer({
     },
     [ctx.isCommissioner, guillotineState, league.sport, leagueId, subCtx, hasAfCommissionerSub],
   )
+
+  const wide = useWideLayout()
+  if (wide && ctx.isCommissioner) {
+    const teams = effectiveLeague.teams ?? []
+    const inviteRow = sections.flatMap((section) => section.rows).find((row) => row.id === 'invite')
+    const phase = nativeLeaguePhase(ctx.displayLeague)
+    return (
+      <CommissionerCenter
+        leagueName={effectiveLeague.name}
+        sections={sections}
+        renderSubPage={renderSubPage}
+        onExit={onExit}
+        initialSubPage={initialSubPage}
+        inSeason={phase === 'Regular season' || phase === 'Playoffs'}
+        managers={{
+          joined: teams.filter((t) => Boolean(t.claimedByUserId)).length,
+          total: effectiveLeague.leagueSize ?? teams.length,
+          inviteUrl: inviteRow?.copyText ?? null,
+        }}
+        onSubPageClosed={() => setReloadKey((k) => k + 1)}
+      />
+    )
+  }
 
   return (
     <LeagueSettingsHome

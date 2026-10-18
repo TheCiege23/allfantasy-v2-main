@@ -26,6 +26,7 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'divisions',
   'ai',
   'commissioner-tools',
+  'survivor-tribes',
 ]
 
 /**
@@ -59,6 +60,8 @@ export const LEGACY_SETTINGS_PANEL_TO_SUB_PAGE: Readonly<Record<string, Settings
   'league-dues': 'commissioner-tools',
   dues: 'commissioner-tools',
   'league-history-commish': 'commissioner-tools',
+  tribes: 'survivor-tribes',
+  'tribe-setup': 'survivor-tribes',
   ...Object.fromEntries(SETTINGS_SUB_PAGE_IDS.map((id) => [id, id])),
 }
 
