@@ -33,7 +33,7 @@ function PickTile({ label, pick, kind }: { label: string; pick: ReportCardPick |
   const tone = kind === 'steal' ? 'text-emerald-300' : 'text-rose-300'
   return (
     <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/25 p-3" data-testid={`draft-report-card-${kind}`}>
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/50">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/50">
         <Icon className={`h-3.5 w-3.5 ${tone}`} />
         {label}
       </div>
@@ -125,7 +125,7 @@ export function DraftReportCardPanel({ leagueId, rosterId, initialResults }: Pro
     >
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300/90">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-300/90">
             <Award className="h-3.5 w-3.5" /> Your report card
           </p>
           <h2 className="mt-1 truncate text-lg font-bold text-white">{card.displayName}</h2>
@@ -152,14 +152,14 @@ export function DraftReportCardPanel({ leagueId, rosterId, initialResults }: Pro
       </div>
 
       <div className="mt-3" data-testid="draft-report-card-positions">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Roster build</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-white/50">Roster build</p>
         <div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
           {positions.map((p) => (
             <div key={p.position} className="rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-center">
-              <p className="text-[10px] font-semibold text-white/55">{p.position}</p>
+              <p className="text-[11px] font-semibold text-white/55">{p.position}</p>
               <p className="text-base font-bold tabular-nums text-white">{p.count}</p>
               <p
-                className={`text-[10px] tabular-nums ${p.value > 0 ? 'text-emerald-300' : p.value < 0 ? 'text-rose-300' : 'text-white/40'}`}
+                className={`text-[11px] tabular-nums ${p.value > 0 ? 'text-emerald-300' : p.value < 0 ? 'text-rose-300' : 'text-white/40'}`}
               >
                 {signed(p.value)}
               </p>
@@ -168,7 +168,7 @@ export function DraftReportCardPanel({ leagueId, rosterId, initialResults }: Pro
         </div>
       </div>
 
-      <p className="mt-3 text-[10px] text-white/45" data-testid="draft-report-card-basis">
+      <p className="mt-3 text-[11px] text-white/45" data-testid="draft-report-card-basis">
         {adpBasisLabel(card.adpBasis)}.
       </p>
 
