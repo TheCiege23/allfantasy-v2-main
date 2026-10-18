@@ -10,6 +10,7 @@ export function survivorPublicCouncil<T extends object>(council: T | null, _canS
   publicRow.status = !revealed && row.status === 'tie_pending' ? 'closed' : row.status
   publicRow.votes = []
   publicRow.revealSequence = revealed ? row.revealSequence ?? null : null
+  publicRow.revealStartsAt = revealed ? row.revealStartsAt ?? null : null
   publicRow.eliminatedRosterId = revealed ? row.eliminatedRosterId ?? null : null
   publicRow.eliminatedUserId = revealed ? row.eliminatedUserId ?? null : null
   publicRow.eliminatedName = revealed ? row.eliminatedName ?? null : null

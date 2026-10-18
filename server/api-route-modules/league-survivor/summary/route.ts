@@ -323,6 +323,7 @@ export async function GET(
           eliminatedRosterId: publicCouncil?.eliminatedRosterId ?? null,
           revealSequence: publicCouncil?.revealSequence ?? null,
           isRevealed: publicCouncil.isRevealed,
+          revealStartsAt: (publicCouncil as { revealStartsAt?: Date | null }).revealStartsAt ?? null,
         }
       : null,
     challenges: challenges.map((c) => ({

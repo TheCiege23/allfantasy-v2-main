@@ -1,0 +1,6 @@
+/* Survivor island scene behind a header (survivor-theme handoff). Keeps the sport prop in frame. */
+.sv-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:62% 60%;z-index:-2;pointer-events:none}
+.sv-scene[data-scene-entering]{animation:svSceneIn .5s ease both}
+@keyframes svSceneIn{from{opacity:0}to{opacity:1}}
+@media (max-width:720px){.sv-scene{object-position:66% 60%}}
+@media (prefers-reduced-motion:reduce){.sv-scene[data-scene-entering]{animation-duration:1ms}}

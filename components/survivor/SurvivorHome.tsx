@@ -138,6 +138,8 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
         enabled={showIntro}
         onClose={() => setShowIntro(false)}
         visualThemeId={summary?.config?.visualThemeId}
+        voteDeadlineAt={summary?.council && !summary.council.closedAt && !summary.council.isRevealed ? summary.council.voteDeadlineAt : null}
+        revealStartsAt={summary?.council?.isRevealed ? summary.council.revealStartsAt ?? null : null}
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_25%,rgba(0,0,0,0.28)_100%)] opacity-40" />
       <div className="relative space-y-6">
