@@ -277,6 +277,11 @@ const nextConfig = {
   // API routes read files under ./data at runtime; keep them in the traced output.
   outputFileTracingIncludes: {
     "/api/**": ["./data/**"],
+    // The tribe emblem composer reads mascot sources and the banner font at runtime.
+    "/api/survivor/tribe-emblem/**": [
+      "./lib/survivor/tribe-art/mascots/*.svg",
+      "./node_modules/@fontsource/archivo/files/archivo-latin-800-normal.woff",
+    ],
   },
 
   experimental: {
