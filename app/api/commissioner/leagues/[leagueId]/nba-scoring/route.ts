@@ -17,7 +17,7 @@ import {
   type NbaScoringPresetKey,
 } from '@/lib/nba-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
-import { settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 const featureGate = new FeatureGateService()
 
@@ -66,12 +66,12 @@ export async function PUT(
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
-  const lifecycleRefusal = await settingsLifecycleRefusal(leagueId, session.user.id, 'scoring')
-  if (lifecycleRefusal) return NextResponse.json({ error: lifecycleRefusal.error, code: lifecycleRefusal.code }, { status: lifecycleRefusal.status })
 
   if (nativeCategoryScoringContext(league.settings, 'NBA')) return NextResponse.json({ error: 'This league uses categories; point weights do not apply.' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'scoring', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
   const presetKey = (body.presetKey ?? 'af_default') as NbaScoringPresetKey
   const customRules = body.rules as Record<string, number> | undefined
 
@@ -97,5 +97,6 @@ export async function PUT(
   })
 
   const updated = await getLeagueNbaScoringConfig(leagueId)
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'nba-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: updated })
 }

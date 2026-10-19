@@ -19,7 +19,14 @@ import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leag
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
-import { lifecycleSectionsTouchedByPatch, settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
+import {
+  decideSettingsEdit,
+  lifecycleSectionsTouchedByPatch,
+  recordMidSeasonSettingsChange,
+  type SettingsEditDecision,
+  type LifecycleGatedSection,
+} from '@/lib/league/settingsLifecycleGate'
+import { MID_SEASON_CONFIRM_FLAG } from '@/lib/league/midSeasonConfirmation'
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
@@ -227,13 +234,18 @@ export async function executeLeagueSettingsPatch(
    * 🛑 THE DECLARED SECTION IS NOT WHAT THE PATCH WRITES. The section-less door (useAutosave → this
    * function with no `section`) never ran the lifecycle gate at all, and a sectioned request can
    * name one section while carrying another's keys. So a body that writes scoring or roster columns
-   * runs those sections' gates too — the same matrix, via settingsLifecycleGate.ts.
+   * runs those sections' gates too — the scoring/roster policy in settingsLifecycleGate.ts, where a
+   * mid-season change needs `confirmMidSeasonChange: true` in the body.
    */
+  const confirmedMidSeason: Array<{ section: LifecycleGatedSection; decision: SettingsEditDecision }> = []
   for (const touched of lifecycleSectionsTouchedByPatch(body)) {
     if (touched === patchOptions?.section) continue
-    const refusal = await settingsLifecycleRefusal(leagueId, userId, touched)
-    if (refusal) return NextResponse.json({ error: refusal.error, code: refusal.code }, { status: refusal.status })
+    const decision = await decideSettingsEdit(leagueId, userId, touched, body)
+    if (!decision.ok) return NextResponse.json(decision.body, { status: decision.status })
+    if (decision.midSeason) confirmedMidSeason.push({ section: touched, decision })
   }
+  // A request flag, never a column or a settings key.
+  delete (body as Record<string, unknown>)[MID_SEASON_CONFIRM_FLAG]
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
@@ -788,6 +800,16 @@ export async function executeLeagueSettingsPatch(
       section: patchOptions?.section ?? null,
     },
   }).catch(() => {})
+
+  for (const { section, decision } of confirmedMidSeason) {
+    await recordMidSeasonSettingsChange(decision, {
+      leagueId,
+      userId: actorUserId,
+      section,
+      source: patchOptions?.section ? `settings-patch:${patchOptions.section}` : 'settings-patch',
+      detail: { updatedFields: [...new Set(updatedFieldNames)].slice(0, 40) },
+    })
+  }
 
   void import('@/lib/league-events/publisher')
     .then(({ publishLeagueFanoutEvent }) =>
