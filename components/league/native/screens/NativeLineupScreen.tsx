@@ -1,14 +1,32 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
 import type { LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { buildDisplayPlayerMap, type DisplayPlayerMap, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
-import { applyLineupPick, buildPlayerRow, buildSwapCandidates, initOrSyncLineupLists, type RosterLineupLists } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
-import { playerEligibleForSlot } from '@/lib/league/lineup-swap'
+import { buildPlayerRow, buildSwapCandidates, initOrSyncLineupLists, type RosterLineupLists } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
+import { resolveLineupMove, seatStartersInSlots, type LineupMoveContext, type LineupSpot } from '@/lib/league/native/lineupMoves'
+import { isIrEligibleStatus, type IrRules } from '@/lib/roster-lineup-engine/irEligibility'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { writeAuthorityCopy } from '@/lib/league/write-authority'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
@@ -26,6 +44,11 @@ import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreen
  * tab's own helpers (`team-tab-roster-helpers`), so eligibility is decided in one place, and the
  * server still validates every save. "Optimize lineup" proposes the exact optimum over the
  * players whose games have not started; it never moves a locked player.
+ *
+ * Moves work by CLICK ("Move") or DRAG (the grip handle, @dnd-kit). Both go through
+ * `resolveLineupMove`, so slot eligibility (`playerEligibleForSlot`), lock and IR rules are decided
+ * once, and both end in the same `save`. Dropping on an occupied slot swaps; dropping a starter on
+ * the bench leaves his slot empty; IR takes only an IR-eligible designation under the league's flags.
  */
 type DbRoster = {
   source?: string
@@ -37,9 +60,48 @@ type DbRoster = {
   starterSlots?: ExpandedStarterSlot[]
   canEditLineup?: boolean
   lineupLockHelp?: string | null
-  lineupLock?: { lockedPlayerIds?: string[] }
   /** Daily-lineup leagues only: the week day by day (`lib/redraft/dailyLineupView.ts`). */
   dailyLineups?: DailyLineupView | null
+  slotLimits?: { bench?: number | null; ir?: number | null } | null
+  /** Per-player locks from the server's lock context (kickoff, daily-lineup schedule locks). */
+  lineupLock?: { lockedPlayerIds?: string[] | null; perPlayerReasons?: Record<string, string> | null } | null
+  irRules?: IrRules | null
+}
+/** Absent `irRules` (older server): only explicit IR designations qualify, never a league option. */
+const STRICT_IR_RULES: IrRules = { irAllowOut: false, irAllowCovid: false, irAllowSuspended: false, irAllowNA: false, irAllowDNR: false, irAllowDoubtful: false }
+const DRAG_PREFIX = 'player:'
+
+function spotFromDropId(id: string): LineupSpot | null {
+  if (id === 'bench') return { kind: 'bench' }
+  if (id === 'ir') return { kind: 'ir' }
+  const m = /^slot:(\d+)$/.exec(id)
+  return m ? { kind: 'starter', slotIndex: Number(m[1]) } : null
+}
+
+/** Pointer first (touch and mouse land where the finger is); keyboard drags have no pointer. */
+const collision: CollisionDetection = (args) => {
+  const hits = pointerWithin(args)
+  return hits.length ? hits : closestCenter(args)
+}
+
+/** A drop target. `state` is set only while a drag is live: would this drop be accepted? */
+function DropZone({ id, state, as = 'div', className, label, moving, row, children }: { id: string; state?: 'ok' | 'no'; as?: 'div' | 'section'; className?: string; label?: string; moving?: boolean; row?: boolean; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  const Tag = as
+  return (
+    <Tag ref={setNodeRef} className={className} aria-label={label} data-moving={moving || undefined} data-dnd={row || undefined} data-drop={state} data-over={(isOver && Boolean(state)) || undefined}>
+      {children}
+    </Tag>
+  )
+}
+
+function DragHandle({ id, name }: { id: string; name: string }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `${DRAG_PREFIX}${id}` })
+  return (
+    <button type="button" ref={setNodeRef} className="nls-drag" data-dragging={isDragging || undefined} {...attributes} {...listeners} aria-label={`Drag ${name}`}>
+      <svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2" cy="2" r="1.5" /><circle cx="8" cy="2" r="1.5" /><circle cx="2" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="2" cy="14" r="1.5" /><circle cx="8" cy="14" r="1.5" /></g></svg>
+    </button>
+  )
 }
 type Move = { kind: 'starter'; slotIndex: number } | { kind: 'bench'; playerId: string }
 
@@ -122,7 +184,12 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       }
       setData(json)
       const slots = json.starterSlots ?? []
-      setLists(slots.length ? initOrSyncLineupLists(json.roster, slots) : null)
+      if (slots.length) {
+        const base = initOrSyncLineupLists(json.roster, slots)
+        // Starters are stored compacted, so a saved empty slot shifts later starters up; re-seat them.
+        const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
+        setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
+      } else setLists(null)
     } catch {
       setError('We could not load your roster.')
     } finally {
@@ -177,7 +244,19 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const viewingOtherDay = Boolean(viewDay && viewDay.status !== 'today')
   const editable = Boolean(data?.rosterId && lists && data.canEditLineup !== false && weekLock && !weekLock.locked && !viewingOtherDay)
   const serverLocked = useMemo(() => new Set(data?.lineupLock?.lockedPlayerIds ?? []), [data])
-  const locked = useCallback((id: string) => serverLocked.has(id) || isGameLocked(players[id], now), [players, now, serverLocked])
+  const locked = useCallback((id: string) => serverLocked.has(id) || isGameLocked(players[id], now), [serverLocked, players, now])
+  const lockReason = useCallback(
+    (id: string): string | undefined => {
+      const r = data?.lineupLock?.perPlayerReasons?.[id]
+      if (r) return r
+      if (isGameLocked(players[id], now)) return 'His game has started.'
+      return serverLocked.has(id) ? 'Locked for this scoring period.' : undefined
+    },
+    [data, players, now, serverLocked],
+  )
+  const canIr = useCallback((id: string) => isIrEligibleStatus(data?.irRules ?? STRICT_IR_RULES, players[id]?.injuryStatus), [data, players])
+  const irCapacity = data?.slotLimits?.ir ?? null
+  const hasIr = (irCapacity ?? 0) > 0 || Boolean(lists?.ir.some(Boolean))
 
   const nextLock = useMemo(() => {
     if (!lists) return null
@@ -189,15 +268,18 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     return best
   }, [lists, players, now])
 
+  const savingRef = useRef(false)
   const save = useCallback(
     async (next: RosterLineupLists) => {
-      if (!data?.rosterId || !editable) return false
+      if (!data?.rosterId || !editable || savingRef.current) return false
+      savingRef.current = true
       setSaving(true)
       try {
         const roster = {
           starters: next.starters.map((id) => (id ? buildPlayerRow(id, players) : null)).filter((x): x is Record<string, unknown> => x != null),
           bench: next.bench.map((id) => buildPlayerRow(id, players)),
-          ir: next.ir.map((id) => buildPlayerRow(id, players)),
+          // The save route admits an IR row by its status, so send the real designation, not 'healthy'.
+          ir: next.ir.map((id) => ({ ...buildPlayerRow(id, players), status: String(players[id]?.injuryStatus ?? 'healthy').toLowerCase() })),
           taxi: next.taxi.map((id) => buildPlayerRow(id, players)),
           devy: next.devy.map((id) => buildPlayerRow(id, players)),
         }
@@ -222,11 +304,78 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         toast.error('Lineup was not saved. Your previous lineup is still active.')
         return false
       } finally {
+        savingRef.current = false
         setSaving(false)
       }
     },
     [data, editable, players, league.id, copy, load],
   )
+
+  const moveCtx: LineupMoveContext | null = useMemo(
+    () =>
+      lists
+        ? { lists, slots, positionOf: (id: string) => players[id]?.position, isLocked: locked, lockReason, canIr, limits: { bench: data?.slotLimits?.bench ?? null, ir: hasIr ? irCapacity : 0 } }
+        : null,
+    [lists, slots, players, locked, lockReason, canIr, data?.slotLimits?.bench, hasIr, irCapacity],
+  )
+  const tryMove = useCallback((playerId: string, target: LineupSpot) => (moveCtx ? resolveLineupMove(moveCtx, playerId, target) : null), [moveCtx])
+  const doMove = useCallback(
+    (playerId: string, target: LineupSpot) => {
+      const r = tryMove(playerId, target)
+      if (!r || !editable) return
+      if (!r.ok) {
+        if (!r.noop) toast.error(r.reason)
+        return
+      }
+      void save(r.next)
+    },
+    [tryMove, editable, save],
+  )
+
+  const [dragId, setDragId] = useState<string | null>(null)
+  const sensors = useSensors(
+    // A short travel before a drag starts, so a tap on the handle (or a scroll) is never a drag.
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
+  )
+  const onDragStart = useCallback((e: DragStartEvent) => {
+    const id = String(e.active.id)
+    setDragId(id.startsWith(DRAG_PREFIX) ? id.slice(DRAG_PREFIX.length) : null)
+  }, [])
+  const onDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      setDragId(null)
+      const id = String(e.active.id)
+      const target = e.over ? spotFromDropId(String(e.over.id)) : null
+      if (!id.startsWith(DRAG_PREFIX) || !target) return
+      doMove(id.slice(DRAG_PREFIX.length), target)
+    },
+    [doMove],
+  )
+  const spotLabel = useCallback(
+    (dropId: string) => {
+      const t = spotFromDropId(dropId)
+      if (!t) return 'nowhere'
+      return t.kind === 'starter' ? `the ${slots[t.slotIndex]?.label ?? ''} slot` : t.kind === 'ir' ? 'injured reserve' : 'the bench'
+    },
+    [slots],
+  )
+  const nameOf = useCallback((dragKey: string | number) => players[String(dragKey).slice(DRAG_PREFIX.length)]?.name ?? 'player', [players])
+  const announcements: Announcements = useMemo(
+    () => ({
+      onDragStart: ({ active }) => `Picked up ${nameOf(active.id)}.`,
+      onDragOver: ({ active, over }) => (over ? `${nameOf(active.id)} is over ${spotLabel(String(over.id))}.` : `${nameOf(active.id)} is not over a lineup spot.`),
+      onDragEnd: ({ active, over }) => (over ? `${nameOf(active.id)} dropped on ${spotLabel(String(over.id))}.` : `${nameOf(active.id)} was dropped.`),
+      onDragCancel: ({ active }) => `Moving ${nameOf(active.id)} was cancelled.`,
+    }),
+    [nameOf, spotLabel],
+  )
+  /** While dragging, every target says whether the drop would be accepted. */
+  const dropState = (target: LineupSpot): 'ok' | 'no' | undefined => {
+    if (!dragId) return undefined
+    return tryMove(dragId, target)?.ok ? 'ok' : 'no'
+  }
 
   const optimal = useMemo(() => (lists && editable ? optimalLineupListsRespectingLocks(slots, lists, players, locked) : null), [lists, editable, slots, players, locked])
 
@@ -255,8 +404,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         : !editable
           ? weekLock?.reason ?? data.lineupLockHelp ?? 'Lineup changes are closed right now.'
           : daily
-            ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. Tap Move on a starter to swap.`
-            : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} Tap Move on a starter to swap.`
+            ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. Drag a player by the handle, or tap Move.`
+            : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} Drag a player by the handle, or tap Move.`
 
   const renderPastDay = (d: DailyLineupDay) => {
     const ids = Object.keys(d.slots)
@@ -287,45 +436,94 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     )
   }
 
-  const renderRow = (id: string, slot: { label: string; index?: number } | null, kind: 'starter' | 'bench', slotIndex?: number) => {
+  type RowKind = 'starter' | 'bench' | 'ir'
+  const renderRow = (id: string, slot: { label: string; index?: number } | null, kind: RowKind, slotIndex?: number) => {
     const p = id ? players[id] : undefined
     const isLocked = id ? locked(id) : false
-    const moving = move && ((move.kind === 'starter' && kind === 'starter' && move.slotIndex === slotIndex) || (move.kind === 'bench' && move.playerId === id))
-    const pill = kind === 'starter' ? slot?.label ?? '—' : 'BN'
+    const reason = id && isLocked ? lockReason(id) : undefined
+    const moving = Boolean(
+      move &&
+        ((move.kind === 'starter' && kind === 'starter' && move.slotIndex === slotIndex) ||
+          (move.kind === 'bench' && kind === 'bench' && move.playerId === id)),
+    )
+    const pill = kind === 'starter' ? slot?.label ?? '—' : kind === 'ir' ? 'IR' : 'BN'
+    const reasonId = reason ? `nls-lock-${kind}-${slotIndex ?? id}` : undefined
+    const cells = (
+      <>
+        {editable ? <span className="nls-drag-cell">{id && !isLocked ? <DragHandle id={id} name={p?.name ?? 'player'} /> : null}</span> : null}
+        <PosPill label={pill} tone={kind === 'starter' ? slot?.label : pill} />
+        <div className="nls-player">
+          <strong>
+            {p?.name ?? (id ? 'Unknown player' : 'Empty')}
+            {kind !== 'starter' && p?.position ? <span className="nls-player-pos"> {p.position}</span> : null}
+            <InjuryFlag status={p?.injuryStatus} />
+          </strong>
+          <small>{gameLine(p) || (id ? '—' : 'Open slot')}</small>
+        </div>
+        <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
+        <span className="nls-lrow-action">
+          {editable ? (
+            isLocked ? (
+              <>
+                <button type="button" className="nls-btn" data-size="sm" disabled aria-describedby={reasonId}>Locked</button>
+                {reason ? <small className="nls-lock-reason" id={reasonId}>{reason}</small> : null}
+              </>
+            ) : kind === 'ir' ? (
+              <button type="button" className="nls-btn" data-size="sm" disabled={saving} aria-label={`Move ${p?.name ?? 'player'} to bench`} onClick={() => doMove(id, { kind: 'bench' })}>
+                To bench
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="nls-btn"
+                data-size="sm"
+                aria-expanded={moving}
+                disabled={saving}
+                onClick={() => setMove(moving ? null : kind === 'starter' ? { kind: 'starter', slotIndex: slotIndex ?? 0 } : { kind: 'bench', playerId: id })}
+              >
+                {moving ? 'Cancel' : 'Move'}
+              </button>
+            )
+          ) : null}
+        </span>
+      </>
+    )
     return (
       <li key={`${kind}-${slotIndex ?? id}`}>
-        <div className="nls-lrow" data-moving={moving || undefined}>
-          <PosPill label={pill} tone={kind === 'starter' ? slot?.label : 'BN'} />
-          <div className="nls-player">
-            <strong>
-              {p?.name ?? (id ? 'Unknown player' : 'Empty')}
-              {kind === 'bench' && p?.position ? <span className="nls-player-pos"> {p.position}</span> : null}
-              <InjuryFlag status={p?.injuryStatus} />
-            </strong>
-            <small>{gameLine(p) || (id ? '—' : 'Open slot')}</small>
+        {kind === 'starter' && editable ? (
+          <DropZone id={`slot:${slotIndex}`} className="nls-lrow" row moving={moving} state={dropState({ kind: 'starter', slotIndex: slotIndex ?? 0 })}>
+            {cells}
+          </DropZone>
+        ) : (
+          <div className="nls-lrow" data-moving={moving || undefined} data-dnd={editable || undefined}>
+            {cells}
           </div>
-          <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
-          <span className="nls-lrow-action">
-            {editable ? (
-              isLocked ? (
-                <button type="button" className="nls-btn" data-size="sm" disabled>Locked</button>
-              ) : (
-                <button
-                  type="button"
-                  className="nls-btn"
-                  data-size="sm"
-                  aria-expanded={Boolean(moving)}
-                  disabled={saving}
-                  onClick={() => setMove(moving ? null : kind === 'starter' ? { kind: 'starter', slotIndex: slotIndex ?? 0 } : { kind: 'bench', playerId: id })}
-                >
-                  {moving ? 'Cancel' : 'Move'}
-                </button>
-              )
-            ) : null}
-          </span>
-        </div>
-        {moving && lists ? renderSwapper(kind, id, slotIndex) : null}
+        )}
+        {moving && lists && kind !== 'ir' ? renderSwapper(kind, id, slotIndex) : null}
       </li>
+    )
+  }
+
+  /** Bench / IR moves for the open row, below its swap list. Every one goes through `doMove`. */
+  const renderSectionMoves = (id: string, kind: 'starter' | 'bench') => {
+    if (!id) return null
+    const name = players[id]?.name ?? 'this player'
+    const bench = kind === 'starter' ? tryMove(id, { kind: 'bench' }) : null
+    const ir = hasIr && canIr(id) ? tryMove(id, { kind: 'ir' }) : null
+    if (!bench && !ir) return null
+    return (
+      <div className="nls-swapper-actions">
+        {bench ? (
+          <button type="button" className="nls-btn" data-size="sm" disabled={!bench.ok || saving} title={bench.ok ? undefined : bench.reason} onClick={() => doMove(id, { kind: 'bench' })}>
+            Move to bench <span className="nls-muted">· leave slot empty</span>
+          </button>
+        ) : null}
+        {ir ? (
+          <button type="button" className="nls-btn" data-size="sm" disabled={!ir.ok || saving} title={ir.ok ? `Move ${name} to injured reserve` : ir.reason} onClick={() => doMove(id, { kind: 'ir' })}>
+            Move to IR
+          </button>
+        ) : null}
+      </div>
     )
   }
 
@@ -340,10 +538,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           {candidates.length ? (
             <ul>
               {candidates.map((c) => {
-                const off = !c.eligible || locked(c.id)
+                const r = tryMove(c.id, { kind: 'starter', slotIndex })
                 return (
                   <li key={c.id}>
-                    <button type="button" disabled={off || saving} onClick={() => void save(applyLineupPick({ lists, slotIndex, incomingId: c.id }))} title={!c.eligible ? `Not eligible for ${slot.label}` : locked(c.id) ? 'His game has started' : undefined}>
+                    <button type="button" disabled={!r?.ok || saving} onClick={() => doMove(c.id, { kind: 'starter', slotIndex })} title={r && !r.ok ? r.reason : undefined}>
                       <PosPill label={c.position} />
                       <span className="nls-player"><strong>{c.name}</strong><small>{c.badge === 'S' ? 'Starter' : 'Bench'} · {gameLine(players[c.id]) || c.team}</small></span>
                       <span className="nls-proj nls-mono">{fmt1(players[c.id]?.projectedPoints ?? null)}</span>
@@ -355,11 +553,12 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           ) : (
             <p className="nls-muted">No one on your roster can fill this slot.</p>
           )}
+          {renderSectionMoves(id, 'starter')}
         </div>
       )
     }
     const p = players[id]
-    const targets = slots.map((s, i) => ({ s, i })).filter(({ s, i }) => playerEligibleForSlot(s, p?.position) && !(lists.starters[i] && locked(lists.starters[i])))
+    const targets = slots.map((s, i) => ({ s, i })).filter(({ i }) => tryMove(id, { kind: 'starter', slotIndex: i })?.ok)
     return (
       <div className="nls-swapper">
         <p className="nls-swapper-title"><span>Start {p?.name ?? 'this player'} in…</span></p>
@@ -369,7 +568,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               const out = lists.starters[i] ? players[lists.starters[i]] : undefined
               return (
                 <li key={i}>
-                  <button type="button" disabled={saving} onClick={() => void save(applyLineupPick({ lists, slotIndex: i, incomingId: id }))}>
+                  <button type="button" disabled={saving} onClick={() => doMove(id, { kind: 'starter', slotIndex: i })}>
                     <PosPill label={s.label} />
                     <span className="nls-player"><strong>{out ? `Replace ${out.name}` : 'Empty slot'}</strong><small>{out ? gameLine(out) : s.label}</small></span>
                     <span className="nls-proj nls-mono">{fmt1(out?.projectedPoints ?? null)}</span>
@@ -381,6 +580,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         ) : (
           <p className="nls-muted">No open starting slot fits his position right now.</p>
         )}
+        {renderSectionMoves(id, 'bench')}
       </div>
     )
   }
@@ -428,31 +628,35 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               renderPastDay(viewDay)
             ) : tab === 'lineup' ? (
               lists && slots.length ? (
-                <>
+                <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)} accessibility={{ announcements }}>
                   <section className="nls-card nls-card-flush" aria-label="Starters">
                     <h3 className="nls-label nls-card-head"><span>Starters</span><span>{startersProj != null ? `Proj ${fmt1(startersProj)}` : ''}</span></h3>
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
                   </section>
-                  <section className="nls-card nls-card-flush" aria-label="Bench">
-                    <h3 className="nls-label nls-card-head">Bench</h3>
+                  <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dropState({ kind: 'bench' })}>
+                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : null}</h3>
                     <ul className="nls-rows">
                       {lists.bench.filter(Boolean).map((id) => renderRow(id, null, 'bench'))}
-                      {lists.ir.filter(Boolean).map((id) => (
-                        <li key={`ir-${id}`}>
-                          <div className="nls-lrow">
-                            <PosPill label="IR" />
-                            <div className="nls-player"><strong>{players[id]?.name ?? 'Unknown player'}<InjuryFlag status={players[id]?.injuryStatus} /></strong><small>{gameLine(players[id]) || '—'}</small></div>
-                            <span className="nls-proj">{fmt1(players[id]?.projectedPoints ?? null)}</span>
-                            <span />
-                          </div>
-                        </li>
-                      ))}
-                      {!lists.ir.filter(Boolean).length ? (
-                        <li><div className="nls-lrow nls-lrow-empty"><PosPill label="IR" /><span>Empty — move an Out or IR player here to free a roster spot.</span></div></li>
+                      {!lists.bench.some(Boolean) ? (
+                        <li><div className="nls-lrow nls-lrow-empty"><PosPill label="BN" /><span>No one on the bench.</span></div></li>
                       ) : null}
                     </ul>
-                  </section>
-                </>
+                  </DropZone>
+                  {hasIr ? (
+                    <DropZone as="section" id="ir" className="nls-card nls-card-flush nls-dropzone" label="Injured reserve" state={dropState({ kind: 'ir' })}>
+                      <h3 className="nls-label nls-card-head"><span>Injured reserve</span><span>{irCapacity != null ? `${lists.ir.filter(Boolean).length} / ${irCapacity}` : ''}</span></h3>
+                      <ul className="nls-rows">
+                        {lists.ir.filter(Boolean).map((id) => renderRow(id, null, 'ir'))}
+                        {!lists.ir.some(Boolean) ? (
+                          <li><div className="nls-lrow nls-lrow-empty"><PosPill label="IR" /><span>Empty — move an injured player here to free a roster spot.</span></div></li>
+                        ) : null}
+                      </ul>
+                    </DropZone>
+                  ) : null}
+                  <DragOverlay dropAnimation={null}>
+                    {dragId ? <div className="nls-drag-overlay"><PosPill label={players[dragId]?.position ?? '—'} /><strong>{players[dragId]?.name ?? 'Player'}</strong></div> : null}
+                  </DragOverlay>
+                </DndContext>
               ) : (
                 <Card><p>Your league has no starting lineup template yet, so there is nothing to set. Your commissioner can set roster slots in league settings.</p></Card>
               )

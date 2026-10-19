@@ -6,25 +6,11 @@ import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
 import type { LineupValidationContext, RosterValidationIssue, RosterValidationResult } from './types'
 import { ROSTER_SECTION_KEYS, type RosterSectionKey } from './types'
 import { resolveConceptRosterLineupRules } from './conceptRosterRules'
+import { isIrEligibleStatus } from './irEligibility'
 
 function playerStatusUpper(row: Record<string, unknown>): string {
   const s = String(row.status ?? row.injury_status ?? '').trim().toUpperCase()
   return s
-}
-
-function isIrEligibleForLeague(
-  league: LineupValidationContext['league'],
-  status: string,
-): boolean {
-  const st = status
-  if (['IR', 'PUP', 'OUT_IR', 'RESERVE'].includes(st)) return true
-  if (st === 'OUT' && league.irAllowOut) return true
-  if (['COVID', 'COVID-19'].includes(st) && league.irAllowCovid) return true
-  if (['SUSP', 'SUSPENDED'].includes(st) && league.irAllowSuspended) return true
-  if (st === 'N/A' && league.irAllowNA) return true
-  if (['DNR', 'DID_NOT_REPORT'].includes(st) && league.irAllowDNR) return true
-  if (['Q', 'QUESTIONABLE', 'DOUBTFUL', 'D'].includes(st) && league.irAllowDoubtful) return true
-  return st === 'IR'
 }
 
 export function collectDuplicatePlayerIssues(playerData: unknown): RosterValidationIssue[] {
@@ -140,7 +126,7 @@ export function validateIrSectionAgainstLeague(
     const o = row as Record<string, unknown>
     const id = String(o.id ?? '')
     const st = playerStatusUpper(o)
-    if (!isIrEligibleForLeague(league, st)) {
+    if (!isIrEligibleStatus(league, st)) {
       issues.push({
         code: 'ir_ineligible_status',
         message: `Player ${id} is not eligible for IR with current injury/status rules.`,
