@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueMlbScoringConfig, saveLeagueMlbScoringConfig, getMlbScoringPresets, buildFullMlbScoringConfig, type MlbScoringPresetKey } from '@/lib/mlb-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (league.sport !== 'MLB') return NextResponse.json({ error: 'MLB leagues only' }, { status: 400 })
+  const lifecycleRefusal = await settingsLifecycleRefusal(leagueId, session.user.id, 'scoring')
+  if (lifecycleRefusal) return NextResponse.json({ error: lifecycleRefusal.error, code: lifecycleRefusal.code }, { status: lifecycleRefusal.status })
   const scoringMode = (league.settings as Record<string, unknown>)?.scoring_mode ?? 'points'
   if (scoringMode !== 'points') return NextResponse.json({error:'This league uses category scoring; points presets cannot replace its format.'},{status:409})
   const body = await req.json().catch(() => ({}))

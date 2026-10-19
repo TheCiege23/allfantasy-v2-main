@@ -17,6 +17,7 @@ import {
   type NbaScoringPresetKey,
 } from '@/lib/nba-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
 
 const featureGate = new FeatureGateService()
 
@@ -65,6 +66,8 @@ export async function PUT(
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
+  const lifecycleRefusal = await settingsLifecycleRefusal(leagueId, session.user.id, 'scoring')
+  if (lifecycleRefusal) return NextResponse.json({ error: lifecycleRefusal.error, code: lifecycleRefusal.code }, { status: lifecycleRefusal.status })
 
   if (nativeCategoryScoringContext(league.settings, 'NBA')) return NextResponse.json({ error: 'This league uses categories; point weights do not apply.' }, { status: 409 })
 

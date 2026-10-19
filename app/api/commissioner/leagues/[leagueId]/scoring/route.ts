@@ -8,6 +8,7 @@ import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConf
 import { replaceLeagueScoringOverrides } from '@/lib/scoring-defaults/ScoringOverrideService'
 import { normalizeScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
 import { queueLeagueScoringRecalcAfterRulesChange } from '@/lib/scoring-defaults/queueLeagueScoringRecalc'
+import { settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
 
 type IncomingRule = {
   statKey?: unknown
@@ -60,6 +61,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   if (role !== 'commissioner' && role !== 'co_commissioner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  const lifecycleRefusal = await settingsLifecycleRefusal(params.leagueId, userId, 'scoring')
+  if (lifecycleRefusal) return NextResponse.json({ error: lifecycleRefusal.error, code: lifecycleRefusal.code }, { status: lifecycleRefusal.status })
 
   const config = await getLeagueScoringConfig(params.leagueId)
   if (!config) {

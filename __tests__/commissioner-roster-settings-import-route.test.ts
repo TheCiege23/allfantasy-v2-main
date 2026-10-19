@@ -13,6 +13,12 @@ vi.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
 
+// The lifecycle gate (lib/league/settingsLifecycleGate.ts) is covered by
+// __tests__/settings-editors-lifecycle-gate.test.ts; here it always allows.
+vi.mock('@/lib/league/settingsLifecycleGate', () => ({
+  settingsLifecycleRefusal: vi.fn(async () => null),
+}))
+
 vi.mock('@/lib/roster-engine', () => ({
   checkCommissionerPermission: checkCommissionerPermissionMock,
   mapImportedRosterToLeagueConfig: mapImportedRosterToLeagueConfigMock,
