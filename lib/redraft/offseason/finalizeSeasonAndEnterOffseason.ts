@@ -101,6 +101,19 @@ export async function finalizeSeasonAndEnterOffseason(input: {
       })
     }
 
+    /*
+     * Passed constitution amendments that take effect "next season" apply here, once, when the
+     * season closes (lib/constitution/constitutionService.ts). Commissioner plan only; the call
+     * never throws and a refused change is recorded on its amendment, so it cannot fail the close.
+     */
+    if (!alreadyFinalized) {
+      const { applyAmendmentsAtSeasonRollover } = await import('@/lib/constitution/constitutionService')
+      const amendments = await applyAmendmentsAtSeasonRollover(input.leagueId)
+      if (amendments.applied > 0 || amendments.failed > 0) {
+        console.info('[finalize-season] constitution amendments', { leagueId: input.leagueId, ...amendments })
+      }
+    }
+
     const leagueMeta = leagueScoring
     const keeperEligible =
       !!leagueMeta && (supportsKeeperDeclarations(leagueMeta.leagueType) || leagueMeta.isDynasty === true)

@@ -95,6 +95,7 @@ const ES: Record<string, string> = {
 
   // ── Rules and access ──────────────────────────────────────────────────
   Disputes: 'Disputas',
+  'League constitution and amendments →': 'Constitución de la liga y enmiendas →',
   'Open integrity monitor →': 'Abrir el monitor de integridad →',
   '1 person': '1 persona',
   you: 'tú',
