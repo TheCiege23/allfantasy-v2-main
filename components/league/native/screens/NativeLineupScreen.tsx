@@ -14,6 +14,8 @@ import { writeAuthorityCopy } from '@/lib/league/write-authority'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, projectedTotal } from '@/lib/league/native/nativeScreenModels'
+import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
+import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
 
 /**
@@ -35,6 +37,9 @@ type DbRoster = {
   starterSlots?: ExpandedStarterSlot[]
   canEditLineup?: boolean
   lineupLockHelp?: string | null
+  lineupLock?: { lockedPlayerIds?: string[] }
+  /** Daily-lineup leagues only: the week day by day (`lib/redraft/dailyLineupView.ts`). */
+  dailyLineups?: DailyLineupView | null
 }
 type Move = { kind: 'starter'; slotIndex: number } | { kind: 'bench'; playerId: string }
 
@@ -72,6 +77,11 @@ function gameLine(p: DisplayPlayerRecord | undefined): string {
   return bits.join(' · ')
 }
 
+/** `2026-10-20` → `Tue 20`, read as the calendar day it names (not shifted by the viewer's zone). */
+function dayLabel(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
 function untilLabel(ms: number): string {
   const m = Math.max(0, Math.round(ms / 60000))
   const h = Math.floor(m / 60)
@@ -92,6 +102,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [nextRunAt, setNextRunAt] = useState<string | null>(null)
   const [faabBudget, setFaabBudget] = useState<number | null>(null)
   const [now, setNow] = useState(() => new Date())
+  const [pickedDay, setPickedDay] = useState<string | null>(null)
   const copy = useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
 
   const load = useCallback(async () => {
@@ -153,12 +164,20 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
 
   const players: DisplayPlayerMap = useMemo(() => buildDisplayPlayerMap(null, data?.unifiedRoster ?? []), [data])
   const slots = useMemo(() => data?.starterSlots ?? [], [data])
+  const daily = data?.dailyLineups ?? null
   const weekLock = useMemo(
-    () => (data?.leagueWeek ? evaluateLineupLock({ sport: String(league.sport ?? 'NFL'), now, leagueWeek: data.leagueWeek, editingWeek: data.leagueWeek }) : null),
-    [data?.leagueWeek, league.sport, now],
+    () =>
+      data?.leagueWeek
+        ? evaluateLineupLock({ sport: String(league.sport ?? 'NFL'), now, leagueWeek: data.leagueWeek, editingWeek: data.leagueWeek, dailyLineups: Boolean(daily) })
+        : null,
+    [data?.leagueWeek, league.sport, now, daily],
   )
-  const editable = Boolean(data?.rosterId && lists && data.canEditLineup !== false && weekLock && !weekLock.locked)
-  const locked = useCallback((id: string) => isGameLocked(players[id], now), [players, now])
+  // Daily leagues: the day being looked at. Only today is edited; a save applies to today and every later day.
+  const viewDay: DailyLineupDay | null = daily ? daily.days.find((d) => d.day === (pickedDay ?? daily.today)) ?? daily.days.find((d) => d.status === 'today') ?? null : null
+  const viewingOtherDay = Boolean(viewDay && viewDay.status !== 'today')
+  const editable = Boolean(data?.rosterId && lists && data.canEditLineup !== false && weekLock && !weekLock.locked && !viewingOtherDay)
+  const serverLocked = useMemo(() => new Set(data?.lineupLock?.lockedPlayerIds ?? []), [data])
+  const locked = useCallback((id: string) => serverLocked.has(id) || isGameLocked(players[id], now), [players, now, serverLocked])
 
   const nextLock = useMemo(() => {
     if (!lists) return null
@@ -226,11 +245,47 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const faab = data?.faabRemaining ?? null
   const runLabel = nextRunAt ? new Date(nextRunAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null
 
+  const lastDay = daily?.days[daily.days.length - 1]?.day
   const lockText = !data
     ? null
-    : !editable
-      ? weekLock?.reason ?? data.lineupLockHelp ?? 'Lineup changes are closed right now.'
-      : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} Tap Move on a starter to swap.`
+    : viewDay && viewDay.status === 'past'
+      ? `${dayLabel(viewDay.day)} is over. This is the lineup that scored that day.`
+      : viewDay && viewDay.status === 'future'
+        ? `Your lineup carries forward to ${dayLabel(viewDay.day)}. Changes you make today apply to every remaining day this week.`
+        : !editable
+          ? weekLock?.reason ?? data.lineupLockHelp ?? 'Lineup changes are closed right now.'
+          : daily
+            ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. Tap Move on a starter to swap.`
+            : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} Tap Move on a starter to swap.`
+
+  const renderPastDay = (d: DailyLineupDay) => {
+    const ids = Object.keys(d.slots)
+    const starters = ids.filter((id) => slotCategory(d.slots[id]) === 'starter')
+    const others = ids.filter((id) => slotCategory(d.slots[id]) !== 'starter')
+    const row = (id: string) => (
+      <li key={`${d.day}-${id}`}>
+        <div className="nls-lrow" data-cols="3">
+          <PosPill label={slotCategory(d.slots[id]) === 'starter' ? d.slots[id] : slotCategory(d.slots[id]) === 'bench' ? 'BN' : d.slots[id].toUpperCase()} />
+          <div className="nls-player"><strong>{players[id]?.name ?? 'Unknown player'}</strong><small>{d.points[id] != null ? 'Played' : 'No game'}</small></div>
+          <span className="nls-proj">{d.points[id] != null ? fmt1(d.points[id]) : '—'}</span>
+        </div>
+      </li>
+    )
+    return (
+      <>
+        <section className="nls-card nls-card-flush" aria-label={`Starters on ${dayLabel(d.day)}`}>
+          <h3 className="nls-label nls-card-head"><span>Starters · {dayLabel(d.day)}</span><span>{fmt1(d.starterPoints)} pts</span></h3>
+          <ul className="nls-rows">{starters.length ? starters.map(row) : <li><div className="nls-lrow nls-lrow-empty"><span>No lineup was recorded for this day.</span></div></li>}</ul>
+        </section>
+        {others.length ? (
+          <section className="nls-card nls-card-flush" aria-label={`Bench on ${dayLabel(d.day)}`}>
+            <h3 className="nls-label nls-card-head">Bench</h3>
+            <ul className="nls-rows">{others.map(row)}</ul>
+          </section>
+        ) : null}
+      </>
+    )
+  }
 
   const renderRow = (id: string, slot: { label: string; index?: number } | null, kind: 'starter' | 'bench', slotIndex?: number) => {
     const p = id ? players[id] : undefined
@@ -357,7 +412,21 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               </div>
             ) : null}
 
-            {tab === 'lineup' ? (
+            {tab === 'lineup' && daily ? (
+              <div className="nls-daypick" data-testid="daily-day-picker">
+                <Segmented
+                  label="Lineup day"
+                  value={viewDay?.day ?? ''}
+                  onChange={setPickedDay}
+                  options={daily.days.map((d) => ({ id: d.day, label: d.status === 'today' ? 'Today' : dayLabel(d.day) }))}
+                />
+                <p className="nls-muted">Week {daily.week} so far: <strong>{fmt1(daily.weekPoints)}</strong> pts from each day&apos;s starters.</p>
+              </div>
+            ) : null}
+
+            {tab === 'lineup' && viewDay?.status === 'past' ? (
+              renderPastDay(viewDay)
+            ) : tab === 'lineup' ? (
               lists && slots.length ? (
                 <>
                   <section className="nls-card nls-card-flush" aria-label="Starters">
