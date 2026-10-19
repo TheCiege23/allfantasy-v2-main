@@ -419,6 +419,9 @@ const FIELD_BY_PROVIDER: Partial<
  */
 const MFL_KEY_HREF = '/settings?tab=connected'
 
+/** Set when Connect is pressed on an empty field; typing into the field makes it obsolete. */
+const EMPTY_LEAGUE_ID_ERROR = 'Enter a league ID to continue.'
+
 const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   fantrax: 'League ID · pick your team',
   /* No account, no cookie, no key — the only tile here that needs nothing first. */
@@ -1979,7 +1982,7 @@ export function ImportV4({
         }
         if (canDiscover) void runDiscover(typed)
         else if (typed) void runPreview(typed)
-        else setError('Enter a league ID to continue.')
+        else setError(EMPTY_LEAGUE_ID_ERROR)
       }}
     >
       {/*
@@ -2395,7 +2398,10 @@ export function ImportV4({
                     placeholder={field.placeholder}
                     value={account}
                     data-testid="import-discovery-account"
-                    onChange={(e) => setAccount(e.target.value)}
+                    onChange={(e) => {
+                      setAccount(e.target.value)
+                      setError((prev) => (prev === EMPTY_LEAGUE_ID_ERROR ? null : prev))
+                    }}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter') return
                       e.preventDefault()
