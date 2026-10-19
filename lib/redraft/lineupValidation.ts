@@ -41,7 +41,7 @@ export type RedraftLineupMove = {
 }
 
 const REQUIRED_FOOTBALL_POSITIONS = ['QB', 'RB', 'WR'] as const
-const NON_STARTER_SLOTS = new Set(['BENCH', 'BN', 'IR', 'TAXI', 'DEVY', 'RESERVE'])
+const NON_STARTER_SLOTS = new Set(['BENCH', 'BN', 'IR', 'TAXI', 'DEVY', 'RESERVE', 'IL', 'IL_PLUS', 'NA', 'PROSPECT', 'RIGHTS', 'MINORS'])
 const INJURY_ERROR_STATUSES = new Set([
   'OUT',
   'O',

@@ -1,4 +1,5 @@
 import type { SportConfigFull } from '../types'
+import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 /** Stat keys aligned with `nhlAdapter` (g, a, ppp, sog, hits, blks). */
 export const NHL_CONFIG: SportConfigFull = {
@@ -49,9 +50,9 @@ export const NHL_CONFIG: SportConfigFull = {
     G: ['G'],
   },
 
-  defaultSeasonWeeks: 22,
-  defaultPlayoffStartWeek: 20,
-  defaultPlayoffTeams: 4,
+  defaultSeasonWeeks: DAILY_SPORT_SEASON_SHAPE.NHL.totalWeeks,
+  defaultPlayoffStartWeek: playoffStartWeekFor('NHL'),
+  defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.NHL.playoffTeams,
   defaultMatchupPeriodDays: 7,
   lineupLockType: 'daily',
 
@@ -76,9 +77,9 @@ export const NHL_CONFIG: SportConfigFull = {
       key: 'seasonWeeks',
       label: 'Regular Season Weeks',
       type: 'number',
-      defaultValue: 20,
+      defaultValue: regularSeasonWeeksFor('NHL'),
       min: 14,
-      max: 24,
+      max: DAILY_SPORT_SEASON_SHAPE.NHL.totalWeeks,
       section: 'schedule',
       locksAfterStart: true,
     },
@@ -86,7 +87,7 @@ export const NHL_CONFIG: SportConfigFull = {
       key: 'playoffTeams',
       label: 'Playoff Teams',
       type: 'select',
-      defaultValue: 4,
+      defaultValue: DAILY_SPORT_SEASON_SHAPE.NHL.playoffTeams,
       options: [
         { value: 4, label: '4 teams' },
         { value: 6, label: '6 teams' },
