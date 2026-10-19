@@ -127,6 +127,12 @@ export async function GET(req: NextRequest) {
       guillotineMode: true,
       keeperPhaseActive: true,
       lockAllMoves: true,
+      irAllowOut: true,
+      irAllowCovid: true,
+      irAllowSuspended: true,
+      irAllowNA: true,
+      irAllowDNR: true,
+      irAllowDoubtful: true,
     },
   })
 
@@ -364,6 +370,16 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       },
       canEditLineup: !lockCtx.locked,
       lineupLockHelp: lockCtx.reason,
+      // The save route's IR rule (`isIrEligibleStatus`) reads these flags; the lineup screen reads the
+      // same rule so it only offers "Move to IR" for a player the server will accept there.
+      irRules: {
+        irAllowOut: league.irAllowOut,
+        irAllowCovid: league.irAllowCovid,
+        irAllowSuspended: league.irAllowSuspended,
+        irAllowNA: league.irAllowNA,
+        irAllowDNR: league.irAllowDNR,
+        irAllowDoubtful: league.irAllowDoubtful,
+      },
       // Lets the client label the save control ("Save shadow lineup") before the user commits,
       // rather than only correcting the story in the success toast afterwards.
       writeAuthority: buildWriteAuthorityEnvelope('lineup', league.platform),

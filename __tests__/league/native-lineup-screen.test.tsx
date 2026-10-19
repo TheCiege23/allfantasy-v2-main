@@ -1,6 +1,6 @@
 /** Native Lineup screen (handoff 2026-10-11 §3): optimise + per-game lock, against mocked routes. */
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { UserLeague } from '@/app/dashboard/types'
 
@@ -8,10 +8,29 @@ vi.mock('@/hooks/useLeagueRealtimeRefresh', () => ({ useLeagueRealtimeRefresh: (
 vi.mock('@/lib/league/lineup-lock', () => ({ evaluateLineupLock: () => ({ locked: false, policy: 'football_weekly' }) }))
 vi.mock('@/lib/dashboard/intelligence-events', () => ({ invalidateIntelligence: () => undefined }))
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), message: vi.fn() }) }))
+// Pointer drags are impractical in jsdom: keep the real DndContext but capture its props so a test can
+// call `onDragEnd` exactly as dnd-kit would after a drop.
+const dnd = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }))
+vi.mock('@dnd-kit/core', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@dnd-kit/core')>()
+  const R = await import('react')
+  return {
+    ...real,
+    DndContext: (props: Record<string, unknown>) => {
+      dnd.props = props
+      return R.createElement(real.DndContext as never, props as never)
+    },
+  }
+})
 
+import { toast } from 'sonner'
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.mocked(toast.error).mockClear()
+  dnd.props = null
+})
 
 const league = { id: 'lg1', name: 'Blah', sport: 'NFL', season: 2026, currentWeek: 5, teamCount: 12, platform: 'allfantasy', format: 'redraft', settings: {} } as unknown as UserLeague
 
@@ -139,5 +158,122 @@ describe('NativeLineupScreen', () => {
     render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
     await screen.findByText('Jalen Hurts')
     expect(screen.queryByTestId('daily-day-picker')).toBeNull()
+  })
+
+  const saves = (calls: Array<{ url: string; init?: RequestInit }>) =>
+    calls.filter((c) => c.url === '/api/leagues/roster/save').map((c) => JSON.parse(String(c.init!.body)) as { roster: Record<string, Array<{ id: string; status?: string }>> })
+  const ids = (rows: Array<{ id: string }>) => rows.map((r) => r.id)
+  const drop = (active: string, over: string | null) =>
+    act(() => {
+      ;(dnd.props!.onDragEnd as (e: unknown) => void)({ active: { id: active, data: { current: undefined } }, over: over ? { id: over, data: { current: undefined } } : null, delta: { x: 0, y: 0 }, collisions: null, activatorEvent: null })
+    })
+  const baseRoutes = (unified: unknown[], extra: Record<string, unknown> = {}) => ({
+    '/api/league/roster': { ...roster(unified), ...extra },
+    '/claims': { claims: [] },
+    '/state': { state: {} },
+    '/settings': {},
+    '/api/leagues/roster/save': { ok: true },
+  })
+  const three = () => [wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]
+
+  it('click: starting a bench player in an occupied slot still swaps through the save route', async () => {
+    const calls = stubFetch(baseRoutes(three()))
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Bijan Robinson')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Move' }).at(-1)!)
+    fireEvent.click(screen.getByText('Replace Tyjae Spears'))
+    await waitFor(() => expect(saves(calls)).toHaveLength(1))
+    expect(ids(saves(calls)[0].roster.starters)).toEqual(['qb1', 'rb2'])
+    expect(ids(saves(calls)[0].roster.bench)).toEqual(['rb1'])
+  })
+
+  it('drag: dropping a bench player onto an occupied slot swaps them via the same save', async () => {
+    const calls = stubFetch(baseRoutes(three()))
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Bijan Robinson')
+    expect(dnd.props).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Drag Bijan Robinson' })).toBeTruthy()
+    drop('player:rb2', 'slot:1')
+    await waitFor(() => expect(saves(calls)).toHaveLength(1))
+    expect(ids(saves(calls)[0].roster.starters)).toEqual(['qb1', 'rb2'])
+    expect(ids(saves(calls)[0].roster.bench)).toEqual(['rb1'])
+  })
+
+  it('drag: an ineligible drop is rejected and nothing is saved', async () => {
+    const calls = stubFetch(baseRoutes(three()))
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Bijan Robinson')
+    drop('player:rb2', 'slot:0')
+    expect(toast.error).toHaveBeenCalledWith('Not eligible for QB.')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(saves(calls)).toHaveLength(0)
+  })
+
+  it('a locked player has no drag handle, shows the lock reason, and a drop of him is refused', async () => {
+    const calls = stubFetch(baseRoutes(three(), { lineupLock: { locked: false, lockedPlayerIds: ['rb1'], perPlayerReasons: { rb1: 'Locked for today: game started' } } }))
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Tyjae Spears')
+    expect(screen.queryByRole('button', { name: 'Drag Tyjae Spears' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Drag Bijan Robinson' })).toBeTruthy()
+    expect(screen.getByText('Locked for today: game started')).toBeTruthy()
+    drop('player:rb1', 'bench')
+    drop('player:rb2', 'slot:1')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(saves(calls)).toHaveLength(0)
+    expect(toast.error).toHaveBeenCalled()
+  })
+
+  it('benching a starter with no replacement leaves his slot empty (click and drag)', async () => {
+    const calls = stubFetch(baseRoutes(three()))
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Tyjae Spears')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Move' })[1])
+    fireEvent.click(screen.getByRole('button', { name: /Move to bench/ }))
+    await waitFor(() => expect(saves(calls)).toHaveLength(1))
+    expect(ids(saves(calls)[0].roster.starters)).toEqual(['qb1'])
+    expect(ids(saves(calls)[0].roster.bench)).toEqual(['rb2', 'rb1'])
+    // One save at a time: wait for the first to settle before dragging.
+    await waitFor(() => expect((screen.getAllByRole('button', { name: 'Move' })[0] as HTMLButtonElement).disabled).toBe(false))
+    drop('player:qb1', 'bench')
+    await waitFor(() => expect(saves(calls)).toHaveLength(2))
+    expect(ids(saves(calls)[1].roster.bench)).toContain('qb1')
+  })
+
+  it('IR: an eligible injured bench player moves to IR, and an IR player moves back to the bench', async () => {
+    const hurt = { ...wire('rb2', 'Bijan Robinson', 'RB', 0), injuryStatus: 'IR' }
+    const calls = stubFetch(
+      baseRoutes([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), hurt], {
+        slotLimits: { starters: 2, bench: 5, ir: 1, taxi: 0, devy: 0 },
+        irRules: { irAllowOut: false, irAllowCovid: false, irAllowSuspended: false, irAllowNA: false, irAllowDNR: false, irAllowDoubtful: false },
+      }),
+    )
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Bijan Robinson')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Move' }).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: /Move to IR/ }))
+    await waitFor(() => expect(saves(calls)).toHaveLength(1))
+    const first = saves(calls)[0].roster
+    expect(ids(first.ir)).toEqual(['rb2'])
+    expect(ids(first.bench)).toEqual([])
+    // The server validates IR from the row status, so the real designation must be sent.
+    expect(first.ir[0].status).toBe('ir')
+    // Healthy players get no IR control.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Move' })[1])
+    expect(screen.queryByRole('button', { name: /Move to IR/ })).toBeNull()
+  })
+
+  it('IR: an IR player moves back out to the bench', async () => {
+    const hurt = { ...wire('rb3', 'Breece Hall', 'RB', 0), injuryStatus: 'IR' }
+    const r = roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2), hurt])
+    const calls = stubFetch({
+      ...baseRoutes([]),
+      '/api/league/roster': { ...r, slotLimits: { starters: 2, bench: 5, ir: 1, taxi: 0, devy: 0 }, roster: { lineup_sections: { starters: [{ id: 'qb1' }, { id: 'rb1' }], bench: [{ id: 'rb2' }], ir: [{ id: 'rb3' }], taxi: [], devy: [] } } },
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Breece Hall')
+    fireEvent.click(screen.getByRole('button', { name: /Move Breece Hall to bench/ }))
+    await waitFor(() => expect(saves(calls)).toHaveLength(1))
+    expect(ids(saves(calls)[0].roster.ir)).toEqual([])
+    expect(ids(saves(calls)[0].roster.bench)).toEqual(['rb2', 'rb3'])
   })
 })
