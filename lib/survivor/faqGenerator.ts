@@ -72,7 +72,7 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
 • To play: message @Chimmy "I want to use my idol"
 • To check your idols: message @Chimmy "Do I have an idol?"
 • Idols are attached to PLAYERS — if a player is traded or picked up from waivers, the idol goes with them
-${idolTimingRuleLines({ expiryWeek: league.survivorIdolExpiryWeek, invalidRemainingPlayers: normalizeSurvivorFoundationSettings(league.settings ?? {}).idolInvalidRemainingPlayers }).map((l) => `• ${l}`).join('\n')}
+${idolTimingRuleLines({ expiryWeek: league.survivorIdolExpiryWeek, invalidRemainingPlayers: normalizeSurvivorFoundationSettings(league.settings ?? {}).idolInvalidRemainingPlayers, playCutoffHours: normalizeSurvivorFoundationSettings(league.settings ?? {}).idolPlayCutoffHours }).map((l) => `• ${l}`).join('\n')}
 • When an idol is played, it is announced in league chat
 
 ---

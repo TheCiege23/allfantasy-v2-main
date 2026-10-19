@@ -104,4 +104,34 @@ describe('no pre-read trace in non-owner payloads', () => {
     expect(survivorPublicCouncil(ctx.council, false)).toEqual(beforePublic)
     expect(JSON.stringify(await buildTribalCouncilView(access))).not.toMatch(/secret-idol|vote_steal|stolenVoter|extraTarget/)
   })
+
+  describe('commissioner idol play cutoff (idolPlayCutoffHours)', () => {
+    it('refuses an idol inside the cutoff without consuming it, and names the rule', async () => {
+      ctx.settings.idolPlayCutoffHours = 1 // votes close in 10 minutes
+      expect(await playVoteShield('l', 'owner', 'immunity')).toMatchObject({ ok: false, status: 409, code: 'play_cutoff_passed', error: 'Idols must be played at least 1 hour before votes close.' })
+      expect(m.db.survivorTribalCouncil.update).not.toHaveBeenCalled()
+      expect(m.db.survivorIdol.updateMany).not.toHaveBeenCalled()
+    })
+    it('allows the play before the cutoff', async () => {
+      ctx.settings.idolPlayCutoffHours = 1
+      ctx.council.voteDeadlineAt = new Date(Date.now() + 2 * 3_600_000)
+      expect(await playVoteShield('l', 'owner', 'immunity')).toMatchObject({ ok: true })
+    })
+    it('still lets an Extra Vote holder cast the ballot after the cutoff — votes run to the close', async () => {
+      ctx.settings.idolPlayCutoffHours = 1
+      ctx.council.idolsPlayed = [{ idolId: 'idol', powerType: 'vote_steal', playerUserId: 'owner' }]
+      expect(await submitAdditionalIdolVote('l', 'owner', 'victim')).toMatchObject({ ok: true })
+    })
+    it('the preview shows the cutoff as the deadline and says why it cannot be played', async () => {
+      ctx.settings.idolPlayCutoffHours = 1
+      const preview = await getCouncilIdolPreview('l', 'owner', 'idol')
+      expect(preview).toMatchObject({ playable: false, reason: 'Idols must be played at least 1 hour before votes close.' })
+      expect(new Date(preview!.deadline!).getTime()).toBe(ctx.council.voteDeadlineAt.getTime() - 3_600_000)
+    })
+    it('no cutoff keeps the vote close as the deadline', async () => {
+      const preview = await getCouncilIdolPreview('l', 'owner', 'idol')
+      expect(preview).toMatchObject({ playable: true, reason: null })
+      expect(new Date(preview!.deadline!).getTime()).toBe(ctx.council.voteDeadlineAt.getTime())
+    })
+  })
 })

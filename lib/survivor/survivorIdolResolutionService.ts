@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { loadCouncilContext, type IdolPlayRecord } from './survivorCouncilService'
 import { idolDefinition, type IdolPlayPreview } from './survivorIdolCatalog'
 import { isEligibleTarget, isEligibleVoter } from './survivorBallotEligibility'
+import { idolPlayDeadline, idolPlayCutoffMessage } from './survivorSettings'
+
+export { idolPlayDeadline }
 
 /**
  * SURVIVOR IDOL RESOLUTION (canonical Phase 3) — makes the seeded idols meaningful.
@@ -27,10 +30,12 @@ export type IdolPlayOutcome =
 
 
 /** The catalog owns timing semantics; unsupported windows never become playable by default. */
-export function idolWindowOpen(council: { status: string; phase: string; isRevealed: boolean; voteDeadlineAt: Date; votingOpensAt: Date | null }, when: string, now = new Date()): boolean {
+export function idolWindowOpen(council: { status: string; phase: string; isRevealed: boolean; voteDeadlineAt: Date; votingOpensAt: Date | null }, when: string, now = new Date(), cutoffHours = 0): boolean {
   return when === 'Before votes close' && council.phase !== 'revote' && !council.isRevealed &&
-    council.status === 'voting_open' && (!council.votingOpensAt || council.votingOpensAt <= now) && council.voteDeadlineAt > now
+    council.status === 'voting_open' && (!council.votingOpensAt || council.votingOpensAt <= now) && idolPlayDeadline(council, cutoffHours) > now
 }
+
+
 
 /** Owner-only projection. Never expose existing plays when listing possible targets. */
 export async function getCouncilIdolPreview(leagueId: string, userId: string, idolId: string): Promise<IdolPlayPreview | null> {
@@ -40,10 +45,12 @@ export async function getCouncilIdolPreview(leagueId: string, userId: string, id
   const ctx = await loadCouncilContext(leagueId)
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { activePlayerCount: true, immunePlayerId: true, pausedSnapshot: true } })
   const owner = ctx?.scopePlayers.find(p => p.userId === userId)
-  const playable = Boolean(definition.action && ctx && owner && game && game.pausedSnapshot == null && game.activePlayerCount > ctx.settings.idolInvalidRemainingPlayers && idolWindowOpen(ctx.council, definition.when))
+  const playable = Boolean(definition.action && ctx && owner && game && game.pausedSnapshot == null && game.activePlayerCount > ctx.settings.idolInvalidRemainingPlayers && idolWindowOpen(ctx.council, definition.when, new Date(), ctx.settings.idolPlayCutoffHours))
+  const cutoff = ctx?.settings.idolPlayCutoffHours ?? 0
+  const pastCutoff = Boolean(ctx && cutoff > 0 && idolWindowOpen(ctx.council, definition.when) && !playable)
   return {
-    deadline: ctx?.council.voteDeadlineAt.toISOString() ?? null, playable,
-    reason: !definition.action ? 'Not playable yet' : !playable ? 'This idol cannot be played in the current council window.' : null,
+    deadline: ctx ? idolPlayDeadline(ctx.council, cutoff).toISOString() : null, playable,
+    reason: !definition.action ? 'Not playable yet' : pastCutoff ? idolPlayCutoffMessage(cutoff) : !playable ? 'This idol cannot be played in the current council window.' : null,
     targets: definition.needsTarget && ctx ? ctx.scopePlayers.filter(p => p.userId !== userId && p.tribeId === owner?.tribeId).map(p => ({
       userId: p.userId, name: p.displayName, disabled: p.userId === game?.immunePlayerId,
       reason: p.userId === game?.immunePlayerId ? 'Immune this week' : null,
@@ -74,6 +81,9 @@ async function playPower(
       }
       if (!idolWindowOpen(council, idolDefinition(power).when)) {
         return { ok: false, status: 409, code: 'window_closed', error: 'The vote window is closed; this power can no longer be played.' }
+      }
+      if (!idolWindowOpen(council, idolDefinition(power).when, new Date(), settings.idolPlayCutoffHours)) {
+        return { ok: false, status: 409, code: 'play_cutoff_passed', error: idolPlayCutoffMessage(settings.idolPlayCutoffHours) }
       }
 
       const ownerRosterId = userToRoster[ownerUserId]

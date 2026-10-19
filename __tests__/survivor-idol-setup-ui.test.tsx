@@ -87,6 +87,23 @@ describe('commissioner IdolSetup', () => {
     expect(locked.disabled).toBe(true)
   })
 
+  it('saves the idol play cutoff with the setup and explains it', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      return { ok: true, json: async () => ({ ...data({ saved: true }), playCutoffHours: body.playCutoffHours }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SurvivorIdolSetup leagueId="l" canEdit initialData={data()} />)
+    const select = screen.getByLabelText('Play idols by') as HTMLSelectElement
+    expect(select.value).toBe('0')
+    expect(screen.getByText('Idols can be played right up until votes close.')).toBeTruthy()
+    fireEvent.change(select, { target: { value: '6' } })
+    expect(screen.getByText(/Every idol is in 6 hours before votes close/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Lock idols for the draft' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ playCutoffHours: 6 })
+  })
+
   it('marks Point surge and Tribute values as coming soon while they have no engine', () => {
     render(<SurvivorIdolSetup leagueId="l" canEdit initialData={data()} />)
     const values = screen.getByRole('region', { name: 'League values' })

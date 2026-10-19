@@ -106,6 +106,24 @@ describe('saving idol setup', () => {
     expect(db.league.update.mock.calls[2][0].data).toEqual({ survivorIdolCount: 7 })
   })
 
+  it('saves the idol play cutoff into League.settings (0 removes it) and shows it in the view', async () => {
+    const { saveSurvivorIdolConfig, getSurvivorIdolSetupView } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb()
+    let settings: Record<string, unknown> = { scoring: 'ppr' }
+    db.league.findUnique.mockImplementation(async () => ({ survivorIdolCount: 7, survivorIdolExpiryWeek: null, settings }) as never)
+    db.league.update.mockImplementation(async (args: { data: { settings?: Record<string, unknown> } }) => { if (args.data.settings) settings = args.data.settings; return { survivorIdolExpiryWeek: null } as never })
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, playCutoffHours: 6 }, db as never)).toMatchObject({ ok: true, playCutoffHours: 6 })
+    expect(settings).toEqual({ scoring: 'ppr', idolPlayCutoffHours: 6 })
+    expect((await getSurvivorIdolSetupView('league-1', { isCommissioner: false }, db as never)).playCutoffHours).toBe(6)
+    await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7 }, db as never)
+    expect(settings).toEqual({ scoring: 'ppr', idolPlayCutoffHours: 6 }) // absent = unchanged
+    await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, playCutoffHours: 0 }, db as never)
+    expect(settings).toEqual({ scoring: 'ppr' })
+    for (const playCutoffHours of [-1, 73, 1.5, '6']) {
+      expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, playCutoffHours }, db as never)).toMatchObject({ ok: false, status: 400 })
+    }
+  })
+
   it('refuses an expiry week outside 1–30 or not a whole week', async () => {
     const { saveSurvivorIdolConfig } = await import('@/lib/survivor/survivorIdolConfigService')
     const db = fakeDb()
