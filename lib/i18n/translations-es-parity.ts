@@ -2099,6 +2099,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsRules.lt.formatAria": "Formato de la liga",
   "lsRules.lt.carryOverAria": "¿Se mantienen las plantillas?",
   "lsRules.lt.carryOver": "¿Se mantienen las plantillas?",
+  "lsRules.lt.piratePreview": "Ver el formato Pirata",
   "lsRules.lt.buyInOptional": "Inscripción (opcional)",
   "lsRules.lt.saving": "Guardando…",
   "lsRules.lt.update": "Actualizar formato",

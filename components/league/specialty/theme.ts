@@ -23,6 +23,12 @@ export interface SpecialtyTheme {
   disp: string
   /** Title uses the display face (true) or Archivo 800 (false). */
   displayTitle: boolean
+  /**
+   * CSS `object-position` for the hero banner. Omitted = centred (the CSS default), which is right
+   * for every format except one whose art package asks otherwise. Pirate's 1600×600 banner puts its
+   * ship right of centre, and the package says crop it at `80% 50%`.
+   */
+  bannerPosition?: string
 }
 
 export const SPECIALTY_THEMES: Record<SpecialtyFormat, SpecialtyTheme> = {
@@ -34,7 +40,7 @@ export const SPECIALTY_THEMES: Record<SpecialtyFormat, SpecialtyTheme> = {
   devy: { acc: '#e8701e', acc2: '#ffb36a', accInk: '#1a0a04', disp: 'Archivo', displayTitle: false },
   c2c: { acc: '#c9a24a', acc2: '#f1d58a', accInk: '#1a1204', disp: 'Archivo', displayTitle: false },
   koth: { acc: '#8b5cf6', acc2: '#f2c94c', accInk: '#fff', disp: 'Cinzel', displayTitle: true },
-  pirate: { acc: '#d4a017', acc2: '#ffe08a', accInk: '#1a1204', disp: 'Pirata One', displayTitle: true },
+  pirate: { acc: '#d4a017', acc2: '#ffe08a', accInk: '#1a1204', disp: 'Pirata One', displayTitle: true, bannerPosition: '80% 50%' },
   tournament: { acc: '#e8b84a', acc2: '#ffd98a', accInk: '#1a1204', disp: 'Archivo', displayTitle: false },
 }
 

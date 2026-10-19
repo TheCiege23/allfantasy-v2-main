@@ -100,6 +100,7 @@ export function SpecialtyHero({
   blurb,
   actions = [],
   clock,
+  bannerPosition,
 }: {
   format: SpecialtyFormat
   bannerSrc: string
@@ -111,12 +112,22 @@ export function SpecialtyHero({
   blurb?: ReactNode
   actions?: SpecialtyAction[]
   clock?: ReactNode
+  /** Overrides the format's `bannerPosition` (object-position). Default: the theme's, else centred. */
+  bannerPosition?: string
 }) {
   const displayTitle = SPECIALTY_THEMES[format].displayTitle
+  const objectPosition = bannerPosition ?? SPECIALTY_THEMES[format].bannerPosition
   return (
     <section className={styles.hero} data-testid="specialty-hero">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className={styles.bg} src={bannerSrc} alt="" aria-hidden />
+      <img
+        className={styles.bg}
+        src={bannerSrc}
+        alt=""
+        aria-hidden
+        style={objectPosition ? { objectPosition } : undefined}
+        data-testid="specialty-hero-banner"
+      />
       <div className={styles.veil} />
       <div className={styles.heroIn}>
         {/* eslint-disable-next-line @next/next/no-img-element */}

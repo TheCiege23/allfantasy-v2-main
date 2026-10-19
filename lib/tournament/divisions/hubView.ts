@@ -6,8 +6,8 @@
  * dev preview feed it the same shape, so the preview exercises the real path.
  */
 import {
-  championshipGame, computeDivision, divisionsCalendar, regionGames, REGIONS,
-  type BidStatus, type BracketGame, type DivisionTeamInput, type FormatSettings, type GameScores, type Region, type TieReason,
+  bracketFromSeeds, championshipGame, computeDivision, divisionsCalendar, regionGames, REGIONS,
+  type BidStatus, type BracketGame, type DivisionTeamInput, type FormatSettings, type GameScores, type Region, type SeededTeam, type TieReason,
 } from './engine'
 import { crestFor, leagueDisplayName, type CrestArt, type DivisionIdentity } from './identity'
 
@@ -47,8 +47,14 @@ export type HubGame = {
 }
 export type HubEntrant = { id: string; name: string; seedLine: number; region: Region; conferenceIndex: number; isMe: boolean }
 
+/** What "Commit seeding" and "Advance round" persisted for one division. */
+export type CommittedDivision = { seeded: SeededTeam[]; scores: GameScores; overrides: Record<string, string>; roundsCommitted: number }
+
 export type HubDivision = {
   index: 0 | 1
+  /** True once the commissioner committed seeding; the bracket then replays the snapshot. */
+  seedingCommitted: boolean
+  roundsCommitted: number
   name: string
   sideId: string
   emblem: string
@@ -90,7 +96,9 @@ export function buildHubView(input: {
   /** Explicit "you" for the preview, which has no user ids. */
   meTeamId?: string | null
   scores?: [GameScores, GameScores]
+  committed?: [CommittedDivision | null, CommittedDivision | null]
   championshipScore?: { a: number; b: number }
+  championshipOverride?: string
   sample?: boolean
 }): HubView {
   const { identity, settings } = input
@@ -112,7 +120,8 @@ export function buildHubView(input: {
     })
     const totals = new Map(result.conferences.map(c => [c.conferenceId, c]))
     const conferenceIdByIndex = new Map(teams.map(t => [t.conferenceIndex, t.conferenceId]))
-    const rounds = result.bracket
+    const committed = input.committed?.[index] ?? null
+    const rounds = committed ? bracketFromSeeds(committed.seeded, committed.scores, committed.overrides) : result.bracket
     const regionRounds = rounds ? Object.fromEntries(REGIONS.map(r => [r, regionGames(rounds, r).map(gs => gs.map(mapGame))])) : {}
     const regionCount = rounds ? Math.log2(rounds[0]!.length * 2) - 2 : 0
     const finals = rounds ? rounds.slice(regionCount).map(gs => gs.map(mapGame)) : []
@@ -129,7 +138,9 @@ export function buildHubView(input: {
         const t = totals.get(conferenceIdByIndex.get(ci) ?? '')
         return { conferenceIndex: ci, leagueName: leagueDisplayName(conf.name, def.name), crest: crestFor(def, conf), points: t?.points ?? 0, teams: t?.teams ?? 0, inBracket: t?.inBracket ?? 0 }
       }),
-      seeded: Boolean(result.seeded),
+      seeded: Boolean(rounds),
+      seedingCommitted: Boolean(committed),
+      roundsCommitted: committed?.roundsCommitted ?? 0,
       regions: regionRounds,
       finals,
       champion: entrant(finalGame?.winner ?? null),
@@ -138,7 +149,7 @@ export function buildHubView(input: {
   }) as [HubDivision, HubDivision]
 
   const [ca, cb] = championsRaw
-  const champ = divisions[0].seeded && divisions[1].seeded ? mapGame(championshipGame(ca ?? null, cb ?? null, input.championshipScore)) : null
+  const champ = divisions[0].seeded && divisions[1].seeded ? mapGame(championshipGame(ca ?? null, cb ?? null, input.championshipScore, input.championshipOverride)) : null
   return {
     tournament: input.tournament, settings, calendar: divisionsCalendar(settings), identity,
     weeksPlayed: Math.max(0, ...input.teams.map(t => t.wins + t.losses + (t.ties ?? 0))),
