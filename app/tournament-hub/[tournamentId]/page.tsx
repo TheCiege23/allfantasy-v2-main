@@ -44,7 +44,7 @@ export default async function TournamentHubPage({
   // Divisions & conferences tournaments have their own screens (record standings,
   // wildcard pool, regional brackets). Null for any other format, or no access.
   const divisions = await loadDivisionsHub(tournamentId, userId)
-  if (divisions) return <DivisionsHub view={divisions} canManage={divisions.canManage} />
+  if (divisions) return <DivisionsHub view={divisions} canManage={divisions.canManage} leagueLinks={divisions.leagueLinks} />
 
   const blueprint = await loadSeasonBlueprint(tournamentId, userId)
   if (blueprint) return <SeasonTournamentPlanner key={blueprint.tournamentId + blueprint.revision} saved={blueprint} />
