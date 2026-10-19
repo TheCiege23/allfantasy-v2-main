@@ -169,7 +169,7 @@ export async function readDivisionsState(tournamentId: string) {
   const conferenceIndex = new Map(shell.conferences.map((c, i) => [c.id, i]))
   const leagues = await prisma.tournamentLeague.findMany({
     where: { tournamentId, divisionId: { not: null }, conferenceId: { not: null } },
-    select: { id: true, name: true, leagueId: true, divisionId: true, conferenceId: true, draftScheduledAt: true, participants: {
+    select: { id: true, name: true, leagueId: true, status: true, divisionId: true, conferenceId: true, draftScheduledAt: true, participants: {
       select: { id: true, userId: true, wins: true, losses: true, ties: true, pointsFor: true, redraftRosterId: true, advancementStatus: true, participant: { select: { displayName: true } } },
     } },
   })
@@ -214,7 +214,7 @@ export function viewFromState(state: NonNullable<DivisionsState>, userId: string
  * and the tournament's own participants (including followers); null otherwise (and
  * for "no such tournament", so a 404 never confirms one exists).
  */
-export async function loadDivisionsHub(tournamentId: string, userId: string): Promise<(HubView & { canManage: boolean }) | null> {
+export async function loadDivisionsHub(tournamentId: string, userId: string): Promise<(HubView & { canManage: boolean; leagueLinks: Array<{ name: string; leagueId: string }> }) | null> {
   const state = await readDivisionsState(tournamentId)
   if (!state) return null
   const { shell } = state
@@ -222,7 +222,10 @@ export async function loadDivisionsHub(tournamentId: string, userId: string): Pr
   const grant = isOwner ? null : await prisma.tournamentShellGrant.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } })
   const participant = isOwner || grant ? null : await prisma.tournamentParticipant.findUnique({ where: { tournamentId_userId: { tournamentId, userId } }, select: { id: true } })
   if (!isOwner && !grant && !participant) return null
-  return { ...viewFromState(state, userId), canManage: isOwner || Boolean(grant && can({ userId, commissionerId: shell.commissionerId, grant }, 'editSettings')) }
+  const canManage = isOwner || Boolean(grant && can({ userId, commissionerId: shell.commissionerId, grant }, 'editSettings'))
+  // The commissioner runs every conference league, so they get a link to each real one.
+  const leagueLinks = canManage ? state.leagues.flatMap(l => (l.leagueId ? [{ name: l.name, leagueId: l.leagueId }] : [])).sort((a, b) => a.name.localeCompare(b.name)) : []
+  return { ...viewFromState(state, userId), canManage, leagueLinks }
 }
 
 /** The latest saved plan, for re-opening the planner on a blueprint. */

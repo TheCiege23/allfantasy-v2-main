@@ -23,6 +23,7 @@ import { leagueDisplayName } from './identity'
 import { placeEntrants, promotions, type PlacementEntrant } from './registration'
 import { readWeekScores } from './weekScores'
 import { sendMoment, postMomentToLeagueChats, type MomentRecipient } from './notify'
+import { CONFERENCE_LEAGUE_READY, provisionConferenceLeagues, type ProvisionResult } from './conferenceLeagues'
 
 const ACTIVE = ['registered', 'waitlisted']
 const hubHref = (id: string) => `/tournament-hub/${encodeURIComponent(id)}`
@@ -201,9 +202,41 @@ export async function closeAndPlace(userId: string, tournamentId: string) {
     await audit(tx, tournamentId, userId, 'divisions_leagues_placed', { ...placement.log, leagues: placement.leagues.map(l => ({ division: l.division, conference: l.conference, size: l.members.length })) })
     return { name: shell.name, leagues: out }
   })
+  // The placement stands on its own; real leagues are built per conference after it commits, and
+  // whatever is not ready yet is retried from the control screen (`provisionLeagues`).
+  const provisioning = await runProvisioning(tournamentId, userId)
   const recipients: MomentRecipient[] = placed.leagues.flatMap(l => l.members.map(m => ({ userId: m.userId, href: hubHref(tournamentId) + '/reveal', ctx: { tournament: placed.name, league: l.name, division: l.division, teams: l.members.length } })))
   await sendMoment(tournamentId, 'league_revealed', recipients)
-  return { leagues: placed.leagues.length, seed }
+  return { leagues: placed.leagues.length, seed, provisioning }
+}
+
+function provisioningSummary(r: ProvisionResult | null) {
+  if (!r) return { complete: false, ready: 0, failed: 0, pending: 0, problems: ['League setup did not run. Try again from the control screen.'] }
+  return {
+    complete: r.complete,
+    ready: r.outcomes.filter(o => o.outcome === 'created' || o.outcome === 'ready').length,
+    failed: r.outcomes.filter(o => o.outcome === 'failed').length,
+    pending: r.outcomes.filter(o => o.outcome === 'pending' || o.outcome === 'busy').length,
+    problems: r.outcomes.filter(o => o.error).map(o => `${o.name}: ${o.error}`),
+  }
+}
+
+async function runProvisioning(tournamentId: string, userId: string) {
+  try {
+    return provisioningSummary(await provisionConferenceLeagues(tournamentId, userId))
+  } catch (e) {
+    console.warn('[tournament/divisions] conference league setup did not run', e instanceof Error ? e.message : 'unknown error')
+    return provisioningSummary(null)
+  }
+}
+
+/** Commissioner retry: build every conference league that is not ready yet. A no-op once all are. */
+export async function provisionLeagues(userId: string, tournamentId: string) {
+  await prisma.$transaction(async tx => {
+    const shell = await assertCan(tx, tournamentId, userId, 'editSettings')
+    if (!['placed', 'live', 'complete'].includes(shell.status)) throw new DivisionsOperationError('Place the leagues first.', 409)
+  })
+  return provisioningSummary(await provisionConferenceLeagues(tournamentId, userId))
 }
 
 /** The commissioner sets a league's draft time; its members hear about it at once. */
@@ -244,7 +277,7 @@ export async function loadControl(userId: string, tournamentId: string) {
   const roundPreview = !preview ? null : preview.kind === 'division'
     ? { round: preview.round, week: preview.week, label: preview.label, kind: 'division' as const, blockers: [...new Set(preview.plans.flatMap(p => p.blockers))], divisions: preview.plans.map(p => ({ needsReview: p.needsReview, games: p.games.map(g => ({ key: g.key, a: slim(g.a), b: slim(g.b), scoreA: g.scoreA, scoreB: g.scoreB, winnerId: g.winner?.id ?? null, decidedBy: g.decidedBy })) })) }
     : { round: preview.round, week: preview.week, label: preview.label, kind: 'championship' as const, blockers: preview.champs.some(c => !c) ? ['Both division finals must be decided first.'] : [], champs: preview.champs.map(c => slim(c)), scores: preview.champs.map(c => (c ? preview.scores.get(c.id) ?? null : null)) }
-  return { roundPreview, view, state: { status: state.shell.status, registration: state.registration, capacity: state.shell.maxParticipants }, seeding: seedingChecklist(state, confirmations), rounds: roundChecklist(state, view, confirmations), audits: audits.map(a => ({ id: a.id, action: a.action, at: a.createdAt.toISOString(), data: a.data })), counts: Object.fromEntries(registration.map(r => [r.status, r._count._all])) as Record<string, number>, leagues: state.leagues.map(l => ({ id: l.id, name: l.name, draftAt: l.draftScheduledAt?.toISOString() ?? null, teams: l.participants.length })) }
+  return { roundPreview, view, state: { status: state.shell.status, registration: state.registration, capacity: state.shell.maxParticipants }, seeding: seedingChecklist(state, confirmations), rounds: roundChecklist(state, view, confirmations), audits: audits.map(a => ({ id: a.id, action: a.action, at: a.createdAt.toISOString(), data: a.data })), counts: Object.fromEntries(registration.map(r => [r.status, r._count._all])) as Record<string, number>, leagues: state.leagues.map(l => ({ id: l.id, name: l.name, draftAt: l.draftScheduledAt?.toISOString() ?? null, teams: l.participants.length, leagueId: l.leagueId, ready: Boolean(l.leagueId) && l.status === CONFERENCE_LEAGUE_READY })) }
 }
 
 function seedingChecklist(state: NonNullable<DivisionsState>, confirmations: Set<number | undefined>) {

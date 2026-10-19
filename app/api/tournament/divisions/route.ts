@@ -6,7 +6,7 @@ import { DivisionsBlueprintError } from '@/lib/tournament/divisions/blueprint'
 import { DivisionsOperationError, saveDivisionsBlueprint, updateDivisionsBlueprint } from '@/lib/tournament/divisions/divisionsStore'
 import {
   advanceRound, callTies, closeAndPlace, commitSeeding, confirmCorrectionsClosed, followTournament, joinTournament,
-  leaveTournament, markRevealSeen, notifyBubble, openRegistration, setDraftTime,
+  leaveTournament, markRevealSeen, notifyBubble, openRegistration, provisionLeagues, setDraftTime,
 } from '@/lib/tournament/divisions/lifecycle'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +22,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('leave'), tournamentId: id }),
   z.object({ action: z.literal('follow'), tournamentId: id }),
   z.object({ action: z.literal('close_and_place'), tournamentId: id }),
+  z.object({ action: z.literal('provision_leagues'), tournamentId: id }),
   z.object({ action: z.literal('reveal_seen'), tournamentId: id }),
   z.object({ action: z.literal('set_draft_time'), tournamentId: id, tournamentLeagueId: id, at: z.string().datetime({ offset: true }) }),
   // control
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
       case 'leave': return NextResponse.json(await leaveTournament(userId, input.tournamentId))
       case 'follow': return NextResponse.json(await followTournament(userId, input.tournamentId))
       case 'close_and_place': return NextResponse.json(await closeAndPlace(userId, input.tournamentId))
+      case 'provision_leagues': return NextResponse.json(await provisionLeagues(userId, input.tournamentId))
       case 'reveal_seen': return NextResponse.json(await markRevealSeen(userId, input.tournamentId))
       case 'set_draft_time': return NextResponse.json(await setDraftTime(userId, input.tournamentId, input.tournamentLeagueId, input.at))
       case 'confirm_corrections': return NextResponse.json(await confirmCorrectionsClosed(userId, input.tournamentId, input.week))

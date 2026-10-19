@@ -504,7 +504,26 @@ function MobileDivision({ view, openBracket }: { view: HubView; openBracket: () 
 
 // ── shell ────────────────────────────────────────────────────────────────────
 
-export function DivisionsHub({ view, initialScreen = 'standings', canManage = false }: { view: HubView; initialScreen?: View; canManage?: boolean }) {
+/** "Go to your league": a member's own conference league; the commissioner gets every one. */
+export function LeagueLinks({ myLeagueId, leagueLinks }: { myLeagueId: string | null; leagueLinks: Array<{ name: string; leagueId: string }> }) {
+  const others = leagueLinks.filter(l => l.leagueId !== myLeagueId)
+  if (!myLeagueId && !others.length) return null
+  return (
+    <>
+      {myLeagueId && <Link href={`/league/${myLeagueId}`} className="grid min-h-11 place-items-center rounded-xl bg-[#e8b84a] px-4 text-sm font-bold text-[#1a1204]">Go to your league</Link>}
+      {others.length > 0 && (
+        <details className="relative">
+          <summary className="grid min-h-11 cursor-pointer list-none place-items-center rounded-xl border border-white/15 px-4 text-sm font-semibold">{myLeagueId ? 'Other leagues' : 'Go to a league'} ({others.length})</summary>
+          <ul className="absolute z-20 mt-2 max-h-80 w-72 overflow-y-auto rounded-xl border border-white/15 bg-[#0e1018] p-2 shadow-xl">
+            {others.map(l => <li key={l.leagueId}><Link href={`/league/${l.leagueId}`} className="flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-white/5">{l.name}</Link></li>)}
+          </ul>
+        </details>
+      )}
+    </>
+  )
+}
+
+export function DivisionsHub({ view, initialScreen = 'standings', canManage = false, leagueLinks = [] }: { view: HubView; initialScreen?: View; canManage?: boolean; leagueLinks?: Array<{ name: string; leagueId: string }> }) {
   const [screen, setScreen] = useState<View>(initialScreen)
   const [divisionIndex, setDivisionIndex] = useState<0 | 1>(view.me?.divisionIndex ?? 0)
   const myDivision = view.me ? view.divisions[view.me.divisionIndex] : null
@@ -514,6 +533,7 @@ export function DivisionsHub({ view, initialScreen = 'standings', canManage = fa
       <nav aria-label="Tournament screens" className="flex flex-wrap items-center gap-3">
         <Seg label="Tournament screens" value={screen} onChange={setScreen} options={[['standings', 'Standings'], ['wildcard', 'Wildcard'], ['bracket', 'Bracket'], ['championship', 'Championship']]} />
         {!view.sample && <span className="flex flex-wrap gap-2">
+          <LeagueLinks myLeagueId={view.me?.leagueId ?? null} leagueLinks={leagueLinks} />
           {canManage && <Link href={`/tournament-hub/${view.tournament.id}/control`} className="grid min-h-11 place-items-center rounded-xl border border-white/15 px-4 text-sm font-semibold">Seeding and round control</Link>}
           {['registering', 'blueprint'].includes(view.tournament.status) && <Link href={`/tournament-hub/${view.tournament.id}/join`} className="grid min-h-11 place-items-center rounded-xl border border-white/15 px-4 text-sm font-semibold">Invite page</Link>}
           {view.me && view.divisions.every(d => d.seedingCommitted) && <Link href={`/tournament-trophy/${view.tournament.id}?entry=${encodeURIComponent(view.me.teamId)}`} className="grid min-h-11 place-items-center rounded-xl border border-white/15 px-4 text-sm font-semibold">My share card</Link>}

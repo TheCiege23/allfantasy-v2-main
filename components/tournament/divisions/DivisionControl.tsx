@@ -23,7 +23,7 @@ const fmt = (n: number | null | undefined) => (n == null ? '—' : n.toFixed(1))
 const AUDIT_TEXT: Record<string, string> = {
   divisions_blueprint_created: 'Tournament plan saved', divisions_blueprint_updated: 'Tournament plan updated',
   divisions_registration_opened: 'Registration opened', divisions_entry_joined: 'Entrant joined', divisions_entry_withdrawn: 'Entrant left',
-  divisions_waitlist_promoted: 'Waitlist spot filled', divisions_leagues_placed: 'Leagues placed', divisions_draft_scheduled: 'Draft time set',
+  divisions_waitlist_promoted: 'Waitlist spot filled', divisions_leagues_placed: 'Leagues placed', divisions_conference_leagues_provisioned: 'Conference leagues set up', divisions_draft_scheduled: 'Draft time set',
   divisions_corrections_closed: 'Stat corrections confirmed closed', divisions_tie_calls: 'Commissioner tie call', divisions_seeding_committed: 'Seeding committed',
   divisions_bubble_notified: 'Bubble alerts sent', divisions_round_advanced: 'Round advanced', divisions_championship_committed: 'Champion crowned',
 }
@@ -108,6 +108,7 @@ export function DivisionControl({ control, preview = false }: { control: Control
               <button type="button" disabled={busy || !ack} onClick={() => act({ action: 'close_and_place' }, 'Leagues placed. Everyone has been told.')} className="min-h-12 w-full rounded-xl bg-[#e8b84a] font-bold text-[#1a1204] disabled:opacity-40">Close registration and place leagues</button>
             </div>
           )}
+          {control.leagues.length > 0 && <LeagueSetup leagues={control.leagues} audits={control.audits} disabled={busy || preview} onRetry={() => act({ action: 'provision_leagues' }, 'League setup ran. Check each conference below.')} />}
           {control.leagues.length > 0 && (
             <div>
               <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Draft times</h3>
@@ -259,6 +260,34 @@ export function DivisionControl({ control, preview = false }: { control: Control
 
       {tab === 'notifications' && <TournamentNotificationsPanel view={view} />}
     </main>
+  )
+}
+
+type SetupProblem = { league: string; outcome: string; error: string | null }
+
+/** Each conference's real league: ready (with a link), or not yet — with the last run's reason and a retry. */
+export function LeagueSetup({ leagues, audits, disabled, onRetry }: { leagues: Control['leagues']; audits: Control['audits']; disabled: boolean; onRetry: () => void }) {
+  const waiting = leagues.filter(l => !l.ready)
+  const last = audits.find(a => a.action === 'divisions_conference_leagues_provisioned')
+  const problems = new Map(((last?.data as { problems?: SetupProblem[] } | null)?.problems ?? []).map(p => [p.league, p]))
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Conference leagues · {leagues.length - waiting.length} of {leagues.length} ready</h3>
+        {waiting.length > 0 && <button type="button" disabled={disabled} onClick={onRetry} className="ml-auto min-h-11 rounded-xl bg-[#e8b84a] px-4 font-bold text-[#1a1204] disabled:opacity-40">Set up {waiting.length} remaining league{waiting.length === 1 ? '' : 's'}</button>}
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {leagues.map(l => {
+          const problem = problems.get(l.name)
+          return (
+            <li key={l.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#0e1018] p-3">
+              <span className="min-w-0 flex-1"><b>{l.name}</b> <span className={'text-sm ' + (l.ready ? 'text-[#6fe0a8]' : 'text-amber-300')}>· {l.ready ? 'League and draft ready' : problem?.error ?? (problem?.outcome === 'busy' ? 'Being set up now' : 'Not set up yet')}</span></span>
+              {l.leagueId && <Link href={`/league/${l.leagueId}`} className="grid min-h-11 place-items-center rounded-lg border border-white/15 px-3 text-sm font-bold">Open league</Link>}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
