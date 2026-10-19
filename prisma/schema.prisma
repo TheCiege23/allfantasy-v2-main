@@ -9102,7 +9102,7 @@ model SurvivorIdolType {
   sortOrder       Int      @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime @default(now()) @updatedAt
 
   @@index([isActive, sortOrder])
   @@map("survivor_idol_types")
@@ -9122,7 +9122,7 @@ model SurvivorIdolConfig {
   pointSurgePct   Int       @default(15)
   tributePct      Int       @default(10)
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  updatedAt       DateTime  @default(now()) @updatedAt
   league          League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@map("survivor_idol_configs")
@@ -15768,8 +15768,8 @@ model SurvivorGuillotineLeague {
   revision       Int      @default(1)
   lastCorrectionCheckAt DateTime?
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  league         League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime @default(now()) @updatedAt
+  league         League   @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("survivor_guillotine_leagues")
 }
@@ -15791,7 +15791,7 @@ model SurvivorGuillotinePower {
   revealedAt         DateTime?
   activatedAt        DateTime?
   createdAt          DateTime  @default(now())
-  league             League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league             League    @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([leagueId, ownerUserId, status])
   @@index([leagueId, playerId, status])
@@ -15807,10 +15807,10 @@ model SurvivorGuillotineCaptainVote {
   voterRosterId     String
   candidateRosterId String
   createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  league            League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  updatedAt         DateTime @default(now()) @updatedAt
+  league            League   @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([leagueId, period, voterRosterId])
+  @@unique([leagueId, period, voterRosterId], map: "survivor_guillotine_captain_votes_leagueId_period_voterRosterId")
   @@index([leagueId, period, tribeId])
   @@map("survivor_guillotine_captain_votes")
 }
@@ -15824,10 +15824,10 @@ model SurvivorGuillotineChoiceVote {
   voterRosterId String
   choice        Json
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  updatedAt     DateTime @default(now()) @updatedAt
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([leagueId, period, slotKey, voterRosterId])
+  @@unique([leagueId, period, slotKey, voterRosterId], map: "survivor_guillotine_choice_votes_leagueId_period_slotKey_voterR")
   @@index([leagueId, period, slotKey])
   @@map("survivor_guillotine_choice_votes")
 }
@@ -15838,8 +15838,8 @@ model SurvivorGuillotineTribeChoice {
   rosterId  String
   tribeId   String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @default(now()) @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([leagueId, rosterId])
   @@index([leagueId, tribeId])
@@ -15854,10 +15854,10 @@ model SurvivorGuillotineDailyLineup {
   gameDay   DateTime @db.Date
   playerIds Json
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @default(now()) @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([leagueId, period, rosterId, gameDay])
+  @@unique([leagueId, period, rosterId, gameDay], map: "survivor_guillotine_daily_lineups_leagueId_period_rosterId_game")
   @@index([leagueId, period, gameDay])
   @@map("survivor_guillotine_daily_lineups")
 }
@@ -15870,8 +15870,8 @@ model SurvivorGuillotineAuctionBid {
   amount    Int
   status    String   @default("sealed")
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @default(now()) @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([leagueId, period, rosterId])
   @@index([leagueId, period, status])
@@ -15890,7 +15890,7 @@ model SurvivorGuillotineChop {
   reversedAt  DateTime?
   reversalReason String?
   createdAt   DateTime @default(now())
-  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([leagueId, period, rosterId])
   @@index([leagueId, period])
