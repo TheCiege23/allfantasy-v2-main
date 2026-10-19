@@ -74,6 +74,11 @@ vi.mock('@/lib/league-creation/canonical/executeCanonicalLeagueCreation', () => 
 vi.mock('@/lib/league/leagueSeats', () => ({ assignLeagueSeat: (t: unknown, a: never) => assign(t, a), releaseLeagueSeat: (t: unknown, a: never) => release(t, a) }))
 vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ buildSlotOrderForLeague: vi.fn(async () => []) }))
 vi.mock('@/lib/nfl-scoring/NflScoringConfigService', () => ({ saveLeagueNflScoringConfig: (...a: unknown[]) => saveScoring(...a) }))
+const { syncCo, syncDraft } = vi.hoisted(() => ({
+  syncCo: vi.fn(async (..._a: unknown[]) => [{ tournamentLeagueId: 'tl1', name: 'Conference 1', leagueId: 'L1', outcome: 'updated', added: 1, removed: 0 }]),
+  syncDraft: vi.fn(async (..._a: unknown[]) => []),
+}))
+vi.mock('@/lib/tournament/divisions/conferenceLeagueSync', () => ({ syncConferenceCoCommissioners: (...a: unknown[]) => syncCo(...a), syncConferenceDraftTimes: (...a: unknown[]) => syncDraft(...a) }))
 
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { nflScoringSeedForCreate } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
@@ -92,7 +97,7 @@ const heldBy = (leagueId: string) => db.seats.filter(s => s.leagueId === leagueI
 
 beforeEach(() => {
   db.shell = null; db.leagues = []; db.seats = []; db.holders = new Map(); db.sessions = []; db.audits = []; db.bodies = []; db.failNames = new Set(); db.n = 0
-  create.mockClear(); assign.mockClear(); release.mockClear(); saveScoring.mockClear()
+  create.mockClear(); assign.mockClear(); release.mockClear(); saveScoring.mockClear(); syncCo.mockClear(); syncDraft.mockClear()
 })
 
 describe('conference league settings come from the tournament rules', () => {
@@ -168,6 +173,29 @@ describe('placement creates real leagues', () => {
     expect(create).toHaveBeenCalledTimes(2)
     expect(assign).not.toHaveBeenCalled()
     expect(again.outcomes.map(o => o.outcome)).toEqual(['ready', 'ready'])
+  })
+
+  it('hands the tournament co-commissioners and draft times to the new leagues, once', async () => {
+    db.shell = shell({ sport: 'NFL' })
+    placed(2, 10, 8)
+    const r = await provisionConferenceLeagues('t1', 'owner')
+    expect(syncCo).toHaveBeenCalledWith('t1', 'owner')
+    expect(syncDraft).toHaveBeenCalledWith('t1', 'owner')
+    expect(r.coCommissioners?.[0]?.outcome).toBe('updated')
+    syncCo.mockClear(); syncDraft.mockClear()
+    await provisionConferenceLeagues('t1', 'owner')
+    expect(syncCo).not.toHaveBeenCalled()
+    expect(syncDraft).not.toHaveBeenCalled()
+  })
+
+  it('a co-commissioner sync failure never undoes league setup', async () => {
+    db.shell = shell({ sport: 'NFL' })
+    placed(1, 10, 8)
+    syncCo.mockRejectedValueOnce(new Error('boom'))
+    const r = await provisionConferenceLeagues('t1', 'owner')
+    expect(r.complete).toBe(true)
+    expect(r.coCommissioners).toBeUndefined()
+    expect(syncDraft).toHaveBeenCalled()
   })
 
   it('a failure in one conference does not stop or duplicate the others, and the retry creates only the missing one', async () => {

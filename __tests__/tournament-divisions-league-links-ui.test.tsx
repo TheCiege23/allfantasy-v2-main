@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }))
 
 import { LeagueLinks } from '@/components/tournament/divisions/DivisionsHub'
-import { LeagueSetup } from '@/components/tournament/divisions/DivisionControl'
+import { CoCommissioners, LeagueSetup, draftSyncText } from '@/components/tournament/divisions/DivisionControl'
 
 describe('Go to your league (hub)', () => {
   it('a member gets a link to their own conference league', () => {
@@ -44,6 +44,41 @@ describe('conference league setup (control screen)', () => {
 
   it('offers no retry once every league is ready', () => {
     render(<LeagueSetup leagues={[leagues[0]!]} audits={[]} disabled={false} onRetry={vi.fn()} />)
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+describe('league sync outcomes (control screen)', () => {
+  it('says what happened to each league draft when a time is set', () => {
+    expect(draftSyncText({ outcome: 'scheduled' })).toBe('League draft scheduled.')
+    expect(draftSyncText({ outcome: 'skipped_started' })).toMatch(/already started/)
+    expect(draftSyncText({ outcome: 'not_ready' })).toMatch(/not set up yet/)
+    expect(draftSyncText({ outcome: 'failed', error: 'Refused.' })).toBe('Refused.')
+  })
+
+  const control = (isOwner: boolean) => ({
+    isOwner,
+    coCommissioners: [{ userId: 'co1', name: 'Casey' }],
+    leagues: [
+      { id: 'tl1', name: 'North Gold', draftAt: null, teams: 12, leagueId: 'L1', ready: true, draftSync: null, coCommissionerSync: { outcome: 'updated', error: null } },
+      { id: 'tl2', name: 'South Gold', draftAt: null, teams: 12, leagueId: 'L2', ready: true, draftSync: null, coCommissionerSync: { outcome: 'failed', error: 'Could not update this one.' } },
+    ],
+  }) as never
+
+  it('lists co-commissioners with their league coverage and lets the owner add and remove', () => {
+    const onAdd = vi.fn(), onRemove = vi.fn()
+    render(<CoCommissioners control={control(true)} disabled={false} onAdd={onAdd} onRemove={onRemove} />)
+    expect(screen.getByText(/co-commissioner in 1 of 2 leagues/)).toBeTruthy()
+    expect(screen.getByText(/South Gold: Could not update this one/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(onRemove).toHaveBeenCalledWith('co1', 'Casey')
+    fireEvent.change(screen.getByLabelText('Co-commissioner username'), { target: { value: ' pat ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add co-commissioner' }))
+    expect(onAdd).toHaveBeenCalledWith('pat')
+  })
+
+  it('staff who are not the owner see the list but cannot change it', () => {
+    render(<CoCommissioners control={control(false)} disabled={false} onAdd={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

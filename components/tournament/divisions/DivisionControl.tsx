@@ -24,6 +24,7 @@ const AUDIT_TEXT: Record<string, string> = {
   divisions_blueprint_created: 'Tournament plan saved', divisions_blueprint_updated: 'Tournament plan updated',
   divisions_registration_opened: 'Registration opened', divisions_entry_joined: 'Entrant joined', divisions_entry_withdrawn: 'Entrant left',
   divisions_waitlist_promoted: 'Waitlist spot filled', divisions_leagues_placed: 'Leagues placed', divisions_conference_leagues_provisioned: 'Conference leagues set up', divisions_draft_scheduled: 'Draft time set',
+  divisions_draft_times_synced: 'Draft times sent to leagues', divisions_co_commissioners_synced: 'Co-commissioners updated in leagues', divisions_co_commissioner_added: 'Co-commissioner added', divisions_co_commissioner_removed: 'Co-commissioner removed',
   divisions_corrections_closed: 'Stat corrections confirmed closed', divisions_tie_calls: 'Commissioner tie call', divisions_seeding_committed: 'Seeding committed',
   divisions_bubble_notified: 'Bubble alerts sent', divisions_round_advanced: 'Round advanced', divisions_championship_committed: 'Champion crowned',
 }
@@ -52,14 +53,14 @@ export function DivisionControl({ control, preview = false }: { control: Control
   const [allowGrouping, setAllowGrouping] = useState(false)
   const tid = view.tournament.id
 
-  async function act(body: Record<string, unknown>, done: string) {
+  async function act(body: Record<string, unknown>, done: string | ((json: Record<string, unknown>) => string)) {
     if (busy || preview) return
     setBusy(true); setMessage('')
     try {
       const res = await fetch('/api/tournament/divisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: tid, ...body }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'That did not work.')
-      setMessage(done); setAck(false); router.refresh()
+      setMessage(typeof done === 'string' ? done : done(json)); setAck(false); router.refresh()
     } catch (e) { setMessage(e instanceof Error ? e.message : 'That did not work.') } finally { setBusy(false) }
   }
 
@@ -113,9 +114,14 @@ export function DivisionControl({ control, preview = false }: { control: Control
             <div>
               <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Draft times</h3>
               <ul className="grid gap-2 sm:grid-cols-2">
-                {control.leagues.map(l => <DraftRow key={l.id} league={l} disabled={busy || preview} onSave={at => act({ action: 'set_draft_time', tournamentLeagueId: l.id, at }, `Draft time set for ${l.name}. Its managers have been told.`)} />)}
+                {control.leagues.map(l => <DraftRow key={l.id} league={l} disabled={busy || preview} onSave={at => act({ action: 'set_draft_time', tournamentLeagueId: l.id, at }, json => `Draft time set for ${l.name}. Its managers have been told. ${draftSyncText((json.leagues as Array<{ outcome: string; error?: string }> | undefined)?.[0] ?? null)}`)} />)}
               </ul>
             </div>
+          )}
+          {control.leagues.length > 0 && (
+            <CoCommissioners control={control} disabled={busy || preview}
+              onAdd={username => act({ action: 'add_co_commissioner', username }, json => `${username} is now a co-commissioner. ${coSyncText(json.leagues)}`)}
+              onRemove={(assigneeId, name) => act({ action: 'remove_co_commissioner', assigneeId }, json => `${name} is no longer a co-commissioner. ${coSyncText(json.leagues)}`)} />
           )}
         </section>
       )}
@@ -291,14 +297,65 @@ export function LeagueSetup({ leagues, audits, disabled, onRetry }: { leagues: C
   )
 }
 
-function DraftRow({ league, disabled, onSave }: { league: { id: string; name: string; draftAt: string | null; teams: number }; disabled: boolean; onSave: (iso: string) => void }) {
+/** What happened to a conference's real league draft when its tournament draft time was set. */
+export function draftSyncText(sync: { outcome: string; error?: string | null } | null): string {
+  if (!sync) return ''
+  switch (sync.outcome) {
+    case 'scheduled': case 'unchanged': return 'League draft scheduled.'
+    case 'skipped_started': return 'League draft already started, so it was not moved.'
+    case 'not_ready': return 'The league is not set up yet; it gets this time when it is.'
+    default: return sync.error || 'The league draft could not be scheduled. Set the time again to retry.'
+  }
+}
+
+function coSyncText(leagues: unknown): string {
+  const list = Array.isArray(leagues) ? (leagues as Array<{ outcome: string }>) : []
+  if (!list.length) return 'No conference leagues yet; they are added when the leagues are set up.'
+  const failed = list.filter(l => l.outcome === 'failed').length
+  return failed ? `Updated ${list.length - failed} of ${list.length} leagues; ${failed} could not be updated.` : `Updated in all ${list.length} leagues.`
+}
+
+function DraftRow({ league, disabled, onSave }: { league: Control['leagues'][number]; disabled: boolean; onSave: (iso: string) => void }) {
   const [value, setValue] = useState('')
+  const sync = league.draftAt ? draftSyncText(league.draftSync) : ''
+  const syncOk = league.draftSync?.outcome === 'scheduled' || league.draftSync?.outcome === 'unchanged'
   return (
     <li className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#0e1018] p-3">
-      <span className="min-w-0 flex-1"><b>{league.name}</b> <span className="text-sm text-slate-400">· {league.teams} teams · {league.draftAt ? new Date(league.draftAt).toLocaleString() : 'no time yet'}</span></span>
+      <span className="min-w-0 flex-1"><b>{league.name}</b> <span className="text-sm text-slate-400">· {league.teams} teams · {league.draftAt ? new Date(league.draftAt).toLocaleString() : 'no time yet'}</span>
+        {sync && <span className={'block text-sm ' + (syncOk ? 'text-[#6fe0a8]' : 'text-amber-300')}>{sync}</span>}</span>
       <input type="datetime-local" aria-label={`Draft time for ${league.name}`} value={value} onChange={e => setValue(e.target.value)} className="min-h-11 rounded-lg border border-white/15 bg-[#07080d] px-2" />
       <button type="button" disabled={disabled || !value} onClick={() => onSave(new Date(value).toISOString())} className="min-h-11 rounded-lg border border-white/15 px-3 font-bold disabled:opacity-40">Set</button>
     </li>
+  )
+}
+
+/** Tournament co-commissioners: each one co-runs every conference league, without a team. */
+export function CoCommissioners({ control, disabled, onAdd, onRemove }: { control: Control; disabled: boolean; onAdd: (username: string) => void; onRemove: (userId: string, name: string) => void }) {
+  const [username, setUsername] = useState('')
+  const linked = control.leagues.filter(l => l.leagueId)
+  const problems = linked.filter(l => l.coCommissionerSync?.outcome === 'failed')
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Co-commissioners</h3>
+      <p className="mb-2 text-sm text-slate-400">They can change settings in every conference league. Nobody gets a team for this.</p>
+      {control.coCommissioners.length === 0 ? <p className="text-sm text-slate-400">None yet.</p> : (
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {control.coCommissioners.map(c => (
+            <li key={c.userId} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#0e1018] p-3">
+              <span className="min-w-0 flex-1"><b>{c.name}</b> <span className="text-sm text-slate-400">· {linked.length ? `co-commissioner in ${linked.length - problems.length} of ${linked.length} leagues` : 'leagues not set up yet'}</span></span>
+              {control.isOwner && <button type="button" disabled={disabled} onClick={() => onRemove(c.userId, c.name)} className="min-h-11 rounded-lg border border-white/15 px-3 font-bold disabled:opacity-40">Remove</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {problems.length > 0 && <ul className="mt-2 text-sm text-amber-300">{problems.map(l => <li key={l.id}>{l.name}: {l.coCommissionerSync?.error ?? 'Could not be updated.'}</li>)}</ul>}
+      {control.isOwner && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input aria-label="Co-commissioner username" placeholder="AllFantasy username" value={username} onChange={e => setUsername(e.target.value)} className="min-h-11 min-w-0 flex-1 rounded-lg border border-white/15 bg-[#07080d] px-3" />
+          <button type="button" disabled={disabled || !username.trim()} onClick={() => { onAdd(username.trim()); setUsername('') }} className="min-h-11 rounded-lg border border-white/15 px-4 font-bold disabled:opacity-40">Add co-commissioner</button>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -93,7 +93,7 @@ export default async function DivisionsPreviewPage({ searchParams }: { searchPar
       seeding: { week: 10, results: 240, provisional: true, correctionsClosed: true, ties: [], committed: false, blockers: [] },
       rounds: { committedRounds: 0, nextRound: 1, nextWeek: 11, nextLabel: 'Round of 64', correctionsClosed: false, championship: null },
       audits: [{ id: 'a1', action: 'divisions_corrections_closed', at: '2026-11-17T16:00:00.000Z', data: { week: 10 } }, { id: 'a2', action: 'divisions_leagues_placed', at: '2026-09-01T16:00:00.000Z', data: {} }],
-      counts: { registered: 240, waitlisted: 3, following: 41 }, leagues: [], roundPreview: null,
+      counts: { registered: 240, waitlisted: 3, following: 41 }, leagues: [], roundPreview: null, isOwner: true, coCommissioners: [],
     }
     return <DivisionControl control={control} preview />
   }

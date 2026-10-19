@@ -24,6 +24,7 @@ import { placeEntrants, promotions, type PlacementEntrant } from './registration
 import { readWeekScores } from './weekScores'
 import { sendMoment, postMomentToLeagueChats, type MomentRecipient } from './notify'
 import { CONFERENCE_LEAGUE_READY, provisionConferenceLeagues, type ProvisionResult } from './conferenceLeagues'
+import { syncConferenceCoCommissioners, syncConferenceDraftTimes } from './conferenceLeagueSync'
 
 const ACTIVE = ['registered', 'waitlisted']
 const hubHref = (id: string) => `/tournament-hub/${encodeURIComponent(id)}`
@@ -239,7 +240,11 @@ export async function provisionLeagues(userId: string, tournamentId: string) {
   return provisioningSummary(await provisionConferenceLeagues(tournamentId, userId))
 }
 
-/** The commissioner sets a league's draft time; its members hear about it at once. */
+/**
+ * The commissioner sets a league's draft time; its members hear about it at once, and the conference's
+ * real league is scheduled through the normal league draft-date path (a started draft is left alone and
+ * reported in `leagues`).
+ */
 export async function setDraftTime(userId: string, tournamentId: string, tournamentLeagueId: string, at: string) {
   const when = Date.parse(at)
   if (!Number.isFinite(when) || when <= Date.now()) throw new DivisionsOperationError('Pick a draft time in the future.', 409)
@@ -255,8 +260,51 @@ export async function setDraftTime(userId: string, tournamentId: string, tournam
   const draftAt = new Date(when).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' })
   const ctx = { tournament: shell?.name ?? 'Your tournament', league: league.name, division: league.division?.name, draftAt }
   await sendMoment(tournamentId, 'draft_scheduled', league.participants.map(p => ({ userId: p.userId, href: hubHref(tournamentId), ctx })))
+  const leagues = await syncConferenceDraftTimes(tournamentId, userId, { tournamentLeagueIds: [league.id] })
   if (league.leagueId && shell) await postMomentToLeagueChats('draft_scheduled', [{ leagueId: league.leagueId, postedBy: shell.commissionerId, ctx, key: `${league.id}_${when}` }])
-  return { ok: true }
+  return { ok: true, leagues }
+}
+
+// ── staff: co-commissioners ──────────────────────────────────────────────────
+
+/** Granting access is the owner's alone (`grantAccess` is never grantable). */
+async function assertOwner(tx: Tx, tournamentId: string, userId: string) {
+  const shell = await tx.tournamentShell.findUnique({ where: { id: tournamentId }, select: { id: true, format: true, commissionerId: true } })
+  if (!shell || shell.format !== DIVISIONS_FORMAT) throw new DivisionsOperationError('Tournament not found.', 404)
+  if (shell.commissionerId !== userId) throw new DivisionsOperationError('Only the tournament owner can manage co-commissioners.', 403)
+  return shell
+}
+
+/**
+ * Make an AllFantasy user a co-commissioner of the tournament — and so of every conference league.
+ * Same grant shape the plan screen writes (settings, no broadcast, never advance). No team is given.
+ */
+export async function addCoCommissioner(userId: string, tournamentId: string, username: string) {
+  await prisma.$transaction(async tx => {
+    const shell = await assertOwner(tx, tournamentId, userId)
+    const assignee = await tx.appUser.findFirst({ where: { username: { equals: username, mode: 'insensitive' } }, select: { id: true } })
+    if (!assignee) throw new DivisionsOperationError('AllFantasy username not found.', 404)
+    if (assignee.id === shell.commissionerId) throw new DivisionsOperationError('The owner already runs every league.', 409)
+    const permissions = { role: 'co_commissioner', canEditSettings: true, canBroadcast: false, canAdvance: false }
+    await tx.tournamentShellGrant.upsert({
+      where: { tournamentId_userId: { tournamentId, userId: assignee.id } },
+      create: { tournamentId, userId: assignee.id, grantedByUserId: userId, ...permissions },
+      update: { ...permissions, grantedByUserId: userId },
+    })
+    await audit(tx, tournamentId, userId, 'divisions_co_commissioner_added', permissions, { type: 'user', id: assignee.id })
+  })
+  return { ok: true, leagues: await syncConferenceCoCommissioners(tournamentId, userId) }
+}
+
+/** Remove a co-commissioner from the tournament and from every conference league. */
+export async function removeCoCommissioner(userId: string, tournamentId: string, assigneeId: string) {
+  await prisma.$transaction(async tx => {
+    const shell = await assertOwner(tx, tournamentId, userId)
+    if (assigneeId === shell.commissionerId) throw new DivisionsOperationError('The tournament owner cannot be removed.', 409)
+    const r = await tx.tournamentShellGrant.deleteMany({ where: { tournamentId, userId: assigneeId } })
+    if (r.count > 0) await audit(tx, tournamentId, userId, 'divisions_co_commissioner_removed', {}, { type: 'user', id: assigneeId })
+  })
+  return { ok: true, leagues: await syncConferenceCoCommissioners(tournamentId, userId) }
 }
 
 // ── control: seeding ─────────────────────────────────────────────────────────
@@ -277,7 +325,30 @@ export async function loadControl(userId: string, tournamentId: string) {
   const roundPreview = !preview ? null : preview.kind === 'division'
     ? { round: preview.round, week: preview.week, label: preview.label, kind: 'division' as const, blockers: [...new Set(preview.plans.flatMap(p => p.blockers))], divisions: preview.plans.map(p => ({ needsReview: p.needsReview, games: p.games.map(g => ({ key: g.key, a: slim(g.a), b: slim(g.b), scoreA: g.scoreA, scoreB: g.scoreB, winnerId: g.winner?.id ?? null, decidedBy: g.decidedBy })) })) }
     : { round: preview.round, week: preview.week, label: preview.label, kind: 'championship' as const, blockers: preview.champs.some(c => !c) ? ['Both division finals must be decided first.'] : [], champs: preview.champs.map(c => slim(c)), scores: preview.champs.map(c => (c ? preview.scores.get(c.id) ?? null : null)) }
-  return { roundPreview, view, state: { status: state.shell.status, registration: state.registration, capacity: state.shell.maxParticipants }, seeding: seedingChecklist(state, confirmations), rounds: roundChecklist(state, view, confirmations), audits: audits.map(a => ({ id: a.id, action: a.action, at: a.createdAt.toISOString(), data: a.data })), counts: Object.fromEntries(registration.map(r => [r.status, r._count._all])) as Record<string, number>, leagues: state.leagues.map(l => ({ id: l.id, name: l.name, draftAt: l.draftScheduledAt?.toISOString() ?? null, teams: l.participants.length, leagueId: l.leagueId, ready: Boolean(l.leagueId) && l.status === CONFERENCE_LEAGUE_READY })) }
+  const sync = await leagueSyncView(tournamentId)
+  return { roundPreview, view, state: { status: state.shell.status, registration: state.registration, capacity: state.shell.maxParticipants }, seeding: seedingChecklist(state, confirmations), rounds: roundChecklist(state, view, confirmations), audits: audits.map(a => ({ id: a.id, action: a.action, at: a.createdAt.toISOString(), data: a.data })), counts: Object.fromEntries(registration.map(r => [r.status, r._count._all])) as Record<string, number>, leagues: state.leagues.map(l => ({ id: l.id, name: l.name, draftAt: l.draftScheduledAt?.toISOString() ?? null, teams: l.participants.length, leagueId: l.leagueId, ready: Boolean(l.leagueId) && l.status === CONFERENCE_LEAGUE_READY, draftSync: sync.draft.get(l.id) ?? null, coCommissionerSync: sync.co.get(l.id) ?? null })), isOwner: access.commissionerId === userId, coCommissioners: sync.coCommissioners }
+}
+
+type SyncEntry = { tournamentLeagueId?: string; outcome?: string; error?: string | null }
+
+/** The latest sync outcome per conference league, and the tournament's co-commissioners, for the control screen. */
+async function leagueSyncView(tournamentId: string) {
+  const [rows, grants] = await Promise.all([
+    prisma.tournamentAuditLog.findMany({ where: { tournamentId, action: { in: ['divisions_draft_times_synced', 'divisions_co_commissioners_synced'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 40, select: { action: true, data: true } }),
+    prisma.tournamentShellGrant.findMany({ where: { tournamentId, canEditSettings: true }, orderBy: { createdAt: 'asc' }, select: { userId: true } }),
+  ])
+  const draft = new Map<string, { outcome: string; error: string | null }>()
+  const co = new Map<string, { outcome: string; error: string | null }>()
+  for (const r of rows) {
+    const target = r.action === 'divisions_draft_times_synced' ? draft : co
+    for (const e of ((r.data as { leagues?: SyncEntry[] } | null)?.leagues ?? [])) {
+      if (e.tournamentLeagueId && e.outcome && !target.has(e.tournamentLeagueId)) target.set(e.tournamentLeagueId, { outcome: e.outcome, error: e.error ?? null })
+    }
+  }
+  const users = grants.length ? await prisma.appUser.findMany({ where: { id: { in: grants.map(g => g.userId) } }, select: { id: true, username: true, displayName: true } }) : []
+  const byId = new Map(users.map(u => [u.id, u]))
+  const coCommissioners = grants.map(g => ({ userId: g.userId, name: byId.get(g.userId)?.displayName || byId.get(g.userId)?.username || 'Unavailable account' }))
+  return { draft, co, coCommissioners }
 }
 
 function seedingChecklist(state: NonNullable<DivisionsState>, confirmations: Set<number | undefined>) {
