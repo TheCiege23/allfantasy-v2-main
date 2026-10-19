@@ -22,9 +22,11 @@ Rules that apply everywhere:
 1. **The league is entitled, not just the person.** A league's subscription features are unlocked when its
    commissioner (or any co-commissioner) holds the Commissioner plan. Managers in that league never need to pay
    to *benefit* from those settings.
-2. **Downgrade never breaks a league mid-season.** If the sub lapses, settings already in effect stay in effect
-   until season rollover; the commish just can't edit the subscription-only settings until they resubscribe.
-   Automations fall back to "AF calculates, commish clicks apply" (the free behaviour).
+2. **Downgrade never breaks a league mid-season.** If the sub lapses, or the paying commish hands the league to a
+   non-subscriber, the league **stays unlocked until season rollover**: settings in effect stay in effect and
+   automations already configured keep running (e.g., this season's rookie order still finalises itself). After
+   rollover, subscription-only settings are read-only and automations fall back to "AF calculates, commish clicks
+   apply" until a commish or co-commish subscribes.
 3. **Every automated action is previewed, logged and reversible.** Each automation posts a preview to the
    commish ("Rookie order updated after Semifinals — review"), writes to the commissioner audit log, and has a
    one-click undo until the next dependent event (e.g., until the draft starts).
@@ -66,7 +68,7 @@ then wait for every playoff round to finish and finish the spreadsheet.
 - Reverse max PF (ignore playoff result)
 
 **C. Within an elimination round** (teams that lost in the same round), order by:
-- Worse seed picks earlier (default) · reverse max PF · reverse PF · lottery
+- Worse seed picks earlier (**default**, owner decision 2026-10-19) · reverse max PF · reverse PF · lottery
 
 **D. Applies to:** Round 1 only · all rounds (same order) · snake/linear/3rd-round-reversal follow-on.
 
@@ -374,7 +376,7 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
 
 ---
 
-## 6. Decisions and open questions
+## 6. Owner decisions
 
 **Decided by the owner (2026-10-19):**
 1. **"Up" = earlier round** (more expensive, R5 → R4); **"down" = later round** (cheaper, R5 → R6).
@@ -383,7 +385,9 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
 3. **Imported-league tools** (rookie order, keepers, playoffs calculators for Sleeper/ESPN/Yahoo/MFL leagues) are
    part of the **Commissioner plan** — no separate add-on. Free keeps the one-time on-demand calculation (§1.1).
 
-**Still open:**
-4. **Within-round playoff ordering default:** worse seed picks earlier, or reverse max PF? (Spec default: worse seed.)
-5. Should a league stay unlocked when the paying commish hands the league to a non-subscriber mid-season? (Spec
-   says yes until rollover.)
+4. **Playoff teams eliminated in the same round:** the **worse seed picks first** (default; commish can switch to
+   reverse max PF or reverse PF).
+5. **Commish handoff mid-season:** if the paying commish hands the league to a non-subscriber, the league **stays
+   unlocked until season rollover**, then falls back to Free behaviour unless a commish/co-commish subscribes.
+
+No open questions remain.
