@@ -200,6 +200,18 @@ function normalizeEliminationOutcome(value: string): SurvivorEliminationOutcome 
   return 'removed_to_waivers'
 }
 
+/**
+ * The idol timing rules managers read (FAQ, Chimmy). Each line is a rule something enforces:
+ * the expiry week (play check + `expireStaleIdols`), merge expiry (`expiresAtMerge`), and the
+ * remaining-players cutoff (`idolInvalidRemainingPlayers`, checked on every play).
+ */
+export function idolTimingRuleLines(input: { expiryWeek: number | null | undefined; invalidRemainingPlayers: number }): string[] {
+  return [
+    input.expiryWeek ? `Idols expire after Week ${input.expiryWeek}` : 'No week limit on idols (some expire at the merge)',
+    `Idols stop working once ${input.invalidRemainingPlayers} players remain`,
+  ]
+}
+
 export function normalizeSurvivorFoundationSettings(
   input: SettingsRecord | null | undefined,
 ): SurvivorFoundationSettings {
