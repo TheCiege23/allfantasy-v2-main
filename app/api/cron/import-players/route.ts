@@ -70,6 +70,24 @@ const PSYCH_MIN_RUNWAY_MS = 90_000
 const ESPN_NCAAB_MAX_MS = 45_000
 const ESPN_NCAAB_MIN_MS = 15_000
 
+/**
+ * The NCAAB devy pool writer on the `?intel=1` tick (`lib/devy/ingestNcaabDevyPool.ts`).
+ *
+ * It runs BEFORE the devy intel sweep, so its allowance is carved out of what that sweep does not
+ * need: the sweep refuses to start a feed with less than 150s left (`MIN_RUNWAY_MS` in
+ * `lib/devy/devyIntelRefresh.ts` — keep this reservation equal to it), and this phase gets at most
+ * NCAAB_DEVY_POOL_MAX_MS of the rest. Below NCAAB_DEVY_POOL_MIN_MS it does not start and records
+ * a deferred outcome; a run its deadline stops resumes on the next tick.
+ *
+ * ⚠ NOT MEASURED. The deadline bounds the upsert loop, checked between batches of 100; the
+ * provider fetch before it has its own timeouts (the RI probe is capped at 30s) and is cached for
+ * 24h, so only the first tick of a week pays it. Tune from the `ncaab-devy-pool` heartbeat's
+ * `durationMs` and `metadata.complete`. Weekly-gated, so on most ticks this is one marker read.
+ */
+const NCAAB_DEVY_POOL_INTEL_RESERVE_MS = 150_000
+const NCAAB_DEVY_POOL_MAX_MS = 45_000
+const NCAAB_DEVY_POOL_MIN_MS = 25_000
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const sportParam = url.searchParams.get("sport")
@@ -183,6 +201,44 @@ async function handle(req: NextRequest) {
         () => ingestNcaafFantraxIdentities(),
         result => ({ rowsWritten: result.updated, metadata: result }),
       ).catch(error => console.error('[cron/import-players] NCAAF Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
+      /*
+       * The NCAAB devy pool's ONLY scheduled writer. `seedCollegePlayers` was reachable solely
+       * from a BullMQ job type nothing enqueues, so `DevyPlayer` rows with sport 'NCAAB' had no
+       * scheduled writer in production. Weekly-gated inside the helper; the runway decision is
+       * inside the heartbeat so a declined fire still writes a row. Errors are caught so the
+       * rest of the tick runs.
+       */
+      const ncaabDevyPool = await withSyncJobRun(
+        { jobName: 'ncaab-devy-pool', jobScope: 'NCAAB', sport: 'NCAAB', trigger: 'cron' },
+        async () => {
+          const remainingMs = budget.remainingMs()
+          const allowanceMs = Math.min(NCAAB_DEVY_POOL_MAX_MS, remainingMs - NCAAB_DEVY_POOL_INTEL_RESERVE_MS)
+          if (allowanceMs < NCAAB_DEVY_POOL_MIN_MS) {
+            return { skipped: 'deferred: run budget too low to start' as const, remainingMs }
+          }
+          const { ingestNcaabDevyPoolIfDue } = await import('@/lib/devy/ingestNcaabDevyPool')
+          return ingestNcaabDevyPoolIfDue({ deadlineAt: Date.now() + allowanceMs })
+        },
+        (r) =>
+          'skipped' in r
+            ? {
+                // A cadence skip is the healthy steady state; a deferral is a warning, so a tick
+                // that keeps declining reads as partial rather than healthy.
+                warnings: r.skipped.startsWith('deferred') ? [`${r.skipped} (${'remainingMs' in r ? r.remainingMs : '?'}ms left)`] : [],
+                metadata: { skipped: r.skipped },
+              }
+            : {
+                rowsRead: r.fetched,
+                rowsWritten: r.seeded,
+                warnings: [
+                  ...(r.complete ? [] : [`stopped at its deadline; resumes from row ${r.resumeFrom}`]),
+                  ...(r.errors > 0 ? [`${r.errors} row(s) skipped`] : []),
+                ],
+                metadata: r,
+              },
+      ).catch((err: unknown) => ({
+        error: err instanceof Error ? err.message.slice(0, 160) : 'ncaab devy pool refresh failed',
+      }))
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
       const { refreshDevyHeadshots, refreshCollegeSportsPlayerHeadshots } = await import(
         '@/lib/devy/devyHeadshotRefresh',
@@ -374,6 +430,8 @@ async function handle(req: NextRequest) {
         ...outcome,
         espnNcaab,
         psychProfiles,
+        // After the existing keys: the dispatcher echoes only the first 1500 chars of the body.
+        ncaabDevyPool,
         durationMs: Date.now() - startedAt,
       })
     }
