@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { readLineupLockSettings, type LineupLockMode } from '@/lib/redraft/lineupLock'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
@@ -24,17 +25,9 @@ export const dynamic = 'force-dynamic'
  * at request time from the schedule, so these settings take effect immediately.
  */
 
-async function canManageLeague(leagueId: string, userId: string): Promise<boolean> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: {
-      userId: true,
-      teams: { where: { claimedByUserId: userId }, select: { isCommissioner: true, isCoCommissioner: true } },
-    },
-  })
-  if (!league) return false
-  if (league.userId === userId) return true
-  return league.teams.some((t: { isCommissioner: boolean; isCoCommissioner: boolean }) => t.isCommissioner || t.isCoCommissioner)
+/** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
+function canManageLeague(leagueId: string, userId: string): Promise<boolean> {
+  return hasLeagueCommissionerRights(leagueId, userId)
 }
 
 type LockOverride = { week?: number; rosterId?: string; playerId?: string }

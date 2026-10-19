@@ -15,6 +15,7 @@ import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
@@ -157,16 +158,38 @@ function requestedPremiumCommissionerKeys(body: Record<string, unknown>): string
 
 export type LeagueSettingsPatchBody = Record<string, unknown> & { leagueId: string }
 
+export type LeagueSettingsPatchOptions = {
+  section?: string
+  scoringOverrideInPlayoffs?: boolean
+  /**
+   * The person who actually made the change, when `userId` is the account the write is authorized
+   * AS. The tournament schedules a conference league's draft as the league's commissioner (the
+   * tournament owner) after checking the actor may change tournament settings; the row, the league
+   * audit entry and the league event must still name whoever set the time. Authorization, the
+   * entitlement check and every refusal use `userId` alone — this changes attribution only.
+   */
+  actingUserId?: string
+  /**
+   * `'tournament'`: the write IS the tournament → league draft-time sync, so the league → tournament
+   * copy-back is skipped (lib/tournament/divisions/leagueDraftTimeToTournament.ts). The copy-back
+   * would be a no-op anyway — both sides already hold the same time — but skipping it means the two
+   * directions can never chase each other.
+   */
+  source?: 'tournament'
+}
+
 /**
  * Applies commissioner-only updates to `League`, `League.settings` JSON, and `LeagueSettings` row.
  */
 export async function executeLeagueSettingsPatch(
   userId: string,
   body: LeagueSettingsPatchBody,
-  patchOptions?: { section?: string; scoringOverrideInPlayoffs?: boolean },
+  patchOptions?: LeagueSettingsPatchOptions,
 ): Promise<Response> {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
   if (!leagueId) return jsonError('leagueId required', 400)
+  /** Who the change is recorded as. Never used to authorize anything — see `actingUserId`. */
+  const actorUserId = patchOptions?.actingUserId?.trim() || userId
 
   try {
     await requireCommissionerRole(leagueId, userId)
@@ -542,7 +565,7 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
-  const lsUpdate: Prisma.LeagueSettingsUpdateInput = { updatedBy: userId }
+  const lsUpdate: Prisma.LeagueSettingsUpdateInput = { updatedBy: actorUserId }
 
   if (body.draftDateUtc !== undefined) {
     lsUpdate.draftDateUtc =
@@ -600,7 +623,7 @@ export async function executeLeagueSettingsPatch(
       where: { leagueId },
       create: {
         leagueId,
-        updatedBy: userId,
+        updatedBy: actorUserId,
         ...(createFields as Omit<Prisma.LeagueSettingsUncheckedCreateInput, 'leagueId' | 'updatedBy'>),
       },
       update: lsUpdate,
@@ -624,6 +647,16 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  // A draft time set directly on a tournament conference league goes back onto the tournament's record
+  // for that conference. Not when this patch IS the tournament → league sync (see `source`).
+  if (shouldPatchLs && updated && body.draftDateUtc !== undefined && patchOptions?.source !== 'tournament') {
+    try {
+      await copyLeagueDraftTimeToTournament(leagueId, updated.draftDateUtc ?? null, actorUserId)
+    } catch (e) {
+      console.warn('[executeLeagueSettingsPatch] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error')
+    }
+  }
+
   const fresh = await prisma.league.findFirst({
     where: { id: leagueId },
     include: { leagueSettings: true },
@@ -632,7 +665,7 @@ export async function executeLeagueSettingsPatch(
 
   await logAction({
     leagueId,
-    userId,
+    userId: actorUserId,
     actionType: 'settings_patch',
     entityType: 'league',
     entityId: leagueId,
@@ -653,7 +686,7 @@ export async function executeLeagueSettingsPatch(
           : 'League settings were updated.',
         category: 'league_announcements',
         visibility: 'all_members',
-        actorUserId: userId,
+        actorUserId,
         meta: {
           section: patchOptions?.section ?? null,
           updatedFields: [...new Set(updatedFieldNames)].slice(0, 40),
@@ -663,7 +696,7 @@ export async function executeLeagueSettingsPatch(
     .catch(() => {})
 
   recordProductEvent(ENGAGEMENT.COMMISSIONER_SETTINGS, {
-    userId,
+    userId: actorUserId,
     meta: {
       leagueId,
       fieldCount: [...new Set(updatedFieldNames)].length,
