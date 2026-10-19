@@ -254,6 +254,23 @@ function main() {
   // must not be mistaken for fixed — or for missing.
   const verdict = judge({ baseline, summary })
 
+  // ⚠ JOB LOGS ARE OFTEN UNREADABLE TO WHOEVER INVESTIGATES (expired, truncated, or blocked by an
+  // egress proxy), but check-run ANNOTATIONS are served by the plain REST API. So on Actions every
+  // finding is also emitted as a workflow command, one per file, which makes "which file and why"
+  // answerable from `gh api .../check-runs/<id>/annotations` alone.
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const esc = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
+    for (const f of verdict.fixed) {
+      console.log(`::error file=${f},title=vitest-ratchet stale baseline entry::${esc(`${f} now PASSES; remove it from scripts/vitest-failure-baseline.json`)}`)
+    }
+    for (const r of verdict.regressions) {
+      console.log(`::error file=${r.file},title=vitest-ratchet regression::${esc(`${r.file}: ${r.reasons.join(' | ')}`.slice(0, 900))}`)
+    }
+    for (const why of verdict.runErrors) {
+      console.log(`::error title=vitest-ratchet unattributed error::${esc(why.slice(0, 900))}`)
+    }
+  }
+
   if (verdict.fixed.length) {
     // Deliberately NOT the "were passing and now FAIL" phrase below: pre-push-smoke blocks on that
     // phrase, and a stale allowlist entry is CI's job to stop, not a reason to refuse a push.
