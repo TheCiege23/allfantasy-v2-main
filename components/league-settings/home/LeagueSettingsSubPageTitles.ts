@@ -10,6 +10,7 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   waivers: 'Waivers',
   trades: 'Trades',
   'guillotine-first-chop': 'First chop week',
+  'guillotine-chop-rules': 'Chop rules',
   playoffs: 'Playoffs',
   members: 'Managers',
   'co-commissioners': 'Co-commissioners',

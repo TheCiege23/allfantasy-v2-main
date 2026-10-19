@@ -2,7 +2,8 @@
  * GET: Guillotine league home summary (survival standings, danger tiers, chopped history, assets).
  * Returns 404 when league is not a guillotine league.
  *
- * PATCH: commissioner-only edit of the first chop week (`{ eliminationStartWeek }`). It lives on
+ * PATCH: commissioner-only edit of the first chop week (`{ eliminationStartWeek }`), or of the chop
+ * schedule and immunity (`{ advanced }`, AF Commissioner — lib/guillotine/chopSchedule.ts). It lives on
  * this existing path rather than its own route file because the app is at the route-count ceiling
  * (too_many_routes — see app/api/leagues/join/route.ts). Rules in lib/guillotine/guillotineFirstChopWeek.ts.
  */
@@ -19,6 +20,8 @@ import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guilloti
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
+import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
+import { describeSchedule } from '@/lib/guillotine/chopSchedule'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +49,7 @@ export async function GET(
     ? Math.max(1, parseInt(weekParam, 10)) || 1
     : await resolveGuillotineCurrentWeek(leagueId, config)
 
-  const [summary, myEscapes, myRosterId, home] = await Promise.all([
+  const [summary, myEscapes, myRosterId, home, advanced] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
     // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
     getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
@@ -58,6 +61,7 @@ export async function GET(
           .then(() => buildGuillotineHomeExtras(leagueId, String(config.sport), weekOrPeriod))
           .catch(() => null)
       : Promise.resolve(null),
+    readGuillotineAdvanced(leagueId).catch(() => null),
   ])
 
   if (!summary) return NextResponse.json({ error: 'Summary not available' }, { status: 500 })
@@ -75,6 +79,8 @@ export async function GET(
           tiebreakerOrder: config.tiebreakerOrder,
           dangerMarginPoints: config.dangerMarginPoints,
           rosterReleaseTiming: config.rosterReleaseTiming,
+          advanced,
+          scheduleLines: advanced ? describeSchedule(advanced, config.teamsPerChop, config.eliminationStartWeek) : [],
         }
       : null,
   })
@@ -101,7 +107,17 @@ export async function PATCH(
     return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
   }
 
-  const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown } | null
+  if (body && 'advanced' in body) {
+    const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
+    if (!saved.ok) {
+      const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
+      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : saved.error
+      return NextResponse.json({ error: message, code: saved.error }, { status })
+    }
+    const config = await getGuillotineConfig(leagueId)
+    return NextResponse.json({ ok: true, advanced: saved.value, scheduleLines: config ? describeSchedule(saved.value, config.teamsPerChop, config.eliminationStartWeek) : [] })
+  }
   if (!body || !('eliminationStartWeek' in body)) {
     return NextResponse.json({ error: 'eliminationStartWeek is required' }, { status: 400 })
   }
