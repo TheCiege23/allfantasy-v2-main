@@ -222,7 +222,8 @@ export const DYNASTY_SPORT_CONFIGS: Record<string, DynastySportConfig> = {
     rookieWindowYears: 2,
     offseason: {
       seasonEndWeek: 24,
-      proDraftMonth: 7,
+      // The NHL Entry Draft is held in late June (was 7); free agency opens July 1.
+      proDraftMonth: 6,
       freeAgencyMonth: 7,
       rookieDraftMonth: 8,
       trainingCampMonth: 9,

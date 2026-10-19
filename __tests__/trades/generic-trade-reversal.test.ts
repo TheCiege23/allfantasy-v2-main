@@ -17,7 +17,7 @@ const db = {
   afLeagueTrade: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), updateMany: vi.fn() },
   tradeExecutionSnapshot: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
   tradeReversal: { findUnique: vi.fn(), create: vi.fn() },
-  roster: { findUnique: vi.fn(), update: vi.fn() },
+  roster: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
   $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(db)),
 }
 

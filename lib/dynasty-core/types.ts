@@ -31,8 +31,11 @@ export interface DynastyPlayoffPresetDto {
   label: string
   firstRoundByes: number
   playoffWeeks: number
-  /** Suggested start week (NFL) */
-  playoffStartWeek: number
+  /**
+   * Suggested start week. NFL only — null for every other sport, whose season length differs, so
+   * callers keep the league's existing start week instead of overwriting it.
+   */
+  playoffStartWeek: number | null
 }
 
 export interface DynastyLeagueConfigDto {

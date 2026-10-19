@@ -24,7 +24,13 @@ import {
 } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
-import { DYNASTY_SUPPORTED_TEAM_SIZES, VETO_RECOMMENDATION_COPY } from '@/lib/dynasty-core/constants'
+import {
+  DYNASTY_ROSTER_PRESETS,
+  DYNASTY_SCORING_PRESETS,
+  DYNASTY_SUPPORTED_TEAM_SIZES,
+  VETO_RECOMMENDATION_COPY,
+  isDynastyFootballSport,
+} from '@/lib/dynasty-core/constants'
 import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/lib/taxi/constants'
 
 export const dynamic = 'force-dynamic'
@@ -61,6 +67,7 @@ export async function GET(
   ])
 
   const sport = (league.sport as string) ?? 'NFL'
+  const footballFormats = isDynastyFootballSport(sport)
 
   const rookiePickOrderMethods = [
     ...ROOKIE_PICK_ORDER_METHODS,
@@ -72,8 +79,10 @@ export async function GET(
   return NextResponse.json({
     effective: effective ?? undefined,
     presets: {
-      roster: getDynastyRosterPresets(),
-      scoring: getDynastyScoringPresets(),
+      // Football-only formats (Superflex, PPR, TEP…). Empty for MLB/NBA/NHL rather than offering a
+      // commissioner a QB/RB/WR/TE format their league cannot use.
+      roster: footballFormats ? getDynastyRosterPresets() : [],
+      scoring: footballFormats ? getDynastyScoringPresets() : [],
       playoff: getDynastyPlayoffPresets(sport),
     },
     constants: {
@@ -120,6 +129,21 @@ export async function PUT(
     (league.leagueVariant && ['devy_dynasty', 'merged_devy_c2c'].includes(String(league.leagueVariant).toLowerCase()))
   if (!isDynasty) return NextResponse.json({ error: 'Not a dynasty league' }, { status: 400 })
 
+  const leagueSport = (league.sport as string) ?? (league.settings as Record<string, unknown> | null)?.sport_type ?? 'NFL'
+  if (!isDynastyFootballSport(String(leagueSport))) {
+    const footballRoster = new Set<string>(DYNASTY_ROSTER_PRESETS.map((p) => p.formatType))
+    const footballScoring = new Set<string>(DYNASTY_SCORING_PRESETS.map((p) => p.formatType))
+    if (
+      (body.roster_format_type != null && footballRoster.has(String(body.roster_format_type))) ||
+      (body.scoring_format_type != null && footballScoring.has(String(body.scoring_format_type)))
+    ) {
+      return NextResponse.json(
+        { error: `That roster/scoring preset is a football format and cannot be applied to a ${String(leagueSport).toUpperCase()} league.` },
+        { status: 400 },
+      )
+    }
+  }
+
   const priorDynasty = await prisma.dynastyLeagueConfig.findUnique({ where: { leagueId } })
 
   const settingsPatch: Record<string, unknown> = {}
@@ -133,8 +157,7 @@ export async function PUT(
   // When only playoff_team_count is updated, merge matching dynasty preset (first_round_byes, playoff_weeks) so bracket stays consistent
   const newCount = body.playoff_team_count != null ? Number(body.playoff_team_count) : null
   if (newCount != null && settingsPatch.playoff_structure == null) {
-    const sport = (league.sport as string) ?? (league.settings as Record<string, unknown> | null)?.sport_type ?? 'NFL'
-    const playoffList = getDynastyPlayoffPresets(String(sport))
+    const playoffList = getDynastyPlayoffPresets(String(leagueSport))
     const preset = playoffList.find((p) => p.playoffTeamCount === newCount)
     if (preset) {
       const current = (league.settings as Record<string, unknown>) ?? {}

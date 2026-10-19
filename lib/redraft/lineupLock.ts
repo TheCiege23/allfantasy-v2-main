@@ -16,10 +16,17 @@
  *   - per_player_kickoff (default) — each player locks at THEIR game's kickoff.
  *   - first_game_of_week          — whole lineup locks at the week's first kickoff.
  *   - manual                      — locked only when the commissioner locks the week.
+ *   - daily (OPT-IN, NBA/NHL/MLB) — each player locks at his own game start on the CURRENT US
+ *                                   Eastern day and is movable again the next day. Honoured only
+ *                                   with `sportConfig.dailyLineupsEnabled === true`; see
+ *                                   `readLineupLockSettings` and docs/DAILY_LINEUPS_DESIGN.md.
  * Emergency commissioner unlocks (postponements/data errors) always win.
  */
 import type { PrismaClient } from '@prisma/client'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+// Client-safe: takes the client as an argument and imports Prisma for types only.
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
@@ -57,9 +64,23 @@ export function lockTeamLookupKeys(sport: string, team: string | null | undefine
   return [exact ? `x:${exact}` : '', loose ? `l:${loose}` : ''].filter(Boolean)
 }
 
-export type LineupLockMode = 'per_player_kickoff' | 'first_game_of_week' | 'manual'
+export type LineupLockMode = 'per_player_kickoff' | 'first_game_of_week' | 'manual' | 'daily'
 
-export function resolveLineupLockMode(raw: unknown): LineupLockMode {
+/**
+ * Sports whose leagues may opt into the `daily` lock. A daily sport plays most days, so a per-day lock
+ * is meaningful; NFL/NCAAF play weekly and are never put on it. NCAAB and SOCCER are left out until
+ * someone has checked them (SOCCER is not even locked yet — see LOCK_NOT_WIRED_SPORTS).
+ */
+export const DAILY_LINEUP_LOCK_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
+
+/**
+ * The stored setting, without the opt-in check. ⚠ 'daily' deliberately still resolves to
+ * `per_player_kickoff` HERE: league settings and the sport configs (`lib/sportConfig/configs/*.ts`)
+ * can carry `lineupLockType: 'daily'` already, and every one of those leagues has been locking per
+ * player at the week's first game. Only `readLineupLockSettings`, given the sport AND the league's
+ * explicit `dailyLineupsEnabled` flag, turns it into the real daily mode.
+ */
+export function resolveLineupLockMode(raw: unknown): Exclude<LineupLockMode, 'daily'> {
   const v = String(raw ?? '').trim().toLowerCase()
   if (v === 'first_game_of_week' || v === 'first_game' || v === 'weekly' || v === 'weekly_first_game') {
     return 'first_game_of_week'
@@ -75,6 +96,11 @@ export type LockComputeInput = {
   playerKickoffUtc?: Date | null
   /** Earliest kickoff of the fantasy week (UTC) — used by first_game_of_week. */
   firstKickoffUtc?: Date | null
+  /**
+   * daily mode only: this player's earliest game start on the US Eastern day of `now` (UTC).
+   * null = his team does not play today (or the team is unresolved) — not locked.
+   */
+  playerKickoffTodayUtc?: Date | null
   /** Commissioner has manually locked this week (manual mode). */
   manualLocked?: boolean
   /** Commissioner emergency-unlocked this player/roster for the week. */
@@ -94,6 +120,13 @@ export function computeLineupLock(input: LockComputeInput): boolean {
     case 'first_game_of_week': {
       const k = input.firstKickoffUtc
       return k != null && input.now.getTime() >= k.getTime()
+    }
+    case 'daily': {
+      // Only TODAY's game decides. A game he played yesterday does not hold him; a game tomorrow
+      // has not started. The day boundary is midnight US Eastern (see `easternDayKey`).
+      const k = input.playerKickoffTodayUtc
+      if (k == null) return false
+      return input.now.getTime() >= k.getTime()
     }
     case 'per_player_kickoff':
     default: {
@@ -151,7 +184,25 @@ export type WeekKickoffs = {
   byTeam: Map<string, Date>
   /** Earliest kickoff across all games that week (UTC), or null. */
   firstKickoff: Date | null
+  /**
+   * Daily sports only: normalized team → US Eastern day ('YYYY-MM-DD') → earliest start that day.
+   * Read by the opt-in `daily` mode; every other mode ignores it. Absent for NFL/NCAAF.
+   */
+  byTeamDay?: Map<string, Map<string, Date>>
   warnings: string[]
+}
+
+/** The US Eastern calendar day of an instant as 'YYYY-MM-DD' — the same rule `game_date` is written by. */
+export function easternDayKey(instant: Date): string | null {
+  const day = easternCalendarDay(instant)
+  return day ? day.toISOString().slice(0, 10) : null
+}
+
+function setEarliestForDay(byTeamDay: Map<string, Map<string, Date>>, team: string, day: string, kickoff: Date): void {
+  const days = byTeamDay.get(team) ?? new Map<string, Date>()
+  const existing = days.get(day)
+  if (!existing || kickoff.getTime() < existing.getTime()) days.set(day, kickoff)
+  byTeamDay.set(team, days)
 }
 
 /**
@@ -272,6 +323,8 @@ export async function buildWeekKickoffMap(
    * ⚠ A game with no start time locks at the start of its Eastern day — early, never late.
    */
   if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport) && !LOCK_NOT_WIRED_SPORTS.includes(sport)) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
     const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
     if (!window) {
@@ -288,6 +341,7 @@ export async function buildWeekKickoffMap(
       return { byTeam, firstKickoff, warnings }
     }
     let teamless = 0
+    const byTeamDay = new Map<string, Map<string, Date>>()
     for (const g of games) {
       // The finalizer's regular slate: labelled regular, or unlabelled. A replaced game's replacement is its own row.
       if (g.seasonType != null && g.seasonType !== 'regular') continue
@@ -306,6 +360,9 @@ export async function buildWeekKickoffMap(
         if (!key) continue
         const existing = byTeam.get(key)
         if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
+        // `g.day` IS the Eastern day (the schedule is keyed on it), so a no-time game's placeholder
+        // instant — which falls on the PREVIOUS Eastern day in winter — never decides the day.
+        if (g.day) setEarliestForDay(byTeamDay, key, g.day, kickoff)
       }
     }
     if (teamless > 0) {
@@ -314,7 +371,7 @@ export async function buildWeekKickoffMap(
     if (games.length === 0) {
       warnings.push(`No ${sport} games in the schedule for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
     }
-    return { byTeam, firstKickoff, warnings }
+    return { byTeam, firstKickoff, byTeamDay, warnings }
   }
 
   if (
@@ -323,6 +380,8 @@ export async function buildWeekKickoffMap(
     !RI_SCHEDULE_SLATE_SPORTS.includes(sport) &&
     !LOCK_NOT_WIRED_SPORTS.includes(sport)
   ) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
     const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
     if (!window) {
@@ -336,21 +395,25 @@ export async function buildWeekKickoffMap(
       seasonType: 'regular',
       dateWindow: { start: new Date(window.start), end: new Date(window.end) },
     })
+    const byTeamDay = new Map<string, Map<string, Date>>()
     for (const g of games) {
       if (!g.startTime) continue
       const kickoff = g.startTime
       if (!firstKickoff || kickoff.getTime() < firstKickoff.getTime()) firstKickoff = kickoff
+      // A 10pm Eastern tip is that Eastern day's game even though its UTC date is the next day.
+      const day = easternDayKey(kickoff)
       for (const team of [g.homeTeam, g.awayTeam]) {
         const key = normalizeLockTeam(sport, team)
         if (!key) continue
         const existing = byTeam.get(key)
         if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
+        if (day) setEarliestForDay(byTeamDay, key, day, kickoff)
       }
     }
     if (games.length === 0) {
       warnings.push(`No ${sport} games found for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
     }
-    return { byTeam, firstKickoff, warnings }
+    return { byTeam, firstKickoff, byTeamDay, warnings }
   }
 
   if (sport !== 'NFL') {
@@ -385,15 +448,49 @@ export async function buildWeekKickoffMap(
 
 type LockOverride = { week?: number; rosterId?: string; playerId?: string }
 
-/** Read lock mode + manual-lock weeks + emergency overrides from league settings. */
-export function readLineupLockSettings(leagueSettings: unknown): {
+/**
+ * Read lock mode + manual-lock weeks + emergency overrides from league settings.
+ *
+ * The `daily` mode needs THREE things, and anything less keeps the mode every existing league has:
+ *   1. `sportConfig.lineupLockType === 'daily'`,
+ *   2. `sportConfig.dailyLineupsEnabled === true` — the explicit per-league opt-in, default off, and
+ *   3. `sport` passed and in `DAILY_LINEUP_LOCK_SPORTS` (never NFL/NCAAF).
+ * Callers that pass no sport (the commissioner route, survivor scoring) therefore see exactly what they
+ * saw before. When 'daily' is requested but not in effect, `warnings` says so instead of falling back
+ * silently.
+ */
+export function readLineupLockSettings(
+  leagueSettings: unknown,
+  sport?: string | null,
+): {
   mode: LineupLockMode
   manualLockedWeeks: Set<number>
   overrides: LockOverride[]
+  warnings: string[]
 } {
   const settings = (leagueSettings ?? {}) as Record<string, unknown>
   const sc = (settings.sportConfig ?? {}) as Record<string, unknown>
-  const mode = resolveLineupLockMode(sc.lineupLockType)
+  const warnings: string[] = []
+  let mode: LineupLockMode = resolveLineupLockMode(sc.lineupLockType)
+  const requestedDaily = String(sc.lineupLockType ?? '').trim().toLowerCase() === 'daily'
+  if (requestedDaily && sport != null) {
+    const sportKey = String(sport).trim().toUpperCase()
+    if (!DAILY_LINEUP_LOCK_SPORTS.includes(sportKey)) {
+      warnings.push(`lineupLockType 'daily' is not supported for ${sportKey}; locking per_player_kickoff.`)
+    } else if (sc.dailyLineupsEnabled !== true) {
+      warnings.push(
+        "lineupLockType 'daily' is set but dailyLineupsEnabled is not; locking per_player_kickoff " +
+          "(each player at his team's first game of the week). See docs/DAILY_LINEUPS_DESIGN.md.",
+      )
+    } else {
+      mode = 'daily'
+      warnings.push(
+        'Daily lineup lock is active: players lock at their own game start each day and unlock the next day, ' +
+          'but matchup scoring is still a weekly aggregate for whoever holds a starter slot when the week is scored. ' +
+          'See docs/DAILY_LINEUPS_DESIGN.md.',
+      )
+    }
+  }
   const manualLockedWeeks = new Set<number>(
     Array.isArray(sc.lineupLockManualWeeks)
       ? (sc.lineupLockManualWeeks as unknown[]).map((w) => Number(w)).filter((w) => Number.isFinite(w))
@@ -402,7 +499,7 @@ export function readLineupLockSettings(leagueSettings: unknown): {
   const overrides: LockOverride[] = Array.isArray(sc.lineupLockOverrides)
     ? (sc.lineupLockOverrides as LockOverride[])
     : []
-  return { mode, manualLockedWeeks, overrides }
+  return { mode, manualLockedWeeks, overrides, warnings }
 }
 
 export type LockablePlayer = {
@@ -431,12 +528,16 @@ async function loadLockContext(
     currentTeamByPlayerId?: ReadonlyMap<string, string | null>
   },
 ): Promise<LockContext> {
-  const { mode, manualLockedWeeks, overrides } = readLineupLockSettings(args.leagueSettings)
+  const settings = readLineupLockSettings(args.leagueSettings, args.sport)
+  const { mode, manualLockedWeeks, overrides } = settings
   // manual mode needs no schedule; kickoff-based modes do.
-  const kickoffs =
+  const schedule: WeekKickoffs =
     mode === 'manual'
       ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
       : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
+  const kickoffs: WeekKickoffs = settings.warnings.length
+    ? { ...schedule, warnings: [...settings.warnings, ...schedule.warnings] }
+    : schedule
   return {
     sport: args.sport,
     mode,
@@ -467,10 +568,19 @@ function stampLineupLock<T extends LockablePlayer>(
     lockTeamLookupKeys(ctx.sport, lockTeam)
       .map((key) => ctx.kickoffs.byTeam.get(key))
       .find((kickoff): kickoff is Date => kickoff != null) ?? null
+  // daily mode: his earliest start on TODAY's Eastern day, looked up under the same team keys.
+  const today = ctx.mode === 'daily' ? easternDayKey(scope.now) : null
+  const playerKickoffTodayUtc =
+    today == null
+      ? null
+      : (lockTeamLookupKeys(ctx.sport, lockTeam)
+          .map((key) => ctx.kickoffs.byTeamDay?.get(key)?.get(today))
+          .find((kickoff): kickoff is Date => kickoff != null) ?? null)
   const isLocked = computeLineupLock({
     mode: ctx.mode,
     now: scope.now,
     playerKickoffUtc,
+    playerKickoffTodayUtc,
     firstKickoffUtc: ctx.kickoffs.firstKickoff,
     manualLocked: ctx.manualLocked,
     emergencyUnlocked,

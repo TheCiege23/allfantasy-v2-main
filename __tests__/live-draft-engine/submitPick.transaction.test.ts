@@ -236,6 +236,11 @@ vi.mock('@/lib/draft-room/postDraftPickChatEvent', () => ({
   postDraftPickChatEvent: (...args: unknown[]) => postDraftPickChatEventMock(...args),
 }))
 
+const resolveServerRookieStatusMock = vi.hoisted(() => vi.fn(async (): Promise<boolean | null> => null))
+vi.mock('@/lib/live-draft-engine/serverRookieStatus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/live-draft-engine/serverRookieStatus')>()),
+  resolveServerRookieStatus: resolveServerRookieStatusMock,
+}))
 vi.mock('@/server/services/leagueLifecycleService', () => ({
   transitionLeagueState: (...args: unknown[]) => leagueLifecycleTransitionMock(...args),
   getLeagueLifecycleState: () => 'drafting',
@@ -553,6 +558,50 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
   })
 })
 
+
+describe('rookies-only drafts: the server decides, for manager picks and autopicks', () => {
+  beforeEach(() => {
+    ctx.resetStore()
+    vi.clearAllMocks()
+    ctx.store.session.playerPool = 'rookies_only'
+    resolveServerRookieStatusMock.mockResolvedValue(false)
+  })
+
+  const vetPick = (source: 'user' | 'auto' | 'commissioner') => ({
+    leagueId: 'league-1',
+    playerName: 'Veteran Star',
+    position: 'QB',
+    playerId: 'vet-1',
+    rosterId: 'roster-a',
+    source,
+    expectedOverall: 1,
+  })
+
+  it('refuses a manager pick of a veteran, with no client rookie hint', async () => {
+    const r = await submitPick(vetPick('user'))
+    expect(r.success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
+    expect(resolveServerRookieStatusMock).toHaveBeenCalledWith({ leagueId: 'league-1', playerId: 'vet-1', playerName: 'Veteran Star' })
+  })
+
+  it('refuses an autopick of a veteran too', async () => {
+    const r = await submitPick(vetPick('auto'))
+    expect(r.success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
+  })
+
+  it('a commissioner pick keeps its override and never asks', async () => {
+    const r = await submitPick(vetPick('commissioner'))
+    expect(r.success).toBe(true)
+    expect(resolveServerRookieStatusMock).not.toHaveBeenCalled()
+  })
+
+  it('an unknown verdict keeps the previous behaviour', async () => {
+    resolveServerRookieStatusMock.mockResolvedValue(null)
+    const r = await submitPick(vetPick('auto'))
+    expect(r.success).toBe(true)
+  })
+})
 
 describe('tournament pick versus control version fencing', () => {
   beforeEach(() => { ctx.resetStore(); vi.clearAllMocks(); ctx.store.season = true })

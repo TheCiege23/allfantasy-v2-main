@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { computeKeeperEligibility } from './eligibilityEngine'
 import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
+import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
 
 export async function openKeeperSelectionPhase(
   leagueId: string,
@@ -78,7 +79,6 @@ export async function submitKeeperSelections(
   const cost: SubmitKeeperResult['cost'] = []
   const warnings: string[] = []
 
-  const costRoundCounts = new Map<number, string[]>()
   const candidates: {
     pid: string
     e: (typeof elig)[0]
@@ -95,37 +95,56 @@ export async function submitKeeperSelections(
       conflicted.push({ playerIds: [pid], reason: 'not_on_roster' })
       continue
     }
-
-    const cr = e.projectedCostRound
-    if (cr != null) {
-      const arr = costRoundCounts.get(cr) ?? []
-      arr.push(pid)
-      costRoundCounts.set(cr, arr)
-    }
     candidates.push({ pid, e })
   }
 
-  const duplicateRoundPlayers = new Set<string>()
-  for (const [round, ids] of costRoundCounts) {
-    if (ids.length > 1) {
-      conflicted.push({
-        playerIds: ids,
-        reason: `duplicate_round_${round}`,
-      })
-      for (const id of ids) duplicateRoundPlayers.add(id)
+  /*
+   * Which pick each round-cost keeper uses (lib/keeper/keeperRules.ts). Two keepers costing the
+   * same round either move (lose_round_before / lose_round_after) or are refused for the manager
+   * to choose (player_chooses / reject_both). The stored `costRound` is the pick actually used,
+   * which is what the carryover forfeits and the next draft places.
+   */
+  const rules = resolveKeeperRules(league)
+  const latestDraft = await prisma.draftSession.findFirst({
+    where: { leagueId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { rounds: true },
+  })
+  const placement = placeTeamKeepers(
+    rules,
+    candidates.flatMap(({ pid, e }) => (e.projectedCostRound != null ? [{ playerId: pid, costRound: e.projectedCostRound }] : [])),
+    { totalRounds: latestDraft?.rounds ?? Math.max(15, ...candidates.map((c) => c.e.projectedCostRound ?? 1)) },
+  )
+  const placedById = new Map(placement.placed.map((p) => [p.playerId, p]))
+  const refusedById = new Map(placement.refused.map((r) => [r.playerId, r]))
+  const refusedByRound = new Map<number, string[]>()
+  for (const r of placement.refused) {
+    if (r.reason !== 'same_round') {
+      conflicted.push({ playerIds: [r.playerId], reason: r.reason })
+      continue
     }
+    refusedByRound.set(r.costRound, [...(refusedByRound.get(r.costRound) ?? []), r.playerId])
+  }
+  for (const [round, ids] of refusedByRound) {
+    // In the order the manager listed them, as before.
+    ids.sort((x, y) => playerIds.indexOf(x) - playerIds.indexOf(y))
+    conflicted.push({ playerIds: ids, reason: `duplicate_round_${round}` })
   }
 
-  const rule = league.keeperConflictRule ?? 'player_chooses'
   for (const { pid, e } of candidates) {
-    if (duplicateRoundPlayers.has(pid)) {
-      if (rule === 'reject_both') {
+    if (refusedById.has(pid)) {
+      if (rules.sameRoundRule === 'reject_both') {
         await prisma.keeperRecord.deleteMany({
           where: { seasonId, rosterId, playerId: pid },
         })
       }
       continue
     }
+
+    const spot = placedById.get(pid)
+    const costRound = spot ? spot.round : e.projectedCostRound
+    const costLabel = spot ? placedKeeperLabel(spot) : e.projectedCost
+    if (spot && spot.round !== spot.costRound) warnings.push(`${pid}: ${costLabel}`)
 
     const player = roster.players.find((p) => p.playerId === pid)!
     const rec = await prisma.keeperRecord.upsert({
@@ -147,16 +166,16 @@ export async function submitKeeperSelections(
         sport: player.sport,
         originalDraftYear: new Date().getFullYear(),
         yearsKept: 1,
-        costRound: e.projectedCostRound,
+        costRound,
         costAuctionValue: e.projectedCostAuction,
-        costLabel: e.projectedCost,
+        costLabel,
         status: 'pending',
         acquisitionType: player.acquisitionType,
       },
       update: {
-        costRound: e.projectedCostRound,
+        costRound,
         costAuctionValue: e.projectedCostAuction,
-        costLabel: e.projectedCost,
+        costLabel,
         status: 'pending',
         submittedAt: new Date(),
       },
@@ -164,8 +183,8 @@ export async function submitKeeperSelections(
     valid.push(rec)
     cost.push({
       playerId: pid,
-      costLabel: e.projectedCost,
-      costRound: e.projectedCostRound,
+      costLabel,
+      costRound,
     })
   }
 

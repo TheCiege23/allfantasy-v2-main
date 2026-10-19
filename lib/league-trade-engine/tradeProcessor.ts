@@ -13,6 +13,7 @@ import {
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { parseInventoryPickId, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { settleTradeContracts, type SalarySettlementEvidence } from '@/lib/salary-cap/TradeContractSettlement'
+import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
 
 export type LeagueTradeTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -163,5 +164,14 @@ export async function applyTradeAssetsInTransaction(
       },
     })
   }
+  // Native scoring reads `RedraftRosterPlayer`; without this a traded player scores for his old team.
+  await applyRedraftRosterMoves(tx, {
+    leagueId: input.leagueId,
+    acquisitionType: 'trade',
+    moves: input.assets
+      .filter((a) => a.itemType === 'player' && a.itemReference)
+      .map((a) => ({ playerId: String(a.itemReference), fromRosterId: a.fromRosterId, toRosterId: a.toRosterId })),
+    playerDataByRoster: dataByRoster,
+  })
   return salaryEvidence
 }

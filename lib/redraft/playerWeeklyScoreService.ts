@@ -28,6 +28,7 @@ import {
   knownDailySportSeasons,
   resolveDailySportWeekWindow,
 } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
@@ -386,6 +387,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     // and those games are ingested like any other.
     // Without an explicit anchor, the shared resolver — which is where a gameweek sport (soccer)
     // differs from seven-day arithmetic. The finalizer reads the same function.
+    // A season past the curated table (dynasty year 2+) is primed from the labelled schedule first.
+    if (!params.seasonStartUtc) await ensureDailySportSeasonStart(sport, seasonYear, { db: prisma as never })
     const window = params.seasonStartUtc
       ? weekWindowFromSeasonStart(params.seasonStartUtc, week)
       : resolveDailySportWeekWindow(sport, seasonYear, week)
@@ -396,7 +399,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const known = knownDailySportSeasons(sport)
       summary.warnings.push(
         `${sport} is a daily sport: a week is a date range, and scoring one needs the regular-season ` +
-          `start date. None was supplied and none is recorded for season ${seasonYear}` +
+          `start date. None was supplied, none is recorded and none could be derived from the stored ` +
+          `schedule for season ${seasonYear}` +
           `${known.length ? ` (recorded: ${known.join(', ')})` : ''}. ` +
           'Add it to `lib/season-week/dailySportSeasonStarts.ts`. No scores were written.',
       )

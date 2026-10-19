@@ -275,7 +275,8 @@ describe('D.5-scheduler — vercel.json cron entry', () => {
   it('vercel.json registers /api/cron/recompute-allfantasy-adp on a daily schedule', () => {
     const src = readFileSync(resolve(root, 'cron-schedule.json'), 'utf8')
     const json = JSON.parse(src) as { crons?: Array<{ path: string; schedule: string }> }
-    const entry = json.crons?.find((c) => c.path === '/api/cron/recompute-allfantasy-adp')
+    // Matched on the pathname: the scheduled fire carries `?sport=NFL,MLB,NBA,NHL`.
+    const entry = json.crons?.find((c) => c.path.split('?')[0] === '/api/cron/recompute-allfantasy-adp')
     expect(entry, 'expected a cron entry for the AllFantasy ADP recompute').toBeDefined()
     // Daily — first cron field is a single hour, last three are wildcards.
     // (We don't pin a specific hour here; matches `0 H * * *` for any H.)

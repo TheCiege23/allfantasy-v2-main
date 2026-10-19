@@ -372,6 +372,7 @@ export async function GET(
         devyConfig: resolved.devyConfig,
         c2cConfig: resolved.c2cConfig,
         isIdp: resolved.isIdp,
+        rookieFilterState: resolved.rookieFilterState,
       }, {
         source: 'rebuilt',
         entryCount: Number(resolved.count ?? resolved.entries.length),

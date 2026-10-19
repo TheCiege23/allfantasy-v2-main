@@ -29,6 +29,16 @@ export const DYNASTY_DEFAULT_IR = 3
 /** Default taxi slots for core dynasty (no devy). */
 export const DYNASTY_DEFAULT_TAXI = 4
 
+/**
+ * The roster, scoring and playoff-week presets below are football formats (QB/RB/WR/TE, PPR, pass
+ * TDs, a week-15 playoff start). They must not be offered to — or saved onto — an MLB, NBA or NHL
+ * league, which the settings API and panel used to do for every sport.
+ */
+export function isDynastyFootballSport(sport: string | null | undefined): boolean {
+  const s = String(sport ?? 'NFL').trim().toUpperCase()
+  return s === 'NFL' || s === 'NCAAF'
+}
+
 /** Roster template format types for dynasty (NFL). */
 export const DYNASTY_ROSTER_PRESETS = [
   { id: 'dynasty_1qb', label: '1QB Dynasty', formatType: 'dynasty_1qb' },

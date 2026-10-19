@@ -17,6 +17,8 @@ import { leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invit
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettingsHome'
 import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
+import { GuillotineChopRulesEditor, patchChopRules } from './GuillotineChopRulesEditor'
+import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
 import { CommissionerCenter } from './CommissionerCenter'
 import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
@@ -109,6 +111,9 @@ export function LeagueSettingsHomeContainer({
           firstChopWeek: num(cfg.eliminationStartWeek) ?? 1,
           endWeek: num(cfg.eliminationEndWeek),
           locked: events.length > 0,
+          scheduleLines: Array.isArray(cfg.scheduleLines) ? (cfg.scheduleLines as unknown[]).filter((l): l is string => typeof l === 'string') : [],
+          advanced: cfg.advanced && typeof cfg.advanced === 'object' ? (cfg.advanced as GuillotineAdvanced) : null,
+          teamsPerChop: num(cfg.teamsPerChop) ?? 1,
         })
       })
     }
@@ -169,6 +174,24 @@ export function LeagueSettingsHomeContainer({
               chopLabel={profile?.chopLabel ?? null}
               save={patchFirstChopWeek(leagueId)}
               onSaved={(week) => setGuillotineState((s) => (s ? { ...s, firstChopWeek: week } : s))}
+            />
+          ),
+        }
+      }
+      if (id === 'guillotine-chop-rules') {
+        if (!guillotineState) return null
+        const profile = getGuillotineSportConfig(String(league.sport ?? 'NFL'))
+        return {
+          title: SUB_PAGE_TITLES[id],
+          content: (
+            <GuillotineChopRulesEditor
+              initial={guillotineState.advanced ?? null}
+              baseChops={guillotineState.teamsPerChop ?? 1}
+              startWeek={guillotineState.firstChopWeek}
+              endWeek={guillotineState.endWeek ?? profile?.regularSeasonWeeks ?? 18}
+              hasAfCommissionerSub={hasAfCommissionerSub}
+              save={patchChopRules(leagueId)}
+              onSaved={(advanced, lines) => setGuillotineState((s) => (s ? { ...s, advanced, scheduleLines: lines } : s))}
             />
           ),
         }

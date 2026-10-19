@@ -22,6 +22,7 @@ import { PickTradeHistoryModal } from '@/components/app/draft-room/PickTradeHist
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { SportAwareDraftRoom } from '@/components/app/draft-room/SportAwareDraftRoom'
+import { parseRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { QueuePanel } from '@/components/app/draft-room/QueuePanel'
 import { DraftIntelQueuePanel } from '@/components/app/draft-room/DraftIntelQueuePanel'
 import { DraftChatPanel, type DraftChatMessage, type DraftChatSendPayload } from '@/components/app/draft-room/DraftChatPanel'
@@ -170,6 +171,8 @@ export type DraftPoolClientPayload = {
   count?: number
   rosterConfigurationIncomplete?: boolean
   poolType?: string | null
+  /** `fallback_no_rookie_data`: a rookies-only session is showing the full pool (no rookie flags). */
+  rookieFilterState?: RookieFilterState
   meta?: {
     source?: string
     entryCount?: number
@@ -1037,6 +1040,7 @@ export function DraftRoomPageClient({
           count: typeof data.count === 'number' ? data.count : Array.isArray(data.entries) ? data.entries.length : undefined,
           rosterConfigurationIncomplete: data.rosterConfigurationIncomplete === true,
           poolType: typeof data.poolType === 'string' ? data.poolType : null,
+          rookieFilterState: parseRookieFilterState(data.rookieFilterState),
           meta:
             data.meta && typeof data.meta === 'object'
               ? {
@@ -3770,6 +3774,7 @@ export function DraftRoomPageClient({
         loading={poolLoading}
         loadingMessage={poolLoadingMessage}
         poolError={poolError}
+        rookieFilterState={draftPool?.rookieFilterState}
         useAiAdp={draftUISettings?.aiAdpEnabled ?? false}
         aiAdpUnavailable={aiAdpUnavailable}
         aiAdpUnavailableMessage={leagueAiAdp?.message ?? null}
@@ -3847,6 +3852,7 @@ export function DraftRoomPageClient({
       poolLoading,
       poolLoadingMessage,
       poolError,
+      draftPool?.rookieFilterState,
       draftUISettings?.aiAdpEnabled,
       aiAdpUnavailable,
       leagueAiAdp?.message,
