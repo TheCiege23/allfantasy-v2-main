@@ -30,11 +30,16 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
   const [message, setMessage] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' })
-    const body = (await res.json().catch(() => null)) as View | { error?: string } | null
-    if (!res.ok || !body || !('review' in body)) return setMessage((body as { error?: string } | null)?.error ?? `HTTP ${res.status}`)
-    setView(body)
-    setText(body.draft ? (body.draft.editedText ?? body.draft.generatedText) : '')
+    // Never rejects: a failed read is a message on the card, not an unhandled error on the hub.
+    try {
+      const res = await fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' })
+      const body = (await res.json().catch(() => null)) as View | { error?: string } | null
+      if (!res.ok || !body || !('review' in body)) return setMessage((body as { error?: string } | null)?.error ?? `HTTP ${res.status}`)
+      setView(body)
+      setText(body.draft ? (body.draft.editedText ?? body.draft.generatedText) : '')
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e))
+    }
   }, [endpoint])
 
   useEffect(() => {
