@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  evaluateTradeDeadline,
+  resolveTradeDeadlineStatus,
   normalizeDeadlineWeek,
   resolveServerTradeWeek,
 } from '@/lib/trade-deadline/tradeDeadlineWindow'
@@ -52,24 +52,24 @@ describe('resolveServerTradeWeek', () => {
   })
 })
 
-describe('evaluateTradeDeadline', () => {
+describe('resolveTradeDeadlineStatus', () => {
   it('passes only AFTER the deadline week', async () => {
     const season = { id: 'S', currentWeek: 0, status: 'active' }
-    expect((await evaluateTradeDeadline(LEAGUE, 11, deps(season, 11).deps)).passed).toBe(false)
-    expect((await evaluateTradeDeadline(LEAGUE, 11, deps(season, 12).deps)).passed).toBe(true)
+    expect((await resolveTradeDeadlineStatus(LEAGUE, 11, deps(season, 11).deps)).passed).toBe(false)
+    expect((await resolveTradeDeadlineStatus(LEAGUE, 11, deps(season, 12).deps)).passed).toBe(true)
   })
 
   it('no deadline configured: reads nothing at all', async () => {
     const d = deps({ id: 'S', currentWeek: 16, status: 'active' }, 16)
     for (const none of [null, undefined, 0, -3, 'abc']) {
-      await expect(evaluateTradeDeadline(LEAGUE, none, d.deps)).resolves.toEqual({ passed: false, deadlineWeek: null, window: null })
+      await expect(resolveTradeDeadlineStatus(LEAGUE, none, d.deps)).resolves.toEqual({ passed: false, deadlineWeek: null, window: null })
     }
     expect(d.findFirst).not.toHaveBeenCalled()
   })
 
   it("offseason: last season's week 17 is not past this season's deadline", async () => {
     const d = deps({ id: 'S', currentWeek: 17, status: 'complete' }, 17)
-    await expect(evaluateTradeDeadline(LEAGUE, 11, d.deps)).resolves.toMatchObject({ passed: false, deadlineWeek: 11 })
+    await expect(resolveTradeDeadlineStatus(LEAGUE, 11, d.deps)).resolves.toMatchObject({ passed: false, deadlineWeek: 11 })
     expect(d.resolveWeek).not.toHaveBeenCalled()
   })
 })

@@ -120,7 +120,7 @@ export type TradeDeadlineVerdict = {
  * Has `deadlineWeek` passed for this league right now? The deadline week itself is still open —
  * "deadline week 11" refuses from week 12 — matching `isPastTradeDeadline` and the NFL runtime.
  */
-export async function evaluateTradeDeadline(
+export async function resolveTradeDeadlineStatus(
   league: TradeDeadlineLeague,
   deadlineWeek: unknown,
   deps: TradeDeadlineDeps = {},
@@ -140,7 +140,7 @@ export async function serverWeekForTradeDeadline(
   deadlineWeek: unknown,
   deps: TradeDeadlineDeps = {},
 ): Promise<number | null> {
-  const verdict = await evaluateTradeDeadline(league, deadlineWeek, deps)
+  const verdict = await resolveTradeDeadlineStatus(league, deadlineWeek, deps)
   return verdict.window?.inSeason ? verdict.window.week : null
 }
 
@@ -164,7 +164,7 @@ export async function evaluateRedraftTradeDeadline(
   })
   if (!row) return { passed: false, deadlineWeek: null, window: null }
   const league = { ...row, id: leagueId }
-  if (!opts.alwaysResolveWeek) return evaluateTradeDeadline(league, row.tradeDeadlineWeek, deps)
+  if (!opts.alwaysResolveWeek) return resolveTradeDeadlineStatus(league, row.tradeDeadlineWeek, deps)
   const deadline = normalizeDeadlineWeek(row.tradeDeadlineWeek)
   const window = await resolveServerTradeWeek(league, deps)
   return { passed: deadline != null && window.inSeason && window.week > deadline, deadlineWeek: deadline, window }
