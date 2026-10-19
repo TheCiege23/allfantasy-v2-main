@@ -1,41 +1,40 @@
 import type { League } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { KeeperEligibilityRow } from './types'
+import { keeperCostRound, resolveKeeperRules } from './keeperRules'
 
-function computeCostRound(
+function computeCost(
   league: Pick<
     League,
     | 'keeperCostSystem'
     | 'keeperRoundPenalty'
     | 'keeperInflationRate'
     | 'keeperAuctionPctIncrease'
+    | 'keeperConflictRule'
+    | 'settings'
   >,
-  originalRound: number | null,
+  lastRound: number | null,
   yearsKept: number,
-): { costRound: number | null; costLabel: string | null; costAuction: number | null } {
-  const sys = league.keeperCostSystem ?? 'round_based'
-  const pen = league.keeperRoundPenalty ?? 1
-  const infl = league.keeperInflationRate ?? 1
+  totalRounds: number,
+): { costRound: number | null; costLabel: string | null; costAuction: number | null; ineligibleReason: string | null } {
+  const rules = resolveKeeperRules(league)
   const aucPct = league.keeperAuctionPctIncrease ?? 0.2
 
-  if (sys === 'free') {
-    return { costRound: null, costLabel: 'Free', costAuction: null }
+  if (rules.costSystem === 'free') {
+    return { costRound: null, costLabel: 'Free', costAuction: null, ineligibleReason: null }
   }
 
-  if (sys === 'auction_value') {
+  if (rules.costSystem === 'auction_value') {
     const base = 40
     const cost = base * (1 + aucPct) * (1 + yearsKept * 0.1)
-    return { costRound: null, costLabel: `$${cost.toFixed(0)}`, costAuction: cost }
+    return { costRound: null, costLabel: `$${cost.toFixed(0)}`, costAuction: cost, ineligibleReason: null }
   }
 
-  const or = originalRound ?? 10
-  if (sys === 'inflation') {
-    const costRound = Math.max(1, or - pen * (yearsKept + 1))
-    return { costRound, costLabel: `Round ${costRound}`, costAuction: null }
-  }
-
-  const costRound = Math.max(1, or - pen)
-  return { costRound, costLabel: `Round ${costRound}`, costAuction: null }
+  // Round costs, waiver-pickup cost and the round floor: lib/keeper/keeperRules.ts.
+  const cost = keeperCostRound(rules, { lastRound, yearsKept, totalRounds })
+  return cost.ok
+    ? { costRound: cost.costRound, costLabel: cost.label, costAuction: null, ineligibleReason: null }
+    : { costRound: cost.costRound, costLabel: cost.label, costAuction: null, ineligibleReason: cost.reason }
 }
 
 export async function computeKeeperEligibility(
@@ -89,7 +88,8 @@ export async function computeKeeperEligibility(
       if (keep.costRound != null && !lastKeptCost.has(key)) lastKeptCost.set(key, keep.costRound)
     }
   }
-  const undraftedRound = latestDraft?.rounds ?? null
+  // Rounds in the draft: the last draft's, else the deepest round anyone was drafted in.
+  const totalRounds = latestDraft?.rounds ?? Math.max(15, ...picks.map((p) => p.round))
 
   const out: KeeperEligibilityRow[] = []
 
@@ -114,19 +114,19 @@ export async function computeKeeperEligibility(
         ineligibleReason = 'not_drafted'
       }
 
-      // The round he last cost: his keeper round if kept last year, else where he was drafted,
-      // else — a free-agent pickup — the draft's last round.
-      const originalRound =
+      // The round he last cost: his keeper round if kept last year, else where he was drafted.
+      // Null — a free-agent pickup — costs the league's waiver round (default: the last round).
+      const lastRound =
         (idKey ? lastKeptCost.get(idKey) : undefined) ??
         lastKeptCost.get(nKey) ??
         (idKey ? draftedRound.get(idKey) : undefined) ??
         draftedRound.get(nKey) ??
-        undraftedRound
-      const { costRound, costLabel, costAuction } = computeCostRound(league, originalRound, yearsKept)
+        null
+      const { costRound, costLabel, costAuction, ineligibleReason: costRefusal } = computeCost(league, lastRound, yearsKept, totalRounds)
 
-      if (isEligible && costRound !== null && costRound < 1) {
+      if (isEligible && costRefusal) {
         isEligible = false
-        ineligibleReason = 'no_pick_available'
+        ineligibleReason = costRefusal
       }
 
       const row = await prisma.keeperEligibility.upsert({
