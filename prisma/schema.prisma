@@ -14563,6 +14563,7 @@ model RedraftRoster {
   playoffWinningMatchups   RedraftPlayoffMatchup[]    @relation("RedraftPlayoffWinnerRoster")
   playoffSeeds             RedraftPlayoffSeed[]
   players                  RedraftRosterPlayer[]
+  dailyLineups             RedraftDailyLineup[]
   /// Back-relation for `Roster.redraftRosterId`. See that field for why the link exists and why it
   /// is incomplete; nothing here should assume every redraft roster has a `Roster` counterpart —
   /// 60 of them do not.
@@ -15392,6 +15393,51 @@ model RedraftPlayoffMatchup {
   @@index([roundId, status])
   @@index([seasonId])
   @@map("redraft_playoff_matchups")
+}
+
+/// Daily lineups (MLB/NBA/NHL, `sportConfig.dailyLineupsEnabled`): the slot each rostered player held
+/// on one US Eastern scoring day. A day with no row carries forward the most recent earlier day.
+/// See docs/DAILY_LINEUPS_DESIGN.md §4 and lib/redraft/dailyLineups.ts.
+model RedraftDailyLineup {
+  id         String        @id @default(cuid())
+  leagueId   String
+  rosterId   String
+  season     Int
+  week       Int
+  scoringDay DateTime      @db.Date
+  playerId   String        @db.VarChar(128)
+  slotType   String        @db.VarChar(32)
+  lockedAt   DateTime?
+  source     String        @default("user") @db.VarChar(32)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  roster     RedraftRoster @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+
+  @@unique([rosterId, scoringDay, playerId])
+  @@index([leagueId, season, week])
+  @@index([rosterId, season, week])
+  @@map("redraft_daily_lineups")
+}
+
+/// One player's summed stats for one US Eastern scoring day, sport-wide like `PlayerWeeklyScore`.
+/// Written by the weekly stat sync for daily-lineup leagues only.
+model PlayerDailyScore {
+  id           String   @id @default(cuid())
+  playerId     String
+  sport        String
+  season       Int
+  week         Int
+  scoringDay   DateTime @db.Date
+  stats        Json
+  gamesPlayed  Int      @default(0)
+  gamesStarted Int      @default(0)
+  inningsOuts  Int?
+  isFinalized  Boolean  @default(false)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([playerId, sport, season, scoringDay])
+  @@index([sport, season, week])
+  @@map("player_daily_scores")
 }
 
 model PlayerWeeklyScore {

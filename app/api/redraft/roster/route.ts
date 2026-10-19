@@ -29,6 +29,7 @@ import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
 import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace'
+import { isDailyLineupScoringEnabled, writeDailyLineupForSave } from '@/lib/redraft/dailyLineups'
 import {
   crosswalkToRollingInsightsIds,
   type RiCrosswalkDb,
@@ -693,14 +694,26 @@ export async function PATCH(req: NextRequest) {
     )
   }
 
-  await prisma.$transaction(
-    body.moves.map((m) =>
-      prisma.redraftRosterPlayer.updateMany({
+  const dailyLineups = isDailyLineupScoringEnabled(leagueForLock?.settings ?? null, roster.season.sport)
+  await prisma.$transaction(async (tx) => {
+    for (const m of body.moves!) {
+      await tx.redraftRosterPlayer.updateMany({
         where: { rosterId: roster.id, playerId: m.playerId, droppedAt: null },
         data: { slotType: m.toSlot },
-      }),
-    ),
-  )
+      })
+    }
+    // A daily-lineup league is scored per day: pin this lineup to every day the save decides.
+    if (dailyLineups) {
+      await writeDailyLineupForSave(tx, {
+        leagueId: roster.leagueId,
+        redraftRosterId: roster.id,
+        sport: roster.season.sport,
+        season: roster.season.season,
+        week,
+        before: new Map(currentPlayers.map((p) => [p.playerId, p.slotType])),
+      })
+    }
+  })
 
   // Phase 2H: best-effort lineup-history write for Decision OS Phase 6 DNA
   // (docs/DECISION_OS_MANAGER_DNA_PHASE2G_VOLUME_AND_LINEUP_HISTORY_SCOPE.md §2).

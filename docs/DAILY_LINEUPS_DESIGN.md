@@ -1,9 +1,16 @@
 # Daily lineups for MLB, NBA and NHL — design
 
-Status: **design + lock core only.** The `daily` lock mode is implemented behind an opt-in setting
-that defaults to off and that nothing in the product turns on. Scoring per day, games-played caps and
-MLB innings limits are **proposed, not built**. A Prisma migration is **proposed below and not
-applied**; applying it is the owner's decision.
+Status (2026-10-19): **phases A, B and C built; the migration is written but NOT applied.**
+The owner ruled on the three scoring questions: matchups are the **daily sum**, each player locks
+**at his own game start**, and a player who has played stays locked **until the next day**. Phase B
+(per-day lineups on both save paths) and phase C (per-day stats and per-day matchup scoring) are in
+`lib/redraft/dailyLineups.ts`, behind the same per-league opt-in, with the migration in
+`prisma/migrations/20261020120000_daily_lineups`. Nothing turns the opt-in on yet. Games-played caps
+and MLB innings limits (phase D) and the UI (phase E) are **not built**.
+
+> 🛑 **Apply the migration before any league gets `dailyLineupsEnabled: true`.** The per-day tables are
+> read and written only for an opted-in league, so the code is inert until then, but an opted-in
+> league on a database without the tables fails every lineup save and every score.
 
 Line references are to `origin/main` at the time of writing unless marked "this branch".
 
@@ -198,6 +205,32 @@ This lock is used by `persistRosterLineupWithEngine` and `GET /api/league/roster
 
 ---
 
+## 5b. What phases B and C implement (2026-10-19)
+
+All of it is in `lib/redraft/dailyLineups.ts` and is gated by `isDailyLineupScoringEnabled`, which is
+exactly the lock's three-part `daily` gate (§5). An unflagged league never reads or writes the
+per-day tables.
+
+- **Saving (B).** Both save paths — `PATCH /api/redraft/roster` and `persistRosterLineupWithEngine` —
+  call `writeDailyLineupForSave` inside their own transaction, after their slot update. It writes the
+  roster's current slots for every day the save decides: today (Eastern) through the end of the week,
+  or the whole week for a save made ahead of it. Those days are replaced wholesale, so a dropped
+  player cannot linger. A week with no date window **refuses the save** rather than fall back to
+  weekly scoring under a daily lock (§3 B5).
+- **Reading a day's slot.** That day's row, else the player's latest earlier row (carry-forward), else
+  — when no daily save has named him — his slot in the weekly lineup (`weekSlotType`).
+- **Stats (C).** The weekly sync, for a flagged league only, also writes one `player_daily_scores` row
+  per player per game day, summed by the same normalizer as the weekly roll-up. Days with no game have
+  no row (0 points). Rows for days that no longer have a game are deleted.
+- **Scoring (C).** `scoreRosterStarters` sums, over the week's days, each day's starters' points for
+  that day. A day before the player joined the roster never counts. Bench days feed `benchPoints`.
+  Completeness still comes from the weekly row: no weekly row means the sync has not covered the
+  player (missing), and the finalizer's seal stays on the weekly row. Category leagues sum the starters'
+  per-day stat lines. Every caller — live updates, the finalizer, guillotine and roto — goes through it.
+- **Not yet:** the commissioner lock route still refuses `daily` (phase E), so the opt-in can only be
+  set by editing league settings; the AF engine lock stays on the weekly per-player lock from #2520,
+  which is stricter than the daily lock and therefore safe.
+
 ## 6. Data-model changes: a migration IS required (proposed, NOT applied)
 
 Per-day attribution needs a lineup per day and points per day. Neither fits the current unique keys:
@@ -285,9 +318,9 @@ The flag is `League.settings.sportConfig.dailyLineupsEnabled`. Default off, set 
 
 | Phase | Work | Migration | Gate |
 |---|---|---|---|
-| **A** *(this PR)* | `daily` lock decision, `byTeamDay`, warnings for a requested-but-inactive `daily`. Inert, because nothing sets the flag. | no | flag + sport |
-| **B** | Apply §6. Write `redraft_daily_lineups` on every lineup save **on both save paths** (redraft PATCH and `persistRosterLineupWithEngine`) for flagged leagues: the Eastern day of `now`, plus every later day of the week the save covers. A nightly carry-forward for days without a save is optional, because reads already carry forward. | **yes** (owner) | flag |
-| **C** | Stat sync writes `player_daily_scores` (the same rows `playerWeeklyScoreService.ts:420-450` already reads, grouped by `gameDate` instead of summed per week). `scoreRosterStarters` for flagged leagues computes Σ days Σ that day's starters. Same for the live-scoring runtime and the week finalizer. Category leagues sum the per-day starter stats. Unflagged leagues keep the weekly path byte for byte. | uses B | flag |
+| **A** *(done, #2514)* | `daily` lock decision, `byTeamDay`, warnings for a requested-but-inactive `daily`. Inert, because nothing sets the flag. | no | flag + sport |
+| **B** *(built)* | Apply §6. Write `redraft_daily_lineups` on every lineup save **on both save paths** (redraft PATCH and `persistRosterLineupWithEngine`) for flagged leagues: the Eastern day of `now`, plus every later day of the week the save covers. A nightly carry-forward for days without a save is optional, because reads already carry forward. | **yes** (owner) | flag |
+| **C** *(built)* | Stat sync writes `player_daily_scores` (the same rows `playerWeeklyScoreService.ts:420-450` already reads, grouped by `gameDate` instead of summed per week). `scoreRosterStarters` for flagged leagues computes Σ days Σ that day's starters. Same for the live-scoring runtime and the week finalizer. Category leagues sum the per-day starter stats. Unflagged leagues keep the weekly path byte for byte. | uses B | flag |
 | **D** | GP caps, goalie starts, MLB innings min/max and starts caps, applied in C's per-day accumulation in chronological order. | no | per-setting |
 | **E** | UI: a day picker on the lineup screen, a per-day lock banner (`lib/core-app/lineupLock.ts` already formats a lock time), and the commissioner route accepting `daily`. The AF engine lock switches to the schedule-derived per-player lock for flagged leagues (fixes B6/B7 for them). Then default **new** MLB/NBA/NHL leagues to daily. Existing leagues opt in. | no | flag |
 | **F** | Optional: re-evaluate B3 (category leagues forced to `first_game_of_week`) and B9 (Monday-to-Sunday weeks). Both change sealed-week semantics and need their own decision. | no | — |
