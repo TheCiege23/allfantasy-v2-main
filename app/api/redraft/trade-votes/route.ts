@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import {
   applyRedraftTradeCapTransfersInTransaction,
@@ -350,20 +351,9 @@ async function finalizeAcceptedTrade(
   return NextResponse.json({ proposal: updated, resolved: true })
 }
 
-async function isCommissionerOrCo(leagueId: string, userId: string): Promise<boolean> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: {
-      userId: true,
-      teams: {
-        where: { claimedByUserId: userId },
-        select: { isCommissioner: true, isCoCommissioner: true },
-      },
-    },
-  })
-  if (!league) return false
-  if (league.userId === userId) return true
-  return league.teams.some((t) => t.isCommissioner || t.isCoCommissioner)
+/** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
+function isCommissionerOrCo(leagueId: string, userId: string): Promise<boolean> {
+  return hasLeagueCommissionerRights(leagueId, userId)
 }
 
 /** A decision snapshot as an object, whatever was stored. */

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { assembleDiscoveryLeague } from '@/lib/trade-discovery/assembleRosters'
 import { findPackages } from '@/lib/trade-discovery/redraftTradeDiscovery'
@@ -9,14 +9,9 @@ import { discoverySignals } from '@/lib/trade-block/redraftTradeBlockService'
 
 export const dynamic = 'force-dynamic'
 
-async function isCommissionerOrOwner(leagueId: string, userId: string): Promise<boolean> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: { userId: true, teams: { where: { claimedByUserId: userId }, select: { isCommissioner: true, isCoCommissioner: true } } },
-  })
-  if (!league) return false
-  if (league.userId === userId) return true
-  return league.teams.some((t) => t.isCommissioner || t.isCoCommissioner)
+/** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
+function isCommissionerOrOwner(leagueId: string, userId: string): Promise<boolean> {
+  return hasLeagueCommissionerRights(leagueId, userId)
 }
 
 export async function POST(req: NextRequest) {

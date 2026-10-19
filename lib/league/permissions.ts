@@ -58,6 +58,31 @@ export function isCommissionerRole(role: LeagueRole): role is 'commissioner' | '
 }
 
 /**
+ * Yes/no: may userId act as commissioner or co-commissioner of leagueId? The league owner, anyone
+ * holding a team flagged `isCommissioner` / `isCoCommissioner`, or a co-commissioner granted by the
+ * tournament that created the league (./tournamentCoCommissioners — no team needed).
+ *
+ * One read. It is the check the redraft commissioner routes each carried a private copy of, with the
+ * tournament list added; unlike `getLeagueRole` it looks at EVERY team the user holds, as those
+ * copies did, so moving them here narrows nobody. Co-commissioner rights only — no team, no seat.
+ */
+export async function hasLeagueCommissionerRights(leagueId: string, userId: string): Promise<boolean> {
+  const league = await prisma.league.findFirst({
+    where: { id: leagueId },
+    select: {
+      userId: true,
+      settings: true,
+      teams: { where: { claimedByUserId: userId }, select: { isCommissioner: true, isCoCommissioner: true } },
+    },
+  })
+  if (!league) return false
+  if (league.userId === userId) return true
+  const teams = (league.teams ?? []) as { isCommissioner: boolean; isCoCommissioner: boolean }[]
+  if (teams.some((t) => t.isCommissioner || t.isCoCommissioner)) return true
+  return isTournamentCoCommissioner(league.settings, userId)
+}
+
+/**
  * Throws a 403 Response if userId is not commissioner or co-commissioner
  * of leagueId. Use this at the top of every settings API route.
  */
