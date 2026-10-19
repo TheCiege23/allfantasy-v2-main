@@ -181,7 +181,7 @@
       "schedule": "*/2 * * * *"
     },
     {
-      "path": "/api/cron/recompute-allfantasy-adp",
+      "path": "/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL",
       "schedule": "0 9 * * *"
     },
     {

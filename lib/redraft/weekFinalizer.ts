@@ -5,6 +5,7 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
@@ -393,6 +394,8 @@ export async function finalizeRedraftWeek(
    */
   let dateWindow: { start: Date; end: Date } | null = null
   if (isDateWindowed) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    await ensureDailySportSeasonStart(sport, season.season, { db: prisma })
     // The stat sync's own resolver, so slate and stats cover the same days — gameweeks for soccer.
     const window = resolveDailySportWeekWindow(sport, season.season, params.week)
     if (!window) return emptyResult(base, 'season_start_unknown')

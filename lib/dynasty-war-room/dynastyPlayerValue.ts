@@ -6,19 +6,37 @@
  * engines combine with value for buy/sell/hold + contention-window calls — it
  * never overwrites the raw value. No fabrication: missing inputs → null/none.
  */
+import { getPeakAgeRange } from '@/lib/dynasty-engine/SportDynastyResolver'
+import { catalogSport, dynastyAdpCutoff, NFL_DYNASTY_ADP_CUTOFF } from './dynastySportCatalog'
 import type { DynastyPlayerFact } from './types'
 
 export type DynastyValueSource = 'value' | 'adp' | 'projection' | 'none'
 
-/** Map an average overall dynasty ADP (lower = better) onto a positive value scale. */
-export function adpToDynastyValue(adp: number): number {
-  return Math.round((Math.max(0, 260 - adp) / 10) * 100) / 100
+/**
+ * Map an average overall dynasty ADP (lower = better) onto a positive value scale (0–26).
+ *
+ * The cutoff past which a player is worth 0 is NFL's 260 by default. Deep MLB/NHL dynasty rosters
+ * hold players far past ADP 260, so with `sport` the cutoff scales with that sport's dynasty roster
+ * depth (`dynastyAdpCutoff`) and the result is rescaled onto the same 0–26 range, so value
+ * thresholds in the engines mean the same thing in every sport. NFL output is identical.
+ */
+export function adpToDynastyValue(adp: number, sport?: string | null): number {
+  const cutoff = dynastyAdpCutoff(sport)
+  // NFL (cutoff 260) takes the original arithmetic verbatim, so its values stay bit-identical.
+  const scaled =
+    cutoff === NFL_DYNASTY_ADP_CUTOFF
+      ? Math.max(0, NFL_DYNASTY_ADP_CUTOFF - adp)
+      : (Math.max(0, cutoff - adp) * NFL_DYNASTY_ADP_CUTOFF) / cutoff
+  return Math.round((scaled / 10) * 100) / 100
 }
 
 /** Long-term dynasty asset value for a player (value → ADP → none). */
-export function dynastyValue(p: DynastyPlayerFact): { value: number; source: DynastyValueSource } {
+export function dynastyValue(
+  p: DynastyPlayerFact,
+  sport?: string | null,
+): { value: number; source: DynastyValueSource } {
   if (p.dynastyValue != null) return { value: p.dynastyValue, source: 'value' }
-  if (p.adp != null) return { value: adpToDynastyValue(p.adp), source: 'adp' }
+  if (p.adp != null) return { value: adpToDynastyValue(p.adp, sport), source: 'adp' }
   return { value: 0, source: 'none' }
 }
 
@@ -29,9 +47,23 @@ export function dynastyValue(p: DynastyPlayerFact): { value: number; source: Dyn
  */
 export type AgeTrajectory = 'ascending' | 'prime' | 'aging' | 'cliff' | 'unknown'
 
-export function ageTrajectory(position: string, age: number | null): AgeTrajectory {
+export function ageTrajectory(position: string, age: number | null, sport?: string | null): AgeTrajectory {
   if (age == null) return 'unknown'
   const pos = position.toUpperCase()
+  /*
+   * NBA/MLB/NHL: the hand-tuned curves below are NFL's, and every other position used to fall
+   * through to 'unknown' — so no MLB/NBA/NHL player ever read as ascending or aging. Use the
+   * sport's own peak-age range (lib/dynasty-engine/SportDynastyResolver.getPeakAgeRange):
+   * before peakStart → ascending, through peakEnd → prime, before hardCliff → aging, then cliff.
+   * NFL (and a call with no sport) keeps the table below exactly.
+   */
+  if (catalogSport(sport)) {
+    const { peakStart, peakEnd, hardCliff } = getPeakAgeRange(String(sport), pos)
+    if (age < peakStart) return 'ascending'
+    if (age <= peakEnd) return 'prime'
+    if (age < hardCliff) return 'aging'
+    return 'cliff'
+  }
   if (pos === 'RB') {
     if (age <= 23) return 'ascending'
     if (age <= 25) return 'prime'

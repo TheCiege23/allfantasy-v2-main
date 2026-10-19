@@ -40,7 +40,7 @@ type Effective = {
 type Presets = {
   roster: { id: string; label: string; formatType: string }[]
   scoring: { id: string; label: string; formatType: string; summary: string }[]
-  playoff: { playoffTeamCount: number; label: string; firstRoundByes: number; playoffStartWeek: number }[]
+  playoff: { playoffTeamCount: number; label: string; firstRoundByes: number; playoffStartWeek: number | null }[]
 }
 
 type DynastySettingsResponse = {
@@ -263,7 +263,7 @@ export default function DynastySettingsPanel({
               <> · {effective.rosterSummary.map((s) => `${s.slotName} ${s.count}`).join(', ')}</>
             )}
           </p>
-          {presets?.roster?.length && isCommissioner && (
+          {presets && presets.roster.length > 0 && isCommissioner && (
             <select
               className="mt-2 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
               value={effective.rosterFormatType}
@@ -286,7 +286,7 @@ export default function DynastySettingsPanel({
           <p className="mt-1 text-xs text-white/65">
             {effective.scoringPresetName} ({effective.scoringFormatType})
           </p>
-          {presets?.scoring?.length && isCommissioner && (
+          {presets && presets.scoring.length > 0 && isCommissioner && (
             <select
               className="mt-2 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
               value={effective.scoringFormatType}
@@ -309,7 +309,7 @@ export default function DynastySettingsPanel({
           <p className="mt-1 text-xs text-white/65">
             {effective.playoffTeamCount} teams · Start week from structure · Regular season {effective.regularSeasonWeeks} weeks
           </p>
-          {presets?.playoff?.length && isCommissioner && (
+          {presets && presets.playoff.length > 0 && isCommissioner && (
             <select
               className="mt-2 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
               value={effective.playoffTeamCount}

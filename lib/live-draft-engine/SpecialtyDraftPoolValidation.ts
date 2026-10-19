@@ -45,6 +45,12 @@ export interface SpecialtyPoolValidationInput {
   position: string
   assetType: string
   pickMetadata?: Record<string, unknown> | null
+  /**
+   * The server's own rookie verdict from the resolved draft pool (`resolveServerRookieStatus`).
+   * When it is a boolean it decides rookies-only / veterans-only eligibility and the client's
+   * metadata is ignored; `null`/absent falls back to the metadata hint.
+   */
+  serverRookieStatus?: boolean | null
   /** Skip pool checks (e.g. commissioner override) when true. */
   commissionerOverride?: boolean
 }
@@ -101,15 +107,19 @@ export function validateSpecialtyDraftPools(input: SpecialtyPoolValidationInput)
   }
 
   const pool = String(input.playerPool || 'all').toLowerCase()
+  // The server's verdict wins: the client only ever sends `isRookie: true` or nothing, so a
+  // metadata-only check could never refuse a veteran (see serverRookieStatus.ts).
+  const rookie =
+    typeof input.serverRookieStatus === 'boolean'
+      ? input.serverRookieStatus
+      : metadataSuggestsRookie(input.pickMetadata ?? undefined)
   if (pool === 'rookies_only') {
-    const hint = metadataSuggestsRookie(input.pickMetadata ?? undefined)
-    if (hint === false) {
+    if (rookie === false) {
       return { valid: false, error: 'Rookie-only pool: select a rookie-eligible player.' }
     }
   }
   if (pool === 'veterans_only') {
-    const hint = metadataSuggestsRookie(input.pickMetadata ?? undefined)
-    if (hint === true) {
+    if (rookie === true) {
       return { valid: false, error: 'Veterans-only pool: rookies are not eligible this draft.' }
     }
   }

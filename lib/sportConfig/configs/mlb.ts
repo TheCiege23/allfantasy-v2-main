@@ -1,4 +1,5 @@
 import type { SportConfigFull } from '../types'
+import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 /** Keys aligned with `mlbAdapter` / legacy redraft stat lines. */
 export const MLB_CONFIG: SportConfigFull = {
@@ -89,9 +90,9 @@ export const MLB_CONFIG: SportConfigFull = {
     RP: ['RP', 'P'],
   },
 
-  defaultSeasonWeeks: 23,
-  defaultPlayoffStartWeek: 22,
-  defaultPlayoffTeams: 4,
+  defaultSeasonWeeks: DAILY_SPORT_SEASON_SHAPE.MLB.totalWeeks,
+  defaultPlayoffStartWeek: playoffStartWeekFor('MLB'),
+  defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.MLB.playoffTeams,
   defaultMatchupPeriodDays: 7,
   lineupLockType: 'daily',
 
@@ -128,9 +129,9 @@ export const MLB_CONFIG: SportConfigFull = {
       key: 'seasonWeeks',
       label: 'Regular Season Weeks',
       type: 'number',
-      defaultValue: 21,
+      defaultValue: regularSeasonWeeksFor('MLB'),
       min: 15,
-      max: 25,
+      max: DAILY_SPORT_SEASON_SHAPE.MLB.totalWeeks,
       section: 'schedule',
       locksAfterStart: true,
     },
