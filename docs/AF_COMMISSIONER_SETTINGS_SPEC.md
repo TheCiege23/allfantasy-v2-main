@@ -104,8 +104,8 @@ round they cost. Managers see their cost before the deadline; the commish sees a
 
 #### Keeper cost rule (one primary rule per league)
 
-Definitions used by the UI (so "up/down" is never ambiguous):
-**"Earlier round"** = more expensive (R5 → R4). **"Later round"** = cheaper (R5 → R6).
+Definitions used by the UI (confirmed by the owner 2026-10-19), shown with an example next to each option:
+**"Up" = earlier round** = more expensive (R5 → R4). **"Down" = later round** = cheaper (R5 → R6).
 
 | Rule | Example (drafted R5 last season) | Tier |
 |---|---|---|
@@ -121,7 +121,7 @@ Definitions used by the UI (so "up/down" is never ambiguous):
 | Modifier | Detail | Tier |
 |---|---|---|
 | **Waiver / free-agent pickups cost round [X]** | Undrafted pickups cost round X (default: last round). Option: "round X or later if picked up after week Y" | Free |
-| **Two keepers in the same round** | Options: (a) lose that round **plus the round before**; (b) lose that round **plus the round after**; (c) next-available earlier round; (d) next-available later round; (e) not allowed — validation blocks it | Sub (a/b), Free (e) |
+| **Two keepers in the same round** | Options: (a) lose that round **plus the round before** — **default** (owner decision 2026-10-19); (b) lose that round **plus the round after**; (c) next-available earlier round; (d) next-available later round; (e) not allowed — validation blocks it | Sub (a/b), Free (e) |
 | Round floor | Keeper can never cost earlier than round X (e.g., Round 1 players can't be kept) | Free |
 | Max years kept | Player can be kept N seasons, then returns to the pool | Free |
 | Max keepers per team | 0–N; optional per-position limits | Free |
@@ -275,7 +275,7 @@ format. **Free** = any commish with an account. **Sub** = Commissioner plan.
 | Free | Sub |
 |---|---|
 | Keeper count, max years, deadline, max per position | Escalating, ADP-based and auction keeper costs |
-| Cost rule: same round / 1 round later / 1 round earlier | Same-round conflict rule: lose that round + the round before or after, or bump to next open round |
+| Cost rule: same round / 1 round later / 1 round earlier | Same-round conflict rule: lose that round + the round before (default) or after, or bump to next open round |
 | Waiver pickups cost round X (default last) | Waiver pickup cost by pickup week ("after week 8 = round 10") |
 | Round floor (e.g., R1 can't be kept) | Traded keepers keep original cost; non-submitter default (AF picks best value) |
 | Keepers pre-filled on the draft board at deadline | Keeper value report: surplus value of each candidate vs. its cost, shared to managers before the deadline |
@@ -374,13 +374,16 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
 
 ---
 
-## 6. Open questions for the owner
+## 6. Decisions and open questions
 
-1. **"One round up/down" wording.** This spec reads "up" as *earlier/more expensive* (R5 → R4) and "down" as
-   *later/cheaper* (R5 → R6). Confirm, and the UI will show the example next to each option so managers never guess.
-2. **Same-round conflict default:** lose the round **before** (more punishing) or the round **after**?
-3. **Within-round playoff ordering default:** worse seed picks earlier, or reverse max PF?
-4. Should keeper and rookie-order automation for **imported** leagues be in the Commissioner plan, or a cheaper
-   "Commish Assist" add-on to pull in commishes who won't move their league?
+**Decided by the owner (2026-10-19):**
+1. **"Up" = earlier round** (more expensive, R5 → R4); **"down" = later round** (cheaper, R5 → R6).
+2. **Same-round keeper conflict default:** lose that round **plus the round before**. Commish can switch to "round
+   after" or a bump rule.
+3. **Imported-league tools** (rookie order, keepers, playoffs calculators for Sleeper/ESPN/Yahoo/MFL leagues) are
+   part of the **Commissioner plan** — no separate add-on. Free keeps the one-time on-demand calculation (§1.1).
+
+**Still open:**
+4. **Within-round playoff ordering default:** worse seed picks earlier, or reverse max PF? (Spec default: worse seed.)
 5. Should a league stay unlocked when the paying commish hands the league to a non-subscriber mid-season? (Spec
    says yes until rollover.)
