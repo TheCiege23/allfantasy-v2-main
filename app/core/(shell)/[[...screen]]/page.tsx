@@ -4,6 +4,9 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
+import { LANG_COOKIE_KEY, resolveLanguage } from '@/lib/i18n/constants'
+import { ScreenUnavailable } from '@/components/core-app/ScreenUnavailable'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
@@ -1979,6 +1982,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     homeScope,
     favoriteIds,
   } = ctx
+  /*
+   * The reader's language for server-rendered copy on this screen. Read from the `af_lang` cookie,
+   * as app/layout.tsx does for <html lang> — no session or profile read, so every screen can afford
+   * it. The client switcher writes the cookie and refreshes the route.
+   */
+  const language = resolveLanguage((await cookies()).get(LANG_COOKIE_KEY)?.value)
 
   /*
    * The /core depth paywall (lib/core-app/coreDepthAccess.ts) — one plan read per render, and only
@@ -4416,30 +4425,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         bracket ? (
           <BracketChallenge data={bracket} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Bracket Challenge
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              The team list for this sport could not be read just now. Nothing is lost — reload, or
-              pick another sport.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Bracket Challenge"
+            body="The team list for this sport could not be read just now. Nothing is lost — reload, or pick another sport."
+          />
         )
       ) : segment === 'hubs' ? (
         /* Segment-matched and above every activeKey branch — see the model-admin note below. */
         formatHub ? (
           <FormatHub data={formatHub} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Format hubs
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your leagues just now. This is a read failure on our side, not a sign
-              that you have none.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Format hubs"
+            body="We could not read your leagues just now. This is a read failure on our side, not a sign that you have none."
+          />
         )
       ) : segment === 'discord' && discordScreen ? (
         discordScreen.state === 'ready' ? (
@@ -4555,7 +4556,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           /* The read failed for a league the user HAS selected — say so, and keep
              them on this screen. Falling through to the picker below would tell
              them to choose a league they already chose. */
-          <ScreenLoadError screen="My team" retryHref={retryHref} />
+          <ScreenLoadError screen="My team" retryHref={retryHref} language={language} />
         ) : /*
            * 2026-09-07 handoff. The ranked board IS the screen now; the picker
            * lives behind `?all=1`, which the board's own footer links to.
@@ -4585,7 +4586,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <Matchup data={matchup} />
           </>
         ) : matchupLoadFailed ? (
-          <ScreenLoadError screen="Matchup" retryHref={retryHref} />
+          <ScreenLoadError screen="Matchup" retryHref={retryHref} language={language} />
         ) : showAllLeagues || !matchupPulse ? (
           /*
            * A failed pulse read is not "no games" — fall back to the picker, and SAY it failed.
@@ -4648,7 +4649,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             />
           </>
         ) : tradesLoadFailed ? (
-          <ScreenLoadError screen="Trade Center" retryHref={retryHref} />
+          <ScreenLoadError screen="Trade Center" retryHref={retryHref} language={language} />
         ) : (
           <TradeCenter
             viewerId={userId}
@@ -4661,7 +4662,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         waivers ? (
           <Waivers data={waivers} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />
         ) : waiversLoadFailed ? (
-          <ScreenLoadError screen="Waivers" retryHref={retryHref} />
+          <ScreenLoadError screen="Waivers" retryHref={retryHref} language={language} />
         ) : !showAllLeagues && waiversBoard ? (
           <WaiversBoard
             data={waiversBoard}
@@ -4767,7 +4768,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : selectedLeagueId && draftArchiveSlot ? (
           draftArchiveSlot
         ) : draftHqLoadFailed ? (
-          <ScreenLoadError screen="Draft HQ" retryHref={retryHref} />
+          <ScreenLoadError screen="Draft HQ" retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
           <>{draftArchiveSlot}<PickALeague
             tabKey="draft-hq"
@@ -4896,11 +4897,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                * while Scout's own read fails, and that half should still be shown rather than
                * replaced by an error for the other half.
                */
-              <ScreenLoadError screen="Scout" retryHref={retryHref} />
+              <ScreenLoadError screen="Scout" retryHref={retryHref} language={language} />
             ) : null}
           </>
         ) : scoutLoadFailed ? (
-          <ScreenLoadError screen="War Room" retryHref={retryHref} />
+          <ScreenLoadError screen="War Room" retryHref={retryHref} language={language} />
         ) : (
           <PickALeague
             tabKey="war-room"
@@ -5022,7 +5023,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             rivalries ? (
               <RivalryRadar data={rivalries} weekHref="/core/week" />
             ) : (
-              <ScreenLoadError screen="Rivalry Radar" retryHref={retryHref} />
+              <ScreenLoadError screen="Rivalry Radar" retryHref={retryHref} language={language} />
             )
           ) : weekBoard ? (
             /*
@@ -5052,7 +5053,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               />
             )
           ) : (
-            <ScreenLoadError screen="Your Week" retryHref={retryHref} />
+            <ScreenLoadError screen="Your Week" retryHref={retryHref} language={language} />
           )}
         </>
       ) : activeKey === 'commissioner' ? (
@@ -5075,15 +5076,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            * had simply not picked one yet.
            */
         selectedLeagueId ? (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Commissioner
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read this league just now. This is a read failure on our side, not a
-              sign that you do not run it.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Commissioner"
+            body="We could not read this league just now. This is a read failure on our side, not a sign that you do not run it."
+          />
         ) : commissionerOverview ? (
           <CommissionerOverview data={commissionerOverview} />
         ) : (
@@ -5130,15 +5127,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (
-            <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-                Standings
-              </h1>
-              <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-                We could not read this league&apos;s weekly results just now. This is a read failure
-                on our side, not a season with no games in it.
-              </p>
-            </div>
+            <ScreenUnavailable
+              language={language}
+              title="Standings"
+              body="We could not read this league's weekly results just now. This is a read failure on our side, not a season with no games in it."
+            />
           ) : showAllLeagues || !outlook ? (
             /*
              * A failed simulation is not "no standings" — fall back to the
@@ -5184,15 +5177,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             }}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Live Scores
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read the slate just now. This is a read failure on our side, not a day
-              with no games on — your players may well be playing.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Live Scores"
+            body="We could not read the slate just now. This is a read failure on our side, not a day with no games on — your players may well be playing."
+          />
         )
       ) : activeKey === 'season-outlook' ? (
         outlook ? (
@@ -5215,29 +5204,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />
           )
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Season Outlook
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not run the simulations just now. This is a read failure on our side, not a
-              season with nothing left to decide.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Season Outlook"
+            body="We could not run the simulations just now. This is a read failure on our side, not a season with nothing left to decide."
+          />
         )
       ) : activeKey === 'notifications' ? (
         notifications ? (
           <NotificationsCenter data={notifications} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Notifications
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your notifications just now. This is a read failure on our side, not
-              an empty inbox.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Notifications"
+            body="We could not read your notifications just now. This is a read failure on our side, not an empty inbox."
+          />
         )
       ) : activeKey === 'share' ? (
         shareCareer ? (
@@ -5277,15 +5258,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             reward={{ tokensPerShare: 1, oncePerDay: true }}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Career Share
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your career just now, and this card is built from it. This is a read
-              failure on our side, not a career with nothing in it.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Career Share"
+            body="We could not read your career just now, and this card is built from it. This is a read failure on our side, not a career with nothing in it."
+          />
         )
       ) : activeKey === 'tools' ? (
         <Tools
@@ -5332,15 +5309,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <Rankings data={rankings} leagueId={selectedLeagueId} />
           )
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Rankings
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read the rankings just now. This is a read failure on our side, not a sign
-              that nobody is ranked.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Rankings"
+            body="We could not read the rankings just now. This is a read failure on our side, not a sign that nobody is ranked."
+          />
         )
       ) : activeKey === 'career' ? (
         /*
@@ -5360,15 +5333,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             nowIso={now.toISOString()}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Career
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your career history just now. This is a read failure on our side, not a
-              sign that you have none.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Career"
+            body="We could not read your career history just now. This is a read failure on our side, not a sign that you have none."
+          />
         )
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
@@ -5385,15 +5354,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             initialView={portfolioView}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Portfolio
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not load your leagues just now. This is a read failure on our side, not a
-              sign that you have none.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Portfolio"
+            body="We could not load your leagues just now. This is a read failure on our side, not a sign that you have none."
+          />
         )
       ) : activeKey === 'home' ? (
         /*
@@ -5460,13 +5425,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              {rail.find((l) => l.id === selectedLeagueId)?.name ?? 'This league'}
+              {rail.find((l) => l.id === selectedLeagueId)?.name ?? coreUiCopy('This league', language)}
             </h1>
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read this league just now. This is a read failure on our side — your other
-              leagues are unaffected, and nothing about this one has changed. Reload, or{' '}
+              {language === 'es'
+                ? 'No pudimos leer esta liga en este momento. Es un fallo de lectura de nuestra parte: tus otras ligas no se ven afectadas y nada de esta ha cambiado. Recarga o '
+                : 'We could not read this league just now. This is a read failure on our side — your other leagues are unaffected, and nothing about this one has changed. Reload, or '}
               <a href="/core" style={{ color: 'var(--accent)' }}>
-                go back to all leagues
+                {language === 'es' ? 'vuelve a todas tus ligas' : 'go back to all leagues'}
               </a>
               .
             </p>
