@@ -370,6 +370,9 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
   Not yet: commissioner UI, chat post after each playoff round, true Max PF for native leagues (they fall back to
   points for with a warning), toilet-bowl and lottery options.
 
+- **Keeper rules engine — built (2026-10-19)**, TheCiege23/allfantasy-v2-main#2499: same/up/down/inflation costs,
+  waiver round, round floor, same-round rules (`lib/keeper/keeperRules.ts`); moving same-round rules are AF Commissioner.
+  Not yet: ADP and real-price auction costs, traded-player cost carry, auto-picks for missed deadlines.
 - **Custom playoff byes — built (2026-10-19)**, TheCiege23/allfantasy-v2-main#2498: bye plans
   (`lib/playoff-brackets/byePlan.ts`), runtime support, `advanced_playoff_setup` gate in the settings patch, and a
   Bracket format card in the Playoffs tab. Odd counts were already supported and stay free.
