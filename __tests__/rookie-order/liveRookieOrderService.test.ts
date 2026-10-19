@@ -70,6 +70,15 @@ describe('refreshLiveRookieOrder', () => {
     expect(saved.live.finalOrder.slots.map((s: { rosterId: string }) => s.rosterId)).toEqual(['r-n1', 'r-a', 'r-b'])
   })
 
+  it('carries the league platform, so an imported league can be told where to set the order', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ userId: 'commish', settings: {}, platform: 'sleeper' })
+    mockLoad.mockResolvedValue(finalSeason)
+    mockEvaluate.mockResolvedValue({ allowed: false })
+    expect((await refreshLiveRookieOrder('L1'))?.platform).toBe('sleeper')
+    mockLeagueFindUnique.mockResolvedValue({ userId: 'commish', settings: {} })
+    expect((await refreshLiveRookieOrder('L1'))?.platform).toBeNull()
+  })
+
   it('keeps running for the season it was turned on in after the plan lapses', async () => {
     mockLeagueFindUnique.mockResolvedValue({ userId: 'commish', settings: liveOn() })
     mockLoad.mockResolvedValue(finalSeason)
