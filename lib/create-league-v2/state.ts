@@ -15,6 +15,7 @@ import {
   type BestBallModeId,
 } from '@/lib/bestball/rules'
 import type { PremiumAdvancedCreateState } from '@/lib/create-league-v2/simple-create'
+import { regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 /** Wizard-level draft type — superset of Prisma's DraftTypeId to accommodate execution modes. */
 export type WizardDraftType = DraftTypeId | 'team' | 'auto' | 'offline'
@@ -196,14 +197,17 @@ export interface CreateLeagueV2State {
   pprMode: PprMode
 }
 
+// NBA/NHL/MLB season length comes from dailySportSeasonShape.ts, the one table the redraft season,
+// the playoff start and the server-side dynasty fallback all read. These were 20/21/21 and drifted
+// from it, so a wizard-made league and a defaulted one got different seasons.
 function defaultDynastyBySport(sport: SupportedSport): Pick<DynastySetupState, 'benchCount' | 'irCount' | 'taxiSlotCount' | 'regularSeasonLength' | 'playoffTeamCount' | 'playoffByeCount' | 'startupRosterDepth'> {
   switch (sport) {
     case 'NBA':
-      return { benchCount: 8, irCount: 3, taxiSlotCount: 4, regularSeasonLength: 20, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 24 }
+      return { benchCount: 8, irCount: 3, taxiSlotCount: 4, regularSeasonLength: regularSeasonWeeksFor('NBA'), playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 24 }
     case 'MLB':
-      return { benchCount: 12, irCount: 4, taxiSlotCount: 6, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 34 }
+      return { benchCount: 12, irCount: 4, taxiSlotCount: 6, regularSeasonLength: regularSeasonWeeksFor('MLB'), playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 34 }
     case 'NHL':
-      return { benchCount: 9, irCount: 3, taxiSlotCount: 4, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 26 }
+      return { benchCount: 9, irCount: 3, taxiSlotCount: 4, regularSeasonLength: regularSeasonWeeksFor('NHL'), playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 26 }
     case 'NCAAF':
       return { benchCount: 10, irCount: 2, taxiSlotCount: 4, regularSeasonLength: 12, playoffTeamCount: 4, playoffByeCount: 0, startupRosterDepth: 24 }
     case 'NCAAB':
