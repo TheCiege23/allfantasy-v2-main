@@ -522,7 +522,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsEd.dr.noAction": "No action taken",
     "lsEd.dr.loading": "Loading draft settings...",
     "lsEd.dr.subtitle": "Set draft time, time per pick, draft order, and set keepers/dynasty",
-    "lsEd.dr.localTz": "This is relative to your local timezone",
+    "lsEd.dr.v2.leagueTz": "Date and time are in the league's timezone: {{tz}}",
     "lsEd.dr.snake": "Snake",
     "lsEd.dr.linear": "Linear",
     "lsEd.dr.auction": "Auction",
