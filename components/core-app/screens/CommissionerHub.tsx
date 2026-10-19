@@ -35,6 +35,7 @@ import {
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
+import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
@@ -492,6 +493,13 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
         </HubSection>
       </HubDepthGate>
+
+      {/* Lineup integrity — free for the latest week; the card names what the plan adds. */}
+      {league.platform === 'sleeper' ? (
+        <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
+          <LineupIntegrity leagueId={league.id} />
+        </HubSection>
+      ) : null}
 
       {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
       <CommunityLinks

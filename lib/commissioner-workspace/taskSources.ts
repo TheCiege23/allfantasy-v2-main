@@ -343,5 +343,15 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
   const managers = withSilentManagers(moved, roster.ownedTeamNames)
   const inactive = detectInactiveManagers(managers, window.lastActivityAt, now)
 
-  return [...[neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null), ...await readOperationalTasks(leagueId, now)]
+  /*
+   * Lineup integrity (lib/lineup-integrity): teams whose finished-week lineup could not score — an
+   * empty slot or a starter on bye. Sleeper NFL leagues only; it returns nothing for the rest.
+   * Imported dynamically so the native path above never loads it.
+   */
+  const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
+  return [
+    ...[neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null),
+    ...await readOperationalTasks(leagueId, now),
+    ...await readLineupIntegrityTasks(leagueId),
+  ]
 }
