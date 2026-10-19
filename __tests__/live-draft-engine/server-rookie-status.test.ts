@@ -13,7 +13,12 @@ vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({
   getWarmDraftPoolSnapshotFast: vi.fn(async () => h.snapshot),
 }))
 
-import { resolveServerRookieStatus, rookieStatusFromPoolEntries } from '@/lib/live-draft-engine/serverRookieStatus'
+import {
+  filterCandidatesForPlayerPool,
+  isEligibleForPlayerPool,
+  resolveServerRookieStatus,
+  rookieStatusFromPoolEntries,
+} from '@/lib/live-draft-engine/serverRookieStatus'
 import { validateSpecialtyDraftPools } from '@/lib/live-draft-engine/SpecialtyDraftPoolValidation'
 
 const POOL = [
@@ -77,6 +82,33 @@ describe('resolveServerRookieStatus', () => {
     h.snapshot = { warm: true, payload: { entries: POOL } }
     expect(await resolveServerRookieStatus({ leagueId: 'L', playerId: 'v1', playerName: 'Vet One' })).toBe(false)
     expect(await resolveServerRookieStatus({ leagueId: 'L', playerId: 'r1', playerName: 'Rookie One' })).toBe(true)
+  })
+})
+
+describe('autopick candidate filtering', () => {
+  it('only a verdict that contradicts the pool mode makes a player ineligible', () => {
+    expect(isEligibleForPlayerPool('rookies_only', false)).toBe(false)
+    expect(isEligibleForPlayerPool('rookies_only', null)).toBe(true)
+    expect(isEligibleForPlayerPool('veterans_only', true)).toBe(false)
+    expect(isEligibleForPlayerPool('veterans_only', false)).toBe(true)
+    expect(isEligibleForPlayerPool('all', false)).toBe(true)
+  })
+
+  it('drops ineligible candidates against the warm board, and passes everything through without one', async () => {
+    const candidates = [{ id: 'v1', n: 'Vet One' }, { id: 'r1', n: 'Rookie One' }, { id: 'zz', n: 'Not In Pool' }]
+    const toPlayer = (c: { id: string; n: string }) => ({ playerId: c.id, playerName: c.n })
+    expect(await filterCandidatesForPlayerPool('L', 'rookies_only', candidates, toPlayer)).toEqual(candidates)
+
+    h.snapshot = { warm: true, payload: { entries: POOL } }
+    expect((await filterCandidatesForPlayerPool('L', 'rookies_only', candidates, toPlayer)).map((c) => c.id)).toEqual([
+      'r1',
+      'zz',
+    ])
+    expect((await filterCandidatesForPlayerPool('L', 'veterans_only', candidates, toPlayer)).map((c) => c.id)).toEqual([
+      'v1',
+      'zz',
+    ])
+    expect(await filterCandidatesForPlayerPool('L', 'all', candidates, toPlayer)).toEqual(candidates)
   })
 })
 
