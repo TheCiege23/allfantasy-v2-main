@@ -14,6 +14,7 @@ const m = vi.hoisted(() => {
     survivorJuryMember: { deleteMany: vi.fn(), upsert: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     survivorChatMessage: { create: vi.fn() }, survivorNotification: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
     survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn() },
+    survivorWeeklyScore: { findMany: vi.fn() },
   }
   return { db, transaction: vi.fn() }
 })
@@ -109,8 +110,55 @@ describe('voted-out manager moves to Exile', () => {
   })
 })
 
-describe('Exile weekly award settlement', () => {
+describe('Exile weekly settlement against a score boss (new leagues: median)', () => {
+  const finalizedOnly = async ({ where }: { where: { action: string } }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null
   beforeEach(() => {
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileBossMode: 'median' } })
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
+    m.db.survivorAuditEntry.findFirst.mockImplementation(finalizedOnly)
+    m.db.survivorPlayer.findUnique.mockImplementation(async ({ where }) => ({ ...players.find(p => p.userId === where.leagueId_userId.userId), playerState: 'exile' }))
+  })
+  it('stays retryable until the main island has final scores to take the median of', async () => {
+    m.db.survivorWeeklyScore.findMany.mockResolvedValue([])
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry-a', userId: 'a', weeklyScore: 120 }])
+    expect(await scoreExileWeek('league', 10)).toBe(false)
+    expect(m.db.exileWeeklyEntry.update).not.toHaveBeenCalled()
+    expect(m.db.survivorWeeklyScore.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'league', week: 10, isFinalized: true } }))
+  })
+  it('wipes only the managers below the median and awards the top score above it', async () => {
+    m.db.survivorWeeklyScore.findMany.mockResolvedValue([90, 100, 110, 130].map(finalScore => ({ finalScore })))
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry-a', userId: 'a', weeklyScore: 131.2 }, { id: 'entry-b', userId: 'b', weeklyScore: 97 }])
+    expect(await scoreExileWeek('league', 10)).toBe(true)
+    // median of 90/100/110/130 = 105
+    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry-a' }, data: { bossScore: 105, bossWon: false, tokenEarned: 1, tokenWiped: false } })
+    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry-b' }, data: { bossScore: 105, bossWon: true, tokenEarned: 0, tokenWiped: true } })
+    expect(m.db.survivorPlayer.update).toHaveBeenCalledWith({ where: { id: 'p-b' }, data: { tokenBalance: 0 } })
+    expect(m.db.survivorPlayer.update).toHaveBeenCalledWith({ where: { id: 'p-a' }, data: { tokenBalance: { increment: 1 }, totalTokensEarned: { increment: 1 } } })
+    // Not the legacy all-or-nothing reset.
+    expect(m.db.survivorPlayer.updateMany).not.toHaveBeenCalled()
+  })
+  it('uses a fixed commissioner score without reading main-island scores', async () => {
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileBossMode: 'fixed', exileBossFixedScore: 100 } })
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry-b', userId: 'b', weeklyScore: 100 }])
+    expect(await scoreExileWeek('league', 10)).toBe(true)
+    expect(m.db.survivorWeeklyScore.findMany).not.toHaveBeenCalled()
+    // A tie with the boss is safe, but does not win the week.
+    expect(m.db.exileWeeklyEntry.update).toHaveBeenCalledWith({ where: { id: 'entry-b' }, data: { bossScore: 100, bossWon: false, tokenEarned: 0, tokenWiped: false } })
+  })
+})
+
+describe('Exile weekly award settlement (legacy Chimmy roster boss)', () => {
+  it('a league with no stored boss mode keeps the Chimmy boss (waits for its verified score)', async () => {
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true } })
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
+    m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
+    m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry', userId: 'b', weeklyScore: 50 }])
+    expect(await scoreExileWeek('league', 10)).toBe(false)
+    expect(m.db.survivorWeeklyScore.findMany).not.toHaveBeenCalled()
+  })
+
+  beforeEach(() => {
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4, exileBossMode: 'chimmy_roster' } })
     m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
     m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry', userId: 'b', weeklyScore: 0 }])
     m.db.survivorPlayer.findUnique.mockResolvedValue({ ...players[1], playerState: 'exile' })

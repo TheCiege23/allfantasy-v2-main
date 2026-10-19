@@ -8,6 +8,7 @@ import {
   type CouncilEligibility,
   type CouncilScopePlayer,
 } from './survivorBallotEligibility'
+import { getCouncilImmuneUserIds } from './survivorTribeImmunity'
 
 /**
  * SURVIVOR COUNCIL + VOTE WINDOW SERVICE (canonical Phase 3).
@@ -65,6 +66,8 @@ export interface CouncilContext {
   rosterToUser: Record<string, string>
   /** userId → rosterId for the scope. */
   userToRoster: Record<string, string>
+  /** Publicly immune managers at this council (weekly necklace / individual immunity). Never idol effects. */
+  immuneUserIds?: string[]
 }
 
 function parseIdolPlays(raw: Prisma.JsonValue | null | undefined): IdolPlayRecord[] {
@@ -122,10 +125,11 @@ export function buildCouncilContextParts(
   scopePlayers: CouncilScopePlayer[],
   idolsPlayed: IdolPlayRecord[],
   settings: SurvivorFoundationSettings,
-  immuneUserId?: string | null,
+  immuneUserId?: string | ReadonlyArray<string> | null,
 ): { eligibility: CouncilEligibility; rosterToUser: Record<string, string>; userToRoster: Record<string, string> } {
   const skipTribal = idolsPlayed.filter((p) => p.powerType === 'skip_tribal')
-  const safeUserIds = [...skipTribal.map((p) => p.playerUserId), ...(immuneUserId ? [immuneUserId] : [])]
+  const immune = typeof immuneUserId === 'string' ? [immuneUserId] : [...(immuneUserId ?? [])]
+  const safeUserIds = [...skipTribal.map((p) => p.playerUserId), ...immune]
   const voteForfeitUserIds = skipTribal.filter((p) => p.forfeitsVote).map((p) => p.playerUserId)
   const eligibility = computeCouncilEligibility({
     scopePlayers,
@@ -176,7 +180,10 @@ export async function loadCouncilContext(leagueId: string, councilId?: string, d
   const idolsPlayed = parseIdolPlays(council.idolsPlayed)
   const scopePlayers = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId, db)
   const game = await db.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true } })
-  const parts = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, game?.immunePlayerId)
+  const scopeIds = new Set(scopePlayers.map((p) => p.userId))
+  const necklaces = await getCouncilImmuneUserIds(leagueId, council.week, council.phase === 'merge' ? null : council.attendingTribeId)
+  const immuneUserIds = [...new Set([...(game?.immunePlayerId ? [game.immunePlayerId] : []), ...necklaces])].filter((id) => scopeIds.has(id))
+  const parts = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, immuneUserIds)
   const { rosterToUser, userToRoster } = parts
   const eligibility = council.phase === 'revote' ? restrictCouncilToRevote(parts.eligibility, council.tiePlayerIds) : parts.eligibility
   return {
@@ -201,6 +208,7 @@ export async function loadCouncilContext(leagueId: string, councilId?: string, d
     eligibility,
     rosterToUser,
     userToRoster,
+    immuneUserIds,
   }
 }
 
@@ -268,7 +276,8 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
   const councilNumber =
     (await prisma.survivorTribalCouncil.count({ where: { leagueId, week } })) + 1
 
-  const { eligibility } = buildCouncilContextParts(scopePlayers, [], settings, gameState?.immunePlayerId)
+  const necklaces = await getCouncilImmuneUserIds(leagueId, week, phase === 'merge' ? null : opts.attendingTribeId ?? null)
+  const { eligibility } = buildCouncilContextParts(scopePlayers, [], settings, [...(gameState?.immunePlayerId ? [gameState.immunePlayerId] : []), ...necklaces])
 
   const council = await prisma.survivorTribalCouncil.create({
     data: {

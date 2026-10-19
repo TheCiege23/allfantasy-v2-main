@@ -73,7 +73,7 @@ export function survivorStakes(summary: SurvivorSummary | null): FormatStakes | 
     const finale = summary.finale
     lines.push({ label: 'Finalists', value: finale.finalists.map((f) => survivorName(summary, f.rosterId)).join(', ') || 'Being decided' })
     lines.push({ label: 'Jury votes', value: `${finale.juryVotesSubmitted} of ${finale.juryVotesRequired} in` })
-    if (finale.winnerRosterId) lines.push({ label: 'Sole Survivor', value: survivorName(summary, finale.winnerRosterId), tone: 'good' })
+    if (finale.winnerRosterId) lines.push({ label: 'Last one standing', value: survivorName(summary, finale.winnerRosterId), tone: 'good' })
     return { format: 'survivor', title: 'Finale', week, lines, you, deadlineIso: null, deadlineLabel: null, tab: 'survivor_jury', cta: 'Open the finale' }
   }
 

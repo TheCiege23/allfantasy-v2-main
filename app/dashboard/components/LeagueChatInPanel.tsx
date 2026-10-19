@@ -12,6 +12,7 @@ import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/li
 import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
 import { RecapShareButton } from '@/components/core-app/comms/RecapShareButton'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
+import { survivorIdolArt } from '@/lib/survivor/survivorIdolTypes'
 
 export type LeagueChatMessage = {
   id: string
@@ -625,14 +626,21 @@ export function LeagueChatInPanel({
               }
 
               if (chimmyPrivateReply) {
+                // Survivor idol reveal DM: the idol's own art (survivor-theme handoff, AF Host DM).
+                const idolArt = meta?.survivorIdolReveal === true && typeof meta.idolTypeId === 'string' ? survivorIdolArt(meta.idolTypeId, 'hero') : null
                 return (
                   <div key={message.id} className="mt-2 flex items-start gap-2 py-1.5">
+                    {idolArt ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={idolArt} alt="" className="mt-0.5 h-12 w-10 shrink-0 object-contain" data-testid="survivor-idol-dm-art" />
+                    ) : (
                     <div
                       className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-[14px] text-violet-200"
                       aria-hidden
                     >
                       ✦
                     </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="mb-1 text-[12px] font-semibold text-violet-200/90">🔒 Chimmy (private)</p>
                       <div className="max-w-[92%] whitespace-pre-wrap rounded-[18px] rounded-tl-md bg-violet-500/10 px-3 py-2 text-[15px] leading-[1.42] text-white ring-1 ring-inset ring-violet-400/20">

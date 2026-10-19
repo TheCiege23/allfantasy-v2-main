@@ -12,6 +12,7 @@ import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { enqueueNotification } from '@/lib/survivor/notificationEngine'
 import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTradesForElimination'
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
+import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch } from '@/lib/survivor/lateSeasonSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +106,22 @@ export async function POST(req: NextRequest) {
         week: extra?.week,
       },
     })
+  }
+
+  // Late-season settings: finalistCount (2|3), mergeNamingMode, exileBossMode (+ fixed score / top N).
+  if (action === 'late_season_settings') {
+    const parsed = validateSurvivorLateSeasonPatch(body.settings)
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const current = (league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings : {}) as Record<string, unknown>
+    // The full-season plan schedules eliminations for its finalist count, so that count locks with it.
+    if ('finalistCount' in parsed.patch && (current.survivor_full_season_plan ||
+      await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } }))) {
+      return NextResponse.json({ error: 'The number of finalists locks when the draft starts.' }, { status: 409 })
+    }
+    await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...current, ...parsed.patch } as object } })
+    await log('late_season_settings', 'Updated late-season Survivor settings', { newState: parsed.patch })
+    return NextResponse.json({ ok: true, settings: readSurvivorLateSeasonSettings({ ...current, ...parsed.patch }) })
   }
 
   if (action === 'force_phase') {

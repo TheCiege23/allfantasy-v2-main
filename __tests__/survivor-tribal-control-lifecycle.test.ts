@@ -6,7 +6,7 @@ const m = vi.hoisted(() => ({ db: {
   survivorGameState: { findUnique: vi.fn(), updateMany: vi.fn() },
   survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
   survivorVote: { findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
-  survivorAuditEntry: { create: vi.fn(), findMany: vi.fn(async () => []) },
+  survivorAuditEntry: { create: vi.fn(), findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
   survivorNotification: { create: vi.fn() },
   survivorChatChannel: { findFirst: vi.fn() }, survivorChatMessage: { create: vi.fn() },
 } }))
@@ -18,7 +18,7 @@ let council: any
 const now = new Date('2026-10-15T12:00:00Z')
 beforeEach(() => {
   vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(now)
-  council = { id: 'c', leagueId: 'l', week: 6, phase: 'pre_merge', status: 'voting_open', voteDeadlineAt: new Date(now.getTime() + 3600000), isRevealed: false, revealSequence: [{ targetName: 'B', status: 'counts' }], isTie: false }
+  council = { id: 'c', leagueId: 'l', week: 6, phase: 'pre_merge', status: 'voting_open', voteDeadlineAt: new Date(now.getTime() + 3600000), isRevealed: false, revealSequence: [{ targetName: 'B', status: 'counts' }, { targetName: 'C', status: 'counts' }], isTie: false }
   m.db.$transaction.mockImplementation(async fn => fn(m.db))
   m.db.survivorTribalCouncil.findFirst.mockImplementation(async () => council)
   m.db.survivorTribalCouncil.update.mockImplementation(async ({ data }) => Object.assign(council, data))
@@ -50,6 +50,8 @@ it('publishes and audits the read once', async () => {
   expect(await revealCouncil('l', 'c', 'host')).toMatchObject({ ok: true, alreadyRevealed: false })
   expect(council.isRevealed).toBe(true)
   expect(m.db.survivorChatMessage.create).toHaveBeenCalledOnce()
+  // The opener names no ballot: the read is one-at-a-time and has only just started.
+  expect(m.db.survivorChatMessage.create.mock.calls[0][0].data.content).not.toMatch(/Ballot|\bB\b|\bC\b|voted off/)
   expect(m.db.survivorNotification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'council_read', recipientRole: 'all', isSpoilerSafe: true, status: 'pending' }) })
   expect(m.db.survivorAuditEntry.create.mock.calls[0][0].data).toMatchObject({ action: 'votes_revealed', actorUserId: 'host' })
   expect(await revealCouncil('l', 'c', 'host')).toMatchObject({ ok: true, alreadyRevealed: true })

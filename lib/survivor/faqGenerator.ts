@@ -49,7 +49,7 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
 • At a configured point, tribes merge into one — individual immunity begins
 • After merge, the highest individual scorer each week wins immunity
 • Late-game eliminated players become the Jury
-• The Final 3 face the Jury — Jury votes for the Sole Survivor
+• The Final 3 face the Jury — Jury votes for the season winner
 
 ---
 
@@ -87,7 +87,7 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
 • Jury begins: ${(league.survivorJuryStart ?? 'after merge').replace(/_/g, ' ')}
 • Eliminated players after jury start join the Jury
 • Final 3 face Jury questions and closing statements
-• Jury votes privately for the winner — the Sole Survivor
+• Jury votes privately for the winner — the last one standing
 
 ---
 

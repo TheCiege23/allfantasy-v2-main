@@ -9,7 +9,7 @@ vi.mock('@/lib/league/league-access', () => ({ assertLeagueCommissioner: vi.fn(a
 vi.mock('@/lib/survivor/survivorHostGuard', () => ({ survivorHostGuard: vi.fn(async () => null) }))
 vi.mock('@/lib/prisma', () => ({ prisma: { survivorTribalCouncil: m.council } }))
 vi.mock('@/lib/survivor/survivorCouncilService', () => ({ closeVoteWindow: m.close }))
-vi.mock('@/lib/survivor/survivorVoteTallyService', () => ({ tallyCouncil: m.tally, revealCouncil: m.reveal }))
+vi.mock('@/lib/survivor/survivorVoteTallyService', () => ({ tallyCouncil: m.tally, revealCouncil: m.reveal, publishCouncilVerdictIfComplete: vi.fn(async () => ({ ok: true, complete: false })) }))
 vi.mock('@/lib/survivor/votingEngine', () => ({ lockVoting: m.legacyLock }))
 vi.mock('@/lib/survivor/SurvivorVoteEngine', () => ({ tallyVotes: m.legacyTally, getSeasonPointsFromRosterPerformance: vi.fn() }))
 
@@ -36,7 +36,8 @@ describe('legacy council URLs', () => {
 
   it('reveal publishes through the canonical Torch Ceremony', async () => {
     const res = await call(reveal)
-    expect(await res.json()).toEqual({ ok: true, councilId: 'council', eliminatedName: 'Bob', isTie: false })
+    // The outcome is not echoed to the host mid-read; it is published when the last ballot is read.
+    expect(await res.json()).toEqual({ ok: true, councilId: 'council' })
     expect(m.reveal).toHaveBeenCalledWith('league', 'council', 'host')
     expect(m.legacyTally).not.toHaveBeenCalled()
   })

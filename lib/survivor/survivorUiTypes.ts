@@ -18,6 +18,8 @@ export type SurvivorSeasonTribeMember = {
 
 export type SurvivorSeasonTribe = {
   logoUrl?: string | null
+  markUrl?: string | null
+  mascot?: string | null
   id: string
   name?: string
   emoji?: string | null
@@ -50,6 +52,11 @@ export type SurvivorSeasonCouncil = {
   eliminatedName?: string | null
   isTie?: boolean
   revealSequence?: { targetName?: string | null; status?: string; isExtraVote?: boolean }[] | null
+  /** Server-gated read: see lib/survivor/survivorRevealGate.ts. */
+  revealMode?: 'one_at_a_time' | 'all_at_once'
+  revealTotalSteps?: number | null
+  revealComplete?: boolean
+  revealNextStepAt?: string | null
   id: string
   week: number
   status?: string
@@ -84,6 +91,8 @@ export type SurvivorSeasonPayload = {
   activeCouncil?: SurvivorSeasonCouncil | null
   currentChallenge?: SurvivorSeasonChallenge | null
   exileStatus?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
+  /** League setting: voted-out managers go to Exile Island. */
+  exileEnabled?: boolean
   juryStatus?: unknown
   userState?: SurvivorSeasonPlayer | null
   weeklyScores?: Array<{ userId: string; finalScore: number; tribeId: string | null; countedTowardTribeTotal: boolean; isFinalized: boolean }>

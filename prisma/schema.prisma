@@ -6432,7 +6432,7 @@ model League {
   survivorExileReturnWeek               Int?
   survivorFinal3                        Boolean?                               @default(true)
   survivorIdolConvertRule               String?                                @default("faab")
-  survivorIdolCount                     Int?                                   @default(9)
+  survivorIdolCount                     Int?                                   @default(7)
   survivorIdolsEnabled                  Boolean?                               @default(true)
   survivorIdolsExpireAtMerge            Boolean?                               @default(true)
   survivorIdolsTradable                 Boolean?                               @default(false)
@@ -6589,6 +6589,7 @@ model League {
   survivorHostMessages                  SurvivorHostMessage[]
   jurySession                           JurySession?
   survivorConfig                        SurvivorLeagueConfig?
+  survivorIdolConfig                    SurvivorIdolConfig?
   survivorNotifications                 SurvivorNotification[]
   survivorPhaseTransitions              SurvivorPhaseTransition[]
   survivorPlayers                       SurvivorPlayer[]
@@ -8960,6 +8961,11 @@ model SurvivorTribe {
   isMerged        Boolean                   @default(false)
   logoUrl         String?
   phase           String                    @default("pre_merge") @db.VarChar(24)
+  /// Tribe emblem catalogue id (lib/survivor/tribeCatalog.json). Crest is composed from it at render time.
+  catalogId       String?                   @db.VarChar(32)
+  /// Commissioner colour overrides (#rrggbb); null = catalogue default. colorHex stays the UI accent.
+  primaryColor    String?                   @db.VarChar(7)
+  secondaryColor  String?                   @db.VarChar(7)
   survivorPlayers SurvivorPlayer[]
   councils        SurvivorTribalCouncil[]
   chatMembers     SurvivorTribeChatMember[]
@@ -8984,6 +8990,40 @@ model SurvivorTribeMember {
   @@index([rosterId])
   @@index([tribeId])
   @@map("survivor_tribe_members")
+}
+
+/// Weekly individual immunity: the top score in each tribe headed to Tribal Council.
+/// One row per tribe per week ("merge" is the tribeId once the tribes have merged).
+/// Worn until the next lineup lock (expiresAt), then clearedAt is stamped.
+model SurvivorTribeImmunity {
+  id                     String    @id @default(cuid())
+  leagueId               String    @db.VarChar(64)
+  week                   Int
+  tribeId                String    @db.VarChar(64)
+  immunityWinnerRosterId String    @db.VarChar(64)
+  immunityWinnerUserId   String    @db.VarChar(64)
+  winnerName             String?   @db.VarChar(160)
+  score                  Float     @default(0)
+  awardedAt              DateTime  @default(now())
+  expiresAt              DateTime?
+  clearedAt              DateTime?
+  announcedAt            DateTime?
+
+  @@unique([leagueId, week, tribeId])
+  @@index([leagueId, clearedAt])
+  @@map("survivor_tribe_immunities")
+}
+
+/// A weekly moment (torch-out, immunity win) a user has already watched, so it plays once.
+model SurvivorMomentSeen {
+  id        String   @id @default(cuid())
+  leagueId  String   @db.VarChar(64)
+  userId    String   @db.VarChar(64)
+  momentKey String   @db.VarChar(160)
+  seenAt    DateTime @default(now())
+
+  @@unique([leagueId, userId, momentKey])
+  @@map("survivor_moments_seen")
 }
 
 /// Hidden idol: player-bound, one-time use. Ownership = current controlling rosterId.
@@ -9045,6 +9085,49 @@ model SurvivorIdolLedgerEntry {
   @@map("survivor_idol_ledger_entries")
 }
 
+/// Idol types (survivor-theme handoff `idols/catalog.json`). New idols are added as rows, not code.
+model SurvivorIdolType {
+  id              String   @id @db.VarChar(48)
+  name            String   @db.VarChar(80)
+  glow            String   @db.VarChar(16)
+  category        String   @db.VarChar(16)
+  tier            Int
+  alwaysIn        Boolean  @default(false)
+  shortText       String
+  powerText       String
+  whenText        String   @db.VarChar(120)
+  targetText      String   @db.VarChar(120)
+  /// Resolution engine power (e.g. vote_shield) when this idol has one; null while it has none.
+  enginePowerType String?  @db.VarChar(64)
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("survivor_idol_types")
+}
+
+/// Commissioner idol setup (IdolSetup). Locks when the draft starts; resolvedTypeIds is the sealed draw.
+model SurvivorIdolConfig {
+  id              String    @id @default(uuid())
+  leagueId        String    @unique @db.VarChar(64)
+  mode            String    @default("random") @db.VarChar(8)
+  count           Int       @default(7)
+  hideFromCommish Boolean   @default(false)
+  pickedTypeIds   String[]  @default([])
+  /// Sealed: the types hidden in this league, drawn on the server at draft lock.
+  resolvedTypeIds String[]  @default([])
+  resolvedAt      DateTime?
+  pointSurgePct   Int       @default(15)
+  tributePct      Int       @default(10)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  league          League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@map("survivor_idol_configs")
+}
+
 /// Tribal Council: one per week (or period). Pre-merge = one tribe attends; merge = all remaining.
 model SurvivorTribalCouncil {
   id                   String               @id @default(uuid())
@@ -9070,6 +9153,8 @@ model SurvivorTribalCouncil {
   nullifiersPlayed     Json?
   revealSequence       Json?
   revealStartsAt       DateTime?
+  /// Steps a commissioner has released with reveal_next. The sequence itself is never mutated.
+  revealStep           Int                  @default(0)
   rockDrawerUserId     String?              @db.VarChar(64)
   status               String               @default("pending") @db.VarChar(24)
   tiePhase             String?              @db.VarChar(32)
@@ -9361,9 +9446,14 @@ model SurvivorTribeSwap {
   newTribes              Json?
   originalTribesRetained Boolean  @default(true)
   executedAt             DateTime @default(now())
+  /// Sealed swap: the draw is stored at executedAt and applied/revealed at revealAt (next lineup lock).
+  /// Null on legacy rows, which were applied immediately.
+  revealAt               DateTime?
+  revealedAt             DateTime?
   league                 League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@index([leagueId])
+  @@index([leagueId, revealedAt])
   @@map("survivor_tribe_swaps")
 }
 
@@ -9761,6 +9851,33 @@ model SurvivorWeeklyScore {
   @@unique([leagueId, userId, week])
   @@index([leagueId, week])
   @@map("survivor_weekly_scores")
+}
+
+/// A shareable Survivor moment (share cards handoff). `id` is the public moment id used by
+/// `/api/share/survivor/[momentId]` and `/l/[leagueSlug]/moment/[momentId]`. `payload` holds
+/// published facts only (display names, final tallies, points) — never ballots, voters or
+/// unplayed idols. A moment is immutable once `final`; it is public only after its subject
+/// (or, for the champion recap, any league member) publishes it.
+model SurvivorShareMoment {
+  id              String    @id @default(uuid())
+  leagueId        String    @db.VarChar(64)
+  /// immunity | out | idol | exile | champ
+  type            String    @db.VarChar(16)
+  week            Int
+  subjectUserId   String    @db.VarChar(64)
+  subjectRosterId String?   @db.VarChar(64)
+  /// Idempotency key per league, e.g. `out:<councilId>` — capture hooks may run more than once.
+  dedupeKey       String    @db.VarChar(191)
+  payload         Json
+  final           Boolean   @default(true)
+  publishedAt     DateTime?
+  publishedBy     String?   @db.VarChar(64)
+  createdAt       DateTime  @default(now())
+
+  @@unique([leagueId, dedupeKey])
+  @@index([leagueId, createdAt])
+  @@index([subjectUserId])
+  @@map("survivor_share_moments")
 }
 
 /// Big Brother league config: HOH, nomination, veto, vote, eviction, jury, finale settings.

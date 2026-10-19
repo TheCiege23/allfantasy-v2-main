@@ -7,8 +7,9 @@ import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { isMergeTriggered } from './SurvivorMergeEngine'
 import { getActiveRosterIdsForLeague } from './SurvivorRosterState'
 import { getSeasonPointsFromRosterPerformance } from './SurvivorVoteEngine'
-
-const MAX_FINALISTS = 3
+import { readSurvivorLateSeasonSettings } from './lateSeasonSettings'
+import { isFinaleVoteComplete } from './finaleReveal'
+import { afterWinnerCrowned } from './shareCards/hooks'
 
 export interface SurvivorFinaleVote {
   jurorRosterId: string
@@ -31,6 +32,12 @@ export interface SurvivorFinaleState {
   winnerRosterId: string | null
   crownedAt: Date | null
   tieBreakSeasonPoints: Record<string, number> | null
+  /** finalistCount setting (2 or 3). */
+  finalistCount: 2 | 3
+  /** Commissioner's jury deadline (JurySession.votingDeadline). */
+  votingDeadline: Date | null
+  /** Every juror has voted, or the deadline has passed: the result may be revealed. */
+  votingComplete: boolean
 }
 
 function asJsonObject(value: unknown): Prisma.JsonObject | null {
@@ -180,7 +187,10 @@ export async function getFinaleState(
   leagueId: string,
   week: number
 ): Promise<SurvivorFinaleState> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorFinal3: true } })
+  const { finalistCount } = readSurvivorLateSeasonSettings(league?.settings, { survivorFinal3: league?.survivorFinal3 })
+  const session = await prisma.jurySession.findUnique({ where: { leagueId }, select: { votingDeadline: true } }).catch(() => null)
+  const votingDeadline = session?.votingDeadline ?? null
   const { readSurvivorFullSeasonPlan } = await import('./survivorFullSeasonPlan')
   const plan = readSurvivorFullSeasonPlan(league?.settings)
   const plannedFinaleReady = !plan || (week >= plan.finaleWeek && Boolean((await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { weekScoringFinalAt: true } }))?.weekScoringFinalAt))
@@ -191,7 +201,7 @@ export async function getFinaleState(
     getLatestWinnerEvent(leagueId),
   ])
 
-  const finalists = merged && plannedFinaleReady && activeRosterIds.length >= 2 && activeRosterIds.length <= MAX_FINALISTS
+  const finalists = merged && plannedFinaleReady && activeRosterIds.length >= 2 && activeRosterIds.length <= finalistCount
     ? [...activeRosterIds].sort()
     : []
   const juryRosterIds = jury.map((member) => member.rosterId)
@@ -212,6 +222,9 @@ export async function getFinaleState(
       winnerRosterId: null,
       crownedAt: null,
       tieBreakSeasonPoints: null,
+      finalistCount,
+      votingDeadline,
+      votingComplete: false,
     }
   }
 
@@ -220,7 +233,9 @@ export async function getFinaleState(
     (jurorRosterId) => !votes.some((vote) => vote.jurorRosterId === jurorRosterId)
   )
 
-  const computedWinner = pendingJuryRosterIds.length === 0
+  // The deadline closes voting: jurors who did not vote simply do not count.
+  const votingComplete = isFinaleVoteComplete({ votesSubmitted: votes.length, votesRequired: juryRosterIds.length, deadline: votingDeadline, now: new Date(), crowned: Boolean(winnerEvent) })
+  const computedWinner = votingComplete
     ? await resolveWinnerFromVoteCount(leagueId, week, finalists, voteCount)
     : { winnerRosterId: null, tieBreakSeasonPoints: null }
 
@@ -238,6 +253,9 @@ export async function getFinaleState(
     winnerRosterId: winnerEvent?.winnerRosterId ?? computedWinner.winnerRosterId,
     crownedAt: winnerEvent?.crownedAt ?? null,
     tieBreakSeasonPoints: winnerEvent?.tieBreakSeasonPoints ?? computedWinner.tieBreakSeasonPoints,
+    finalistCount,
+    votingDeadline,
+    votingComplete,
   }
 }
 
@@ -268,6 +286,9 @@ export async function submitJuryVote(args: {
   if (jurorRosterId === finalistRosterId) {
     return { ok: false, error: 'Finalists cannot vote for themselves in the finale' }
   }
+  if (state.votingDeadline && Date.now() >= state.votingDeadline.getTime()) {
+    return { ok: false, error: 'The jury vote has closed' }
+  }
 
   await appendSurvivorAudit(leagueId, config.configId, 'jury_vote_submitted', {
     week,
@@ -280,21 +301,39 @@ export async function submitJuryVote(args: {
 
   const updatedState = await getFinaleState(leagueId, week)
   if (!updatedState.closed && updatedState.open && updatedState.pendingJuryRosterIds.length === 0 && updatedState.winnerRosterId) {
-    await appendSurvivorAudit(leagueId, config.configId, 'winner_crowned', {
-      week,
-      winnerRosterId: updatedState.winnerRosterId,
-      finalists: updatedState.finalists,
-      voteCount: updatedState.voteCount,
-      bonusVotesByFinalist: updatedState.bonusVotesByFinalist,
-      tieBreakSeasonPoints: updatedState.tieBreakSeasonPoints,
-      crownedAt: new Date().toISOString(),
-    })
-    const crowned = await getFinaleState(leagueId, week)
-    await recordCrownedWinner(leagueId, crowned)
+    const crowned = await crownFinaleWinner(leagueId, config.configId, week, updatedState)
     return { ok: true, state: crowned }
   }
 
   return { ok: true, state: updatedState }
+}
+
+/** Writes the single winner_crowned record, then mirrors it (jury session, history, badge, chat). */
+async function crownFinaleWinner(leagueId: string, configId: string, week: number, updatedState: SurvivorFinaleState): Promise<SurvivorFinaleState> {
+  await appendSurvivorAudit(leagueId, configId, 'winner_crowned', {
+    week,
+    winnerRosterId: updatedState.winnerRosterId,
+    finalists: updatedState.finalists,
+    voteCount: updatedState.voteCount,
+    bonusVotesByFinalist: updatedState.bonusVotesByFinalist,
+    tieBreakSeasonPoints: updatedState.tieBreakSeasonPoints,
+    crownedAt: new Date().toISOString(),
+  })
+  const crowned = await getFinaleState(leagueId, week)
+  await recordCrownedWinner(leagueId, crowned)
+  return crowned
+}
+
+/**
+ * Settle the finale once the commissioner's jury deadline passes with ballots missing. Idempotent:
+ * returns the existing state when already crowned, not open, or not yet due.
+ */
+export async function settleFinaleIfDue(leagueId: string, week: number): Promise<SurvivorFinaleState> {
+  const state = await getFinaleState(leagueId, week)
+  if (state.closed || !state.open || !state.votingComplete || !state.winnerRosterId) return state
+  const config = await getSurvivorConfig(leagueId)
+  if (!config) return state
+  return crownFinaleWinner(leagueId, config.configId, week, state)
 }
 
 /**
@@ -326,6 +365,33 @@ export async function recordCrownedWinner(leagueId: string, state: SurvivorFinal
   await prisma.survivorPlayer.updateMany({ where: { leagueId, userId: winnerUserId }, data: { playerState: 'survivor_winner' } })
   const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
   if (channel) await prisma.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
-    contentType: 'host_announcement', content: `The jury has spoken. ${winnerName} is the Sole Survivor.` } })
+    contentType: 'host_announcement', content: `The jury has spoken. ${winnerName} is the last one standing.` } })
+  await writeChampionToHistory(leagueId, { winnerUserId, winnerName, winnerRosterId: state.winnerRosterId, voteCount: state.voteCount, crownedAt: session.revealedAt }).catch(error => {
+    console.error('[survivor-finale] champion history write failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
+  })
+  // Share cards: the champion card, offered to the winner and to the league as a recap.
+  afterWinnerCrowned(leagueId)
   return { winnerUserId }
+}
+
+/**
+ * League history + profile badge for the champion. LeagueChampionship is the league-history table
+ * the guillotine and playoff finishers write; AIBadge is the profile badge store (lib/badge-engine).
+ * Both are upserts / existence-checked so a re-crown or retry never duplicates them.
+ */
+async function writeChampionToHistory(leagueId: string, input: { winnerUserId: string; winnerName: string; winnerRosterId: string; voteCount: Record<string, number>; crownedAt: Date }) {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true, name: true, userId: true } })
+  if (!league) return
+  const season = Number(league.season)
+  const seasonPoints = await getSeasonPointsFromRosterPerformance(leagueId, input.winnerRosterId, 99).catch(() => null)
+  const record = { championUserId: input.winnerUserId, teamName: input.winnerName.slice(0, 128), pointsFor: seasonPoints, playoffRecord: 'Jury vote', recordedBy: league.userId }
+  if (Number.isInteger(season)) {
+    await prisma.leagueChampionship.upsert({ where: { leagueId_season: { leagueId, season } }, create: { leagueId, season, ...record }, update: record })
+  }
+  const existing = await prisma.aIBadge.findFirst({ where: { userId: input.winnerUserId, badgeType: 'survivor_champion', data: { path: ['leagueId'], equals: leagueId } }, select: { id: true } })
+  if (!existing) {
+    await prisma.aIBadge.create({ data: { userId: input.winnerUserId, badgeType: 'survivor_champion', badgeName: 'Survivor champion',
+      description: `Last one standing in ${league.name ?? 'a Survivor league'} (${league.season}).`, tier: 'gold', xpReward: 250,
+      data: { leagueId, season: league.season, icon: '/survivor/late/champion-icon.svg', voteCount: input.voteCount, crownedAt: input.crownedAt.toISOString() } } })
+  }
 }

@@ -10,6 +10,7 @@ import { useLiveRailScores, type LiveRailScore } from '@/components/core-app/use
 import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
 import { importedPlatformLabel, isNativePlatform } from '@/lib/dashboard/platform-label'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { leagueRailStatus, unreadBadgeText, type LeagueRailStatus } from '@/lib/league/leagueRailStatus'
 
 /**
  * The /league/[leagueId] league rail, drawn with /core's rail row.
@@ -43,6 +44,8 @@ export type LeagueRailRowView = {
   freshMinutes: number | null
   /** "Wk 6" from the matchup when there is one, else the league's own week, else its phase. */
   weekLabel: string
+  /** Handoff §2: ring colour, the mono line under the crest, and the switcher group. */
+  status: LeagueRailStatus
 }
 
 const markOf = (name: string) =>
@@ -68,6 +71,7 @@ export function leagueRailRowView(
     : null
   const week = m?.week ?? row.currentWeek ?? null
   const phase = nativeLeaguePhase(row)
+  const weekLabel = week != null && (phase === 'Regular season' || phase === 'Playoffs' || m) ? `Wk ${week}` : phase
   return {
     id: row.id,
     name: row.name,
@@ -80,7 +84,8 @@ export function leagueRailRowView(
     isLive: Boolean(live && !delayed && m?.scored),
     delayed,
     freshMinutes,
-    weekLabel: week != null && (phase === 'Regular season' || phase === 'Playoffs' || m) ? `Wk ${week}` : phase,
+    weekLabel,
+    status: leagueRailStatus({ m, phase, weekLabel }),
   }
 }
 
@@ -125,6 +130,7 @@ export function LeagueRailRow({
   expanded,
   isCommissioner,
   onClick,
+  unread = 0,
 }: {
   view: LeagueRailRowView
   href: string
@@ -133,7 +139,11 @@ export function LeagueRailRow({
   expanded: boolean
   isCommissioner?: boolean
   onClick?: () => void
+  /** Unread league-chat messages (`/api/chat/unread` → byLeague). */
+  unread?: number
 }) {
+  const badge = unreadBadgeText(unread)
+  const { status } = view
   return (
     <Link
       href={href}
@@ -142,13 +152,19 @@ export function LeagueRailRow({
       data-active={active ? 'true' : undefined}
       data-live={view.isLive ? 'true' : undefined}
       aria-current={active ? 'page' : undefined}
-      aria-label={`${view.name} on ${view.platformLabel}${view.isLive ? ', live' : ''}`}
-      title={`${view.name} · ${view.platformLabel} · ${view.weekLabel}`}
+      data-ring={status.tone ?? undefined}
+      aria-label={`${view.name} on ${view.platformLabel}, ${status.line}${badge ? `, ${badge} unread` : ''}${view.isLive ? ', live' : ''}`}
+      title={`${view.name} · ${status.line} · ${status.mini}`}
       onClick={onClick}
     >
-      <span className="af-rail-tile-art af-platform nl-rail-art" data-platform={view.platform}>
-        <LeagueMark src={view.imageUrl} letter={view.mark} />
-        {view.isLive ? <span className="nl-rail-live-dot" aria-hidden /> : null}
+      <span className="nl-rail-crest">
+        <span className="af-rail-tile-art af-platform nl-rail-art" data-platform={view.platform} data-ring={status.tone ?? undefined}>
+          <LeagueMark src={view.imageUrl} letter={view.mark} />
+          {view.isLive ? <span className="nl-rail-live-dot" aria-hidden /> : null}
+          {badge ? <span className="nl-rail-unread" aria-hidden>{badge}</span> : null}
+          {!expanded ? <span className="nl-rail-tag" data-platform={view.platform} aria-hidden>{view.platformLabel}</span> : null}
+        </span>
+        {!expanded ? <span className="nl-rail-mini" data-tone={status.tone ?? undefined} aria-hidden>{status.mini}</span> : null}
       </span>
       {expanded ? (
         <RailRowBody

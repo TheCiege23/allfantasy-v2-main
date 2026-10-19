@@ -15,7 +15,7 @@ vi.mock('@/lib/redraft/scoringEngine', () => ({ buildLeagueStatScorer: () => (st
 
 import { finalizeChimmyExileBossScore, lockChimmyExileRoster } from '@/lib/survivor/exileChimmyBoss'
 
-const league = { platform: 'allfantasy', sport: 'NBA', season: 2026, survivorMode: true, settings: { commissionerParticipationMode: 'participating_player', starter_slots: { PG: 1, SG: 1, BN: 1 } }, scoring: {} }
+const league = { platform: 'allfantasy', sport: 'NBA', season: 2026, survivorMode: true, settings: { exileBossMode: 'chimmy_roster', commissionerParticipationMode: 'participating_player', starter_slots: { PG: 1, SG: 1, BN: 1 } }, scoring: {} }
 const now = new Date('2026-10-20T12:00:00Z')
 
 beforeEach(() => {

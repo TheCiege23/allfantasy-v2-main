@@ -24,11 +24,14 @@ import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStar
 import { openTribalCouncil as openVerifiedCouncil, closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
-import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
+import { afterWeeklyScoresFinalized } from '@/lib/survivor/shareCards/hooks'
+import { finishCouncilReadIfComplete } from '@/lib/survivor/survivorCouncilReadFinish'
 import { nextTorchCeremonyDeadline } from '@/lib/survivor/survivorCeremonySchedule'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 import { applySurvivorMergeCast } from './survivorMergeCast'
+import { awardTribeImmunity, clearExpiredTribeImmunity } from './survivorTribeImmunity'
+import { postImmunityWinLine } from './leagueChatPoster'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
 export async function sumRedraftStartersFantasy(
@@ -270,6 +273,9 @@ export async function syncWeeklyScores(leagueId: string, week: number): Promise<
   // pause marker in lastError stays put until the commissioner resumes.
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
   if (game?.pausedSnapshot != null) return
+  // No lineup-lock hook exists in Survivor; the first score sync after the lock takes the
+  // necklace off (each row carries the lock instant it expires at).
+  await clearExpiredTribeImmunity(leagueId)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { createdAt: 'desc' },
@@ -391,6 +397,11 @@ export async function finalizeWeeklyScores(leagueId: string, week: number): Prom
       needsTribalLock: plan ? plan.eliminationWeeks.includes(week) : true,
     },
   })
+  // Final scores decide the necklace: top score in each tribe headed to Tribal Council.
+  await awardTribeImmunity(leagueId, week, { post: (winner, awardWeek) => postImmunityWinLine(leagueId, winner, awardWeek) }).catch(() => {})
+  // Share cards: the immunity winner's card, once scores are final. Runs AFTER the award above so
+  // the capture reads the SurvivorTribeImmunity rows it just wrote.
+  afterWeeklyScoresFinalized(leagueId, week)
 }
 
 function tribalVoteWindowHoursFromLeague(settings: unknown): number {
@@ -479,20 +490,26 @@ export async function processTribalDeadline(leagueId: string): Promise<void> {
       if (!tallied.ok) throw new Error(tallied.error)
     }
     await resolveAutonomousCouncil(leagueId, council.id)
-    if (normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null).autoReveal === false) return
+    // A read a host already opened is finished here even when auto-reveal is off.
+    if (!latest.isRevealed && normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null).autoReveal === false) return
     const revealed = await revealCouncil(leagueId, council.id)
     if (!revealed.ok) throw new Error(revealed.error)
-    if (revealed.isTie || !revealed.eliminatedUserId) return
-    const eliminated = await resolveElimination(leagueId, council.id)
-    if (!eliminated.ok) throw new Error(eliminated.error)
+    // The verdict and the elimination wait for the last ballot of the read; a later tick finishes them.
+    const finished = await finishCouncilReadIfComplete(leagueId, council.id)
+    if (!finished.ok) throw new Error(finished.error)
+    if (finished.complete && finished.elimination && !finished.elimination.ok) throw new Error(finished.elimination.error)
+    return
+  }
+  // Leagues without a full-season plan: lockVoting opens the read; a later tick finishes it (verdict,
+  // elimination) once the last ballot has been released.
+  if (council.isRevealed) {
+    const finished = await finishCouncilReadIfComplete(leagueId, council.id)
+    if (!finished.ok) throw new Error(finished.error)
     return
   }
   if (council.status !== 'voting_open') return
-  await lockVoting(gs.activeCouncilId)
-  await prisma.survivorGameState.update({
-    where: { leagueId },
-    data: { tribalRevealAt: new Date() },
-  })
+  const locked = await lockVoting(gs.activeCouncilId)
+  if (!locked.ok) throw new Error(locked.error)
 }
 
 export type PhaseAdvanceSuggestion = {

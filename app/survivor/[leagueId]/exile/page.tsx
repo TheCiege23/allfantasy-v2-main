@@ -6,10 +6,12 @@ import { ExileTokenWallet } from '@/components/league/survivor/ExileTokenWallet'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
+import { ExileBossBoard } from '@/components/survivor/late/ExileBossBoard'
 
 type ExileGet = {
   island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null; bossWinsEnabled?: boolean; bossTokenResetOnWin?: boolean } | null
   user?: { tokenBalance?: number; playerState?: string } | null
+  bossMode?: 'median' | 'fixed' | 'topN' | 'chimmy_roster'
   bossContest?: { status: 'pending' | 'locked' | 'final'; week: number; team?: string; players?: { name: string; position: string; slot: string }[]; score?: number } | null
   returnRules?: { enabled: boolean; week: number; tokensRequired: number; resolved: boolean; slots: number }
   error?: string
@@ -58,6 +60,12 @@ export default function SurvivorExilePage() {
         </p>
       </header>
 
+      {!isExile && ctx.isCommissioner && !ctx.survivorFairPlayActive && island?.bossWinsEnabled && data?.bossMode !== 'chimmy_roster' ? (
+        <section className="relative mt-6" aria-label="Exile board">
+          <ExileBossBoard leagueId={leagueId} />
+        </section>
+      ) : null}
+
       {viewerSummary ? (
         <section className="relative mt-6 survivor-panel p-5">
           <p className="text-[14px] text-white/75">The main island only sees a summary.</p>
@@ -70,7 +78,13 @@ export default function SurvivorExilePage() {
           <div className="relative mt-6"><ExileTokenWallet leagueId={leagueId} /></div>
           <ExileRosterWaivers leagueId={leagueId} />
 
-          {island?.bossWinsEnabled ? <section className="relative mt-6 rounded-2xl border border-violet-400/30 bg-violet-950/20 p-4" aria-live="polite">
+          {island?.bossWinsEnabled && data?.bossMode !== 'chimmy_roster' ? (
+            <section className="relative mt-6" aria-label="Exile board">
+              <ExileBossBoard leagueId={leagueId} />
+            </section>
+          ) : null}
+
+          {island?.bossWinsEnabled && data?.bossMode === 'chimmy_roster' ? <section className="relative mt-6 rounded-2xl border border-violet-400/30 bg-violet-950/20 p-4" aria-live="polite">
             <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-violet-200">Chimmy score to beat · Week {data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek}</p>
             {data?.bossContest?.status === 'pending' ? (
               <p className="mt-2 text-[13px] text-white/70">Chimmy&apos;s NBA roster has not locked yet. The contest starts once a verified lineup is set before the week&apos;s first game.</p>

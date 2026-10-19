@@ -50,6 +50,10 @@ export interface SurvivorConfig {
 export interface SurvivorTribeRow {
   logoUrl?: string | null
   colorHex?: string | null
+  /** Emblem catalogue id + colour overrides (see lib/survivor/survivorTribeIdentity.ts resolveTribeEmblem). */
+  catalogId?: string | null
+  primaryColor?: string | null
+  secondaryColor?: string | null
   id: string
   leagueId: string
   configId: string

@@ -80,6 +80,12 @@ import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/L
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
+import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
+import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
+import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
+import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
+import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
+import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
@@ -2244,6 +2250,41 @@ function LeagueTabRouter({
         </section>
       </div>
     )
+  }
+
+  /*
+   * Native league screens (handoff 2026-10-11 §3): AF-hosted leagues get the rebuilt Matchup, Lineup,
+   * Waivers, Trades and Standings. Synced leagues, and the variants whose tab renders something
+   * else entirely (Big Brother standings, IDP / Best Ball / dynasty team views), keep the components below.
+   */
+  if (isNativePlatform(selectedLeague.platform)) {
+    const firstTab = (...ids: string[]) => ids.find((id) => tabDefs.some((t) => t.id === id)) ?? ids[0]
+    const goTo = (id: string) =>
+      onSelectTab(
+        id === 'roster' ? firstTab('roster', 'team', 'squad')
+          : id === 'waivers' ? firstTab('waivers', 'players')
+            : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
+              : id,
+      )
+    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null)
+    switch (activeTab) {
+      case 'matchups':
+      case 'matchup':
+        return <NativeMatchupScreen league={selectedLeague} onSelectTab={goTo} />
+      case 'team':
+      case 'roster':
+      case 'squad':
+        // Dynasty keeps the classic Team tab for now: taxi, devy and college-rights moves live there.
+        if (!idpLeagueActive && !bestBall && !selectedLeague.isDynasty) return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
+        break
+      case 'waivers':
+        return <NativeWaiversScreen league={selectedLeague} />
+      case 'trades':
+        return <NativeTradesScreen league={selectedLeague} teams={teamSlots} />
+      case 'standings':
+        if (selectedLeague.leagueVariant !== 'big_brother') return <NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />
+        break
+    }
   }
 
   switch (activeTab) {

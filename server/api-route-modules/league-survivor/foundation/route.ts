@@ -28,6 +28,7 @@ import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteComm
 import { playVoteShield, playExtraVote, playSkipTribal, playVoteSteal, getCouncilIdolPreview } from '@/lib/survivor/survivorIdolResolutionService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveElimination } from '@/lib/survivor/survivorEliminationService'
+import { finishCouncilReadIfComplete } from '@/lib/survivor/survivorCouncilReadFinish'
 import { sendPushToUser } from '@/lib/push-notifications'
 import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
 import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick } from '@/lib/survivor/survivorNbaWeeklyScoring'
@@ -109,7 +110,7 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   if (settings.defaultTeamCount !== previousSettings.defaultTeamCount) return NextResponse.json({ error: 'Choose league size during creation. Changing it here would leave draft seats and rosters inconsistent.' }, { status: 409 })
   if (settings.tribeCount !== previousSettings.tribeCount || JSON.stringify(settings.survivorTribeSlots) !== JSON.stringify(previousSettings.survivorTribeSlots)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
   const exileChanged = settings.exileIslandEnabled !== previousSettings.exileIslandEnabled || settings.exileReturnWeek !== previousSettings.exileReturnWeek || settings.exileReturnTokens !== previousSettings.exileReturnTokens
-  const mutableAfterDraft = new Set(['tribalCouncilDay', 'tribalCouncilTime', 'voteOpenOffset', 'voteCloseOffset'])
+  const mutableAfterDraft = new Set(['tribalCouncilDay', 'tribalCouncilTime', 'voteOpenOffset', 'voteCloseOffset', 'shareCardsEnabled', 'publicMomentPages'])
   const lockedRuleChanged = Object.keys(settings).some(key => !mutableAfterDraft.has(key) &&
     JSON.stringify(settings[key as keyof typeof settings]) !== JSON.stringify(previousSettings[key as keyof typeof previousSettings]))
   if (lockedRuleChanged && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
@@ -649,9 +650,11 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if (!councilId) return NextResponse.json({ error: 'No council', action }, { status: 404 })
     const result = await revealCouncil(leagueId, councilId, userId)
     if (!result.ok) return NextResponse.json({ ...result, action }, { status: result.status })
-    // Continue the existing elimination pipeline; ballots never travel back to this control page.
-    const aftermath = !result.isTie && result.eliminatedUserId ? await resolveElimination(leagueId, councilId, userId) : null
-    return NextResponse.json({ ok: true, action, aftermathPending: aftermath != null && !aftermath.ok })
+    // The verdict and elimination follow when the last ballot is read (now, for all-at-once pacing;
+    // otherwise reveal_next or the next automation tick). Ballots never travel back to this page.
+    const finished = await finishCouncilReadIfComplete(leagueId, councilId, userId)
+    const aftermathPending = !finished.ok || !finished.complete || (finished.elimination != null && !finished.elimination.ok)
+    return NextResponse.json({ ok: true, action, aftermathPending, readInProgress: finished.ok && !finished.complete })
   }
 
   if (action === 'resolve-elimination') {

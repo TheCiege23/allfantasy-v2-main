@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { postWeeklyRecap } from './leagueChatPoster'
+import { isCouncilReadComplete } from './survivorRevealGate'
 
 export async function generateAndPostWeeklyRecap(
   leagueId: string,
@@ -17,10 +18,13 @@ export async function generateAndPostWeeklyRecap(
   })
 
   // Get elimination council result
-  const council = await prisma.survivorTribalCouncil.findFirst({
+  const found = await prisma.survivorTribalCouncil.findFirst({
     where: { leagueId, week, isRevealed: true, eliminatedRosterId: { not: null } },
-    select: { eliminatedName: true, attendingTribeId: true, idolsPlayed: true, isTie: true },
+    select: { eliminatedName: true, attendingTribeId: true, idolsPlayed: true, isTie: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true },
   })
+  // A recap never names a voted-out manager before the council read has finished.
+  const league = found ? await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } }) : null
+  const council = found && isCouncilReadComplete(found, league?.survivorRevealMode) ? found : null
 
   // Get top scorer
   const topScore = await prisma.survivorWeeklyScore.findFirst({

@@ -12,6 +12,8 @@ import {
   type SurvivorIdolPowerType,
 } from './survivorIdolSeedingEngine'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
+import { lockSurvivorIdolDraw } from './survivorIdolConfigService'
+import { survivorIdolStoredPowerType, survivorIdolTypeIdForPower } from './survivorIdolTypes'
 
 export type SurvivorIdolSeedOutcome =
   | { ok: true; seeded: boolean; alreadySeeded: boolean; voteShieldCount: number; ownerCount: number; seed: number | null }
@@ -57,7 +59,11 @@ export async function seedSurvivorIdols(
   if (!league) return { ok: false, status: 422, code: 'league_missing', error: 'League not found.' }
   const settings = normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null)
   const tribeCount = Math.max(1, Math.floor(opts.tribeCount ?? (await db.survivorTribe.count({ where: { leagueId } })) ?? 4))
-  const idolCount = league.survivorIdolCount ?? settings.idolCount
+  // The league's idol types: drawn at draft lock (or now, if lock was missed). Null keeps the
+  // legacy power-pool path for leagues with a commissioner-saved pool or before migration.
+  const draw = await lockSurvivorIdolDraw(leagueId, db)
+  const typeById = new Map((draw?.types ?? []).map(type => [survivorIdolStoredPowerType(type), type]))
+  const idolCount = draw ? draw.types.length : league.survivorIdolCount ?? settings.idolCount
   const draft = await db.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true, sessionKind: true } })
   if (!draft || draft.status !== 'completed' || draft.sessionKind === 'mock') {
     return { ok: false, status: 422, code: 'draft_not_ready', error: 'Finish the current native draft before idols can be assigned to real players.' }
@@ -81,7 +87,11 @@ export async function seedSurvivorIdols(
     .map(pick => ({ playerId: pick.playerId!, playerName: pick.playerName, rosterId: pick.rosterId, ownerUserId: ownerByRoster.get(pick.rosterId)! }))
   const config = await db.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { idolPowerPool: true } })
   const powerPool = Array.isArray(config?.idolPowerPool) ? config.idolPowerPool.filter((power): power is string => typeof power === 'string') as SurvivorIdolPowerType[] : undefined
-  const plan = computePlayerBoundIdolSeedPlan({ candidates, idolCount, powerPool, seed: opts.seed ?? randomInt(0, 2_147_483_647) })
+  const plan = computePlayerBoundIdolSeedPlan({
+    candidates, idolCount, powerPool,
+    ...(draw ? { powerTypes: draw.types.map(survivorIdolStoredPowerType) } : {}),
+    seed: opts.seed ?? randomInt(0, 2_147_483_647),
+  })
   if (!plan.ok) {
     return { ok: false, status: 422, code: plan.code, error: plan.error }
   }
@@ -100,7 +110,11 @@ export async function seedSurvivorIdols(
 
     const idsByOwner = new Map<string, string[]>()
     for (const a of plan.assignments) {
-      const spec = SURVIVOR_IDOL_CATALOG[a.powerType]
+      const type = typeById.get(a.powerType)
+      const legacy = SURVIVOR_IDOL_CATALOG[a.powerType as SurvivorIdolPowerType]
+      const spec = type
+        ? { label: type.name, description: type.power, category: type.category.toLowerCase() }
+        : { label: legacy?.label ?? a.powerType, description: legacy?.description ?? '', category: legacy?.category ?? 'game' }
       ownerIds.add(a.ownerUserId)
       const idol = await tx.survivorIdol.create({
         data: {
@@ -124,7 +138,7 @@ export async function seedSurvivorIdols(
           playWindowRule: 'before_reveal',
           rarity: 'common',
           assignedAt: new Date(),
-          auditLog: { assignedSource: 'phase2_seed', playerId: a.playerId, expiresAtRemainingPlayers: a.expiresAtRemainingPlayers },
+          auditLog: { assignedSource: 'phase2_seed', playerId: a.playerId, expiresAtRemainingPlayers: a.expiresAtRemainingPlayers, ...(type ? { idolTypeId: type.id } : {}) },
         },
         select: { id: true },
       })
@@ -146,7 +160,7 @@ export async function seedSurvivorIdols(
           isPrivate: true,
           visibleToUserId: a.ownerUserId,
           messageSubtype: 'chimmy_private',
-          metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, idolId: idol.id, playerId: a.playerId, playerName: player?.name ?? a.playerName ?? null, playerImageUrl: player?.imageUrl ?? null },
+          metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, idolId: idol.id, playerId: a.playerId, playerName: player?.name ?? a.playerName ?? null, playerImageUrl: player?.imageUrl ?? null, idolTypeId: type?.id ?? survivorIdolTypeIdForPower(a.powerType) },
         },
       })
       const arr = idsByOwner.get(a.ownerUserId) ?? []

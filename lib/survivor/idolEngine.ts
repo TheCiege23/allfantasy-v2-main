@@ -4,6 +4,7 @@ import { appendSurvivorAudit } from './SurvivorAuditLog'
 import { logSurvivorAuditEntry } from './auditEntry'
 import { postHostMessage } from './hostEngine'
 import type { IdolPowerType } from './types'
+import { survivorIdolPlayBlockReason } from './juryGuards'
 
 export type IdolPlayResult = { ok: true; message: string } | { ok: false; error: string }
 
@@ -468,6 +469,18 @@ export async function playIdol(
     ? idol.currentOwnerUserId === playingUserId
     : idol.rosterId === selfRosterId
   if (!ownsIdol) return { ok: false, error: 'Invalid idol' }
+
+  // Jurors (and anyone else out of the game) cannot play idols. Legacy leagues may have no
+  // SurvivorPlayer row, so the jury table is checked independently of it.
+  const [castRow, juryRow] = await Promise.all([
+    prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId: council.leagueId, userId: playingUserId } }, select: { playerState: true, isJuryMember: true } }),
+    prisma.survivorJuryMember.findUnique({ where: { leagueId_rosterId: { leagueId: council.leagueId, rosterId: selfRosterId } }, select: { id: true } }),
+  ])
+  if (juryRow) return { ok: false, error: 'Jurors cannot play idols.' }
+  if (castRow) {
+    const blocked = survivorIdolPlayBlockReason(castRow)
+    if (blocked) return { ok: false, error: blocked }
+  }
 
   let allyRosterId: string | null = null
   if (protectedUserId) {
