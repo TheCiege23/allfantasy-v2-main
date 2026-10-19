@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import { readWeekGames } from '@/lib/redraft/weekGames'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 
 export type LineupLockResolveArgs = {
   leagueId: string
@@ -115,6 +116,7 @@ export function nbaTeamKey(value: string | null | undefined): string {
 }
 
 async function resolveNbaSurvivorGameDayLocks(args: LineupLockResolveArgs, now: Date) {
+  await ensureDailySportSeasonStart('NBA', args.season, { db: prisma as never })
   const window = resolveDailySportWeekWindow('NBA', args.season, args.editingWeek)
   if (!window) throw new Error('NBA Survivor lineup cannot be edited without a verified fantasy-week calendar.')
   const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { redraftRosterId: true, platformUserId: true } })

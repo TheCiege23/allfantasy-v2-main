@@ -18,6 +18,7 @@ import {
   toScheduleSportKey,
 } from './sportWeekSignal'
 import { dailySportWeekForInstant, resolveDailySportSeasonStart } from './dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from './deriveDailySportSeasonStart'
 import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import type {
   LeagueSeasonWeekResolution,
@@ -81,6 +82,11 @@ export async function resolveSportWeek(
    * are never summed into `PlayerWeeklyScore`, matchups never recalculate and
    * standings never update — the league sits at week 1 with nothing red.
    */
+  // A season past the curated table (a dynasty league's year 2) gets its opener from the labelled
+  // schedule; priming here is what lets the week roller activate it at all. Curated years skip the read.
+  if (!sportHasWeekSignal(scheduleSport)) {
+    await ensureDailySportSeasonStart(scheduleSport, seasonYear, { db: db as never, now })
+  }
   const dailyAnchor = sportHasWeekSignal(scheduleSport)
     ? null
     : resolveDailySportSeasonStart(scheduleSport, seasonYear)
