@@ -8,6 +8,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { buildPlayerKey, collapseStoredAdpRows } from '@/lib/adp/computeAllFantasyAdp'
+import { fantasyPositionsForSport, positionInSet } from './dynastySportCatalog'
 
 export interface DynastyFreeAgent {
   playerKey: string
@@ -23,6 +24,20 @@ const FANTASY_POSITIONS = new Set([
   'DL', 'DE', 'DT', 'EDGE', 'LB', 'ILB', 'OLB', 'MLB',
   'DB', 'CB', 'S', 'FS', 'SS',
 ])
+
+/**
+ * Is `position` a real fantasy position for `sport`?
+ *
+ * 🛑 THE SET ABOVE IS NFL + IDP ONLY. It used to filter every sport's pool, so an NBA/MLB/NHL
+ * league's PG/SP/LW/D free agents were all dropped and the panel read "free-agent pool
+ * unavailable". NBA/MLB/NHL now use the positions their own slot catalog accepts (multi-eligible
+ * "PG/SG"-style tokens included); NFL and every other sport keep the exact set above.
+ */
+export function isDynastyFantasyPosition(sport: string, position: string | null | undefined): boolean {
+  const sportSet = fantasyPositionsForSport(sport)
+  if (sportSet) return positionInSet(position, sportSet)
+  return FANTASY_POSITIONS.has((position ?? '').trim().toUpperCase())
+}
 
 function sportVariants(sport: string): string[] {
   const s = String(sport ?? '').trim()
@@ -101,7 +116,7 @@ export async function fetchDynastyFreeAgentPool(input: {
   for (const [playerKey, v] of best) {
     if (input.rosteredKeys.has(playerKey)) continue
     const [, posRaw] = playerKey.split('|')
-    if (!FANTASY_POSITIONS.has((posRaw ?? '').trim().toUpperCase())) continue
+    if (!isDynastyFantasyPosition(input.sport, posRaw)) continue
     available.push({ playerKey, playerName: v.playerName, position: (posRaw ?? '').toUpperCase(), adp: v.adp, adpRank: 0 })
   }
   available.sort((a, b) => a.adp - b.adp)

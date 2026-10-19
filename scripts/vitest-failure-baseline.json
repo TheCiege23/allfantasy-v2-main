@@ -1,6 +1,6 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 53,
+  "count": 51,
   "failingFiles": [
     "__tests__/active-nav-state-resolver.test.ts",
     "__tests__/admin-production-readiness-service.test.ts",
@@ -22,7 +22,6 @@
     "__tests__/draft-defaults-by-sport.test.ts",
     "__tests__/draft-type-startup-allowlist.test.ts",
     "__tests__/drafts/commit-11-route-redirects.test.ts",
-    "__tests__/fantasy-os/route-guard.test.tsx",
     "__tests__/fantasy-os/sports-data-matchup.test.ts",
     "__tests__/g32-nfl-redraft-home-dashboard.test.tsx",
     "__tests__/g49j-nfl-redraft-provider-migration-certification.test.ts",

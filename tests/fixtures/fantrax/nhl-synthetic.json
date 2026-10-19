@@ -1,0 +1,47 @@
+{
+  "provenance": {
+    "synthetic": true,
+    "modeledOn": "tests/fixtures/fantrax/mlb-points-public.json",
+    "note": "SYNTHETIC NHL fixture, NOT a Fantrax capture. Same shape as the public MLB getLeagueInfo/getPlayerIds/getTeamRosters capture. Ids are invented, names are public athletes, no credentials. Replace with a real capture when one is committed (see contracts/fantrax/GAPS.md)."
+  },
+  "info": {
+    "leagueName": "Synthetic Ice Dynasty",
+    "seasonYear": 2026,
+    "scoringPeriods": [
+      { "number": 1, "startDate": "2025-10-07", "endDate": "2025-10-12" }
+    ],
+    "rosterInfo": {
+      "positionConstraints": {
+        "C": { "maxActive": 2 },
+        "LW": { "maxActive": 2 },
+        "RW": { "maxActive": 2 },
+        "D": { "maxActive": 4 },
+        "G": { "maxActive": 2 },
+        "UT": { "maxActive": 1 }
+      },
+      "maxTotalPlayers": 20,
+      "maxTotalActivePlayers": 13,
+      "maxTotalReservePlayers": 7
+    }
+  },
+  "playerMap": {
+    "syn-nhl-01": { "name": "McDavid, Connor", "fantraxId": "syn-nhl-01", "team": "EDM", "position": "C" },
+    "syn-nhl-02": { "name": "Kucherov, Nikita", "fantraxId": "syn-nhl-02", "team": "TB", "position": "RW" },
+    "syn-nhl-03": { "name": "Makar, Cale", "fantraxId": "syn-nhl-03", "team": "COL", "position": "D" },
+    "syn-nhl-04": { "name": "Hellebuyck, Connor", "fantraxId": "syn-nhl-04", "team": "WPG", "position": "G" },
+    "syn-nhl-05": { "name": "Panarin, Artemi", "fantraxId": "syn-nhl-05", "team": "NYR", "position": "LW" },
+    "syn-nhl-06": { "name": "Hughes, Quinn", "fantraxId": "syn-nhl-06", "team": "VAN", "position": "D" }
+  },
+  "roster": {
+    "teamName": "Fixture team",
+    "rosterItems": [
+      { "id": "syn-nhl-01", "position": "C", "status": "ACTIVE" },
+      { "id": "syn-nhl-02", "position": "RW", "status": "ACTIVE" },
+      { "id": "syn-nhl-03", "position": "D", "status": "ACTIVE" },
+      { "id": "syn-nhl-04", "position": "G", "status": "ACTIVE" },
+      { "id": "syn-nhl-05", "position": "LW", "status": "RESERVE" },
+      { "id": "syn-nhl-06", "position": "D", "status": "INJURED_RESERVE" },
+      { "id": "syn-nhl-98", "position": "C", "status": "MINORS" }
+    ]
+  }
+}

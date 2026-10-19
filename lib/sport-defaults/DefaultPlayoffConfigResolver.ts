@@ -3,6 +3,7 @@
  * Used by league creation initialization, standings, seeding and bracket rendering.
  */
 import type { SportType, DefaultPlayoffConfig } from './types'
+import { playoffStartWeekFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 type PlayoffVariantMap = Partial<Record<SportType, Record<string, Partial<DefaultPlayoffConfig>>>>
 
@@ -33,7 +34,7 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     first_round_byes: 2,
     bracket_type: 'single_elimination',
     consolation_plays_for: 'pick',
-    playoff_start_week: 22,
+    playoff_start_week: playoffStartWeekFor('NBA'),
     seeding_rules: 'standard_standings',
     tiebreaker_rules: ['points_for', 'head_to_head', 'points_against'],
     bye_rules: 'top_two_seeds_bye',
@@ -52,7 +53,7 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     first_round_byes: 2,
     bracket_type: 'single_elimination',
     consolation_plays_for: 'none',
-    playoff_start_week: 23,
+    playoff_start_week: playoffStartWeekFor('MLB'),
     seeding_rules: 'standard_standings',
     tiebreaker_rules: ['points_for', 'head_to_head', 'points_against'],
     bye_rules: 'top_two_seeds_bye',
@@ -71,7 +72,7 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     first_round_byes: 2,
     bracket_type: 'single_elimination',
     consolation_plays_for: 'pick',
-    playoff_start_week: 22,
+    playoff_start_week: playoffStartWeekFor('NHL'),
     seeding_rules: 'standard_standings',
     tiebreaker_rules: ['points_for', 'head_to_head', 'points_against'],
     bye_rules: 'top_two_seeds_bye',

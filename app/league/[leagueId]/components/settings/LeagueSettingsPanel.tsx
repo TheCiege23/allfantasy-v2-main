@@ -16,6 +16,20 @@ import {
   controlClass,
 } from './settings-ui'
 
+/** `League.keeperRoundPenalty`: rounds EARLIER than last season; 0 = same round, negative = later. */
+const KEEPER_ROUND_SHIFTS = [5, 4, 3, 2, 1, 0, -1, -2, -3]
+
+function roundShiftLabel(n: number): string {
+  if (n === 0) return 'Same round as last season'
+  const rounds = Math.abs(n) === 1 ? '1 round' : `${Math.abs(n)} rounds`
+  return n > 0 ? `${rounds} up (earlier)` : `${rounds} down (later)`
+}
+
+function roundOrNull(value: unknown): number | null {
+  const n = Number(value)
+  return value != null && value !== '' && Number.isInteger(n) && n >= 1 ? n : null
+}
+
 export function LeagueSettingsPanel({
   leagueId,
   initialData,
@@ -65,6 +79,9 @@ export function LeagueSettingsPanel({
   const [keeperWaiverAllowed, setKeeperWaiverAllowed] = useState(initialData.keeperWaiverAllowed ?? true)
   const [keeperMinRoundsHeld, setKeeperMinRoundsHeld] = useState(initialData.keeperMinRoundsHeld ?? 0)
   const [keeperDeadlineLocal, setKeeperDeadlineLocal] = useState('')
+  const [keeperConflictRule, setKeeperConflictRule] = useState(initialData.keeperConflictRule ?? 'player_chooses')
+  const [keeperWaiverRound, setKeeperWaiverRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
+  const [keeperMinCostRound, setKeeperMinCostRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_min_cost_round))
 
   useEffect(() => {
     setName(initialData.name ?? '')
@@ -93,6 +110,9 @@ export function LeagueSettingsPanel({
     setKeeperMaxYears(initialData.keeperMaxYears ?? 3)
     setKeeperWaiverAllowed(initialData.keeperWaiverAllowed ?? true)
     setKeeperMinRoundsHeld(initialData.keeperMinRoundsHeld ?? 0)
+    setKeeperConflictRule(initialData.keeperConflictRule ?? 'player_chooses')
+    setKeeperWaiverRound(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
+    setKeeperMinCostRound(roundOrNull(settingsSnapshot.keeper_min_cost_round))
     if (initialData.keeperSelectionDeadline) {
       const d = new Date(initialData.keeperSelectionDeadline)
       setKeeperDeadlineLocal(d.toISOString().slice(0, 16))
@@ -416,8 +436,9 @@ export function LeagueSettingsPanel({
 
           {(keeperCostSystem === 'round_based' || keeperCostSystem === 'inflation') && (
             <div>
-              <label className="mb-1 block text-[11px] text-white/45">Round penalty (rounds earlier)</label>
+              <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-penalty">Keeper cost vs. last season</label>
               <select
+                id="kp-penalty"
                 className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
                 disabled={disabled}
                 value={keeperRoundPenalty}
@@ -427,12 +448,15 @@ export function LeagueSettingsPanel({
                   debouncedSave({ keeperRoundPenalty: n })
                 }}
               >
-                {[1, 2, 3, 4, 5].map((n) => (
+                {KEEPER_ROUND_SHIFTS.map((n) => (
                   <option key={n} value={n}>
-                    {n}
+                    {roundShiftLabel(n)}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-white/40">
+                Up = an earlier, pricier round (drafted R5 → R4). Down = a later, cheaper round (R5 → R6).
+              </p>
             </div>
           )}
 
@@ -511,6 +535,84 @@ export function LeagueSettingsPanel({
             />
             Allow waiver pickups as keepers
           </label>
+
+          {keeperWaiverAllowed && keeperCostSystem !== 'free' && keeperCostSystem !== 'auction_value' && (
+            <div>
+              <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-waiver-round">Waiver pickups cost</label>
+              <select
+                id="kp-waiver-round"
+                className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
+                disabled={disabled}
+                value={keeperWaiverRound ?? ''}
+                onChange={(e) => {
+                  const n = e.target.value === '' ? null : Number(e.target.value)
+                  setKeeperWaiverRound(n)
+                  debouncedSave({ settingsMerge: { keeper_waiver_cost_round: n } })
+                }}
+              >
+                <option value="">The last round</option>
+                {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    Round {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {keeperCostSystem !== 'free' && keeperCostSystem !== 'auction_value' && (
+            <>
+              <div>
+                <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-floor">Earliest round a keeper can cost</label>
+                <select
+                  id="kp-floor"
+                  className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
+                  disabled={disabled}
+                  value={keeperMinCostRound ?? ''}
+                  onChange={(e) => {
+                    const n = e.target.value === '' ? null : Number(e.target.value)
+                    setKeeperMinCostRound(n)
+                    debouncedSave({ settingsMerge: { keeper_min_cost_round: n } })
+                  }}
+                >
+                  <option value="">No limit</option>
+                  {Array.from({ length: 9 }, (_, i) => i + 2).map((n) => (
+                    <option key={n} value={n}>
+                      Round {n}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-white/40">Round 2 means first-round players can&apos;t be kept.</p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-same-round">Two keepers that cost the same round</label>
+                <select
+                  id="kp-same-round"
+                  className="w-full max-w-md rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
+                  disabled={disabled}
+                  value={keeperConflictRule}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setKeeperConflictRule(v)
+                    void save({ keeperConflictRule: v })
+                  }}
+                >
+                  <option value="player_chooses">Not allowed: the manager picks one</option>
+                  <option value="reject_both">Not allowed: neither is kept</option>
+                  <option value="lose_round_before" disabled={!hasAfCommissionerSub && keeperConflictRule !== 'lose_round_before'}>
+                    Lose that round plus the round before{hasAfCommissionerSub ? '' : ' · AF Commissioner'}
+                  </option>
+                  <option value="lose_round_after" disabled={!hasAfCommissionerSub && keeperConflictRule !== 'lose_round_after'}>
+                    Lose that round plus the round after{hasAfCommissionerSub ? '' : ' · AF Commissioner'}
+                  </option>
+                </select>
+                <p className="mt-1 text-[11px] text-white/40">
+                  A pick a team traded away is handled the same way: the keeper moves to the next pick the team still owns.
+                </p>
+              </div>
+            </>
+          )}
 
           <div>
             <label className="mb-1 block text-[11px] text-white/45">Keeper selection deadline (local)</label>

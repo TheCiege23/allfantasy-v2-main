@@ -1,0 +1,50 @@
+{
+  "provenance": {
+    "synthetic": true,
+    "modeledOn": "tests/fixtures/fantrax/mlb-points-public.json",
+    "note": "SYNTHETIC NBA fixture, NOT a Fantrax capture. Same shape as the public MLB getLeagueInfo/getPlayerIds/getTeamRosters capture. Ids are invented, names are public athletes, no credentials. Replace with a real capture when one is committed (see contracts/fantrax/GAPS.md)."
+  },
+  "info": {
+    "leagueName": "Synthetic Hoops Dynasty",
+    "seasonYear": 2026,
+    "scoringPeriods": [
+      { "number": 1, "startDate": "2025-10-21", "endDate": "2025-10-26" },
+      { "number": 2, "startDate": "2025-10-27", "endDate": "2025-11-02" }
+    ],
+    "rosterInfo": {
+      "positionConstraints": {
+        "PG": { "maxActive": 1 },
+        "SG": { "maxActive": 1 },
+        "G": { "maxActive": 1 },
+        "SF": { "maxActive": 1 },
+        "PF": { "maxActive": 1 },
+        "F": { "maxActive": 1 },
+        "C": { "maxActive": 2 },
+        "UT": { "maxActive": 2 }
+      },
+      "maxTotalPlayers": 15,
+      "maxTotalActivePlayers": 10,
+      "maxTotalReservePlayers": 5
+    }
+  },
+  "playerMap": {
+    "syn-nba-01": { "name": "Gilgeous-Alexander, Shai", "fantraxId": "syn-nba-01", "team": "OKC", "position": "PG" },
+    "syn-nba-02": { "name": "Jokic, Nikola", "fantraxId": "syn-nba-02", "team": "DEN", "position": "C" },
+    "syn-nba-03": { "name": "Tatum, Jayson", "fantraxId": "syn-nba-03", "team": "BOS", "position": "SF" },
+    "syn-nba-04": { "name": "Edwards, Anthony", "fantraxId": "syn-nba-04", "team": "MIN", "position": "SG" },
+    "syn-nba-05": { "name": "Wembanyama, Victor", "fantraxId": "syn-nba-05", "team": "SA", "position": "C" },
+    "syn-nba-06": { "name": "Banchero, Paolo", "fantraxId": "syn-nba-06", "team": "ORL", "position": "PF" }
+  },
+  "roster": {
+    "teamName": "Fixture team",
+    "rosterItems": [
+      { "id": "syn-nba-01", "position": "PG", "status": "ACTIVE" },
+      { "id": "syn-nba-02", "position": "C", "status": "ACTIVE" },
+      { "id": "syn-nba-03", "position": "SF", "status": "ACTIVE" },
+      { "id": "syn-nba-04", "position": "SG", "status": "ACTIVE" },
+      { "id": "syn-nba-05", "position": "C", "status": "INJURED_RESERVE" },
+      { "id": "syn-nba-06", "position": "PF", "status": "RESERVE" },
+      { "id": "syn-nba-99", "position": "UT", "status": "MINORS" }
+    ]
+  }
+}

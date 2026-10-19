@@ -145,6 +145,8 @@ interface RankingsData {
   phase: string
   isDynasty: boolean
   isSuperFlex: boolean
+  /** League sport from /api/rankings/league-v2 (absent on older responses → NFL). */
+  sport?: string
   teams: TeamScore[]
   weeklyPointsDistribution: { rosterId: number; weeklyPoints: number[] }[]
   computedAt: number
@@ -668,6 +670,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          sport: data?.sport,
           leagueType: data?.isDynasty ? 'Dynasty' : 'Redraft',
           isSF: data?.isSuperFlex ?? false,
           goal: isContending ? 'compete' : 'rebuild',

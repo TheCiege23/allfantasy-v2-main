@@ -26,6 +26,7 @@ import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/Roster
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 
 export type AutopickFallbackPoolEntry = {
   playerName: string
@@ -282,14 +283,21 @@ export async function loadAutopickDraftContextForOnClock(
       nbaSurvivorPlayerIdMatches(roster, candidate.playerName, candidate.playerId),
     )
   }
-  const fallbackPool = fallbackPoolRaw.filter((entry) => {
-    if (!entry.playerName || !entry.position) return false
-    if (draftedNames.has(normalizeName(entry.playerName))) return false
-    if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions)) {
-      return false
-    }
-    return true
-  })
+  const fallbackPool = await filterCandidatesForPlayerPool(
+    leagueId,
+    (draftSession as { playerPool?: string | null }).playerPool,
+    fallbackPoolRaw.filter((entry) => {
+      if (!entry.playerName || !entry.position) return false
+      if (draftedNames.has(normalizeName(entry.playerName))) return false
+      if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions)) {
+        return false
+      }
+      return true
+    }),
+    // Same verdict pick validation applies to `auto` picks, so autopick never chooses a player it
+    // would then be refused — a refused autopick retries the same player and stalls the clock.
+    (entry) => ({ playerId: entry.playerId, playerName: entry.playerName }),
+  )
 
   if (fallbackPool.length === 0) return null
 

@@ -35,6 +35,7 @@ import {
   parseInventoryPickId,
   transferNativeFuturePick,
 } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
 
 export type ReversalBlocker =
   | 'TRADE_NOT_FOUND'
@@ -255,6 +256,21 @@ export async function reverseGenericTrade(
           },
         })
       }
+      // Native scoring reads `RedraftRosterPlayer`; move the players' rows back with their JSON.
+      const after = readRosters(snapshot.afterState)
+      const afterIds = new Map(after.map((r) => [r.rosterId, new Set(getRosterPlayerIds(r.playerData))]))
+      await applyRedraftRosterMoves(tx, {
+        leagueId: trade.leagueId,
+        acquisitionType: 'trade',
+        moves: before.flatMap((b) => getRosterPlayerIds(b.playerData)
+          .filter((pid) => !afterIds.get(b.rosterId)?.has(pid))
+          .map((pid) => ({
+            playerId: pid,
+            fromRosterId: after.find((r) => afterIds.get(r.rosterId)?.has(pid))?.rosterId ?? null,
+            toRosterId: b.rosterId,
+          }))),
+        playerDataByRoster: new Map(before.map((b) => [b.rosterId, b.playerData])),
+      })
       // The snapshot restores roster JSON only; a native future pick is moved back here, under
       // the readiness check just re-run in this transaction.
       for (const p of nativePickItems(trade.items)) {
