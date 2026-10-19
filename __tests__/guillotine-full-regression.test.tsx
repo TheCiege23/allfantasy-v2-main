@@ -60,10 +60,12 @@ const standingsMock = vi.hoisted(() => vi.fn())
 const dangerMock = vi.hoisted(() => vi.fn())
 const eventsMock = vi.hoisted(() => vi.fn())
 
+const applyFaabAfterChopMock = vi.hoisted(() => vi.fn())
 const acquireEliminationLockMock = vi.hoisted(() => vi.fn())
 const releaseEliminationLockMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/automation/locks', () => ({ acquireAutomationLock: acquireEliminationLockMock, releaseAutomationLock: releaseEliminationLockMock }))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/guillotine/faabAfterChop', () => ({ applyFaabAfterChop: applyFaabAfterChopMock }))
 /*
  * The engine resolves across the two roster id spaces through this module. Mocking it keeps this
  * suite testing ELIMINATION rather than re-modelling the reconciler's query sequence -- the
@@ -123,6 +125,7 @@ describe('Guillotine full regression matrix', () => {
     prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing' })
     acquireEliminationLockMock.mockResolvedValue({ ok: true, backend: 'postgres' })
     releaseEliminationLockMock.mockResolvedValue(undefined)
+    applyFaabAfterChopMock.mockResolvedValue({ applied: false, reason: 'rule_unchanged' })
     prismaMock.guillotineSeason.findFirst.mockResolvedValue(null)
     prismaMock.guillotineSeason.findUnique.mockResolvedValue({ createdAt: new Date('2026-01-01') })
     prismaMock.guillotineElimination.findFirst.mockResolvedValue(null)
@@ -212,6 +215,20 @@ describe('Guillotine full regression matrix', () => {
     expect(prismaMock.redraftRosterPlayer.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { rosterId: { in: ['rr-low'] }, droppedAt: null } }))
     expect(evaluateWeekMock).not.toHaveBeenCalled()
     expect(resolveTiebreakMock).not.toHaveBeenCalled()
+    // A chop whose FAAB step failed finishes it on the retry (the step itself is once-per-week).
+    expect(applyFaabAfterChopMock).toHaveBeenCalledWith({ leagueId: 'league-1', seasonKey: 'gs1', weekOrPeriod: 3 })
+  })
+
+  it('a failing FAAB step never fails a recorded chop', async () => {
+    getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18 })
+    prismaMock.guillotineSeason.findFirst.mockResolvedValue({ id: 'gs1' })
+    prismaMock.guillotineElimination.findFirst.mockResolvedValue({ id: 'completed-audit' })
+    prismaMock.roster.findMany.mockResolvedValue([])
+    applyFaabAfterChopMock.mockRejectedValueOnce(new Error('db down'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026 })).resolves.toMatchObject({ reason: 'period already processed' })
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it('does not chop another survivor after state was written but audit failed', async () => {
@@ -307,6 +324,8 @@ describe('Guillotine full regression matrix', () => {
       expect(out).toMatchObject({ choppedRosterIds: [], reason: 'no chop scheduled' })
       expect(resolveTiebreakMock).not.toHaveBeenCalled()
       expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
+      // "After each chop": a week with no chop changes nobody's FAAB.
+      expect(applyFaabAfterChopMock).not.toHaveBeenCalled()
     })
 
     it('a no-chop week moves the season past it, so the weekly driver goes on to the next week', async () => {
@@ -406,6 +425,9 @@ describe('Guillotine full regression matrix', () => {
     })
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop', expect.any(Object))
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop_animation_trigger', expect.any(Object))
+    // FAAB after a chop runs once the chop and release are recorded, keyed on this week.
+    expect(applyFaabAfterChopMock).toHaveBeenCalledWith({ leagueId: 'league-1', seasonKey: 'season:unknown', weekOrPeriod: 3 })
+    expect(applyFaabAfterChopMock.mock.invocationCallOrder[0]).toBeGreaterThan(releaseChoppedRostersMock.mock.invocationCallOrder[0])
     expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
     // The announcement is read by the whole league: a name, never the fixture's email.
     expect(postChopToLeagueChatMock.mock.calls[0][0].displayNames).toEqual({ 'r-low': 'Lowest Team' })
