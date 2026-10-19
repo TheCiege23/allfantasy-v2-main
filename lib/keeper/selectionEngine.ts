@@ -3,6 +3,7 @@ import { computeKeeperEligibility } from './eligibilityEngine'
 import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
 import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
+import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule } from './missedDeadlineService'
 
 export async function openKeeperSelectionPhase(
   leagueId: string,
@@ -61,6 +62,13 @@ export async function submitKeeperSelections(
   const maxKeepers = league.keeperCount ?? 3
   if (playerIds.length > maxKeepers) {
     throw new Error(`At most ${maxKeepers} keepers`)
+  }
+  if (playerIds.length === 0) {
+    // "Keep nobody" writes no keeper record, so leave a marker: the missed-deadline rule
+    // (./missedDeadlineService) must not mistake a deliberate empty list for silence.
+    await prisma.leagueAuditLog
+      .create({ data: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId, metadata: { rosterId } } })
+      .catch(() => undefined)
   }
 
   const roster = await prisma.redraftRoster.findFirst({
@@ -241,6 +249,15 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
   if (!session) throw new Error('Session not found')
 
   const wasAlreadyLocked = session.status === 'locked'
+
+  // Teams that never answered get the league's missed-deadline rule (default: no keepers) as
+  // pending records, which the lock below locks with everyone else's. Once per session: a
+  // repeat lock must not pick again. A failure leaves those teams with no keepers, as before.
+  if (!wasAlreadyLocked) {
+    await applyMissedDeadlineRule(leagueId, session.seasonId).catch((e) => {
+      console.error('[keeper] missed-deadline rule failed; silent teams keep nobody', { leagueId, sessionId, error: e instanceof Error ? e.message : e })
+    })
+  }
 
   await prisma.keeperRecord.updateMany({
     where: { leagueId, seasonId: session.seasonId, status: 'pending' },
