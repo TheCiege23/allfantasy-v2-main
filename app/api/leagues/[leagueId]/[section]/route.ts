@@ -61,6 +61,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'legacy-score': () => import('../legacy-score/handler'),
   'lifecycle': () => import('../lifecycle/handler'),
   'matchup-center': () => import('../matchup-center/handler'),
+  'tournament-bracket': () => import('../tournament-bracket/handler'),
   'matchups': () => import('../matchups/handler'),
   'media': () => import('../media/handler'),
   'my-team': () => import('../my-team/handler'),
