@@ -9,7 +9,11 @@
  *   - the image — private chat storage (`putPrivateChatFile` under the league's chat prefix, handed
  *     back as `chatUploadReadUrl`), the same path the chat composer's photo upload takes, so only
  *     league members can open it;
- *   - the post — `createLeagueChatMessage` with a deterministic row id.
+ *   - the post — `createLeagueChatMessage` with a deterministic row id;
+ *   - what happens after a post — the Discord relay (`syncOutboundLeagueChat`) and the "new message in
+ *     your league chat" alert (`queueLeagueChatNotifications`, which honours each member's League chat
+ *     preference), the same two calls `POST /api/league/chat` makes after saving a user message.
+ *     `createLeagueChatMessage` sends neither, so each fires exactly once here.
  *
  * ONCE PER MOMENT: the row id is derived from (tournament, entry, poster, headline). The headline is
  * the moment ("Made the bracket", "Final four", "CHAMPION"…), so a manager can post again when their
@@ -23,6 +27,8 @@ import { createHash, randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
+import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
+import { queueLeagueChatNotifications } from '@/lib/chat-notifications/chatMessageNotifier'
 import { privateChatStorageConfigured, putPrivateChatFile } from '@/lib/chat-core/privateStorage'
 import { chatUploadPrefix, chatUploadReadUrl } from '@/lib/chat-core/chatUploadAccess'
 import { getBaseUrl } from '@/lib/get-base-url'
@@ -102,14 +108,31 @@ export async function postShareCardToLeagueChat(input: { userId: string; tournam
 
   const href = trophyHref(input.tournamentId, input.entryId)
   const text = `${shareCaption(card, view.tournament.name)}\n${getBaseUrl()}${href}`
-  const created = await createLeagueChatMessage(league.leagueId, input.userId, text, {
-    idempotencyKey: messageId,
-    imageUrl,
-    metadata: {
-      ...(imageUrl ? { attachments: [{ type: 'image', url: imageUrl, mimeType: 'image/png' }] } : {}),
-      tournamentShare: { tournamentId: input.tournamentId, entryId: input.entryId, headline: card.headline, href },
-    },
-  })
+  const metadata = {
+    ...(imageUrl ? { attachments: [{ type: 'image', url: imageUrl, mimeType: 'image/png' }] } : {}),
+    tournamentShare: { tournamentId: input.tournamentId, entryId: input.entryId, headline: card.headline, href },
+  }
+  const created = await createLeagueChatMessage(league.leagueId, input.userId, text, { idempotencyKey: messageId, imageUrl, metadata })
   if (!created) throw new ShareToChatError('You already posted this card to your league chat.', 409)
+
+  // Same follow-up as a member's own message. The card image lives in private chat storage, so the
+  // Discord relay carries the caption and link only.
+  await syncOutboundLeagueChat({
+    leagueId: league.leagueId,
+    messageId: created.id,
+    authorName: created.senderName ?? 'Manager',
+    authorAvatarUrl: created.senderAvatarUrl ?? null,
+    text: created.body,
+    gifUrl: null,
+  }).catch(() => console.warn('[tournament/divisions] share card Discord relay failed'))
+  queueLeagueChatNotifications({
+    leagueId: league.leagueId,
+    messageId: created.id,
+    senderUserId: input.userId,
+    messageType: created.messageType ?? 'text',
+    body: text,
+    metadata,
+    source: 'league',
+  })
   return { leagueId: league.leagueId, leagueName: league.name, messageId, image: Boolean(imageUrl) }
 }

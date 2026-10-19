@@ -7,6 +7,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
 
 export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
@@ -27,6 +28,9 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   }, [ctx.league.playoffTeams, chosenStartWeek])
 
   const teamCap = ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12
+
+  // A tournament conference league has no league playoffs; its fields would do nothing.
+  if (tournamentRunsPlayoffs(ctx.league.settings)) return <TournamentPlayoffsNote settings={ctx.league.settings} />
 
   return (
     <div className="space-y-8">

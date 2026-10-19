@@ -188,6 +188,16 @@ describe('runNativeGuillotineWeek', () => {
     expect(m.runElimination.mock.calls[0]![0]).toMatchObject({ skipChat: true, systemUserId: undefined })
   })
 
+  it('a scheduled no-chop week ends as no_chop, not refused, and drops nobody', async () => {
+    arrange()
+    m.runElimination.mockResolvedValue({ leagueId: 'L1', weekOrPeriod: 3, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'no chop scheduled' })
+
+    const r = await run()
+
+    expect(r).toMatchObject({ outcome: 'no_chop', week: 3 })
+    expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
+  })
+
   it('does nothing for a league that is not guillotine', async () => {
     arrange()
     m.isGuillotineLeague.mockResolvedValue(false)

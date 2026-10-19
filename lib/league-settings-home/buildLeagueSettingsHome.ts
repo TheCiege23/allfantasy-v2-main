@@ -9,6 +9,7 @@
  */
 
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 
 export type SettingsSubPageId =
   | 'general'
@@ -19,6 +20,8 @@ export type SettingsSubPageId =
   | 'waivers'
   | 'trades'
   | 'guillotine-first-chop'
+  /** Guillotine: chop schedule, double/no-chop weeks and immunity (lib/guillotine/chopSchedule.ts). */
+  | 'guillotine-chop-rules'
   | 'playoffs'
   | 'members'
   | 'co-commissioners'
@@ -80,6 +83,11 @@ export type SettingsHomeDraft = {
 export type SettingsHomeGuillotine = {
   firstChopWeek: number
   endWeek: number | null
+  /** One line per chop rule, from the server (describeSchedule). */
+  scheduleLines?: string[]
+  /** The chop rules as saved, and the base teams per chop they build on. */
+  advanced?: GuillotineAdvanced | null
+  teamsPerChop?: number
   /** The first chop has happened — the start week can no longer move. */
   locked: boolean
 }
@@ -319,6 +327,13 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           value: g ? `Week ${g.firstChopWeek}${g.locked ? ' · locked' : ''}` : LOADING,
           pending: g == null,
           ...(g?.locked ? {} : edit('guillotine-first-chop')),
+        },
+        {
+          id: 'chop-rules',
+          label: 'Chop rules',
+          value: g ? (g.scheduleLines?.length ? g.scheduleLines.slice(0, 2).join(' ') : 'One chop a week') : LOADING,
+          pending: g == null,
+          ...edit('guillotine-chop-rules'),
         },
         {
           id: 'chop-schedule',

@@ -47,6 +47,7 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
       { id: 'trades', label: 'Trades' },
       { id: 'playoffs', label: 'Playoffs' },
       { id: 'guillotine-first-chop', label: 'First chop week' },
+      { id: 'guillotine-chop-rules', label: 'Chop rules' },
     ],
   },
   {

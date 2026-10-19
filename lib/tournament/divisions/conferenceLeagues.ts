@@ -138,9 +138,10 @@ async function applyScoringOverride(leagueId: string, plan: ConferenceLeaguePlan
 /**
  * Write the tournament calendar onto the league so its first season is created to match it.
  * Idempotent. It only shapes a season created AFTER it is written; a league whose season already
- * exists keeps the schedule it has (reported, never rewritten here).
+ * exists keeps the schedule it has here — the commissioner's "Apply tournament schedule"
+ * (./conferenceSchedule) re-applies it to a season that has not started.
  */
-async function applySeasonPlan(leagueId: string, plan: ConferenceSeasonPlan) {
+export async function applySeasonPlan(leagueId: string, plan: ConferenceSeasonPlan) {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   if (!league) throw new ProvisionStepError('The league could not be found.')
   const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : {}
