@@ -784,9 +784,38 @@ const TASK_EXACT_ES: Record<string, string> = {
     'Ambos mánagers aceptaron este intercambio. Revisa la propuesta registrada antes de aprobarlo o rechazarlo.',
   'Recorded scoring recalculation failed': 'Falló un recálculo de puntuación registrado',
   'Recorded league deadline approaches': 'Se acerca una fecha límite registrada de la liga',
+  // inboxTasks.ts
+  'Keeper picks are missing': 'Faltan keepers por enviar',
+  'Keeper conflicts need a ruling': 'Hay conflictos de keepers por resolver',
+  'Integrity flag to review': 'Hay una alerta de integridad por revisar',
+  'Join requests are waiting': 'Hay solicitudes de ingreso pendientes',
+  'Orphan team adoption request': 'Solicitud para adoptar un equipo huérfano',
+  'League dues are unpaid': 'Hay cuotas de la liga sin pagar',
+  'Payout request awaits approval': 'Una solicitud de pago espera aprobación',
+  'A league payout request is waiting for commissioner approval.': 'Una solicitud de pago de la liga espera la aprobación del comisionado.',
+  'An AI commissioner alert is open for this league.': 'Hay una alerta del comisionado IA abierta en esta liga.',
 }
 
 const TASK_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
+  // inboxTasks.ts
+  [
+    /^(\d+) of (\d+) teams have not submitted keepers\. Picks lock at the deadline; teams that miss it follow the league's missed-deadline rule\.$/,
+    (n, total) => `${n} de ${total} equipos no han enviado sus keepers. Se bloquean en la fecha límite; los equipos que no lleguen siguen la regla de la liga para plazos vencidos.`,
+  ],
+  [
+    /^(\d+) teams? kept two players who cost the same round\. Resolve them before keepers lock\.$/,
+    (n) => `${n} ${n === '1' ? 'equipo guardó' : 'equipos guardaron'} dos jugadores que cuestan la misma ronda. Resuélvelo antes de que se bloqueen los keepers.`,
+  ],
+  [
+    /^(\d+) managers? asked to join outside the league's division\. Approve or decline each request\.$/,
+    (n) => `${n} ${n === '1' ? 'mánager pidió' : 'mánagers pidieron'} unirse fuera de la división de la liga. Aprueba o rechaza cada solicitud.`,
+  ],
+  [/^(.+) asked to take over an open team\. Approve or reject the request\.$/, (name) => `${name} pidió hacerse cargo de un equipo sin dueño. Aprueba o rechaza la solicitud.`],
+  [
+    /^(\d+) of (\d+) teams have not paid (\d{4}) dues: (.+)\.$/,
+    (n, total, season, names) => `${n} de ${total} equipos no han pagado las cuotas de ${season}: ${names}.`,
+  ],
+  [/^An open (.+) flag needs a commissioner decision\.$/, (kind) => `Una alerta abierta de tipo «${kind}» necesita una decisión del comisionado.`],
   // taskSources.ts — detectStaleImport
   [
     /^The newest imported event for this league is (\d+) days? old\. Every rolling-window figure on League Analytics — active managers, trade activity, transactions per week — is computed over a (\d+)-day and 90-day window, so they now read as though the league went quiet\. Re-run the import to bring the feed current; the figures correct themselves once it does\.$/,
