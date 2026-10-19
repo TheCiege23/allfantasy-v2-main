@@ -43,6 +43,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'draft-results': () => import('../draft-results/handler'),
   'drama': () => import('../drama/handler'),
   'dynasty-backfill': () => import('../dynasty-backfill/handler'),
+  'dynasty-hub': () => import('../dynasty-hub/handler'),
   'dynasty-projections': () => import('../dynasty-projections/handler'),
   'dynasty-settings': () => import('../dynasty-settings/handler'),
   'dynasty-war-room': () => import('../dynasty-war-room/handler'),

@@ -208,8 +208,9 @@ export type NflRedraftLiveScoringRuntimeState = {
   }
 }
 
-const NON_SCORING_SLOTS = new Set(['bench', 'bn', 'ir', 'taxi', 'devy', 'reserve'])
-const IR_SLOTS = new Set(['ir', 'reserve'])
+// MLB/NBA reserve slots (`il`, `il_plus`, `na`, MLB stash slots) never score either.
+const NON_SCORING_SLOTS = new Set(['bench', 'bn', 'ir', 'taxi', 'devy', 'reserve', 'il', 'il_plus', 'na', 'prospect', 'rights', 'minors'])
+const IR_SLOTS = new Set(['ir', 'reserve', 'il', 'il_plus', 'na'])
 
 function roundScore(value: number): number {
   return Math.round(value * 100) / 100

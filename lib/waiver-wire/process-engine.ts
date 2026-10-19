@@ -22,6 +22,7 @@ import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
+import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 
 type ClaimRow = {
   id: string
@@ -345,6 +346,23 @@ export async function processWaiverClaimsForLeague(
       }
     }
 
+    /*
+     * Native scoring reads `RedraftRosterPlayer`, not `playerData` — without this an awarded
+     * player never scores and the dropped one keeps scoring. Survivor Guillotine writes its own
+     * rows above, so it is excluded here rather than written twice.
+     */
+    const redraftMoveWrites = league.leagueVariant === 'survivor_guillotine'
+      ? []
+      : await planRedraftRosterMoveWrites(prisma, {
+          leagueId,
+          acquisitionType: 'waiver',
+          moves: [
+            { playerId: addId, fromRosterId: null, toRosterId: claim.rosterId },
+            ...(dropId ? [{ playerId: dropId, fromRosterId: claim.rosterId, toRosterId: null }] : []),
+          ],
+          playerDataByRoster: new Map([[claim.rosterId, newPlayerData]]),
+        })
+
     await (prisma as any).$transaction([
       (prisma as any).waiverClaim.update({
         where: claimSnapshotWhere(claim),
@@ -373,6 +391,7 @@ export async function processWaiverClaimsForLeague(
         },
       }),
       ...survivorGuillotineWrites,
+      ...redraftMoveWrites,
     ])
 
     rosteredByPlayer.set(addId, claim.rosterId)

@@ -1,5 +1,6 @@
 // lib/trade-engine/dynasty-tiers.ts
 import { Asset, LeagueContext } from './types'
+import { nonNflCornerstoneSport } from './league-intelligence'
 
 export type Thresholds = {
   QB_CORNERSTONE_SF: number
@@ -21,12 +22,27 @@ export function defaultThresholds(): Thresholds {
   }
 }
 
-export function classifyCornerstone(asset: Asset, league: LeagueContext, t: Thresholds): Asset {
+/**
+ * NOTE: the live trade engine classifies with `classifyCornerstone` in `./league-intelligence`
+ * (this module had no importers when it was made sport-aware); both apply the same rule.
+ *
+ * `league.sport` NBA/MLB/NHL: those sports have no SF-QB/TEP-style positional premium, so one
+ * position-agnostic bar (`SKILL_CORNERSTONE`) applies to every player. NFL/unset is unchanged.
+ */
+export function classifyCornerstone(asset: Asset, league: LeagueContext & { sport?: string | null }, t: Thresholds): Asset {
   if (asset.type === 'FAAB') return { ...asset, isCornerstone: false }
   if (asset.type === 'PICK') {
     // early 1st cornerstone only
     if (asset.round === 1 && asset.projected === 'early') {
       return { ...asset, isCornerstone: true, cornerstoneReason: 'Early 1st is a cornerstone pick.' }
+    }
+    return { ...asset, isCornerstone: false }
+  }
+
+  const nonNfl = nonNflCornerstoneSport(league.sport)
+  if (nonNfl) {
+    if (asset.value >= t.SKILL_CORNERSTONE) {
+      return { ...asset, isCornerstone: true, cornerstoneReason: `Elite ${nonNfl} cornerstone.` }
     }
     return { ...asset, isCornerstone: false }
   }

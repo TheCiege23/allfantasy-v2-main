@@ -3,6 +3,7 @@
  * Used by LeagueDefaultSettingsService and league creation initialization.
  */
 import type { SportType, DefaultScheduleConfig } from './types'
+import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 type ScheduleVariantMap = Partial<Record<SportType, Record<string, Partial<DefaultScheduleConfig>>>>
 
@@ -27,7 +28,7 @@ const BASE_CONFIGS: Record<SportType, DefaultScheduleConfig> = {
   NBA: {
     sport_type: 'NBA',
     schedule_unit: 'week',
-    regular_season_length: 24,
+    regular_season_length: DAILY_SPORT_SEASON_SHAPE.NBA.totalWeeks,
     matchup_frequency: 'weekly',
     season_labeling: 'week',
     lock_time_behavior: 'first_game',
@@ -38,13 +39,13 @@ const BASE_CONFIGS: Record<SportType, DefaultScheduleConfig> = {
     scoring_period_behavior: 'full_period',
     reschedule_handling: 'use_final_time',
     doubleheader_or_multi_game_handling: 'all_games_count',
-    playoff_transition_point: 22,
+    playoff_transition_point: playoffStartWeekFor('NBA'),
     schedule_generation_strategy: 'round_robin',
   },
   MLB: {
     sport_type: 'MLB',
     schedule_unit: 'week',
-    regular_season_length: 26,
+    regular_season_length: DAILY_SPORT_SEASON_SHAPE.MLB.totalWeeks,
     matchup_frequency: 'weekly',
     season_labeling: 'week',
     lock_time_behavior: 'slate_lock',
@@ -55,13 +56,13 @@ const BASE_CONFIGS: Record<SportType, DefaultScheduleConfig> = {
     scoring_period_behavior: 'slate_based',
     reschedule_handling: 'use_final_time',
     doubleheader_or_multi_game_handling: 'all_games_count',
-    playoff_transition_point: 24,
+    playoff_transition_point: playoffStartWeekFor('MLB'),
     schedule_generation_strategy: 'round_robin',
   },
   NHL: {
     sport_type: 'NHL',
     schedule_unit: 'week',
-    regular_season_length: 25,
+    regular_season_length: DAILY_SPORT_SEASON_SHAPE.NHL.totalWeeks,
     matchup_frequency: 'weekly',
     season_labeling: 'week',
     lock_time_behavior: 'first_game',
@@ -72,7 +73,7 @@ const BASE_CONFIGS: Record<SportType, DefaultScheduleConfig> = {
     scoring_period_behavior: 'full_period',
     reschedule_handling: 'use_final_time',
     doubleheader_or_multi_game_handling: 'all_games_count',
-    playoff_transition_point: 22,
+    playoff_transition_point: playoffStartWeekFor('NHL'),
     schedule_generation_strategy: 'round_robin',
   },
   NCAAF: {

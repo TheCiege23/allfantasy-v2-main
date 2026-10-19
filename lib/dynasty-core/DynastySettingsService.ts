@@ -12,6 +12,7 @@ import {
   DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS,
   DYNASTY_DEFAULT_ROOKIE_DRAFT_TYPE,
   ROOKIE_PICK_ORDER_METHODS,
+  isDynastyFootballSport,
 } from './constants'
 import type {
   DynastyLeagueConfigDto,
@@ -40,14 +41,17 @@ export async function getEffectiveDynastySettings(
   if (!league) return null
 
   const settings = (league.settings as Record<string, unknown>) ?? {}
+  // The superflex/PPR fallbacks are football formats; MLB/NBA/NHL fall back to their own dynasty
+  // roster template and standard scoring instead of being summarised as an NFL league.
+  const football = isDynastyFootballSport(league.sport as string | null)
   const rosterFormatType =
     (settings.roster_format_type as string) ??
     (settings.roster_format as string) ??
-    'dynasty_superflex'
+    (football ? 'dynasty_superflex' : 'dynasty')
   const scoringFormatType =
     (settings.scoring_format_type as string) ??
     (settings.scoring_format as string) ??
-    'PPR'
+    (football ? 'PPR' : 'standard')
   const playoffTeamCount = (settings.playoff_team_count as number) ?? 6
   const playoffStructure = (settings.playoff_structure as Record<string, unknown>) ?? {}
   const regularSeasonWeeks =

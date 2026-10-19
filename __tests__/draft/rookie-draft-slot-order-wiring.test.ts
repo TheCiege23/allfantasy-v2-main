@@ -18,10 +18,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * order wins over the bare creation-order default).
  */
 
-const { mockGetRookieDraftOrderConfig, mockComputeRookieDraftOrder, mockLeagueFindUnique } = vi.hoisted(() => ({
+const { mockGetRookieDraftOrderConfig, mockComputeRookieDraftOrder, mockLeagueFindUnique, mockResolveLive } = vi.hoisted(() => ({
   mockGetRookieDraftOrderConfig: vi.fn(),
   mockComputeRookieDraftOrder: vi.fn(),
   mockLeagueFindUnique: vi.fn(),
+  mockResolveLive: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -33,13 +34,32 @@ vi.mock('@/lib/league/rookieDraftOrder', () => ({
   computeRookieDraftOrder: mockComputeRookieDraftOrder,
 }))
 
+// The live order (lib/rookie-order) is consulted first; off by default here so the older path is what these tests pin.
+vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({
+  resolveLiveRookieDraftSlots: mockResolveLive,
+}))
+
 import { resolveRookieDraftSlotOrderForLeague } from '@/lib/draft/resolveRookieDraftSlotOrderForLeague'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockResolveLive.mockResolvedValue(null)
 })
 
 describe('resolveRookieDraftSlotOrderForLeague', () => {
+  it('uses the saved live order when automation has one, without consulting the older setting', async () => {
+    const live = [
+      { slot: 1, rosterId: 'r2', displayName: 'Lowest Max PF' },
+      { slot: 2, rosterId: 'r1', displayName: 'Champion' },
+    ]
+    mockResolveLive.mockResolvedValueOnce(live)
+
+    const result = await resolveRookieDraftSlotOrderForLeague('league-1')
+
+    expect(result).toEqual(live)
+    expect(mockGetRookieDraftOrderConfig).not.toHaveBeenCalled()
+  })
+
   it('returns null when the commissioner has not enabled auto rookie order', async () => {
     mockGetRookieDraftOrderConfig.mockResolvedValueOnce(null)
 

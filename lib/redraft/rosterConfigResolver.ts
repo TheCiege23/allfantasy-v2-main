@@ -28,8 +28,10 @@ export type ResolvedRosterConfig = {
 }
 
 const BENCH_TOKENS = new Set(['BENCH', 'BN'])
-const IR_TOKENS = new Set(['IR', 'RESERVE'])
-const TAXI_TOKENS = new Set(['TAXI', 'DEVY'])
+// MLB and NBA templates name their injured list `IL` (MLB adds `IL_PLUS` and the minor-league `NA`);
+// without them here those slots were counted as starter capacity (lib/mlb-roster/MlbRosterTemplates.ts).
+const IR_TOKENS = new Set(['IR', 'RESERVE', 'IL', 'IL_PLUS', 'NA'])
+const TAXI_TOKENS = new Set(['TAXI', 'DEVY', 'PROSPECT', 'RIGHTS', 'MINORS'])
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)

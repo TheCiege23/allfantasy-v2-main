@@ -47,10 +47,10 @@ function valueOf(p: DynastyPlayerFact): number | null {
 }
 
 /** Age-weighted value used to rank stashable young free agents above older ones at equal ADP. */
-function stashValue(p: DynastyPlayerFact): number | null {
+function stashValue(p: DynastyPlayerFact, sport: string): number | null {
   const v = valueOf(p)
   if (v == null) return null
-  const traj = ageTrajectory(p.position, p.age)
+  const traj = ageTrajectory(p.position, p.age, sport)
   const mult = traj === 'ascending' ? 1.2 : traj === 'prime' ? 1.0 : traj === 'aging' ? 0.85 : traj === 'cliff' ? 0.7 : 1.0
   return v * mult
 }
@@ -81,7 +81,7 @@ export function buildDynastyWaiverRecommendations(
   // DROP side — weakest, oldest rosterable assets (works without a pool).
   const dropCandidates = team.players
     .filter((p) => !p.isStarterSlot || team.players.length > context.roster.totalStarterSlots)
-    .map((p) => ({ p, sv: stashValue(p), traj: ageTrajectory(p.position, p.age) }))
+    .map((p) => ({ p, sv: stashValue(p, context.sport), traj: ageTrajectory(p.position, p.age, context.sport) }))
     .sort((a, b) => (a.sv ?? -1) - (b.sv ?? -1))
 
   const recommendedDrops: DynastyWaiverDrop[] = dropCandidates.slice(0, 3).map(({ p, traj }) => {
@@ -107,7 +107,7 @@ export function buildDynastyWaiverRecommendations(
     )
   } else {
     recommendedAdds = context.freeAgents
-      .map((p) => ({ p, sv: stashValue(p), atNeed: targetSet.has(p.position), traj: ageTrajectory(p.position, p.age) }))
+      .map((p) => ({ p, sv: stashValue(p, context.sport), atNeed: targetSet.has(p.position), traj: ageTrajectory(p.position, p.age, context.sport) }))
       .sort((a, b) => {
         if (a.atNeed !== b.atNeed) return a.atNeed ? -1 : 1
         return (b.sv ?? -1) - (a.sv ?? -1)
