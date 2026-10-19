@@ -361,6 +361,15 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
 | Survivor idols | `SurvivorIdolConfig`, 20-idol catalog | 16 idols without engines; Survivor runtime flagged not production-safe in `capabilities.ts` |
 | Big Brother twists | `premiumEngineSpec` | Expose twists in commish settings UI behind the Sub |
 
+### Build status
+
+- **Rookie order engine — built (2026-10-19).** `lib/rookie-order/`: pure engine (`rookieOrderEngine.ts`), playoff
+  game adapters for native and Sleeper brackets, a loader for both, and `liveRookieOrderService.ts` (settings,
+  Commissioner gate, lapse rule, saved final order). API: `GET/PUT /api/commissioner/leagues/[leagueId]/rookie-draft-order/live`.
+  The live draft seats the saved order through `resolveRookieDraftSlotOrderForLeague`.
+  Not yet: commissioner UI, chat post after each playoff round, true Max PF for native leagues (they fall back to
+  points for with a warning), toilet-bowl and lottery options.
+
 ### Proposed new feature keys
 `commish_rookie_order_auto`, `commish_keeper_rules_advanced`, `commish_playoffs_custom` (or reuse
 `advanced_playoff_setup`), `commish_import_assist`, `commish_rollover_wizard`, `commish_inbox`,
