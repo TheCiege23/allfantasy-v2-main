@@ -149,8 +149,8 @@ Everyone else ships the same 4/6/8-team bracket. AF lets the commish design the 
 
 | Setting | Free | Commissioner sub |
 |---|---|---|
-| Playoff teams | 4, 6, 8 (standard) | **Any number 2 – 16 including odd (3, 5, 7, 9, 11…)** |
-| Byes | Standard (top-2 in 6-team) | **Grant any number of byes to top seeds**, including multi-round byes for the #1 seed |
+| Playoff teams | **Any number 2 – 16 including odd (3, 5, 7, 9…)** with standard byes — free per the Oct 15 rule | Same |
+| Byes | Standard (natural byes for the count) | **Grant extra byes**: multi-round byes for top seeds, stepladder formats |
 | Play-in games | — | Lowest seeds play a play-in week before Round 1 |
 | Re-seeding | Fixed bracket | Fixed **or** re-seed after every round (top remaining seed plays lowest) |
 | Matchup length | 1 week | 1 or 2 weeks per round (e.g., two-week championship) |
@@ -370,6 +370,10 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
   Not yet: commissioner UI, chat post after each playoff round, true Max PF for native leagues (they fall back to
   points for with a warning), toilet-bowl and lottery options.
 
+- **Custom playoff byes — built (2026-10-19)**, TheCiege23/allfantasy-v2-main#2498: bye plans
+  (`lib/playoff-brackets/byePlan.ts`), runtime support, `advanced_playoff_setup` gate in the settings patch, and a
+  Bracket format card in the Playoffs tab. Odd counts were already supported and stay free.
+
 ### Proposed new feature keys
 `commish_rookie_order_auto`, `commish_keeper_rules_advanced`, `commish_playoffs_custom` (or reuse
 `advanced_playoff_setup`), `commish_import_assist`, `commish_rollover_wizard`, `commish_inbox`,
@@ -398,5 +402,8 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
    reverse max PF or reverse PF).
 5. **Commish handoff mid-season:** if the paying commish hands the league to a non-subscriber, the league **stays
    unlocked until season rollover**, then falls back to Free behaviour unless a commish/co-commish subscribes.
+
+6. **Odd playoff team counts are free** (keeps the Oct 15 "running a league is free" rule). AF Commissioner adds
+   commissioner-granted byes beyond the natural ones. Built in TheCiege23/allfantasy-v2-main#2498.
 
 No open questions remain.
