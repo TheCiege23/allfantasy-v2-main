@@ -13,7 +13,7 @@
 
 import type { ImportProvider } from './types';
 
-export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB';
+export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL';
 
 export const IMPORT_PROVIDER_UI_OPTIONS: {
   provider: ImportProvider;
@@ -64,8 +64,13 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * NFL, NCAAF and MLB: resolve roster IDs against the three player maps.
    * A tied or empty result refuses to guess. Public MLB scoring/roster/player
    * evidence is captured in tests/fixtures/fantrax/mlb-points-public.json.
+   *
+   * NBA and NHL (2026-10-19): detected the same way, against `getPlayerIds?sport=NBA|NHL`; seasons
+   * keyed by the year they begin; lineup slots mapped onto lib/nba-roster / lib/nhl-roster; minors
+   * carried as taxi. ⚠ PROVEN AGAINST SYNTHETIC FIXTURES ONLY — no NBA/NHL Fantrax league has been
+   * captured or imported live. contracts/fantrax/GAPS.md lists what a real capture must confirm.
    */
-  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB'] },
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL'] },
   /*
    * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
    * service, the pipeline entry and the storage column all existed; what did not
