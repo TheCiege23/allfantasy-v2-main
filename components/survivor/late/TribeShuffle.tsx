@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import type { TribeShuffleView } from '@/lib/survivor/tribeSwapService'
-import { swapHeadline } from '@/lib/survivor/tribeSwapReveal'
+import { swapHeadline } from '@/lib/survivor/tribeSwapHeadline'
 import { TribeBuff } from './TribeBuff'
 import { LateAvatar, usePrefersReducedMotion } from './lateUi'
 import './late-season.css'
