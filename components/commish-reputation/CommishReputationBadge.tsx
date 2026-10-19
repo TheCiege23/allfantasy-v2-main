@@ -13,7 +13,7 @@ export function CommishReputationBadge({ reputation, className }: { reputation: 
   if (!reputation) return null
   if (reputation.kind === 'new') {
     return (
-      <span className={`inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/60 ${className ?? ''}`} data-testid="commish-badge-new">
+      <span className={`inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/60 ${className ?? ''}`} data-testid="commish-badge-new">
         {t('New commissioner', 'Comisionado nuevo')}
       </span>
     )
@@ -23,7 +23,7 @@ export function CommishReputationBadge({ reputation, className }: { reputation: 
   if (reputation.wellRun) {
     return (
       <span
-        className={`inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-200 ${className ?? ''}`}
+        className={`inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-200 ${className ?? ''}`}
         title={t(`Rated ${stars} by managers across ${reputation.leagues} league(s), ${count}`, `Valorado ${stars} por mánagers en ${reputation.leagues} liga(s), ${count}`)}
         data-testid="commish-badge-well-run"
       >
@@ -32,7 +32,7 @@ export function CommishReputationBadge({ reputation, className }: { reputation: 
     )
   }
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/70 ${className ?? ''}`} data-testid="commish-badge-rated">
+    <span className={`inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/70 ${className ?? ''}`} data-testid="commish-badge-rated">
       {t('Commish', 'Comisionado')} {stars} · {count}
     </span>
   )
