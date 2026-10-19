@@ -9,6 +9,7 @@ import {
 } from '@/lib/roster-engine'
 import { prisma } from '@/lib/prisma'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ le
     return NextResponse.json({ error: `Roster settings not yet available for ${league.sport}` }, { status: 400 })
   }
 
+  const locked = await settingsLockedResponse(leagueId, 'rosters')
+
+  if (locked) return locked
   await resetLeagueRosterToDefault(leagueId, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
   const config = await registry.getService(league.sport).getConfig(leagueId)

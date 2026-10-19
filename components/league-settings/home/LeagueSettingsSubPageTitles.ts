@@ -17,5 +17,6 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   divisions: 'Divisions',
   ai: 'League AI',
   'commissioner-tools': 'Commissioner tools',
+  'settings-lock': 'Settings lock',
   'survivor-tribes': 'Survivor tribes',
 }

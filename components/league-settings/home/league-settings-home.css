@@ -244,3 +244,32 @@
 }
 .af-core .lsh-error { margin-top: 10px; color: var(--bad); font-size: 13px; }
 .af-core .lsh-ok { margin-top: 10px; color: var(--good); font-size: 13px; }
+
+/* Settings lock panel. `.lsh-secondary` is also defined by the score adjustments editor; the two
+   definitions are identical, so whichever lands second is a no-op. */
+.af-core .lsh-secondary {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.af-core .lsh-secondary:disabled { opacity: 0.45; cursor: default; }
+.af-core [data-testid='settings-lock'] select,
+.af-core [data-testid='settings-lock'] input[type='text'] {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+}
+.af-core [data-testid='settings-lock'] input[type='checkbox'] { accent-color: var(--accent, currentColor); }

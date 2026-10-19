@@ -17,6 +17,7 @@ import {
   type NbaScoringPresetKey,
 } from '@/lib/nba-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 const featureGate = new FeatureGateService()
 
@@ -64,6 +65,8 @@ export async function PUT(
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+  if (locked) return locked
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
 
   if (nativeCategoryScoringContext(league.settings, 'NBA')) return NextResponse.json({ error: 'This league uses categories; point weights do not apply.' }, { status: 409 })

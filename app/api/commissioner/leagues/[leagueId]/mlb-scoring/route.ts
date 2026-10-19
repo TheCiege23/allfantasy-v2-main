@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueMlbScoringConfig, saveLeagueMlbScoringConfig, getMlbScoringPresets, buildFullMlbScoringConfig, type MlbScoringPresetKey } from '@/lib/mlb-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, settings: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+  if (locked) return locked
   if (league.sport !== 'MLB') return NextResponse.json({ error: 'MLB leagues only' }, { status: 400 })
   const scoringMode = (league.settings as Record<string, unknown>)?.scoring_mode ?? 'points'
   if (scoringMode !== 'points') return NextResponse.json({error:'This league uses category scoring; points presets cannot replace its format.'},{status:409})

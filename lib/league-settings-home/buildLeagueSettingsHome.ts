@@ -28,6 +28,8 @@ export type SettingsSubPageId =
   | 'divisions'
   | 'ai'
   | 'commissioner-tools'
+  /** Lock areas of the rules for the season; unlocking mid-season takes a league vote (lib/league/settingsLock). */
+  | 'settings-lock'
   /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
   | 'survivor-tribes'
 
@@ -382,6 +384,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       rows: [
         { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
         { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+        { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },
         ...(isSurvivorSettingsLeague(league)
           ? [{ id: 'survivor-tribes', label: 'Survivor tribes', value: 'Tribes, assignment & announce', target: 'survivor-tribes' as const }]
           : []),

@@ -8,6 +8,7 @@ import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConf
 import { replaceLeagueScoringOverrides } from '@/lib/scoring-defaults/ScoringOverrideService'
 import { normalizeScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
 import { queueLeagueScoringRecalcAfterRulesChange } from '@/lib/scoring-defaults/queueLeagueScoringRecalc'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 type IncomingRule = {
   statKey?: unknown
@@ -60,6 +61,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   if (role !== 'commissioner' && role !== 'co_commissioner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  const locked = await settingsLockedResponse(params.leagueId, 'scoring')
+  if (locked) return locked
 
   const config = await getLeagueScoringConfig(params.leagueId)
   if (!config) {

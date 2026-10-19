@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueNcaabScoringConfig, saveLeagueNcaabScoringConfig, getNcaabScoringPresets, buildFullNcaabScoringConfig, type NcaabScoringPresetKey } from '@/lib/ncaab-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 const featureGate = new FeatureGateService()
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+  if (locked) return locked
   if (league.sport !== 'NCAAB') return NextResponse.json({ error: 'NCAAB leagues only' }, { status: 400 })
   const body = await req.json().catch(() => ({}))
   const presetKey = (body.presetKey ?? 'af_default') as NcaabScoringPresetKey
