@@ -55,7 +55,12 @@ vi.mock('@/lib/redraft/offseason/carryDynastyRosters', async (importOriginal) =>
 }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.logAction }))
 vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({ resolveLiveRookieDraftSlots: m.liveRookieSlots }))
-vi.mock('@/lib/draft/resolve-draft-context', () => ({ resolveWeightedLotterySlotOrderForLeague: m.lotterySlots }))
+vi.mock('@/lib/draft-lottery/rookieDraftLottery', () => ({
+  ensureRookieDraftLottery: async (input: unknown) => {
+    const slotOrder = await m.lotterySlots(input)
+    return slotOrder ? { slotOrder, ranNow: false, seed: 'seed' } : null
+  },
+}))
 
 import {
   createNextLeagueDraft,
@@ -354,6 +359,24 @@ describe('a saved rookie order wins over standings', () => {
     m.liveRookieSlots.mockResolvedValue(seat(['R-c', 'R-a', 'R-gone', 'R-b']))
     const r = await createNextLeagueDraft('L1', 'commish')
     expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+  })
+
+  it('asks for THIS draft\'s lottery: one drawn after the previous draft finished', async () => {
+    rookieLeague()
+    const completedAt = new Date('2026-09-01T02:00:00Z')
+    m.draftSessionFindFirst.mockResolvedValue({ ...completedDraft, completedAt, updatedAt: new Date('2026-09-02T00:00:00Z') })
+    await createNextLeagueDraft('L1', 'commish')
+    expect(m.lotterySlots).toHaveBeenCalledWith({ leagueId: 'L1', season: 2027, previousDraftEndedAt: completedAt, actorUserId: 'commish' })
+  })
+
+  it('a lottery league whose draw cannot run falls back to worst-to-first, never to a stale stored draw', async () => {
+    rookieLeague()
+    m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'weighted_lottery' })
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+    expect(m.buildSlotOrder).not.toHaveBeenCalled()
+    expect(seated()[0]).toBe('R-b')
+    expect(seated().at(-1)).toBe('R-a')
   })
 
   it('[control] with neither, max_pf is still worst-to-first from standings', async () => {

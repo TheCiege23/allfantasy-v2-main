@@ -68,7 +68,7 @@ type SeasonRow = { id: string; season: number; status: string; createdAt: Date; 
 const SEASON_SELECT = { id: true, season: true, status: true, createdAt: true, currentWeek: true } as const
 
 /** Whether the newest draft is this season's rookie draft, and whether it is still open. */
-async function rookieDraftState(
+export async function rookieDraftState(
   leagueId: string,
   incoming: SeasonRow,
 ): Promise<'open' | 'complete' | 'none'> {
