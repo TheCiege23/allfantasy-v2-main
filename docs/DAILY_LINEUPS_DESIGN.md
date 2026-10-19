@@ -7,6 +7,16 @@ applied**; applying it is the owner's decision.
 
 Line references are to `origin/main` at the time of writing unless marked "this branch".
 
+> **2026-10-19 — Phase B code landed, migration NOT yet applied.** The owner approved the §6 tables.
+> `prisma/migrations/20261019210000_daily_lineups` creates both (`RedraftDailyLineup`, `PlayerDailyScore`
+> in the schema). `lib/redraft/dailyLineupStore.ts` writes per-day rows on BOTH save paths
+> (`persistRosterLineupWithEngine` and `PATCH /api/redraft/roster`), only for leagues where
+> `dailyLineupsActive` is true. Nothing sets that yet, so no code reaches the new tables until the
+> migration is applied and the flag is turned on for the first test league (owner's choice: "The Ciege
+> NBA Guilly" first). Scoring is still weekly: **do not turn the flag on before Phase C.**
+> The save rule is in the store's header: today and later days get the new lineup, earlier days with
+> no rows get the lineup the save replaced, and earlier days with rows are history.
+
 ---
 
 ## 1. TL;DR

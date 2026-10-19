@@ -9,6 +9,7 @@ import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegis
 import { validateCanonicalRosterPayload } from './rosterValidationService'
 import { syncAfRosterLineupAssignments } from './lineupAssignmentSync'
 import { syncRedraftSlotTypesForLineup } from './redraftSlotSync'
+import { dailyLineupsActive, slotMapFromPlayerData, writeDailyLineupSave } from '@/lib/redraft/dailyLineupStore'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { recordAfRosterMoveHistory } from './rosterMoveHistory'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
@@ -198,6 +199,23 @@ export async function persistRosterLineupWithEngine(
     )
     if (redraftRosterId) {
       await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
+      // Daily-lineup leagues also record who sat where on each day of the week (docs/DAILY_LINEUPS_DESIGN.md).
+      if (dailyLineupsActive(league.settings, sport)) {
+        const players = await tx.redraftRosterPlayer.findMany({
+          where: { rosterId: redraftRosterId, droppedAt: null },
+          select: { playerId: true, position: true },
+        })
+        await writeDailyLineupSave(tx, {
+          leagueId: input.leagueId,
+          redraftRosterId,
+          sport,
+          season: input.season,
+          week: input.week,
+          before: slotMapFromPlayerData(roster.playerData, players),
+          after: slotMapFromPlayerData(input.nextPlayerData, players),
+          source: input.source,
+        })
+      }
     }
   }) } catch(e) {
     if(e instanceof Error && e.message==='STALE_TEAM_LINEUP') return {ok:false,error:'Your roster changed while saving. Refresh and compare again.',status:409}

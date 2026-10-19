@@ -14,6 +14,8 @@ import {
   type RedraftLineupValidationResult,
 } from '@/lib/redraft/lineupValidation'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
+import { dailyLineupsActive, writeDailyLineupSave } from '@/lib/redraft/dailyLineupStore'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
 import { applyNbaSurvivorPickLineupLocks } from '@/lib/survivor/survivorNbaWeeklyScoring'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
@@ -693,14 +695,38 @@ export async function PATCH(req: NextRequest) {
     )
   }
 
-  await prisma.$transaction(
-    body.moves.map((m) =>
-      prisma.redraftRosterPlayer.updateMany({
-        where: { rosterId: roster.id, playerId: m.playerId, droppedAt: null },
-        data: { slotType: m.toSlot },
-      }),
-    ),
-  )
+  const moves = body.moves
+  if (resolveWriteAuthority(leagueForLock?.platform) === 'NATIVE' && dailyLineupsActive(leagueForLock?.settings, roster.season.sport)) {
+    // Daily-lineup league: the slot moves and the per-day record commit together (docs/DAILY_LINEUPS_DESIGN.md).
+    const slotMap = (players: ReadonlyArray<{ playerId: string; slotType: string; droppedAt?: unknown }>) =>
+      new Map(players.filter((p) => !p.droppedAt).map((p) => [p.playerId, p.slotType]))
+    await prisma.$transaction(async (tx) => {
+      for (const m of moves) {
+        await tx.redraftRosterPlayer.updateMany({
+          where: { rosterId: roster.id, playerId: m.playerId, droppedAt: null },
+          data: { slotType: m.toSlot },
+        })
+      }
+      await writeDailyLineupSave(tx, {
+        leagueId: roster.leagueId,
+        redraftRosterId: roster.id,
+        sport: roster.season.sport,
+        season: roster.season.season,
+        week,
+        before: slotMap(currentPlayers),
+        after: slotMap(applied.players),
+      })
+    })
+  } else {
+    await prisma.$transaction(
+      moves.map((m) =>
+        prisma.redraftRosterPlayer.updateMany({
+          where: { rosterId: roster.id, playerId: m.playerId, droppedAt: null },
+          data: { slotType: m.toSlot },
+        }),
+      ),
+    )
+  }
 
   // Phase 2H: best-effort lineup-history write for Decision OS Phase 6 DNA
   // (docs/DECISION_OS_MANAGER_DNA_PHASE2G_VOLUME_AND_LINEUP_HISTORY_SCOPE.md §2).
