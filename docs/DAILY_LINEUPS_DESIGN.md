@@ -16,6 +16,17 @@ Line references are to `origin/main` at the time of writing unless marked "this 
 > NBA Guilly" first). Scoring is still weekly: **do not turn the flag on before Phase C.**
 > The save rule is in the store's header: today and later days get the new lineup, earlier days with
 > no rows get the lineup the save replaced, and earlier days with rows are history.
+>
+> **2026-10-19 — Phase C (per-day scoring) landed behind the same flag.** `lib/redraft/dailyScoring.ts`
+> resolves each day's lineup (saved rows → latest earlier saved day → the weekly lineup) and roster
+> membership per day (a drop ON day D still counts D). The stat sync writes `player_daily_scores` for
+> flagged leagues (the weekly aggregation, one Eastern day at a time). `scoreRosterStarters` scores
+> Σ days Σ that day's starters, including category totals and bench points. The finalizer covers and
+> seals everyone who started on any day, and seals their daily rows. Best ball and devy stay weekly.
+> **Not yet daily:** the matchup rail (`lib/core-app/nativeRailMatchups.ts`) and
+> `/api/leagues/[leagueId]/scoring/roster-scores` still display weekly numbers. They are display-only
+> and belong to Phase E with the day picker. The engine's 6 PM ET whole-lineup lock (B7) also still
+> applies; Phase E replaces it for flagged leagues.
 
 ---
 

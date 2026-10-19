@@ -23,6 +23,8 @@ import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupVal
 import { importedNcaafScoring } from './importedNcaafScoring'
 import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { leagueScoresDaily, loadDailySlotsForWeek } from './dailyScoring'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -343,6 +345,13 @@ async function scoreRosterStarters(args: {
     }
   }
 
+  // Daily-lineup leagues score each day's starters on that day's points (docs/DAILY_LINEUPS_DESIGN.md).
+  const daily = await leagueScoresDaily(prisma, args.leagueId)
+  if (daily) {
+    const summary = await scoreRosterDaily({ ...args, sport: daily.sport })
+    if (summary) return summary
+  }
+
   const starters = await prisma.redraftRosterPlayer.findMany({
     where: {
       rosterId: args.rosterId,
@@ -407,6 +416,103 @@ async function scoreRosterStarters(args: {
   return {
     rosterId: args.rosterId,
     starterCount: activeStarters.length,
+    scoredStarterCount,
+    points: Math.round(pts * 100) / 100,
+    ...(args.includeBench ? { benchPoints: Math.round(benchPts * 100) / 100 } : {}),
+    statTotals: accumulateTeamTotals(statMaps),
+    missingPlayerIds,
+    allFinal,
+  }
+}
+
+/**
+ * One roster's week in a daily-lineup league: Σ days Σ that day's starters of that day's points
+ * (`lib/redraft/dailyScoring.ts`). `null` when the week has no calendar, so the caller falls back to
+ * weekly scoring rather than scoring nothing.
+ *
+ * Completeness is still the WEEK's: a player who started on any day needs his weekly row, and the
+ * week is final once the finalizer has sealed those rows. The weekly row is what says "this week's
+ * stats are in"; the daily rows only split it across days.
+ */
+async function scoreRosterDaily(args: {
+  leagueId: string
+  rosterId: string
+  week: number
+  seasonYear: number
+  sport: string
+  includeBench?: boolean
+}): Promise<RosterScoreSummary | null> {
+  const window = resolveDailySportWeekWindow(args.sport, args.seasonYear, args.week)
+  if (!window) return null
+  // Dropped this week still counts for the days he was here; `onRosterOnDay` decides which.
+  const players = await prisma.redraftRosterPlayer.findMany({
+    where: { rosterId: args.rosterId, OR: [{ droppedAt: null }, { droppedAt: { gte: window.start } }] },
+  })
+  const weekLineups = await loadWeekLineups(prisma, {
+    redraftRosterIds: [args.rosterId],
+    season: args.seasonYear,
+    week: args.week,
+  })
+  const loaded = await loadDailySlotsForWeek(prisma, {
+    sport: args.sport,
+    season: args.seasonYear,
+    week: args.week,
+    players,
+    weekLineups,
+  })
+  if (!loaded) return null
+
+  const playerIds = [...new Set(players.map((p) => p.playerId))]
+  const dayRows = playerIds.length
+    ? await prisma.playerDailyScore.findMany({
+        where: { playerId: { in: playerIds }, season: args.seasonYear, scoringDay: { gte: window.start, lt: window.end } },
+        select: { playerId: true, sport: true, scoringDay: true, stats: true },
+      })
+    : []
+  const dayStats = new Map<string, Record<string, number>>()
+  for (const r of dayRows) {
+    dayStats.set(`${r.sport}::${r.playerId}::${r.scoringDay.toISOString().slice(0, 10)}`, r.stats as Record<string, number>)
+  }
+  const statsFor = (p: { sport: string; playerId: string }, day: Date) =>
+    dayStats.get(`${p.sport}::${p.playerId}::${day.toISOString().slice(0, 10)}`)
+
+  let pts = 0
+  let benchPts = 0
+  const statMaps: TeamStatTotals[] = []
+  const started = new Map<string, (typeof players)[number]>()
+  for (const { day, player, slotType } of loaded.slots) {
+    const starter = isScoringStarterSlot(slotType)
+    if (starter) started.set(`${player.sport}::${player.playerId}`, player)
+    const stats = statsFor(player, day)
+    if (!stats) continue
+    if (starter) {
+      statMaps.push(stats as TeamStatTotals)
+      pts += await calculateScoreFromSportConfig(args.leagueId, player.playerId, args.week, stats, player.position)
+    } else if (args.includeBench && !NON_BENCH_RESERVE_SLOTS.has(String(slotType ?? '').trim().toLowerCase())) {
+      benchPts += await calculateScoreFromSportConfig(args.leagueId, player.playerId, args.week, stats, player.position)
+    }
+  }
+
+  let scoredStarterCount = 0
+  let allFinal = true
+  const missingPlayerIds: string[] = []
+  for (const p of started.values()) {
+    const row = await prisma.playerWeeklyScore.findUnique({
+      where: { playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport } },
+      select: { isFinalized: true },
+    })
+    if (!row) {
+      missingPlayerIds.push(p.playerId)
+      allFinal = false
+      continue
+    }
+    scoredStarterCount += 1
+    if (!row.isFinalized) allFinal = false
+  }
+
+  return {
+    rosterId: args.rosterId,
+    starterCount: started.size,
     scoredStarterCount,
     points: Math.round(pts * 100) / 100,
     ...(args.includeBench ? { benchPoints: Math.round(benchPts * 100) / 100 } : {}),

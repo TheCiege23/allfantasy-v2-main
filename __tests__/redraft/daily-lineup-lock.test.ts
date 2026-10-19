@@ -18,7 +18,7 @@ import { scheduleKeyPrefix, type ScheduleGame } from '@/lib/sports-data/riSeason
  *
  * ⚠ The daily mode is honoured ONLY when the league opts in (`dailyLineupsEnabled: true`) AND the sport
  * plays daily. Without the flag, 'daily' keeps today's behaviour (per_player_kickoff) but says so in a
- * warning, so no existing league changes. Matchup scoring is still a weekly aggregate; see
+ * warning, so no existing league changes. Daily scoring is lib/redraft/dailyScoring.ts; see
  * docs/DAILY_LINEUPS_DESIGN.md for why that matters before anyone turns the flag on.
  */
 
@@ -103,9 +103,10 @@ describe('daily lock — NBA', () => {
     expect(warnings).toEqual([])
   })
 
-  it('daily mode says out loud that scoring is still weekly', async () => {
+  it('daily mode says it is active and that each day is scored on its own', async () => {
     const { warnings } = await nbaLocks('2026-10-21T13:00:00.000Z', DAILY_ON)
-    expect(warnings.some((w) => /daily lineup lock/i.test(w) && /weekly/i.test(w))).toBe(true)
+    expect(warnings.some((w) => /daily lineup lock/i.test(w) && /each day's starters/i.test(w))).toBe(true)
+    expect(warnings.some((w) => /still a weekly/i.test(w))).toBe(false)
   })
 })
 

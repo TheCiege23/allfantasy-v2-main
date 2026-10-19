@@ -11,6 +11,7 @@ import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek }
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { leagueScoresDaily, loadDailySlotsForWeek } from './dailyScoring'
 import { isSealedWeek } from './weekSealed'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
@@ -490,9 +491,34 @@ export async function finalizeRedraftWeek(
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
   const exileStarterKeys = new Set<string>()
-  for (const p of rosterPlayers) {
-    if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
-    starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+  /*
+   * A daily-lineup league's starters are everyone who started on ANY day of the week
+   * (`lib/redraft/dailyScoring.ts`), including a player dropped mid-week for the days he was here.
+   * The coverage proof below then runs on them exactly as it does for a weekly league.
+   */
+  const daily = !bestBall && dateWindow && rosterIds.length ? await leagueScoresDaily(prisma, season.leagueId) : null
+  const dailySlots = daily
+    ? await loadDailySlotsForWeek(prisma, {
+        sport,
+        season: season.season,
+        week: params.week,
+        weekLineups,
+        players: await prisma.redraftRosterPlayer.findMany({
+          where: { rosterId: { in: rosterIds }, OR: [{ droppedAt: null }, { droppedAt: { gte: dateWindow!.start } }] },
+          select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true, addedAt: true, droppedAt: true },
+        }),
+      })
+    : null
+  if (dailySlots) {
+    for (const { player, slotType } of dailySlots.slots) {
+      if (!countsTowardScore(slotType, false)) continue
+      starters.set(`${player.sport}::${player.playerId}`, { playerId: player.playerId, sport: player.sport })
+    }
+  } else {
+    for (const p of rosterPlayers) {
+      if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
+      starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+    }
   }
   // Closed Exile lineups are separate from the main league roster. They must
   // participate in the same slate and coverage proof before their score can
@@ -623,6 +649,15 @@ export async function finalizeRedraftWeek(
       data: { isFinalized: true },
     })
     rowsFinalized += updated.count
+  }
+  if (dailySlots) {
+    // The per-day split of the rows just sealed; the matchup reads its points from these.
+    for (const [playerSport, playerIds] of bySport) {
+      await prisma.playerDailyScore.updateMany({
+        where: { season: season.season, sport: playerSport, playerId: { in: playerIds }, week: params.week, isFinalized: false },
+        data: { isFinalized: true },
+      })
+    }
   }
 
   await recalc(season.id, params.week)

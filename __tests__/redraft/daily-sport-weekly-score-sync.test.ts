@@ -23,6 +23,7 @@ const prismaMock = vi.hoisted(() => ({
   playerGameStat: { findMany: vi.fn() },
   playerIdentityMap: { findFirst: vi.fn(), findMany: vi.fn() },
   playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(async () => []) },
+  playerDailyScore: { upsert: vi.fn(async () => ({})) },
   redraftRoster: { findMany: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },
@@ -155,6 +156,33 @@ describe('daily-sport weekly score sync', () => {
     expect(written.create.sport).toBe('NBA')
     expect(written.create.week).toBe(3)
     expect(typeof written.create.fantasyPts).toBe('number')
+  })
+
+  it('a daily-lineup league also writes each day on its own; a weekly league does not', async () => {
+    const DAILY = { sport: 'NBA', settings: { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } } }
+    prismaMock.league.findFirst.mockResolvedValue(DAILY)
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NBA'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue(rosterOf('NBA'))
+    const games = [
+      { playerId: 'p1', gameDate: new Date('2026-10-21T00:00:00Z'), normalizedStatMap: { seasonType: 'regular', stats: { points: 20 } } },
+      { playerId: 'p1', gameDate: new Date('2026-10-23T00:00:00Z'), normalizedStatMap: { seasonType: 'regular', stats: { points: 18 } } },
+    ]
+    prismaMock.playerGameStat.findMany.mockResolvedValue(games)
+
+    prismaMock.league.findUnique.mockImplementation(async (args: { select?: Record<string, boolean> }) => (args.select?.settings ? DAILY : null))
+    const daily = await runSync({ seasonStartUtc: SEASON_START })
+    expect(daily.dailyScoresUpserted).toBe(2)
+    const days = prismaMock.playerDailyScore.upsert.mock.calls.map((c: any[]) => [c[0].create.scoringDay.toISOString().slice(0, 10), c[0].create.stats.pts])
+    expect(days).toEqual([['2026-10-21', 20], ['2026-10-23', 18]])
+    expect(prismaMock.playerWeeklyScore.upsert.mock.calls[0][0].create.stats.pts).toBe(38)
+
+    vi.clearAllMocks()
+    prismaMock.adminAuditLog.create.mockResolvedValue({ id: 'audit-2' })
+    prismaMock.playerGameStat.findMany.mockResolvedValue(games)
+    prismaMock.league.findUnique.mockImplementation(async (args: { select?: Record<string, boolean> }) => (args.select?.settings ? { sport: 'NBA', settings: {} } : null))
+    const weekly = await runSync({ seasonStartUtc: SEASON_START })
+    expect(weekly.dailyScoresUpserted).toBeUndefined()
+    expect(prismaMock.playerDailyScore.upsert).not.toHaveBeenCalled()
   })
 
   it.each(['NBA', 'NHL'])('ingests a closed %s Exile roster even when no main-island roster holds that player', async sport => {

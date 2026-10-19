@@ -31,6 +31,7 @@ import {
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
+import { leagueScoresDaily } from '@/lib/redraft/dailyScoring'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
 import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/player-identity/verifiedNcaafReserves'
@@ -51,6 +52,8 @@ export type WeeklyScoreSyncSummary = {
   cacheRowsRead: number
   /** Daily-sport game rows in the window that were PRESEASON games, and so not scored. */
   preseasonRowsSkipped?: number
+  /** Daily-lineup leagues only: `player_daily_scores` rows written (one per player per day played). */
+  dailyScoresUpserted?: number
   /** Daily sports: roster ids translated to game-log (PlayerIdentityMap) ids — see rosterGameLogIdBridge.ts. */
   gameLogIdsBridged?: number
   /** NFL, foreign platform: roster ids translated to a Sleeper id through the crosswalk before any read or write. */
@@ -365,6 +368,9 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * rather than invented ones.
    */
   const dailyRowsByPlayer = new Map<string, unknown[]>()
+  // Daily-lineup leagues also keep each player's stats per Eastern day (docs/DAILY_LINEUPS_DESIGN.md).
+  const dayRowsByPlayer = new Map<string, Map<string, unknown[]>>()
+  const writeDailyScores = isDailySport && (await leagueScoresDaily(prisma, season.leagueId)) !== null
   if (isDailySport) {
     /**
      * 🛑 SELECTED BY DATE WINDOW, NOT BY `weekOrRound` — AND AN EARLIER VERSION
@@ -449,6 +455,12 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const rows = dailyRowsByPlayer.get(rosterId) ?? []
       rows.push(row.normalizedStatMap)
       dailyRowsByPlayer.set(rosterId, rows)
+      if (writeDailyScores && row.gameDate) {
+        const byDay = dayRowsByPlayer.get(rosterId) ?? new Map<string, unknown[]>()
+        const key = row.gameDate.toISOString().slice(0, 10)
+        byDay.set(key, [...(byDay.get(key) ?? []), row.normalizedStatMap])
+        dayRowsByPlayer.set(rosterId, byDay)
+      }
     }
     summary.cacheRowsRead = gameRows.length
   }
@@ -798,6 +810,23 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         },
       })
       summary.scoresUpserted += 1
+      if (writeDailyScores && normalizer) {
+        // The same aggregation, one Eastern day at a time: Σ days of these rows is the weekly row above.
+        for (const [key, rows] of dayRowsByPlayer.get(playerId) ?? []) {
+          const day = aggregateWeeklyStats(rows, normalizer)
+          if (day.gamesCounted === 0) continue
+          const scoringDay = new Date(`${key}T00:00:00.000Z`)
+          await prisma.playerDailyScore.upsert({
+            where: { playerId_sport_season_scoringDay: { playerId, sport: playerSport, season: seasonYear, scoringDay } },
+            update: { stats: day.stats, gamesPlayed: day.gamesCounted, week, isFinalized: false },
+            create: {
+              playerId, sport: playerSport, season: seasonYear, week, scoringDay,
+              stats: day.stats, gamesPlayed: day.gamesCounted, isFinalized: false,
+            },
+          })
+          summary.dailyScoresUpserted = (summary.dailyScoresUpserted ?? 0) + 1
+        }
+      }
       continue
     }
 
