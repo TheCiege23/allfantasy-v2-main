@@ -50,6 +50,39 @@ import {
   type TeamShooting,
 } from '@/lib/live/espnGamePresentation'
 import '@/components/core-app/af-live.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  countSuffix,
+  finalCount,
+  highlightTitle,
+  kicksOffIn,
+  leagueCount as leagueCountCopy,
+  lineupDecisionsClosing,
+  liveScoresCopy as lsc,
+  lockExposure,
+  missingScores,
+  noScoreboardMatch,
+  noneOnField,
+  playAgeCopy,
+  pointsIn,
+  projectionCopy,
+  projectionTitle,
+  runnersOn,
+  showAllStarters,
+  slateCountAria,
+  starterCount,
+  starterStageDetailCopy,
+  startersPlayingNow,
+  teamBall,
+  teamLeaders,
+  timeoutsLeft,
+  top25EmptyBody,
+  top25HiddenNote,
+  topPrefix,
+  updatedAgo,
+  weekLabel as weekLabelCopy,
+  yourStartersHead,
+} from '@/lib/core-app/liveScoresCopy'
 
 /**
  * Screen 38a·2 — Live Scores, inside the AF Core shell.
@@ -150,6 +183,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
+  const { language } = useOptionalLanguage()
   const [data, setData] = useState<LivePageData>(initial)
   const [scope, setScope] = useState<'my' | 'all'>(initial.scope)
   const [sport, setSport] = useState(initial.sport)
@@ -518,15 +552,15 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       data-low-data={lowData.lowData ? 'true' : undefined}
     >
       <header className="af-live-head">
-        <p className="af-label af-live-eyebrow">Core · Live</p>
-        <h1 className="af-display af-live-title">Live Scores</h1>
+        <p className="af-label af-live-eyebrow">{lsc('Core · Live', language)}</p>
+        <h1 className="af-display af-live-title">{lsc('Live Scores', language)}</h1>
         <p className="af-live-lede">
           {/* The lede follows the EFFECTIVE scope, not the URL. Saying "only games
               affecting starters in this league" while showing every fixture is the
               same defect as the hidden toggle, wearing different clothes. */}
-          {leagueFilterId
+          {lsc(leagueFilterId
             ? 'Only games affecting starters in this league, scored with this league’s rules.'
-            : scope === 'my' ? 'Games affecting your starters across all leagues. Points follow each league’s scoring.' : 'All games, with your roster contributions highlighted where available.'}
+            : scope === 'my' ? 'Games affecting your starters across all leagues. Points follow each league’s scoring.' : 'All games, with your roster contributions highlighted where available.', language)}
         </p>
       </header>
 
@@ -545,14 +579,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">
         <div className="af-live-bar-top">
-          <span className="af-live-bar-name">Live Scores</span>
+          <span className="af-live-bar-name">{lsc('Live Scores', language)}</span>
 
           {/*
             ⚠ ALWAYS RENDERED, INCLUDING WITH A LEAGUE SELECTED. It used to be
             `{!selectedLeagueId ? … : null}`, which hid the widening control in
             exactly the state that needed it — see the note on `leagueFilterId`.
           */}
-          <div className="af-live-scope" role="group" aria-label="Which games to show">
+          <div className="af-live-scope" role="group" aria-label={lsc('Which games to show', language)}>
             <button
               type="button"
               className="af-live-scope-btn"
@@ -560,7 +594,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               aria-pressed={scope === 'my'}
               onClick={() => pickScope('my')}
             >
-              My games
+              {lsc('My games', language)}
             </button>
             <button
               type="button"
@@ -569,7 +603,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               aria-pressed={scope === 'all'}
               onClick={() => pickScope('all')}
             >
-              All games
+              {lsc('All games', language)}
             </button>
           </div>
 
@@ -579,8 +613,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search team, game, or your player"
-              aria-label="Search this live scoreboard by team, game, player, or league"
+              placeholder={lsc('Search team, game, or your player', language)}
+              aria-label={lsc('Search this live scoreboard by team, game, player, or league', language)}
             />
           </label>
 
@@ -600,14 +634,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             className="af-live-freshness"
             data-live={connection === 'live'}
             data-state={connection}
-            title={connectionDetail(connection) ?? undefined}
+            title={connectionDetail(connection) != null ? lsc(connectionDetail(connection)!, language) : undefined}
           >
             {connection === 'live' ? <span className="af-live-pulse" aria-hidden /> : null}
-            <span role="status">{connectionLabel(connection)}</span>
-            {ageSeconds != null ? <span> · updated {formatAge(ageSeconds)} ago</span> : null}
+            <span role="status">{lsc(connectionLabel(connection), language)}</span>
+            {ageSeconds != null ? <span>{updatedAgo(formatAge(ageSeconds), language)}</span> : null}
             {refreshing ? <span className="af-live-refreshing" aria-hidden> ·</span> : null}
           </span>
-          <button type="button" className="af-btn af-live-refresh" aria-label={refreshing ? 'Refreshing scores' : 'Refresh scores'} disabled={refreshing} onClick={() => void load(sport, scope)}><span className="af-live-refresh-icon" aria-hidden>↻</span><span className="af-live-refresh-label">{refreshing ? 'Refreshing…' : 'Refresh scores'}</span></button>
+          <button type="button" className="af-btn af-live-refresh" aria-label={lsc(refreshing ? 'Refreshing scores' : 'Refresh scores', language)} disabled={refreshing} onClick={() => void load(sport, scope)}><span className="af-live-refresh-icon" aria-hidden>↻</span><span className="af-live-refresh-label">{lsc(refreshing ? 'Refreshing…' : 'Refresh scores', language)}</span></button>
         </div>
 
         {/*
@@ -623,7 +657,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           into. They genuinely do swap the slate below, so the slate is the
           panel and the wiring says so.
         */}
-        <div className="af-live-sports" role="tablist" aria-label="Sport">
+        <div className="af-live-sports" role="tablist" aria-label={lsc('Sport', language)}>
           {data.counts.map((c) => (
             <button
               key={c.sport}
@@ -655,7 +689,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                   count reads 0 for most of the day and made the badge look broken. */}
               <span
                 className="af-live-sport-count af-num"
-                aria-label={`${c.slateCount} ${c.slateCount === 1 ? 'game' : 'games'} in slate`}
+                aria-label={slateCountAria(c.slateCount, language)}
               >
                 {c.slateCount}
               </span>
@@ -687,14 +721,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         >
           {connectionDetail(connection) ? (
             <p className="af-live-connection" role="status">
-              {connectionDetail(connection)}
+              {lsc(connectionDetail(connection)!, language)}
             </p>
           ) : null}
 
           <LockWarning alerts={lockAlerts} now={now} />
 
           <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters · live first, then most leagues affected' : 'all games · live first'}{' '}
+            {activeSportLabel} · {lsc(leagueFilterId ? 'this league' : scope === 'my' ? 'your starters · live first, then most leagues affected' : 'all games · live first', language)}{' '}
             <TopicTip topic="liveGameWinEstimate" />
           </h2>
 
@@ -707,14 +741,13 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             <p className="af-live-top25-note">
               {data.top25.showingAll ? (
                 <>
-                  Showing every game.{' '}
-                  <a href={top25Href(data.sport, scope, false)}>Top 25 and your teams only</a>
+                  {lsc('Showing every game.', language)}{' '}
+                  <a href={top25Href(data.sport, scope, false)}>{lsc('Top 25 and your teams only', language)}</a>
                 </>
               ) : (
                 <>
-                  Top 25 and teams you follow · {data.top25.hidden} other{' '}
-                  {data.top25.hidden === 1 ? 'game' : 'games'} hidden.{' '}
-                  <a href={top25Href(data.sport, scope, true)}>Show all games</a>
+                  {top25HiddenNote(data.top25.hidden, language)}{' '}
+                  <a href={top25Href(data.sport, scope, true)}>{lsc('Show all games', language)}</a>
                 </>
               )}
             </p>
@@ -723,9 +756,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           {visibleGames.length === 0 ? (
             query.trim() ? (
               <div className="af-live-empty">
-                <p className="af-live-empty-title">No scoreboard match for “{query.trim()}”.</p>
+                <p className="af-live-empty-title">{noScoreboardMatch(query.trim(), language)}</p>
                 <p className="af-live-empty-body">
-                  Try a team name, abbreviation, rostered player, or league name.
+                  {lsc('Try a team name, abbreviation, rostered player, or league name.', language)}
                 </p>
               </div>
             ) : (
@@ -764,26 +797,26 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           )}
         </section>
 
-        <aside className="af-live-side" aria-label="Your live impact">
+        <aside className="af-live-side" aria-label={lsc('Your live impact', language)}>
 
           <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="side" />
 
           <details className="af-live-card af-live-contributions" open={!!leagueFilterId}>
-            <summary>Contributions by league</summary>
-            <p>Actual points from games on this slate. Remaining is a player count, not a projection. Different league scoring totals are not comparable.</p>
+            <summary>{lsc('Contributions by league', language)}</summary>
+            <p>{lsc('Actual points from games on this slate. Remaining is a player count, not a projection. Different league scoring totals are not comparable.', language)}</p>
             {workspace.leagues.map(league => <div key={league.id} className="af-live-league-contribution">
               <Link href={`/core/matchup?league=${encodeURIComponent(league.id)}`}>{league.name}</Link>
-              <dl><div><dt>Live</dt><dd>{league.live.toFixed(1)}</dd></div><div><dt>Completed</dt><dd>{league.completed.toFixed(1)}</dd></div><div><dt>Remaining</dt><dd>{league.remaining}</dd></div></dl>
-              {league.missing > 0 && <small>{league.missing} player scores unavailable; totals are partial.</small>}
+              <dl><div><dt>{lsc('Live', language)}</dt><dd>{league.live.toFixed(1)}</dd></div><div><dt>{lsc('Completed', language)}</dt><dd>{league.completed.toFixed(1)}</dd></div><div><dt>{lsc('Remaining', language)}</dt><dd>{league.remaining}</dd></div></dl>
+              {league.missing > 0 && <small>{missingScores(league.missing, language)}</small>}
             </div>)}
-            {!workspace.leagues.length && <p>No roster contributions available for this view.</p>}
+            {!workspace.leagues.length && <p>{lsc('No roster contributions available for this view.', language)}</p>}
           </details>
 
           {impact.biggestMover ? (
             <div className="af-live-card">
               {/* Renamed from "Biggest mover" (2026-10-11): it is the newest play, never a ranking. */}
               <h2 className="af-label">
-                Latest for you <TopicTip topic="biggestMover" />
+                {lsc('Latest for you', language)} <TopicTip topic="biggestMover" />
               </h2>
               <div className="af-live-mover">
                 <MiniPlayerImg
@@ -795,7 +828,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                   <span className="af-live-mover-name">{impact.biggestMover.playerName}</span>
                   <span className="af-live-mover-line">{impact.biggestMover.headline}</span>
                   {playAgeLabel(impact.biggestMover.detectedAt, now) ? (
-                    <span className="af-live-mover-age af-num">{playAgeLabel(impact.biggestMover.detectedAt, now)}</span>
+                    <span className="af-live-mover-age af-num">{playAgeCopy(playAgeLabel(impact.biggestMover.detectedAt, now)!, language)}</span>
                   ) : null}
                   {impact.biggestMover.leagues.length > 0 ? (
                     <span className="af-live-mover-leagues">
@@ -815,7 +848,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 placeholders is noise on a Tuesday. `impact.plays` is NFL-only by
                 construction, so on any other tab this card is simply absent.
               */}
-              <h2 className="af-label">Live plays</h2>
+              <h2 className="af-label">{lsc('Live plays', language)}</h2>
               <ul className="af-live-plays">
                 {impact.plays.map((p) => (
                   /* Keyed on the feed's own idempotency key — the same key it
@@ -831,7 +864,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                     <span className="af-live-play-text">
                       <span className="af-live-play-head">
                         <span className="af-live-play-type af-num" data-tone={playTone(p.type)}>
-                          {PLAY_TYPE_LABEL[p.type] ?? p.type}
+                          {lsc(PLAY_TYPE_LABEL[p.type] ?? p.type, language)}
                         </span>
                         {/*
                           Logo when we resolved one, the abbreviation when we
@@ -882,7 +915,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
           {impact.upNext.length > 0 ? (
             <div className="af-live-card">
-              <h2 className="af-label">Up next for you</h2>
+              <h2 className="af-label">{lsc('Up next for you', language)}</h2>
               <ul className="af-live-next">
                 {impact.upNext.map((u, i) => (
                   <li key={`${u.playerName}-${i}`}>
@@ -897,8 +930,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           ) : null}
 
           <p className="af-live-note">
-            Scores come from the official feed. AllFantasy only reads your leagues — nothing here
-            changes anything on your platform.
+            {lsc('Scores come from the official feed. AllFantasy only reads your leagues — nothing here changes anything on your platform.', language)}
           </p>
         </aside>
       </div>
@@ -922,10 +954,11 @@ function ImpactSummary({
   leagueScoped: boolean
   placement: 'side' | 'inline'
 }) {
+  const { language } = useOptionalLanguage()
   return (
     <div className="af-live-impact" data-placement={placement}>
       <h2 className="af-label">
-        Your live impact <TopicTip topic="liveImpactTotal" />
+        {lsc('Your live impact', language)} <TopicTip topic="liveImpactTotal" />
       </h2>
       {data.rosterFailed ? (
         /*
@@ -939,11 +972,10 @@ function ImpactSummary({
         <>
           <p className="af-live-impact-total" data-missing="true">
             <span className="af-num">—</span>
-            <span>we could not read your rosters</span>
+            <span>{lsc('we could not read your rosters', language)}</span>
           </p>
           <p className="af-live-impact-sub">
-            This is a problem on our end, not an empty roster. The scores themselves are
-            fine.
+            {lsc('This is a problem on our end, not an empty roster. The scores themselves are fine.', language)}
           </p>
         </>
       ) : data.hasRosterData ? (
@@ -955,17 +987,14 @@ function ImpactSummary({
           */}
           <p className="af-live-impact-total">
             <span className="af-num">{impact.livePlayers}</span>
-            <span>
-              {impact.livePlayers === 1 ? 'starter' : 'starters'} playing now
-              {leagueScoped ? ' in this league' : ''}
-            </span>
+            <span>{startersPlayingNow(impact.livePlayers, leagueScoped, language)}</span>
           </p>
           <p className="af-live-impact-sub">
             {impact.livePlayers === 0 && !impact.upcomingPlayers && !impact.finishedPlayers
-              ? 'None of your starters are on this slate.'
+              ? lsc('None of your starters are on this slate.', language)
               : impact.livePlayers === 0
-                ? `None on the field right now · ${starterStageDetail(impact)}`
-                : starterStageDetail(impact)}
+                ? noneOnField(starterStageDetailCopy(impact, starterStageDetail(impact), language), language)
+                : starterStageDetailCopy(impact, starterStageDetail(impact), language)}
           </p>
         </>
       ) : (
@@ -977,10 +1006,10 @@ function ImpactSummary({
         <>
           <p className="af-live-impact-total" data-missing="true">
             <span className="af-num">—</span>
-            <span>no roster to score against yet</span>
+            <span>{lsc('no roster to score against yet', language)}</span>
           </p>
           <p className="af-live-impact-sub">
-            Claim your team in one of your leagues and this fills in automatically.
+            {lsc('Claim your team in one of your leagues and this fills in automatically.', language)}
           </p>
         </>
       )}
@@ -1042,8 +1071,9 @@ export function GameCard({
   starterLimit?: number
 }) {
   const lowDataOn = useLowData().lowData
+  const { language } = useOptionalLanguage()
   const wp = game.winProbability
-  const weekLabel = game.week != null && game.week > 0 ? `${game.sport} · Week ${game.week}` : game.sport
+  const weekLabel = game.week != null && game.week > 0 ? weekLabelCopy(game.sport, game.week, language) : game.sport
   const isFootball = game.sport === 'NFL' || game.sport === 'NCAAF'
   const isBasketball = isBasketballSport(game.sport)
   const situation = game.situation
@@ -1084,7 +1114,7 @@ export function GameCard({
         {game.broadcast ? <span className="af-live-broadcast af-num">{game.broadcast}</span> : null}
         {detailHref ? (
           <Link className="af-live-detail-link" href={detailHref}>
-            {game.isLive ? 'Gamecast →' : 'Game details →'}
+            {lsc(game.isLive ? 'Gamecast →' : 'Game details →', language)}
           </Link>
         ) : null}
       </div>
@@ -1117,7 +1147,7 @@ export function GameCard({
         <div className="af-live-highlight">
           <GameHighlight
             youtubeId={game.highlight.youtubeId}
-            title={`${game.away.name} at ${game.home.name} highlights`}
+            title={highlightTitle(game.away.name, game.home.name, language)}
           />
         </div>
       ) : null}
@@ -1142,7 +1172,7 @@ export function GameCard({
       {situation?.lastPlay ? (
         <div className="af-live-lastplay">
           <span className="af-label af-live-lastplay-head">
-            Last play
+            {lsc('Last play', language)}
             {situation.lastPlayType ? (
               <span className="af-live-lastplay-type af-num">{situation.lastPlayType}</span>
             ) : null}
@@ -1152,9 +1182,9 @@ export function GameCard({
       ) : lastPlay ? (
         <div className="af-live-lastplay" data-tone={playTone(lastPlay.type)}>
           <span className="af-label af-live-lastplay-head">
-            Last play
+            {lsc('Last play', language)}
             <span className="af-live-lastplay-type af-num" data-tone={playTone(lastPlay.type)}>
-              {PLAY_TYPE_LABEL[lastPlay.type] ?? lastPlay.type}
+              {lsc(PLAY_TYPE_LABEL[lastPlay.type] ?? lastPlay.type, language)}
             </span>
           </span>
           <p className="af-live-lastplay-text">{lastPlay.headline}</p>
@@ -1198,7 +1228,7 @@ export function GameCard({
       */}
       {wp ? (
         <div className="af-live-wp">
-          <span className="af-label">Win prob · est</span>
+          <span className="af-label">{lsc('Win prob · est', language)}</span>
           <span className="af-live-wp-bar" aria-hidden>
             <span className="af-live-wp-away" style={{ width: `${wp.away}%` }} />
             <span className="af-live-wp-home" style={{ width: `${wp.home}%` }} />
@@ -1249,11 +1279,12 @@ function FinalGames({
   selectedLeagueId: string | null
   lastPlayByGame: Map<string, LivePageData['impact']['plays'][number]>
 }) {
+  const { language } = useOptionalLanguage()
   if (games.length === 0) return null
   return (
-    <section className="af-live-finals" aria-label="Final games">
+    <section className="af-live-finals" aria-label={lsc('Final games', language)}>
       <h3 className="af-label af-live-finals-head">
-        Final · {games.length} {games.length === 1 ? 'game' : 'games'}
+        {finalCount(games.length, language)}
       </h3>
       <ul className="af-live-finals-list">
         {games.map((game) => (
@@ -1282,6 +1313,7 @@ function FinalGameRow({
   lastPlay: LivePageData['impact']['plays'][number] | null
 }) {
   const lowDataOn = useLowData().lowData
+  const { language } = useOptionalLanguage()
   const [open, setOpen] = useState(false)
   const panelId = `af-live-final-${game.gameId}`
   const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
@@ -1324,10 +1356,10 @@ function FinalGameRow({
         <span className="af-live-final-status af-num">{game.statusDetail}</span>
         {starters.length > 0 ? (
           <span className="af-live-final-mine">
-            {starters.length} {starters.length === 1 ? 'starter' : 'starters'}
+            {starterCount(starters.length, language)}
             {best ? (
               <>
-                {' · top '}
+                {topPrefix(language)}
                 {best.group.playerName} {best.pts.toFixed(1)}
               </>
             ) : null}
@@ -1361,6 +1393,7 @@ function Linescore({
   isFootball: boolean
   isBaseball: boolean
 }) {
+  const { language } = useOptionalLanguage()
   const awayLines = game.away.linescores ?? []
   const homeLines = game.home.linescores ?? []
   const played = Math.max(awayLines.length, homeLines.length)
@@ -1379,7 +1412,7 @@ function Linescore({
       <table className="af-live-linescore af-num">
         <thead>
           <tr>
-            <th scope="col" aria-label="Team" />
+            <th scope="col" aria-label={lsc('Team', language)} />
             {Array.from({ length: columns }, (_, i) => (
               <th key={i} scope="col">
                 {label(i)}
@@ -1428,6 +1461,7 @@ const YARD_MARKS = [10, 20, 30, 40, 50, 60, 70, 80, 90]
  * (0–100 from the away goal line), first-down line when the distance is known.
  */
 function FieldStrip({ game }: { game: LiveGameCard }) {
+  const { language } = useOptionalLanguage()
   const s = game.situation
   if (!s) return null
   const ball = s.ballOn
@@ -1445,7 +1479,7 @@ function FieldStrip({ game }: { game: LiveGameCard }) {
         {s.downDistance || s.shortDownDistance ? (
           <span className="af-live-down af-num">{s.downDistance ?? s.shortDownDistance}</span>
         ) : null}
-        {s.isRedZone ? <span className="af-live-redzone af-label">Red zone</span> : null}
+        {s.isRedZone ? <span className="af-live-redzone af-label">{lsc('Red zone', language)}</span> : null}
         <span className="af-live-timeouts">
           <Timeouts abbrev={game.away.abbrev} left={s.awayTimeouts} />
           <Timeouts abbrev={game.home.abbrev} left={s.homeTimeouts} />
@@ -1456,7 +1490,7 @@ function FieldStrip({ game }: { game: LiveGameCard }) {
         <div
           className="af-live-field"
           role="img"
-          aria-label={`${offense ? `${offense.abbrev} ball` : 'Ball'}${s.downDistance ? `, ${s.downDistance}` : ''}`}
+          aria-label={`${offense ? teamBall(offense.abbrev, language) : lsc('Ball', language)}${s.downDistance ? `, ${s.downDistance}` : ''}`}
         >
           <EndZone side={game.away} />
           <div className="af-live-grass" data-redzone={s.isRedZone ? (toward > 0 ? 'home' : 'away') : undefined}>
@@ -1493,14 +1527,15 @@ const BASES = [
  * unlit rather than drawn as 0-0.
  */
 function Diamond({ game }: { game: LiveGameCard }) {
+  const { language } = useOptionalLanguage()
   const b = game.situation?.baseball
   if (!b) return null
   const on = { first: b.onFirst, second: b.onSecond, third: b.onThird }
   const runners = BASES.filter((base) => on[base.key]).map((base) => base.key)
-  const basesLabel = runners.length === 0 ? 'Bases empty' : `Runner${runners.length > 1 ? 's' : ''} on ${runners.join(' and ')}`
+  const basesLabel = runnersOn(runners, language)
   const countLabel =
     b.balls != null && b.strikes != null && b.outs != null
-      ? `, ${b.balls}-${b.strikes} count, ${b.outs} ${b.outs === 1 ? 'out' : 'outs'}`
+      ? countSuffix(b.balls, b.strikes, b.outs, language)
       : ''
 
   return (
@@ -1531,8 +1566,8 @@ function Diamond({ game }: { game: LiveGameCard }) {
 
       {b.pitcher || b.batter ? (
         <ul className="af-live-atbat">
-          {b.pitcher ? <AtBatRow role="Pitching" player={b.pitcher} /> : null}
-          {b.batter ? <AtBatRow role="At bat" player={b.batter} /> : null}
+          {b.pitcher ? <AtBatRow role={lsc('Pitching', language)} player={b.pitcher} /> : null}
+          {b.batter ? <AtBatRow role={lsc('At bat', language)} player={b.batter} /> : null}
         </ul>
       ) : null}
     </div>
@@ -1582,9 +1617,10 @@ function EndZone({ side }: { side: LiveGameCard['home'] }) {
 }
 
 function Timeouts({ abbrev, left }: { abbrev: string; left: number | null }) {
+  const { language } = useOptionalLanguage()
   if (left == null) return null
   return (
-    <span className="af-live-to" aria-label={`${abbrev} ${left} timeouts left`}>
+    <span className="af-live-to" aria-label={timeoutsLeft(abbrev, left, language)}>
       <span className="af-num">{abbrev}</span>
       {[0, 1, 2].map((i) => (
         <span key={i} className="af-live-to-dot" data-used={i >= left} aria-hidden />
@@ -1635,6 +1671,7 @@ function pregameLeadersLabel(week: number | null): string {
  */
 function Leaders({ game }: { game: LiveGameCard }) {
   const lowDataOn = useLowData().lowData
+  const { language } = useOptionalLanguage()
   const leaders = game.leaders ?? []
   if (leaders.length > 0) {
     return (
@@ -1646,14 +1683,14 @@ function Leaders({ game }: { game: LiveGameCard }) {
            * are from the game in front of them, and only words can correct it.
            */
           <p className="af-live-leaders-note">
-            <span className="af-label">{pregameLeadersLabel(game.week)}</span>
-            <span>Not from this game — it has not kicked off.</span>
+            <span className="af-label">{lsc(pregameLeadersLabel(game.week), language)}</span>
+            <span>{lsc('Not from this game — it has not kicked off.', language)}</span>
           </p>
         ) : null}
         <ul
           className="af-live-leaders"
           aria-label={
-            game.leadersArePregame ? pregameLeadersLabel(game.week) : 'Game leaders'
+            lsc(game.leadersArePregame ? pregameLeadersLabel(game.week) : 'Game leaders', language)
           }
         >
           {leaders.map((l) => (
@@ -1686,7 +1723,7 @@ function Leaders({ game }: { game: LiveGameCard }) {
   if (game.topPerformer) {
     return (
       <div className="af-live-top">
-        <span className="af-label">Top performer</span>
+        <span className="af-label">{lsc('Top performer', language)}</span>
         <span className="af-live-top-name">{game.topPerformer.name}</span>
         <span className="af-live-top-line af-num">{game.topPerformer.statLine}</span>
       </div>
@@ -1704,12 +1741,13 @@ function Leaders({ game }: { game: LiveGameCard }) {
  */
 function TeamBox({ game }: { game: LiveGameCard }) {
   const lowDataOn = useLowData().lowData
+  const { language } = useOptionalLanguage()
   const sides = [game.away, game.home]
   if (!sides.some((s) => (s.leaders ?? []).length > 0 || s.shooting)) return null
   return (
     <div className="af-live-teambox">
       {sides.map((side) => (
-        <section key={side.abbrev} className="af-live-teambox-side" aria-label={`${side.abbrev} leaders`}>
+        <section key={side.abbrev} className="af-live-teambox-side" aria-label={teamLeaders(side.abbrev, language)}>
           <span className="af-label af-live-teambox-team">{side.abbrev}</span>
           {(side.leaders ?? []).length > 0 ? (
             <ul className="af-live-teambox-leaders">
@@ -1803,6 +1841,7 @@ export function MyStarters({
    * "My games" exists.
    */
   const [open, setOpen] = useState(true)
+  const { language } = useOptionalLanguage()
   /*
    * ⚠ OPEN, BUT CAPPED. A Sunday slate carried 10–20 starters per card, all listed, and the page ran
    * to ~22,700px on a phone (measured 2026-10-11) — the games themselves were buried under the lists.
@@ -1824,8 +1863,7 @@ export function MyStarters({
         onClick={() => setOpen((o) => !o)}
       >
         <span className="af-label af-live-tieins-head">
-          Your starters · {groups.length} {groups.length === 1 ? 'player' : 'players'} · {leagueCount}{' '}
-          {leagueCount === 1 ? 'league' : 'leagues'}
+          {yourStartersHead(groups.length, leagueCount, language)}
         </span>
         <span className="af-live-mine-chev" aria-hidden />
       </button>
@@ -1852,7 +1890,7 @@ export function MyStarters({
           aria-controls={listId}
           onClick={() => setShowAll((v) => !v)}
         >
-          {showAll ? 'Show fewer' : `Show all ${groups.length} starters`}
+          {showAll ? lsc('Show fewer', language) : showAllStarters(groups.length, language)}
         </button>
       ) : null}
     </div>
@@ -1875,6 +1913,7 @@ function StarterRow({
   upcoming?: boolean
 }) {
   const lowDataOn = useLowData().lowData
+  const { language } = useOptionalLanguage()
   const [open, setOpen] = useState(false)
   const panelId = `af-live-mine-${gameId}-${group.playerId}`
   const selected =
@@ -1890,7 +1929,7 @@ function StarterRow({
    * (17 of them on one card, 2026-10-11). It now shows this week's projection under each league's
    * own rules, labelled "proj", or a dash when it could not be priced.
    */
-  const points = upcoming ? formatStarterProjection(group, selectedLeagueId) : formatStarterPoints(group, selectedLeagueId)
+  const points = upcoming ? projectionCopy(formatStarterProjection(group, selectedLeagueId), language) : formatStarterPoints(group, selectedLeagueId)
 
   return (
     <li className="af-live-mine-row" data-open={open} data-selected={selected != null}>
@@ -1921,16 +1960,16 @@ function StarterRow({
           onClick={() => setOpen((o) => !o)}
         >
           <span className="af-live-mine-count">
-            {n} {n === 1 ? 'league' : 'leagues'}
+            {leagueCountCopy(n, language)}
           </span>
           <span
             className="af-live-mine-pts af-num"
             data-kind={upcoming ? 'projection' : undefined}
             title={
               upcoming
-                ? `Projection for this week${selected ? ` in ${selected.leagueName}` : ''}, under each league’s own scoring`
+                ? projectionTitle(selected ? selected.leagueName : null, language)
                 : selected
-                  ? `Points in ${selected.leagueName}`
+                  ? pointsIn(selected.leagueName, language)
                   : undefined
             }
           >
@@ -1946,7 +1985,7 @@ function StarterRow({
             <li key={l.leagueId} data-selected={l.leagueId === selectedLeagueId}>
               <span className="af-live-mine-league">{l.leagueName}</span>
               <span className="af-live-mine-league-pts af-num">
-                {upcoming ? formatLeagueProjection(l) : l.points == null ? '—' : `${l.points.toFixed(1)} pts`}
+                {upcoming ? projectionCopy(formatLeagueProjection(l), language) : l.points == null ? '—' : `${l.points.toFixed(1)} pts`}
               </span>
             </li>
           ))}
@@ -1968,6 +2007,7 @@ function Side({
   hasBall: boolean
 }) {
   const lowDataOn = useLowData().lowData
+  const { language } = useOptionalLanguage()
   return (
     <div className="af-live-side-team" data-align={align}>
       {/*
@@ -1991,7 +2031,7 @@ function Side({
           {side.rank != null ? <span className="af-live-team-rank af-num">{side.rank}</span> : null}
           {side.name}
           {hasBall ? (
-            <span className="af-live-possession" role="img" aria-label="has the ball" title="Possession" />
+            <span className="af-live-possession" role="img" aria-label={lsc('has the ball', language)} title={lsc('Possession', language)} />
           ) : null}
         </span>
         {/* Records are not published for every league/sport; withheld, not "0—0". */}
@@ -2077,13 +2117,13 @@ function EmptySlate({
   top25Hidden?: number
   showAllHref?: string | null
 }) {
+  const { language } = useOptionalLanguage()
   if (loadFailed) {
     return (
       <div className="af-live-empty" data-tone="bad">
-        <p className="af-live-empty-title">Scores could not be loaded.</p>
+        <p className="af-live-empty-title">{lsc('Scores could not be loaded.', language)}</p>
         <p className="af-live-empty-body">
-          This is a problem on our end, not an empty slate — there may well be games on. Retrying
-          automatically.
+          {lsc('This is a problem on our end, not an empty slate — there may well be games on. Retrying automatically.', language)}
         </p>
       </div>
     )
@@ -2107,13 +2147,12 @@ function EmptySlate({
   if (top25Hidden > 0 && (scope === 'all' || !rosterFailed)) {
     return (
       <div className="af-live-empty">
-        <p className="af-live-empty-title">No Top 25 games on this slate.</p>
+        <p className="af-live-empty-title">{lsc('No Top 25 games on this slate.', language)}</p>
         <p className="af-live-empty-body">
-          {top25Hidden} {top25Hidden === 1 ? 'game' : 'games'} between unranked teams{' '}
-          {top25Hidden === 1 ? 'is' : 'are'} hidden.{' '}
-          {showAllHref ? <a href={showAllHref}>Show all games</a> : null}
+          {top25EmptyBody(top25Hidden, language)}{' '}
+          {showAllHref ? <a href={showAllHref}>{lsc('Show all games', language)}</a> : null}
           {' · '}
-          <a href="/settings?tab=notifications">Follow a team</a> to always see its games.
+          <a href="/settings?tab=notifications">{lsc('Follow a team', language)}</a>{lsc(' to always see its games.', language)}
         </p>
       </div>
     )
@@ -2122,10 +2161,9 @@ function EmptySlate({
   if (rosterFailed && scope === 'my') {
     return (
       <div className="af-live-empty" data-tone="bad">
-        <p className="af-live-empty-title">We could not read your rosters.</p>
+        <p className="af-live-empty-title">{lsc('We could not read your rosters.', language)}</p>
         <p className="af-live-empty-body">
-          The scores themselves are fine — this is a problem on our end, so we cannot say which
-          games involve your players. Switch to All games to see the full slate meanwhile.
+          {lsc('The scores themselves are fine — this is a problem on our end, so we cannot say which games involve your players. Switch to All games to see the full slate meanwhile.', language)}
         </p>
       </div>
     )
@@ -2134,14 +2172,14 @@ function EmptySlate({
   return (
     <div className="af-live-empty">
       <p className="af-live-empty-title">
-        {scope === 'my' ? 'None of your players are playing right now.' : 'No games on this slate.'}
+        {lsc(scope === 'my' ? 'None of your players are playing right now.' : 'No games on this slate.', language)}
       </p>
       <p className="af-live-empty-body">
-        {scope === 'my' && !hasRosterData
+        {lsc(scope === 'my' && !hasRosterData
           ? 'Claim your team in one of your leagues and this fills in automatically.'
           : scope === 'my'
             ? 'Switch to All games to see the rest of the slate.'
-            : 'Nothing is scheduled in this window.'}
+            : 'Nothing is scheduled in this window.', language)}
       </p>
     </div>
   )
@@ -2170,6 +2208,7 @@ export default LiveScores
  * relative to it, so there is no honest thing to show.
  */
 export function LockWarning({ alerts, now }: { alerts: LiveLockAlert[]; now: number | null }) {
+  const { language } = useOptionalLanguage()
   if (now == null) return null
 
   const closing = alerts
@@ -2188,17 +2227,15 @@ export function LockWarning({ alerts, now }: { alerts: LiveLockAlert[]; now: num
       aria-live="polite"
     >
       <h2 className="af-label af-live-lock-head">
-        {closing.length === 1
-          ? 'Lineup decision closing'
-          : `${closing.length} lineup decisions closing`}
+        {lineupDecisionsClosing(closing.length, language)}
       </h2>
 
       <ul className="af-live-lock-list">
         {closing.map(({ alert, msLeft }) => (
           <li key={alert.gameId} className="af-live-lock-row">
             <span className="af-live-lock-match">{alert.matchup}</span>
-            <span className="af-live-lock-time">kicks off in {formatLockCountdown(msLeft)}</span>
-            <span className="af-live-lock-who">{describeLockExposure(alert)}</span>
+            <span className="af-live-lock-time">{kicksOffIn(lsc(formatLockCountdown(msLeft), language), language)}</span>
+            <span className="af-live-lock-who">{describeLockExposure(alert, language)}</span>
           </li>
         ))}
       </ul>
@@ -2211,8 +2248,7 @@ export function LockWarning({ alerts, now }: { alerts: LiveLockAlert[]; now: num
         earlier than this and we cannot tell which leagues those are.
       */}
       <p className="af-live-lock-foot">
-        Change it on your platform &mdash; AllFantasy cannot set your lineup for you. Leagues that
-        lock weekly may already be closed.
+        {lsc('Change it on your platform — AllFantasy cannot set your lineup for you. Leagues that lock weekly may already be closed.', language)}
       </p>
     </section>
   )
@@ -2238,11 +2274,6 @@ function formatLockCountdown(msLeft: number): string {
  * that is still a decision, where a starter is the choice already made. A bare
  * headcount would hide exactly the players the reader might still act on.
  */
-function describeLockExposure(alert: LiveLockAlert): string {
-  const parts: string[] = []
-  if (alert.bench > 0) parts.push(`${alert.bench} benched`)
-  if (alert.starters > 0) parts.push(`${alert.starters} starting`)
-  const leagues =
-    alert.leagues.length === 1 ? alert.leagues[0]!.leagueName : `${alert.leagues.length} leagues`
-  return `${parts.join(', ')} · ${leagues}`
+function describeLockExposure(alert: LiveLockAlert, language: string): string {
+  return lockExposure(alert, language)
 }
