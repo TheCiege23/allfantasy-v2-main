@@ -24,6 +24,7 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
   DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
   DAILY_WAIVER_SCHEDULE_SETTINGS_KEY,
@@ -292,6 +293,8 @@ export async function executeLeagueSettingsPatch(
     const k = Number(body.keeperCount)
     if (!Number.isFinite(k) || k < 0 || k > 10) return jsonError('keeperCount must be 0–10', 400)
   }
+  const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule })
+  if (keeperRefusal) return jsonError(keeperRefusal.message, keeperRefusal.status)
 
   const teamCount = league.leagueSize ?? league.teams.length
   if (body.playoffTeams != null) {
