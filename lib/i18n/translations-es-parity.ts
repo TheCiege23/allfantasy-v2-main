@@ -2434,6 +2434,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsScore.upgrade": "Mejorar",
   "lsScore.statCount": "{{label}} ({{count}} estadísticas)",
   "lsScore.clickToEdit": "Haz clic en un valor para editarlo",
+  "lsScore.notAvailable": "N/D",
+  "lsScore.notAvailableHelp": "Aún no disponible: nuestra fuente de estadísticas no lo reporta, así que no puntúa.",
   "lsScore.saved": "Puntuación guardada correctamente.",
   "lsScore.saving": "Guardando...",
   "lsScore.save": "Guardar puntuación",

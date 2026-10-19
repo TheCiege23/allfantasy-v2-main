@@ -714,6 +714,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lsScore.upgrade": "Upgrade",
     "lsScore.statCount": "{{label}} ({{count}} stats)",
     "lsScore.clickToEdit": "Click value to edit",
+    "lsScore.notAvailable": "N/A",
+    "lsScore.notAvailableHelp": "Not available yet — our stats feed does not report this, so it does not score.",
     "lsScore.saved": "Scoring settings saved successfully.",
     "lsScore.saving": "Saving...",
     "lsScore.save": "Save Scoring",

@@ -57,7 +57,7 @@ const AF_DEFAULT: NhlScoringPreset = {
   description: 'Balanced NHL scoring optimized for AllFantasy league types including specialty formats.',
   rules: {
     goals: 3, assists: 2, plus_minus: 1, power_play_points: 0.5, short_handed_points: 1,
-    game_winning_goals: 1, shots_on_goal: 0.5, hits: 0.3, blocked_shots: 0.5,
+    shots_on_goal: 0.5, hits: 0.3, blocked_shots: 0.5,
     penalty_minutes: -0.25, faceoff_wins: 0.1, faceoff_losses: -0.05, hat_trick_bonus: 2,
     goalie_wins: 3, saves: 0.2, goals_against: -1, shutouts: 2,
   },
