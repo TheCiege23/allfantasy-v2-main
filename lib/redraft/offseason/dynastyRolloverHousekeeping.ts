@@ -28,6 +28,7 @@
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { ourIdOrSleeperIdWhere, playerRowKeys } from '@/lib/player-identity/externalIdNamespace'
 import {
   validateIrSectionAgainstLeague,
   validateTaxiSectionAgainstLeague,
@@ -163,16 +164,17 @@ async function loadYearsExp(sports: string[], playerIds: string[]): Promise<Map<
       where: {
         sport: { in: sports },
         yearsExp: { not: null },
-        OR: [{ id: { in: playerIds } }, { externalId: { in: playerIds } }, { sleeperId: { in: playerIds } }],
+        // Never a bare id against `externalId`: there a Rolling Insights number names a different player.
+        AND: [ourIdOrSleeperIdWhere(playerIds)],
       },
-      select: { id: true, externalId: true, sleeperId: true, yearsExp: true },
+      select: { id: true, sleeperId: true, yearsExp: true },
     })
     .catch(() => [])
   const wanted = new Set(playerIds)
   const seen = new Map<string, Set<number>>()
   for (const r of rows) {
     if (r.yearsExp == null) continue
-    for (const key of new Set([r.id, r.externalId, r.sleeperId])) {
+    for (const key of new Set(playerRowKeys(r))) {
       if (!key || !wanted.has(key)) continue
       const set = seen.get(key) ?? new Set<number>()
       set.add(r.yearsExp)
