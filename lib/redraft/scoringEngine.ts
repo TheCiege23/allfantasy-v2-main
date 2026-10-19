@@ -4,14 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
-import {
-  expandSportConfigToggles,
-  getScoringCategories,
-  resolveSportConfigKey,
-  tryGetSportConfig,
-} from '@/lib/sportConfig'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
-import { bridgeUiRulesToEngineCategoryPoints } from '@/lib/nfl-scoring/scoringKeyBridge'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
@@ -20,8 +13,7 @@ import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
-import { importedNcaafScoring } from './importedNcaafScoring'
-import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
+import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 
 export function calculateFantasyPoints(
@@ -76,18 +68,7 @@ export function pointsForCategory(cat: ScoringCategory, rawStats: Record<string,
   return raw * pts
 }
 
-export function applyScoringPresetToRecPoints(
-  categories: ScoringCategory[],
-  preset: string,
-  overrides: Record<string, number>,
-): ScoringCategory[] {
-  if (overrides.rec != null) return categories
-  if (preset === 'CUSTOM') return categories
-  const recPts =
-    preset === 'PPR' ? 1 : preset === 'HALF_PPR' ? 0.5 : preset === 'STANDARD' ? 0 : null
-  if (recPts === null) return categories
-  return categories.map((c) => (c.key === 'rec' ? { ...c, defaultPoints: recPts } : c))
-}
+export { applyScoringPresetToRecPoints }
 
 /**
  * Pure scorer: sum fantasy points for one player's raw weekly stats against a
@@ -173,36 +154,6 @@ function playerPositions(position: string | null | undefined): string[] {
     .filter(Boolean)
 }
 
-type SportConfigBlob = Record<string, unknown>
-
-function readSportConfig(league: { settings: unknown }): SportConfigBlob {
-  const s = league.settings as Record<string, unknown> | null | undefined
-  const raw = s?.sportConfig
-  return raw && typeof raw === 'object' && raw !== null ? (raw as SportConfigBlob) : {}
-}
-
-/**
- * Legacy fallback (R1): derive engine overrides from `settings.nfl_scoring_config`
- * (the UI store) when the canonical `sportConfig.categoryPoints` is absent — so
- * leagues last saved before the UI→engine bridge still score their commissioner
- * settings. Only fires when categoryPoints is empty.
- */
-function bridgeLegacyNflScoringConfig(league: { settings: unknown }): Record<string, number> {
-  const s = league.settings as Record<string, unknown> | null | undefined
-  const legacy = s?.nfl_scoring_config as Record<string, unknown> | undefined
-  const rules = legacy?.rules as Record<string, number> | undefined
-  if (!rules || typeof rules !== 'object') return {}
-  return bridgeUiRulesToEngineCategoryPoints(rules)
-}
-
-function togglesFromSportConfig(sc: SportConfigBlob): string[] {
-  const t: string[] = []
-  if (sc.enableIDP === true) t.push('IDP')
-  if (sc.enableSuperflex === true) t.push('SUPERFLEX')
-  if (sc.enableTEPremium === true) t.push('TE_PREMIUM')
-  return t
-}
-
 /** A league's own scoring, resolved once: raw stat line (and the player's position) to fantasy points. */
 export type LeagueStatScorer = (rawStats: Record<string, number>, position?: string | null) => number
 
@@ -235,41 +186,9 @@ export async function calculateScoreFromSportConfig(
  * trade grade must score a stat line the same way, so they share this rather than a copy.
  */
 export function buildLeagueStatScorer(league: { sport: string; settings: unknown }): LeagueStatScorer | null {
-  const sport = resolveSportConfigKey(String(league.sport))
-  const cfg = tryGetSportConfig(sport)
-  if (!cfg) return null
-
-  const sc = readSportConfig(league)
-  const toggles = togglesFromSportConfig(sc)
-  const expanded = expandSportConfigToggles(toggles)
-  let categories = getScoringCategories(cfg.sport, expanded)
-  const preset = String(sc.scoringPreset ?? 'PPR')
-  // R1 precedence: the canonical engine store wins. For legacy leagues that only
-  // have the UI store (`nfl_scoring_config`, written before the bridge existed),
-  // derive engine overrides from it so their commissioner scoring is honored too.
-  let overrides =
-    typeof sc.categoryPoints === 'object' && sc.categoryPoints !== null
-      ? (sc.categoryPoints as Record<string, number>)
-      : {}
-  if (Object.keys(overrides).length === 0) {
-    const settings = league.settings as Record<string, unknown> | null
-    const savedPanel = storeSavedByPerson(settings?.ncaaf_scoring_config)
-    const imported = savedPanel ? null : importedNcaafScoring(cfg.sport, settings, cfg.scoringCategories)
-    // Explicit commissioner edits retain precedence. Untouched seeded panel defaults cannot
-    // override the actual source weights or reintroduce penalties the source never awards.
-    if (imported) {
-      categories = imported.categories
-      overrides = imported.overrides
-    } else {
-      overrides = bridgeSportUiScoringStore(cfg.sport, league.settings) ?? bridgeLegacyNflScoringConfig(league)
-    }
-  }
-  categories = applyScoringPresetToRecPoints(categories, preset, overrides)
-
-  if (cfg.sport === 'NCAAF' && overrides.te_premium !== undefined && !categories.some(c => c.key === 'te_premium')) {
-    categories = [...categories, cfg.scoringCategories.find(c => c.key === 'te_premium')!]
-  }
-  const resolved = categories
+  const rules = resolveLeagueScoringRules(league)
+  if (!rules) return null
+  const { categories: resolved, overrides } = rules
   return (rawStats, position) =>
     scoreStatsWithCategories(resolved, applyTePremiumStat(resolved, rawStats, position), overrides)
 }
