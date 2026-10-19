@@ -10,7 +10,7 @@ import {
   getWindowMultiplier,
   TIER_BASE_VALUES,
 } from '@/lib/dynasty-tiers'
-import { getPeakAgeRange, hasNativeAgingCurve } from '@/lib/dynasty-engine/SportDynastyResolver'
+import { getPeakAgeRange, isCollegeDynastySport } from '@/lib/dynasty-engine/SportDynastyResolver'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport, SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type {
@@ -50,7 +50,7 @@ const POSITION_ALIASES: Record<string, Record<string, string>> = {
   NCAAB: { G: 'PG', F: 'SF', UTIL: 'SF' },
   MLB: { SP: 'SP', RP: 'RP', P: 'SP', DH: 'OF', LF: 'OF', CF: 'OF', RF: 'OF' },
   NHL: { W: 'LW', F: 'C', LD: 'D', RD: 'D' },
-  SOCCER: { GK: 'GK', GKP: 'GK', G: 'GK', F: 'FWD', FW: 'FWD', M: 'MID', D: 'DEF' },
+  SOCCER: { GK: 'GK', GKP: 'GK', G: 'GK', F: 'FWD', FW: 'FWD', ST: 'FWD', M: 'MID', MF: 'MID', D: 'DEF', DF: 'DEF' },
 }
 
 const POSITION_BASE_VALUES_BY_SPORT: Record<string, Record<string, number>> = {
@@ -110,24 +110,19 @@ function resolveArchetypePosition(sport: string, position: string): string | nul
   // MLB / NBA / NHL used to be mapped onto NFL archetypes here (NBA PG & MLB SP -> QB curve,
   // NHL wingers -> WR curve, MLB C -> TE curve), which then applied NFL cliffs and the NFL
   // superflex/TE-premium multipliers to them. They now return null so every caller falls through
-  // to the sport's own per-position range from getPeakAgeRange.
-  if (hasNativeAgingCurve(sport)) return null
-  if (sport === 'NCAAB') {
-    if (['PG', 'SG'].includes(normalized)) return 'QB'
-    if (['SF', 'PF'].includes(normalized)) return 'WR'
-    if (normalized === 'C') return 'TE'
-  }
-  if (sport === 'SOCCER') {
-    if (normalized === 'GK') return 'QB'
-    if (normalized === 'DEF') return 'TE'
-    if (normalized === 'FWD') return 'RB'
-    return 'WR'
-  }
+  // to the sport's own per-position range from getPeakAgeRange. SOCCER joined them (GK used to run
+  // the NFL QB curve and take the superflex x1.6; DEF the TE curve and the TE-premium bump), and
+  // NCAAB returns null too (its PG/SG were NFL QBs for the superflex multiplier). NCAAF keeps the NFL
+  // archetypes for POSITION value only — superflex / TE premium are real college-football settings —
+  // while its age handling is flat (see getSportAwareAgeMultiplier).
   return null
 }
 
 function getSportAwareAgeMultiplier(sport: string, position: string, age: number | null): number {
   if (age == null) return 1
+  // NCAAF / NCAAB: no age effect (players leave college before any decline; eligibility, which these
+  // inputs do not carry, is what ends their value). See COLLEGE_DYNASTY_SPORTS.
+  if (isCollegeDynastySport(sport)) return 1
   const archetype = resolveArchetypePosition(sport, position)
   if (archetype) {
     return roundTo(getAgeCurveWithCliffs(archetype, age), 2)
@@ -149,6 +144,10 @@ function getSportAwareAgeMultiplier(sport: string, position: string, age: number
 
 function getSportAwareExpectedWindow(sport: string, position: string, age: number | null): number {
   if (age == null) return 5
+  // College: the remaining window is eligibility (class year), not age, and it is not an input here,
+  // so age is treated as uninformative — the same 5 an unknown age gets — rather than reading an NFL
+  // career length (a 20-year-old QB used to get a 12-year window) into a college roster.
+  if (isCollegeDynastySport(sport)) return 5
   const archetype = resolveArchetypePosition(sport, position)
   if (archetype) {
     return roundTo(getExpectedWindow(archetype, age), 1)

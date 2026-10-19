@@ -67,6 +67,8 @@ const NBA_BASE: Record<string, number> = {
 const NFL_BASE: Record<string, number> = { QB: 7600, RB: 7000, WR: 6800, TE: 6100, K: 3600, DST: 4200, DEF: 4200 }
 const POSITION_BASE_BY_SPORT: Record<string, Record<string, number>> = {
   NFL: NFL_BASE,
+  // College reuses its pro sport's table on purpose: NCAAF rosters use exactly the NFL labels and
+  // NCAAB the NBA ones (incl. the generic G / F slots), and these are relative within-league bases.
   NCAAF: NFL_BASE,
   NBA: NBA_BASE,
   NCAAB: NBA_BASE,
@@ -76,7 +78,11 @@ const POSITION_BASE_BY_SPORT: Record<string, Record<string, number>> = {
     SP: 6500, RP: 5000, P: 5800, C: 5300, '1B': 6100, '2B': 5800, '3B': 6000, SS: 5900,
     OF: 6100, LF: 6100, CF: 6100, RF: 6100, DH: 5600, UTIL: 5600,
   },
-  SOCCER: { FWD: 6200, FW: 6200, F: 6200, MID: 6000, M: 6000, DEF: 5600, D: 5600, GK: 5600, G: 5600 },
+  // Soccer labels are keyed under SOCCER, so its DEF / D / F / G never read NFL DST or NBA/NHL values.
+  SOCCER: {
+    FWD: 6200, FW: 6200, F: 6200, ST: 6200, MID: 6000, MF: 6000, M: 6000,
+    DEF: 5600, DF: 5600, D: 5600, GK: 5600, GKP: 5600, G: 5600,
+  },
 }
 /** Unknown position: NFL keeps its historical 5200; elsewhere use the sport's floor, not a mid value. */
 const NFL_UNKNOWN_POSITION_BASE = 5200
