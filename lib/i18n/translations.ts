@@ -501,6 +501,12 @@ export const translations: Record<string, Record<string, string>> = {
     "lsEd.saving": "Saving...",
     "lsEd.save": "Save",
     "lsEd.saveFailed": "Save failed",
+    // Mid-season scoring / roster change confirmation (lib/league/midSeasonConfirmation.ts).
+    "lsEd.midSeason.title": "The season has started",
+    "lsEd.midSeason.body": "This league's season has started. Changing scoring/roster settings will recalculate scores and may make some lineups invalid. Confirm to continue.",
+    "lsEd.midSeason.confirm": "Change anyway",
+    "lsEd.midSeason.cancel": "Cancel",
+    "lsEd.midSeason.cancelled": "Change not saved.",
     "lsEd.failedToSave": "Failed to save",
     "lsEd.requestFailed": "Request failed",
     "lsEd.loadFailed": "Failed to load",

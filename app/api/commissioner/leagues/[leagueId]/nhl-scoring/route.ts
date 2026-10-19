@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueNhlScoringConfig, saveLeagueNhlScoringConfig, getNhlScoringPresets, buildFullNhlScoringConfig, type NhlScoringPresetKey } from '@/lib/nhl-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
-import { settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 const featureGate = new FeatureGateService()
 
@@ -34,12 +34,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (league.sport !== 'NHL') return NextResponse.json({ error: 'NHL leagues only' }, { status: 400 })
-  const lifecycleRefusal = await settingsLifecycleRefusal(leagueId, session.user.id, 'scoring')
-  if (lifecycleRefusal) return NextResponse.json({ error: lifecycleRefusal.error, code: lifecycleRefusal.code }, { status: lifecycleRefusal.status })
   const body = await req.json().catch(() => ({}))
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'scoring', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
   const presetKey = (body.presetKey ?? 'af_default') as NhlScoringPresetKey
   if ((presetKey === 'custom' || body.rules) && !(await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring').then(a => a.allowed).catch(() => false)))
     return NextResponse.json({ error: 'premiumRequired' }, { status: 403 })
   await saveLeagueNhlScoringConfig(leagueId, { presetKey, rules: body.rules ?? buildFullNhlScoringConfig(presetKey), userId: session.user.id, premiumFeaturesUsed: presetKey === 'custom' })
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'nhl-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: await getLeagueNhlScoringConfig(leagueId) })
 }

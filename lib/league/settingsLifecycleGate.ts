@@ -1,83 +1,151 @@
 /**
- * The league lifecycle matrix, applied to every editor that writes scoring or roster rules.
+ * When a commissioner may change scoring or roster rules, for every editor that writes them:
+ * the per-sport `*-scoring` PUTs, the generic `PUT .../scoring`, `roster-settings` (PUT,
+ * reset-default, import apply) and the scoring/roster keys of the settings PATCH.
  *
- * 🛑 THIS INVENTS NO POLICY. Whether `settings_edit_scoring` / `settings_edit_roster` is allowed in a
- * phase is decided by `ACTIONS` in server/services/leagueLifecycleService.ts, through
- * `assertSettingsEditAllowed` — the same check `PATCH /api/leagues/[id]/settings` with a `section`
- * has always run. Before this, the per-sport scoring PUTs, the roster-settings PUT and the
- * section-less `PATCH /api/league/settings` never asked it, so the matrix only bound the one door
- * the settings UI does not use for these edits.
+ * 🛑 OWNER'S DECISION 2026-10-19: A MID-SEASON CHANGE IS ALLOWED WITH A WARNING, NOT BLOCKED.
+ * The lifecycle matrix (`ACTIONS` in server/services/leagueLifecycleService.ts) refuses
+ * `settings_edit_scoring` from the draft onward and `settings_edit_roster` in post_draft and
+ * between seasons. For these editors that is superseded by `SETTINGS_EDIT_POLICY` below. The matrix
+ * itself is unchanged, so the sectioned `PATCH /api/leagues/[id]/settings` with `section: 'scoring'`
+ * or `'roster'` still follows it — that door is not covered here.
  *
- * What this adds is the RESPONSE: a lifecycle refusal is a 409 (the request is fine; the league's
- * phase conflicts with it) worded for a commissioner, instead of the internal
- * `Action "settings_edit_scoring" is not allowed in lifecycle state "in_season"`. Every other refusal
- * from the gate — 403 not a commissioner, 404, 423 locked/paused, 409 tournament setup — passes
- * through with its own status and message.
+ * Everything else the shared gate checks still applies, through `assertLeagueActionGate`:
+ * signed in, a member, an elevated commissioner, not emergency-paused / locked (elevated roles pass
+ * both, as before), and the season-tournament setup lock.
  */
 
 import type { LeagueLifecycleState } from '@prisma/client'
-import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
+import { prisma } from '@/lib/prisma'
+import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
+import { getLeagueLifecycleState, type LeagueLifecycleAction } from '@/server/services/leagueLifecycleService'
+import { logAction } from '@/server/services/auditService'
+import {
+  MID_SEASON_CONFIRMATION_CODE,
+  MID_SEASON_CONFIRMATION_MESSAGE,
+  hasMidSeasonConfirmation,
+} from '@/lib/league/midSeasonConfirmation'
 
 export type LifecycleGatedSection = 'scoring' | 'roster'
 
-export type SettingsLifecycleRefusal = { status: number; error: string; code?: string }
+/** `allowed`: no question asked. `confirm`: only with the explicit flag. `refused`: never. */
+export type SettingsEditPolicy = 'allowed' | 'confirm' | 'refused'
 
-const DRAFT_STARTED: ReadonlySet<LeagueLifecycleState> = new Set([
-  'drafting',
-  'post_draft',
-  'in_season',
-  'playoffs',
-  'completed',
-])
-const SEASON_OVER: ReadonlySet<LeagueLifecycleState> = new Set(['completed', 'offseason', 'renewal_pending'])
-
-export function lifecycleRefusalMessage(section: LifecycleGatedSection, state: LeagueLifecycleState | undefined): string {
-  if (section === 'scoring') {
-    if (state === 'offseason' || state === 'renewal_pending') {
-      return "Scoring can't be changed in the offseason. It opens again when the league is renewed for next season."
-    }
-    if (state === 'archived') return "Scoring can't be changed on an archived league."
-    if (state && DRAFT_STARTED.has(state)) {
-      return "Scoring can't be changed once the draft has started. Contact support if a rule is wrong."
-    }
-    return "Scoring can't be changed in the league's current phase. Contact support if a rule is wrong."
-  }
-  if (state === 'drafting') return "Roster slots can't be changed while the draft is in progress."
-  if (state === 'post_draft') {
-    return "Roster slots can't be changed once the draft has finished. Contact support if a slot is wrong."
-  }
-  if (state && SEASON_OVER.has(state)) {
-    return "Roster slots can't be changed after the season has ended. They open again when the league is renewed for next season."
-  }
-  if (state === 'archived') return "Roster slots can't be changed on an archived league."
-  return "Roster slots can't be changed in the league's current phase. Contact support if a slot is wrong."
+export const SETTINGS_EDIT_POLICY: Record<LeagueLifecycleState, SettingsEditPolicy> = {
+  setup: 'allowed',
+  pre_draft: 'allowed',
+  drafting: 'refused',
+  post_draft: 'confirm',
+  in_season: 'confirm',
+  playoffs: 'confirm',
+  completed: 'allowed',
+  offseason: 'allowed',
+  renewal_pending: 'allowed',
+  archived: 'refused',
 }
 
-const LIFECYCLE_CODES = new Set(['LIFECYCLE_BLOCKED', 'SCORING_LOCKED'])
+export type SettingsEditRefusalBody = { error: string; code: string; message?: string }
 
-/** `null` when the edit may proceed; otherwise the refusal to return. Unexpected errors rethrow. */
-export async function settingsLifecycleRefusal(
+export type SettingsEditDecision =
+  | { ok: true; state: LeagueLifecycleState; midSeason: boolean }
+  | { ok: false; status: number; body: SettingsEditRefusalBody }
+
+const ACTION: Record<LifecycleGatedSection, LeagueLifecycleAction> = {
+  scoring: 'settings_edit_scoring',
+  roster: 'settings_edit_roster',
+}
+
+export function lifecycleRefusalMessage(section: LifecycleGatedSection, state: LeagueLifecycleState): string {
+  const what = section === 'scoring' ? 'Scoring' : 'Roster slots'
+  if (state === 'drafting') return `${what} can't be changed while the draft is in progress. Try again once it finishes.`
+  if (state === 'archived') return `${what} can't be changed on an archived league.`
+  return `${what} can't be changed in the league's current phase. Contact support if a rule is wrong.`
+}
+
+/**
+ * Decide one scoring or roster edit. `requestBody` is the parsed JSON body the confirmation flag
+ * (`confirmMidSeasonChange: true`) is read from. A missing/defaulted `lifecycleState` reads as
+ * `in_season` (getLeagueLifecycleState), so such a league needs the confirmation — by decision.
+ */
+export async function decideSettingsEdit(
   leagueId: string,
   userId: string,
   section: LifecycleGatedSection,
-): Promise<SettingsLifecycleRefusal | null> {
-  try {
-    await assertSettingsEditAllowed(leagueId, userId, section)
-    return null
-  } catch (e) {
-    const err = e as Error & { status?: number; code?: string; lifecycleState?: LeagueLifecycleState }
-    if (typeof err.status !== 'number') throw e
-    if (err.code && LIFECYCLE_CODES.has(err.code)) {
-      return { status: 409, error: lifecycleRefusalMessage(section, err.lifecycleState), code: err.code }
-    }
-    return { status: err.status, error: err.message, ...(err.code ? { code: err.code } : {}) }
+  requestBody: unknown,
+): Promise<SettingsEditDecision> {
+  // commissionerOverride: the phase rule is SETTINGS_EDIT_POLICY's, not the matrix's. It only takes
+  // effect for an elevated commissioner, and the gate refuses anyone else before it gets there.
+  const gate = await assertLeagueActionGate(leagueId, userId, ACTION[section], {
+    lifecycle: { commissionerOverride: true },
+  })
+  if (!gate.ok) return { ok: false, status: gate.err.status, body: { error: gate.err.error, code: gate.err.code } }
+
+  const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { lifecycleState: true } })
+  if (!row) return { ok: false, status: 404, body: { error: 'League not found', code: 'NOT_FOUND' } }
+  const state = getLeagueLifecycleState(row)
+  const policy = SETTINGS_EDIT_POLICY[state] ?? 'refused'
+
+  if (policy === 'refused') {
+    return { ok: false, status: 409, body: { error: lifecycleRefusalMessage(section, state), code: 'LIFECYCLE_BLOCKED' } }
   }
+  if (policy === 'confirm' && !hasMidSeasonConfirmation(requestBody)) {
+    return {
+      ok: false,
+      status: 409,
+      body: {
+        code: MID_SEASON_CONFIRMATION_CODE,
+        message: MID_SEASON_CONFIRMATION_MESSAGE,
+        error: MID_SEASON_CONFIRMATION_MESSAGE,
+      },
+    }
+  }
+  return { ok: true, state, midSeason: policy === 'confirm' }
+}
+
+/**
+ * After a CONFIRMED mid-season change has been written: an audit row and a league announcement
+ * through the same `settings_changed` fanout the settings PATCH already publishes. A no-op for any
+ * other decision, so a route can call it unconditionally. Never throws — the change is already saved.
+ */
+export async function recordMidSeasonSettingsChange(
+  decision: SettingsEditDecision,
+  args: { leagueId: string; userId: string; section: LifecycleGatedSection; source: string; detail?: Record<string, unknown> },
+): Promise<void> {
+  if (!decision.ok || !decision.midSeason) return
+  const { leagueId, userId, section, source, detail } = args
+  const metadata = { section, lifecycleState: decision.state, source, confirmed: true, ...(detail ?? {}) }
+  await logAction({
+    leagueId,
+    userId,
+    actionType: 'settings_mid_season_change',
+    entityType: 'league',
+    entityId: leagueId,
+    metadata,
+  }).catch(() => {})
+
+  void import('@/lib/league-events/publisher')
+    .then(({ publishLeagueFanoutEvent }) =>
+      publishLeagueFanoutEvent({
+        leagueId,
+        eventType: 'settings_changed',
+        title: section === 'scoring' ? 'Scoring rules changed mid-season' : 'Roster settings changed mid-season',
+        message:
+          section === 'scoring'
+            ? 'The commissioner changed the scoring rules after the season started. Scores will be recalculated.'
+            : 'The commissioner changed the roster settings after the season started. Check that your lineup is still valid.',
+        category: 'league_announcements',
+        visibility: 'all_members',
+        actorUserId: userId,
+        meta: metadata,
+      }),
+    )
+    .catch(() => {})
 }
 
 /**
  * Body keys of a settings PATCH that write scoring or roster rules. Deliberately the unambiguous
  * columns only: `sportConfig` and `settingsMerge` carry roster AND unrelated fields in one blob, so
- * gating them by key would refuse a timezone change in week 5 — they are not covered here.
+ * gating them by key would interrupt a timezone change in week 5 — they are not covered here.
  */
 const PATCH_KEYS_BY_SECTION: Record<LifecycleGatedSection, readonly string[]> = {
   scoring: ['scoring'],

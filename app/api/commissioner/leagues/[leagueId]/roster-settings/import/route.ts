@@ -7,7 +7,7 @@ import {
   previewImportedRosterForLeague,
 } from '@/lib/roster-engine'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
-import { settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,10 +31,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
 
   try {
     if (action === 'apply') {
-      const lifecycleRefusal = await settingsLifecycleRefusal(leagueId, session.user.id, 'roster')
-      if (lifecycleRefusal) return NextResponse.json({ error: lifecycleRefusal.error, code: lifecycleRefusal.code }, { status: lifecycleRefusal.status })
+      const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
+      if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
       const config = await mapImportedRosterToLeagueConfig(leagueId, sourcePlatform, importedConfig)
       invalidateLeagueDraftCaches(leagueId)
+      await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/import', detail: { sourcePlatform } })
       return NextResponse.json({ ok: true, action: 'apply', unifiedConfig: config })
     }
 
