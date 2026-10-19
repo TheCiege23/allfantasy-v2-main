@@ -89,7 +89,7 @@ export function evaluateBuySellHold(
   const entries: BuySellHoldEntry[] = team.players
     .map((p) => {
       const value = valueOf(p)
-      const traj = ageTrajectory(p.position, p.age)
+      const traj = ageTrajectory(p.position, p.age, context.sport)
       const { call, reason } = needsValueSignal
         ? { call: 'hold' as AssetCall, reason: 'No value signal — holding by default.' }
         : decide(direction.window, traj, value)

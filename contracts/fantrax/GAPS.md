@@ -1,0 +1,96 @@
+# Fantrax contract gaps
+
+Unknowns about Fantrax's `fxea` read API that code in this repo works around rather than resolves.
+Per CLAUDE.md: do not call Fantrax to settle these. Each needs a committed capture (a public league,
+no credentials — the `fxea/general` endpoints are unauthenticated) before the workaround can be
+replaced by a rule.
+
+The only committed league capture is MLB: `tests/fixtures/fantrax/mlb-points-public.json`
+(`getLeagueInfo` scoring + roster constraints, a `getPlayerIds?sport=MLB` slice, one
+`getTeamRosters` team) and `tests/fixtures/fantrax/mlb-player-map-public.json`.
+
+## F-01 — NBA / NHL `getPlayerIds` is not captured
+
+`getPlayerIds?sport=NBA` and `?sport=NHL` are read by `importFantraxLeague` for sport detection and by
+`ingestProFantraxIdentities` for identity links. They are assumed to have the same id-keyed
+`{ fantraxId, name: "Last, First", team, position }` shape as the captured MLB/CFB maps.
+`getAdp?sport=NBA` WAS verified (2026-10-13, see `fantraxApi.ts`), which shows the `NBA` code is
+accepted — not that `getPlayerIds` answers it, nor what `team`/`position` spellings it uses.
+
+Workaround: a map that fails to load fails soft (the import needs only the league's own sport), and
+the identity matcher refuses on an unrecognised team label rather than guessing.
+
+**Needed:** a trimmed `getPlayerIds?sport=NBA` and `?sport=NHL` slice (a few rows each, including a
+two-position player and, for NHL, a goalie) committed under `tests/fixtures/fantrax/`.
+
+## F-02 — How an NBA/NHL league labels its season
+
+`seasonYear` is `2023` (a number) on the MLB capture. For a basketball/hockey league it is unknown
+whether Fantrax sends `2025`, `2026` or `"2025-26"` for the 2025-26 season. We key those seasons by the
+year they BEGIN. `fantraxSplitSeasonStartYear` reads, in order: a range label → the league's own
+`startDate` / `scoringPeriods[].startDate` → a bare number → the season in progress.
+
+**Needed:** `getLeagueInfo` for one public NBA and one public NHL league (the `seasonYear`,
+`startDate`, `endDate` and first `scoringPeriods` entry are enough).
+
+## F-03 — NBA/NHL `rosterInfo.positionConstraints` slot codes
+
+Only MLB's codes are captured (`C`, `1B`, …, `UT`, `CI`, `MI`, `P`). The NBA/NHL mapping in
+`mapFantraxRosterSlots` accepts our catalog's own codes plus `UT`, and reports anything else as
+`rosterSlotGaps` instead of coercing it. Combined slots (`G/F`, `F/C`, hockey `F`, `Skt`) are mapped
+only where the meaning is unambiguous.
+
+**Needed:** `getLeagueInfo.rosterInfo` from a public NBA and NHL league, ideally one with a
+combined/flex slot.
+
+## F-04 — Minors / IR roster limits and statuses
+
+`getTeamRosters` `status` values captured: `ACTIVE`, `RESERVE`. `INJURED_RESERVE` and `MINORS` appear
+only in synthetic tests. NBA/NHL `MINORS` is carried as the taxi squad; an unrecognised status falls
+to bench (never IR). `rosterInfo` keys for minors/IR limits (if any) are not captured, so native
+taxi/IR slot counts are not imported.
+
+**Needed:** `getTeamRosters` + `getLeagueInfo.rosterInfo` from a public dynasty league that uses
+minors and IR slots (any sport).
+
+## F-05 — Future draft picks (dynasty)
+
+`getDraftPicks.futureDraftPicks` was EMPTY in the only league measured (see `fantraxApi.ts`), so its
+element shape — and whether it reflects traded ownership (original vs current team) — is unverified.
+`lib/league-trade-engine/importedFuturePicks.ts` therefore stays Sleeper/MFL only; a Fantrax league
+shows no future picks rather than listing every pick with its original team.
+
+**Needed:** `getDraftPicks` from a public dynasty league in which at least one future pick has been
+traded.
+
+## F-06 — No dynasty / keeper flag in `getLeagueInfo`
+
+Nothing in the captured `getLeagueInfo` says redraft, keeper or dynasty. Imported Fantrax leagues keep
+`isDynasty = isDevy` as before. Deriving it from F-04/F-05 evidence (minors slots, future picks) is
+plausible but would be a guess today.
+
+**Needed:** the full `getLeagueInfo` body of a known dynasty or keeper league, to look for the flag.
+
+## F-07 — Category scoring
+
+`scoringSystem.type` is `POINTS_BASED` on the capture. For any other type `fantraxScoringRules`
+returns a gap, and `importedMlbScoring` (native conversion) only understands ESPN's category
+`scoringItems`, so a Fantrax category league is refused at "make this league native". Which
+categories a Fantrax category league scores — and in which field — is not captured.
+
+**Needed:** `getLeagueInfo.scoringSystem` from a public H2H-categories and a roto league (MLB first;
+NBA/NHL when F-02 is closed).
+
+## F-08 — NBA/NHL points scoring codes
+
+`fantraxScoringRules` maps football and baseball `scoringCategory.code`s only. Basketball/hockey codes
+are unknown, so every NBA/NHL rule is reported as a gap (the import still completes; native conversion
+would refuse).
+
+**Needed:** `getLeagueInfo.scoringSystem.scoringCategorySettings` from a public NBA and NHL points league.
+
+## F-09 — Prior seasons
+
+`previousSeasons` lists only snapshots this repo has already stored for the same league name. No
+captured endpoint maps a league id to its prior-season league ids, so multi-season backfill remains
+Sleeper-only.
