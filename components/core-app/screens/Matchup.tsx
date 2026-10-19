@@ -22,6 +22,7 @@ import type {
   MatchupSlot,
   MatchupTeam,
 } from '@/lib/core-app/matchup'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 5 — Matchup.
@@ -341,7 +342,7 @@ function Kickoff({ iso }: { iso: string }) {
     const at = new Date(iso)
     if (Number.isNaN(at.getTime())) return
     setLabel(
-      at.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
+      at.toLocaleString(getAppIntlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
     )
   }, [iso])
   return label ? <time dateTime={iso}>{label}</time> : null

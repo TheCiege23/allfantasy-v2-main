@@ -13,6 +13,7 @@ import { WeeklyCalendar } from './WeeklyCalendar'
 import { WeeklyScheduleForecasts } from './WeeklyScheduleForecasts'
 import { buildWeeklySwings, sportWeekAdvice } from '@/lib/core-app/weeklySportPlan'
 import { playoffInputChanges } from '@/lib/core-app/weeklyPlayoffMovement'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: WeeklyPlayoffPath | null }) {
   const { language } = useOptionalLanguage(); const es = language === 'es'
@@ -88,7 +89,7 @@ export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
       {league!.whatDecidesIt ? <p>{coreUiCopy(league!.whatDecidesIt,language)}</p> : null}
       {delta != null ? <p>{es ? 'El cambio refleja nuevas puntuaciones, calendario restante o entradas del modelo; no se ha atribuido a una causa específica.' : 'Movement can reflect new scores, remaining schedule or model inputs; a specific cause has not been established.'}</p> : null}
       {swing?.week === path.period && swing.helpIfLose?.length ? <p>{es ? 'Si pierdes, el modelo señala ayuda de: ' : 'If you lose, the model identifies possible help from: '}{swing.helpIfLose.join(', ')}. {es ? 'Es una condición del modelo, no una garantía.' : 'This is conditional model evidence, not a guarantee.'}</p> : null}
-      <details><summary>{es ? 'Cómo se calcula' : 'How this is calculated'}</summary><p>{es ? 'Simulación del calendario restante con el historial de puntuación. No es una garantía.' : 'Remaining-schedule simulation using scoring history. This is not a guarantee.'}</p><p>{league!.assumptions.iterations.toLocaleString()} {es ? 'simulaciones' : 'simulations'} · {es ? 'Último cálculo' : 'Last calculated'}: <LocalCalculatedTime iso={league!.assumptions.computedAt} language={language}/></p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>
+      <details><summary>{es ? 'Cómo se calcula' : 'How this is calculated'}</summary><p>{es ? 'Simulación del calendario restante con el historial de puntuación. No es una garantía.' : 'Remaining-schedule simulation using scoring history. This is not a guarantee.'}</p><p>{league!.assumptions.iterations.toLocaleString(getAppIntlLocale())} {es ? 'simulaciones' : 'simulations'} · {es ? 'Último cálculo' : 'Last calculated'}: <LocalCalculatedTime iso={league!.assumptions.computedAt} language={language}/></p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>
     </> : <p>{es ? 'El modelo de playoffs no está disponible para este formato o estos datos. Revisa la clasificación y las reglas de tu liga.' : 'Playoff modeling is unavailable for this format or data. Review your league standings and rules.'}</p>}
     {path.historyUnavailable ? <p role="status">{es ? 'El historial de probabilidades no está disponible; el cálculo actual sigue visible.' : 'Probability history is unavailable; the current calculation remains visible.'}</p> : null}
     <Link href={`/core/season-outlook?league=${encodeURIComponent(path.leagueId ?? league?.leagueId ?? '')}`}>{es ? 'Ver los escenarios completos' : 'View full scenarios'} →</Link>

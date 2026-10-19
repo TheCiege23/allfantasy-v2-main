@@ -12,6 +12,7 @@ import { TeamSplit } from '@/components/core-app/player-finder/TeamSplit'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { designationText, finderCopy, reasonText } from '@/lib/core-app/playerFinderCopy'
 import { tradeValueCopy, tradeValueReasonText, type TradeValueCopy } from '@/lib/core-app/finderTradeValueCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * "YOUR SHARES" — the Player Finder home's board of the players you roster most (Phase 2).
@@ -141,7 +142,7 @@ export function PlayerSharesBoard({
                           <span className="af-pf-share-locked">{t.valueLocked}</span>
                         ) : cell?.value ? (
                           <span title={cell.value.fitNote ? reasonText(cell.value.fitNote, language) : undefined}>
-                            {finderCopy(language).valueInline(cell.value.value.toLocaleString('en-US'))}
+                            {finderCopy(language).valueInline(cell.value.value.toLocaleString(getAppIntlLocale()))}
                             {cell.value.value !== cell.value.base ? '*' : ''}
                           </span>
                         ) : (
