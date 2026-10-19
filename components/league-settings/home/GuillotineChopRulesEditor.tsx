@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, describeSchedule, isDefault, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
+import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, MAX_FAAB_AMOUNT, describeSchedule, isDefault, type FaabAfterChop, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SettingsSubPageFooter } from './LeagueSettingsHome'
 
 export type SaveChopRules = (a: GuillotineAdvanced) => Promise<{ ok: true; value: GuillotineAdvanced; lines: string[] } | { ok: false; error: string }>
@@ -50,7 +50,7 @@ export function GuillotineChopRulesEditor({
   save: SaveChopRules
   onSaved?: (a: GuillotineAdvanced, lines: string[]) => void
 }) {
-  const [rules, setRules] = useState<GuillotineAdvanced>(initial ?? DEFAULT_ADVANCED)
+  const [rules, setRules] = useState<GuillotineAdvanced>({ ...DEFAULT_ADVANCED, ...(initial ?? {}) })
   const [saved, setSaved] = useState(JSON.stringify(initial ?? DEFAULT_ADVANCED))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,7 +85,7 @@ export function GuillotineChopRulesEditor({
     <div className="space-y-5" data-testid="guillotine-chop-rules">
       {!hasAfCommissionerSub && (
         <p className="rounded-lg border border-violet-400/30 bg-violet-950/30 px-3 py-2 text-[12px] text-violet-200">
-          Chop schedules, special weeks and immunity are part of AF Commissioner.{' '}
+          Chop schedules, special weeks, immunity and FAAB after a chop are part of AF Commissioner.{' '}
           <a href="/upgrade?plan=commissioner" className="font-semibold underline">Upgrade</a>
         </p>
       )}
@@ -163,6 +163,30 @@ export function GuillotineChopRulesEditor({
           </span>
           <input type="checkbox" className="h-5 w-5" checked={rules.immunity === 'top_scorer'} onChange={(e) => update({ ...rules, immunity: e.target.checked ? 'top_scorer' : 'off' })} />
         </label>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-[13px] font-semibold text-white">FAAB after a chop</h3>
+        <p className="text-[12px] text-white/50">What every surviving team’s FAAB becomes once a team is chopped, so the released players are worth bidding on. Only matters with FAAB waivers.</p>
+        <div className="grid grid-cols-[1fr_1fr] items-end gap-2">
+          <label className="text-[11px] text-white/50">Survivors’ FAAB
+            <select className={inputClass} value={rules.faab.mode} data-testid="guillotine-faab-mode"
+              onChange={(e) => {
+                const mode = e.target.value as FaabAfterChop['mode']
+                update({ ...rules, faab: { mode, amount: mode === 'unchanged' ? 0 : Math.max(mode === 'add' ? 1 : 0, rules.faab.amount || 100) } })
+              }}>
+              <option value="unchanged">Stays the same</option>
+              <option value="add">Topped up by</option>
+              <option value="set">Resets to</option>
+            </select>
+          </label>
+          {rules.faab.mode !== 'unchanged' && (
+            <label className="text-[11px] text-white/50">Amount ($)
+              <input type="number" inputMode="numeric" min={rules.faab.mode === 'add' ? 1 : 0} max={MAX_FAAB_AMOUNT} className={inputClass} value={rules.faab.amount} data-testid="guillotine-faab-amount"
+                onChange={(e) => update({ ...rules, faab: { ...rules.faab, amount: Math.round(Number(e.target.value)) } })} />
+            </label>
+          )}
+        </div>
       </section>
 
       <section className="rounded-xl border border-white/10 bg-white/[0.03] p-3">

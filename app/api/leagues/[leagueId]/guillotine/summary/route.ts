@@ -21,7 +21,7 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
-import { describeSchedule } from '@/lib/guillotine/chopSchedule'
+import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,7 +112,7 @@ export async function PATCH(
     const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
     if (!saved.ok) {
       const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
-      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : saved.error
+      const message = saved.error === 'not_entitled' ? 'Chop schedules, immunity and FAAB after a chop are part of AF Commissioner.' : saved.error === 'bad_faab' ? `FAAB after a chop must be a whole dollar amount up to ${MAX_FAAB_AMOUNT}.` : saved.error
       return NextResponse.json({ error: message, code: saved.error }, { status })
     }
     const config = await getGuillotineConfig(leagueId)

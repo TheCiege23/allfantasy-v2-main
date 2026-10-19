@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { applyImmunity, describeSchedule, immuneRosterIds, normalizeAdvanced, readAdvanced, scheduledChops, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
+import { applyImmunity, describeSchedule, faabAfterChop, immuneRosterIds, isDefault, normalizeAdvanced, readAdvanced, scheduledChops, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 
-const rules = (over: Partial<GuillotineAdvanced> = {}): GuillotineAdvanced => ({ steps: [], overrides: {}, immunity: 'off', ...over })
+const rules = (over: Partial<GuillotineAdvanced> = {}): GuillotineAdvanced => ({ steps: [], overrides: {}, immunity: 'off', faab: { mode: 'unchanged', amount: 0 }, ...over })
 
 describe('scheduledChops', () => {
   const a = rules({ steps: [{ fromWeek: 10, chops: 2 }, { fromWeek: 14, chops: 3 }], overrides: { 8: 0, 12: 4 } })
@@ -16,7 +16,7 @@ describe('scheduledChops', () => {
 describe('normalizeAdvanced — strict on input', () => {
   it('sorts steps and reads week keys', () => {
     const n = normalizeAdvanced({ steps: [{ fromWeek: 12, chops: 2 }, { fromWeek: 9, chops: 3 }], overrides: { '6': 0 }, immunity: 'top_scorer' })
-    expect(n).toEqual({ ok: true, value: { steps: [{ fromWeek: 9, chops: 3 }, { fromWeek: 12, chops: 2 }], overrides: { 6: 0 }, immunity: 'top_scorer' } })
+    expect(n).toEqual({ ok: true, value: { steps: [{ fromWeek: 9, chops: 3 }, { fromWeek: 12, chops: 2 }], overrides: { 6: 0 }, immunity: 'top_scorer', faab: { mode: 'unchanged', amount: 0 } } })
   })
   it('refuses bad rows rather than dropping them', () => {
     expect(normalizeAdvanced({ steps: [{ fromWeek: 0, chops: 1 }] })).toEqual({ ok: false, error: 'bad_step' })
@@ -54,5 +54,34 @@ describe('describeSchedule', () => {
       'Week 15: 2 teams chopped.',
       'Each week’s top scorer cannot be chopped the next week.',
     ])
+  })
+
+  describe('FAAB after a chop', () => {
+    it('reads a rule saved before FAAB existed as unchanged, and accepts top-up and reset', () => {
+      expect(normalizeAdvanced({ immunity: 'off' })).toMatchObject({ ok: true, value: { faab: { mode: 'unchanged', amount: 0 } } })
+      expect(normalizeAdvanced({ faab: { mode: 'add', amount: 50 } })).toMatchObject({ ok: true, value: { faab: { mode: 'add', amount: 50 } } })
+      expect(normalizeAdvanced({ faab: { mode: 'set', amount: 0 } })).toMatchObject({ ok: true, value: { faab: { mode: 'set', amount: 0 } } })
+      expect(normalizeAdvanced({ faab: { mode: 'unchanged', amount: 999 } })).toMatchObject({ ok: true, value: { faab: { mode: 'unchanged', amount: 0 } } })
+    })
+    it('refuses a bad mode, a $0 top-up, fractions and amounts over the cap', () => {
+      for (const faab of [{ mode: 'double', amount: 5 }, { mode: 'add', amount: 0 }, { mode: 'set', amount: 2.5 }, { mode: 'set', amount: 10_001 }, { mode: 'add', amount: '5' }, 'add']) {
+        expect(normalizeAdvanced({ faab })).toEqual({ ok: false, error: 'bad_faab' })
+      }
+    })
+    it('a FAAB rule alone is not the default season', () => {
+      expect(isDefault(rules({ faab: { mode: 'add', amount: 10 } }))).toBe(false)
+      expect(isDefault(rules())).toBe(true)
+    })
+    it('tops up from the current balance (none counts as $0) or resets to the amount', () => {
+      expect(faabAfterChop({ mode: 'add', amount: 25 }, 40)).toBe(65)
+      expect(faabAfterChop({ mode: 'add', amount: 25 }, null)).toBe(25)
+      expect(faabAfterChop({ mode: 'set', amount: 100 }, 3)).toBe(100)
+      expect(faabAfterChop({ mode: 'set', amount: 100 }, 400)).toBe(100)
+      expect(faabAfterChop({ mode: 'unchanged', amount: 0 }, 40)).toBe(40)
+    })
+    it('says the rule in the season summary', () => {
+      expect(describeSchedule(rules({ faab: { mode: 'add', amount: 25 } }), 1, 1)).toContain('After each chop, every surviving team gets $25 more FAAB.')
+      expect(describeSchedule(rules({ faab: { mode: 'set', amount: 100 } }), 1, 1)).toContain('After each chop, every surviving team’s FAAB resets to $100.')
+    })
   })
 })
