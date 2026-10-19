@@ -28,6 +28,7 @@ import { leagueJoinUrl } from '@/lib/league/league-invite-link'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DiscordLeagueSyncPanel } from './DiscordLeagueSyncPanel'
+import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '@/components/league-settings/TournamentLeagueNotes'
 import { PlayoffSettingsEditor as PlayoffSettingsEditorLazy } from '@/components/league-settings/PlayoffSettingsEditor'
 import { RosterSettingsEditor as RosterSettingsEditorLazy } from '@/components/league-settings/RosterSettingsEditor'
 import {
@@ -777,6 +778,8 @@ export function SettingsSubPanelBody({
         </div>
       )
     case 'playoffs':
+      // A tournament conference league has no league playoffs (lib/tournament/divisions/conferenceSeasonPlan.ts).
+      if (tournamentRunsPlayoffs(ctx.league.settings)) return <TournamentPlayoffsNote settings={ctx.league.settings} />
       return (
         <>
           <PlayoffSettingsReadonlyPanel ctx={ctx} />

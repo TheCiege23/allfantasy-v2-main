@@ -25,6 +25,7 @@ import { readWeekScores } from './weekScores'
 import { sendMoment, postMomentToLeagueChats, type MomentRecipient } from './notify'
 import { CONFERENCE_LEAGUE_READY, provisionConferenceLeagues, type ProvisionResult } from './conferenceLeagues'
 import { syncConferenceCoCommissioners, syncConferenceDraftTimes } from './conferenceLeagueSync'
+import { applyTournamentScheduleToLeagues, scheduleOutcomeSummary } from './conferenceSchedule'
 
 const ACTIVE = ['registered', 'waitlisted']
 const hubHref = (id: string) => `/tournament-hub/${encodeURIComponent(id)}`
@@ -238,6 +239,19 @@ export async function provisionLeagues(userId: string, tournamentId: string) {
     if (!['placed', 'live', 'complete'].includes(shell.status)) throw new DivisionsOperationError('Place the leagues first.', 409)
   })
   return provisioningSummary(await provisionConferenceLeagues(tournamentId, userId))
+}
+
+/**
+ * "Apply tournament schedule": re-apply the season plan to conference leagues whose season existed
+ * before it. A league whose season has started is refused and reported, never rewritten.
+ */
+export async function applyTournamentSchedule(userId: string, tournamentId: string) {
+  await prisma.$transaction(async tx => {
+    const shell = await assertCan(tx, tournamentId, userId, 'editSettings')
+    if (!['placed', 'live', 'complete'].includes(shell.status)) throw new DivisionsOperationError('Place the leagues first.', 409)
+  })
+  const leagues = await applyTournamentScheduleToLeagues(tournamentId, userId)
+  return { ok: true, leagues: leagues.map(l => ({ tournamentLeagueId: l.tournamentLeagueId, name: l.name, outcome: l.outcome, error: l.error ?? null })), summary: scheduleOutcomeSummary(leagues) }
 }
 
 /**
