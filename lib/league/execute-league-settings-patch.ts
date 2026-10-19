@@ -19,6 +19,7 @@ import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leag
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
+import { lifecycleSectionsTouchedByPatch, settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
@@ -215,6 +216,18 @@ export async function executeLeagueSettingsPatch(
       }
       throw e
     }
+  }
+
+  /*
+   * 🛑 THE DECLARED SECTION IS NOT WHAT THE PATCH WRITES. The section-less door (useAutosave → this
+   * function with no `section`) never ran the lifecycle gate at all, and a sectioned request can
+   * name one section while carrying another's keys. So a body that writes scoring or roster columns
+   * runs those sections' gates too — the same matrix, via settingsLifecycleGate.ts.
+   */
+  for (const touched of lifecycleSectionsTouchedByPatch(body)) {
+    if (touched === patchOptions?.section) continue
+    const refusal = await settingsLifecycleRefusal(leagueId, userId, touched)
+    if (refusal) return NextResponse.json({ error: refusal.error, code: refusal.code }, { status: refusal.status })
   }
 
   const league = await prisma.league.findFirst({
