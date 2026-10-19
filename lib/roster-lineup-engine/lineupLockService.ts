@@ -12,6 +12,7 @@ import { readWeekGames } from '@/lib/redraft/weekGames'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 
 export type LineupLockResolveArgs = {
   leagueId: string
@@ -196,7 +197,9 @@ export async function resolveDailySportWeeklyLocks(
   for (const p of stamped) {
     if (!p.isLocked) continue
     lockedPlayerIds.push(p.playerId)
-    reasons[p.playerId] = "This player's first game of the fantasy week has started; he is locked until the week ends."
+    reasons[p.playerId] = isDailyLineupScoringEnabled(args.settings, sport)
+      ? "This player's game today has started; he is locked until tomorrow."
+      : "This player's first game of the fantasy week has started; he is locked until the week ends."
   }
   return { lockedPlayerIds, reasons }
 }
@@ -267,11 +270,13 @@ export async function upsertAfLineupLockState(input: {
 export async function resolveFullLineupLockContext(args: LineupLockResolveArgs): Promise<LineupLockContext> {
   const now = args.now ?? new Date()
   const nbaSurvivor = args.sport.toUpperCase() === 'NBA' && String(args.leagueVariant ?? '').toLowerCase() === 'survivor'
+  const dailyLineups = isDailyLineupScoringEnabled(args.settings, args.sport)
   const base: LineupLockResult = evaluateLineupLock({
     sport: args.sport,
     now,
     leagueWeek: args.leagueWeek,
     editingWeek: args.editingWeek,
+    dailyLineups,
   })
 
   const concept = resolveConceptRosterLineupRules(args.settings)
@@ -312,10 +317,22 @@ export async function resolveFullLineupLockContext(args: LineupLockResolveArgs):
   if (!nbaSurvivor) {
     // Schedule-derived weekly locks for daily sports, added to (never replacing) the kickoff heuristic.
     // A schedule read that fails keeps the previous behaviour rather than blocking every save.
+    let weeklyFailed = false
     const weekly = await resolveDailySportWeeklyLocks(args, now).catch((err: unknown) => {
       console.warn('[lineupLockService] daily-sport weekly locks unavailable:', err instanceof Error ? err.message : String(err))
+      weeklyFailed = true
       return null
     })
+    /*
+     * 🛑 A DAILY-LINEUP LEAGUE HAS NO WHOLE-LINEUP WINDOW TO FALL BACK ON (`dailyLineups` above), so
+     * the schedule-derived lock is its ONLY lock. Failing open here would let a player who has
+     * already played today be moved out of today's lineup. Refuse the save until it can be checked.
+     */
+    if (weeklyFailed && dailyLineups && args.editingWeek === args.leagueWeek) {
+      locked = true
+      reason = "Game start times could not be checked, so lineup changes are paused. Try again in a minute."
+      policy = 'daily_lock_unavailable'
+    }
     if (weekly && weekly.lockedPlayerIds.length > 0) {
       const ids = new Set(kick.lockedPlayerIds)
       const reasons = { ...kick.reasons }

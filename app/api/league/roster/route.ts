@@ -12,7 +12,8 @@ import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPla
 import { getRedraftDefaultContract } from '@/lib/league-concepts/redraftDefaults'
 import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
-import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
+import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
+import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -313,9 +314,33 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       })
     }
 
+    // Daily-lineup leagues: the week day by day, for the lineup screen's day picker (null otherwise).
+    let dailyLineups: DailyLineupView | null = null
+    if (resolveWriteAuthority(league.platform) === 'NATIVE' && roster.redraftRosterId) {
+      const redraftRosterId = roster.redraftRosterId
+      // The scoring calendar's week and year, the ones the matchup is scored under.
+      dailyLineups = await prisma.redraftRoster
+        .findUnique({ where: { id: redraftRosterId }, select: { season: { select: { season: true, currentWeek: true } } } })
+        .then((r) =>
+          r?.season
+            ? loadDailyLineupView(prisma, {
+                leagueId,
+                redraftRosterId,
+                season: r.season.season,
+                week: Math.max(1, r.season.currentWeek ?? leagueWeek),
+              })
+            : null,
+        )
+        .catch((e: unknown) => {
+          console.warn('[league/roster] daily lineup view failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+          return null
+        })
+    }
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
+      dailyLineups,
       collegeRights,
       roster: roster.playerData,
       unifiedRoster,

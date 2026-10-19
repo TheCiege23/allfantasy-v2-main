@@ -314,6 +314,22 @@ Settings changes (League.settings JSON, **no migration**). They all live under `
 
 ## 7. Rollout plan (feature flag per league, default off)
 
+> **2026-10-19 — Phase E, first slice.** For leagues with `dailyLineupsEnabled`:
+> - **Lock.** `evaluateLineupLock({ dailyLineups: true })` drops the 6 PM ET whole-lineup window, so
+>   only the schedule-derived per-player `daily` lock applies (fixes B6/B7 for flagged leagues). If
+>   that schedule read fails, the engine save path **fails closed** (`daily_lock_unavailable`),
+>   because nothing else locks a daily league.
+> - **Reads.** `lib/redraft/dailyLineupView.ts` gives the week day by day (slots, points, starter
+>   points), using the scorer's own rules. A test pins its `weekPoints` to `scoreRosterForWeek`.
+>   `GET /api/league/roster` returns it as `dailyLineups`. `/api/leagues/[leagueId]/scoring/roster-scores`
+>   lists each player's started-day points. The matchup rail's guillotine line takes daily leagues'
+>   points from the matchup scorer.
+> - **UI.** `NativeLineupScreen` gets a day picker. Today is editable, and a save applies today
+>   through the week's last day. A past day shows the lineup that scored and each player's points. A
+>   future day shows the lineup that carries forward.
+> - **Still to do in E:** editing a FUTURE day on its own (today a save always covers today onward),
+>   the commissioner route accepting `daily`, and defaulting new leagues to daily.
+
 The flag is `League.settings.sportConfig.dailyLineupsEnabled`. Default off, set per league.
 
 | Phase | Work | Migration | Gate |

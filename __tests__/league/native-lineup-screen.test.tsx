@@ -85,4 +85,59 @@ describe('NativeLineupScreen', () => {
     expect(screen.getByText(/Start Bijan Robinson in/)).toBeTruthy()
     expect(screen.getByText('Replace Tyjae Spears')).toBeTruthy()
   })
+
+  it('a daily-lineup league gets a day picker: today is editable, a past day shows what scored', async () => {
+    const day = (d: string, status: string, slots: Record<string, string>, points: Record<string, number>, starterPoints: number) => ({ day: d, status, slots, points, starterPoints })
+    const calls = stubFetch({
+      '/api/league/roster': {
+        ...roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]),
+        lineupLock: { lockedPlayerIds: ['rb1'] },
+        dailyLineups: {
+          week: 1,
+          today: '2026-10-21',
+          weekPoints: 31.5,
+          startedPoints: { qb1: 20, rb2: 11.5 },
+          days: [
+            day('2026-10-20', 'past', { qb1: 'QB', rb2: 'RB', rb1: 'bench' }, { qb1: 20, rb2: 11.5, rb1: 4 }, 31.5),
+            day('2026-10-21', 'today', { qb1: 'QB', rb1: 'RB', rb2: 'bench' }, {}, 0),
+            day('2026-10-22', 'future', { qb1: 'QB', rb1: 'RB', rb2: 'bench' }, {}, 0),
+          ],
+        },
+      },
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    expect(screen.getByTestId('daily-day-picker')).toBeTruthy()
+    expect(screen.getByText(/Changes apply today/)).toBeTruthy()
+    // The server's per-player lock wins: Spears' game today has started.
+    expect((screen.getByRole('button', { name: 'Locked' }) as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /Tue/ }))
+    expect(await screen.findByText(/is over/)).toBeTruthy()
+    expect(screen.getByText('31.5 pts')).toBeTruthy()
+    expect(screen.queryAllByRole('button', { name: 'Move' })).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: /Thu/ }))
+    expect(await screen.findByText(/carries forward/)).toBeTruthy()
+    expect(screen.queryAllByRole('button', { name: 'Move' })).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
+    expect(screen.getAllByRole('button', { name: 'Move' }).length).toBeGreaterThan(0)
+    expect(calls.some((c) => c.url === '/api/leagues/roster/save')).toBe(false)
+  })
+
+  it('a weekly league shows no day picker', async () => {
+    stubFetch({
+      '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]),
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    expect(screen.queryByTestId('daily-day-picker')).toBeNull()
+  })
 })
