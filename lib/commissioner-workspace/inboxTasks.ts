@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { readClassJoinRequests } from '@/lib/class-rating/exceptions'
 import { getOrphanAdoptionRequests } from '@/lib/orphan-marketplace/settings'
+import { openDisputes, readDisputes } from '@/lib/disputes/disputeStore'
 import type { WorkspaceTaskCandidate } from './taskSources'
 
 /**
@@ -16,6 +17,7 @@ import type { WorkspaceTaskCandidate } from './taskSources'
  *   adoptions  pending orphan-team adoption requests
  *   dues       teams that have not paid this season's dues (dues tracker on)
  *   payouts    payout requests waiting for approval
+ *   disputes   disputes filed on the dispute desk with no ruling yet (critical after 3 days)
  */
 
 type Severity = 'critical' | 'elevated' | 'standard' | 'advisory'
@@ -75,6 +77,11 @@ export function detectInboxConditions(input: InboxConditionInput, now: Date): Wo
   }
 
   for (const p of input.payouts) add(`operational:payout:${p.id}:v1`, 'Payout request awaits approval', 'A league payout request is waiting for commissioner approval.', settingsHref)
+
+  for (const d of openDisputes(readDisputes(input.settings))) {
+    const stale = now.getTime() - Date.parse(d.createdAt) >= 3 * 86_400_000
+    add(`operational:dispute:${d.id}:v1`, 'A dispute needs your ruling', `${d.filedByName ?? 'A manager'} filed “${d.subject}”. Rule on it from the dispute desk.`, `/league/${id}/disputes`, stale ? 'critical' : 'elevated')
+  }
 
   return tasks
 }

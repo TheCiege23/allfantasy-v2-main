@@ -64,6 +64,19 @@ describe('Commish Inbox detectors', () => {
     expect(keys({ payouts: [{ id: 'P' }] })).toEqual(['operational:payout:P:v1'])
   })
 
+  it('open disputes: one task each, critical after three days, cleared once ruled or withdrawn', () => {
+    const dispute = (id: string, status: string, createdAt: string) => ({ id, category: 'trade', subject: `Trade ${id}`, details: '', filedByUserId: 'u', filedByName: 'Sam', status, createdAt, closedAt: null, ruling: null })
+    const tasks = detectInboxConditions(
+      { ...empty, settings: { league_disputes: [dispute('new', 'open', '2026-10-18T12:00:00Z'), dispute('old', 'open', '2026-10-15T12:00:00Z'), dispute('done', 'withdrawn', '2026-10-01T00:00:00Z')] } },
+      now,
+    )
+    expect(tasks.map((t) => [t.sourceKey, t.priority])).toEqual([
+      ['operational:dispute:new:v1', 'elevated'],
+      ['operational:dispute:old:v1', 'critical'],
+    ])
+    expect(tasks[0].relatedLinks[0].href).toBe('/league/L1/disputes')
+  })
+
   it('every title and description it can produce has Spanish copy', () => {
     const tasks = detectInboxConditions(
       {
@@ -75,6 +88,7 @@ describe('Commish Inbox detectors', () => {
           dues_tracker: { enabled: true, entries: [] },
           classJoinRequests: [{ userId: 'u1', requestedAt: 'x', divisionAtRequest: 3 }],
           orphan_adoption_requests: [{ id: 'O', leagueId: 'L1', rosterId: 'r', userId: 'u', requesterName: 'Sam', message: null, status: 'pending', createdAt: 'x', resolvedAt: null, resolvedBy: null }],
+          league_disputes: [{ id: 'D', category: 'rules', subject: 'Bye week rule', details: '', filedByUserId: 'u', filedByName: 'Sam', status: 'open', createdAt: '2026-10-18T00:00:00Z', closedAt: null, ruling: null }],
         },
         teams: [{ id: 't1', teamName: 'Ghosts' }],
         payouts: [{ id: 'P' }],
@@ -82,7 +96,7 @@ describe('Commish Inbox detectors', () => {
       now,
     )
     const texts = tasks.flatMap((t) => (t.sourceKey.startsWith('operational:alert:') ? [t.description] : [t.title, t.description]))
-    expect(tasks.map((t) => t.sourceKey.split(':')[1]).sort()).toEqual(['adoption', 'alert', 'dues', 'integrity', 'join-requests', 'keeper-conflicts', 'keepers', 'payout'])
+    expect(tasks.map((t) => t.sourceKey.split(':')[1]).sort()).toEqual(['adoption', 'alert', 'dispute', 'dues', 'integrity', 'join-requests', 'keeper-conflicts', 'keepers', 'payout'])
     expect(texts.length).toBeGreaterThan(10)
     for (const text of texts) expect(taskText(text, 'es'), text).not.toBe(text)
   })
