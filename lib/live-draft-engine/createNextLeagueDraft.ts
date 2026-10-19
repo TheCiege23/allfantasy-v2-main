@@ -40,8 +40,28 @@ import {
 } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { logAction } from '@/server/services/auditService'
 import { CHAMPIONSHIP_ROUND_WHERE } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { resolveLiveRookieDraftSlots } from '@/lib/rookie-order/liveRookieOrderService'
+import { resolveWeightedLotterySlotOrderForLeague } from '@/lib/draft/resolve-draft-context'
 
 export type NextDraftKind = 'rookie' | 'standard'
+
+export type NextDraftOrderSource = 'lottery' | 'live_rookie_order' | 'standings' | 'default'
+
+/**
+ * A stored order is seated only when it places every draft roster exactly once — a stale order
+ * from before a manager swap must fall through to standings, never seat a roster that is gone.
+ */
+function seatsEveryRoster(
+  order: { slot: number; rosterId: string; displayName: string }[] | null,
+  draftRosters: { id: string }[],
+): order is SlotOrderEntry[] {
+  if (!order || order.length !== draftRosters.length || order.length === 0) return false
+  const ids = new Set(draftRosters.map((r) => r.id))
+  const seated = new Set(order.map((e) => e.rosterId))
+  const slots = new Set(order.map((e) => e.slot))
+  return seated.size === order.length && [...seated].every((id) => ids.has(id)) &&
+    slots.size === order.length && order.every((e) => Number.isInteger(e.slot) && e.slot >= 1 && e.slot <= order.length)
+}
 
 export type CreateNextDraftResult =
   | {
@@ -51,8 +71,12 @@ export type CreateNextDraftResult =
       seasonId: string
       season: number
       rounds: number
-      /** `standings` = worst-to-first from last season; `default` = the league's usual draft order. */
-      orderSource: 'standings' | 'default'
+      /**
+       * `lottery` = the stored weighted-lottery result; `live_rookie_order` = the saved live rookie
+       * order (AF Commissioner automation); `standings` = worst-to-first from last season;
+       * `default` = the league's usual draft order.
+       */
+      orderSource: NextDraftOrderSource
       keepersPlaced: number
       playersCarried: number
       /** Future picks traded before this draft existed, now on its board with their new owners. */
@@ -228,6 +252,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
 
   // Order: worst-to-first for a rookie draft, the league's usual order otherwise.
   let slotOrder: SlotOrderEntry[] | null = null
+  let orderSource: NextDraftOrderSource = 'default'
   let rounds = previous.rounds
   let draftType = previous.draftType
   let thirdRoundReversal = previous.thirdRoundReversal
@@ -242,8 +267,27 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
     draftType = dynasty?.rookieDraftType === 'snake' ? 'snake' : 'linear'
     thirdRoundReversal = false
 
+    /*
+     * 🛑 A SAVED ORDER WINS OVER STANDINGS. With the default `max_pf` method this used to go straight
+     * to last season's standings, so a weighted-lottery result or the saved live rookie order
+     * (`liveRookieOrderService.ts`: "the next rookie draft is seated from it automatically") was
+     * silently ignored on exactly the draft it exists for. Same precedence as
+     * `buildSlotOrderForLeague`: lottery, then the live order, then worst-to-first.
+     */
+    const lottery = await resolveWeightedLotterySlotOrderForLeague(leagueId).catch(() => null)
+    if (seatsEveryRoster(lottery, draftRosters)) {
+      slotOrder = lottery
+      orderSource = 'lottery'
+    } else {
+      const live = await resolveLiveRookieDraftSlots(leagueId).catch(() => null)
+      if (seatsEveryRoster(live, draftRosters)) {
+        slotOrder = live
+        orderSource = 'live_rookie_order'
+      }
+    }
+
     const method = dynasty?.rookiePickOrderMethod ?? 'max_pf'
-    if (outgoingId && (method === 'max_pf' || method === 'reverse_standings')) {
+    if (!slotOrder && outgoingId && (method === 'max_pf' || method === 'reverse_standings')) {
       const standings = await prisma.redraftRoster.findMany({
         where: { leagueId, seasonId: outgoingId },
         select: { id: true, ownerId: true, ownerName: true, teamName: true, wins: true, losses: true, ties: true, pointsFor: true },
@@ -259,10 +303,12 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
           displayName: row.teamName || row.ownerName,
         }
       })
-      if (entries.length > 0 && entries.every((e) => e.rosterId)) slotOrder = entries as SlotOrderEntry[]
+      if (entries.length > 0 && entries.every((e) => e.rosterId)) {
+        slotOrder = entries as SlotOrderEntry[]
+        orderSource = 'standings'
+      }
     }
   }
-  const orderSource: 'standings' | 'default' = slotOrder ? 'standings' : 'default'
   if (!slotOrder) slotOrder = await buildSlotOrderForLeague(leagueId)
   const teamCount = slotOrder.length || previous.teamCount
 

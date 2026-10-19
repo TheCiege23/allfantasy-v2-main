@@ -84,12 +84,18 @@ export async function resolveSportWeek(
    */
   // A season past the curated table (a dynasty league's year 2) gets its opener from the labelled
   // schedule; priming here is what lets the week roller activate it at all. Curated years skip the read.
-  if (!sportHasWeekSignal(scheduleSport)) {
-    await ensureDailySportSeasonStart(scheduleSport, seasonYear, { db: db as never, now })
-  }
+  const opener = sportHasWeekSignal(scheduleSport)
+    ? null
+    : await ensureDailySportSeasonStart(scheduleSport, seasonYear, { db: db as never, now })
   const dailyAnchor = sportHasWeekSignal(scheduleSport)
     ? null
     : resolveDailySportSeasonStart(scheduleSport, seasonYear)
+
+  // A season past the curated table whose opener is only ESTIMATED is not "this sport has no
+  // calendar": it is a missing date a human can supply. Say so, rather than the generic decline.
+  if (!dailyAnchor && opener?.source === 'estimate') {
+    return { ok: false, reason: 'SEASON_OPENER_UNRECORDED' }
+  }
 
   if (!sportHasWeekSignal(scheduleSport) && !dailyAnchor) {
     // Neither a feed week nor a recorded anchor: still genuinely unknown.
