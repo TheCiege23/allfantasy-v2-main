@@ -485,9 +485,8 @@ export function readLineupLockSettings(
     } else {
       mode = 'daily'
       warnings.push(
-        'Daily lineup lock is active: players lock at their own game start each day and unlock the next day, ' +
-          'but matchup scoring is still a weekly aggregate for whoever holds a starter slot when the week is scored. ' +
-          'See docs/DAILY_LINEUPS_DESIGN.md.',
+        'Daily lineup lock is active: players lock at their own game start each day and unlock the next day; ' +
+          'each day is scored on that day\'s starters (lib/redraft/dailyLineups.ts). See docs/DAILY_LINEUPS_DESIGN.md.',
       )
     }
   }

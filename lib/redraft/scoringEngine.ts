@@ -23,6 +23,16 @@ import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupVal
 import { importedNcaafScoring } from './importedNcaafScoring'
 import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import {
+  dailySlotFor,
+  dayKey,
+  daysInWindow,
+  isDailyLineupScoringEnabled,
+  loadDailyLineups,
+  loadPlayerDailyStats,
+} from './dailyLineups'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -343,6 +353,9 @@ async function scoreRosterStarters(args: {
     }
   }
 
+  const daily = await scoreRosterStartersDaily(args)
+  if (daily) return daily
+
   const starters = await prisma.redraftRosterPlayer.findMany({
     where: {
       rosterId: args.rosterId,
@@ -407,6 +420,110 @@ async function scoreRosterStarters(args: {
   return {
     rosterId: args.rosterId,
     starterCount: activeStarters.length,
+    scoredStarterCount,
+    points: Math.round(pts * 100) / 100,
+    ...(args.includeBench ? { benchPoints: Math.round(benchPts * 100) / 100 } : {}),
+    statTotals: accumulateTeamTotals(statMaps),
+    missingPlayerIds,
+    allFinal,
+  }
+}
+
+/**
+ * DAILY-LINEUP LEAGUES (docs/DAILY_LINEUPS_DESIGN.md §4, lib/redraft/dailyLineups.ts): the week's score
+ * is the sum over its Eastern days of each day's starters' points FOR THAT DAY. A player benched on a
+ * day contributes nothing that day, however well he played. Returns `null` for every other league,
+ * which then scores exactly as before.
+ *
+ * A player's slot on a day is that day's saved row, else his latest earlier row, else — no daily save
+ * names him yet — his slot in the weekly lineup. Days before he joined the roster never count.
+ * Completeness is still read from the weekly row the sync writes beside the daily ones: no weekly row
+ * means the sync has not covered him (missing), and the finalizer's seal is on the weekly row.
+ */
+async function scoreRosterStartersDaily(args: {
+  leagueId: string
+  rosterId: string
+  week: number
+  seasonYear: number
+  includeBench?: boolean
+}): Promise<RosterScoreSummary | null> {
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
+  const sport = String(league?.sport ?? '').toUpperCase()
+  if (!league || !isDailyLineupScoringEnabled(league.settings, sport)) return null
+  const window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
+  if (!window) return null
+
+  const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, droppedAt: null } })
+  const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
+  const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: [args.rosterId], window })
+  const days = daysInWindow(window)
+  const playerIds = players.map((p: (typeof players)[number]) => p.playerId)
+  const dailyStatsBySport = new Map<string, Awaited<ReturnType<typeof loadPlayerDailyStats>>>()
+  for (const playerSport of new Set(players.map((p: (typeof players)[number]) => p.sport))) {
+    dailyStatsBySport.set(
+      playerSport,
+      await loadPlayerDailyStats(prisma, { playerIds, sport: playerSport, season: args.seasonYear, window }),
+    )
+  }
+
+  let pts = 0
+  let benchPts = 0
+  let starterCount = 0
+  let scoredStarterCount = 0
+  let allFinal = true
+  const missingPlayerIds: string[] = []
+  const statMaps: TeamStatTotals[] = []
+
+  for (const p of players) {
+    const joined = easternCalendarDay(p.addedAt)
+    const onRoster = days.filter((d) => !joined || d.getTime() >= joined.getTime())
+    const slotOn = (day: Date) => dailySlotFor(dailyLineups, args.rosterId, p.playerId, day) ?? weekSlotType(p, weekLineups)
+    const startedDays = onRoster.filter((d) => isScoringStarterSlot(slotOn(d)))
+    const benchDays = args.includeBench
+      ? onRoster.filter((d) => {
+          const slot = slotOn(d)
+          return !isScoringStarterSlot(slot) && !NON_BENCH_RESERVE_SLOTS.has(String(slot ?? '').trim().toLowerCase())
+        })
+      : []
+    if (startedDays.length === 0 && benchDays.length === 0) continue
+
+    const byDay = dailyStatsBySport.get(p.sport)?.get(p.playerId)
+    const pointsFor = async (day: Date) => {
+      const line = byDay?.get(dayKey(day))
+      if (!line) return { points: 0, stats: null }
+      return {
+        points: await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, line.stats, p.position),
+        stats: line.stats,
+      }
+    }
+
+    if (startedDays.length > 0) {
+      starterCount += 1
+      const weekly = await prisma.playerWeeklyScore.findUnique({
+        where: {
+          playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport },
+        },
+        select: { isFinalized: true },
+      })
+      if (!weekly) {
+        missingPlayerIds.push(p.playerId)
+        allFinal = false
+      } else {
+        scoredStarterCount += 1
+        if (!weekly.isFinalized) allFinal = false
+        for (const day of startedDays) {
+          const r = await pointsFor(day)
+          pts += r.points
+          if (r.stats) statMaps.push(r.stats as TeamStatTotals)
+        }
+      }
+    }
+    for (const day of benchDays) benchPts += (await pointsFor(day)).points
+  }
+
+  return {
+    rosterId: args.rosterId,
+    starterCount,
     scoredStarterCount,
     points: Math.round(pts * 100) / 100,
     ...(args.includeBench ? { benchPoints: Math.round(benchPts * 100) / 100 } : {}),
