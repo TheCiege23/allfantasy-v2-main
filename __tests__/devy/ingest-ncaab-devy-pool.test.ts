@@ -136,3 +136,28 @@ describe('an empty provider answer is a failure, not a finished week', () => {
     expect(r).toMatchObject({ skipped: 'retry backoff' })
   })
 })
+
+describe('the 200-row cached answer is never a refresh', () => {
+  it('asks the provider for the full list on every pass', async () => {
+    h.seed.mockResolvedValue(complete())
+    await ingestNcaabDevyPoolIfDue({ deadlineAt: deadlineAt() })
+    expect(h.seed).toHaveBeenCalledWith(expect.objectContaining({ sport: 'NCAAB', forceRefresh: true }))
+  })
+
+  it('refuses a cached answer: no week stamped, error recorded, retried after back-off', async () => {
+    h.seed.mockResolvedValue(complete({ source: 'cache', fetched: 200, seeded: 200 }))
+    await expect(ingestNcaabDevyPoolIfDue({ deadlineAt: deadlineAt() })).rejects.toThrow(/at most 200 rows/)
+    const written = h.upserts.at(-1)!.data
+    expect(written.at).toBeNull()
+    expect(String(written.lastError)).toMatch(/cache/)
+  })
+
+  it('restarts a resumed pass whose list came back shorter than the resume offset', async () => {
+    h.marker = { data: { at: ago(9 * DAY), resumeFrom: 3000 } }
+    h.seed.mockResolvedValue(complete({ fetched: 200, seeded: 0 }))
+    await expect(ingestNcaabDevyPoolIfDue({ deadlineAt: deadlineAt() })).rejects.toThrow(/resume offset 3000/)
+    const written = h.upserts.at(-1)!.data
+    expect(written.resumeFrom).toBe(0)
+    expect(written.at).toBe(h.marker.data && (h.marker.data as { at: string }).at)
+  })
+})

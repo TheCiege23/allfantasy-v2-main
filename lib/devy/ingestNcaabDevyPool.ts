@@ -25,10 +25,16 @@ import { seedCollegePlayers } from '@/lib/devy/CollegePlayerSeedService'
  * current roster.
  *
  * Cadence: weekly, by a `sportsDataCache` marker (the `ingestMlbFantraxIdentities` pattern). A run
- * a deadline stopped stores `resumeFrom` and continues on the next tick instead of waiting a week;
- * the chain caches the payload for 24h and intel ticks are 6h apart, so the offset indexes the
- * same row order. An empty provider answer does NOT stamp the week — it records the attempt and
- * backs off for a day.
+ * a deadline stopped stores `resumeFrom` and continues on the next tick instead of waiting a week.
+ * An empty provider answer does NOT stamp the week — it records the attempt and backs off for a day.
+ *
+ * 🛑 EVERY PASS ASKS THE PROVIDER (`forceRefresh`), AND A CACHED ANSWER IS REFUSED. Left to its
+ * defaults the chain answers `players` from SportsPlayer with `take: 200` (newest first) whenever
+ * fresh NCAAB rows exist — so the "weekly refresh" would rewrite the 200 most recently touched
+ * players under a `ncaab_cache` tag, stamp the week done, and never touch the rest of the pool.
+ * Forcing the refresh skips both caches. If the answer is still `source: 'cache'` (the chain's
+ * error path), or a resumed run's offset is past the end of the list, the pass is treated as a
+ * failure and retried after the back-off — never as a finished week.
  */
 export const NCAAB_DEVY_POOL_MARKER_KEY = 'devy:ncaab-pool:last-run'
 
@@ -89,14 +95,27 @@ export async function ingestNcaabDevyPoolIfDue(input: { deadlineAt: number }): P
     return { skipped: 'weekly cadence', lastRunAt }
   }
 
-  const seed = await seedCollegePlayers({ sport: 'NCAAB', deadlineAt: input.deadlineAt, startAt: resumeFrom })
+  const seed = await seedCollegePlayers({ sport: 'NCAAB', deadlineAt: input.deadlineAt, startAt: resumeFrom, forceRefresh: true })
   const attemptAt = new Date().toISOString()
 
-  if (!seed.fetched) {
-    const lastError = seed.errors[0]?.slice(0, 160) ?? 'no rows'
-    // Keep `at` and `resumeFrom` as they were: a failed fetch finished nothing.
-    await writeMarker({ at: lastRunAt, resumeFrom, lastAttemptAt: attemptAt, lastError })
-    throw new Error(`NCAAB players: provider chain returned no rows (${lastError})`)
+  // `source: 'cache'` with no rows is the chain's error path, reported as "no rows" below.
+  const truncated = !seed.fetched
+    ? null
+    : seed.source === 'cache'
+      ? 'chain answered from cache (at most 200 rows), not the provider'
+      : resumeFrom > 0 && (seed.fetched ?? 0) <= resumeFrom
+        ? `provider returned ${seed.fetched ?? 0} rows, fewer than the resume offset ${resumeFrom}`
+        : null
+  if (!seed.fetched || truncated) {
+    const lastError = (truncated ?? seed.errors[0] ?? 'no rows').slice(0, 160)
+    // Keep `at` as it was: a failed fetch finished nothing. A list shorter than the resume offset
+    // cannot be resumed into, so the next attempt starts the pass over.
+    await writeMarker({ at: lastRunAt, resumeFrom: truncated && resumeFrom > 0 ? 0 : resumeFrom, lastAttemptAt: attemptAt, lastError })
+    throw new Error(
+      truncated
+        ? `NCAAB players: refresh not completed (${lastError})`
+        : `NCAAB players: provider chain returned no rows (${lastError})`,
+    )
   }
 
   const complete = seed.nextOffset == null

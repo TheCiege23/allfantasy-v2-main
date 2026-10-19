@@ -81,3 +81,17 @@ describe('NCAAB seed bounds', () => {
     expect(r.nextOffset).toBeNull()
   })
 })
+
+describe('forceRefresh', () => {
+  it('skips the chain caches only when asked, so the 200-row SportsPlayer read cannot answer a refresh', async () => {
+    const { apiChain } = await import('@/lib/workers/api-chain')
+    const fetch = vi.mocked(apiChain.fetch)
+    h.rows = makeRows(3)
+    fetch.mockClear()
+    await seedCollegePlayers({ sport: 'NCAAB', forceRefresh: true })
+    expect(fetch.mock.calls[0][0]).toMatchObject({ sport: 'NCAAB', dataType: 'players', forceRefresh: true })
+    fetch.mockClear()
+    await seedCollegePlayers({ sport: 'NCAAB' })
+    expect(fetch.mock.calls[0][0]).not.toHaveProperty('forceRefresh')
+  })
+})

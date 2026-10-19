@@ -33,6 +33,13 @@ export type CollegePlayerSeedOptions = {
   deadlineAt?: number
   /** Skip this many rows of the provider payload (resume a run a deadline stopped). */
   startAt?: number
+  /**
+   * NCAAB: skip the chain's caches and ask the provider for the full list. The chain's normalized
+   * read answers `players` from SportsPlayer with `take: 200` ordered by updatedAt, so a cached
+   * answer is the 200 most recently touched rows — a scheduled refresh built on it would rewrite
+   * a fifth of the pool under a `ncaab_cache` tag and call the week done.
+   */
+  forceRefresh?: boolean
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -73,6 +80,9 @@ async function seedCollegeBasketballPlayers(options: CollegePlayerSeedOptions = 
   const response = await apiChain.fetch<Array<Record<string, unknown>>>({
     sport: 'NCAAB',
     dataType: 'players',
+    // See `forceRefresh` on CollegePlayerSeedOptions: without it the chain can answer from the
+    // SportsPlayer table, which returns only the 200 most recently updated rows.
+    ...(options.forceRefresh ? { forceRefresh: true } : {}),
   })
 
   const source = response.source
@@ -181,7 +191,7 @@ export async function seedCollegePlayers(
   }
 
   if (sport === 'NCAAB') {
-    return seedCollegeBasketballPlayers({ deadlineAt: input.deadlineAt, startAt: input.startAt })
+    return seedCollegeBasketballPlayers({ deadlineAt: input.deadlineAt, startAt: input.startAt, forceRefresh: input.forceRefresh })
   }
 
   throw new Error('College player seed only supports NCAAF and NCAAB.')
