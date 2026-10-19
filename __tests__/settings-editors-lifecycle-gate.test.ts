@@ -2,16 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 /**
- * 🛑 THE SCORING AND ROSTER EDITORS COMMISSIONERS ACTUALLY USE SKIPPED THE LIFECYCLE MATRIX.
+ * WHEN A COMMISSIONER MAY CHANGE SCORING OR ROSTER RULES — every editor that writes them.
  *
- * `ACTIONS` in server/services/leagueLifecycleService.ts says when `settings_edit_scoring` and
- * `settings_edit_roster` are allowed, and `assertSettingsEditAllowed` enforces it — but only on
- * `PATCH /api/leagues/[id]/settings` with a `section`. The per-sport scoring PUTs, the roster
- * settings PUT, and the section-less `PATCH /api/league/settings` (useAutosave) never asked, so a
- * commissioner could rewrite scoring in week 9 of the playoffs.
+ * History: the lifecycle matrix only ever bound `PATCH /api/leagues/[id]/settings` with a
+ * `section`; the per-sport scoring PUTs, the generic scoring PUT, the roster-settings writers and the
+ * section-less `PATCH /api/league/settings` never asked. The owner's policy (2026-10-19) for these
+ * editors, restated here independently of `SETTINGS_EDIT_POLICY` so the test can disagree with it:
  *
- * These run the REAL gate chain (commissionerService → leagueActionGate → leagueLifecycleService)
- * against a mocked league row, so the matrix itself decides each case — nothing here restates it.
+ *   setup, pre_draft, completed, offseason, renewal_pending   allowed, no question
+ *   post_draft, in_season, playoffs                           only with `confirmMidSeasonChange: true`
+ *   drafting, archived                                        refused (409)
+ *
+ * The real gate chain runs (settingsLifecycleGate → leagueActionGate → leagueLifecycleService)
+ * against a mocked league row.
  */
 
 const h = vi.hoisted(() => ({
@@ -22,6 +25,8 @@ const h = vi.hoisted(() => ({
   applyImportedRoster: vi.fn(),
   replaceOverrides: vi.fn(),
   leagueUpdate: vi.fn(),
+  logAction: vi.fn(async () => undefined),
+  publish: vi.fn(async () => undefined),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'u1' } })) }))
@@ -44,8 +49,8 @@ vi.mock('@/server/services/permissionService', () => ({
   canViewLeague: vi.fn(async () => true),
   canDestructiveCommissionerAction: vi.fn(async () => true),
 }))
-vi.mock('@/server/services/auditService', () => ({ logAction: vi.fn(async () => undefined) }))
-vi.mock('@/lib/league-events/publisher', () => ({ publishLeagueFanoutEvent: vi.fn(async () => undefined) }))
+vi.mock('@/server/services/auditService', () => ({ logAction: h.logAction }))
+vi.mock('@/lib/league-events/publisher', () => ({ publishLeagueFanoutEvent: h.publish }))
 vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ undoLastPick: vi.fn() }))
 vi.mock('@/lib/waiver-wire/process-engine', () => ({ processWaiverClaimsForLeague: vi.fn() }))
 vi.mock('@/server/services/standingsEngine', () => ({ recomputeStandingsForSeason: vi.fn() }))
@@ -135,8 +140,23 @@ import { PUT as genericScoringPut } from '@/app/api/commissioner/leagues/[league
 import { PATCH as sectionlessPatch } from '@/app/api/league/settings/route'
 
 type Handler = (req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) => Promise<Response>
+type Expect = 'allowed' | 'confirm' | 'refused'
 
-function setLeague(sport: string, lifecycleState: string) {
+const POLICY: Record<string, Expect> = {
+  setup: 'allowed',
+  pre_draft: 'allowed',
+  drafting: 'refused',
+  post_draft: 'confirm',
+  in_season: 'confirm',
+  playoffs: 'confirm',
+  completed: 'allowed',
+  offseason: 'allowed',
+  renewal_pending: 'allowed',
+  archived: 'refused',
+}
+const STATES = Object.keys(POLICY)
+
+function setLeague(sport: string, lifecycleState: string | null) {
   h.leagueRow = {
     id: 'L1',
     userId: 'u1',
@@ -150,7 +170,7 @@ function setLeague(sport: string, lifecycleState: string) {
   }
 }
 
-function put(handler: Handler, body: unknown) {
+function call(handler: Handler, body: unknown) {
   const req = new NextRequest('http://localhost/x', { method: 'PUT', body: JSON.stringify(body) })
   return handler(req, { params: Promise.resolve({ leagueId: 'L1' }) })
 }
@@ -160,15 +180,40 @@ function patch(body: unknown) {
   return sectionlessPatch(req)
 }
 
-const SCORING_EDITORS: Array<[string, string, Handler]> = [
-  ['NFL', 'nfl-scoring', nflPut as Handler],
-  ['NBA', 'nba-scoring', nbaPut as Handler],
-  ['NHL', 'nhl-scoring', nhlPut as Handler],
-  ['MLB', 'mlb-scoring', mlbPut as Handler],
-  ['NCAAB', 'ncaab-scoring', ncaabPut as Handler],
-  ['NCAAF', 'ncaaf-scoring', ncaafPut as Handler],
-  ['SOCCER', 'soccer-scoring', soccerPut as Handler],
+type Editor = {
+  name: string
+  sport: string
+  send: (body: Record<string, unknown>) => Promise<Response>
+  base: Record<string, unknown>
+  wrote: () => boolean
+}
+
+const sportEditor = (name: string, sport: string, handler: Handler): Editor => ({
+  name,
+  sport,
+  send: (b) => call(handler, b),
+  base: { presetKey: 'af_default' },
+  wrote: () => h.saveScoring.mock.calls.length > 0,
+})
+
+const EDITORS: Editor[] = [
+  sportEditor('nfl-scoring', 'NFL', nflPut as Handler),
+  sportEditor('nba-scoring', 'NBA', nbaPut as Handler),
+  sportEditor('nhl-scoring', 'NHL', nhlPut as Handler),
+  sportEditor('mlb-scoring', 'MLB', mlbPut as Handler),
+  sportEditor('ncaab-scoring', 'NCAAB', ncaabPut as Handler),
+  sportEditor('ncaaf-scoring', 'NCAAF', ncaafPut as Handler),
+  sportEditor('soccer-scoring', 'SOCCER', soccerPut as Handler),
+  { name: 'generic scoring PUT', sport: 'NFL', send: (b) => call(genericScoringPut as Handler, b), base: { rules: [] }, wrote: () => h.replaceOverrides.mock.calls.length > 0 },
+  { name: 'roster-settings PUT', sport: 'NFL', send: (b) => call(rosterPut as Handler, b), base: { slots: { QB: 1 }, templateKey: 'custom' }, wrote: () => h.updateRoster.mock.calls.length > 0 },
+  { name: 'roster reset-default', sport: 'NFL', send: (b) => call(rosterResetPost as Handler, b), base: {}, wrote: () => h.resetRoster.mock.calls.length > 0 },
+  { name: 'roster import apply', sport: 'NFL', send: (b) => call(rosterImportPost as Handler, b), base: { action: 'apply', sourcePlatform: 'sleeper', importedConfig: { QB: 1 } }, wrote: () => h.applyImportedRoster.mock.calls.length > 0 },
+  { name: 'settings PATCH scoring key', sport: 'NFL', send: (b) => patch(b), base: { leagueId: 'L1', scoring: 'ppr' }, wrote: () => h.leagueUpdate.mock.calls.length > 0 },
+  { name: 'settings PATCH rosterSize key', sport: 'NFL', send: (b) => patch(b), base: { leagueId: 'L1', rosterSize: 18 }, wrote: () => h.leagueUpdate.mock.calls.length > 0 },
 ]
+
+const midSeasonAudits = () =>
+  h.logAction.mock.calls.filter((c) => (c[0] as { actionType?: string }).actionType === 'settings_mid_season_change')
 
 beforeEach(() => {
   h.saveScoring.mockReset()
@@ -177,124 +222,100 @@ beforeEach(() => {
   h.resetRoster.mockReset()
   h.applyImportedRoster.mockReset()
   h.replaceOverrides.mockReset()
+  h.logAction.mockClear()
+  h.publish.mockClear()
 })
 
-describe('per-sport scoring PUT obeys the lifecycle matrix', () => {
-  for (const [sport, name, handler] of SCORING_EDITORS) {
-    it(`${name}: accepts in pre_draft`, async () => {
-      setLeague(sport, 'pre_draft')
-      const res = await put(handler, { presetKey: 'af_default' })
-      expect(res.status).toBe(200)
-      expect(h.saveScoring).toHaveBeenCalledTimes(1)
-    })
-
-    for (const state of ['drafting', 'post_draft', 'in_season', 'playoffs', 'completed', 'offseason']) {
-      it(`${name}: refuses in ${state} with 409 and saves nothing`, async () => {
-        setLeague(sport, state)
-        const res = await put(handler, { presetKey: 'af_default' })
+describe.each(EDITORS)('$name obeys the scoring/roster lifecycle policy', (editor) => {
+  for (const state of STATES) {
+    const expected = POLICY[state]
+    if (expected === 'allowed') {
+      it(`${state}: allowed with no confirmation, no mid-season audit`, async () => {
+        setLeague(editor.sport, state)
+        const res = await editor.send(editor.base)
+        expect(res.status).toBe(200)
+        expect(editor.wrote()).toBe(true)
+        expect(midSeasonAudits()).toHaveLength(0)
+      })
+    } else if (expected === 'refused') {
+      it(`${state}: refused with 409 even when confirmed, nothing written`, async () => {
+        setLeague(editor.sport, state)
+        const res = await editor.send({ ...editor.base, confirmMidSeasonChange: true })
         expect(res.status).toBe(409)
-        const body = (await res.json()) as { error?: string }
-        expect(body.error).toMatch(/^Scoring can't be changed/)
-        expect(h.saveScoring).not.toHaveBeenCalled()
+        const json = (await res.json()) as { code?: string; error?: string }
+        expect(json.code).toBe('LIFECYCLE_BLOCKED')
+        expect(json.error).toMatch(/can't be changed/)
+        expect(editor.wrote()).toBe(false)
+      })
+    } else {
+      it(`${state}: 409 mid_season_confirmation_required without the flag, nothing written`, async () => {
+        setLeague(editor.sport, state)
+        const res = await editor.send(editor.base)
+        expect(res.status).toBe(409)
+        expect(await res.json()).toMatchObject({
+          code: 'mid_season_confirmation_required',
+          message:
+            "This league's season has started. Changing scoring/roster settings will recalculate scores and may make some lineups invalid. Confirm to continue.",
+        })
+        expect(editor.wrote()).toBe(false)
+        expect(midSeasonAudits()).toHaveLength(0)
+      })
+      it(`${state}: applied with confirmMidSeasonChange, audited and announced`, async () => {
+        setLeague(editor.sport, state)
+        const res = await editor.send({ ...editor.base, confirmMidSeasonChange: true })
+        expect(res.status).toBe(200)
+        expect(editor.wrote()).toBe(true)
+        const audits = midSeasonAudits()
+        expect(audits).toHaveLength(1)
+        expect(audits[0][0]).toMatchObject({
+          leagueId: 'L1',
+          userId: 'u1',
+          metadata: { lifecycleState: state, confirmed: true },
+        })
+        await vi.waitFor(() =>
+          expect(h.publish).toHaveBeenCalledWith(
+            expect.objectContaining({
+              eventType: 'settings_changed',
+              category: 'league_announcements',
+              title: expect.stringMatching(/mid-season/),
+            }),
+          ),
+        )
       })
     }
   }
+})
 
-  it('the in-season message says why and where to go', async () => {
-    setLeague('NFL', 'in_season')
-    const res = await put(nflPut as Handler, { presetKey: 'af_default' })
-    expect(await res.json()).toMatchObject({
-      error: "Scoring can't be changed once the draft has started. Contact support if a rule is wrong.",
-    })
+describe('details', () => {
+  it('a league with no lifecycleState reads as in_season and needs confirmation, not a block', async () => {
+    setLeague('NFL', null)
+    const res = await call(nflPut as Handler, { presetKey: 'af_default' })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { code?: string }).code).toBe('mid_season_confirmation_required')
   })
-})
 
-describe('roster-settings PUT obeys the lifecycle matrix', () => {
-  const body = { slots: { QB: 1 }, templateKey: 'custom' }
-
-  for (const state of ['setup', 'pre_draft', 'in_season', 'playoffs']) {
-    it(`accepts in ${state} (matrix allows settings_edit_roster)`, async () => {
-      setLeague('NFL', state)
-      const res = await put(rosterPut as Handler, body)
-      expect(res.status).toBe(200)
-      expect(h.updateRoster).toHaveBeenCalledTimes(1)
-    })
-  }
-
-  for (const state of ['drafting', 'post_draft', 'completed', 'offseason']) {
-    it(`refuses in ${state} with 409 and writes nothing`, async () => {
-      setLeague('NFL', state)
-      const res = await put(rosterPut as Handler, body)
-      expect(res.status).toBe(409)
-      const json = (await res.json()) as { error?: string }
-      expect(json.error).toMatch(/^Roster slots can't be changed/)
-      expect(h.updateRoster).not.toHaveBeenCalled()
-    })
-  }
-})
-
-describe('section-less PATCH /api/league/settings gates the scoring and roster keys it touches', () => {
-  it('accepts a scoring change in pre_draft', async () => {
-    setLeague('NFL', 'pre_draft')
-    const res = await patch({ leagueId: 'L1', scoring: 'ppr' })
+  it('the confirmation flag is never written to the league row by the settings PATCH', async () => {
+    setLeague('NFL', 'in_season')
+    const res = await patch({ leagueId: 'L1', scoring: 'ppr', confirmMidSeasonChange: true })
     expect(res.status).toBe(200)
-    expect(h.leagueUpdate).toHaveBeenCalled()
+    const arg = h.leagueUpdate.mock.calls[0][0] as { data: Record<string, unknown> }
+    expect(arg.data).toEqual({ scoring: 'ppr' })
   })
 
-  it('refuses a scoring change in_season with 409 and writes nothing', async () => {
-    setLeague('NFL', 'in_season')
-    const res = await patch({ leagueId: 'L1', scoring: 'ppr' })
-    expect(res.status).toBe(409)
-    expect(((await res.json()) as { error?: string }).error).toMatch(/^Scoring can't be changed/)
-    expect(h.leagueUpdate).not.toHaveBeenCalled()
-  })
-
-  it('refuses a roster-size change in post_draft with 409', async () => {
-    setLeague('NFL', 'post_draft')
-    const res = await patch({ leagueId: 'L1', rosterSize: 18 })
-    expect(res.status).toBe(409)
-    expect(h.leagueUpdate).not.toHaveBeenCalled()
-  })
-
-  it('still accepts a general change (name) in_season — keys outside scoring/roster are untouched', async () => {
+  it('a settings PATCH that touches neither scoring nor roster is not interrupted in_season', async () => {
     setLeague('NFL', 'in_season')
     const res = await patch({ leagueId: 'L1', name: 'New name' })
     expect(res.status).toBe(200)
-    expect(h.leagueUpdate).toHaveBeenCalled()
-  })
-})
-
-describe('the other scoring / roster writers obey the same gate', () => {
-  it('generic scoring PUT: accepts in pre_draft, refuses in_season with 409', async () => {
-    setLeague('NFL', 'pre_draft')
-    expect((await put(genericScoringPut as Handler, { rules: [] })).status).toBe(200)
-    expect(h.replaceOverrides).toHaveBeenCalledTimes(1)
-    h.replaceOverrides.mockReset()
-    setLeague('NFL', 'in_season')
-    const res = await put(genericScoringPut as Handler, { rules: [] })
-    expect(res.status).toBe(409)
-    expect(h.replaceOverrides).not.toHaveBeenCalled()
+    expect(midSeasonAudits()).toHaveLength(0)
   })
 
-  it('roster reset-default: accepts in pre_draft, refuses in post_draft with 409', async () => {
-    setLeague('NFL', 'pre_draft')
-    expect((await put(rosterResetPost as Handler, {})).status).toBe(200)
-    expect(h.resetRoster).toHaveBeenCalledTimes(1)
-    h.resetRoster.mockReset()
-    setLeague('NFL', 'post_draft')
-    expect((await put(rosterResetPost as Handler, {})).status).toBe(409)
-    expect(h.resetRoster).not.toHaveBeenCalled()
-  })
-
-  it('roster import apply: accepts in pre_draft, refuses in drafting; preview is never gated', async () => {
-    const body = { action: 'apply', sourcePlatform: 'sleeper', importedConfig: { QB: 1 } }
-    setLeague('NFL', 'pre_draft')
-    expect((await put(rosterImportPost as Handler, body)).status).toBe(200)
-    expect(h.applyImportedRoster).toHaveBeenCalledTimes(1)
-    h.applyImportedRoster.mockReset()
+  it('roster import preview is never gated', async () => {
     setLeague('NFL', 'drafting')
-    expect((await put(rosterImportPost as Handler, body)).status).toBe(409)
-    expect(h.applyImportedRoster).not.toHaveBeenCalled()
-    expect((await put(rosterImportPost as Handler, { ...body, action: 'preview' })).status).toBe(200)
+    const res = await call(rosterImportPost as Handler, {
+      action: 'preview',
+      sourcePlatform: 'sleeper',
+      importedConfig: { QB: 1 },
+    })
+    expect(res.status).toBe(200)
   })
 })

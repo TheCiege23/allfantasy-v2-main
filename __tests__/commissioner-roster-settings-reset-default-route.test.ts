@@ -19,7 +19,8 @@ vi.mock('@/lib/auth', () => ({
 // The lifecycle gate (lib/league/settingsLifecycleGate.ts) is covered by
 // __tests__/settings-editors-lifecycle-gate.test.ts; here it always allows.
 vi.mock('@/lib/league/settingsLifecycleGate', () => ({
-  settingsLifecycleRefusal: vi.fn(async () => null),
+  decideSettingsEdit: vi.fn(async () => ({ ok: true, state: 'pre_draft', midSeason: false })),
+  recordMidSeasonSettingsChange: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/prisma', () => ({
