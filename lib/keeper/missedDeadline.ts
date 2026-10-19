@@ -41,6 +41,18 @@ export function pickSlotForRound(round: number, teams: number): number {
   return (round - 1) * teams + Math.ceil(teams / 2)
 }
 
+export type KeeperValue = { marketRank: number; pickSlot: number; surplus: number }
+
+/**
+ * One keeper's value against his cost (the keeper value report, spec §4.3): positive = worth more
+ * than the pick he uses. Null when he isn't priced by round or has no market price.
+ */
+export function keeperValue(costRound: number | null, marketRank: number | null, teams: number): KeeperValue | null {
+  if (costRound == null || marketRank == null) return null
+  const pickSlot = pickSlotForRound(costRound, Math.max(1, teams))
+  return { marketRank, pickSlot, surplus: pickSlot - marketRank }
+}
+
 export function chooseBestValueKeepers(input: {
   candidates: readonly BestValueCandidate[]
   maxKeepers: number
