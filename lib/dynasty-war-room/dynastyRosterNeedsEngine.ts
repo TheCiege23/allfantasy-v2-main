@@ -93,7 +93,7 @@ export function evaluateDynastyTeamNeeds(
     const agingByPos: Record<string, string[]> = {}
     for (const p of team.players) {
       if (!p.isStarterSlot) continue
-      const traj = ageTrajectory(p.position, p.age)
+      const traj = ageTrajectory(p.position, p.age, context.sport)
       if (traj === 'aging' || traj === 'cliff') (agingByPos[p.position] ??= []).push(`${p.playerName} (${p.age}, ${traj})`)
     }
     for (const [pos, names] of Object.entries(agingByPos)) {

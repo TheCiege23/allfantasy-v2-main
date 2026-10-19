@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { recordLlmUsage } from '@/lib/telemetry/llm-usage'
+import { buildDynastyRoadmapPrompt } from '@/lib/rankings-engine/dynastyRoadmapPrompt'
 
 const openai = getOpenAIRouteClient()
 
@@ -21,6 +22,8 @@ interface RosterSignal {
 }
 
 interface RoadmapRequest {
+  /** The league's sport (NFL when omitted, for older clients). */
+  sport?: string
   leagueType: string
   isSF: boolean
   goal: string
@@ -91,6 +94,7 @@ export const POST = withApiUsage({ endpoint: "/api/rankings/dynasty-roadmap", to
       weakPositions,
       topAssets,
       leagueName,
+      sport,
     } = body
 
     if (!rosterSignals || !Array.isArray(rosterSignals) || rosterSignals.length === 0) {
@@ -118,46 +122,23 @@ export const POST = withApiUsage({ endpoint: "/api/rankings/dynasty-roadmap", to
     const topAssetsStr = topAssets.slice(0, 5).join(', ')
     const weakPosStr = weakPositions.join(', ')
 
-    const prompt = `You are a dynasty fantasy football strategist. Generate a 3-5 year dynasty roadmap based strictly on the computed roster data below. Be motivational but honest.
-
-ROSTER DATA:
-- League: ${leagueType}${isSF ? ' Superflex' : ' 1QB'}${leagueName ? ` (${leagueName})` : ''}
-- Goal: ${goal}
-- Average Roster Age: ${avgAge.toFixed(1)}
-- Total Roster Value: ${totalValue.toLocaleString()}
-- Aging Assets (29+): ${agingAssets} players (${agingPct}%)
-- Young Core (24-): ${youngCore} players (${youngPct}%)
-- Position Strengths: ${posStrengthStr}
-- Weak Positions: ${weakPosStr || 'None identified'}
-- Top Assets: ${topAssetsStr}
-- Total Roster Size: ${totalPlayers}
-
-RULES:
-1. Every recommendation MUST reference specific roster data above (age distribution, position strengths, weak positions).
-2. Do NOT invent player names or stats not provided.
-3. Each year plan should have 2-4 concrete priorities.
-4. Be motivational - frame challenges as opportunities.
-5. If the roster is already strong, acknowledge it and suggest maintenance strategies.
-6. Consider the ${isSF ? 'Superflex' : '1QB'} format in QB valuation.
-7. Factor in the user's stated goal of "${goal}".
-
-Return a JSON object with this exact structure:
-{
-  "horizon": "3-Year Plan" or "5-Year Plan",
-  "currentPhase": one of "Contending" | "Retooling" | "Rebuilding" | "Emerging",
-  "overallStrategy": "1-2 sentence summary",
-  "yearPlans": [
-    {
-      "year": 1,
-      "label": "Year 1: [Theme]",
-      "priorities": ["priority 1", "priority 2"],
-      "targetPositions": ["QB", "RB"],
-      "keyMoves": ["Specific actionable move 1", "Specific actionable move 2"]
-    }
-  ],
-  "riskFactors": ["risk 1", "risk 2"],
-  "confidence": "HIGH" | "MEDIUM" | "LOW"
-}`
+    const prompt = buildDynastyRoadmapPrompt({
+      sport,
+      leagueType,
+      isSF,
+      goal,
+      leagueName,
+      avgAge,
+      totalValue,
+      agingAssets,
+      agingPct,
+      youngCore,
+      youngPct,
+      posStrengthStr,
+      weakPosStr,
+      topAssetsStr,
+      totalPlayers,
+    })
 
     const response = await openai.chat.completions.create({
       model: ROADMAP_MODEL,
