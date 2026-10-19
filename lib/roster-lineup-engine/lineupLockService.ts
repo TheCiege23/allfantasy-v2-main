@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import { readWeekGames } from '@/lib/redraft/weekGames'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
 
 export type LineupLockResolveArgs = {
   leagueId: string
@@ -147,6 +148,56 @@ async function resolveNbaSurvivorGameDayLocks(args: LineupLockResolveArgs, now: 
   return nbaSurvivorGameDayLocks(players, games, now, selectedStarts)
 }
 
+/*
+ * 🛑 A NATIVE NBA / MLB / NHL / NCAAB LINEUP COULD BENCH A PLAYER AFTER HE HAD PLAYED THAT WEEK.
+ *
+ * For daily sports `evaluateLineupLock` only locks the WHOLE lineup from 6 PM ET to midnight and
+ * reopens it every morning, and the per-player lock below it (`computePerPlayerKickoffLocks`) reads
+ * a `gameTime` the CLIENT sent on the previous save — '—' when the UI had none, so it never locks,
+ * and refreshed to the next game by any save, so a second save unlocks him. Meanwhile a native save
+ * syncs slot types onto the redraft roster (`syncRedraftSlotTypesForLineup`), and the week is
+ * scored from the slot each player holds at scoring time (`calculateTeamScore` via
+ * `loadWeekLineups`), crediting him the WHOLE week's points. So a manager could bench a starter the
+ * morning after a bad game and erase it from the week, or start a player whose games were done.
+ *
+ * The redraft lineup route already enforces the right rule from the schedule: a player locks at his
+ * team's first game of the fantasy week and stays locked (`hydrateRedraftLineupLocks`, default
+ * `per_player_kickoff`, honouring the league's lock mode and commissioner overrides). This applies the
+ * same derivation here, so both save paths agree. NBA Survivor keeps its own pick-aware lock above.
+ */
+const DAILY_LOCK_SPORTS: ReadonlySet<string> = new Set(['NBA', 'MLB', 'NHL', 'NCAAB'])
+
+export async function resolveDailySportWeeklyLocks(
+  args: LineupLockResolveArgs,
+  now: Date,
+): Promise<{ lockedPlayerIds: string[]; reasons: Record<string, string> } | null> {
+  const sport = args.sport.toUpperCase()
+  if (!DAILY_LOCK_SPORTS.has(sport) || args.editingWeek !== args.leagueWeek) return null
+  const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { redraftRosterId: true } })
+  if (!roster?.redraftRosterId) return null
+  const players = await prisma.redraftRosterPlayer.findMany({
+    where: { rosterId: roster.redraftRosterId, droppedAt: null },
+    select: { playerId: true, team: true },
+  })
+  const { players: stamped } = await hydrateRedraftLineupLocks(prisma, {
+    sport,
+    season: args.season,
+    week: args.editingWeek,
+    rosterId: roster.redraftRosterId,
+    leagueSettings: args.settings,
+    players,
+    now,
+  })
+  const lockedPlayerIds: string[] = []
+  const reasons: Record<string, string> = {}
+  for (const p of stamped) {
+    if (!p.isLocked) continue
+    lockedPlayerIds.push(p.playerId)
+    reasons[p.playerId] = "This player's first game of the fantasy week has started; he is locked until the week ends."
+  }
+  return { lockedPlayerIds, reasons }
+}
+
 export async function resolveSpecialtyLineupGuard(
   leagueId: string,
   rosterId: string,
@@ -252,9 +303,26 @@ export async function resolveFullLineupLockContext(args: LineupLockResolveArgs):
     policy = 'specialty_guard'
   }
 
-  const kick = nbaSurvivor && args.editingWeek === args.leagueWeek
+  let kick = nbaSurvivor && args.editingWeek === args.leagueWeek
     ? await resolveNbaSurvivorGameDayLocks(args, now)
     : computePerPlayerKickoffLocks(args.playerData, now)
+  if (!nbaSurvivor) {
+    // Schedule-derived weekly locks for daily sports, added to (never replacing) the kickoff heuristic.
+    // A schedule read that fails keeps the previous behaviour rather than blocking every save.
+    const weekly = await resolveDailySportWeeklyLocks(args, now).catch((err: unknown) => {
+      console.warn('[lineupLockService] daily-sport weekly locks unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    if (weekly && weekly.lockedPlayerIds.length > 0) {
+      const ids = new Set(kick.lockedPlayerIds)
+      const reasons = { ...kick.reasons }
+      for (const id of weekly.lockedPlayerIds) {
+        ids.add(id)
+        reasons[id] = reasons[id] ?? weekly.reasons[id]
+      }
+      kick = { lockedPlayerIds: [...ids], reasons }
+    }
+  }
 
   return {
     locked,
