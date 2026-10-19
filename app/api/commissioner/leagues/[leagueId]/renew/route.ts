@@ -72,7 +72,7 @@ export async function GET(
       userId: true, season: true, sport: true, isDynasty: true,
       leagueVariant: true, status: true, settings: true, scoring: true,
       name: true, leagueSize: true,
-      lifecycleState: true,
+      lifecycleState: true, lifecycleMetadata: true,
       teams: {
         select: {
           id: true, teamName: true, ownerName: true, avatarUrl: true,
@@ -161,7 +161,14 @@ export async function GET(
     orphanCount: orphanMembers.length,
     dispersalDraftEligible,
     isListedInFinder,
-    renewalCompleted: Boolean(settings.renewal_completed_for_season === nextSeason),
+    // True right after a renewal (the league is now IN the renewed season), so the modal stops
+    // offering a second renew that POST would refuse. The old `=== nextSeason` read one season late.
+    renewalCompleted: isAlreadyRenewedIntoSeason({
+      season: currentSeason,
+      status: league.status,
+      settings,
+      lifecycleMetadata: league.lifecycleMetadata,
+    }),
     lifecycleState: league.lifecycleState,
     tournamentFeeder,
   })
