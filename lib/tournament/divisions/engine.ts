@@ -43,10 +43,15 @@ export type DivisionTeamInput = {
   bestWeek?: number | null
   /** True while any of this team's scores are missing or not final. Blocks seeding commits. */
   provisional?: boolean
+  /**
+   * The commissioner's call on a tie nothing else separates (tiebreaker 4). Higher wins.
+   * Only consulted after record, points and best week are all level.
+   */
+  commissionerRank?: number | null
 }
 
 /** Why a row sits where it does relative to a neighbour with the same leading key. */
-export type TieReason = 'points' | 'record' | 'best_week' | 'review'
+export type TieReason = 'points' | 'record' | 'best_week' | 'commissioner' | 'review'
 
 export type RankedTeam = DivisionTeamInput & {
   rank: number
@@ -118,12 +123,14 @@ const STANDINGS_KEYS: Key<DivisionTeamInput>[] = [
   { reason: null, value: t => record(t) },
   { reason: 'points', value: t => t.points },
   { reason: 'best_week', value: t => t.bestWeek ?? null },
+  { reason: 'commissioner', value: t => t.commissionerRank ?? null },
 ]
 
 const POINTS_KEYS: Key<DivisionTeamInput>[] = [
   { reason: null, value: t => t.points },
   { reason: 'record', value: t => record(t) },
   { reason: 'best_week', value: t => t.bestWeek ?? null },
+  { reason: 'commissioner', value: t => t.commissionerRank ?? null },
 ]
 
 /** Every team in ONE division, ranked by record, then points, then best week. */
@@ -336,6 +343,54 @@ export function regionGames(rounds: BracketGame[][], region: Region): BracketGam
     const per = games.length / 4
     return games.slice(regionIndex * per, (regionIndex + 1) * per)
   })
+}
+
+/** A committed seeding snapshot replays into the same bracket, independent of later standings. */
+export function bracketFromSeeds(seeded: SeededTeam[], scores: GameScores = {}, overrides: Record<string, string> = {}): BracketGame[][] {
+  return playBracket(divisionFirstRound(seeded), scores, overrides)
+}
+
+export type WeekScore = { points: number; final: boolean }
+
+export type RoundPlan = {
+  round: number
+  games: Array<BracketGame & { key: string }>
+  /** Reasons the round cannot be advanced yet. Empty means ready. */
+  blockers: string[]
+  /** Games level on points that nothing but the commissioner can decide. */
+  needsReview: string[]
+  /** Scores to commit for this round, keyed by game. */
+  scores: GameScores
+}
+
+/**
+ * What advancing `round` would do, from each team's score for that week.
+ * A missing or non-final score is never read as zero: it blocks the round.
+ */
+export function planRound(rounds: BracketGame[][], round: number, weekScores: Map<string, WeekScore>, overrides: Record<string, string> = {}): RoundPlan {
+  const games = rounds[round - 1]
+  if (!games) return { round, games: [], blockers: ['That round does not exist.'], needsReview: [], scores: {} }
+  const blockers: string[] = []
+  const scores: GameScores = {}
+  let missing = 0, provisional = 0, waiting = 0
+  const planned = games.map(g => {
+    const key = gameKey(round, g.index)
+    if (!g.a || !g.b) { waiting++; return { ...g, key } }
+    const sa = weekScores.get(g.a.id), sb = weekScores.get(g.b.id)
+    if (!sa || !sb) { missing++; return { ...g, key } }
+    if (!sa.final || !sb.final) provisional++
+    scores[key] = { a: sa.points, b: sb.points }
+    const decided = decideGame(g.a, g.b, sa.points, sb.points)
+    const override = overrides[key]
+    const winner = decided.decidedBy === 'review' && override ? (override === g.a.id ? g.a : override === g.b.id ? g.b : null) : decided.winner
+    return { ...g, key, scoreA: sa.points, scoreB: sb.points, winner, decidedBy: decided.decidedBy }
+  })
+  if (waiting) blockers.push(`${waiting} game${waiting === 1 ? ' is' : 's are'} still waiting on the previous round.`)
+  if (missing) blockers.push(`${missing} game${missing === 1 ? ' has' : 's have'} a missing score.`)
+  if (provisional) blockers.push(`${provisional} game${provisional === 1 ? ' is' : 's are'} not final yet.`)
+  const needsReview = planned.filter(g => g.decidedBy === 'review' && !g.winner).map(g => g.key)
+  if (needsReview.length) blockers.push(`${needsReview.length} tied game${needsReview.length === 1 ? ' needs' : 's need'} a commissioner decision.`)
+  return { round, games: planned, blockers, needsReview, scores }
 }
 
 // ── calendar ─────────────────────────────────────────────────────────────────

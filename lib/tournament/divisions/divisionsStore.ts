@@ -15,8 +15,9 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { can } from '@/lib/tournament/tournamentPermissions'
 import { buildDivisionsBlueprint, type DivisionsBlueprint } from './blueprint'
-import { buildHubView, type HubTeamInput, type HubView } from './hubView'
-import { defaultFormatSettings, type FormatSettings } from './engine'
+import { buildHubView, type CommittedDivision, type HubTeamInput, type HubView } from './hubView'
+import { defaultFormatSettings, divisionsCalendar, type FormatSettings, type GameScores, type SeededTeam } from './engine'
+import { readSeasonSummaries } from './weekScores'
 import { presetIdentity, type DivisionIdentity } from './identity'
 
 export const DIVISIONS_FORMAT = 'divisions'
@@ -111,17 +112,33 @@ export async function tournamentFormat(tournamentId: string): Promise<string | n
   return shell?.format ?? null
 }
 
-function readSettings(raw: unknown, sport: string): FormatSettings {
+export type RegistrationSettings = { closesAt: string | null; allowPreference: boolean; allowGrouping: boolean; entry: string }
+
+/** Registration options live beside the format settings, under `registration`. */
+export function readRegistration(raw: unknown): RegistrationSettings {
+  const r = (raw && typeof raw === 'object' ? (raw as { registration?: Partial<RegistrationSettings> }).registration : undefined) ?? {}
+  return { closesAt: typeof r.closesAt === 'string' ? r.closesAt : null, allowPreference: r.allowPreference !== false, allowGrouping: r.allowGrouping === true, entry: typeof r.entry === 'string' ? r.entry : 'Free' }
+}
+
+export function readSettings(raw: unknown, sport: string): FormatSettings {
   const fallback = defaultFormatSettings(sport === 'NBA' ? 'NBA' : 'NFL')
   return raw && typeof raw === 'object' ? { ...fallback, ...(raw as Partial<FormatSettings>), regions: 4 } : fallback
 }
 
+export type DivisionsState = Awaited<ReturnType<typeof readDivisionsState>>
+
+/** The latest tie calls the commissioner made (tiebreaker 4), by team id. */
+export async function readTieCalls(tournamentId: string): Promise<Record<string, number>> {
+  const row = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'divisions_tie_calls' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
+  return ((row?.data as { calls?: Record<string, number> } | null)?.calls) ?? {}
+}
+
 /**
- * The divisions hub for one viewer. Visible to the commissioner, staff with a grant,
- * and the tournament's own participants; null otherwise (and for "no such
- * tournament", so a 404 never confirms one exists).
+ * Everything persisted about a divisions tournament, turned into engine inputs.
+ * Used by the hub, the control screen and every guarded commit, so they all see
+ * the same numbers.
  */
-export async function loadDivisionsHub(tournamentId: string, userId: string): Promise<(HubView & { canManage: boolean }) | null> {
+export async function readDivisionsState(tournamentId: string) {
   const shell = await prisma.tournamentShell.findUnique({
     where: { id: tournamentId },
     include: {
@@ -130,12 +147,8 @@ export async function loadDivisionsHub(tournamentId: string, userId: string): Pr
     },
   })
   if (!shell || shell.format !== DIVISIONS_FORMAT) return null
-  const isOwner = shell.commissionerId === userId
-  const grant = isOwner ? null : await prisma.tournamentShellGrant.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } })
-  const participant = isOwner || grant ? null : await prisma.tournamentParticipant.findUnique({ where: { tournamentId_userId: { tournamentId, userId } }, select: { id: true } })
-  if (!isOwner && !grant && !participant) return null
-
   const settings = readSettings(shell.formatSettings, shell.sport)
+  const registration = readRegistration(shell.formatSettings)
   const fallbackIdentity = presetIdentity('black-gold', Math.max(2, shell.conferences.length || settings.conferencesPerDivision))
   const identity: DivisionIdentity = {
     version: 1, presetId: null,
@@ -152,29 +165,60 @@ export async function loadDivisionsHub(tournamentId: string, userId: string): Pr
   const conferenceIndex = new Map(shell.conferences.map((c, i) => [c.id, i]))
   const leagues = await prisma.tournamentLeague.findMany({
     where: { tournamentId, divisionId: { not: null }, conferenceId: { not: null } },
-    select: { id: true, leagueId: true, divisionId: true, conferenceId: true, participants: {
-      select: { id: true, userId: true, wins: true, losses: true, ties: true, pointsFor: true, participant: { select: { displayName: true } } },
+    select: { id: true, name: true, leagueId: true, divisionId: true, conferenceId: true, draftScheduledAt: true, participants: {
+      select: { id: true, userId: true, wins: true, losses: true, ties: true, pointsFor: true, redraftRosterId: true, advancementStatus: true, participant: { select: { displayName: true } } },
     } },
   })
+  const calendar = divisionsCalendar(settings)
+  const summaries = await readSeasonSummaries(leagues.map(l => ({ leagueId: l.leagueId, participants: l.participants })), calendar.seedingLocksAfter)
+  const calls = await readTieCalls(tournamentId)
   const teams: HubTeamInput[] = []
   for (const league of leagues) {
     const d = divisionIndex.get(league.divisionId!)
     const c = conferenceIndex.get(league.conferenceId!)
     if (d === undefined || c === undefined) continue
     for (const p of league.participants) {
+      const summary = summaries.get(p.id)
       teams.push({
         id: p.id, name: p.participant.displayName, userId: p.userId, conferenceId: league.conferenceId!,
-        wins: p.wins, losses: p.losses, ties: p.ties, points: p.pointsFor, bestWeek: null,
+        wins: p.wins, losses: p.losses, ties: p.ties, points: p.pointsFor, bestWeek: summary?.bestWeek ?? null,
+        provisional: Boolean(summary?.weeksProvisional), commissionerRank: calls[p.id] ?? null,
         divisionIndex: d, conferenceIndex: c, leagueId: league.leagueId,
       })
     }
   }
-
-  const view = buildHubView({
-    tournament: { id: shell.id, name: shell.name, sport: settings.sport, status: shell.status, season: null },
-    settings, identity, teams, meUserId: userId,
+  const committed = shell.divisions.slice(0, 2).map((d): CommittedDivision | null => {
+    if (!d.seedingCommittedAt || !Array.isArray(d.seeding)) return null
+    const state = (d.bracketState ?? {}) as { scores?: GameScores; overrides?: Record<string, string>; roundsCommitted?: number }
+    return { seeded: d.seeding as unknown as SeededTeam[], scores: state.scores ?? {}, overrides: state.overrides ?? {}, roundsCommitted: state.roundsCommitted ?? 0 }
   })
-  return { ...view, canManage: isOwner || Boolean(grant && can({ userId, commissionerId: shell.commissionerId, grant }, 'editSettings')) }
+  const championshipRow = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'divisions_championship_committed' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
+  const championship = championshipRow?.data as { score?: { a: number; b: number }; override?: string } | undefined
+  return { shell, settings, registration, identity, leagues, teams, calendar, committed: [committed[0] ?? null, committed[1] ?? null] as [CommittedDivision | null, CommittedDivision | null], championship: championship ?? null }
+}
+
+export function viewFromState(state: NonNullable<DivisionsState>, userId: string | null, extra: { sample?: boolean } = {}): HubView {
+  return buildHubView({
+    tournament: { id: state.shell.id, name: state.shell.name, sport: state.settings.sport, status: state.shell.status, season: null },
+    settings: state.settings, identity: state.identity, teams: state.teams, meUserId: userId,
+    committed: state.committed, championshipScore: state.championship?.score, championshipOverride: state.championship?.override, ...extra,
+  })
+}
+
+/**
+ * The divisions hub for one viewer. Visible to the commissioner, staff with a grant,
+ * and the tournament's own participants (including followers); null otherwise (and
+ * for "no such tournament", so a 404 never confirms one exists).
+ */
+export async function loadDivisionsHub(tournamentId: string, userId: string): Promise<(HubView & { canManage: boolean }) | null> {
+  const state = await readDivisionsState(tournamentId)
+  if (!state) return null
+  const { shell } = state
+  const isOwner = shell.commissionerId === userId
+  const grant = isOwner ? null : await prisma.tournamentShellGrant.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } })
+  const participant = isOwner || grant ? null : await prisma.tournamentParticipant.findUnique({ where: { tournamentId_userId: { tournamentId, userId } }, select: { id: true } })
+  if (!isOwner && !grant && !participant) return null
+  return { ...viewFromState(state, userId), canManage: isOwner || Boolean(grant && can({ userId, commissionerId: shell.commissionerId, grant }, 'editSettings')) }
 }
 
 /** The latest saved plan, for re-opening the planner on a blueprint. */
