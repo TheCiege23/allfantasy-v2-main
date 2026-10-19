@@ -25,6 +25,8 @@
 import type { PrismaClient } from '@prisma/client'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+// Client-safe: takes the client as an argument and imports Prisma for types only.
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
@@ -321,6 +323,8 @@ export async function buildWeekKickoffMap(
    * ⚠ A game with no start time locks at the start of its Eastern day — early, never late.
    */
   if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport) && !LOCK_NOT_WIRED_SPORTS.includes(sport)) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
     const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
     if (!window) {
@@ -376,6 +380,8 @@ export async function buildWeekKickoffMap(
     !RI_SCHEDULE_SLATE_SPORTS.includes(sport) &&
     !LOCK_NOT_WIRED_SPORTS.includes(sport)
   ) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
     const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
     if (!window) {
