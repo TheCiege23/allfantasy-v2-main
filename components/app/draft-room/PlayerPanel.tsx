@@ -29,6 +29,8 @@ import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-p
 import { isRookieEligibleForFilter, isVetEligibleForFilter } from '@/lib/draft-room/rookieFilterPredicate'
 import { sleeperPoolStatOptionsFromPositionFilter } from '@/lib/draft-room/sleeperPoolTableLayout'
 import { getDraftRoomRookieDataState, type DraftRoomRookiePlayerLike } from '@/lib/draft-room/draftPlayerRookie'
+import type { RookieFilterState } from '@/lib/draft-room/rookieFilterState'
+import { RookieFilterFallbackBanner } from '@/components/app/draft-room/RookieFilterFallbackBanner'
 import { buildRookieSignalDiagnostics } from '@/lib/draft-room/draftRoomRookieDiagnostics'
 import {
   getDraftRoomPositionGroupCounts,
@@ -193,6 +195,11 @@ export type PlayerPanelProps = {
   draftSeasonYear?: number
   /** When true, pool fetch completed with a network or server error (distinguishes from a legitimately empty pool). */
   poolError?: boolean
+  /**
+   * From the pool API. `fallback_no_rookie_data` = the session is rookies-only but no pool entry
+   * carries a rookie flag, so the server kept the full pool; the panel explains that with a banner.
+   */
+  rookieFilterState?: RookieFilterState
 }
 
 /** D.3 — re-exposed from SleeperPoolSort. Kept as `SortKey` for legacy call sites. */
@@ -416,6 +423,7 @@ function PlayerPanelInner({
   isPlayerQueued,
   draftSeasonYear,
   poolError = false,
+  rookieFilterState,
 }: PlayerPanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
@@ -1260,6 +1268,7 @@ function PlayerPanelInner({
           />
         </div>
       ) : null}
+      {players.length > 0 ? <RookieFilterFallbackBanner rookieFilterState={rookieFilterState} t={t} /> : null}
       <div
         ref={scrollRef}
         data-testid="draft-player-list-scroll"
