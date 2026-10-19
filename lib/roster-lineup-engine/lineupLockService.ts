@@ -175,10 +175,11 @@ export async function resolveDailySportWeeklyLocks(
   if (!DAILY_LOCK_SPORTS.has(sport) || args.editingWeek !== args.leagueWeek) return null
   const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { redraftRosterId: true } })
   if (!roster?.redraftRosterId) return null
-  const players = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId: roster.redraftRosterId, droppedAt: null },
-    select: { playerId: true, team: true },
-  })
+  const players: Array<{ playerId: string; team: string | null; isLocked?: boolean | null }> =
+    await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: roster.redraftRosterId, droppedAt: null },
+      select: { playerId: true, team: true },
+    })
   const { players: stamped } = await hydrateRedraftLineupLocks(prisma, {
     sport,
     season: args.season,
