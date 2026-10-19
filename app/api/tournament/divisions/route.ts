@@ -5,8 +5,8 @@ import { authOptions } from '@/lib/auth'
 import { DivisionsBlueprintError } from '@/lib/tournament/divisions/blueprint'
 import { DivisionsOperationError, saveDivisionsBlueprint, updateDivisionsBlueprint } from '@/lib/tournament/divisions/divisionsStore'
 import {
-  advanceRound, callTies, closeAndPlace, commitSeeding, confirmCorrectionsClosed, followTournament, joinTournament,
-  leaveTournament, markRevealSeen, notifyBubble, openRegistration, provisionLeagues, setDraftTime,
+  addCoCommissioner, advanceRound, callTies, closeAndPlace, commitSeeding, confirmCorrectionsClosed, followTournament, joinTournament,
+  leaveTournament, markRevealSeen, notifyBubble, openRegistration, provisionLeagues, removeCoCommissioner, setDraftTime,
 } from '@/lib/tournament/divisions/lifecycle'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +25,9 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('provision_leagues'), tournamentId: id }),
   z.object({ action: z.literal('reveal_seen'), tournamentId: id }),
   z.object({ action: z.literal('set_draft_time'), tournamentId: id, tournamentLeagueId: id, at: z.string().datetime({ offset: true }) }),
+  // staff
+  z.object({ action: z.literal('add_co_commissioner'), tournamentId: id, username: z.string().trim().min(1).max(80) }),
+  z.object({ action: z.literal('remove_co_commissioner'), tournamentId: id, assigneeId: id }),
   // control
   z.object({ action: z.literal('confirm_corrections'), tournamentId: id, week: z.number().int().min(1).max(30) }),
   z.object({ action: z.literal('call_ties'), tournamentId: id, calls: z.record(z.string().max(200), z.number().int().min(-1000).max(1000)) }),
@@ -55,6 +58,8 @@ export async function POST(req: NextRequest) {
       case 'provision_leagues': return NextResponse.json(await provisionLeagues(userId, input.tournamentId))
       case 'reveal_seen': return NextResponse.json(await markRevealSeen(userId, input.tournamentId))
       case 'set_draft_time': return NextResponse.json(await setDraftTime(userId, input.tournamentId, input.tournamentLeagueId, input.at))
+      case 'add_co_commissioner': return NextResponse.json(await addCoCommissioner(userId, input.tournamentId, input.username))
+      case 'remove_co_commissioner': return NextResponse.json(await removeCoCommissioner(userId, input.tournamentId, input.assigneeId))
       case 'confirm_corrections': return NextResponse.json(await confirmCorrectionsClosed(userId, input.tournamentId, input.week))
       case 'call_ties': return NextResponse.json(await callTies(userId, input.tournamentId, input.calls))
       case 'commit_seeding': return NextResponse.json(await commitSeeding(userId, input.tournamentId))

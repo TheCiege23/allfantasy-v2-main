@@ -32,6 +32,7 @@ import { buildFullNflScoringConfig } from '@/lib/nfl-scoring/NflScoringPresets'
 import { conferenceLeagueCreateBody, type ConferenceLeaguePlan } from './conferenceLeagueSettings'
 import { readSettings } from './divisionsStore'
 import { divisionsRulesLabels } from './rules'
+import { syncConferenceCoCommissioners, syncConferenceDraftTimes, type CoCommissionerOutcome, type DraftTimeOutcome } from './conferenceLeagueSync'
 
 export const CLAIM_STALE_MS = 10 * 60_000
 export const CONFERENCE_LEAGUE_READY = 'ready'
@@ -45,7 +46,23 @@ export type ConferenceLeagueOutcome = {
   error?: string
 }
 
-export type ProvisionResult = { outcomes: ConferenceLeagueOutcome[]; complete: boolean }
+export type ProvisionResult = { outcomes: ConferenceLeagueOutcome[]; complete: boolean; coCommissioners?: CoCommissionerOutcome[]; draftTimes?: DraftTimeOutcome[] }
+
+/**
+ * After leagues are created: hand the tournament's co-commissioners and any draft time already set
+ * down to them. Both are idempotent reconciles, and a failure here never undoes the setup itself.
+ */
+async function syncNewLeagues(tournamentId: string, actorId: string) {
+  const coCommissioners = await syncConferenceCoCommissioners(tournamentId, actorId).catch(e => {
+    console.warn('[tournament/divisions] co-commissioner sync did not run', e instanceof Error ? e.message : 'unknown error')
+    return undefined
+  })
+  const draftTimes = await syncConferenceDraftTimes(tournamentId, actorId).catch(e => {
+    console.warn('[tournament/divisions] draft time sync did not run', e instanceof Error ? e.message : 'unknown error')
+    return undefined
+  })
+  return { coCommissioners, draftTimes }
+}
 
 type Member = { userId: string; draftSlot: number | null }
 
@@ -180,5 +197,6 @@ export async function provisionConferenceLeagues(tournamentId: string, actorId: 
     tournamentId, actorId, actorType: 'commissioner', action: 'divisions_conference_leagues_provisioned', targetType: 'tournament', targetId: tournamentId,
     data: { complete, counts, problems: outcomes.filter(o => o.outcome === 'failed' || o.outcome === 'busy').map(o => ({ league: o.name, outcome: o.outcome, error: o.error ?? null })) } as Prisma.InputJsonValue,
   } })
-  return { outcomes, complete }
+  const synced = outcomes.some(o => o.outcome === 'created') ? await syncNewLeagues(tournamentId, actorId) : {}
+  return { outcomes, complete, ...synced }
 }
