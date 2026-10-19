@@ -40,6 +40,8 @@ import {
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
+import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -327,6 +329,27 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  /*
+   * Championship length — how many weeks the final is scored over (lib/playoff-runtime/playoffRoundWeeks.ts).
+   * Stored in `settings.playoff_structure`, where creation writes the sport default (2 for MLB/NHL).
+   * ⚠ REFUSED WHILE THE PLAYOFFS ARE BEING PLAYED: the scorer reads it live, so changing it mid-final
+   * would move the week the title is decided on — shortening it could crown a champion on one week of
+   * a two-week final that is half played.
+   */
+  let championshipLengthToStore: number | null = null
+  if (body.championshipLength !== undefined) {
+    const n = Number(body.championshipLength)
+    if (!Number.isInteger(n) || n < 1 || n > 4) return jsonError('championshipLength must be 1–4 weeks', 400)
+    if (n !== (readChampionshipLength(league.settings) ?? 1)) {
+      const inPlayoffs = await prisma.redraftSeason.findFirst({
+        where: { leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) return jsonError('Championship length cannot change while the playoffs are being played.', 409)
+    }
+    championshipLengthToStore = n
+  }
+
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
@@ -523,6 +546,24 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push(DAILY_WAIVER_SCHEDULE_SETTINGS_KEY)
+  }
+
+  if (championshipLengthToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    const prevStructure =
+      prev.playoff_structure && typeof prev.playoff_structure === 'object' && !Array.isArray(prev.playoff_structure)
+        ? (prev.playoff_structure as Record<string, unknown>)
+        : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          playoff_structure: { ...prevStructure, championship_length: championshipLengthToStore },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push('championship_length')
   }
 
   const derivedSyncKeys = new Set([
