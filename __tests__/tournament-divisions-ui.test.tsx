@@ -45,6 +45,10 @@ describe('DivisionsHub', () => {
     expect(within(list).getByRole('separator', { name: 'WILDCARD BUBBLE ENDS · 64' })).toBeTruthy()
     expect(within(list).getAllByText(/^You · /).length).toBeGreaterThan(0)
     expect(screen.getByText('Week 10')).toBeTruthy()
+    const chip = screen.getByTestId('hub-rules-chip')
+    expect(within(chip).getByTestId('scoring-pill-half').textContent).toBe('HALF')
+    expect(within(chip).getByText('Half PPR')).toBeTruthy()
+    expect(within(chip).getByTestId('roster-label-nfl-std').textContent).toMatch(/^Standard roster · 9 start/)
   })
 
   it('switches to the conferences grid, the wildcard pool, the bracket and the championship', () => {
@@ -87,7 +91,51 @@ describe('TournamentPlanFlow', () => {
     fireEvent.click(screen.getByRole('button', { name: /Angelic \/ Demonic/ }))
     expect(screen.getAllByText('Angelic vs Demonic').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Clear for custom names' }))
-    expect((screen.getByRole('button', { name: 'Save and continue' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('step 3 shows the real scoring and roster pickers, locked on the NFL defaults', () => {
+    render(<TournamentPlanFlow />)
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByRole('heading', { name: 'Scoring and roster' })).toBeTruthy()
+    const scoring = screen.getByRole('radiogroup', { name: 'Scoring' })
+    const scoringRadios = within(scoring).getAllByRole('radio')
+    expect(scoringRadios).toHaveLength(8) // 7 NFL options + Custom
+    const checked = scoringRadios.filter(r => r.getAttribute('aria-checked') === 'true')
+    expect(checked).toHaveLength(1)
+    expect(within(checked[0]!).getByRole('img', { name: /^Half PPR scoring/ })).toBeTruthy()
+    expect(scoringRadios.every(r => (r as HTMLButtonElement).disabled)).toBe(true)
+    const roster = screen.getByRole('radiogroup', { name: 'Roster' })
+    const rosterChecked = within(roster).getAllByRole('radio').filter(r => r.getAttribute('aria-checked') === 'true')
+    expect(rosterChecked).toHaveLength(1)
+    expect(rosterChecked[0]!.getAttribute('data-testid')).toBe('rules-label-option-nfl-std')
+    expect(screen.getAllByText(/Every NFL divisions tournament plays these defaults for now/).length).toBe(2)
+    expect(screen.getByTestId('rules-plain-label').textContent).toBe('Half PPR · Standard roster')
+  })
+
+  it('an NBA plan shows Points + Standard and saving posts the plan from step 3', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tournamentId: 'abc' }), { status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      render(<TournamentPlanFlow />)
+      fireEvent.click(within(screen.getAllByRole('radiogroup', { name: 'Sport' })[0]!).getByRole('radio', { name: 'NBA' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(screen.getByTestId('rules-plain-label').textContent).toBe('Points · Standard roster')
+      expect(screen.getByTestId('rules-label-option-pts').getAttribute('aria-checked')).toBe('true')
+      expect(screen.getByTestId('rules-label-option-nba-std').getAttribute('aria-checked')).toBe('true')
+      fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }))
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      const body = JSON.parse(((fetchMock.mock.calls[0] as unknown) as [string, RequestInit])[1].body as string)
+      expect(body.action).toBe('save')
+      expect(body.plan.settings.sport).toBe('NBA')
+      // The plan has no scoring/roster field yet; the API would drop one, so none is sent.
+      expect(Object.keys(body.plan).sort()).toEqual(['identity', 'name', 'settings'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('points race hands off to the existing planner', () => {

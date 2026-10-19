@@ -4,6 +4,7 @@
  * Pure — the store persists what this accepts.
  */
 import { z } from 'zod'
+import { LABEL_DEFAULTS, type RosterLabelId, type ScoringLabelId } from '@/lib/league-labels/catalog'
 import { divisionsCalendar, validateFormatSettings, type FormatSettings } from './engine'
 import { parseIdentity, type DivisionIdentity } from './identity'
 
@@ -18,6 +19,19 @@ export const formatSettingsSchema = z.object({
 })
 
 export type DivisionsBlueprint = { version: 1; name: string; settings: FormatSettings; identity: DivisionIdentity }
+
+/**
+ * The scoring and roster labels a divisions tournament plays under.
+ *
+ * ⚠ The saved plan has no `scoringId` / `rosterId` yet (the handoff's storage shape), so every
+ * divisions tournament uses its sport's defaults: NFL Half PPR + Standard, NBA Points + Standard.
+ * The planner, hub and invite page all read them from here; when the plan gains the fields,
+ * read them from the saved config instead and unlock the planner's picker.
+ */
+export function divisionsRulesLabels(sport: FormatSettings['sport']): { scoringId: ScoringLabelId; rosterId: RosterLabelId } {
+  const d = LABEL_DEFAULTS[sport]
+  return { scoringId: d.scoring, rosterId: d.roster }
+}
 
 export class DivisionsBlueprintError extends Error {
   constructor(public readonly issues: string[]) {
