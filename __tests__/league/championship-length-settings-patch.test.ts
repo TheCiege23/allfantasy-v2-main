@@ -14,6 +14,7 @@ const m = vi.hoisted(() => ({
     leagueWaiverSettings: { findUnique: vi.fn() },
     leagueSettings: { upsert: vi.fn() },
     redraftSeason: { findFirst: vi.fn() },
+    redraftPlayoffRound: { findFirst: vi.fn() },
   },
 }))
 
@@ -54,6 +55,76 @@ beforeEach(() => {
     return {}
   })
   m.prisma.redraftSeason.findFirst.mockResolvedValue(null)
+  m.prisma.redraftPlayoffRound.findFirst.mockResolvedValue(null)
+})
+
+/** A league with a playoff shape, and (optionally) a latest season; nothing is in its playoffs. */
+function shape(opts: {
+  sport?: string
+  playoffTeams: number
+  playoffStartWeek?: number
+  season?: { totalWeeks: number; playoffStartWeek: number } | null
+  bracketFinalRound?: number
+  storedLength?: number
+}) {
+  settingsInDb = { playoff_structure: opts.storedLength != null ? { championship_length: opts.storedLength } : {} }
+  m.prisma.league.findFirst.mockImplementation(async () => ({
+    id: 'L', platform: 'manual', leagueSize: 12, timezone: 'UTC', teams: [], leagueSettings: null,
+    waiverSchedule: null, waiverProcessTime: '02:00', sport: opts.sport ?? 'NFL',
+    playoffTeams: opts.playoffTeams, playoffWeeksPerRound: 1, playoffStartWeek: opts.playoffStartWeek ?? null,
+    settings: structuredClone(settingsInDb),
+  }))
+  m.prisma.redraftSeason.findFirst.mockImplementation(async (args: { where: { status?: string } }) =>
+    args.where.status ? null : opts.season ? { id: 's1', ...opts.season } : null,
+  )
+  m.prisma.redraftPlayoffRound.findFirst.mockResolvedValue(
+    opts.bracketFinalRound ? { roundNumber: opts.bracketFinalRound } : null,
+  )
+}
+
+describe('championshipLength is refused when the final would end after the season', () => {
+  it('NFL, playoffs from week 16, four teams: a two-week final needs a week 18 a 17-week season lacks', async () => {
+    shape({ playoffTeams: 4, season: { totalWeeks: 17, playoffStartWeek: 16 } })
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', championshipLength: 2 })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/week 18, past the season's last week \(17\)/)
+    expect((settingsInDb.playoff_structure as Record<string, unknown>).championship_length).toBeUndefined()
+  })
+
+  it('the same final fits when the playoffs start a week earlier', async () => {
+    shape({ playoffTeams: 4, season: { totalWeeks: 17, playoffStartWeek: 15 } })
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', championshipLength: 2 })
+    expect(res.status).toBe(200)
+    expect((settingsInDb.playoff_structure as Record<string, unknown>).championship_length).toBe(2)
+  })
+
+  it('reads the generated bracket\'s final round, not only the playoff team count', async () => {
+    // Four teams would be two rounds (15, 16-17: fits); the bracket actually has three (15, 16, 17-18).
+    shape({ playoffTeams: 4, season: { totalWeeks: 17, playoffStartWeek: 15 }, bracketFinalRound: 3 })
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', championshipLength: 2 })
+    expect(res.status).toBe(400)
+  })
+
+  it('NHL shape (28 weeks, playoffs from 25, six teams) takes its two-week final', async () => {
+    shape({ sport: 'NHL', playoffTeams: 6, season: { totalWeeks: 28, playoffStartWeek: 25 }, storedLength: 1 })
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', championshipLength: 2 })
+    expect(res.status).toBe(200)
+  })
+
+  it('without a season, checks the season league creation would make (NFL: 17 weeks)', async () => {
+    shape({ playoffTeams: 4, playoffStartWeek: 16, season: null })
+    expect((await executeLeagueSettingsPatch('u', { leagueId: 'L', championshipLength: 2 })).status).toBe(400)
+    shape({ playoffTeams: 4, playoffStartWeek: 15, season: null })
+    expect((await executeLeagueSettingsPatch('u', { leagueId: 'L', championshipLength: 2 })).status).toBe(200)
+  })
+
+  it('shortening is always allowed, even on a league that already overruns', async () => {
+    // Stored 3 (final 17-19) on a 17-week season; 2 (17-18) still overruns but is no worse — allowed.
+    shape({ playoffTeams: 4, season: { totalWeeks: 17, playoffStartWeek: 16 }, storedLength: 3 })
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', championshipLength: 2 })
+    expect(res.status).toBe(200)
+    expect((settingsInDb.playoff_structure as Record<string, unknown>).championship_length).toBe(2)
+  })
 })
 
 describe('championshipLength in the commissioner settings PATCH', () => {

@@ -41,6 +41,7 @@ import {
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
@@ -334,7 +335,8 @@ export async function executeLeagueSettingsPatch(
    * Stored in `settings.playoff_structure`, where creation writes the sport default (2 for MLB/NHL).
    * ⚠ REFUSED WHILE THE PLAYOFFS ARE BEING PLAYED: the scorer reads it live, so changing it mid-final
    * would move the week the title is decided on — shortening it could crown a champion on one week of
-   * a two-week final that is half played.
+   * a two-week final that is half played. Also refused (400) when the final would end after the
+   * season's last week (lib/playoff-runtime/championshipLengthFit.ts).
    */
   let championshipLengthToStore: number | null = null
   if (body.championshipLength !== undefined) {
@@ -346,6 +348,19 @@ export async function executeLeagueSettingsPatch(
         select: { id: true },
       })
       if (inPlayoffs) return jsonError('Championship length cannot change while the playoffs are being played.', 409)
+      // A final that ends after the season's last week never seals, so the season never completes.
+      // Playoff fields saved in the same request are what the bracket will be built from.
+      const overflow = await championshipLengthOverflow({
+        league: {
+          ...league,
+          playoffTeams: body.playoffTeams != null ? Number(body.playoffTeams) : league.playoffTeams,
+          playoffWeeksPerRound:
+            body.playoffWeeksPerRound != null ? Number(body.playoffWeeksPerRound) : league.playoffWeeksPerRound,
+          playoffStartWeek: body.playoffStartWeek != null ? Number(body.playoffStartWeek) : league.playoffStartWeek,
+        },
+        championshipLength: n,
+      })
+      if (overflow) return jsonError(championshipLengthOverflowMessage(overflow), 400)
     }
     championshipLengthToStore = n
   }
