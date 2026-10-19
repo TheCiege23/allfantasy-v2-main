@@ -133,7 +133,9 @@ async function playPower(
         return { ok: false, status: 404, code: 'no_playable_idol', error: `You do not hold a playable ${power.replace('_', ' ')}.` }
       }
 
-      if (idol.expiresAtWeek != null && council.week >= idol.expiresAtWeek) return { ok: false, status: 422, code: 'idol_expired', error: 'This idol has expired.' }
+      // Playable THROUGH its expiry week — the rule shown to managers ("expire after Week N") and the one
+      // expireStaleIdols sweeps by (`lt currentWeek`).
+      if (idol.expiresAtWeek != null && council.week > idol.expiresAtWeek) return { ok: false, status: 422, code: 'idol_expired', error: 'This idol has expired.' }
       if (!idolWindowOpen(council, idolDefinition(power).when)) return { ok: false, status: 409, code: 'window_closed', error: 'The vote deadline has passed.' }
 
       const extraTargetRosterId = extra.extraTargetUserId ? userToRoster[extra.extraTargetUserId] : undefined
