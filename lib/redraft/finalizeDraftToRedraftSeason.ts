@@ -18,6 +18,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
 import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
+import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -640,6 +641,20 @@ export async function syncCompletedDraftToRedraftSeason(
         currentWeek: Math.max(1, season.currentWeek ?? 1, scheduleStartWeek),
       },
     })
+    /*
+     * A dynasty league's rookie draft starting year two: re-check the carried taxi and IR players
+     * and flag any team the draft took over its roster size. A no-op for every other league and for
+     * a first season (see `afterDynastyNewSeasonActivated`), and it must not fail draft completion.
+     */
+    if (season.status === 'setup') {
+      await afterDynastyNewSeasonActivated(leagueId, season.id).catch((err) => {
+        console.warn('[syncCompletedDraftToRedraftSeason] dynasty rollover housekeeping skipped', {
+          leagueId,
+          seasonId: season.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
   }
 
   await ensureScheduleForNewSeason({
