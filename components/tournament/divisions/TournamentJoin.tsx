@@ -11,7 +11,8 @@ import { joinState, type JoinState } from '@/lib/tournament/divisions/registrati
 import { side } from '@/lib/tournament/divisions/identity'
 import type { JoinView } from '@/lib/tournament/divisions/lifecycle'
 import { DivisionBadge, LeagueCrest } from './DivisionArt'
-import { RulesPlatePlaceholder } from './RulesPlatePlaceholder'
+import { RosterLabel, ScoringLabel } from '@/components/league-labels'
+import { divisionsRulesLabels } from '@/lib/tournament/divisions/rules'
 
 const card = 'rounded-2xl border border-white/10 bg-[#0b0d14]'
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBA')
@@ -40,12 +41,15 @@ export function TournamentJoin({ view, refName, previewState }: { view: JoinView
     } catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong.') } finally { setBusy(false) }
   }
 
+  // The tournament's saved choice; older tournaments (no saved rules) read as the sport default.
+  const rules = divisionsRulesLabels(view.sport, view.rules)
   const facts: Array<[string, React.ReactNode]> = [
     ['Draft window', view.myLeague?.draftAt ? fmtDate(view.myLeague.draftAt) : 'Set after placement'],
     ['Regular season', `Weeks ${view.calendar.regularSeason.start}–${view.calendar.regularSeason.end}`],
     ['Bracket', `Weeks ${view.calendar.bracketStartWeek}–${view.calendar.lastWeek}`],
     ['Entry', view.registration.entry],
-    ['Scoring', <RulesPlatePlaceholder key="p" sport={view.sport} />],
+    ['Scoring', <ScoringLabel key="s" id={rules.scoringId} size="sm" />],
+    ['Roster', <RosterLabel key="r" id={rules.rosterId} size="sm" />],
     ['League size', `${s.teamsPerConference} teams`],
     ['Trades', 'Within your league'],
     ['Registration closes', fmtDate(view.registration.closesAt)],

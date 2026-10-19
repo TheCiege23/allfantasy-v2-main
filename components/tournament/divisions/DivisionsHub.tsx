@@ -12,7 +12,8 @@ import { REGIONS, type Region } from '@/lib/tournament/divisions/engine'
 import { crestFor, markPath, side } from '@/lib/tournament/divisions/identity'
 import type { HubDivision, HubGame, HubPoolRow, HubRow, HubView } from '@/lib/tournament/divisions/hubView'
 import { ConferenceIcon, DivisionBadge, DivisionCrest } from './DivisionArt'
-import { RulesPlatePlaceholder } from './RulesPlatePlaceholder'
+import { RosterLabel, ScoringLabel } from '@/components/league-labels'
+import { divisionsRulesLabels } from '@/lib/tournament/divisions/rules'
 
 export type HubScreen = 'standings' | 'wildcard' | 'bracket' | 'championship'
 type View = HubScreen
@@ -80,6 +81,7 @@ function HubHeader({ view, myDivision }: { view: HubView; myDivision: HubDivisio
     ? `Week ${view.weeksPlayed} of ${view.calendar.regularSeason.end} · You’re #${myRow.rank} in ${myDivision!.name}${myRow.status === 'auto' ? ' — holding an automatic bid' : myRow.status === 'wildcard' ? ' — on the wildcard bubble' : myRow.status === 'bubble_out' ? ' — just outside the wildcard line' : ''}`
     : `Week ${view.weeksPlayed} of ${view.calendar.regularSeason.end}`
   const s = view.settings
+  const rules = divisionsRulesLabels(view.tournament.sport, view.rules)
   return (
     <header className="relative overflow-hidden rounded-2xl border border-white/10 p-5 sm:p-6" style={{ background: `linear-gradient(100deg, ${side(div.sideId).dark}cc, #0b0d14 55%)` }}>
       <div className="flex flex-col gap-5 md:flex-row md:items-center">
@@ -89,7 +91,11 @@ function HubHeader({ view, myDivision }: { view: HubView; myDivision: HubDivisio
             <span className="rounded-md bg-[#1a1c26] px-2 py-1 text-slate-200">{view.tournament.sport}{view.tournament.season ? ' ' + view.tournament.season : ''}</span>
             <span className="rounded-md bg-[#1a1c26] px-2 py-1 text-slate-200">Divisions &amp; conferences</span>
             <span className="rounded-md bg-[#1a1c26] px-2 py-1 text-slate-200">{total} teams · {leagues} leagues</span>
-            <RulesPlatePlaceholder sport={view.tournament.sport} />
+            <span className="inline-flex items-center rounded-md bg-[#1a1c26] px-2 py-1 text-slate-200" data-testid="hub-rules-chip">
+              <ScoringLabel id={rules.scoringId} size="sm" />
+              <span aria-hidden className="mx-2 text-slate-500">·</span>
+              <RosterLabel id={rules.rosterId} size="sm" />
+            </span>
           </div>
           <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">{view.identity.divisions[0].name} vs {view.identity.divisions[1].name}</h1>
           <p className="font-semibold text-[#ffd98a]">{sub}</p>

@@ -36,6 +36,26 @@ describe('TournamentJoin', () => {
     expect(screen.getAllByRole('img', { name: /Smoke (Angelic|Demonic)/ }).length).toBeGreaterThanOrEqual(2)
   })
 
+  it('shows the real scoring and roster labels before joining (NFL and NBA)', () => {
+    const { unmount } = render(<TournamentJoin view={join()} refName={null} />)
+    expect(screen.getByTestId('scoring-pill-half').textContent).toBe('HALF')
+    expect(screen.getByText('Half PPR')).toBeTruthy()
+    expect(screen.getByTestId('roster-label-nfl-std').textContent).toMatch(/^Standard roster · 9 start/)
+    unmount()
+    const nba = defaultFormatSettings('NBA')
+    render(<TournamentJoin view={join({ sport: 'NBA', settings: nba, calendar: divisionsCalendar(nba) })} refName={null} />)
+    expect(screen.getByTestId('scoring-pill-pts').textContent).toBe('PTS')
+    expect(screen.getByTestId('roster-label-nba-std').textContent).toMatch(/^Standard roster · 10 start/)
+  })
+
+  it('shows the tournament\'s SAVED scoring and roster to invitees, read-only', () => {
+    render(<TournamentJoin view={join({ rules: { scoringId: 'ppr', rosterId: 'nfl-sf' } })} refName={null} />)
+    expect(screen.getByTestId('scoring-pill-ppr').textContent).toBe('PPR')
+    expect(screen.getByTestId('roster-label-nfl-sf').textContent).toMatch(/^Superflex roster · 10 start/)
+    expect(screen.queryByTestId('scoring-pill-half')).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Scoring' })).toBeNull()
+  })
+
   it('almost full and full (waitlist position)', () => {
     const { unmount } = render(<TournamentJoin view={join({ registered: 236 })} refName={null} />)
     expect(screen.getByText(/Only 4 spots left/)).toBeTruthy()

@@ -69,7 +69,7 @@ export default async function DivisionsPreviewPage({ searchParams }: { searchPar
   if (params.screen === 'join') {
     const state = (['open', 'almost_full', 'full', 'closed', 'in'] as JoinState[]).includes(params.state as JoinState) ? (params.state as JoinState) : 'open'
     const join: JoinView = {
-      tournamentId: 'preview', name: tournament.name, phase: state === 'closed' ? 'placed' : 'registering', sport: 'NFL', settings, calendar: divisionsCalendar(settings), identity,
+      tournamentId: 'preview', name: tournament.name, phase: state === 'closed' ? 'placed' : 'registering', sport: 'NFL', settings, calendar: divisionsCalendar(settings), rules: view.rules, identity,
       registration: { closesAt: '2026-09-01T16:00:00.000Z', allowPreference: true, allowGrouping: false, entry: 'Free' },
       capacity: 240, registered: state === 'open' ? 212 : state === 'almost_full' ? 236 : 240, waitlist: 3,
       me: state === 'in' ? { status: 'registered', waitlistPosition: null, preference: null, revealSeen: false } : null,

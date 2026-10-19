@@ -19,6 +19,7 @@ import { buildHubView, type CommittedDivision, type HubTeamInput, type HubView }
 import { defaultFormatSettings, divisionsCalendar, type FormatSettings, type GameScores, type SeededTeam } from './engine'
 import { readSeasonSummaries } from './weekScores'
 import { presetIdentity, type DivisionIdentity } from './identity'
+import { divisionsRulesLabels } from './rules'
 
 export const DIVISIONS_FORMAT = 'divisions'
 const CONFIG_ACTIONS = ['divisions_blueprint_created', 'divisions_blueprint_updated']
@@ -35,7 +36,9 @@ const slugify = (s: string, n: number) => (s.toLowerCase().replace(/[^a-z0-9]+/g
 function shellFields(config: DivisionsBlueprint, calendarLastWeek: number, bracketSize: number) {
   const s = config.settings
   return {
-    name: config.name, sport: s.sport, format: DIVISIONS_FORMAT, formatSettings: s as unknown as Prisma.InputJsonValue,
+    name: config.name, sport: s.sport, format: DIVISIONS_FORMAT,
+    // The scoring/roster choice rides inside formatSettings (no column of its own); see ./rules.
+    formatSettings: { ...s, rules: config.rules } as unknown as Prisma.InputJsonValue,
     maxParticipants: s.conferencesPerDivision * s.teamsPerConference * 2,
     conferenceCount: s.conferencesPerDivision, leaguesPerConference: 2, teamsPerLeague: s.teamsPerConference,
     namingMode: 'commissioner_custom', openingWeekStart: 1, championshipWeek: calendarLastWeek,
@@ -149,6 +152,7 @@ export async function readDivisionsState(tournamentId: string) {
   if (!shell || shell.format !== DIVISIONS_FORMAT) return null
   const settings = readSettings(shell.formatSettings, shell.sport)
   const registration = readRegistration(shell.formatSettings)
+  const rules = divisionsRulesLabels(settings.sport, shell.formatSettings)
   const fallbackIdentity = presetIdentity('black-gold', Math.max(2, shell.conferences.length || settings.conferencesPerDivision))
   const identity: DivisionIdentity = {
     version: 1, presetId: null,
@@ -194,13 +198,13 @@ export async function readDivisionsState(tournamentId: string) {
   })
   const championshipRow = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'divisions_championship_committed' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
   const championship = championshipRow?.data as { score?: { a: number; b: number }; override?: string } | undefined
-  return { shell, settings, registration, identity, leagues, teams, calendar, committed: [committed[0] ?? null, committed[1] ?? null] as [CommittedDivision | null, CommittedDivision | null], championship: championship ?? null }
+  return { shell, settings, registration, rules, identity, leagues, teams, calendar, committed: [committed[0] ?? null, committed[1] ?? null] as [CommittedDivision | null, CommittedDivision | null], championship: championship ?? null }
 }
 
 export function viewFromState(state: NonNullable<DivisionsState>, userId: string | null, extra: { sample?: boolean } = {}): HubView {
   return buildHubView({
     tournament: { id: state.shell.id, name: state.shell.name, sport: state.settings.sport, status: state.shell.status, season: null },
-    settings: state.settings, identity: state.identity, teams: state.teams, meUserId: userId,
+    settings: state.settings, rules: state.rules, identity: state.identity, teams: state.teams, meUserId: userId,
     committed: state.committed, championshipScore: state.championship?.score, championshipOverride: state.championship?.override, ...extra,
   })
 }

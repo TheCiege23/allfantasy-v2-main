@@ -18,7 +18,7 @@ const panel = 'rounded-2xl border border-white/10 bg-[#0b0d14] p-4 sm:p-5'
 const label = 'text-xs font-bold uppercase tracking-[0.2em] text-slate-400'
 const input = 'min-h-11 w-full rounded-xl border border-white/15 bg-[#07080d] px-3 text-[15px] font-bold text-white placeholder:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e8b84a]'
 
-export function TournamentIdentityStep({ identity, onChange, minConferences = 2, onBack, onSave, saving, error }: {
+export function TournamentIdentityStep({ identity, onChange, minConferences = 2, onBack, onSave, saving, error, saveLabel = 'Save and continue' }: {
   identity: DivisionIdentityInput
   onChange: (next: DivisionIdentityInput) => void
   /** The format settings' minimum (4); the identity step offers 2 only when settings allow. */
@@ -27,6 +27,8 @@ export function TournamentIdentityStep({ identity, onChange, minConferences = 2,
   onSave: () => void
   saving?: boolean
   error?: string
+  /** The primary button's label; the planner passes "Continue" because it saves at step 3. */
+  saveLabel?: string
 }) {
   const [slot, setSlot] = useState<Slot>({ kind: 'conference', index: Math.min(5, identity.conferences.length - 1) })
   const [previewIndex, setPreviewIndex] = useState(Math.min(5, identity.conferences.length - 1))
@@ -203,7 +205,7 @@ export function TournamentIdentityStep({ identity, onChange, minConferences = 2,
         )}
         <div className="grid grid-cols-[1fr_2fr] gap-3">
           <button type="button" onClick={onBack} className="min-h-12 rounded-xl border border-white/15 bg-[#0e1018] font-bold text-white">Back</button>
-          <button type="button" onClick={onSave} disabled={saving || allIssues.length > 0} className="min-h-12 rounded-xl bg-[#e8b84a] font-bold text-[#1a1204] disabled:opacity-40">{saving ? 'Saving…' : 'Save and continue'}</button>
+          <button type="button" onClick={onSave} disabled={saving || allIssues.length > 0} className="min-h-12 rounded-xl bg-[#e8b84a] font-bold text-[#1a1204] disabled:opacity-40">{saving ? 'Saving…' : saveLabel}</button>
         </div>
       </aside>
     </div>
