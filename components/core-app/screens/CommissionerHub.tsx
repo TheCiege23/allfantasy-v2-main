@@ -35,6 +35,7 @@ import {
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
+import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
@@ -492,6 +493,14 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
         </HubSection>
       </HubDepthGate>
+
+      {/*
+        Deadline autopilot — outside the depth gate on purpose: its list and "Remind now" are free,
+        and the card itself says which part is the Commissioner plan (the route enforces it).
+      */}
+      <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
+        <DeadlineAutopilot leagueId={league.id} />
+      </HubSection>
 
       {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
       <CommunityLinks
