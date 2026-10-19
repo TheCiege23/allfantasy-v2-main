@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+vi.mock('html2canvas', () => ({ default: async () => ({ toBlob: (cb: (b: Blob | null) => void) => cb(new Blob(['png'], { type: 'image/png' })), toDataURL: () => '' }) }))
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }))
 
@@ -157,5 +158,27 @@ describe('ChampionShareStudio', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Square' }))
     expect(screen.getByText(/Exports at 1080 × 1080/)).toBeTruthy()
     expect(screen.getAllByText('created by KB').length).toBeGreaterThan(0)
+  })
+
+  it('offers "Post to league chat" only to league members, and posts the card to the share route once', async () => {
+    const view = buildHubView({ tournament: { id: 't', name: 'T', sport: 'NFL', status: 'live', season: 2026 }, settings, identity, teams })
+    const top = computeDivision(teams.filter(t => t.divisionIndex === 0), settings).ranked[0]!
+    const card = buildShareCard(view, top.id)!
+    const { unmount } = render(<ChampionShareStudio card={card} view={view} shareUrl="/tournament-trophy/t" />)
+    expect(screen.queryByRole('button', { name: 'Post to league chat' })).toBeNull()
+    unmount()
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, leagueName: 'North Gold' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<ChampionShareStudio card={card} view={view} shareUrl="/tournament-trophy/t" chatShare={{ tournamentId: 't', entryId: top.id }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Post to league chat' }))
+    expect(await screen.findByText('Posted to North Gold chat.')).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: FormData }]
+    expect(url).toBe('/api/tournament/divisions/share-to-chat')
+    expect(init.body.get('tournamentId')).toBe('t')
+    expect(init.body.get('entryId')).toBe(top.id)
+    expect((init.body.get('file') as File).type).toBe('image/png')
+    expect((screen.getByRole('button', { name: 'Posted to league chat' }) as HTMLButtonElement).disabled).toBe(true)
+    vi.unstubAllGlobals()
   })
 })

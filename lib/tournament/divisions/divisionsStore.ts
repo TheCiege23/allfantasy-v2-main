@@ -183,9 +183,12 @@ export async function readDivisionsState(tournamentId: string) {
     if (d === undefined || c === undefined) continue
     for (const p of league.participants) {
       const summary = summaries.get(p.id)
+      // Regular-season weeks only: the league keeps playing (and its own table keeps counting) through
+      // the bracket weeks, so the participant's copied league record is used only before any week is read.
+      const record = summary ? { wins: summary.wins, losses: summary.losses, ties: summary.ties, points: summary.points } : { wins: p.wins, losses: p.losses, ties: p.ties, points: p.pointsFor }
       teams.push({
         id: p.id, name: p.participant.displayName, userId: p.userId, conferenceId: league.conferenceId!,
-        wins: p.wins, losses: p.losses, ties: p.ties, points: p.pointsFor, bestWeek: summary?.bestWeek ?? null,
+        ...record, bestWeek: summary?.bestWeek ?? null,
         provisional: Boolean(summary?.weeksProvisional), commissionerRank: calls[p.id] ?? null,
         divisionIndex: d, conferenceIndex: c, leagueId: league.leagueId,
       })

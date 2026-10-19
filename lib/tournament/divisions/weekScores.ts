@@ -5,6 +5,11 @@
  * Unlike `computeWeeklyPointsByTlpId`, this keeps FINALITY: a matchup whose
  * status is not 'final' is reported as provisional, and a team with no matchup in
  * a week is simply absent. Callers must treat absent as missing, not zero.
+ *
+ * Conference leagues play every week through the championship week with no league playoffs (see
+ * ./conferenceSeasonPlan), so a league's own cumulative record keeps moving through the bracket.
+ * The tournament therefore reads records here, bounded to the weeks it asks for, rather than
+ * trusting the league table.
  */
 import 'server-only'
 import { prisma } from '@/lib/prisma'
@@ -15,7 +20,7 @@ export type LeagueSlice = { leagueId: string | null; participants: Array<{ id: s
 type Row = { week: number; homeRosterId: string; awayRosterId: string | null; homeScore: number; awayScore: number; status: string }
 
 async function readRows(leagues: LeagueSlice[], weeks: { gte: number; lte: number }) {
-  const out: Array<{ tlpId: string; week: number; points: number; final: boolean }> = []
+  const out: Array<{ tlpId: string; week: number; points: number; opponent: number | null; final: boolean }> = []
   for (const league of leagues) {
     if (!league.leagueId) continue
     const season = await prisma.redraftSeason.findFirst({ where: { leagueId: league.leagueId }, orderBy: { season: 'desc' }, select: { id: true } })
@@ -29,9 +34,9 @@ async function readRows(leagues: LeagueSlice[], weeks: { gte: number; lte: numbe
     for (const m of rows) {
       const final = m.status === 'final'
       const home = byRoster.get(m.homeRosterId)
-      if (home) out.push({ tlpId: home, week: m.week, points: m.homeScore, final })
+      if (home) out.push({ tlpId: home, week: m.week, points: m.homeScore, opponent: m.awayRosterId ? m.awayScore : null, final })
       const away = m.awayRosterId ? byRoster.get(m.awayRosterId) : undefined
-      if (away) out.push({ tlpId: away, week: m.week, points: m.awayScore, final })
+      if (away) out.push({ tlpId: away, week: m.week, points: m.awayScore, opponent: m.homeScore, final })
     }
   }
   return out
@@ -44,14 +49,32 @@ export async function readWeekScores(leagues: LeagueSlice[], week: number): Prom
   return map
 }
 
-export type SeasonSummary = { bestWeek: number | null; weeksFinal: number; weeksProvisional: number }
+export type SeasonSummary = {
+  bestWeek: number | null
+  weeksFinal: number
+  weeksProvisional: number
+  /** Record and points from FINAL head-to-head weeks through `throughWeek` only (a bye counts no result). */
+  wins: number
+  losses: number
+  ties: number
+  points: number
+}
 
-/** Best single week and finality through `throughWeek`, per participant. */
+/** Best single week, finality and the regular-season record through `throughWeek`, per participant. */
 export async function readSeasonSummaries(leagues: LeagueSlice[], throughWeek: number): Promise<Map<string, SeasonSummary>> {
   const map = new Map<string, SeasonSummary>()
   for (const r of await readRows(leagues, { gte: 1, lte: throughWeek })) {
-    const cur = map.get(r.tlpId) ?? { bestWeek: null, weeksFinal: 0, weeksProvisional: 0 }
-    if (r.final) { cur.weeksFinal++; cur.bestWeek = cur.bestWeek === null ? r.points : Math.max(cur.bestWeek, r.points) } else cur.weeksProvisional++
+    const cur = map.get(r.tlpId) ?? { bestWeek: null, weeksFinal: 0, weeksProvisional: 0, wins: 0, losses: 0, ties: 0, points: 0 }
+    if (r.final) {
+      cur.weeksFinal++
+      cur.bestWeek = cur.bestWeek === null ? r.points : Math.max(cur.bestWeek, r.points)
+      cur.points = Math.round((cur.points + r.points) * 100) / 100
+      if (r.opponent !== null) {
+        if (r.points > r.opponent) cur.wins++
+        else if (r.points < r.opponent) cur.losses++
+        else cur.ties++
+      }
+    } else cur.weeksProvisional++
     map.set(r.tlpId, cur)
   }
   return map

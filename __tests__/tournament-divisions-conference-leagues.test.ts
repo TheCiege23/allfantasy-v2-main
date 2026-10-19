@@ -13,6 +13,7 @@ const { db, prismaMock, create, assign, release, saveScoring } = vi.hoisted(() =
     audits: [] as Array<{ action: string; data: Record<string, unknown> }>,
     bodies: [] as Array<Record<string, unknown>>,
     failNames: new Set<string>(),
+    leagueSettings: new Map<string, Record<string, unknown>>(),
     n: 0,
   }
   const matches = (row: TL, where: Record<string, unknown>): boolean => Object.entries(where).every(([k, v]) => {
@@ -37,6 +38,10 @@ const { db, prismaMock, create, assign, release, saveScoring } = vi.hoisted(() =
     draftSession: {
       findFirst: vi.fn(async ({ where }: { where: { leagueId: string; status: string } }) => db.sessions.find(s => s.leagueId === where.leagueId && s.status === where.status) ?? null),
       updateMany: vi.fn(async () => ({ count: 1 })),
+    },
+    league: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({ settings: db.leagueSettings.get(where.id) ?? { existing: true } })),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: { settings: Record<string, unknown> } }) => { db.leagueSettings.set(where.id, data.settings); return {} }),
     },
     tournamentAuditLog: { create: vi.fn(async ({ data }: { data: { action: string; data: Record<string, unknown> } }) => { db.audits.push(data); return data }) },
     $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(prismaMock)),
@@ -85,6 +90,8 @@ import { nflScoringSeedForCreate } from '@/lib/nfl-scoring/nflScoringSeedForCrea
 import { conferenceLeagueCreateBody, conferenceLeaguePlan } from '@/lib/tournament/divisions/conferenceLeagueSettings'
 import { provisionConferenceLeagues, seatPlan } from '@/lib/tournament/divisions/conferenceLeagues'
 import { rosterChoices, scoringChoices } from '@/lib/tournament/divisions/rules'
+import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
+import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
 
 const shell = (formatSettings: Record<string, unknown>, sport = 'NFL') => ({ id: 't1', format: 'divisions', status: 'placed', sport, commissionerId: 'owner', formatSettings })
 const placed = (count: number, teamSlots: number, membersPer: number) => {
@@ -96,7 +103,7 @@ const placed = (count: number, teamSlots: number, membersPer: number) => {
 const heldBy = (leagueId: string) => db.seats.filter(s => s.leagueId === leagueId).sort((a, b) => a.slotNumber - b.slotNumber).map(s => db.holders.get(s.rosterId))
 
 beforeEach(() => {
-  db.shell = null; db.leagues = []; db.seats = []; db.holders = new Map(); db.sessions = []; db.audits = []; db.bodies = []; db.failNames = new Set(); db.n = 0
+  db.shell = null; db.leagues = []; db.seats = []; db.holders = new Map(); db.sessions = []; db.audits = []; db.bodies = []; db.failNames = new Set(); db.leagueSettings = new Map(); db.n = 0
   create.mockClear(); assign.mockClear(); release.mockClear(); saveScoring.mockClear(); syncCo.mockClear(); syncDraft.mockClear()
 })
 
@@ -154,6 +161,29 @@ describe('placement creates real leagues', () => {
     expect(db.sessions.every(s => s.status === 'pre_draft')).toBe(true)
     expect(saveScoring).not.toHaveBeenCalled()
     expect(db.audits.at(-1)).toMatchObject({ action: 'divisions_conference_leagues_provisioned', data: { complete: true, counts: { created: 3 } } })
+  })
+
+  it('writes the tournament calendar onto each league so its season runs through the bracket weeks', async () => {
+    db.shell = shell({ sport: 'NFL', autoBids: 52, wildcardSpots: 12 })
+    placed(2, 12, 12)
+    await provisionConferenceLeagues('t1', 'owner')
+    for (const id of ['L1', 'L2']) {
+      const settings = db.leagueSettings.get(id)!
+      expect(settings.existing).toBe(true)
+      const plan = readConferenceSeasonPlan(settings)
+      expect(plan).toMatchObject({ tournamentId: 't1', regularSeasonEnd: 10, bracketStartWeek: 11, lastWeek: 17 })
+      expect(resolveCreatedSeasonWeeks({ settings }, 18)).toBe(17)
+    }
+  })
+
+  it('a league set up before the calendar existed gets it on the next run, without being re-created', async () => {
+    db.shell = shell({ sport: 'NBA' }, 'NBA')
+    placed(1, 10, 10)
+    Object.assign(db.leagues[0]!, { leagueId: 'L9', status: 'ready' })
+    const r = await provisionConferenceLeagues('t1', 'owner')
+    expect(create).not.toHaveBeenCalled()
+    expect(r.outcomes[0]!.outcome).toBe('ready')
+    expect(readConferenceSeasonPlan(db.leagueSettings.get('L9'))?.lastWeek).toBe(24)
   })
 
   it('a commissioner who is also an entrant keeps a seat — their own draft slot', async () => {
