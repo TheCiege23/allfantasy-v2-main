@@ -65,6 +65,23 @@ describe('LiveRookieOrderPanel', () => {
     expect(screen.getByText(/Sleeper default seeding/)).toBeTruthy()
   })
 
+  it('imported league: shows how to set the order on its platform; a native league does not', async () => {
+    fetchMock.mockReturnValueOnce(json(liveView({ platform: 'sleeper' })))
+    const { unmount } = render(<LiveRookieOrderPanel leagueId="L1" />)
+    await screen.findByText('Gridiron Ghosts')
+    expect(screen.getByTestId('imported-order-checklist')).toBeTruthy()
+    expect(screen.getByText('Set this order on Sleeper')).toBeTruthy()
+    expect(screen.getByText('Put Gridiron Ghosts at pick 1.')).toBeTruthy()
+    // Two slots still wait on playoff games, so it says so first.
+    expect(screen.getByText(/not final yet/)).toBeTruthy()
+    unmount()
+
+    fetchMock.mockReturnValueOnce(json(liveView({ source: 'native', platform: 'allfantasy' })))
+    render(<LiveRookieOrderPanel leagueId="L1" />)
+    await screen.findByText('Gridiron Ghosts')
+    expect(screen.queryByTestId('imported-order-checklist')).toBeNull()
+  })
+
   it('previews a setting change without saving it', async () => {
     fetchMock.mockReturnValueOnce(json(liveView())).mockReturnValueOnce(json(liveView({ preview: true })))
     render(<LiveRookieOrderPanel leagueId="L1" />)
