@@ -4,6 +4,7 @@ import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraf
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
 import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
@@ -190,10 +191,12 @@ export async function ensureRedraftSeason(leagueId: string) {
   const createdWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
   const totalWeeks = guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks
   // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
+  // A divisions-tournament conference league has no league playoffs: its bracket weeks are regular
+  // weeks the tournament scores (lib/tournament/divisions/conferenceSeasonPlan.ts).
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
       ? leaguePlayoffStart
       : cfg?.defaultPlayoffStartWeek ?? 15

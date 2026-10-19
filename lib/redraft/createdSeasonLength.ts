@@ -1,5 +1,6 @@
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
 /** Respect a dynasty commissioner's regular season length when materializing the first season. */
 export function resolveCreatedSeasonWeeks(league: {
   bestBallMode?: boolean | null
@@ -11,6 +12,9 @@ export function resolveCreatedSeasonWeeks(league: {
 }, sportDefaultWeeks: number): number {
   const survivorPlan = readSurvivorFullSeasonPlan(league.settings)
   if (survivorPlan) return survivorPlan.endWeek
+  // A divisions-tournament conference league plays through the tournament's championship week.
+  const conferencePlan = readConferenceSeasonPlan(league.settings)
+  if (conferencePlan) return conferencePlan.lastWeek
   if (isNativeTournamentLeague(league)) {
     const settings = (league.settings as { best_ball_settings?: { regularSeasonLength: number; tournamentAdvancementRounds: number; roundEndWeeks?: number[] } } | null)?.best_ball_settings
     if (settings) return tournamentRoundEnds(settings).at(-1)!
