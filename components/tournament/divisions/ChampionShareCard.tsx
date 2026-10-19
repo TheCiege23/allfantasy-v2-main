@@ -4,6 +4,10 @@
  * exported as a PNG at its exact size (1080 × 1350 / 1920 / 1080). The export
  * renders an unscaled copy off screen, so the PNG is pixel-exact rather than a
  * screenshot of the preview.
+ *
+ * "Post to league chat" sends the same PNG, a caption and the trophy link into the viewer's own
+ * conference league chat (`/api/tournament/divisions/share-to-chat`). It is shown only when the
+ * server says the viewer is a member of one of the tournament's leagues; the route checks again.
  */
 import { useRef, useState } from 'react'
 import { crestFor } from '@/lib/tournament/divisions/identity'
@@ -57,7 +61,9 @@ export function ShareCardFace({ card, view, size, showPath, showStats }: { card:
   )
 }
 
-export function ChampionShareStudio({ card, view, shareUrl }: { card: ShareCard; view: HubView; shareUrl: string }) {
+export type ChatShareTarget = { tournamentId: string; entryId: string }
+
+export function ChampionShareStudio({ card, view, shareUrl, chatShare }: { card: ShareCard; view: HubView; shareUrl: string; chatShare?: ChatShareTarget | null }) {
   const [size, setSize] = useState<ShareSize>('story')
   const [showPath, setShowPath] = useState(true)
   const [showStats, setShowStats] = useState(true)
@@ -66,12 +72,39 @@ export function ChampionShareStudio({ card, view, shareUrl }: { card: ShareCard;
   const { width, height } = SHARE_SIZES[size]
   const scale = 560 / height
 
-  async function download() {
+  const [posting, setPosting] = useState(false)
+  const [posted, setPosted] = useState(false)
+
+  async function renderCanvas(): Promise<HTMLCanvasElement | null> {
     const el = exportRef.current?.firstElementChild as HTMLElement | null
-    if (!el) return
+    if (!el) return null
+    const html2canvas = (await import('html2canvas')).default
+    return html2canvas(el, { scale: 1, width, height, backgroundColor: '#0b0d14', useCORS: true, logging: false })
+  }
+
+  async function postToChat() {
+    if (!chatShare || posting) return
+    setPosting(true)
     try {
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(el, { scale: 1, width, height, backgroundColor: '#0b0d14', useCORS: true, logging: false })
+      const form = new FormData()
+      form.set('tournamentId', chatShare.tournamentId)
+      form.set('entryId', chatShare.entryId)
+      // The card image is best effort: without it the caption and link still post.
+      const canvas = await renderCanvas().catch(() => null)
+      const blob = canvas ? await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png')) : null
+      if (blob) form.set('file', blob, `allfantasy-tournament-${size}.png`)
+      const res = await fetch('/api/tournament/divisions/share-to-chat', { method: 'POST', body: form })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; leagueName?: string }
+      if (res.ok) { setPosted(true); setNotice(`Posted to ${data.leagueName ?? 'your league'} chat.`) }
+      else { if (res.status === 409) setPosted(true); setNotice(data.error ?? 'Could not post to league chat. Try again.') }
+    } catch { setNotice('Could not post to league chat. Try again.') }
+    setPosting(false)
+  }
+
+  async function download() {
+    try {
+      const canvas = await renderCanvas()
+      if (!canvas) return
       const a = document.createElement('a')
       a.href = canvas.toDataURL('image/png')
       a.download = `allfantasy-${card.champion ? 'champion' : 'tournament'}-${size}-${width}x${height}.png`
@@ -111,6 +144,11 @@ export function ChampionShareStudio({ card, view, shareUrl }: { card: ShareCard;
           ))}
           <button type="button" onClick={download} className="mt-4 min-h-12 w-full rounded-xl bg-[#e8b84a] font-bold text-[#1a1204]">Download image</button>
           <button type="button" onClick={copy} className="mt-3 min-h-11 w-full rounded-xl border border-white/15 bg-[#0e1018] font-bold text-white">Copy link</button>
+          {chatShare && (
+            <button type="button" onClick={postToChat} disabled={posting || posted} className="mt-3 min-h-11 w-full rounded-xl border border-[#e8b84a]/50 bg-[#0e1018] font-bold text-[#ffd98a] disabled:opacity-60">
+              {posted ? 'Posted to league chat' : posting ? 'Posting…' : 'Post to league chat'}
+            </button>
+          )}
           <p role="status" className="mt-2 text-sm text-slate-300">{notice}</p>
         </section>
       </aside>
