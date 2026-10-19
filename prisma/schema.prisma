@@ -12669,6 +12669,8 @@ model SleeperRoster {
 
 model RookieRanking {
   id           String   @id @default(cuid())
+  /// NFL for every row written before the column existed; readers filter by it.
+  sport        String   @default("NFL") @db.VarChar(16)
   year         Int
   name         String
   position     String
@@ -12679,8 +12681,9 @@ model RookieRanking {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@unique([year, name])
+  @@unique([sport, year, name])
   @@index([year])
+  @@index([sport, year])
   @@index([position])
 }
 
