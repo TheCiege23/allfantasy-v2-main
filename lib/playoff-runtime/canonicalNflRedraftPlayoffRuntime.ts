@@ -1,4 +1,5 @@
 import { isPointsOnlySeeding } from '@/lib/playoff-defaults/seedingRule'
+import { checkByePlan, isNaturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
 import type {
   CanonicalLeagueRuntimeEvent,
   CanonicalLeagueRuntimeEventType,
@@ -24,6 +25,8 @@ export type NflRedraftPlayoffRulesInput = {
     byeRules?: string | null
     reseedBehavior?: string | null
     standingsTiebreakers?: string[] | null
+    /** Rounds each seed sits out (`lib/playoff-brackets/byePlan.ts`). Null = the natural byes. */
+    byePlan?: readonly number[] | null
   }
   schedule: {
     regularSeasonLength?: number | null
@@ -82,6 +85,12 @@ export type NflRedraftPlayoffSettings = {
   bracketSize: number
   firstRoundByes: number
   roundCount: number
+  /**
+   * A commissioner-granted bye plan that differs from the natural one (multi-round byes). When set,
+   * rounds are sized by the plan and every round re-pairs best vs worst, adding the seeds whose
+   * bye ends that round. Null for the natural bracket, which keeps the fixed tree below.
+   */
+  byePlan: number[] | null
   reseedAfterEachRound: boolean
   consolationEnabled: boolean
   thirdPlaceGameEnabled: boolean
@@ -321,7 +330,10 @@ function resolveSettings(input: {
   const calculatedByes = bracketSize - playoffTeamCount
   const configuredByes = intOrNull(input.rules.playoffs.firstRoundByes)
   const firstRoundByes = Math.max(0, Math.min(configuredByes ?? calculatedByes, calculatedByes))
-  const roundCount = Math.max(1, Math.ceil(Math.log2(bracketSize)))
+  const storedPlan = parseStoredByePlan(input.rules.playoffs.byePlan, playoffTeamCount)
+  const byePlan = storedPlan && !isNaturalByePlan(playoffTeamCount, storedPlan) ? storedPlan : null
+  const planCheck = byePlan ? checkByePlan(playoffTeamCount, byePlan) : null
+  const roundCount = planCheck?.ok ? planCheck.roundCount : Math.max(1, Math.ceil(Math.log2(bracketSize)))
   const tiebreakers = normalizeTiebreakers(input.rules)
   const supportWarnings: string[] = []
   if (playoffTeamCount > 16) supportWarnings.push('Playoff brackets above 16 teams are not supported by the G40 runtime.')
@@ -331,9 +343,10 @@ function resolveSettings(input: {
     regularSeasonEndWeek,
     playoffStartWeek,
     bracketSize,
-    firstRoundByes,
+    firstRoundByes: planCheck?.ok ? planCheck.byeSeeds.length : firstRoundByes,
     roundCount,
-    reseedAfterEachRound: includesToken(input.rules.playoffs.reseedBehavior, 'reseed'),
+    byePlan,
+    reseedAfterEachRound: byePlan != null || includesToken(input.rules.playoffs.reseedBehavior, 'reseed'),
     consolationEnabled: Boolean(input.rules.playoffs.consolationBracketEnabled),
     thirdPlaceGameEnabled: Boolean(input.rules.playoffs.thirdPlaceGameEnabled),
     divisionWinnersEnabled:
@@ -634,6 +647,7 @@ function buildGeneratedRounds(input: {
   bracketType: NflRedraftPlayoffBracketType
 }): NflRedraftPlayoffRoundState[] {
   const seedToRoster = new Map(input.seeds.map((seed) => [seed.seed, seed.rosterId]))
+  if (input.settings.byePlan) return buildByePlanRounds({ ...input, seedToRoster, byePlan: input.settings.byePlan })
   const roundCount = input.settings.roundCount
   const pairs = generatedSeedPairs(input.settings.bracketSize)
   const rounds: NflRedraftPlayoffRoundState[] = []
@@ -693,6 +707,70 @@ function buildGeneratedRounds(input: {
     previousMatchupIds = matchups.map((matchup) => matchup.matchupId)
   }
   return rounds
+}
+
+/** Seeds whose bye ends at `roundNumber`, i.e. who play their first game in it. */
+function seedsEnteringRound(byePlan: readonly number[], roundNumber: number): number[] {
+  return byePlan.flatMap((off, i) => (off === roundNumber - 1 ? [i + 1] : []))
+}
+
+/** Best remaining vs worst remaining. */
+function pairBestVsWorst<T>(sorted: T[]): Array<[T, T]> {
+  const pairs: Array<[T, T]> = []
+  for (let i = 0; i < Math.floor(sorted.length / 2); i += 1) pairs.push([sorted[i], sorted[sorted.length - 1 - i]])
+  return pairs
+}
+
+/**
+ * Rounds for a commissioner bye plan. Round 1 is paired now from the seeds that play in it; later
+ * rounds are empty slots sized by the plan and filled by `fillNextRound` as winners come in. No
+ * `nextMatchupId` links: the plan re-pairs every round, so no game feeds a fixed slot.
+ */
+function buildByePlanRounds(input: {
+  seeds: NflRedraftPlayoffSeedState[]
+  settings: NflRedraftPlayoffSettings
+  bracketType: NflRedraftPlayoffBracketType
+  seedToRoster: Map<number, string>
+  byePlan: number[]
+}): NflRedraftPlayoffRoundState[] {
+  const plan = checkByePlan(input.byePlan.length, input.byePlan)
+  if (!plan.ok) return []
+  return plan.rounds.map((planRound) => {
+    const roundName = roundNameFor(planRound.round, plan.roundCount)
+    const firstPairs = planRound.round === 1 ? pairBestVsWorst(planRound.entering) : []
+    const matchups: NflRedraftPlayoffMatchupState[] = Array.from({ length: planRound.games }, (_, index) => {
+      const [homeSeed, awaySeed] = firstPairs[index] ?? [null, null]
+      return {
+        matchupId: `${input.bracketType}:r${planRound.round}:m${index + 1}`,
+        roundId: `${input.bracketType}:round:${planRound.round}`,
+        roundNumber: planRound.round,
+        roundName,
+        matchupNumber: index + 1,
+        bracketType: input.bracketType,
+        homeRosterId: homeSeed ? input.seedToRoster.get(homeSeed) ?? null : null,
+        awayRosterId: awaySeed ? input.seedToRoster.get(awaySeed) ?? null : null,
+        homeSeed,
+        awaySeed,
+        homeScore: null,
+        awayScore: null,
+        winnerRosterId: null,
+        loserRosterId: null,
+        nextMatchupId: null,
+        status: 'scheduled',
+        bye: false,
+        complete: false,
+        metadata: { byePlan: true, enteringSeeds: planRound.entering },
+      }
+    })
+    return {
+      roundId: `${input.bracketType}:round:${planRound.round}`,
+      roundNumber: planRound.round,
+      roundName,
+      bracketType: input.bracketType,
+      status: planRound.round === 1 ? 'active' : 'pending',
+      matchups,
+    }
+  })
 }
 
 function buildConsolationRounds(input: {
@@ -1010,8 +1088,15 @@ function fillNextRound(input: {
   const nextRound = input.rounds.find((round) => round.roundNumber === input.activeRound.roundNumber + 1)
   if (!nextRound) return null
   const seedByRosterId = new Map(input.state.seeds.map((seed) => [seed.rosterId, seed.seed]))
+  // A bye plan adds the seeds whose bye ends this round to the winners before pairing.
+  const byePlan = input.state.settings.byePlan
+  const entering = byePlan
+    ? seedsEnteringRound(byePlan, nextRound.roundNumber)
+        .map((seed) => input.state.seeds.find((row) => row.seed === seed)?.rosterId ?? null)
+        .filter((rosterId): rosterId is string => rosterId != null && !input.winners.includes(rosterId))
+    : []
   const sortedWinners = input.state.settings.reseedAfterEachRound
-    ? [...input.winners].sort((a, b) => (seedByRosterId.get(a) ?? 999) - (seedByRosterId.get(b) ?? 999))
+    ? [...input.winners, ...entering].sort((a, b) => (seedByRosterId.get(a) ?? 999) - (seedByRosterId.get(b) ?? 999))
     : input.winners
 
   if (input.state.settings.reseedAfterEachRound) {

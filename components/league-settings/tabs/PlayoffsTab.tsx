@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
+import { PlayoffBracketFormatCard } from '@/components/league-settings/PlayoffBracketFormatCard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -72,6 +73,8 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           </label>
         </div>
       </div>
+
+      {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}
 
       <div>
         <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.stages')}</h4>
