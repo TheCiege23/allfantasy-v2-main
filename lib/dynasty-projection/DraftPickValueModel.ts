@@ -19,7 +19,8 @@ export function valueFuturePicks(
   let long = 0
 
   for (const p of picks) {
-    const base = getPickValue(p.season, p.round, ctx.isDynasty, p.pickNumber, ctx.teamCount)
+    // ctx.sport: MLB/NBA/NHL price off their own rookie-draft month and round count; NFL unchanged.
+    const base = getPickValue(p.season, p.round, ctx.isDynasty, p.pickNumber, ctx.teamCount, ctx.sport)
     const yearsOut = Math.max(0, p.season - currentYear)
 
     total += base
