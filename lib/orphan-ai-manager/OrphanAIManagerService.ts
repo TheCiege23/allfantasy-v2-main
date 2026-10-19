@@ -18,6 +18,7 @@ import type { LeagueSport } from '@prisma/client'
 import { getAssignmentForRoster, parseCommissionerAiManagers } from '@/lib/commissioner-ai-draft-manager'
 import { mapAiStyleToCpuMode } from '@/lib/commissioner-ai-draft-manager/mapAiStyle'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 
 export type AiManagerAuditAction = 'draft_pick' | 'trade_accept' | 'trade_reject' | 'trade_counter' | 'trade_send'
 
@@ -211,7 +212,16 @@ export async function executeDraftPickForOrphan(
   const draftedNames = new Set(snapshot.picks.map((p) => p.playerName))
   const sport = (league.sport as LeagueSport) ?? 'NFL'
   const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 })
-  const available = pool
+  const sessionPool = await prisma.draftSession.findFirst({
+    where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { playerPool: true },
+  })
+  // Pick validation refuses an ineligible `auto` pick in a rookies-only / veterans-only draft.
+  const eligiblePool = await filterCandidatesForPlayerPool(leagueId, sessionPool?.playerPool, pool, (p) => ({
+    playerName: p.full_name,
+  }))
+  const available = eligiblePool
     .filter((p) => !draftedNames.has(p.full_name))
     .slice(0, 250)
     .map((p) => ({

@@ -14,7 +14,7 @@ import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invaria
 import { computeTimerEndAt } from './DraftTimerService'
 import { validatePickSubmission, validateDevyEligibilityAsync, validateC2CEligibilityAsync } from './PickValidation'
 import { validateSpecialtyDraftPools } from './SpecialtyDraftPoolValidation'
-import { resolveServerRookieStatus } from './serverRookieStatus'
+import { isRookieRestrictedPlayerPool, resolveServerRookieStatus } from './serverRookieStatus'
 import { validateRosterFitForDraftPick } from './RosterFitValidation'
 import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { resolvePickOwner } from './PickOwnershipResolver'
@@ -274,12 +274,12 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     else assetType = 'player'
   }
 
-  // Manager picks only: autopick retries the same candidate on a refusal, so a strict check there
-  // could stall the clock. Its candidates come from the same board in the common case.
-  const playerPoolMode = String(session.playerPool ?? 'all').toLowerCase()
+  // Manager picks and autopicks. Autopick filters its candidates with the same resolver
+  // (`filterCandidatesForPlayerPool`), because a refused autopick retries the same player.
+  const pickSource = input.source ?? 'user'
   const serverRookieStatus =
-    (playerPoolMode === 'rookies_only' || playerPoolMode === 'veterans_only') &&
-    (input.source ?? 'user') === 'user' &&
+    isRookieRestrictedPlayerPool(session.playerPool) &&
+    (pickSource === 'user' || pickSource === 'auto') &&
     assetType === 'player'
       ? await resolveServerRookieStatus({ leagueId: input.leagueId, playerId: input.playerId, playerName: input.playerName })
       : null

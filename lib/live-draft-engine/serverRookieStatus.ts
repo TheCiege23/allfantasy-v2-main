@@ -21,35 +21,80 @@
  *   contradict the board;
  * - the player is absent from a board that is not rookies-only (it may simply not be in the pool),
  *   or two board entries share the player's name.
+ *
+ * ⚠ AUTOPICK MUST FILTER ITS CANDIDATES WITH THE SAME RESOLVER (`filterCandidatesForPlayerPool`).
+ * A refused autopick is retried with the same player on the next tick, so a candidate list that
+ * disagrees with this check stalls the clock rather than merely losing one pick.
  */
 import { getWarmDraftPoolSnapshotFast } from '@/lib/draft-room/ensureDraftPoolReady'
 import { normalizeDraftPoolNameForDedupe } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 
 type PoolEntryLike = { playerId?: unknown; name?: unknown; isRookie?: unknown }
+type PlayerRef = { playerId?: string | null; playerName?: string | null }
 
-export function rookieStatusFromPoolEntries(
-  entries: ReadonlyArray<unknown>,
-  player: { playerId?: string | null; playerName?: string | null },
-): boolean | null {
+export type ServerRookieStatusResolver = (player: PlayerRef) => boolean | null
+
+/** Indexes the board once, so autopick can judge hundreds of candidates against it. */
+export function buildRookieStatusResolver(entries: ReadonlyArray<unknown>): ServerRookieStatusResolver {
   const rows = entries.filter((e): e is PoolEntryLike => Boolean(e) && typeof e === 'object')
-  if (!rows.some((e) => e.isRookie === true)) return null
+  if (!rows.some((e) => e.isRookie === true)) return () => null
+  const allRookies = rows.every((e) => e.isRookie === true)
 
-  const id = String(player.playerId ?? '').trim()
-  let match = id ? rows.find((e) => String(e.playerId ?? '').trim() === id) : undefined
-  let nameMatches = 0
-  if (!match) {
-    const name = normalizeDraftPoolNameForDedupe(String(player.playerName ?? ''))
-    if (name) {
-      const byName = rows.filter((e) => normalizeDraftPoolNameForDedupe(String(e.name ?? '')) === name)
-      nameMatches = byName.length
-      // Two pool players with one name cannot be told apart by name: unknown, not a guess.
-      if (byName.length === 1) match = byName[0]
-    }
+  const byId = new Map<string, PoolEntryLike>()
+  const byName = new Map<string, PoolEntryLike[]>()
+  for (const row of rows) {
+    const id = String(row.playerId ?? '').trim()
+    if (id && !byId.has(id)) byId.set(id, row)
+    const name = normalizeDraftPoolNameForDedupe(String(row.name ?? ''))
+    if (name) byName.set(name, [...(byName.get(name) ?? []), row])
   }
-  if (match) return match.isRookie === true
-  if (nameMatches > 1) return null
-  // Absent from a board of nothing but rookies: the rookies-only filter removed them.
-  return rows.every((e) => e.isRookie === true) ? false : null
+
+  return (player) => {
+    const id = String(player.playerId ?? '').trim()
+    let match = id ? byId.get(id) : undefined
+    let nameMatches = 0
+    if (!match) {
+      const name = normalizeDraftPoolNameForDedupe(String(player.playerName ?? ''))
+      const named = name ? byName.get(name) ?? [] : []
+      nameMatches = named.length
+      // Two pool players with one name cannot be told apart by name: unknown, not a guess.
+      if (named.length === 1) match = named[0]
+    }
+    if (match) return match.isRookie === true
+    if (nameMatches > 1) return null
+    // Absent from a board of nothing but rookies: the rookies-only filter removed them.
+    return allRookies ? false : null
+  }
+}
+
+export function rookieStatusFromPoolEntries(entries: ReadonlyArray<unknown>, player: PlayerRef): boolean | null {
+  return buildRookieStatusResolver(entries)(player)
+}
+
+export function isRookieRestrictedPlayerPool(playerPool: unknown): boolean {
+  const mode = String(playerPool ?? '').toLowerCase()
+  return mode === 'rookies_only' || mode === 'veterans_only'
+}
+
+/** False only when the server's verdict contradicts the pool mode; unknown stays eligible. */
+export function isEligibleForPlayerPool(playerPool: unknown, rookie: boolean | null): boolean {
+  const mode = String(playerPool ?? '').toLowerCase()
+  if (mode === 'rookies_only') return rookie !== false
+  if (mode === 'veterans_only') return rookie !== true
+  return true
+}
+
+export async function loadServerRookieStatusResolver(leagueId: string): Promise<ServerRookieStatusResolver | null> {
+  try {
+    const snapshot = await getWarmDraftPoolSnapshotFast(leagueId)
+    if (!snapshot.warm || !snapshot.payload) return null
+    const entries = (snapshot.payload as { entries?: unknown }).entries
+    if (!Array.isArray(entries)) return null
+    return buildRookieStatusResolver(entries)
+  } catch (err) {
+    console.warn('[draft] server rookie status unavailable:', err instanceof Error ? err.message : String(err))
+    return null
+  }
 }
 
 export async function resolveServerRookieStatus(args: {
@@ -57,14 +102,22 @@ export async function resolveServerRookieStatus(args: {
   playerId?: string | null
   playerName: string
 }): Promise<boolean | null> {
-  try {
-    const snapshot = await getWarmDraftPoolSnapshotFast(args.leagueId)
-    if (!snapshot.warm || !snapshot.payload) return null
-    const entries = (snapshot.payload as { entries?: unknown }).entries
-    if (!Array.isArray(entries)) return null
-    return rookieStatusFromPoolEntries(entries, args)
-  } catch (err) {
-    console.warn('[draft] server rookie status unavailable:', err instanceof Error ? err.message : String(err))
-    return null
-  }
+  const resolver = await loadServerRookieStatusResolver(args.leagueId)
+  return resolver ? resolver(args) : null
+}
+
+/**
+ * Drops autopick candidates that pick validation would refuse in a rookies-only / veterans-only
+ * draft. A no-op for every other pool mode and when the server cannot tell (no warm snapshot).
+ */
+export async function filterCandidatesForPlayerPool<T>(
+  leagueId: string,
+  playerPool: unknown,
+  candidates: T[],
+  toPlayer: (candidate: T) => PlayerRef,
+): Promise<T[]> {
+  if (!isRookieRestrictedPlayerPool(playerPool) || candidates.length === 0) return candidates
+  const resolver = await loadServerRookieStatusResolver(leagueId)
+  if (!resolver) return candidates
+  return candidates.filter((c) => isEligibleForPlayerPool(playerPool, resolver(toPlayer(c))))
 }
