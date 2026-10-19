@@ -68,7 +68,6 @@ export async function POST(
     expiresInHours?: number
     metadata?: Record<string, unknown>
     decisionEvidenceToken?: string | null
-    currentWeek?: number | null
     vetoMode?: unknown
     vetoThreshold?: unknown
     reviewWindow?: unknown
