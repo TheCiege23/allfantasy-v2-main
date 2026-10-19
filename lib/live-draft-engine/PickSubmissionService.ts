@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { assertDraftSessionBelongsToLeague } from '@/lib/engine-testing/hardening/engineInvariants'
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
 import { computeTimerEndAt } from './DraftTimerService'
+import { absentClockSeconds, normalizeAbsentManagerRule } from '@/lib/draft-day/absentManager'
 import { validatePickSubmission, validateDevyEligibilityAsync, validateC2CEligibilityAsync } from './PickValidation'
 import { validateSpecialtyDraftPools } from './SpecialtyDraftPoolValidation'
 import { validateRosterFitForDraftPick } from './RosterFitValidation'
@@ -301,6 +302,23 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
 
   const timerSeconds = session.timerSeconds ?? 90
   const nextTimerEndAt = computeTimerEndAt(timerSeconds)
+  const absentRule = normalizeAbsentManagerRule(uiSettings?.absentManagerRule)
+  /** The short clock for the team on the clock AFTER this pick, or null for the normal timer. */
+  const absentClockForNextTeam = (picksAfter: Array<{ overall: number; rosterId: string; source?: string | null; playerName: string; position: string; pickMetadata?: unknown }>): number | null => {
+    if (!absentRule.enabled) return null
+    const next = resolveCurrentOnTheClock({
+      totalPicks,
+      picks: picksAfter.map((p) => ({ overall: p.overall, playerName: p.playerName, position: p.position, pickMetadata: p.pickMetadata ?? null })),
+      teamCount,
+      draftType: session.draftType as 'snake' | 'linear' | 'auction',
+      thirdRoundReversal: session.thirdRoundReversal,
+      slotOrder,
+    })
+    if (!next) return null
+    const nextRound = Math.ceil(next.overall / teamCount)
+    const nextRosterId = resolvePickOwner(nextRound, next.slot, slotOrder, tradedPicks)?.rosterId ?? next.rosterId
+    return absentClockSeconds({ rule: absentRule, timerMode: uiSettings?.timerMode, timerSeconds, picks: picksAfter, nextRosterId })
+  }
 
   /*
    * A COMMISSIONER CORRECTION MUST NOT RESUME A PAUSED DRAFT.
@@ -387,6 +405,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           ownerUserId: input.madeByUserId ?? null,
         },
       })
+      // Draft-day kit: a team whose last picks were all auto-picked gets the short clock.
+      const absentSeconds = absentClockForNextTeam([...locked.picks, created])
       const sessionMutation = {
         where: { id: session.id },
         data: keepPaused
@@ -403,7 +423,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
               updatedAt: new Date(),
             }
           : {
-              timerEndAt: nextTimerEndAt,
+              timerEndAt: absentSeconds != null ? computeTimerEndAt(absentSeconds) : nextTimerEndAt,
               pausedRemainingSeconds: null,
               status: 'in_progress',
               version: { increment: 1 },

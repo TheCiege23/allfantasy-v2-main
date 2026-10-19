@@ -44,6 +44,7 @@ import {
 } from '@/components/app/draft-room/ResultsRosterPanel'
 import { DraftRosterStrip } from '@/components/app/draft-room/DraftRosterStrip'
 import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/DraftRoundOneAnnouncementOverlay'
+import { DraftDayShow } from '@/components/draft-day/DraftDayShow'
 import { DraftIntroGate } from '@/components/draft/DraftIntroGate'
 import type { DraftAiOverlaySignal, PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
@@ -4584,6 +4585,7 @@ export function DraftRoomPageClient({
         </div>
       </div>
     ) : null}
+    {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} /> : null}
     {presentationVariant === 'redraft_snake' && !isDynasty ? (
       <DraftRoundOneAnnouncementOverlay
         presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}

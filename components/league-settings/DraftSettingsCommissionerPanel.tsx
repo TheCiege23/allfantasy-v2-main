@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Calendar, Clock, Shuffle, Sparkles, Info, ChevronDown, Trophy, TrendingDown, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
+import { DraftDayKit } from '@/components/draft-day/DraftDayKit'
 import {
   LEGACY_TIMER_SECONDS,
   RANDOMIZE_MAX_TIMES,
@@ -689,6 +690,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           )}
         </section>
       )}
+
+      <DraftDayKit leagueId={leagueId} isCommissioner={isCommissioner} />
 
       {/* ===== MESSAGES + SAVE ===== */}
       <div className="space-y-2" aria-live="polite">
