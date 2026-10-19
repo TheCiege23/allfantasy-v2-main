@@ -1,3 +1,5 @@
+import { ageMultiplier as sportAgeMultiplier } from '@/lib/dynasty-engine/AgingCurveService'
+import { getPeakAgeRange, hasNativeAgingCurve } from '@/lib/dynasty-engine/SportDynastyResolver'
 import type {
   PlayerDynastyAsset,
   DynastyLeagueContext,
@@ -6,7 +8,11 @@ import type {
 
 type Horizon = 'next' | 'three' | 'five'
 
-function ageMultiplier(position: string, age: number | null, horizon: Horizon): number {
+/**
+ * NFL-shaped curve. This is the historical behaviour and still what NFL (and the sports without a
+ * native curve) run, byte-for-byte — note it deliberately differs from getPeakAgeRange for K/DEF.
+ */
+function nflAgeMultiplier(position: string, age: number | null, horizon: Horizon): number {
   if (!age || age <= 0) return 1
   const pos = position.toUpperCase()
 
@@ -38,6 +44,35 @@ function ageMultiplier(position: string, age: number | null, horizon: Horizon): 
 
   const t = (effAge - cfg.peakEnd) / (cfg.hardCliff - cfg.peakEnd)
   return 1.0 - t * 0.6
+}
+
+/**
+ * MLB / NBA / NHL used to run the NFL curve above, so an NHL goalie fell to the 25/29/32 default and
+ * an MLB SP aged like an NFL WR. They now go through the sport-aware AgingCurveService.
+ */
+function ageMultiplier(sport: string, position: string, age: number | null, horizon: Horizon): number {
+  if (hasNativeAgingCurve(sport)) return sportAgeMultiplier(sport, position, age, horizon)
+  return nflAgeMultiplier(position, age, horizon)
+}
+
+/**
+ * Per-player age risk (0-100ish). NFL keeps its hand-tuned position slopes. Native-curve sports
+ * previously scored 0 for every position (only QB/RB/WR/TE matched), so their agingRiskScore was
+ * always 0; they now accrue risk from one year before peakEnd, scaled so reaching the cliff costs
+ * ~8 points per year of decline window regardless of how long that window is.
+ */
+function ageRiskFor(sport: string, position: string, age: number): number {
+  const pos = position.toUpperCase()
+  if (hasNativeAgingCurve(sport)) {
+    const r = getPeakAgeRange(sport, pos)
+    const span = Math.max(1, r.hardCliff - r.peakEnd)
+    return Math.max(0, age - (r.peakEnd - 1)) * (8 / span)
+  }
+  if (pos === 'RB') return Math.max(0, age - 25) * 4
+  if (pos === 'WR') return Math.max(0, age - 28) * 2.5
+  if (pos === 'TE') return Math.max(0, age - 28) * 2
+  if (pos === 'QB') return Math.max(0, age - 33) * 1.5
+  return 0
 }
 
 function positionScarcityMultiplier(position: string, ctx: DynastyLeagueContext): number {
@@ -73,26 +108,16 @@ export function calculateRosterFutureValue(
     if (!base) continue
     const scarcity = positionScarcityMultiplier(p.position, ctx)
 
-    const mNext = ageMultiplier(p.position, p.age ?? null, 'next') * scarcity
-    const mThree = ageMultiplier(p.position, p.age ?? null, 'three') * scarcity
-    const mFive = ageMultiplier(p.position, p.age ?? null, 'five') * scarcity
+    const mNext = ageMultiplier(ctx.sport, p.position, p.age ?? null, 'next') * scarcity
+    const mThree = ageMultiplier(ctx.sport, p.position, p.age ?? null, 'three') * scarcity
+    const mFive = ageMultiplier(ctx.sport, p.position, p.age ?? null, 'five') * scarcity
 
     nextSum += base * mNext
     threeSum += base * mThree
     fiveSum += base * mFive
 
     const ageForRisk = p.age ?? 26
-    const pos = p.position.toUpperCase()
-    let ageRisk = 0
-    if (pos === 'RB') {
-      ageRisk = Math.max(0, ageForRisk - 25) * 4
-    } else if (pos === 'WR') {
-      ageRisk = Math.max(0, ageForRisk - 28) * 2.5
-    } else if (pos === 'TE') {
-      ageRisk = Math.max(0, ageForRisk - 28) * 2
-    } else if (pos === 'QB') {
-      ageRisk = Math.max(0, ageForRisk - 33) * 1.5
-    }
+    const ageRisk = ageRiskFor(ctx.sport, p.position, ageForRisk)
 
     const injuryScore = p.recentInjuryScore ?? 0
 

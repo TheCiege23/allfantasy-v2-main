@@ -10,7 +10,7 @@ import {
   getWindowMultiplier,
   TIER_BASE_VALUES,
 } from '@/lib/dynasty-tiers'
-import { getPeakAgeRange } from '@/lib/dynasty-engine/SportDynastyResolver'
+import { getPeakAgeRange, hasNativeAgingCurve } from '@/lib/dynasty-engine/SportDynastyResolver'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport, SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type {
@@ -48,8 +48,8 @@ const POSITION_ALIASES: Record<string, Record<string, string>> = {
   NCAAF: { HB: 'RB', FB: 'RB', PK: 'K', DEF: 'DST', D: 'DST' },
   NBA: { G: 'PG', F: 'SF', UTIL: 'SF' },
   NCAAB: { G: 'PG', F: 'SF', UTIL: 'SF' },
-  MLB: { SP: 'SP', RP: 'RP', P: 'SP', DH: 'OF' },
-  NHL: {},
+  MLB: { SP: 'SP', RP: 'RP', P: 'SP', DH: 'OF', LF: 'OF', CF: 'OF', RF: 'OF' },
+  NHL: { W: 'LW', F: 'C', LD: 'D', RD: 'D' },
   SOCCER: { GK: 'GK', GKP: 'GK', G: 'GK', F: 'FWD', FW: 'FWD', M: 'MID', D: 'DEF' },
 }
 
@@ -107,20 +107,15 @@ function resolveArchetypePosition(sport: string, position: string): string | nul
   if (sport === 'NFL' || sport === 'NCAAF') {
     if (['QB', 'RB', 'WR', 'TE'].includes(normalized)) return normalized
   }
-  if (sport === 'NBA' || sport === 'NCAAB') {
+  // MLB / NBA / NHL used to be mapped onto NFL archetypes here (NBA PG & MLB SP -> QB curve,
+  // NHL wingers -> WR curve, MLB C -> TE curve), which then applied NFL cliffs and the NFL
+  // superflex/TE-premium multipliers to them. They now return null so every caller falls through
+  // to the sport's own per-position range from getPeakAgeRange.
+  if (hasNativeAgingCurve(sport)) return null
+  if (sport === 'NCAAB') {
     if (['PG', 'SG'].includes(normalized)) return 'QB'
     if (['SF', 'PF'].includes(normalized)) return 'WR'
     if (normalized === 'C') return 'TE'
-  }
-  if (sport === 'NHL') {
-    if (normalized === 'G') return 'QB'
-    if (normalized === 'D') return 'TE'
-    return 'WR'
-  }
-  if (sport === 'MLB') {
-    if (['SP', 'RP'].includes(normalized)) return 'QB'
-    if (normalized === 'C') return 'TE'
-    return 'WR'
   }
   if (sport === 'SOCCER') {
     if (normalized === 'GK') return 'QB'

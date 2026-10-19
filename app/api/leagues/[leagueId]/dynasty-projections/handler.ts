@@ -44,38 +44,42 @@ type RosterLite = {
   playerData: unknown
 }
 
+/** A team left out of generation, with why — returned so the UI can say so instead of guessing. */
+type SkippedTeam = { teamId: string; reason: 'empty_roster' }
+
+/** Player values fed to the engine are heuristic estimates, not market (FantasyCalc/KTC) values. */
+const PLAYER_VALUE_SOURCE = 'estimated' as const
+
 type DraftSessionLite = {
   tradedPicks: unknown
 }
 
-const POSITION_BASE: Record<string, number> = {
-  QB: 7600,
-  RB: 7000,
-  WR: 6800,
-  TE: 6100,
-  K: 3600,
-  DST: 4200,
-  DEF: 4200,
-  PG: 6500,
-  SG: 6400,
-  SF: 6500,
-  PF: 6400,
-  C: 6300,
-  G: 5900,
-  D: 5700,
-  LW: 5900,
-  RW: 5900,
-  SP: 6500,
-  RP: 5000,
-  OF: 6100,
-  SS: 5900,
-  '2B': 5800,
-  '3B': 6000,
-  '1B': 6100,
-  FWD: 6200,
-  MID: 6000,
-  GK: 5600,
+/**
+ * Heuristic base value by SPORT, then position. This used to be one flat table keyed by label, so
+ * MLB catcher, NBA center and NHL center were all "C" = 6300, NBA guard and NHL goalie were both
+ * "G", and a soccer "DEF" was priced as an NFL team defense. Every number here is an ESTIMATE
+ * (position base x age curve + market trend), which the response says via `playerValueSource`.
+ * NFL values are unchanged.
+ */
+const NBA_BASE: Record<string, number> = {
+  PG: 6500, SG: 6400, SF: 6500, PF: 6400, C: 6300, G: 6450, F: 6450, 'G-F': 6450, 'F-C': 6350, UTIL: 6300,
 }
+const NFL_BASE: Record<string, number> = { QB: 7600, RB: 7000, WR: 6800, TE: 6100, K: 3600, DST: 4200, DEF: 4200 }
+const POSITION_BASE_BY_SPORT: Record<string, Record<string, number>> = {
+  NFL: NFL_BASE,
+  NCAAF: NFL_BASE,
+  NBA: NBA_BASE,
+  NCAAB: NBA_BASE,
+  NHL: { C: 6300, LW: 5900, RW: 5900, W: 5900, F: 6100, D: 5700, G: 6000 },
+  // Catcher is the shallowest fantasy position in MLB, not a premium one.
+  MLB: {
+    SP: 6500, RP: 5000, P: 5800, C: 5300, '1B': 6100, '2B': 5800, '3B': 6000, SS: 5900,
+    OF: 6100, LF: 6100, CF: 6100, RF: 6100, DH: 5600, UTIL: 5600,
+  },
+  SOCCER: { FWD: 6200, FW: 6200, F: 6200, MID: 6000, M: 6000, DEF: 5600, D: 5600, GK: 5600, G: 5600 },
+}
+/** Unknown position: NFL keeps its historical 5200; elsewhere use the sport's floor, not a mid value. */
+const NFL_UNKNOWN_POSITION_BASE = 5200
 
 function asObject(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
@@ -134,9 +138,14 @@ function statusToInjuryRisk(status: string | null | undefined): number {
   return 0.2
 }
 
-function getBaseValueForPosition(position: string): number {
+function getBaseValueForPosition(sport: string, position: string): number {
   const pos = position.toUpperCase()
-  return POSITION_BASE[pos] ?? 5200
+  const s = resolveSportForDynasty(sport)
+  const table = POSITION_BASE_BY_SPORT[s] ?? NFL_BASE
+  const hit = table[pos]
+  if (hit != null) return hit
+  if (table === NFL_BASE) return NFL_UNKNOWN_POSITION_BASE
+  return Math.min(...Object.values(table))
 }
 
 function estimateDynastyValue(params: {
@@ -146,7 +155,7 @@ function estimateDynastyValue(params: {
   trendScore: number
   injuryRisk: number
 }): number {
-  const base = getBaseValueForPosition(params.position)
+  const base = getBaseValueForPosition(params.sport, params.position)
   const ageAdj = ageMultiplier(params.sport, params.position, params.age, 'next')
   const trendAdj = Math.max(0, Math.min(100, params.trendScore)) * 26
   const injuryPenalty = params.injuryRisk * 900
@@ -184,41 +193,6 @@ function inferFormatFlags(league: LeagueLite): { isSuperFlex: boolean; isTightEn
     scoring.includes('tep') ||
     scoring.includes('te premium')
   return { isSuperFlex, isTightEndPremium }
-}
-
-function buildSyntheticPlayers(team: TeamLite, sport: string): PlayerDynastyAsset[] {
-  const baseline = Math.max(40, Math.min(95, team.aiPowerScore ?? 65))
-  const templatesBySport: Record<string, string[]> = {
-    NFL: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'WR', 'RB'],
-    NBA: ['PG', 'SG', 'SF', 'PF', 'C', 'SG', 'SF', 'PF'],
-    NHL: ['C', 'LW', 'RW', 'D', 'D', 'C', 'LW', 'G'],
-    MLB: ['SP', 'SP', 'RP', '1B', '2B', '3B', 'SS', 'OF'],
-    NCAAB: ['PG', 'SG', 'SF', 'PF', 'C', 'SG', 'SF', 'PF'],
-    NCAAF: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'WR', 'RB'],
-    SOCCER: ['FWD', 'MID', 'MID', 'DEF', 'DEF', 'GK', 'FWD', 'MID'],
-  }
-  const template = templatesBySport[sport] ?? templatesBySport.NFL
-  return template.map((position, i) => {
-    const age = 23 + (i % 8)
-    const trendScore = Math.max(0, Math.min(100, baseline + (4 - i) * 2))
-    return {
-      playerId: `synthetic-${team.externalId}-${i + 1}`,
-      name: `${team.teamName || team.externalId} ${position} ${i + 1}`,
-      position,
-      age,
-      dynastyValue: estimateDynastyValue({
-        sport,
-        position,
-        age,
-        trendScore,
-        injuryRisk: 0,
-      }),
-      recentInjuryScore: 0,
-      gamesPlayedLastSeason: null,
-      draftRound: null,
-      yearsInLeague: null,
-    }
-  })
 }
 
 function buildFuturePicksByTeam(params: {
@@ -326,7 +300,7 @@ async function buildTeamInputsFromLeague(params: {
   sportOverride?: string
   seasonOverride?: number
   teamIdFilter?: string
-}): Promise<{ league: LeagueLite; teamInputs: TeamDynastyInputs[] }> {
+}): Promise<{ league: LeagueLite; teamInputs: TeamDynastyInputs[]; skippedTeams: SkippedTeam[] }> {
   const league = await resolveLeagueByAnyId(params.leagueId)
   if (!league) {
     throw new Error('League not found')
@@ -430,7 +404,19 @@ async function buildTeamInputsFromLeague(params: {
   })
   const formatFlags = inferFormatFlags(league)
 
-  const teamInputs: TeamDynastyInputs[] = targetTeams.map((team) => {
+  /*
+   * A team whose roster has no players is SKIPPED and reported, never projected. This used to
+   * fabricate eight template players (ages 23-30, values from aiPowerScore) and persist a projection
+   * built on them, which read as a real roster outlook for a team we know nothing about.
+   */
+  const skippedTeams: SkippedTeam[] = []
+  const teamsWithPlayers = targetTeams.filter((team) => {
+    const hasPlayers = (rosterPlayerIdsByTeam.get(team.externalId) ?? []).length > 0
+    if (!hasPlayers) skippedTeams.push({ teamId: team.externalId, reason: 'empty_roster' })
+    return hasPlayers
+  })
+
+  const teamInputs: TeamDynastyInputs[] = teamsWithPlayers.map((team) => {
     const rosterIds = rosterPlayerIdsByTeam.get(team.externalId) ?? []
     const playersForTeam: PlayerDynastyAsset[] = rosterIds.map((id) => {
       const p = playerById.get(id)
@@ -460,8 +446,6 @@ async function buildTeamInputsFromLeague(params: {
       }
     })
 
-    const fallbackPlayers =
-      playersForTeam.length > 0 ? playersForTeam : buildSyntheticPlayers(team, sport)
     return {
       leagueId: league.id,
       teamId: team.externalId,
@@ -473,12 +457,12 @@ async function buildTeamInputsFromLeague(params: {
         isTightEndPremium: formatFlags.isTightEndPremium,
         teamCount: league.leagueSize ?? teams.length,
       },
-      players: fallbackPlayers,
+      players: playersForTeam,
       futurePicks: futurePicksByTeam.get(team.externalId) ?? [],
     }
   })
 
-  return { league, teamInputs }
+  return { league, teamInputs, skippedTeams }
 }
 
 async function generateForInputs(
@@ -527,14 +511,16 @@ export async function GET(
 
     let projections = await getDynastyProjectionsForLeague(league.id, sport)
     let generated = false
+    let skippedTeams: SkippedTeam[] = []
 
     if (refresh || projections.length === 0) {
-      const { teamInputs } = await buildTeamInputsFromLeague({
+      const built = await buildTeamInputsFromLeague({
         leagueId: league.id,
         sportOverride: sport,
         teamIdFilter: teamId,
       })
-      projections = await generateForInputs(teamInputs, true)
+      skippedTeams = built.skippedTeams
+      projections = await generateForInputs(built.teamInputs, true)
       generated = true
     } else if (teamId) {
       projections = projections.filter((p) => p.teamId === teamId)
@@ -545,6 +531,8 @@ export async function GET(
       generated,
       generatedAt: latestGeneratedAt(projections),
       projections,
+      skippedTeams,
+      playerValueSource: PLAYER_VALUE_SOURCE,
     })
   } catch (e) {
     console.error('[dynasty-projections GET]', e)
@@ -597,7 +585,7 @@ export async function POST(
       })
     }
 
-    const { league, teamInputs } = await buildTeamInputsFromLeague({
+    const { league, teamInputs, skippedTeams } = await buildTeamInputsFromLeague({
       leagueId,
       sportOverride: body.sport,
       seasonOverride: body.season,
@@ -609,6 +597,8 @@ export async function POST(
       generated: true,
       generatedAt: latestGeneratedAt(results),
       projections: results,
+      skippedTeams,
+      playerValueSource: PLAYER_VALUE_SOURCE,
     })
   } catch (e) {
     console.error('[dynasty-projections POST]', e)
