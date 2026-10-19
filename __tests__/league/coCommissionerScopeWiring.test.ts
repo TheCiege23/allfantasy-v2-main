@@ -65,6 +65,36 @@ describe('executeLeagueSettingsPatch → requireCommissionerRole scopes', () => 
   })
 })
 
+describe('co-commissioner permissions cannot be written through the generic settings patch', () => {
+  it('🛑 settingsMerge carrying co_commissioner_scopes is refused before anything is written', async () => {
+    requireRole.mockResolvedValue(undefined)
+    m.prisma.league.findFirst.mockResolvedValue({
+      id: 'L', platform: 'manual', leagueSize: 12, timezone: 'UTC', teams: [], leagueSettings: null,
+      waiverSchedule: null, waiverProcessTime: '02:00', settings: {},
+    })
+    const res = await executeLeagueSettingsPatch('co', {
+      leagueId: 'L',
+      settingsMerge: { co_commissioner_scopes: { myTeam: ['scoring', 'rosters', 'trades', 'money', 'chat', 'league'] } },
+    })
+    expect(res.status).toBe(400)
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+
+  it('an ordinary settingsMerge key still saves', async () => {
+    requireRole.mockResolvedValue(undefined)
+    m.prisma.league.findFirst.mockResolvedValue({
+      id: 'L', platform: 'manual', leagueSize: 12, timezone: 'UTC', teams: [], leagueSettings: null,
+      waiverSchedule: null, waiverProcessTime: '02:00', settings: {},
+    })
+    m.prisma.league.findUnique.mockResolvedValue({ settings: {} })
+    m.prisma.league.update.mockResolvedValue({})
+    m.prisma.leagueSettings.upsert.mockResolvedValue({ updatedAt: new Date() })
+    const res = await executeLeagueSettingsPatch('co', { leagueId: 'L', settingsMerge: { publicStandings: true } })
+    expect(res.status).toBe(200)
+    expect(m.prisma.league.update).toHaveBeenCalled()
+  })
+})
+
 describe('scoped routes pass their permission area', () => {
   const line = (path: string, re: RegExp) => readFileSync(path, 'utf8').split('\n').filter((l) => re.test(l) && !/^\s*(\*|\/\/)/.test(l))
   it.each([

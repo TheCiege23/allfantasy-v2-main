@@ -11,7 +11,7 @@ import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
 import { keeperProvenanceFromCommissionerSave } from '@/lib/league-contract/keeperProvenance'
-import { scopesForSettingsPatch } from '@/lib/league/coCommissionerScopes'
+import { CO_COMMISSIONER_SCOPES_KEY, scopesForSettingsPatch } from '@/lib/league/coCommissionerScopes'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
@@ -428,6 +428,15 @@ export async function executeLeagueSettingsPatch(
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
+  // 🛑 Co-commissioner permissions have ONE writer, the head-commissioner-only co-commissioners
+  // route. Through `settingsMerge` they would be classified as league setup, so a co-commissioner
+  // holding only that permission could grant themselves every other one.
+  if (
+    body.settingsMerge && typeof body.settingsMerge === 'object' &&
+    Object.prototype.hasOwnProperty.call(body.settingsMerge, CO_COMMISSIONER_SCOPES_KEY)
+  ) {
+    return jsonError('Co-commissioner permissions are changed in Co-commissioner settings, not here.', 400)
+  }
 
   /*
    * Per-day waiver schedule (lib/waivers/dailyWaiverSchedule.ts). Stored in `League.settings`, and
