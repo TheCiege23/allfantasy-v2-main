@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -258,6 +259,12 @@ function SuccessContent() {
                 </label>
               ))}
             </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Sneak peek:{' '}
+              <Link href="/formats/king-of-the-hill" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">King of the Hill</Link>
+              {' · '}
+              <Link href="/formats/pirate" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">Pirate</Link>
+            </p>
             {errors.experimentalInterest && <p className="text-xs text-red-400 mt-1">{errors.experimentalInterest.message}</p>}
           </div>
 

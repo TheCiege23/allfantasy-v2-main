@@ -147,6 +147,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    */
   { name: 'share-link', why: 'Sleeper deep links handed to the user', test: /^sleeper\.com$/i },
   { name: 'share-link', why: "Apple's subscription-management page, a redirect handed to an App Store subscriber, never fetched", test: /^apps\.apple\.com$/i },
+  { name: 'share-link', why: 'the AllFantasy Etsy storefront the shop tab links to, never fetched — lib/merch/drop1.ts ETSY_SHOP_URL', test: /^artbyciege\.etsy\.com$/i },
   { name: 'share-link', why: 'webmail inboxes the import verify step links to ("Open Gmail"), never fetched — lib/core-app/importVerifyGate.ts', test: /^(mail\.google\.com|mail\.yahoo\.com|outlook\.live\.com|www\.icloud\.com)$/i },
   /*
    * FOUR MORE OF THE SAME SHAPE, moved out of DATA_API_UNMONITORED on 2026-08-28 by
