@@ -14,6 +14,7 @@ import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invaria
 import { computeTimerEndAt } from './DraftTimerService'
 import { validatePickSubmission, validateDevyEligibilityAsync, validateC2CEligibilityAsync } from './PickValidation'
 import { validateSpecialtyDraftPools } from './SpecialtyDraftPoolValidation'
+import { resolveServerRookieStatus } from './serverRookieStatus'
 import { validateRosterFitForDraftPick } from './RosterFitValidation'
 import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { resolvePickOwner } from './PickOwnershipResolver'
@@ -273,6 +274,15 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     else assetType = 'player'
   }
 
+  // Manager picks only: autopick retries the same candidate on a refusal, so a strict check there
+  // could stall the clock. Its candidates come from the same board in the common case.
+  const playerPoolMode = String(session.playerPool ?? 'all').toLowerCase()
+  const serverRookieStatus =
+    (playerPoolMode === 'rookies_only' || playerPoolMode === 'veterans_only') &&
+    (input.source ?? 'user') === 'user' &&
+    assetType === 'player'
+      ? await resolveServerRookieStatus({ leagueId: input.leagueId, playerId: input.playerId, playerName: input.playerName })
+      : null
   const specialtyPool = validateSpecialtyDraftPools({
     draftModeLabel: (session as { draftModeLabel?: string | null }).draftModeLabel,
     dispersalPoolConfig: (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig,
@@ -284,6 +294,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     position: input.position,
     assetType,
     pickMetadata: input.pickMetadata ?? undefined,
+    serverRookieStatus,
     commissionerOverride: input.source === 'commissioner',
   })
   if (!specialtyPool.valid) return { success: false, error: specialtyPool.error }
