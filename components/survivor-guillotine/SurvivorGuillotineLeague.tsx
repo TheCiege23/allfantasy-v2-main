@@ -8,6 +8,8 @@ import type { SGConfig, SGPower } from '@/lib/survivor-guillotine/types'
 import type { SGLivePeriod, SGTribeMember } from '@/lib/survivor-guillotine/live'
 import type { SGCalendarEntry, SGTribeDraftState } from '@/lib/survivor-guillotine/operations'
 import styles from './league.module.css'
+import { SGVisualSet } from './SGVisualSet'
+import type { SGReleasedPlayer, SGReversalRow } from '@/lib/survivor-guillotine/visual-boards'
 
 type Team = { legacyRosterId: string | null; teamName: string; ownerName: string; eliminatedAt: string | null }
 type Player = { id: string; name: string; position: string; team: string | null }
@@ -25,7 +27,8 @@ type Data = { season: { config: SGConfig; tribes: SGTribeMember[]; periodState: 
     ownBid: { amount: number; status: string } | null; tribeChoice: string | null } | null;
   teams: Team[]; scores: { rosterId: string; totalPoints: number; status: string }[];
   powers: SGPower[]; chops: { period: number; rosterId: string }[];
-  stealTargets: (Player & { rosterId: string })[] }
+  stealTargets: (Player & { rosterId: string })[]
+  releasedPlayers?: SGReleasedPlayer[]; reversals?: SGReversalRow[] }
 
 function localDay() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric',
   month: '2-digit', day: '2-digit' }).format(new Date()) }
@@ -160,9 +163,14 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
     ? pickPlace : captainDraft.leaders.length * 2 - pickPlace - 1]
   if (!data) return <main className={styles.page}><p role="status">{notice || 'Loading Survivor Guillotine…'}</p></main>
   return <main className={styles.page}>
-    <header className={styles.hero}><div><span className={styles.eyebrow}>ALLFANTASY · SURVIVOR GUILLOTINE</span><h1>The island</h1>
-      <p>{season?.status === 'completed' ? 'The Sole Survivor has been crowned.' : `Period ${season?.currentPeriod || 1} · ${current ? SG_MODE_LABELS[current.mode] : 'Season setup'}`}</p></div>
-      <div className={styles.heroActions}><span>{alive.length} managers standing</span>{isCommissioner && <a href={`/survivor-guillotine/setup?leagueId=${encodeURIComponent(leagueId)}`}>League rules</a>}</div></header>
+    <SGVisualSet leagueId={leagueId} isCommissioner={isCommissioner} input={{ season: { config: data.season.config,
+      tribes: data.season.tribes, periodState: data.season.periodState, currentPeriod: data.season.currentPeriod,
+      status: data.season.status, periodHistory: data.season.periodHistory }, ownRosterId: data.ownRoster?.id ?? null,
+      teams: data.teams, scores: data.scores, powers: data.powers }} extras={{ ownPlayers: data.ownRoster?.players ?? [],
+      releasedPlayers: data.releasedPlayers ?? [], reversals: data.reversals ?? [], faabRemaining: data.ownRoster?.faabRemaining ?? null,
+      onPlayPower: (powerId) => { setActivePower(powerId); setPowerTarget(''); setDropPlayer('')
+        window.setTimeout(() => document.getElementById('sg-powers')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0) } }} />
+    <h2 className={styles.opsHeading}>Island operations</h2>
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     <div className={styles.grid}><div>
       <section className={styles.card}><h2>Your lineup</h2><p>{season?.config.sport === 'NBA' && season.config.nbaScoring === 'capped_games'
@@ -203,7 +211,7 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
       </section>
     </div><aside>
       <section className={styles.card}><h2>Elimination watch</h2>{season?.config.sport === 'NBA' && season.config.nbaScoring === 'capped_games' && <p>Live raw points are provisional. The capped player-game total determines the chop after period close.</p>}{data.scores.length ? <ol>{[...data.scores].sort((a, b) => a.totalPoints - b.totalPoints).map(s => <li key={s.rosterId}>{names.get(s.rosterId) ?? s.rosterId} · {s.totalPoints.toFixed(1)} {s.status}</li>)}</ol> : <p>Scores will appear when this period starts.</p>}</section>
-      <section className={styles.card}><h2>Private powers & reveals</h2>{data.powers.length ? <ul>{data.powers.map(power => <li key={power.id}>{SG_POWER_LABELS[power.kind]} · {power.status} · through period {power.expiresAfterPeriod}{power.status === 'held' && data.ownRoster && <button onClick={() => { setActivePower(power.id); setPowerTarget(''); setDropPlayer('') }}>Use privately</button>}</li>)}</ul> : <p>No known powers on your team. Hidden powers are revealed only to their current owner.</p>}
+      <section id="sg-powers" className={styles.card}><h2>Private powers & reveals</h2>{data.powers.length ? <ul>{data.powers.map(power => <li key={power.id}>{SG_POWER_LABELS[power.kind]} · {power.status} · through period {power.expiresAfterPeriod}{power.status === 'held' && data.ownRoster && <button onClick={() => { setActivePower(power.id); setPowerTarget(''); setDropPlayer('') }}>Use privately</button>}</li>)}</ul> : <p>No known powers on your team. Hidden powers are revealed only to their current owner.</p>}
         {activePower && (() => { const power = data.powers.find(p => p.id === activePower); if (!power) return null
           const needsRoster = power.kind === 'ally_immunity' || power.kind === 'tribe_swap'
           const needsPlayer = power.kind === 'steal_player'

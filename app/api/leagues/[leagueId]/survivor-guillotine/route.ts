@@ -11,6 +11,7 @@ import type { SGTribeMember, SGLivePeriod } from '@/lib/survivor-guillotine/live
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { readSGTribeDraftState } from '@/lib/survivor-guillotine/operations'
 import { projectSGHostedHistory } from '@/lib/survivor-guillotine/hosted-presentation'
+import { selectReleasedPlayers } from '@/lib/survivor-guillotine/visual-boards'
 
 export const dynamic = 'force-dynamic'
 type Context = { params: Promise<{ leagueId: string }> }
@@ -71,7 +72,30 @@ export async function GET(_req: NextRequest, context: Context) {
         return player ? [{ ...player, rosterId: roster.id }] : []
       }))
     })() : []
-  return NextResponse.json({ season: { leagueId, config: season.config, tribes: readSGTribes(season.tribes),
+  // Waiver board + reversal board (2026-10). Both respect the hosted-ceremony embargo: a chop the
+  // presentation still hides contributes nothing, and only engine-published facts are returned.
+  const hiddenPeriods = presentation.hiddenHostedChop ? [season.currentPeriod] : []
+  const [reversalRows, releaseRows] = await Promise.all([
+    prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: { not: null } },
+      select: { period: true, rosterId: true, score: true, reversedAt: true, reversalReason: true },
+      orderBy: { period: 'desc' }, take: 5 }),
+    prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: null },
+      select: { period: true, rosterId: true, releaseSnapshot: true, reversedAt: true },
+      orderBy: { period: 'desc' }, take: 6 }),
+  ])
+  const releasedIds = [...new Set(releaseRows.filter(c => !hiddenPeriods.includes(c.period)).flatMap(c =>
+    getRosterPlayerIds((c.releaseSnapshot as { playerData?: unknown } | null)?.playerData)))]
+  const [releasedPlayerRows, leagueRosters] = releasedIds.length ? await Promise.all([
+    prisma.player.findMany({ where: { id: { in: releasedIds } }, select: { id: true, name: true, position: true, team: true } }),
+    prisma.roster.findMany({ where: { leagueId }, select: { playerData: true } }),
+  ]) : [[], []]
+  const releasedPlayers = selectReleasedPlayers({ chops: releaseRows, hiddenPeriods,
+    rosterPlayerIds: getRosterPlayerIds,
+    ownedPlayerIds: new Set(leagueRosters.flatMap(r => getRosterPlayerIds(r.playerData))),
+    players: new Map(releasedPlayerRows.map(p => [p.id, { name: p.name, position: p.position, team: p.team }])) })
+  const reversals = reversalRows.filter(r => !hiddenPeriods.includes(r.period)).map(r => ({ period: r.period,
+    rosterId: r.rosterId, score: r.score, reversedAt: r.reversedAt?.toISOString() ?? null, reason: r.reversalReason }))
+  return NextResponse.json({ releasedPlayers, reversals, season: { leagueId, config: season.config, tribes: readSGTribes(season.tribes),
     periodState, currentPeriod: season.currentPeriod,
     status: season.status, revision: season.revision, periodHistory: presentation.history,
     tribeDraftState: readSGTribeDraftState(season.tribeDraftState) }, powers,
