@@ -9,6 +9,7 @@ import {
 } from '@/lib/roster-engine'
 import { prisma } from '@/lib/prisma'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLifecycleRefusal } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ le
   if (!registry.isSupported(league.sport)) {
     return NextResponse.json({ error: `Roster settings not yet available for ${league.sport}` }, { status: 400 })
   }
+  const lifecycleRefusal = await settingsLifecycleRefusal(leagueId, session.user.id, 'roster')
+  if (lifecycleRefusal) return NextResponse.json({ error: lifecycleRefusal.error, code: lifecycleRefusal.code }, { status: lifecycleRefusal.status })
 
   await resetLeagueRosterToDefault(leagueId, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
