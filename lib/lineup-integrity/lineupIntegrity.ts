@@ -8,9 +8,10 @@
  * ⚠ TWO HARD SIGNALS AND ONE SOFT ONE, AND THEY ARE KEPT APART ON PURPOSE.
  *   empty slot   required starters minus the starters the platform recorded — a fact
  *   on bye       the starter's club had no game that week (the stored schedule) — a fact
- *   ruled out    scored 0 AND is listed Out / IR TODAY. Injury status is only stored as it is now,
- *                not as it was at lock, so this can be wrong: a player hurt on Monday night reads as
- *                "ruled out" for Sunday. It is shown as a soft signal, never counted toward a flag.
+ *   ruled out    did not play (Sleeper: scored 0; AllFantasy: no stat line that week) AND is listed
+ *                Out / IR as last synced. Injury status is not stored as it was at lock, so this can
+ *                be wrong: a player hurt on Monday night reads as "ruled out" for Sunday. It is shown
+ *                as a soft signal, never counted toward a flag.
  *
  * ⚠ A WEEK WITH NO RECORDED STARTERS FOR A TEAM IS SKIPPED, NOT COUNTED AS EMPTY. The Sleeper
  * import drops a starter whose points are null, and a missing feed looks exactly like an empty
@@ -19,15 +20,18 @@
 
 export type WeeklyStarterRow = {
   week: number
-  rosterId: number | null
+  rosterId: string | null
   playerId: string
   isStarter: boolean
-  points: number | null
+  /** True when the player recorded nothing that week — the precondition for the soft signal. */
+  didNotPlay: boolean
+  /** The player's bye week when the source stores it per player; else the club map decides. */
+  byeWeek?: number | null
 }
 
 export type TeamWeekFinding = {
   week: number
-  rosterId: number
+  rosterId: string
   teamName: string
   emptySlots: number
   byeStarters: string[]
@@ -35,7 +39,7 @@ export type TeamWeekFinding = {
 }
 
 export type TeamSeasonSummary = {
-  rosterId: number
+  rosterId: string
   teamName: string
   weeksAudited: number
   weeksFlagged: number
@@ -52,7 +56,7 @@ export type AuditInput = {
   clubByPlayer: ReadonlyMap<string, string | null>
   /** Players listed Out / IR now (see the soft-signal note above). */
   ruledOutNow: ReadonlySet<string>
-  teamNameByRoster: ReadonlyMap<number, string>
+  teamNameByRoster: ReadonlyMap<string, string>
 }
 
 /** A finding is a FLAG only on hard evidence: an empty slot or a bye starter. */
@@ -61,7 +65,7 @@ export function isFlagged(f: Pick<TeamWeekFinding, 'emptySlots' | 'byeStarters'>
 }
 
 export function auditLineups(input: AuditInput): { findings: TeamWeekFinding[]; summary: TeamSeasonSummary[]; weeks: number[] } {
-  const byTeamWeek = new Map<string, { week: number; rosterId: number; starters: WeeklyStarterRow[] }>()
+  const byTeamWeek = new Map<string, { week: number; rosterId: string; starters: WeeklyStarterRow[] }>()
   for (const r of input.rows) {
     if (!r.isStarter || r.rosterId == null) continue
     const key = `${r.rosterId}:${r.week}`
@@ -70,21 +74,22 @@ export function auditLineups(input: AuditInput): { findings: TeamWeekFinding[]; 
     byTeamWeek.set(key, entry)
   }
 
-  const name = (rosterId: number) => input.teamNameByRoster.get(rosterId) ?? `Team ${rosterId}`
+  const name = (rosterId: string) => input.teamNameByRoster.get(rosterId) ?? `Team ${rosterId}`
   const findings: TeamWeekFinding[] = []
-  const summary = new Map<number, TeamSeasonSummary>()
+  const summary = new Map<string, TeamSeasonSummary>()
   for (const { week, rosterId, starters } of byTeamWeek.values()) {
     const s = summary.get(rosterId) ?? { rosterId, teamName: name(rosterId), weeksAudited: 0, weeksFlagged: 0, emptySlots: 0, byeStarts: 0, ruledOutStarts: 0 }
     s.weeksAudited++
     const emptySlots = input.requiredStarters > 0 ? Math.max(0, input.requiredStarters - starters.length) : 0
     const byeStarters = starters
       .filter((r) => {
+        if (typeof r.byeWeek === 'number') return r.byeWeek === week
         const club = input.clubByPlayer.get(r.playerId)
         return club != null && input.byeWeekByClub[club] === week
       })
       .map((r) => r.playerId)
     const ruledOutStarters = starters
-      .filter((r) => (r.points ?? 0) === 0 && input.ruledOutNow.has(r.playerId) && !byeStarters.includes(r.playerId))
+      .filter((r) => r.didNotPlay && input.ruledOutNow.has(r.playerId) && !byeStarters.includes(r.playerId))
       .map((r) => r.playerId)
     const f: TeamWeekFinding = { week, rosterId, teamName: name(rosterId), emptySlots, byeStarters, ruledOutStarters }
     if (isFlagged(f)) s.weeksFlagged++
@@ -107,6 +112,6 @@ export function describeFinding(f: TeamWeekFinding, playerName: (id: string) => 
   const parts: string[] = []
   if (f.emptySlots > 0) parts.push(`${f.emptySlots} empty starting ${f.emptySlots === 1 ? 'slot' : 'slots'}`)
   if (f.byeStarters.length > 0) parts.push(`started ${f.byeStarters.map(playerName).join(', ')} on a bye`)
-  if (f.ruledOutStarters.length > 0) parts.push(`started ${f.ruledOutStarters.map(playerName).join(', ')}, who scored 0 and is listed Out/IR now`)
+  if (f.ruledOutStarters.length > 0) parts.push(`started ${f.ruledOutStarters.map(playerName).join(', ')}, who did not play and is listed Out/IR`)
   return `Week ${f.week}: ${f.teamName} — ${parts.join('; ')}.`
 }

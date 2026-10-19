@@ -12,9 +12,9 @@ import type { LineupIntegrityReport } from '@/lib/lineup-integrity/lineupIntegri
 type View = LineupIntegrityReport & { entitled: boolean }
 
 const UNSUPPORTED: Record<string, [string, string]> = {
-  not_sleeper: [
-    'Available for Sleeper leagues today. AllFantasy-run leagues do not keep each week’s starting lineup yet, so there is nothing honest to audit.',
-    'Disponible hoy para ligas de Sleeper. Las ligas de AllFantasy todavía no guardan la alineación de cada semana, así que no hay nada que auditar con honestidad.',
+  unsupported_platform: [
+    'Available for leagues run on AllFantasy and for Sleeper leagues. This league’s platform does not give AllFantasy each week’s starting lineup.',
+    'Disponible para ligas de AllFantasy y de Sleeper. La plataforma de esta liga no le da a AllFantasy la alineación de cada semana.',
   ],
   not_nfl: ['Only NFL leagues have a weekly lineup lock to audit.', 'Solo las ligas de la NFL tienen un cierre semanal de alineación que auditar.'],
   best_ball: ['Best ball leagues set lineups automatically, so there is nothing to audit.', 'Las ligas best ball fijan la alineación solas, así que no hay nada que auditar.'],

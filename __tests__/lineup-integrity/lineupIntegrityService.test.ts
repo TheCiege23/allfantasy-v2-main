@@ -37,8 +37,8 @@ beforeEach(() => {
 
 describe('readLineupIntegrity', () => {
   it('says plainly where it cannot audit', async () => {
-    state.league = { ...sleeper, platform: 'native' }
-    expect(await readLineupIntegrity('L1', { fullSeason: true })).toEqual({ supported: false, reason: 'not_sleeper' })
+    state.league = { ...sleeper, platform: 'fleaflicker' }
+    expect(await readLineupIntegrity('L1', { fullSeason: true })).toEqual({ supported: false, reason: 'unsupported_platform' })
     state.league = { ...sleeper, bestBallMode: true }
     expect(await readLineupIntegrity('L1', { fullSeason: true })).toEqual({ supported: false, reason: 'best_ball' })
     state.league = { ...sleeper, settings: {} }
@@ -52,15 +52,15 @@ describe('readLineupIntegrity', () => {
     expect(rep.summary).toBeNull()
     // Two required starters (QB, WR; BN is bench): Bob's lineup was full, his Out starter is only a lead.
     expect(rep.findings.map((f) => [f.teamName, f.flagged])).toEqual([['bob', false], ['Tankers', true]])
-    expect(rep.findings.find((f) => f.rosterId === 1)?.text).toBe('Week 6: Tankers — 1 empty starting slot; started Patrick Mahomes on a bye.')
-    expect(rep.findings.find((f) => f.rosterId === 2)?.ruledOutStarters).toEqual(['hurt'])
+    expect(rep.findings.find((f) => f.rosterId === '1')?.text).toBe('Week 6: Tankers — 1 empty starting slot; started Patrick Mahomes on a bye.')
+    expect(rep.findings.find((f) => f.rosterId === '2')?.ruledOutStarters).toEqual(['hurt'])
   })
 
   it('full season adds the team-by-team record', async () => {
     const rep = await readLineupIntegrity('L1', { fullSeason: true })
     if (!rep?.supported) throw new Error('unsupported')
     expect(rep.weeks).toEqual([5, 6])
-    expect(rep.summary?.find((s) => s.rosterId === 1)).toMatchObject({ weeksAudited: 2, weeksFlagged: 1 })
+    expect(rep.summary?.find((s) => s.rosterId === '1')).toMatchObject({ weeksAudited: 2, weeksFlagged: 1 })
   })
 })
 
@@ -71,7 +71,7 @@ describe('Action Queue tasks', () => {
     expect(tasks.map((t) => t.sourceKey)).toEqual(['operational:lineup-integrity:1:2026:6:v1'])
   })
   it('nothing for leagues it cannot audit', async () => {
-    state.league = { ...sleeper, platform: 'native' }
+    state.league = { ...sleeper, platform: 'fleaflicker' }
     expect(await readLineupIntegrityTasks('L1')).toEqual([])
   })
 })

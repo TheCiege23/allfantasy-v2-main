@@ -495,7 +495,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       </HubDepthGate>
 
       {/* Lineup integrity — free for the latest week; the card names what the plan adds. */}
-      {league.platform === 'sleeper' ? (
+      {league.native || league.platform === 'sleeper' ? (
         <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
           <LineupIntegrity leagueId={league.id} />
         </HubSection>

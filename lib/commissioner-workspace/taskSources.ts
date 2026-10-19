@@ -312,7 +312,8 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
   if (platform !== undefined && resolveWriteAuthority(platform) === 'NATIVE') {
     const roster = await readOrphanTeamCounts(leagueId)
     const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
-    return [...(orphans ? [orphans] : []), ...await readOperationalTasks(leagueId, now)]
+    const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
+    return [...(orphans ? [orphans] : []), ...await readOperationalTasks(leagueId, now), ...await readLineupIntegrityTasks(leagueId)]
   }
 
   const window = await readActivityWindow(leagueId)
@@ -345,7 +346,7 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
 
   /*
    * Lineup integrity (lib/lineup-integrity): teams whose finished-week lineup could not score — an
-   * empty slot or a starter on bye. Sleeper NFL leagues only; it returns nothing for the rest.
+   * empty slot or a starter on bye. NFL leagues on AllFantasy or Sleeper; nothing for the rest.
    * Imported dynamically so the native path above never loads it.
    */
   const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
