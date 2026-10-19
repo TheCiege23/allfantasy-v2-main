@@ -167,6 +167,16 @@ async function handle(req: NextRequest) {
         () => ingestMlbFantraxIdentities(),
         result => ({ rowsWritten: result.updated, metadata: result }),
       ).catch(error => console.error('[cron/import-players] MLB Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
+      // NBA/NHL: the same weekly, batched, additive link for Fantrax basketball and hockey leagues.
+      // Each sport keeps its own cadence marker, so after the first week these are one cache read each.
+      const { ingestNbaFantraxIdentities, ingestNhlFantraxIdentities } = await import('@/lib/player-identity/ingestProFantraxIdentities')
+      for (const [sport, ingest] of [['NBA', ingestNbaFantraxIdentities], ['NHL', ingestNhlFantraxIdentities]] as const) {
+        await withSyncJobRun(
+          { jobName: `${sport.toLowerCase()}-fantrax-identities`, sport, provider: 'fantrax', trigger: 'cron' },
+          () => ingest(),
+          result => ({ rowsWritten: result.updated, metadata: result }),
+        ).catch(error => console.error(`[cron/import-players] ${sport} Fantrax identities:`, error instanceof Error ? error.message : 'refresh failed'))
+      }
       const { ingestNcaafFantraxIdentities } = await import('@/lib/player-identity/ingestNcaafFantraxIdentities')
       await withSyncJobRun(
         { jobName: 'ncaaf-fantrax-identities', sport: 'NCAAF', provider: 'fantrax', trigger: 'cron' },
