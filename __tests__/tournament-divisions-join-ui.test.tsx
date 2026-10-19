@@ -48,6 +48,14 @@ describe('TournamentJoin', () => {
     expect(screen.getByTestId('roster-label-nba-std').textContent).toMatch(/^Standard roster · 10 start/)
   })
 
+  it('shows the tournament\'s SAVED scoring and roster to invitees, read-only', () => {
+    render(<TournamentJoin view={join({ rules: { scoringId: 'ppr', rosterId: 'nfl-sf' } })} refName={null} />)
+    expect(screen.getByTestId('scoring-pill-ppr').textContent).toBe('PPR')
+    expect(screen.getByTestId('roster-label-nfl-sf').textContent).toMatch(/^Superflex roster · 10 start/)
+    expect(screen.queryByTestId('scoring-pill-half')).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Scoring' })).toBeNull()
+  })
+
   it('almost full and full (waitlist position)', () => {
     const { unmount } = render(<TournamentJoin view={join({ registered: 236 })} refName={null} />)
     expect(screen.getByText(/Only 4 spots left/)).toBeTruthy()

@@ -10,6 +10,7 @@ import {
   type BidStatus, type BracketGame, type DivisionTeamInput, type FormatSettings, type GameScores, type Region, type SeededTeam, type TieReason,
 } from './engine'
 import { crestFor, leagueDisplayName, type CrestArt, type DivisionIdentity } from './identity'
+import { divisionsRulesLabels, type DivisionsRules } from './rules'
 
 export type HubTeamInput = DivisionTeamInput & {
   divisionIndex: 0 | 1
@@ -76,6 +77,8 @@ export type HubView = {
   settings: FormatSettings
   calendar: ReturnType<typeof divisionsCalendar>
   identity: DivisionIdentity
+  /** Scoring and roster labels — the saved choice, or the sport default for older tournaments. */
+  rules: DivisionsRules
   weeksPlayed: number
   divisions: [HubDivision, HubDivision]
   championship: HubGame | null
@@ -90,6 +93,8 @@ const toEntrant = (meId: string | null, conferenceIndexById: Map<string, number>
 export function buildHubView(input: {
   tournament: HubView['tournament']
   settings: FormatSettings
+  /** The saved scoring/roster choice; omitted or invalid = the sport's defaults. */
+  rules?: DivisionsRules | null
   identity: DivisionIdentity
   teams: HubTeamInput[]
   meUserId?: string | null
@@ -152,6 +157,7 @@ export function buildHubView(input: {
   const champ = divisions[0].seeded && divisions[1].seeded ? mapGame(championshipGame(ca ?? null, cb ?? null, input.championshipScore, input.championshipOverride)) : null
   return {
     tournament: input.tournament, settings, calendar: divisionsCalendar(settings), identity,
+    rules: divisionsRulesLabels(input.tournament.sport, input.rules),
     weeksPlayed: Math.max(0, ...input.teams.map(t => t.wins + t.losses + (t.ties ?? 0))),
     divisions, championship: champ,
     me: meTeam ? { divisionIndex: meTeam.divisionIndex, teamId: meTeam.id, conferenceIndex: meTeam.conferenceIndex, leagueId: meTeam.leagueId ?? null } : null,

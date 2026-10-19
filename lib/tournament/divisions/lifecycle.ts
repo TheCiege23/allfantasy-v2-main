@@ -484,7 +484,7 @@ export async function loadJoinView(userId: string, tournamentId: string, ref: st
   const myLeagueIndex = myLeague ? { division: state.shell.divisions.findIndex(d => d.id === myLeague.divisionId) as 0 | 1, conference: state.shell.conferences.findIndex(c => c.id === myLeague.conferenceId) } : null
   return {
     tournamentId, name: shell.name, phase: shell.status, sport: state.settings.sport, settings: state.settings, calendar: state.calendar,
-    identity: state.identity, registration: state.registration, capacity: shell.maxParticipants, registered, waitlist: queue.length,
+    rules: state.rules, identity: state.identity, registration: state.registration, capacity: shell.maxParticipants, registered, waitlist: queue.length,
     me: me ? { status: me.status, waitlistPosition: position, preference: me.divisionPreference, revealSeen: Boolean(me.revealSeenAt) } : null,
     myLeague: myLeague && myLeagueIndex ? { name: myLeague.name, draftAt: myLeague.draftScheduledAt?.toISOString() ?? null, leagueId: myLeague.leagueId, ...myLeagueIndex } : null,
     commissioner: { name: commissioner?.displayName || commissioner?.username || 'Commissioner', leaguesRun },
