@@ -31,6 +31,7 @@ import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 
 export const dynamic = 'force-dynamic'
 
@@ -587,6 +588,12 @@ export async function PATCH(
       if (lsSyncKeys.size > 0) {
         await syncDraftSessionFromLeagueSettings(leagueId, lsRow, leagueForFormat?.leagueSize ?? 0, lsSyncKeys).catch((e) =>
           console.warn('[draft/settings PATCH] league-settings sync', e),
+        )
+      }
+      // A tournament conference league's new draft time goes back onto the tournament's record for it.
+      if (body.draftDate !== undefined) {
+        await copyLeagueDraftTimeToTournament(leagueId, lsRow.draftDateUtc ?? null, userId).catch((e) =>
+          console.warn('[draft/settings PATCH] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error'),
         )
       }
     }

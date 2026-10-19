@@ -56,7 +56,7 @@ const { db, prismaMock, patch } = vi.hoisted(() => {
   }
   prismaMock.$transaction = vi.fn(async (fn: (t: unknown) => unknown) => fn(prismaMock))
   /** Stand-in for the commissioner's league settings save: writes LeagueSettings.draftDateUtc. */
-  const patch = vi.fn(async (userId: string, body: { leagueId: string; draftDateUtc: string }) => {
+  const patch = vi.fn(async (userId: string, body: { leagueId: string; draftDateUtc: string }, _opts?: { actingUserId?: string; source?: string }) => {
     if (db.refuse.has(body.leagueId)) return new Response(JSON.stringify({ error: 'Only the commissioner can change league settings.' }), { status: 403 })
     db.draftDates.set(body.leagueId, new Date(body.draftDateUtc))
     return new Response(JSON.stringify({ success: true, userId }), { status: 200 })
@@ -66,7 +66,7 @@ const { db, prismaMock, patch } = vi.hoisted(() => {
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/league/execute-league-settings-patch', () => ({ executeLeagueSettingsPatch: (u: string, b: never) => patch(u, b) }))
+vi.mock('@/lib/league/execute-league-settings-patch', () => ({ executeLeagueSettingsPatch: (u: string, b: never, o?: never) => (o === undefined ? patch(u, b) : patch(u, b, o)) }))
 
 import { syncConferenceCoCommissioners, syncConferenceDraftTimes } from '@/lib/tournament/divisions/conferenceLeagueSync'
 import { getLeagueRole } from '@/lib/league/permissions'
@@ -96,7 +96,9 @@ describe('tournament draft times reach the real conference leagues', () => {
     const out = await syncConferenceDraftTimes('t1', 'actor')
     expect(out.map(o => o.outcome)).toEqual(['scheduled', 'scheduled', 'scheduled', 'scheduled'])
     expect(patch).toHaveBeenCalledTimes(4)
-    expect(patch).toHaveBeenCalledWith('owner', { leagueId: 'L3', draftDateUtc: AT.toISOString() })
+    // Authorized as the league commissioner (the owner), recorded as whoever set the time, and marked
+    // as the tournament's own sync so the league → tournament copy-back does not run.
+    expect(patch).toHaveBeenCalledWith('owner', { leagueId: 'L3', draftDateUtc: AT.toISOString() }, { actingUserId: 'actor', source: 'tournament' })
     for (const id of ['L1', 'L2', 'L3', 'L4']) expect(db.draftDates.get(id)?.toISOString()).toBe(AT.toISOString())
     expect(db.audits.filter(a => a.action === 'divisions_draft_times_synced')).toHaveLength(1)
   })
