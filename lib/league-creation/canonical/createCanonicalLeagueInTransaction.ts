@@ -31,6 +31,7 @@ import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
+import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 
 type Tx = Prisma.TransactionClient
 
@@ -869,6 +870,7 @@ export async function createCanonicalLeagueInTransaction(
     },
   })
 
+  const defaultWaiverDaysList = defaultProcessingDaysList(waiverDefaults.processing_days)
   await tx.leagueWaiverSettings.create({
     data: {
       leagueId: league.id,
@@ -880,6 +882,8 @@ export async function createCanonicalLeagueInTransaction(
       tiebreakRule: (waiverDefaults.claim_priority_behavior as string) ?? null,
       lockType: (waiverDefaults.game_lock_behavior as string) ?? null,
       instantFaAfterClear: waiverDefaults.free_agent_unlock_behavior === 'instant',
+      // Daily sports run on every default day; single-day sports (NFL) write no list — unchanged.
+      ...(defaultWaiverDaysList ? { processingDays: defaultWaiverDaysList } : {}),
     },
   })
 
