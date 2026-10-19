@@ -9,6 +9,30 @@ import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { recomputeAllFantasyAdp } from '@/lib/adp/recomputeAllFantasyAdp'
 import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '@/lib/draft-archive/ingestion/referenceWriter'
+import { recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+
+/*
+ * MLB / NBA / NHL dynasty values. The bare (NFL) fire was the only one scheduled, so the dynasty
+ * War Room had no value data for any other sport. Those three fire as `?sport=X` modes of this
+ * route and share `allfantasy_adp_snapshots.lastUpdatedAt` with the NFL fire — a table probe on
+ * them would be satisfied by NFL — so each records its own heartbeat. Names are literals so
+ * `__tests__/cron-heartbeat-route-contracts.test.ts` and grep can find them; keep them in step
+ * with PROBES in scripts/cron-freshness-check.mjs.
+ */
+const HEARTBEAT_JOB_BY_SPORT: Record<string, string> = {
+  MLB: 'cron-recompute-allfantasy-adp-mlb',
+  NBA: 'cron-recompute-allfantasy-adp-nba',
+  NHL: 'cron-recompute-allfantasy-adp-nhl',
+}
+
+/** Telemetry must never turn a finished recompute into a 500. */
+async function recordHeartbeat(...args: Parameters<typeof recordSyncJobRun>): Promise<void> {
+  try {
+    await recordSyncJobRun(...args)
+  } catch (err) {
+    console.warn('[recompute-allfantasy-adp] heartbeat not recorded:', err instanceof Error ? err.message : String(err))
+  }
+}
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -38,6 +62,9 @@ async function handle(req: NextRequest) {
 
   const sport = sportParam ? sportParam.toUpperCase() : 'NFL'
   const season = seasonParam?.trim() ? seasonParam.trim() : null
+  // Manual runs (dry runs, test-draft runs) must not refresh the scheduled heartbeat.
+  const heartbeatJob = !dryRun && !includeTest ? HEARTBEAT_JOB_BY_SPORT[sport] ?? null : null
+  const startedAt = Date.now()
 
   try {
     const report = await recomputeAllFantasyAdp({
@@ -62,10 +89,21 @@ async function handle(req: NextRequest) {
     }
     const hasErrors = report.errors.length > 0 || referenceErrors
     const status = hasErrors ? 207 : 200
+    if (heartbeatJob) {
+      await recordHeartbeat(
+        { jobName: heartbeatJob, sport, trigger: 'cron' },
+        { rowsWritten: report.snapshotsWritten, errors: report.errors.map((e) => e.slice(0, 240)) },
+        Date.now() - startedAt,
+      )
+    }
 
     return NextResponse.json({ ok: !hasErrors, report, references, referenceErrors }, { status })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    // A failing fire is still a fire that ran; losing the heartbeat would read as "never scheduled".
+    if (heartbeatJob) {
+      await recordHeartbeat({ jobName: heartbeatJob, sport, trigger: 'cron' }, { errors: [message.slice(0, 240)] }, Date.now() - startedAt)
+    }
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }

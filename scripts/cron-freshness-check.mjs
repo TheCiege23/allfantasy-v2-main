@@ -239,6 +239,10 @@ export const PROBES = {
    * unique key makes most runs insert nothing: see `adp_data` under adp-refresh below.
    */
   '/api/cron/recompute-allfantasy-adp': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
+  // Per-sport modes share that table with the NFL fire, so each heartbeats under its own name.
+  '/api/cron/recompute-allfantasy-adp?sport=MLB': { heartbeat: 'cron-recompute-allfantasy-adp-mlb' },
+  '/api/cron/recompute-allfantasy-adp?sport=NBA': { heartbeat: 'cron-recompute-allfantasy-adp-nba' },
+  '/api/cron/recompute-allfantasy-adp?sport=NHL': { heartbeat: 'cron-recompute-allfantasy-adp-nhl' },
   /*
    * ⚠ HEARTBEAT, NOT `adp_data.created_at`. That table is append-only, but it is unique per
    * calendar WEEK, so only the first run of each week inserts and every later run writes zero rows
