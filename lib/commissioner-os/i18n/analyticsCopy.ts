@@ -794,6 +794,7 @@ const TASK_EXACT_ES: Record<string, string> = {
   'Payout request awaits approval': 'Una solicitud de pago espera aprobación',
   'A league payout request is waiting for commissioner approval.': 'Una solicitud de pago de la liga espera la aprobación del comisionado.',
   'An AI commissioner alert is open for this league.': 'Hay una alerta del comisionado IA abierta en esta liga.',
+  'A dispute needs your ruling': 'Una disputa espera tu decisión',
 }
 
 const TASK_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
@@ -810,6 +811,7 @@ const TASK_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
     /^(\d+) managers? asked to join outside the league's division\. Approve or decline each request\.$/,
     (n) => `${n} ${n === '1' ? 'mánager pidió' : 'mánagers pidieron'} unirse fuera de la división de la liga. Aprueba o rechaza cada solicitud.`,
   ],
+  [/^(.+) filed “(.+)”\. Rule on it from the dispute desk\.$/, (name, subject) => `${name} presentó «${subject}». Resuélvela desde la mesa de disputas.`],
   [/^(.+) asked to take over an open team\. Approve or reject the request\.$/, (name) => `${name} pidió hacerse cargo de un equipo sin dueño. Aprueba o rechaza la solicitud.`],
   [
     /^(\d+) of (\d+) teams have not paid (\d{4}) dues: (.+)\.$/,
