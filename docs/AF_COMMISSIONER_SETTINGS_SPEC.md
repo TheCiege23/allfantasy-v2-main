@@ -367,7 +367,8 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
   game adapters for native and Sleeper brackets, a loader for both, and `liveRookieOrderService.ts` (settings,
   Commissioner gate, lapse rule, saved final order). API: `GET/PUT /api/commissioner/leagues/[leagueId]/rookie-draft-order/live`.
   The live draft seats the saved order through `resolveRookieDraftSlotOrderForLeague`.
-  Not yet: commissioner UI, chat post after each playoff round, true Max PF for native leagues (they fall back to
+  Commissioner UI: the live order panel in Draft settings (TheCiege23/allfantasy-v2-main#2497).
+  Not yet: chat post after each playoff round, true Max PF for native leagues (they fall back to
   points for with a warning), toilet-bowl and lottery options.
 
 - **Keeper rules engine — built (2026-10-19)**, TheCiege23/allfantasy-v2-main#2499: same/up/down/inflation costs,
@@ -376,6 +377,14 @@ Mapped from the current codebase (2026-10-19). Paths are relative to the repo ro
 - **Custom playoff byes — built (2026-10-19)**, TheCiege23/allfantasy-v2-main#2498: bye plans
   (`lib/playoff-brackets/byePlan.ts`), runtime support, `advanced_playoff_setup` gate in the settings patch, and a
   Bracket format card in the Playoffs tab. Odd counts were already supported and stay free.
+- **Commish Inbox — built (2026-10-19)**, TheCiege23/allfantasy-v2-main#2500: keepers, keeper conflicts, AI alerts,
+  integrity flags, join and adoption requests, unpaid dues and payouts join the Commissioner Action Queue
+  (`lib/commissioner-workspace/inboxTasks.ts`); each task clears itself when the condition does.
+  Not yet: deadline autopilot (§3.5), draft-order confirmations.
+- **Dispute desk — built (2026-10-19)**, TheCiege23/allfantasy-v2-main#2501: members file, commissioners rule with a
+  required reason, rulings can post to league chat and always write the audit log (`lib/disputes/`). Open disputes
+  appear in the Commish Inbox and turn critical after 3 days. Members see their own disputes and posted rulings only.
+  Free on every tier. Not yet: canned ruling templates, optional league vote, a link from the league page.
 
 ### Proposed new feature keys
 `commish_rookie_order_auto`, `commish_keeper_rules_advanced`, `commish_playoffs_custom` (or reuse
