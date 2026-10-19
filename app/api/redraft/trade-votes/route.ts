@@ -26,6 +26,7 @@ import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import { evaluateTradeWindowForLeague } from '@/lib/league-trade-engine/tradeWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,6 +113,16 @@ async function finalizeAcceptedTrade(
       eventType: 'trade_failed',
       actorUserId: decidedByUserId,
     })
+  // 🛑 THE TRADE WINDOW, RE-CHECKED AT SETTLEMENT, FOR EVERY SPORT. Accept, commissioner approval and
+  // the vote threshold all settle here, and none of them re-checked the deadline or `lockAllMoves` —
+  // so a proposal made in the deadline week settled whenever it was approved. Server week only
+  // (`RedraftSeason.currentWeek` for this season). The proposal is left as it is: a refusal here is
+  // not a decision about it, and it expires on its own clock.
+  const settleWindow = await evaluateTradeWindowForLeague(proposal.leagueId, { seasonId: proposal.seasonId })
+  if (settleWindow.refusal) {
+    return NextResponse.json({ error: settleWindow.refusal.message, code: settleWindow.refusal.code }, { status: 409 })
+  }
+
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
 
@@ -611,6 +622,13 @@ export async function POST(req: NextRequest) {
           { error: 'This trade has already been accepted and is awaiting review.' },
           { status: 409 },
         )
+      }
+
+      // Refused BEFORE `acceptedAt` is recorded, so a review-mode trade cannot be accepted past the
+      // deadline and then sit as "accepted, awaiting review" for something that can never settle.
+      const acceptWindow = await evaluateTradeWindowForLeague(proposal.leagueId, { seasonId: proposal.seasonId })
+      if (acceptWindow.refusal) {
+        return NextResponse.json({ error: acceptWindow.refusal.message, code: acceptWindow.refusal.code }, { status: 409 })
       }
 
       if (proposal.vetoMode === 'no_veto') {

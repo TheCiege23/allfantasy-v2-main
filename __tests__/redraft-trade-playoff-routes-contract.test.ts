@@ -386,6 +386,46 @@ describe('Redraft trade votes route contract', () => {
    * settlement path works end to end. The review modes are covered by the two tests below, which
    * assert they do NOT settle.
    */
+  it('🛑 refuses to accept (and settles nothing) after the trade deadline, from the server week', async () => {
+    prismaMock.redraftTradeProposal.findFirst.mockResolvedValueOnce({
+      id: 'p-1',
+      leagueId: 'l-1',
+      seasonId: 's-1',
+      proposerRosterId: 'r-1',
+      receiverRosterId: 'r-2',
+      status: 'pending',
+      expiresAt: null,
+      acceptedAt: null,
+      vetoMode: 'no_veto',
+      vetoThreshold: 4,
+      votes: [],
+      assets: [],
+    })
+    prismaMock.redraftRoster.findMany.mockResolvedValueOnce([
+      { id: 'r-1', ownerId: 'u-1' },
+      { id: 'r-2', ownerId: 'u-2' },
+    ])
+    prismaMock.league.findFirst.mockResolvedValueOnce({ userId: 'u-1', teams: [] })
+    prismaMock.league.findUnique.mockResolvedValue({ id: 'l-1', sport: 'NBA', tradeDeadlineWeek: 8, lockAllMoves: false, settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue({ currentWeek: 9 })
+    try {
+      const { POST } = await import('../app/api/redraft/trade-votes/route')
+      const req = createMockNextRequest('http://localhost/api/redraft/trade-votes', {
+        method: 'POST',
+        body: { proposalId: 'p-1', action: 'accept' },
+      })
+      const res = await POST(req as any)
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.code).toBe('TRADE_DEADLINE')
+      expect(prismaMock.$transaction).not.toHaveBeenCalled()
+      expect(prismaMock.redraftTradeProposal.updateMany).not.toHaveBeenCalled()
+    } finally {
+      prismaMock.league.findUnique.mockReset()
+      prismaMock.redraftSeason.findFirst.mockReset()
+    }
+  })
+
   it('accepts a pending proposal by receiver owner when no review is configured', async () => {
     prismaMock.redraftTradeProposal.findFirst.mockResolvedValueOnce({
       id: 'p-1',

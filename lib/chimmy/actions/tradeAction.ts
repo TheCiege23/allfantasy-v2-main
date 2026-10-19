@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { createAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
 import { resolveLeagueTradeSettings, isPastTradeDeadline } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { resolveServerTradeWeek } from '@/lib/league-trade-engine/tradeWindow'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
@@ -22,9 +23,9 @@ import type { ActionCardPlayer, ChimmyActionCard, ChimmyActionTokenPayload, Trad
  * ⚠ SENDING AN OFFER IS NOT MAKING A TRADE. The other manager still accepts or declines, and the
  * league's own review (commissioner / vote) still applies. The card says so.
  *
- * ⚠ THE DEADLINE IS ACTUALLY CHECKED HERE. `createAfLeagueTrade` checks the deadline against
- * `currentWeek`, and the Trade Center route never passes one — so through that route the deadline
- * check is a no-op. Chimmy passes the league's week, so a Chimmy offer past the deadline is refused.
+ * ⚠ THE DEADLINE. `createAfLeagueTrade` resolves the league's week itself (`tradeWindow.ts`) and
+ * refuses past the deadline or under `lockAllMoves`, whoever calls it. The pre-flight below uses the
+ * SAME server week, so a card is never offered for an offer the confirm step must refuse.
  *
  * Players only. Picks and FAAB need ids the model cannot see; the card says to use the Trade Center.
  */
@@ -143,7 +144,8 @@ export async function proposeTrade(args: { leagueId: string; userId: string; giv
     prisma.roster.findFirst({ where: { id: partner.id, leagueId: league.id } }),
   ])
   if (!proposerRow || !receiverRow) return { ok: false, text: 'NO CARD WAS MADE: the rosters could not be loaded.' }
-  if (isPastTradeDeadline(league, week)) return { ok: false, text: 'NO CARD WAS MADE: this league\'s trade deadline has passed. Say so.' }
+  const tradeWeek = await resolveServerTradeWeek(league)
+  if (isPastTradeDeadline(league, tradeWeek)) return { ok: false, text: 'NO CARD WAS MADE: this league\'s trade deadline has passed. Say so.' }
   const v = validateTradeAssets({
     league,
     settings,
@@ -151,7 +153,7 @@ export async function proposeTrade(args: { leagueId: string; userId: string; giv
     receiver: receiverRow,
     participants: [proposerRow, receiverRow],
     assets: toEngineAssets(assets),
-    currentWeek: week,
+    currentWeek: tradeWeek,
   })
   if (!v.ok) return { ok: false, text: `NO CARD WAS MADE: ${v.message} Say so plainly.` }
 
@@ -258,7 +260,6 @@ export async function executeTradeAction(payload: ChimmyActionTokenPayload, user
       proposerRosterId: spec.proposerRosterId,
       receiverRosterId: spec.receiverRosterId,
       assets,
-      currentWeek: scope.week,
       metadata: { source: 'chimmy', chimmyActionId: payload.actionId },
     })
     return { ok: true, tradeId: id, message: 'Offer sent — they will see it in their Trades tab.' }

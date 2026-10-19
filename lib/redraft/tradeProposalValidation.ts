@@ -15,7 +15,12 @@
  * ⚠ THAT VALIDATOR IS NFL-REDRAFT ONLY. `resolveNflRedraftTradeRuntime` refuses any other sport or format
  * (production on 2026-09-13: 247 NFL redraft seasons, 1 NCAAF). Rather than leave those unvalidated, they get
  * the sport-agnostic core — ownership, duplicate players, and FAAB — read straight from the roster tables.
- * No lock or roster-limit check exists for them, because no lock source exists for them.
+ * No per-player lock or roster-limit check exists for them, because no lock source exists for them.
+ *
+ * 🛑 BUT THE LEAGUE-WIDE RULES DO APPLY TO THEM. The fallback used to skip the trade deadline and
+ * `League.lockAllMoves` too, so an NBA / NHL / MLB league with every move locked, or weeks past its
+ * deadline, still took proposals. Both now come from `evaluateTradeWindow` — the same server-side week
+ * (`RedraftSeason.currentWeek` for THIS season) and the same refusal the native trade engine uses.
  */
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -25,6 +30,7 @@ import {
   validateNflRedraftTradeProposal,
   type NflRedraftTradeAssetInput,
 } from '@/lib/trade-runtime'
+import { evaluateTradeWindowForLeague } from '@/lib/league-trade-engine/tradeWindow'
 
 export type RedraftProposalValidationSource = 'nfl_runtime' | 'ownership_fallback'
 
@@ -58,6 +64,8 @@ export async function validateRedraftTradeProposalAtCreation(
       ? { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
       : { ok: false, code: result.code, message: result.message, source: 'nfl_runtime' }
   }
+  const { refusal } = await evaluateTradeWindowForLeague(input.leagueId, { seasonId: input.seasonId })
+  if (refusal) return { ok: false, code: refusal.code, message: refusal.message, source: 'ownership_fallback' }
   return validateOwnershipFallback(db, input)
 }
 

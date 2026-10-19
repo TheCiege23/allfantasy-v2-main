@@ -150,7 +150,8 @@ describe('executeTradeAction', () => {
     return v.payload
   }
 
-  it("creates the offer through the Trade Center's service, as the user, with the league week", async () => {
+  // The week is no longer passed: `createAfLeagueTrade` resolves it server-side (tradeWindow.ts).
+  it("creates the offer through the Trade Center's service, as the user, without a caller-supplied week", async () => {
     const p = await payload()
     const r = await executeTradeAction(p, 'u1')
     expect(r).toEqual({ ok: true, tradeId: 'T1', message: expect.any(String) })
@@ -163,7 +164,6 @@ describe('executeTradeAction', () => {
         { itemType: 'player', itemReference: 'p1', fromRosterId: 'r1', toRosterId: 'r2' },
         { itemType: 'player', itemReference: 'p9', fromRosterId: 'r2', toRosterId: 'r1' },
       ],
-      currentWeek: 5,
       metadata: { source: 'chimmy', chimmyActionId: p.actionId },
     })
   })

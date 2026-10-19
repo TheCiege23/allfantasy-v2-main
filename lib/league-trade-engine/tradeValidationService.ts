@@ -96,7 +96,11 @@ export function validateTradeAssets(params: {
   /** Every roster named by a multi-team asset graph. Defaults to proposer + receiver. */
   participants?: Roster[]
   assets: TradeAssetInput[]
-  /** Current fantasy week for deadline checks */
+  /**
+   * Current fantasy week for deadline checks. 🛑 MUST BE SERVER-RESOLVED
+   * (`resolveServerTradeWeek` in `tradeWindow.ts`) — null disables the deadline check, and a
+   * client-supplied week can be anything the client likes.
+   */
   currentWeek: number | null
   /**
    * A native dynasty league's future picks: `fdp:` id → the roster holding it
@@ -106,6 +110,15 @@ export function validateTradeAssets(params: {
   nativeFuturePickOwners?: ReadonlyMap<string, string> | null
 }): TradeValidationResult {
   const { league, settings, proposer, receiver, assets, currentWeek } = params
+
+  // Checked before `tradesAllowed` (which also folds the lock in) so a locked league says WHY.
+  if (league.lockAllMoves) {
+    return {
+      ok: false,
+      code: 'MOVES_LOCKED',
+      message: 'Roster moves are locked by the commissioner, so trades cannot be proposed or accepted right now.',
+    }
+  }
 
   if (!settings.tradesAllowed) {
     return { ok: false, code: 'TRADES_DISABLED', message: 'Trades are disabled for this league format or settings.' }

@@ -68,7 +68,8 @@ export async function POST(
     expiresInHours?: number
     metadata?: Record<string, unknown>
     decisionEvidenceToken?: string | null
-    currentWeek?: number | null
+    /** Ignored. The trade deadline is checked against the week the SERVER resolves (`tradeWindow.ts`). */
+    currentWeek?: unknown
     vetoMode?: unknown
     vetoThreshold?: unknown
     reviewWindow?: unknown

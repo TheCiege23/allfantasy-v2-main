@@ -23,7 +23,8 @@ export async function POST(
     proposerRosterId?: string
     receiverRosterId?: string
     assets?: TradeAssetInput[]
-    currentWeek?: number | null
+    /** Ignored. The trade deadline is checked against the week the SERVER resolves (`tradeWindow.ts`). */
+    currentWeek?: unknown
     metadata?: Record<string, unknown>
   }
   if (!body.proposerRosterId || !body.receiverRosterId || !Array.isArray(body.assets)) {
@@ -38,7 +39,6 @@ export async function POST(
       receiverRosterId: body.receiverRosterId,
       assets: body.assets,
       parentTradeId: tradeId,
-      currentWeek: body.currentWeek ?? null,
       metadata: body.metadata,
     })
     return NextResponse.json({ ok: true, tradeId: id })

@@ -8,6 +8,12 @@ import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleS
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import {
+  evaluateTradeWindowForLeague,
+  resolveServerTradeWeek,
+  tradeWindowRefusal,
+  TRADE_DEADLINE_CODE,
+} from '@/lib/league-trade-engine/tradeWindow'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
@@ -468,7 +474,6 @@ async function linkCounterToParent(
 }
 
 export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
-  currentWeek?: number | null
   verifiedProposalEvidence?: VerifiedProposalEvidence | null
 }): Promise<{ id: string }> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
@@ -510,6 +515,11 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  // 🛑 THE WEEK IS THE SERVER'S. A caller-supplied week (the counter route forwarded `body.currentWeek`)
+  // or none at all (the propose route) left the deadline unenforced. See `tradeWindow.ts`.
+  const currentWeek = await resolveServerTradeWeek(league)
+  const windowRefusal = tradeWindowRefusal(league, currentWeek, settings.tradeDeadlineWeek ?? null)
+  if (windowRefusal) throw new Error(windowRefusal.message)
   // A native dynasty league's future picks are checked against its inventory, not `playerData`.
   const offersNativePick = input.assets.some((a) => parseInventoryPickId(String(a.itemReference ?? '')) != null)
   const nativePicks = offersNativePick ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
@@ -520,7 +530,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     receiver,
     participants,
     assets: input.assets,
-    currentWeek: input.currentWeek ?? null,
+    currentWeek,
     nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
   })
   if (!v.ok) throw new Error(v.message)
@@ -787,6 +797,11 @@ export async function acceptAfLeagueTrade(input: {
   if (trade.status !== 'pending') throw new Error('Trade is not pending')
   if (trade.expiresAt && trade.expiresAt < new Date()) throw new Error('Trade expired')
 
+  // Re-checked at accept time, BEFORE any acceptance is recorded: a proposal made in the deadline
+  // week must not be accepted the week after, and a locked league accepts nothing. Server week only.
+  const acceptWindow = await evaluateTradeWindowForLeague(input.leagueId)
+  if (acceptWindow.refusal) throw new Error(acceptWindow.refusal.message)
+
   const participantRosterIds = [...new Set([
     trade.proposerRosterId,
     trade.receiverRosterId,
@@ -989,6 +1004,41 @@ export async function finalizeAfLeagueTradeProcessing(input: {
 
   if (trade.status === 'scheduled' && trade.scheduledProcessAt && trade.scheduledProcessAt > new Date()) {
     throw new Error('Trade is scheduled for a future processing time')
+  }
+
+  /*
+   * 🛑 THE WINDOW IS RE-CHECKED AT EXECUTION, NOT ONLY AT PROPOSAL AND ACCEPT. A trade accepted in the
+   * deadline week with a processing delay, or one sitting in commissioner review / the veto window,
+   * would otherwise complete after the deadline — and `processDueScheduledTrades` would execute it
+   * with nobody looking.
+   *
+   * The two refusals are deliberately DIFFERENT:
+   *   - past the deadline → the trade is CANCELLED (reason `trade_deadline_passed`). The deadline does
+   *     not un-pass this season, so leaving it `scheduled` would only make the sweep fail it every
+   *     run forever. `cancelled` is the existing terminal status for a trade stopped before processing.
+   *   - `lockAllMoves` → it stays where it is and this throws. A lock is a commissioner's temporary
+   *     switch; the trade processes on the first run after it is lifted.
+   */
+  const execWeek = await resolveServerTradeWeek(league)
+  const execRefusal = tradeWindowRefusal(league, execWeek, settings.tradeDeadlineWeek ?? null)
+  if (execRefusal) {
+    if (execRefusal.code === TRADE_DEADLINE_CODE) {
+      const stopped = await prisma.afLeagueTrade.updateMany({
+        where: { id: trade.id, status: trade.status },
+        data: { status: 'cancelled', cancelledAt: new Date() },
+      })
+      if (stopped.count > 0) {
+        await appendAfTradeStatusHistory({
+          tradeId: trade.id,
+          fromStatus: trade.status,
+          toStatus: 'cancelled',
+          actorUserId: input.actorUserId,
+          reason: 'trade_deadline_passed',
+          metadata: { currentWeek: execWeek, tradeDeadlineWeek: settings.tradeDeadlineWeek ?? null },
+        })
+      }
+    }
+    throw new Error(execRefusal.message)
   }
 
   if (delayH > 0 && !trade.scheduledProcessAt && trade.status !== 'scheduled') {
