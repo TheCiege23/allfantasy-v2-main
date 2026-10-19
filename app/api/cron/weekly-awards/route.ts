@@ -15,7 +15,9 @@ import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { weeklyRecapAllowed } from '@/lib/core-app/commissioner/recipes'
 import { notifyWeeklyStories } from '@/lib/core-app/weeklyStoryNotify'
-import { postNativeWeeklyRecap } from '@/lib/league-chat/nativeWeeklyRecap'
+import { buildNativeRecapForLeague, postNativeWeeklyRecap } from '@/lib/league-chat/nativeWeeklyRecap'
+import { holdRecapDraft, recapDraftExists, recapReviewOn } from '@/lib/recap-review/recapReviewService'
+import { readChimmySpeaksUp } from '@/lib/league-chat/chimmyIdentity'
 import { planRecapSweep } from '@/lib/league-chat/weeklyRecapSweep'
 import { notifyWeeklyRecaps, type PostedRecap } from '@/lib/league-chat/weeklyRecapNotify'
 
@@ -68,9 +70,16 @@ async function j<T>(path: string): Promise<T | null> {
 async function postRecapForLeague(
   afLeagueId: string,
   sleeperLeagueId: string,
-  _ownerUserId: string,
+  ownerUserId: string,
   leagueName: string,
+  settings: unknown = null,
 ) {
+  /*
+   * Review mode (lib/recap-review): the recap is written exactly as below but HELD as a draft for
+   * the commissioner instead of posted. Not when Chimmy is quiet — nothing could post it, so the
+   * league gets the same "switched off" answer it gets today.
+   */
+  const review = recapReviewOn(settings) && readChimmySpeaksUp(settings)
   const h2h = await getLeagueH2H(sleeperLeagueId)
   const awards = h2h?.latestWeekAwards
   if (!h2h || !awards) return { posted: false, reason: 'no completed week synced yet', emailsSent: 0 }
@@ -86,6 +95,9 @@ async function postRecapForLeague(
   if (await weeklyRecapAlreadyPosted({ afLeagueId, sleeperLeagueId, season: awards.season, week: awards.week })) {
     return { posted: false, reason: 'already posted', emailsSent: 0 }
   }
+  if (review && (await recapDraftExists(afLeagueId, awards.season, awards.week))) {
+    return { posted: false, reason: 'waiting for the commissioner', emailsSent: 0 }
+  }
 
   // ── Results and standings: straight from the Sleeper week feed ──
   const [rosters, users, matchups] = await Promise.all([
@@ -94,6 +106,10 @@ async function postRecapForLeague(
     j<WireMatchup[]>(`/league/${sleeperLeagueId}/matchups/${awards.week}`),
   ])
   const text = buildWeeklyRecap({ leagueName, sleeperLeagueId, h2h, awards, rosters, users, matchups })
+  if (review) {
+    await holdRecapDraft({ leagueId: afLeagueId, leagueName, ownerUserId, sleeperLeagueId, season: awards.season, week: awards.week, generatedText: text })
+    return { posted: false, held: true, reason: 'held for the commissioner to review', emailsSent: 0 }
+  }
 
   /*
    * Posted as Chimmy. Deduped per league per week by the moment itself AND by the pre-Chimmy
@@ -187,6 +203,7 @@ export async function GET(req: NextRequest) {
         let emailsSent = 0
         let skippedForTime = 0
         let optedOut = 0
+        let held = 0
         const errors: string[] = []
         const postedRecaps: PostedRecap[] = []
         for (const l of leagues) {
@@ -207,7 +224,8 @@ export async function GET(req: NextRequest) {
             continue
           }
           try {
-            const r = await postRecapForLeague(l.id, l.platformLeagueId, l.userId, l.name ?? 'League')
+            const r = await postRecapForLeague(l.id, l.platformLeagueId, l.userId, l.name ?? 'League', l.settings)
+            if ('held' in r && r.held) held += 1
             if (r.posted) {
               posted += 1
               emailsSent += r.emailsSent
@@ -231,7 +249,7 @@ export async function GET(req: NextRequest) {
             platform: { in: ['manual', 'allfantasy', 'af', 'native'] },
             settings: { path: ['commissionerRecipes', 'recipes', 'weeklyRecap'], equals: true },
           },
-          select: { id: true, name: true, settings: true },
+          select: { id: true, name: true, userId: true, settings: true },
           take: 100,
         })
         let nativePosted = 0
@@ -242,6 +260,14 @@ export async function GET(req: NextRequest) {
           }
           if (!weeklyRecapAllowed(league.settings, 'manual')) continue
           try {
+            if (recapReviewOn(league.settings) && readChimmySpeaksUp(league.settings) && league.userId) {
+              const built = await buildNativeRecapForLeague({ leagueId: league.id, leagueName: league.name ?? 'League', seasonYear: new Date().getUTCFullYear() })
+              if (built.ok) {
+                const r = await holdRecapDraft({ leagueId: league.id, leagueName: league.name ?? 'League', ownerUserId: league.userId, sleeperLeagueId: null, season: String(built.season), week: built.week, generatedText: built.text })
+                if (r === 'held') held += 1
+              }
+              continue
+            }
             const result = await postNativeWeeklyRecap({
               leagueId: league.id,
               leagueName: league.name ?? 'League',
@@ -275,6 +301,7 @@ export async function GET(req: NextRequest) {
           emailsSent: emailsSent + recapPush.emailed,
           skippedForTime,
           optedOut,
+          held,
           errors,
           stories,
           sweep: { sleeperLeagues: allLeagues.length, alreadyDone: plan.alreadyDone, coldDeferred: plan.coldDeferred },
@@ -287,7 +314,7 @@ export async function GET(req: NextRequest) {
         rowsSkipped: r.skippedForTime,
         errors: r.errors.map((id) => `league ${id}`),
         warnings: r.skippedForTime > 0 ? [`time budget hit — ${r.skippedForTime} league(s) deferred to the next fire`] : [],
-        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut, weeklyStoryPush: r.stories, sweep: r.sweep, recapPush: r.recapPush },
+        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut, heldForReview: r.held, weeklyStoryPush: r.stories, sweep: r.sweep, recapPush: r.recapPush },
       }),
     )
     return NextResponse.json({
@@ -317,6 +344,6 @@ export async function GET(req: NextRequest) {
   if (!weeklyRecapAllowed(league.settings, 'sleeper')) {
     return NextResponse.json({ mode: 'manual' as const, posted: false, reason: 'weekly recap is turned off for this league', emailsSent: 0 })
   }
-  const result = await postRecapForLeague(league.id, league.platformLeagueId, league.userId, league.name ?? 'League')
+  const result = await postRecapForLeague(league.id, league.platformLeagueId, league.userId, league.name ?? 'League', league.settings)
   return NextResponse.json({ mode: 'manual' as const, ...result })
 }

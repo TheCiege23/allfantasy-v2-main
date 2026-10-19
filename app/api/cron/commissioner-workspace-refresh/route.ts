@@ -6,6 +6,7 @@ import { discoverWorkspaceRefreshLeagues } from '@/lib/automation/jobs/workspace
 import { refreshWorkspaceTasksBatch } from '@/lib/automation/jobs/workspace/refreshWorkspaceTasksJob'
 import { generateScheduledReportsBatch } from '@/lib/automation/jobs/reports/generateScheduledReportsJob'
 import { runCommissionerRecipesBatch } from '@/lib/automation/jobs/commissioner/runCommissionerRecipesJob'
+import { postUntouchedRecapDrafts } from '@/lib/recap-review/recapReviewService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const runtime = 'nodejs'
@@ -123,7 +124,18 @@ export async function GET(request: Request) {
         console.error('[cron-commissioner] recipes failed:', toErrorMessage(e))
         return { enabled: true, discovered: 0, completed: 0, skipped: 0, failed: 1 }
       })
-      return { ...workspace, reports, recipes }
+      /*
+       * Weekly recaps held for review (lib/recap-review): a draft nobody touched by this morning
+       * posts now, in leagues that asked for that. Off for every league until a commissioner picks
+       * review mode, so on most runs this is one indexed read that finds nothing.
+       */
+      const recapDrafts = leagueId
+        ? { checked: 0, posted: 0, failed: 0 }
+        : await postUntouchedRecapDrafts().catch((e) => {
+            console.error('[cron-commissioner] recap drafts failed:', toErrorMessage(e))
+            return { checked: 0, posted: 0, failed: 1 }
+          })
+      return { ...workspace, reports, recipes, recapDrafts }
     },
     (r) => ({
       rowsRead: r.discovered,
@@ -148,6 +160,8 @@ export async function GET(request: Request) {
         recipesEnabled: r.recipes.enabled,
         recipesCompleted: r.recipes.completed,
         recipesFailed: r.recipes.failed,
+        recapDraftsPosted: r.recapDrafts.posted,
+        recapDraftsFailed: r.recapDrafts.failed,
       },
     }),
   )

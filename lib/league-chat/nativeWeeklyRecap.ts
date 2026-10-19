@@ -51,23 +51,27 @@ export function buildNativeWeeklyRecap(input: {
   return lines.join('\n')
 }
 
-export async function postNativeWeeklyRecap(input: {
+/**
+ * The recap text for the league's latest fully-final week, without posting it. Split from the post
+ * so the commissioner's review mode (lib/recap-review) can hold the text for editing in between.
+ */
+export async function buildNativeRecapForLeague(input: {
   leagueId: string
   leagueName: string
   seasonYear: number
-}): Promise<{ posted: boolean; reason?: string }> {
+}): Promise<{ ok: true; season: number; week: number; text: string } | { ok: false; reason: string }> {
   const season = await prisma.redraftSeason.findUnique({
     where: { leagueId_season: { leagueId: input.leagueId, season: input.seasonYear } },
     select: { id: true, season: true },
   })
-  if (!season) return { posted: false, reason: 'no current season' }
+  if (!season) return { ok: false, reason: 'no current season' }
 
   const latest = await prisma.redraftMatchup.findFirst({
     where: { seasonId: season.id, status: 'final', isMedianMatchup: false, awayRosterId: { not: null } },
     orderBy: { week: 'desc' },
     select: { week: true },
   })
-  if (!latest) return { posted: false, reason: 'no finalized week' }
+  if (!latest) return { ok: false, reason: 'no finalized week' }
   const rows = await prisma.redraftMatchup.findMany({
     where: { seasonId: season.id, week: latest.week, isMedianMatchup: false, awayRosterId: { not: null } },
     select: {
@@ -79,7 +83,7 @@ export async function postNativeWeeklyRecap(input: {
     },
   })
   if (rows.length === 0 || rows.some((row) => row.status !== 'final' || !row.awayRoster)) {
-    return { posted: false, reason: 'week is not final' }
+    return { ok: false, reason: 'week is not final' }
   }
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: season.id },
@@ -103,13 +107,33 @@ export async function postNativeWeeklyRecap(input: {
       name: name(roster), wins: roster.wins, losses: roster.losses, ties: roster.ties,
     })),
   })
+  return { ok: true, season: season.season, week: latest.week, text }
+}
+
+/** Post a native recap's text as Chimmy, deduped per league per week like every weekly recap. */
+export async function postNativeRecapText(input: {
+  leagueId: string
+  season: number | string
+  week: number
+  text: string
+}): Promise<{ posted: boolean; reason?: string }> {
   const result = await postChimmyMoment({
     leagueId: input.leagueId,
     kind: 'weekly_awards',
-    dedupeKey: `${season.season}:${latest.week}`,
-    text,
-    card: { weeklyRecap: true, season: String(season.season), week: latest.week },
+    dedupeKey: `${input.season}:${input.week}`,
+    text: input.text,
+    card: { weeklyRecap: true, season: String(input.season), week: input.week },
     messageType: 'system',
   })
   return result.posted ? { posted: true } : { posted: false, reason: result.reason }
+}
+
+export async function postNativeWeeklyRecap(input: {
+  leagueId: string
+  leagueName: string
+  seasonYear: number
+}): Promise<{ posted: boolean; reason?: string }> {
+  const built = await buildNativeRecapForLeague(input)
+  if (!built.ok) return { posted: false, reason: built.reason }
+  return postNativeRecapText({ leagueId: input.leagueId, season: built.season, week: built.week, text: built.text })
 }
