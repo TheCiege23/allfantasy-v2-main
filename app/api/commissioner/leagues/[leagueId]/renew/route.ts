@@ -20,7 +20,9 @@ import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeN
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { checkAndTriggerRatingIfOffseason } from '@/lib/commissioner/CommissionerRatingTrigger'
+import { readBracketResult } from '@/lib/redraft/offseason/RedraftOffseasonService'
 import {
+  isAlreadyRenewedIntoSeason,
   isSeasonOverForRenewal,
   normalizeRenewalModalType,
   renewalKindFromSelection,
@@ -178,7 +180,7 @@ export async function POST(
     select: {
       userId: true, season: true, settings: true, leagueVariant: true, platform: true,
       isDynasty: true, sport: true, name: true, scoring: true,
-      waiverBudget: true,
+      waiverBudget: true, status: true, lifecycleState: true, lifecycleMetadata: true,
       teams: {
         select: {
           id: true, teamName: true, ownerName: true, isOrphan: true,
@@ -241,6 +243,36 @@ export async function POST(
   }
   const currentSeason = league.season ?? new Date().getFullYear()
   const nextSeason = currentSeason + 1
+
+  /*
+   * 🛑 RENEW ONCE. Every POST advanced `League.season` again, so a double-click or a re-opened modal
+   * skipped a whole season and wiped its stats. Renewal leaves `lifecycleState` where it was, so the
+   * season-over check below still passes after it — the marker written in step 6 is what stops it.
+   */
+  if (isAlreadyRenewedIntoSeason({
+    season: currentSeason,
+    status: league.status,
+    settings,
+    lifecycleMetadata: league.lifecycleMetadata,
+  })) {
+    return NextResponse.json(
+      { error: 'already_renewed', message: `This league has already been renewed for ${currentSeason}.` },
+      { status: 409 },
+    )
+  }
+  // 🛑 Same predicate GET reports as `isSeasonOver`; only the UI checked it before.
+  if (!isSeasonOverForRenewal({
+    status: league.status,
+    dynastySeasonPhase: settings.dynastySeasonPhase as string | undefined,
+    seasonPhase: settings.season_phase as string | undefined,
+    lifecycleState: league.lifecycleState,
+  })) {
+    return NextResponse.json(
+      { error: 'season_not_over', message: `The ${currentSeason} season is not over yet. Renew the league once it has finished.` },
+      { status: 409 },
+    )
+  }
+
   const changes: { field: string; oldValue: string; newValue: string }[] = []
 
   // ─── 1. STORE SEASON HISTORY with rankings ───
@@ -260,18 +292,50 @@ export async function POST(
         isCommissioner: t.isCommissioner,
       }))
 
-    // Find champion (rank 1 or highest points)
-    const champion = teamRecords[0]
+    /*
+     * 🛑 THE CHAMPION IS THE BRACKET WINNER, NOT THE POINTS LEADER. This upsert wrote `teamRecords[0]`
+     * (most points) over the snapshot `enterRedraftOffseason` had already written from the finished
+     * bracket. So: a recorded snapshot is kept as it is; with none, the bracket is read the same way
+     * (`readBracketResult`); the points leader is only the fallback for a season with no bracket.
+     */
+    const existing = await prisma.leagueSeason.findUnique({
+      where: { leagueId_season: { leagueId, season: currentSeason } },
+      select: { championName: true, runnerUpName: true, regularSeasonWinnerName: true, teamRecords: true },
+    })
+    let championName: string | null = null
+    let runnerUpName: string | null = null
+    if (!existing?.championName) {
+      const redraftSeason = await prisma.redraftSeason.findFirst({
+        where: { leagueId, season: currentSeason },
+        select: {
+          playoffBracket: { select: { structure: true } },
+          rosters: { select: { id: true, teamName: true, ownerName: true } },
+        },
+      })
+      const bracket = readBracketResult(redraftSeason?.playoffBracket?.structure)
+      if (bracket) {
+        const nameOf = (id: string | null) => {
+          const r = id ? redraftSeason?.rosters.find((x) => x.id === id) : undefined
+          return r ? r.teamName ?? r.ownerName : null
+        }
+        championName = nameOf(bracket.championRosterId)
+        runnerUpName = nameOf(bracket.runnerUpRosterId)
+      } else {
+        championName = teamRecords[0]?.ownerName ?? teamRecords[0]?.teamName ?? null
+        runnerUpName = teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null
+      }
+    }
+    const pointsLeaderName = teamRecords[0]?.ownerName ?? teamRecords[0]?.teamName ?? null
 
     await prisma.leagueSeason.upsert({
       where: { leagueId_season: { leagueId, season: currentSeason } },
+      // Fill only what is missing; a recorded snapshot is never rewritten.
       update: {
         status: 'complete',
-        teamRecords: toPrismaJsonInput(teamRecords),
-        championName: champion?.ownerName ?? champion?.teamName ?? null,
-        runnerUpName: teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null,
-        regularSeasonWinnerName: champion?.ownerName ?? champion?.teamName ?? null,
-        teamCount: teamRecords.length,
+        ...(existing?.teamRecords == null ? { teamRecords: toPrismaJsonInput(teamRecords), teamCount: teamRecords.length } : {}),
+        ...(existing?.championName ? {} : { championName }),
+        ...(existing?.championName || existing?.runnerUpName ? {} : { runnerUpName }),
+        ...(existing?.regularSeasonWinnerName ? {} : { regularSeasonWinnerName: pointsLeaderName }),
         scoringFormat: league.scoring ?? null,
         isDynasty: league.isDynasty,
       },
@@ -281,10 +345,10 @@ export async function POST(
         platformLeagueId: leagueId,
         status: 'complete',
         teamRecords: toPrismaJsonInput(teamRecords),
-        championName: champion?.ownerName ?? champion?.teamName ?? null,
+        championName,
         championAvatar: null,
-        runnerUpName: teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null,
-        regularSeasonWinnerName: champion?.ownerName ?? champion?.teamName ?? null,
+        runnerUpName,
+        regularSeasonWinnerName: pointsLeaderName,
         teamCount: teamRecords.length,
         scoringFormat: league.scoring ?? null,
         isDynasty: league.isDynasty,
@@ -365,6 +429,7 @@ export async function POST(
   const updatedSettings: Record<string, unknown> = {
     ...settings, // ← PRESERVES all existing settings (roster, scoring, draft, etc.)
     renewal_completed_for_season: nextSeason,
+    renewal_completed_at: new Date().toISOString(),
     dynastySeasonPhase: 'regular',
     season_phase: 'pre_season',
     // Flag dispersal draft eligibility
