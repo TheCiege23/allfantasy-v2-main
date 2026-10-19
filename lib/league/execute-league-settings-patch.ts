@@ -11,6 +11,7 @@ import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
 import { keeperProvenanceFromCommissionerSave } from '@/lib/league-contract/keeperProvenance'
+import { scopesForSettingsPatch } from '@/lib/league/coCommissionerScopes'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
@@ -209,7 +210,8 @@ export async function executeLeagueSettingsPatch(
   const actorUserId = patchOptions?.actingUserId?.trim() || userId
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    // A co-commissioner may only change the areas the head commissioner granted (coCommissionerScopes).
+    await requireCommissionerRole(leagueId, userId, scopesForSettingsPatch(body, patchOptions?.section))
   } catch (err) {
     if (err instanceof Response) return err
     console.error('[executeLeagueSettingsPatch]', err)
