@@ -139,7 +139,7 @@ export function ConstitutionBuilder({ leagueId }: { leagueId: string }) {
           <p className="mt-1 text-white/60">
             {t(
               'AllFantasy writes it from your league’s real settings — rosters, scoring, waivers, trades, playoffs, keepers and dues — plus the answers below. You can edit every article before publishing.',
-              'AllFantasy la escribe con la configuración real de tu liga —plantillas, puntuación, waivers, intercambios, playoffs, keepers y cuotas— y las respuestas de abajo. Puedes editar cada artículo antes de publicar.',
+              'AllFantasy la escribe con la configuración real de tu liga —plantillas, puntuación, agentes libres, intercambios, playoffs, keepers y cuotas— y las respuestas de abajo. Puedes editar cada artículo antes de publicar.',
             )}
           </p>
           <Questions t={t} answers={answers} onChange={setAnswers} />
