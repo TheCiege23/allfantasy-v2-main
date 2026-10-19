@@ -131,6 +131,8 @@ describe('the redraft PATCH save', () => {
     const [client, args] = h.writeDailyLineupForSave.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
     expect(client).toBe(h.tx)
     expect(args).toMatchObject({ leagueId: 'L', redraftRosterId: 'rr-1', sport: 'NBA', season: 2026, week: 1 })
+    // The slots the move replaced, for back-filling earlier days.
+    expect(args.before).toEqual(new Map([['p1', 'PG']]))
   })
 
   it('leaves a league not opted in alone', async () => {

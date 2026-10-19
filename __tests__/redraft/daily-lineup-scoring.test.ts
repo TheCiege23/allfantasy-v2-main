@@ -103,7 +103,7 @@ describe('the slot a player held on a day', () => {
 })
 
 describe('writing a save', () => {
-  function tx() {
+  function tx(existingDays: string[] = []) {
     return {
       redraftRosterPlayer: {
         findMany: vi.fn(async () => [
@@ -111,7 +111,11 @@ describe('writing a save', () => {
           { playerId: 'p2', slotType: 'BN' },
         ]),
       },
-      redraftDailyLineup: { deleteMany: vi.fn(async () => ({ count: 0 })), createMany: vi.fn(async () => ({ count: 0 })) },
+      redraftDailyLineup: {
+        findMany: vi.fn(async () => existingDays.map((d) => ({ scoringDay: day(d) }))),
+        deleteMany: vi.fn(async () => ({ count: 0 })),
+        createMany: vi.fn(async () => ({ count: 0 })),
+      },
     }
   }
 
@@ -132,6 +136,37 @@ describe('writing a save', () => {
     const data = t.redraftDailyLineup.createMany.mock.calls[0][0].data as Array<Record<string, unknown>>
     expect(data).toHaveLength(6)
     expect(data[0]).toMatchObject({ leagueId: 'L1', rosterId: 'r1', season: 2026, week: 1, playerId: 'p1', slotType: 'PG', source: 'user' })
+  })
+
+  it('back-fills the week\'s earlier days that have no rows with the lineup the save replaced', async () => {
+    // Tuesday was saved; Wednesday-Friday never were, so they ran on the lineup this Saturday save replaces.
+    const t = tx(['2026-10-20'])
+    const before = new Map([['p1', 'BN'], ['p2', 'PG']])
+    const r = await writeDailyLineupForSave(t as never, {
+      leagueId: 'L1',
+      redraftRosterId: 'r1',
+      sport: 'NBA',
+      season: 2026,
+      week: 1,
+      now: new Date('2026-10-24T16:00:00.000Z'),
+      before,
+    })
+    expect(r).toEqual({ days: 3, rows: 6, backfilledDays: 3 })
+    const data = t.redraftDailyLineup.createMany.mock.calls[0][0].data as Array<{ scoringDay: Date; playerId: string; slotType: string }>
+    const backfill = data.filter((d) => d.scoringDay.getTime() < day('2026-10-24').getTime())
+    expect([...new Set(backfill.map((d) => d.scoringDay.toISOString().slice(0, 10)))]).toEqual(['2026-10-21', '2026-10-22', '2026-10-23'])
+    expect(backfill.find((d) => d.playerId === 'p1')?.slotType).toBe('BN')
+    // Earlier history is never rewritten: only the decided days are cleared.
+    expect(t.redraftDailyLineup.deleteMany.mock.calls[0][0].where.scoringDay).toEqual({ gte: day('2026-10-24'), lte: day('2026-10-26') })
+  })
+
+  it('without the replaced lineup, writes only the decided days', async () => {
+    const t = tx()
+    const r = await writeDailyLineupForSave(t as never, {
+      leagueId: 'L1', redraftRosterId: 'r1', sport: 'NBA', season: 2026, week: 1, now: new Date('2026-10-24T16:00:00.000Z'),
+    })
+    expect(r).toEqual({ days: 3, rows: 6 })
+    expect(t.redraftDailyLineup.findMany).not.toHaveBeenCalled()
   })
 
   it('refuses rather than leave an enabled league scored on the weekly lineup', async () => {

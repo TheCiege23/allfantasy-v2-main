@@ -710,6 +710,7 @@ export async function PATCH(req: NextRequest) {
         sport: roster.season.sport,
         season: roster.season.season,
         week,
+        before: new Map(currentPlayers.map((p) => [p.playerId, p.slotType])),
       })
     }
   })

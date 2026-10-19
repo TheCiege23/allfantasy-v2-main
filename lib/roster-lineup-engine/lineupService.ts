@@ -198,10 +198,23 @@ export async function persistRosterLineupWithEngine(
       tx,
     )
     if (redraftRosterId) {
+      const dailyLineups = isDailyLineupScoringEnabled(league.settings, sport)
+      // The slots this save replaces back-fill the week's earlier days that have no saved lineup yet.
+      const before = dailyLineups
+        ? new Map(
+            (
+              await tx.redraftRosterPlayer.findMany({
+                where: { rosterId: redraftRosterId, droppedAt: null },
+                select: { playerId: true, slotType: true },
+              })
+            ).map((p) => [p.playerId, p.slotType] as const),
+          )
+        : undefined
       await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
       // A daily-lineup league is scored per day: pin the synced slots to every day the save decides.
-      if (isDailyLineupScoringEnabled(league.settings, sport)) {
+      if (dailyLineups) {
         await writeDailyLineupForSave(tx, {
+          before,
           leagueId: input.leagueId,
           redraftRosterId,
           sport,

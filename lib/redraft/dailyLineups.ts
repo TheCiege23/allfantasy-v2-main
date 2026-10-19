@@ -61,6 +61,11 @@ type DailyLineupWriteDb = Pick<Prisma.TransactionClient, 'redraftRosterPlayer' |
  * every day the save decides. Replaces those days wholesale so a player dropped since the last save
  * does not linger as a starter. Call only for an enabled league (`isDailyLineupScoringEnabled`).
  *
+ * `before` — the slots the save REPLACED — fills the week's EARLIER days that have no rows yet. Every
+ * save writes rows, so a day with none had no save on or before it this week, and the lineup in force
+ * that day was exactly the one this save replaces. Earlier days that already have rows are history and
+ * are never touched. (Ported from #2539, which the owner closed in favour of this PR.)
+ *
  * Throws when the week has no date window: in an enabled league a lineup that cannot be pinned to its
  * days would be scored on the weekly lineup, and a lock that resets daily makes that an exploit
  * (design §3 B5). Refusing the save is the safe failure.
@@ -75,8 +80,10 @@ export async function writeDailyLineupForSave(
     week: number
     now?: Date
     source?: string
+    /** playerId → slotType before the save, for back-filling the week's earlier days. */
+    before?: ReadonlyMap<string, string>
   },
-): Promise<{ days: number; rows: number }> {
+): Promise<{ days: number; rows: number; backfilledDays?: number }> {
   const window = resolveDailySportWeekWindow(args.sport, args.season, args.week)
   if (!window) {
     throw new Error(
@@ -86,6 +93,32 @@ export async function writeDailyLineupForSave(
   }
   const days = daysDecidedBySave(window, args.now ?? new Date())
   if (days.length === 0) return { days: 0, rows: 0 }
+
+  let backfilled: Record<string, unknown>[] = []
+  let backfilledDays = 0
+  const earlier = daysInWindow(window).filter((d) => d.getTime() < days[0].getTime())
+  if (args.before && args.before.size > 0 && earlier.length > 0) {
+    const existing = await tx.redraftDailyLineup.findMany({
+      where: { rosterId: args.redraftRosterId, scoringDay: { gte: earlier[0], lt: days[0] } },
+      select: { scoringDay: true },
+      distinct: ['scoringDay'],
+    })
+    const withRows = new Set(existing.map((r) => dayKey(r.scoringDay)))
+    const missing = earlier.filter((d) => !withRows.has(dayKey(d)))
+    backfilledDays = missing.length
+    backfilled = missing.flatMap((scoringDay) =>
+      [...args.before!].map(([playerId, slotType]) => ({
+        leagueId: args.leagueId,
+        rosterId: args.redraftRosterId,
+        season: args.season,
+        week: args.week,
+        scoringDay,
+        playerId,
+        slotType,
+        source: args.source ?? 'user',
+      })),
+    )
+  }
 
   const players = await tx.redraftRosterPlayer.findMany({
     where: { rosterId: args.redraftRosterId, droppedAt: null },
@@ -106,8 +139,9 @@ export async function writeDailyLineupForSave(
       source: args.source ?? 'user',
     })),
   )
-  if (data.length) await tx.redraftDailyLineup.createMany({ data })
-  return { days: days.length, rows: data.length }
+  const all = [...backfilled, ...data] as typeof data
+  if (all.length) await tx.redraftDailyLineup.createMany({ data: all })
+  return { days: days.length, rows: data.length, ...(backfilledDays ? { backfilledDays } : {}) }
 }
 
 /** redraftRosterId → playerId → (dayKey → slotType), only the days that have a saved row. */
