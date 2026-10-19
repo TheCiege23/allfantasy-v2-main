@@ -45,10 +45,12 @@ describe('one source of truth for a daily sport dynasty season', () => {
     }
   })
 
-  it('the create wizard defaults match it, and NFL keeps 14', () => {
-    expect(getDefaultDynastySetup('NBA').regularSeasonLength).toBe(regularSeasonWeeksFor('NBA'))
-    expect(getDefaultDynastySetup('NHL').regularSeasonLength).toBe(regularSeasonWeeksFor('NHL'))
-    expect(getDefaultDynastySetup('MLB').regularSeasonLength).toBe(regularSeasonWeeksFor('MLB'))
+  // The wizard's own defaults (NBA 20, NHL/MLB 21) are deliberately NOT moved to the shape: that would push
+  // wizard-made leagues' playoffs ~2 weeks later, and when fantasy playoffs end is an open owner decision.
+  it('the create wizard keeps its existing defaults, and NFL keeps 14', () => {
+    expect(getDefaultDynastySetup('NBA').regularSeasonLength).toBe(20)
+    expect(getDefaultDynastySetup('NHL').regularSeasonLength).toBe(21)
+    expect(getDefaultDynastySetup('MLB').regularSeasonLength).toBe(21)
     expect(getDefaultDynastySetup('NFL').regularSeasonLength).toBe(14)
   })
 
