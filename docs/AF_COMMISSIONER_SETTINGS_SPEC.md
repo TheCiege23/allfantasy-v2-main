@@ -245,3 +245,142 @@ Ranked by how much commish pain they remove. ★ = recommended for the first bui
     popular template (e.g., "Superflex TE-premium dynasty, reverse max PF").
 
 ---
+## 4. Settings by league type
+
+The 12 formats are `LeagueTypeId` in `lib/league-creation-wizard/types.ts` / `FORMAT_REGISTRY` in
+`lib/league/format-engine.ts`. Every format gets everything in §2. The tables below add what's specific to that
+format. **Free** = any commish with an account. **Sub** = Commissioner plan.
+
+### 4.1 Redraft
+| Free | Sub |
+|---|---|
+| Standard playoffs (4/6/8), standard byes, consolation on/off | Custom playoffs (§1.3): odd counts, extra byes, play-ins, re-seeding, 2-week final |
+| Waiver type, FAAB budget, trade deadline | FAAB min bid / $0 bids, conditional waivers, waiver lock on game day |
+| Draft order: random or manual | Draft-slot lottery show, "pick your slot" order by last year's finish, KDS (draft slot choice) |
+| Scoring presets | Custom scoring tables (`advanced_scoring`), position-specific bonuses |
+| — | Anti-tank: lineup minimums, toilet-bowl prize/punishment |
+
+### 4.2 Dynasty
+| Free | Sub |
+|---|---|
+| Rookie draft order: worst-to-first or reverse PF, **calculated on demand**, commish clicks apply | **Auto rookie order** (§1.1): reverse true max PF, playoff finish + seed, live updates per playoff round, written onto next season at rollover |
+| Taxi squad size + eligibility (rookies / 1st–2nd year) | Taxi rules: lock after week X, max years on taxi, promote-only windows, taxi stealing (claim another team's taxi player) |
+| Future pick trading (1–3 years out) | Conditional pick trades ("becomes a 1st if Team X misses playoffs"), pick-protection |
+| Season rollover (manual) | Rollover wizard (§2.2): order → taxi → contracts → dues → schedule |
+| IR slots | IR rules: OUT-only, auto-move to bench when activated |
+| — | Weighted rookie lottery (existing lottery engine), anti-tank "toilet bowl gets #1" |
+| — | Orphan team auction / dispersal draft for abandoned rosters |
+
+### 4.3 Keeper
+| Free | Sub |
+|---|---|
+| Keeper count, max years, deadline, max per position | Escalating, ADP-based and auction keeper costs |
+| Cost rule: same round / 1 round later / 1 round earlier | Same-round conflict rule: lose that round + the round before or after, or bump to next open round |
+| Waiver pickups cost round X (default last) | Waiver pickup cost by pickup week ("after week 8 = round 10") |
+| Round floor (e.g., R1 can't be kept) | Traded keepers keep original cost; non-submitter default (AF picks best value) |
+| Keepers pre-filled on the draft board at deadline | Keeper value report: surplus value of each candidate vs. its cost, shared to managers before the deadline |
+
+### 4.4 Best ball
+| Free | Sub |
+|---|---|
+| Auto optimal lineup, roster size, draft | Best-ball **tournament mode** (multiple leagues → advance on total points) |
+| Season-long standings by total points or H2H | Advance rounds (top N by points advance each X weeks) |
+| — | Guillotine best ball (§4.5) and survivor best ball |
+
+### 4.5 Guillotine (incl. best-ball guillotine)
+| Free | Sub |
+|---|---|
+| Roster mode: standard **or best ball** (both already supported by `GuillotineValidation`) | Teams chopped per week by schedule (e.g., 1/wk then 2/wk after week 10) |
+| First chop week, teams per chop | **Double-chop weeks**, "no-chop" holiday weeks, final-N format (final 3 play for title over last 2 weeks) |
+| Tiebreak order, stat-correction window | Released-player rules: FAAB reset amount, release timing (instant / next waiver run / blind auction) |
+| Chop announcement post | **Immunity**: weekly top scorer is chop-proof next week; buy-back (re-enter once by FAAB bid) |
+| — | Chop drama recap + danger-zone alerts to the bottom 3 before lock |
+
+### 4.6 Survivor (idols, tribes, jury)
+| Free | Sub |
+|---|---|
+| Tribes, merge week, jury start, elimination by vote or by low score | **Idol settings**: number of idols, random vs commish-picked types, which of the 20 catalog idols are live, hidden from commish, expiry week, play deadline before lock |
+| Exile island on/off | Per-idol tuning: point surge %, tribute %, vote steal, extra vote, immunity; "idols are transferable / tradeable" |
+| Vote visibility (public / revealed at tribal) | Tribe swaps (weeks + method), Redemption/Edge of Extinction returns, final-tribal format (final 2 or 3) |
+| — | Commish "host mode" with AI host narration (`survivor_host_ai`) |
+
+**Build note:** only 4 of 20 catalog idols have play engines today (`lib/survivor/survivorIdolEngines.ts`). The
+picker should only offer idols that have an engine and grey out the others as "coming soon".
+
+### 4.7 Big Brother
+| Free | Sub |
+|---|---|
+| HOH / nominations / veto / eviction schedule, final nominee count | **Twists**: double/triple eviction, battle back, secret HOH, America's vote, hidden powers, safety pass (already modelled in `premiumEngineSpec`) |
+| Jury start, finale (final 2 / final 3) | Custom competition rotation, Have-Not penalties, consecutive-HOH rule |
+| Vote visibility, auto-nomination fallback | AI host and diary-room recaps (`big_brother_host_ai`) |
+| Pause the game (holiday / emergency) | Scheduled twist calendar (commish sets twists ahead, hidden from houseguests) |
+
+### 4.8 Zombie
+| Free | Sub |
+|---|---|
+| Infection rule (loss to a zombie = infected), starting zombie count | Cure/antidote items, horde bonuses, zombie-only waiver pool |
+| — | Weekly event cards (blood moon double-infection week, safe-house immunity) |
+
+### 4.9 Salary cap
+| Free | Sub |
+|---|---|
+| Cap amount, min salary, auction startup | Contract years, rookie-scale contracts, franchise tag, cap holds, dead money on cuts |
+| — | Cap-space trading, mid-season extensions, contract escalators; AI cap advice (`commissioner_cap_advice`) |
+
+### 4.10 Devy and C2C (Campus to Canton)
+| Free | Sub |
+|---|---|
+| Devy slots, college roster size | Devy/C2C rookie order uses the same engine as §1.1; graduation rules (auto-promote when drafted to NFL/NBA) |
+| — | Devy pick trading, separate devy draft order, AI devy scouting (`commissioner_devy_scouting`) |
+
+### 4.11 Tournament
+| Free | Sub |
+|---|---|
+| Bracket size, advancement by points | Multi-league tournaments with redraft between rounds, custom seeding, odd brackets, byes (§1.3 engine) |
+
+### 4.12 Concept leagues (survivor-guillotine, royal, pirate/vampire, king of the hill)
+Inherit the base format's Free settings; the concept itself and its special rules are Sub.
+
+---
+
+## 5. What already exists vs. what to build
+
+Mapped from the current codebase (2026-10-19). Paths are relative to the repo root.
+
+| Feature | Exists | Gap to close |
+|---|---|---|
+| Tier gating | `lib/subscription/FeatureGateService.ts`, `requireEntitlement.ts`, feature matrix in `lib/monetization/feature-monetization-matrix.ts` (`commissioner_automation`, `advanced_playoff_setup`, `advanced_scoring`…) | Add the new keys (below); gate by **league** (any commish/co-commish entitled), not only by user |
+| Rookie order | `lib/league/rookieDraftOrder.ts` (worst_to_first, reverse_max_pf), route `app/api/commissioner/leagues/[leagueId]/rookie-draft-order` | "Max PF" is really points-for; playoff teams ordered by `currentRank`, not bracket results; route has no entitlement check. Reuse the true max PF engine from `lib/commissioner-os/efl/maxPfEngine.ts` and bracket placements |
+| Draft lottery | `lib/draft-lottery/` (weighted, eligibility, tiebreaks) | `maxPf` = `pointsFor` in `standingsForLottery.ts`; `reverse_max_pf` fallback coerced to reverse standings; non-lottery teams placed by rank not playoff finish |
+| Sleeper ingest | `fpts_against` stored; bracket placements in `lib/league-import/sleeper/bracketPlacements.ts`; draft order in `draftArchiveMetadata.ts` | `ppts` (Sleeper's max PF) is read but not stored — store it as a cross-check; compute true max PF from weekly player scores |
+| Keepers | `lib/keeper/` — round_based, inflation, auction (stub), free; conflict rule player_chooses / reject_both; waiver = last round | Add "1 round later", same-round **lose adjacent round** and **bump** rules, waiver = round X, auction cost based on real price (not the $40 stub); merge with `lib/league/keeper-policy.ts` so there's one cost model |
+| Playoffs | `PlayoffBracketConfigResolver.ts` (counts, byes, consolation, toilet bowl, 3rd place) | `lib/redraft/oddPlayoffBracket.ts` already supports 3/5/7/9/11 but **nothing calls it**, and `redraftDefaults.ts` forces even counts. Wire it in behind `advanced_playoff_setup`; add play-ins, custom byes, re-seeding |
+| Co-commissioners | Roles in `LeagueSettingsPermissionsService` | `lib/commissioner/permissions.ts` excludes co-commishes; add granular co-commish permissions |
+| Survivor idols | `SurvivorIdolConfig`, 20-idol catalog | 16 idols without engines; Survivor runtime flagged not production-safe in `capabilities.ts` |
+| Big Brother twists | `premiumEngineSpec` | Expose twists in commish settings UI behind the Sub |
+
+### Proposed new feature keys
+`commish_rookie_order_auto`, `commish_keeper_rules_advanced`, `commish_playoffs_custom` (or reuse
+`advanced_playoff_setup`), `commish_import_assist`, `commish_rollover_wizard`, `commish_inbox`,
+`commish_rule_simulator`, `commish_guillotine_advanced`, `commish_survivor_idols`, `commish_bb_twists`.
+
+### Suggested build order
+1. **Rookie order engine** (true max PF + bracket placements + live per-round updates + rollover write) — the flagship.
+   Works for native and Sleeper-imported leagues on day one.
+2. **Odd-count playoffs + custom byes** — the code mostly exists; wire `oddPlayoffBracket.ts` in and lift the even-count rule.
+3. **Keeper cost rules + auto board placement at deadline.**
+4. **Commish Inbox + deadline autopilot** (§3.1, §3.5) — the everyday "this app does my job" feeling.
+5. Format-specific Sub settings (guillotine schedule/immunity, survivor idol picker, BB twist calendar).
+
+---
+
+## 6. Open questions for the owner
+
+1. **"One round up/down" wording.** This spec reads "up" as *earlier/more expensive* (R5 → R4) and "down" as
+   *later/cheaper* (R5 → R6). Confirm, and the UI will show the example next to each option so managers never guess.
+2. **Same-round conflict default:** lose the round **before** (more punishing) or the round **after**?
+3. **Within-round playoff ordering default:** worse seed picks earlier, or reverse max PF?
+4. Should keeper and rookie-order automation for **imported** leagues be in the Commissioner plan, or a cheaper
+   "Commish Assist" add-on to pull in commishes who won't move their league?
+5. Should a league stay unlocked when the paying commish hands the league to a non-subscriber mid-season? (Spec
+   says yes until rollover.)
