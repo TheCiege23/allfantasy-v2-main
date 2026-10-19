@@ -403,6 +403,9 @@ export const translationsEsParity: Record<string, string> = {
 
   "draftRoom.playerPanel.close": "Cerrar",
   "draftRoom.playerPanel.noPicksYet": "Aún no hay picks.",
+  "draftRoom.playerPanel.rookieFilterFallbackTitle": "Filtro de rookies no disponible para este deporte",
+  "draftRoom.playerPanel.rookieFilterFallbackBody":
+    "Los datos de rookies aún no están disponibles para este deporte, así que este draft de solo rookies muestra todo el pool de jugadores. Los picks no se verifican por condición de rookie: confirma que un jugador es rookie antes de draftearlo.",
 
   "draftRoom.autopick.label": "Auto-pick",
 
