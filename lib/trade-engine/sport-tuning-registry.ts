@@ -6,6 +6,7 @@
  * injects its own positional scarcity, scoring normalization,
  * roster size weights, and volatility profiles.
  */
+import { DAILY_SPORT_SEASON_SHAPE } from '@/lib/sportConfig/dailySportSeasonShape'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -141,7 +142,7 @@ const NFL_TUNING: SportTuning = {
 const NBA_TUNING: SportTuning = {
   sport: 'NBA',
   displayName: 'NBA Fantasy Basketball',
-  seasonWeeks: 24,
+  seasonWeeks: DAILY_SPORT_SEASON_SHAPE.NBA.totalWeeks,
   typicalStarters: 10,
   defaultScoreStdDev: 12,
   maxCareerYears: 18,
@@ -191,7 +192,7 @@ const NBA_TUNING: SportTuning = {
 const MLB_TUNING: SportTuning = {
   sport: 'MLB',
   displayName: 'MLB Fantasy Baseball',
-  seasonWeeks: 26,
+  seasonWeeks: DAILY_SPORT_SEASON_SHAPE.MLB.totalWeeks,
   typicalStarters: 14,
   defaultScoreStdDev: 14,
   maxCareerYears: 20,
@@ -249,7 +250,7 @@ const MLB_TUNING: SportTuning = {
 const NHL_TUNING: SportTuning = {
   sport: 'NHL',
   displayName: 'NHL Fantasy Hockey',
-  seasonWeeks: 25,
+  seasonWeeks: DAILY_SPORT_SEASON_SHAPE.NHL.totalWeeks,
   typicalStarters: 10,
   defaultScoreStdDev: 18,
   maxCareerYears: 18,

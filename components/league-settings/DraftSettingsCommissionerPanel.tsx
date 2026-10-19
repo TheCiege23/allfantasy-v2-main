@@ -5,7 +5,7 @@
  * Commissioner Draft tab: schedule, draft type, pick clock (+ pace label), overnight auto-pause
  * (slow drafts only), CPU auto-pick, rounds (= draftable roster spots unless an AF Commissioner
  * overrides), draft order (Fill with CI, Randomize ×N), and the rookie order for dynasty-family
- * leagues. Persists through /api/leagues/[leagueId]/draft/settings and
+ * leagues (plus the live order card, `LiveRookieOrderPanel`). Persists through /api/leagues/[leagueId]/draft/settings and
  * /api/leagues/[leagueId]/draft/randomize-order. Built for a 360–390px phone first.
  *
  * Timer / pace / rounds rules live in lib/draft/draftSettingsPolicy.ts and are shared with the
@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Calendar, Clock, Shuffle, Sparkles, Info, ChevronDown, Trophy, TrendingDown, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
+import { LiveRookieOrderPanel } from '@/components/league-settings/LiveRookieOrderPanel'
 import {
   LEGACY_TIMER_SECONDS,
   RANDOMIZE_MAX_TIMES,
@@ -689,6 +690,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           )}
         </section>
       )}
+
+      {/* ===== LIVE ROOKIE ORDER (Dynasty/C2C/Devy, commissioner only) ===== */}
+      {isDynastyLike && isCommissioner && <LiveRookieOrderPanel leagueId={leagueId} />}
 
       {/* ===== MESSAGES + SAVE ===== */}
       <div className="space-y-2" aria-live="polite">

@@ -160,7 +160,7 @@ export async function persistRosterLineupWithEngine(
     }
     const movedLockedPlayer = movedLockedLineupPlayer(roster.playerData, input.nextPlayerData, lockCtx.lockedPlayerIds)
     if (movedLockedPlayer) {
-      return { ok: false, error: 'That player\'s game has started. Their lineup position is locked for today.', status: 403 }
+      return { ok: false, error: 'That player\'s game has started, so their lineup position is locked.', status: 403 }
     }
   }
 
