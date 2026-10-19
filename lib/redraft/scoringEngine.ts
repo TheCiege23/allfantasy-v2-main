@@ -27,12 +27,13 @@ import {
   dailySlotFor,
   dayKey,
   daysInWindow,
+  daysOnRoster,
+  droppedInWindow,
   isDailyLineupScoringEnabled,
   loadDailyLineups,
   loadPlayerDailyStats,
 } from './dailyLineups'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
-import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -453,7 +454,8 @@ async function scoreRosterStartersDaily(args: {
   const window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
   if (!window) return null
 
-  const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, droppedAt: null } })
+  // Dropped this week too: the days he was here still count (`daysOnRoster`).
+  const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, ...droppedInWindow(window) } })
   const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
   const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: [args.rosterId], window })
   const days = daysInWindow(window)
@@ -475,8 +477,7 @@ async function scoreRosterStartersDaily(args: {
   const statMaps: TeamStatTotals[] = []
 
   for (const p of players) {
-    const joined = easternCalendarDay(p.addedAt)
-    const onRoster = days.filter((d) => !joined || d.getTime() >= joined.getTime())
+    const onRoster = daysOnRoster(p, days)
     const slotOn = (day: Date) => dailySlotFor(dailyLineups, args.rosterId, p.playerId, day) ?? weekSlotType(p, weekLineups)
     const startedDays = onRoster.filter((d) => isScoringStarterSlot(slotOn(d)))
     const benchDays = args.includeBench

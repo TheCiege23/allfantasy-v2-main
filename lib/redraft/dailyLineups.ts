@@ -189,6 +189,29 @@ export function dailySlotFor(lineups: DailyLineups, rosterId: string, playerId: 
   return best
 }
 
+/**
+ * The week's days a player was on the roster: added on or before the day, and not dropped before it.
+ *
+ * 🛑 A DROP ON DAY D STILL COUNTS D, AND THE DAYS BEFORE IT COUNT TOO. A reader that loads only
+ * `droppedAt: null` rows lets a manager start a player on Tuesday, drop him after a bad game, and
+ * take Tuesday off the score — the B5 exploit reached through a drop instead of a bench move.
+ * Callers load rows dropped inside the window as well (`droppedInWindow`), and this decides which
+ * of his days still count.
+ */
+export function daysOnRoster(
+  player: { addedAt?: Date | null; droppedAt?: Date | null },
+  days: readonly Date[],
+): Date[] {
+  const joined = player.addedAt ? easternCalendarDay(player.addedAt) : null
+  const left = player.droppedAt ? easternCalendarDay(player.droppedAt) : null
+  return days.filter((d) => (!joined || d.getTime() >= joined.getTime()) && (!left || d.getTime() <= left.getTime()))
+}
+
+/** The roster-player filter for a daily week: still rostered, or dropped during the window. */
+export function droppedInWindow(window: { start: Date; end: Date }) {
+  return { OR: [{ droppedAt: null }, { droppedAt: { gte: window.start } }] }
+}
+
 /** playerId → dayKey → that day's summed stats. */
 export type PlayerDailyStats = Map<string, Map<string, { stats: Record<string, number>; isFinalized: boolean }>>
 
