@@ -8,7 +8,7 @@ import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleS
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { evaluateTradeDeadline, serverWeekForTradeDeadline } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import { resolveTradeDeadlineStatus, serverWeekForTradeDeadline } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
@@ -815,7 +815,7 @@ export async function acceptAfLeagueTrade(input: {
    * acceptance leaves the offer exactly as it was. Once accepted, the review period (commissioner,
    * league vote, processing delay) may finish after the deadline — see `finalizeAfLeagueTradeProcessing`.
    */
-  const deadline = await evaluateTradeDeadline(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek)
+  const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek)
   if (deadline.passed) throw new Error('Trade deadline has passed.')
 
   const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
@@ -1011,7 +1011,7 @@ export async function finalizeAfLeagueTradeProcessing(input: {
    * to the deadline like a new proposal.
    */
   if (trade.status === 'pending' && !input.deadlineChecked) {
-    const deadline = await evaluateTradeDeadline(league, settings.tradeDeadlineWeek)
+    const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek)
     if (deadline.passed) throw new Error('Trade deadline has passed.')
   }
   const delayH = settings.processingDelayHours ?? trade.processingDelayHours ?? 0
