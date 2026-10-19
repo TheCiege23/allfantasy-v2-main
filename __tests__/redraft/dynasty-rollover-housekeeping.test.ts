@@ -134,7 +134,7 @@ describe('runDynastyRolloverHousekeeping', () => {
     vi.clearAllMocks()
     m.leagueFindUnique.mockResolvedValue(LEAGUE)
     m.seasonFindUnique.mockResolvedValue({ sport: 'NFL' })
-    m.sportsPlayerFindMany.mockResolvedValue([{ id: 'sp1', externalId: 'soph', sleeperId: null, yearsExp: 1 }])
+    m.sportsPlayerFindMany.mockResolvedValue([{ id: 'sp1', sleeperId: 'soph', yearsExp: 1 }])
     m.playerUpdateMany.mockResolvedValue({ count: 1 })
     m.rosterFindMany.mockResolvedValue([
       { id: 'R1', ownerId: 'u1', teamName: 'Aces', players: [p('soph', 'taxi'), p('healed', 'IR')] },
@@ -166,13 +166,25 @@ describe('runDynastyRolloverHousekeeping', () => {
 
   it('treats two sources that disagree about experience as unknown', async () => {
     m.sportsPlayerFindMany.mockResolvedValue([
-      { id: 'a', externalId: 'soph', sleeperId: null, yearsExp: 1 },
-      { id: 'b', externalId: 'soph', sleeperId: null, yearsExp: 0 },
+      { id: 'a', sleeperId: 'soph', yearsExp: 1 },
+      { id: 'b', sleeperId: 'soph', yearsExp: 0 },
     ])
     m.rosterFindMany.mockResolvedValue([{ id: 'R1', ownerId: 'u1', teamName: 'Aces', players: [p('soph', 'taxi')] }])
     const out = await runDynastyRolloverHousekeeping('L', 'y2')
     expect(out?.movedToBench).toEqual([])
     expect(out?.taxiUnverified).toBe(1)
+  })
+
+  it('never matches a roster id against a bare externalId, where it names a different player', async () => {
+    // Sleeper's own rows store `sleeper:<id>`; a bare externalId is another provider's number.
+    m.sportsPlayerFindMany.mockResolvedValue([{ id: 'ri-row', externalId: 'soph', sleeperId: null, yearsExp: 9 }])
+    m.rosterFindMany.mockResolvedValue([{ id: 'R1', ownerId: 'u1', teamName: 'Aces', players: [p('soph', 'taxi')] }])
+    const out = await runDynastyRolloverHousekeeping('L', 'y2')
+    expect(out?.movedToBench).toEqual([])
+    expect(out?.taxiUnverified).toBe(1)
+    const where = JSON.stringify(m.sportsPlayerFindMany.mock.calls[0][0].where)
+    expect(where).not.toContain('"externalId":{"in":["soph"')
+    expect(where).toContain('sleeper:soph')
   })
 })
 
