@@ -347,6 +347,10 @@ async function loadSnapshotLines(
     // Derived from ONE game's line by the normalizer; on a season average they would fire every night.
     delete stats.dbl_dbl
     delete stats.trpl_dbl
+    // NHL rate bonuses are per game too: on an average line they would score the season's rate.
+    delete stats.g_sv_pct_bonus
+    delete stats.g_gaa_bonus
+    delete stats.sh_pct_bonus
     lines.push({
       id: r.playerId,
       name: r.playerName,

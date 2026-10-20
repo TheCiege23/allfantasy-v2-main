@@ -51,6 +51,11 @@ export const NHL_CONFIG: SportConfigFull = {
     { key: 'g_50sv_game', label: '50+ Save Game (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
     // Goalie `time_on_ice`, stored as minutes by the ingest. 0 by default, gated like the rows above.
     { key: 'g_toi', label: 'Minute Played (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    // Rate-stat bonuses, evaluated PER GAME in `normalizeNhlGameStats` and summed. 0 by default, gated
+    // like the rows above. Save % and shooting % count steps above the floor; GAA is one per game.
+    { key: 'g_sv_pct_bonus', label: 'Save % Bonus (per .010 over .900, per game)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'g_gaa_bonus', label: 'GAA Under 2.50 Game (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'sh_pct_bonus', label: 'Shooting % Bonus (per point over 10%, per game)', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
   ],
 
   scoringPresets: [{ name: 'Standard', categories: [] }],
