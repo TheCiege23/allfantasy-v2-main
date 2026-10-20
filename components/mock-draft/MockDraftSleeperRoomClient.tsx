@@ -1355,11 +1355,7 @@ export default function MockDraftSleeperRoomClient({
                   key={league.id}
                   type="button"
                   onClick={() => void loadLeaguePayload(league)}
-                  className={`rounded-3xl border p-5 text-left transition-all ${
-                    selectedLeague?.id === league.id
-                      ? 'border-cyan-400/40 bg-cyan-500/10'
-                      : 'border-white/8 bg-[#0c1224] hover:border-white/15 hover:bg-white/[0.03]'
-                  }`}
+                  className="rounded-3xl border border-white/8 bg-[#0c1224] p-5 text-left transition-all hover:border-white/15 hover:bg-white/[0.03]"
                   data-testid={`mock-draft-league-card-${league.id}`}
                 >
                   <div className="flex items-center justify-between gap-3">
