@@ -326,6 +326,8 @@ jobs:
         NEXTAUTH_URL: http://localhost:3000
         # 8192MB heap: see the note on the retention-engagement step above.
         NODE_OPTIONS: --max-old-space-size=8192
+        # The server uses a separate override so react-server conditions stay out.
+        PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:mobile
     # ⚠ THE AUTHENTICATED PHONE LANE. Separate from mobile-smoke on purpose: it
     # seeds leagues and users and signs in, which is exactly what phone-smoke.spec.ts

@@ -101,11 +101,27 @@ beforeEach(() => {
 })
 
 describe('notification outbox relay', () => {
+  it('retries a partial device failure instead of losing the failed phone', async () => {
+    stageRows([row({ channel: 'push' })])
+    sendPushToUser.mockResolvedValue([{ ok: true }, { ok: false, error: '503' }])
+    const result = await relayNotificationOutbox()
+    expect(result.retried).toBe(1)
+    expect(writeback().status).toBe('pending')
+  })
+
+  it('expires a live alert after an outage instead of replaying it late', async () => {
+    stageRows([row({ channel: 'push', metadata: { expiresAt: new Date(Date.now() - 1000).toISOString() } })])
+    const result = await relayNotificationOutbox()
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(result.skipped).toBe(1)
+    expect(writeback().lastError).toContain('expired')
+  })
+
   it('claims pending rows conditionally so two concurrent runs cannot double-send', async () => {
     stageRows([row()])
     await relayNotificationOutbox()
 
-    const claim = outboxUpdateMany.mock.calls[0]![0] as {
+    const claim = outboxUpdateMany.mock.calls.find(call => call[0].where.status === 'pending')![0] as {
       where: Record<string, unknown>
       data: Record<string, unknown>
     }
