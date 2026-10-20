@@ -35,6 +35,7 @@ import {
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
+import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
@@ -505,6 +506,16 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
         </HubSection>
       </HubDepthGate>
+
+      {/*
+        Weekly recap review — outside the depth gate: editing the league's own recap before it posts
+        is a free commissioner control. Only where a recap runs at all (Sleeper and AllFantasy-run).
+      */}
+      {league.native || league.platform === 'sleeper' ? (
+        <HubSection id="ch-recap" title={t('Weekly recap')}>
+          <WeeklyRecapReview leagueId={league.id} />
+        </HubSection>
+      ) : null}
 
       {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
       <CommunityLinks
