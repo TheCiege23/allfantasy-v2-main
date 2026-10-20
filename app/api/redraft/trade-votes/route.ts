@@ -648,9 +648,9 @@ export async function POST(req: NextRequest) {
        * its review after it — what Sleeper and ESPN do. See lib/trade-deadline/tradeDeadlineWindow.ts.
        */
       const deadline = await evaluateRedraftTradeDeadline(proposal.leagueId)
-      if (deadline.passed && deadline.deadlineWeek != null) {
+      if (deadline.passed) {
         return NextResponse.json(
-          { error: tradeDeadlinePassedMessage(deadline.deadlineWeek), code: 'TRADE_DEADLINE_PASSED' },
+          { error: tradeDeadlinePassedMessage(deadline), code: 'TRADE_DEADLINE_PASSED' },
           { status: 409 },
         )
       }

@@ -37,6 +37,7 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -454,6 +455,15 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     if (parsed.value && !hasSub) return jsonError('A custom tiebreaker order is part of the AF Commissioner plan.', 403)
     tiebreakerOrderToStore = { value: parsed.value }
+  }
+
+  // The trade close time is read by every trade gate (lib/trade-deadline/tradeDeadlineTime.ts), where an
+  // unreadable value would mean "no close time" — so it is refused here, and stored as one ISO instant.
+  // (`merge` is the settingsMerge read for the tiebreaker check above.)
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TRADE_DEADLINE_AT_KEY in merge) {
+    const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
   }
 
   /*
