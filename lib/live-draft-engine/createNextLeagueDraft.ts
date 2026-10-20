@@ -160,7 +160,7 @@ export function placeKeeperRounds<T extends { rosterId: string; roundCost: numbe
   return placed
 }
 
-async function championAndRunnerUp(seasonId: string): Promise<{ championId: string | null; runnerUpId: string | null }> {
+export async function championAndRunnerUp(seasonId: string): Promise<{ championId: string | null; runnerUpId: string | null }> {
   const finalRound = await prisma.redraftPlayoffRound
     .findFirst({
       // The title bracket only: consolation rounds share this table at `100 + n`, so without the

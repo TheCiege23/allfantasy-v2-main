@@ -46,6 +46,14 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
+// A redraft renew also runs the unified season-engine renew (roster reset + next season + draft).
+// These guards are about the route's own history/season writes, so it is stubbed as "no season
+// engine" — the legacy roster-only path. Its own behaviour is __tests__/redraft/renew-redraft-league.test.ts.
+vi.mock('@/lib/redraft/offseason/renewRedraftLeague', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/redraft/offseason/renewRedraftLeague')>()),
+  renewRedraftLeague: vi.fn().mockResolvedValue({ ok: false, code: 'NO_SEASON', message: 'no season' }),
+}))
+
 function baseLeague(overrides: Record<string, unknown> = {}) {
   return {
     userId: 'commish',
