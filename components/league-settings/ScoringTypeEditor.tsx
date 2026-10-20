@@ -27,6 +27,7 @@ const PRESET_LABELS: Record<string, string> = {
   nba_9cat: '9-cat',
   mlb_5x5: '5x5',
   mlb_6x6: '6x6',
+  nhl_standard: 'Standard',
 }
 
 export function ScoringTypeEditor({
