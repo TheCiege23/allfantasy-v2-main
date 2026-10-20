@@ -141,3 +141,41 @@ describe('production mock mobile recovery and clocks', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('could not save your mock progress')
   })
 })
+
+
+describe('native NBA league entry and checkpoint', () => {
+  it('opens a native league link, preserves custom setup and restores its mock paused', async () => {
+    const nativeKey = 'af:mock-draft:v1:viewer:native-nba'
+    const rosterSlots = ['UTIL', 'UTIL', 'UTIL', 'UTIL', 'SUPER_UTIL', 'BN', 'BN', 'BN', 'BN']
+    const league = {
+      leagueId: 'native-nba', platformLeagueId: 'native-nba', leagueName: 'NBA Redraft', sport: 'NBA', scoring: 'Points', isDynasty: false,
+      teamCount: 16, rounds: 9, draftType: 'snake', superflex: false, rosterSlots, detectedUserSlot: 1, hasExplicitDraftOrder: true,
+      managers: Array.from({ length: 16 }, (_, index) => ({ slot: index + 1, rosterId: index + 1, managerId: `manager-${index}`, managerName: `Manager ${index + 1}`, avatarUrl: null, isUser: index === 0, slotPredicted: false, isOrphan: index > 2, role: 'member', record: { wins: 0, losses: 0, ties: 0, pointsFor: 0 } })),
+    }
+    const fetchMock = vi.fn(async (input: string, options?: RequestInit) => {
+      expect(options?.method ?? 'GET').toBe('GET')
+      if (input.startsWith('/api/league/list')) return new Response(JSON.stringify({ leagues: [] }))
+      if (input.startsWith('/api/mock-draft/adp?')) return new Response(JSON.stringify({ entries: checkpoint().state.availablePlayers.map(player => ({ ...player, playerId: player.id })) }))
+      if (input.startsWith('/api/mock-draft?')) return new Response(JSON.stringify({ league }))
+      throw new Error(`Unexpected request: ${input}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const view = render(<MockDraftSleeperRoomClient viewerId="viewer" initialLeagueId="native-nba" initialSport="NBA" />)
+    await screen.findByText(/16 teams.*9 rounds.*Points.*snake/)
+    expect((screen.getByTestId('mock-draft-league-seat-select') as HTMLSelectElement).value).toBe('1')
+    fireEvent.click(screen.getByTestId('mock-draft-league-start'))
+    await screen.findByTestId('mock-draft-pause')
+    fireEvent.click(screen.getByTestId('mock-draft-pause'))
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(nativeKey)!).state.status).toBe('paused'))
+    const state = JSON.parse(localStorage.getItem(nativeKey)!).state
+    expect(state.settings).toMatchObject({ teamCount: 16, rounds: 9, sport: 'NBA', scoring: 'Points', rosterSlots })
+    expect(state.teams).toHaveLength(16)
+    expect(state.availablePlayers).toHaveLength(4)
+    expect(state.teams[0].rosterNeeds).toEqual([])
+    view.unmount()
+    render(<MockDraftSleeperRoomClient viewerId="viewer" initialLeagueId="native-nba" initialSport="NBA" />)
+    await screen.findByText(/Recovered your mock draft/)
+    expect(JSON.parse(localStorage.getItem(nativeKey)!).state.settings.rosterSlots).toEqual(rosterSlots)
+    expect(screen.getByTestId('mock-draft-resume')).toBeDefined()
+  })
+})

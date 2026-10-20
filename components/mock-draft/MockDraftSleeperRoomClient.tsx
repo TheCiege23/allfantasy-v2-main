@@ -60,6 +60,7 @@ interface LeagueMockPayload {
     rounds: number
     draftType: DraftType
     superflex: boolean
+    rosterSlots?: string[]
     managers: LeagueManager[]
     detectedUserSlot: number
     hasExplicitDraftOrder: boolean
@@ -67,6 +68,7 @@ interface LeagueMockPayload {
 }
 
 interface DraftSettings {
+  rosterSlots?: string[]
   teamCount: number
   rounds: number
   draftType: DraftType
@@ -260,6 +262,7 @@ function positionLabelColor(position: string): string {
 }
 
 function getRosterSlots(settings: DraftSettings): string[] {
+  if (settings.rosterSlots?.length) return settings.rosterSlots
   switch (settings.sport) {
     case 'NHL':
       return ['C', 'C', 'LW', 'RW', 'LW', 'RW', 'D', 'D', 'UTIL', 'G']
@@ -293,7 +296,7 @@ function slotSupportsPosition(slot: string, position: string): boolean {
   if (normalizedSlot === 'SUPER_FLEX') {
     return ['QB', 'RB', 'WR', 'TE'].includes(normalizedPosition)
   }
-  if (normalizedSlot === 'UTIL') {
+  if (['UTIL', 'SUPER_UTIL', 'BN'].includes(normalizedSlot)) {
     return true
   }
   if (normalizedSlot === 'G') {
@@ -345,6 +348,8 @@ function computeTeamNeeds(team: TeamSlot, settings: DraftSettings): string[] {
         case 'SUPER_FLEX':
           return ['QB', 'RB', 'WR', 'TE']
         case 'UTIL':
+        case 'SUPER_UTIL':
+        case 'BN':
           return []
         case 'G':
           return ['PG', 'SG']
@@ -974,6 +979,7 @@ export default function MockDraftSleeperRoomClient({
       }
 
       setLeaguePayload(payload.league)
+      setSelectedLeague({ ...league, id: payload.league.leagueId ?? league.id, isDynasty: payload.league.isDynasty, sport: payload.league.sport })
       setSettings({
         teamCount: payload.league.teamCount,
         rounds: payload.league.rounds,
@@ -981,6 +987,7 @@ export default function MockDraftSleeperRoomClient({
         sport: payload.league.sport,
         scoring: payload.league.scoring,
         superflex: payload.league.superflex,
+        rosterSlots: payload.league.rosterSlots,
         myPickSlot: payload.league.detectedUserSlot,
         speed: 15,
       })
@@ -1302,9 +1309,9 @@ export default function MockDraftSleeperRoomClient({
         <div className="border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
           <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
             <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-300">League Mock</div>
-            <h1 className="mt-3 text-3xl font-black">Select a Sleeper league</h1>
+            <h1 className="mt-3 text-3xl font-black">Select a league</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/50">
-              Import real managers, avatars, and draft slots when Sleeper has them. If order is not set yet, AllFantasy predicts it from team records.
+              Practice with league managers, roster layout, and draft settings. Imported Sleeper leagues use their draft order when available, or a predicted order from team records.
             </p>
           </div>
         </div>
@@ -1379,7 +1386,7 @@ export default function MockDraftSleeperRoomClient({
 
           {selectedLeague && loadingLeaguePayload ? (
             <div className="mt-6 rounded-3xl border border-white/8 bg-[#0c1224] p-6 text-sm text-white/60">
-              Loading managers and Sleeper draft settings...
+              Loading managers and league draft settings...
             </div>
           ) : null}
 
