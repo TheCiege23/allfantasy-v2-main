@@ -39,6 +39,7 @@ import {
   type NcaafScoringRow,
 } from '@/lib/ncaaf-scoring/NcaafScoringCategories'
 import type { NcaafScoringPresetKey } from '@/lib/ncaaf-scoring/NcaafScoringPresets'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,6 +100,7 @@ interface Props {
 
 export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, FOOTBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NcaafScoringPreset[]>([])
@@ -196,7 +198,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
     if (!leagueId) return
     setSaving(true); setError(null); setSuccess(false)
     try {
-      const res = await fetch(
+      const res = await confirmFetch(
         `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/ncaaf-scoring`,
         {
           method: 'PUT',
@@ -222,7 +224,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
     } finally {
       setSaving(false)
     }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -243,6 +245,8 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -458,5 +462,6 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NCAAF')}
       />
     </div>
+    </>
   )
 }

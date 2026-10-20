@@ -23,6 +23,7 @@ const h = vi.hoisted(() => {
     seasonStatus: 'in_season',
     week: 2,
     leagueSettings: {} as Record<string, unknown>,
+    lockAllMoves: false,
     extraPlayers: [] as Array<Record<string, unknown>>,
   }
   const rosters = [
@@ -76,6 +77,7 @@ const h = vi.hoisted(() => {
         platform: 'allfantasy',
         tradeDeadlineWeek: state.deadlineWeek,
         lifecycleState: state.lifecycleState,
+        lockAllMoves: state.lockAllMoves,
       }),
     },
     redraftRoster: {
@@ -113,6 +115,7 @@ vi.mock('@/lib/league-runtime', async (importOriginal) => ({
       : {
           ...h.rules,
           general: { ...h.rules.general, sport: h.state.sport, format: h.state.format },
+          roster: { ...h.rules.roster, lockAllMoves: h.state.lockAllMoves },
           trades: { ...h.rules.trades, deadlineWeek: h.state.deadlineWeek },
         },
   ),
@@ -139,6 +142,7 @@ beforeEach(() => {
     seasonStatus: 'in_season',
     week: 2,
     leagueSettings: {},
+    lockAllMoves: false,
     extraPlayers: [],
   })
 })
@@ -362,5 +366,24 @@ describe('NFL redraft keeps its own deadline check, and also answers to the serv
       code: 'ROSTER_LIMIT',
       source: 'nfl_runtime',
     })
+  })
+})
+
+describe('lock all moves (`League.lockAllMoves`)', () => {
+  it("UNCHANGED: NFL redraft is refused once, by the runtime's own check, with its own code and message", async () => {
+    h.state.lockAllMoves = true
+    // Deadline also passed: the lock is still the one refusal, as it always was (the runtime checks it first).
+    Object.assign(h.state, { deadlineWeek: 10, week: 12 })
+    await expect(validate([player('alpha-rb', 'alpha', 'beta')])).resolves.toEqual({
+      ok: false,
+      code: 'MOVE_LOCKED',
+      message: 'Roster moves are locked by league settings.',
+      source: 'nfl_runtime',
+    })
+  })
+
+  it('🛑 refuses the ownership-fallback path too (no league rules), which used to check only the deadline', async () => {
+    Object.assign(h.state, { sport: 'NCAAF', rulesMissing: true, lockAllMoves: true })
+    await expect(validate([player('alpha-rb', 'alpha', 'beta')])).resolves.toMatchObject({ ok: false, code: 'MOVE_LOCKED' })
   })
 })

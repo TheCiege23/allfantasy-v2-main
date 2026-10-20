@@ -1,4 +1,5 @@
-import { accumulateTeamTotals, getCategoryPresetDefinitions, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
+import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
+import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
@@ -15,6 +16,7 @@ import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
 import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
 import {
   dailySlotFor,
   dayKey,
@@ -26,6 +28,7 @@ import {
   loadPlayerDailyStats,
 } from './dailyLineups'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -291,6 +294,9 @@ async function scoreRosterStarters(args: {
   const activeStarters = starters.filter((p: (typeof starters)[number]) =>
     isScoringStarterSlot(weekSlotType(p, weekLineups)),
   )
+  // "Which games count" (lib/redraft/gamesCount.ts). Null — and no query against its tables — unless
+  // the commissioner chose best-N or lock-in, so every other league scores exactly as before.
+  const gamesCount = activeStarters.length > 0 ? await loadRosterGamesCount(args, activeStarters) : null
 
   let pts = 0
   const statMaps: TeamStatTotals[] = []
@@ -312,6 +318,27 @@ async function scoreRosterStarters(args: {
     if (!row) {
       missingPlayerIds.push(p.playerId)
       allFinal = false
+      continue
+    }
+    if (gamesCount) {
+      const games = gamesCount.games.get(p.playerId)
+      // A weekly row with no per-game rows: the sync has not covered him since the setting changed.
+      // Scoring his whole week would silently ignore the rule, so he is missing until it does.
+      if (!games?.length) {
+        missingPlayerIds.push(p.playerId)
+        allFinal = false
+        continue
+      }
+      const counted = await scoreCountedGames({
+        setting: gamesCount.setting,
+        games,
+        choice: gamesCount.choices.get(p.playerId),
+        scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+      })
+      for (const stats of counted.countedStats) statMaps.push(stats as TeamStatTotals)
+      pts += counted.points
+      scoredStarterCount += 1
+      if (!row.isFinalized) allFinal = false
       continue
     }
     statMaps.push(row.stats as TeamStatTotals)
@@ -349,6 +376,24 @@ async function scoreRosterStarters(args: {
   }
 }
 
+/** The league's games-count rule for a weekly-lineup roster, or null when it counts every game. */
+async function loadRosterGamesCount(
+  args: { leagueId: string; rosterId: string; week: number; seasonYear: number },
+  players: ReadonlyArray<{ playerId: string; sport: string }>,
+): Promise<GamesCountScoring | null> {
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
+  if (!league) return null
+  return loadGamesCountScoring({
+    leagueId: args.leagueId,
+    leagueSettings: league.settings,
+    sport: String(league.sport ?? '').toUpperCase(),
+    rosterId: args.rosterId,
+    season: args.seasonYear,
+    week: args.week,
+    players,
+  })
+}
+
 /**
  * DAILY-LINEUP LEAGUES (docs/DAILY_LINEUPS_DESIGN.md §4, lib/redraft/dailyLineups.ts): the week's score
  * is the sum over its Eastern days of each day's starters' points FOR THAT DAY. A player benched on a
@@ -379,6 +424,16 @@ async function scoreRosterStartersDaily(args: {
   const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: [args.rosterId], window })
   const days = daysInWindow(window)
   const playerIds = players.map((p: (typeof players)[number]) => p.playerId)
+  // "Which games count" applies across the days he STARTED: only those days' games are eligible.
+  const gamesCount = await loadGamesCountScoring({
+    leagueId: args.leagueId,
+    leagueSettings: league.settings,
+    sport,
+    rosterId: args.rosterId,
+    season: args.seasonYear,
+    week: args.week,
+    players,
+  })
   const dailyStatsBySport = new Map<string, Awaited<ReturnType<typeof loadPlayerDailyStats>>>()
   for (const playerSport of new Set(players.map((p: (typeof players)[number]) => p.sport))) {
     dailyStatsBySport.set(
@@ -428,6 +483,22 @@ async function scoreRosterStartersDaily(args: {
       if (!weekly) {
         missingPlayerIds.push(p.playerId)
         allFinal = false
+      } else if (gamesCount && !gamesCount.games.get(p.playerId)?.length) {
+        // Opted in, but no per-game rows yet (see the weekly path): missing, never scored whole-week.
+        missingPlayerIds.push(p.playerId)
+        allFinal = false
+      } else if (gamesCount) {
+        scoredStarterCount += 1
+        if (!weekly.isFinalized) allFinal = false
+        const started = new Set(startedDays.map((d) => dayKey(d)))
+        const counted = await scoreCountedGames({
+          setting: gamesCount.setting,
+          games: (gamesCount.games.get(p.playerId) ?? []).filter((g) => started.has(g.day)),
+          choice: gamesCount.choices.get(p.playerId),
+          scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+        })
+        pts += counted.points
+        for (const stats of counted.countedStats) statMaps.push(stats as TeamStatTotals)
       } else {
         scoredStarterCount += 1
         if (!weekly.isFinalized) allFinal = false
@@ -575,10 +646,11 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   const seasonYear = season.season
 
   const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true } })
-  const scoringSettings = scoringLeague?.settings as Record<string, any> | null
+  // The scoring type in force for THIS week: a mid-season switch never re-scores a week played before it.
+  const scoringSettings = settingsForScoringWeek(scoringLeague?.settings as Record<string, any> | null, seasonYear, week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
   const categoryId = scoringSettings?.category_preset_id ?? scoringSettings?.scoringSettings?.categoryPresetId
-  const categories = scoringMode === 'h2h_category' || scoringMode === 'roto' ? getCategoryPresetDefinitions(categoryId) : null
+  const categories = scoringMode === 'h2h_category' || scoringMode === 'roto' ? resolveLeagueCategories(scoringSettings, categoryId) : null
   if (scoringMode !== 'points' && !categories) throw new Error('Category scoring requires a supported native category preset.')
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
@@ -604,6 +676,16 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     if (bestBall || useDevyEngine) throw new Error('Category scoring is not supported for this concept.')
     home.points = categoryMatchup.aWins
     away.points = categoryMatchup.bWins
+  }
+  // Commissioner score adjustments (lib/score-adjustments): points leagues only, added on top of the
+  // computed score on every rescore so a stat sync can never erase one.
+  const adjustments = scoringMode === 'points' ? readScoreAdjustments(scoringSettings) : []
+  const commissionerAdjustment = adjustments.length
+    ? { home: adjustmentFor(adjustments, matchupId, homeRosterId), away: adjustmentFor(adjustments, matchupId, awayRosterId) }
+    : null
+  if (commissionerAdjustment) {
+    home.points = adjustedScore(home.points, adjustments, matchupId, homeRosterId)
+    away.points = adjustedScore(away.points, adjustments, matchupId, awayRosterId)
   }
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =
@@ -647,6 +729,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
+          ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
           home,
           away,
           missingPlayerIds,
@@ -708,9 +791,9 @@ export async function recalculateMatchupsForSeasonWeek(
   week: number,
 ): Promise<{ updated: number; incomplete: number; summaries: MatchupScoreUpdateSummary[] }> {
   const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
-  const settings = season?.league.settings as Record<string,any> | null
+  const settings = settingsForScoringWeek(season?.league.settings as Record<string,any> | null, season?.season, week)
   if (settings?.scoring_mode === 'roto' && season) {
-    const categories=getCategoryPresetDefinitions(settings.category_preset_id)
+    const categories=resolveLeagueCategories(settings, settings.category_preset_id)
     if(!categories) throw new Error('Rotisserie category preset is missing.')
     const rosters=await prisma.roster.findMany({where:{leagueId:season.leagueId,redraftRosterId:{not:null}},select:{id:true,redraftRosterId:true}})
     let incomplete=0

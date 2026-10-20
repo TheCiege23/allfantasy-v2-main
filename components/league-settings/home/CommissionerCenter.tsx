@@ -54,6 +54,8 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
     title: 'Season ops',
     items: [
       { id: 'commissioner-tools', label: 'Lineups, locks & schedule' },
+      { id: 'settings-lock', label: 'Settings lock' },
+      { id: 'score-adjustments', label: 'Score adjustments' },
       { id: 'survivor-tribes', label: 'Survivor tribes' },
       { id: 'ai', label: 'League AI' },
     ],
@@ -65,6 +67,8 @@ const TOOLS: ReadonlyArray<{ id: string; label: string; detail: string; target: 
   { id: 'edit-lineups', label: 'Edit any lineup', detail: 'Set or fix a manager’s starters.', target: 'commissioner-tools', inSeasonOnly: true },
   { id: 'roster-locks', label: 'Lock or unlock rosters', detail: 'Freeze adds, drops and trades for a team.', target: 'commissioner-tools' },
   { id: 'schedule', label: 'Edit the schedule', detail: 'Change who plays whom, week by week.', target: 'commissioner-tools' },
+  { id: 'settings-lock', label: 'Lock settings for the season', detail: 'Mid-season changes then need a league vote.', target: 'settings-lock' },
+  { id: 'score-adjust', label: 'Adjust a score', detail: 'Add or take away points, with a reason.', target: 'score-adjustments', inSeasonOnly: true },
   { id: 'co-commish', label: 'Co-commissioners', detail: 'Share the work with a trusted manager.', target: 'co-commissioners' },
   { id: 'dues', label: 'Dues & league history', detail: 'Track buy-ins and past seasons.', target: 'commissioner-tools' },
 ]

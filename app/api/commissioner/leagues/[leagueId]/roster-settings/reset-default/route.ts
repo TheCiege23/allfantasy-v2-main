@@ -9,10 +9,12 @@ import {
 } from '@/lib/roster-engine'
 import { prisma } from '@/lib/prisma'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -27,11 +29,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ le
   if (!registry.isSupported(league.sport)) {
     return NextResponse.json({ error: `Roster settings not yet available for ${league.sport}` }, { status: 400 })
   }
+  const body = await req.json().catch(() => ({}))
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
 
+  const locked = await settingsLockedResponse(leagueId, 'rosters')
+
+  if (locked) return locked
   await resetLeagueRosterToDefault(leagueId, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
   const config = await registry.getService(league.sport).getConfig(leagueId)
   const unifiedConfig = await getLeagueRosterConfig(leagueId)
 
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/reset-default' })
   return NextResponse.json({ ok: true, config, unifiedConfig })
 }

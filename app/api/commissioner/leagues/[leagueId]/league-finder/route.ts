@@ -70,7 +70,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ leagueId:
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -153,7 +153,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ leagueI
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

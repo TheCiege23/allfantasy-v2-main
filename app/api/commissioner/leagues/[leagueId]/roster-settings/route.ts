@@ -14,6 +14,8 @@ import {
 } from '@/lib/roster-engine'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,11 +92,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   }
 
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const locked = await settingsLockedResponse(leagueId, 'rosters')
+  if (locked) return locked
 
   const body = await req.json().catch(() => ({}))
   const slots = body.slots as Record<string, number> | undefined
   const templateKey = (body.templateKey as string) ?? 'custom'
   if (!slots || typeof slots !== 'object') return NextResponse.json({ error: 'slots required' }, { status: 400 })
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
 
   const oldConfig = await getLeagueRosterConfig(leagueId)
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
@@ -128,5 +134,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     }
   } catch { /* non-fatal */ }
 
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
   return NextResponse.json({ ok: true, config, unifiedConfig })
 }

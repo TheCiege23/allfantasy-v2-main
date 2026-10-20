@@ -3,7 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { postDraftRosterMoveRefusal } from '@/server/services/postDraftRosterLockService'
 import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradeProposalValidation'
+import { REDRAFT_MOVES_LOCKED_CODE, REDRAFT_MOVES_LOCKED_STATUS } from '@/lib/redraft/tradeMoveLock'
 import {
   REDRAFT_TRADE_GOVERNANCE_REFUSAL,
   prohibitedRedraftGovernanceFields,
@@ -284,7 +286,19 @@ export async function POST(req: NextRequest) {
     })),
   })
   if (!validation.ok) {
-    return NextResponse.json({ error: validation.message, code: validation.code }, { status: 400 })
+    // The move lock is league state, not a bad request: 409, for every sport — NFL's runtime refusal included.
+    const status = validation.code === REDRAFT_MOVES_LOCKED_CODE ? REDRAFT_MOVES_LOCKED_STATUS : 400
+    return NextResponse.json({ error: validation.message, code: validation.code }, { status })
+  }
+
+  // This path does not go through the lifecycle gate, so it applies the post-draft roster lock itself —
+  // after validation (incl. the deadline) so every existing refusal answers exactly as before.
+  const postDraftLock = await postDraftRosterMoveRefusal(leagueId, 'trade')
+  if (postDraftLock) {
+    return NextResponse.json(
+      { error: postDraftLock.error, code: postDraftLock.code, unlocksAt: postDraftLock.unlocksAt },
+      { status: postDraftLock.status },
+    )
   }
 
   const created = await prisma.$transaction(async (tx: any) => {

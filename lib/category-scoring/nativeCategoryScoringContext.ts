@@ -1,4 +1,4 @@
-import { getCategoryPresetDefinitions } from './index'
+import { resolveLeagueCategories } from './leagueScoringType'
 
 /** Facts from validated stored rules only; never infer category mode from a label. */
 export function nativeCategoryScoringContext(settings: unknown, sport: string) {
@@ -13,7 +13,7 @@ export function nativeCategoryScoringContext(settings: unknown, sport: string) {
   if (upper === 'NBA' && mode === 'roto' && presetId !== 'nba_9cat') return null
   if (upper === 'NHL' && mode !== 'h2h_category') return null
   if (mode === 'roto' ? recordMode !== 'roto' : recordMode !== 'each' && recordMode !== 'most') return null
-  const categories = getCategoryPresetDefinitions(presetId)
+  const categories = resolveLeagueCategories(s, presetId)
   if (!categories) return null
   const sportConfig = s.sportConfig as Record<string, unknown> | undefined
   return { mode, presetId, recordMode, lineupLockType: sportConfig?.lineupLockType === 'first_game_of_week' ? 'first_game_of_week' : null,

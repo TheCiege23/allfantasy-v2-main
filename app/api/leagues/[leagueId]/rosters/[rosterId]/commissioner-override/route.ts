@@ -38,7 +38,7 @@ export async function POST(
   }
 
   try {
-    await requireCommissionerRole(leagueId, session.user.id)
+    await requireCommissionerRole(leagueId, session.user.id, 'rosters')
   } catch (res) {
     if (res instanceof Response) {
       const data = await res.json().catch(() => ({ error: 'Forbidden' }))

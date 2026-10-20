@@ -55,7 +55,7 @@ beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()
   h.newsFind.mockResolvedValue([ROW])
   h.newsUpdate.mockResolvedValue({ count: 1 })
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
   h.classify.mockReturnValue('injury')
   h.rosterFind.mockResolvedValue([])
   h.playerFollowers.mockResolvedValue([])

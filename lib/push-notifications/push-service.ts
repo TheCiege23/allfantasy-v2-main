@@ -79,7 +79,7 @@ export async function removePushSubscription(
 }
 
 /** Get all subscriptions for a user. */
-export async function getPushSubscriptions(userId: string, strict = false): Promise<
+export async function getPushSubscriptions(userId: string, strict = true): Promise<
   { id: string; endpoint: string; p256dh: string; auth: string }[]
 > {
   const rows = await (prisma as any).webPushSubscription
@@ -154,7 +154,7 @@ async function sendToSubscription(
   }
 
   try {
-    await webpush.sendNotification(pushSubscription, payloadStr)
+    await webpush.sendNotification(pushSubscription, payloadStr, { urgency: 'high', timeout: 8000, TTL: /^(game_(scoring_play|big_play|close)|live_score)/.test(payload.type ?? '') ? 300 : 86400 })
     return { ok: true }
   } catch (e: unknown) {
     const err = e as { statusCode?: number; body?: string }
@@ -201,7 +201,7 @@ export async function sendPushToUser(
     )
     for (let i = 0; i < ios.length; i += 1) {
       const r = sent[i]
-      results.push(r.ok ? { ok: true, subscriptionId: ios[i].id } : { ok: false, error: r.error, subscriptionId: ios[i].id })
+      results.push(r.ok ? { ok: true, subscriptionId: ios[i].id } : { ok: false, error: r.expired ? 'Subscription expired' : r.error, subscriptionId: ios[i].id })
       if (!r.ok && r.expired) {
         await (prisma as any).webPushSubscription
           .deleteMany({ where: { endpoint: ios[i].endpoint } })
@@ -217,7 +217,7 @@ export async function sendPushToUser(
     return [...results, ...subs.map(() => ({ ok: false, error: "VAPID not configured" }))]
   }
 
-  for (const sub of subs) {
+  await Promise.all(subs.map(async sub => {
     const result = await sendToSubscription(sub, payload)
     results.push({ ...result, subscriptionId: sub.id })
     if (!result.ok && result.error === "Subscription expired") {
@@ -229,7 +229,7 @@ export async function sendPushToUser(
         // ignore
       }
     }
-  }
+  }))
   return results
 }
 

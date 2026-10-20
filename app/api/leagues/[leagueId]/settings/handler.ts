@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
+import { WAIVER_TYPES as ENGINE_WAIVER_TYPES } from '@/lib/waiver-wire/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,8 +20,8 @@ const SECTIONS = new Set([
   'ai',
 ])
 
-/** Waiver types the AF engine runs (`normalizeWaiverTypeForEngine`); the settings UI offers the first three. */
-const WAIVER_TYPES = new Set(['faab', 'rolling', 'reverse_standings', 'fcfs', 'standard'])
+/** Waiver types the AF engine runs — the same list the waiver-wire settings route validates against. */
+const WAIVER_TYPES = new Set<string>(ENGINE_WAIVER_TYPES)
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })

@@ -62,7 +62,7 @@ describe('resolveTradeDeadlineStatus', () => {
   it('no deadline configured: reads nothing at all', async () => {
     const d = deps({ id: 'S', currentWeek: 16, status: 'active' }, 16)
     for (const none of [null, undefined, 0, -3, 'abc']) {
-      await expect(resolveTradeDeadlineStatus(LEAGUE, none, d.deps)).resolves.toEqual({ passed: false, deadlineWeek: null, window: null })
+      await expect(resolveTradeDeadlineStatus(LEAGUE, none, d.deps)).resolves.toMatchObject({ passed: false, by: null, deadlineWeek: null, deadlineAt: null, window: null })
     }
     expect(d.findFirst).not.toHaveBeenCalled()
   })

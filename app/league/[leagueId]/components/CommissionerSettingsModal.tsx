@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { useAutosave } from '@/lib/hooks/useAutosave'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
@@ -11,6 +12,7 @@ import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
 import { TradeSettingsPanel } from './settings/TradeSettingsPanel'
 import { WaiverLeagueSettingsPanel } from './settings/WaiverLeagueSettingsPanel'
 import { RosterComplianceSettingsPanel } from './settings/RosterComplianceSettingsPanel'
+import { LineupModeSetting } from './settings/LineupModeSetting'
 import { AiLeagueSettingsPanel } from './settings/AiLeagueSettingsPanel'
 import { DraftSettingsPanel } from './settings/DraftSettingsPanel'
 import { ScheduleSettingsPanel } from './settings/ScheduleSettingsPanel'
@@ -117,7 +119,8 @@ export function CommissionerSettingsModal({
   const [c2cMode, setC2cMode] = useState(false)
   const [c2cConfig, setC2cConfig] = useState<C2CConfigClient | null>(null)
 
-  const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId)
+  const { confirm: confirmMidSeason, dialog: midSeasonDialog } = useMidSeasonConfirm()
+  const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId, { confirmMidSeason })
   const { hasCommissioner } = useEntitlements()
 
   useEffect(() => {
@@ -290,6 +293,7 @@ export function CommissionerSettingsModal({
 
   return (
     <SubscriptionGateProvider>
+    {midSeasonDialog}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-0 backdrop-blur-sm md:p-4"
       role="dialog"
@@ -368,7 +372,15 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'team' ? (
             <TeamSettingsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'roster' ? (
-            <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <LineupModeSetting
+                leagueId={leagueId}
+                sport={initialData.sport ?? null}
+                initialMode={initialData.lineupMode ?? null}
+                canEdit={canEdit}
+              />
+              <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            </div>
           ) : activeTab === 'scoring' ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <CommissionerScoringSettingsPanel
@@ -394,6 +406,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'draft' ? (
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
+              league={payload?.league ?? null}
               canEdit={canEdit}
               save={save}
               debouncedSave={debouncedSave}
