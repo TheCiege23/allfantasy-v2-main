@@ -125,6 +125,20 @@ export type LeagueRostersData = {
   /** Optional: absent from a server that predates imported picks. */
   pickCoverage?: PickCoverage
   pickPreviewBook?: TradePickPreviewBook | null
+  /** Optional: absent from a server that predates the redraft pick rule. */
+  pickPolicy?: TradePickPolicy | null
+}
+
+/**
+ * Which picks this league may trade. `redraft_current_draft`: only this season's draft, so future
+ * picks are hidden and `futurePicksReason` says why.
+ */
+export type TradePickPolicy = {
+  mode: 'redraft_current_draft' | 'standard'
+  season: number | null
+  futurePicksAllowed: boolean
+  futurePicksReason: string | null
+  draftClosedReason: string | null
 }
 
 export type LeagueRostersState = 'idle' | 'loading' | 'failed'
@@ -163,6 +177,7 @@ export function useLeagueRosters(
           partnerRanking: j.partnerRanking ?? null,
           pickCoverage: j.pickCoverage ?? 'none',
           pickPreviewBook: j.pickPreviewBook ?? null,
+          pickPolicy: j.pickPolicy ?? null,
         })
         setState('idle')
       } catch {

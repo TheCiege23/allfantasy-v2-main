@@ -28,6 +28,7 @@ import {
   type NhlScoringRow,
 } from '@/lib/nhl-scoring/NhlScoringCategories'
 import type { NhlScoringPresetKey } from '@/lib/nhl-scoring/NhlScoringPresets'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,6 +99,7 @@ interface Props {
 
 export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, HOCKEY_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NhlScoringPreset[]>([])
@@ -195,7 +197,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     setError(null)
     setSuccess(false)
     try {
-      const res = await fetch(
+      const res = await confirmFetch(
         `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nhl-scoring`,
         {
           method: 'PUT',
@@ -221,7 +223,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     } finally {
       setSaving(false)
     }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -242,6 +244,8 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -479,5 +483,6 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NHL')}
       />
     </div>
+    </>
   )
 }

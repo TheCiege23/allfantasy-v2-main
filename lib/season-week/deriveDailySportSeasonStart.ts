@@ -10,8 +10,22 @@
  * WHAT COUNTS AS EVIDENCE — ONLY A GAME THE FEED ITSELF LABELS REGULAR SEASON:
  *   1. the Rolling Insights season schedule cached in `SportsDataCache` (`riScheduleCache.ts`), whose
  *      `seasonType` is the vendor's own `season_type` (MLB, NCAAB today);
- *   2. `SportsGame` rows whose `seasonType` says regular (Rolling Insights live rows carry it).
+ *   2. `SportsGame` rows whose `seasonType` says regular (Rolling Insights live rows carry it);
+ *   3. `player_game_stats` rows the Rolling Insights `/live` ingest wrote, whose
+ *      `normalizedStatMap.seasonType` is that game's own `season_type`, classified by
+ *      `riSeasonType.ts` (`rollingInsightsGameLogs.ts` `normalizedMapFor`).
  * The opener is the EARLIEST such Eastern game day inside a ±21-day window around the estimate.
+ *
+ * 🛑 SOURCE 3 IS THE ONLY ONE THAT EXISTS FOR NBA AND NHL. `SportsGame.seasonType` is NULL for every
+ * NBA/NHL row in production and the season-schedule sync runs for MLB, NCAAB and soccer only (there
+ * is no committed NBA/NHL `schedule-season` capture to build one from). Without it, a 2027-28 dynasty
+ * season would sit on the estimate forever. Its evidence is the vendor's own per-game label:
+ * `contracts/rolling-insights/fixtures/live.NBA.json` and `live.NHL.json` carry
+ * `season_type: "Regular Season"` on every game, and `riSeasonType.ts` classifies any label it does
+ * not recognise (GAPS.md `N-13`) as `null`, never as regular — so a preseason game cannot be
+ * promoted to an opener by a new spelling. The cost: stats exist only once a game is PLAYED and
+ * ingested, so this source names the opener on opening night, not before it. Until then the season
+ * reports `SEASON_OPENER_UNRECORDED` (seasonWeekService.ts) and the week roller holds, loudly.
  *
  * 🛑 AN UNLABELLED ROW IS NEVER EVIDENCE. Preseason and regular-season NBA/NHL rows are otherwise
  * indistinguishable (`dailySportSeasonStarts.ts` header: NHL preseason 19–27 Sep 2026 is real,
@@ -49,7 +63,8 @@ export type DailySportSeasonStartResolution =
   | { opener: null; source: 'unknown'; estimated: false; detail: string }
 
 export type DeriveSeasonStartDeps = {
-  db: Pick<PrismaClient, 'sportsGame' | 'sportsDataCache'>
+  /** `playerGameStat` is optional so a caller holding a narrower client still derives from 1–2. */
+  db: Pick<PrismaClient, 'sportsGame' | 'sportsDataCache'> & Partial<Pick<PrismaClient, 'playerGameStat'>>
   now?: Date
 }
 
@@ -109,6 +124,21 @@ async function earliestLabelledRegularDay(
     .sort()
   if (days[0]) candidates.push({ day: days[0], evidence: 'SportsGame rows labelled regular' })
 
+  // 3. Played games the RI `/live` ingest stored with the vendor's per-game label. `game_date` is
+  //    already the US Eastern day (a DATE column), so it needs no re-bucketing.
+  if (db.playerGameStat) {
+    const first = await db.playerGameStat.findFirst({
+      where: {
+        sportType: sport,
+        gameDate: { gte: window.start, lt: window.end },
+        normalizedStatMap: { path: ['seasonType'], equals: 'regular' },
+      },
+      orderBy: { gameDate: 'asc' },
+      select: { gameDate: true },
+    })
+    if (first?.gameDate) candidates.push({ day: isoDay(first.gameDate), evidence: 'Rolling Insights /live game stats labelled regular' })
+  }
+
   candidates.sort((a, b) => a.day.localeCompare(b.day))
   return candidates[0] ?? null
 }
@@ -152,7 +182,8 @@ async function derive(sport: string, season: number, deps: DeriveSeasonStartDeps
     console.warn(
       `[dailySportSeasonStart] ${sport} ${season}: no curated opener and no game labelled regular season ` +
         `in the stored schedule; ESTIMATED opener ${estimate.slice(0, 10)} — not used as a week anchor, ` +
-        'so weeks stay unresolved until the schedule is ingested or the date is added to dailySportSeasonStarts.ts.',
+        'so weeks stay unresolved (SEASON_OPENER_UNRECORDED) until opening night is ingested or the published ' +
+        'date is added to REGULAR_SEASON_START_UTC in lib/season-week/dailySportSeasonStarts.ts.',
     )
   }
   return {

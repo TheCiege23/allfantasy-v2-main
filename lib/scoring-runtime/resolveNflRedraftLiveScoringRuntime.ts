@@ -1,12 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
-import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
+import type { CanonicalLeagueRules, CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
 import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
 import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import {
@@ -27,6 +28,7 @@ import {
   resolveNflRedraftScoringSettings,
   type NflRedraftLiveScoringRuntimeState,
   type NflRedraftRuntimeScoreInput,
+  type NflRedraftScoringSettings,
   type NflRedraftRuntimeTeamInput,
 } from './canonicalNflRedraftScoringRuntime'
 
@@ -109,6 +111,34 @@ async function sleeperIdLookup(
 function categoryPointsFromLeagueSettings(settings: unknown): Record<string, number> {
   const root = asRecord(settings)
   return asNumberMap(asRecord(root.sportConfig).categoryPoints)
+}
+
+/**
+ * The scoring settings every NFL redraft live-scoring write (recalc, correction, ingest) scores with.
+ *
+ * ONE RULE: these are the league's rules exactly as the weekly matchup engine resolves them
+ * (`calculateScoreFromSportConfig` → `buildLeagueStatScorer` → `resolveLeagueScoringRules`):
+ * `sportConfig.categoryPoints` when set, otherwise the commissioner's saved scoring panel
+ * (`nfl_scoring_config`), on the `sportConfig` preset/toggles. This path previously scored from the
+ * scoring template + `LeagueScoringOverride` rows + `categoryPoints`, never read `nfl_scoring_config`,
+ * and let template rules override `categoryPoints` — so `recalculate_week` / `apply_correction` could
+ * rewrite RedraftMatchup and PlayerWeeklyScore on rules the panel does not show.
+ *
+ * Falls back to the template-derived resolution only when the sport has no config.
+ */
+export function resolveNflRedraftLeagueScoringSettings(input: {
+  rules: CanonicalLeagueRules
+  league: { sport?: string | null; settings: unknown } | null
+}): NflRedraftScoringSettings {
+  const leagueScoring = resolveLeagueScoringRules({
+    sport: String(input.league?.sport ?? input.rules.general?.sport ?? 'NFL'),
+    settings: input.league?.settings ?? null,
+  })
+  return resolveNflRedraftScoringSettings({
+    rules: input.rules,
+    categoryPoints: categoryPointsFromLeagueSettings(input.league?.settings ?? null),
+    leagueScoring,
+  })
 }
 
 function serializeSnapshot(input: {
@@ -251,7 +281,7 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { sport: true, settings: true, platform: true } })
   // No explicit week: an imported season's stored week is never advanced — see resolveEffectiveRedraftWeek.
   // `== null`, not positiveWeek's fallback: the GET route passes `week: null` when absent, and
   // `Number(null)` is a finite 0 that positiveWeek clamps to week 1 without ever reaching a fallback.
@@ -405,7 +435,7 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
       awayScore: matchup.awayScore,
     })),
     scoreRows,
-    categoryPoints: categoryPointsFromLeagueSettings(league?.settings ?? null),
+    settings: resolveNflRedraftLeagueScoringSettings({ rules, league }),
     now: input.now,
   })
 
@@ -500,11 +530,8 @@ export async function ingestNflRedraftStatPayload(input: {
   const rules = await resolveCanonicalLeagueRules(season.leagueId)
   if (!rules) throw new Error('league_not_found')
   const week = positiveWeek(input.week, season.currentWeek || 1)
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
-  const settings = resolveNflRedraftScoringSettings({
-    rules,
-    categoryPoints: categoryPointsFromLeagueSettings(league?.settings ?? null),
-  })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { sport: true, settings: true, platform: true } })
+  const settings = resolveNflRedraftLeagueScoringSettings({ rules, league })
   const rosterPlayers = await prisma.redraftRosterPlayer.findMany({
     where: { roster: { seasonId: season.id, leagueId: season.leagueId }, droppedAt: null },
     select: { playerId: true, playerName: true, position: true, team: true, sport: true },
@@ -602,7 +629,7 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
   })
   if (!rosterPlayer) throw new Error('player_not_rostered')
 
-  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { sport: true, settings: true, platform: true } })
   /*
    * The previous line is READ and the correction WRITTEN under the Sleeper id (see `sleeperIdLookup`). A
    * foreign roster id with none is refused before either — audited, so the refusal is counted — rather
@@ -637,10 +664,7 @@ export async function applyNflRedraftStatCorrectionToSeason(input: {
     previousStats: asRecord(existing?.stats),
     correctedStats: input.correctedStats,
   })
-  const settings = resolveNflRedraftScoringSettings({
-    rules,
-    categoryPoints: categoryPointsFromLeagueSettings(league?.settings ?? null),
-  })
+  const settings = resolveNflRedraftLeagueScoringSettings({ rules, league })
   const calculation = calculateNflRedraftFantasyPoints({
     settings,
     stats: correction.normalizedStats,

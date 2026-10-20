@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (err) {
     if (err instanceof Response) return err
     throw err

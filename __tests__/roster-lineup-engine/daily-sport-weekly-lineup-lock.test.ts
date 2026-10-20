@@ -99,3 +99,46 @@ describe('daily-sport weekly lineup locks on the roster-engine save path', () =>
     expect(ctx.lockedPlayerIds).toEqual([])
   })
 })
+
+describe('a daily-lineup league on the roster-engine save path', () => {
+  const DAILY = { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } }
+  // 2026-10-22 23:45Z is 7:45 PM ET: the weekly path's whole-lineup 6 PM lock is ON.
+  const EVENING = new Date('2026-10-22T23:45:00.000Z')
+
+  beforeEach(() => {
+    h.redraftRosterId = 'rr-1'
+    h.players = [
+      { playerId: 'tatum', team: 'Boston Celtics' },
+      { playerId: 'brunson', team: 'New York Knicks' },
+      { playerId: 'bench-guy', team: 'Miami Heat' },
+    ]
+    h.games = [
+      // Celtics played last night; tonight the Knicks tipped at 7:30 PM ET; the Heat play at 10:30 PM ET.
+      { homeTeam: 'Boston Celtics', awayTeam: 'Orlando Magic', startTime: new Date('2026-10-21T23:30:00.000Z'), status: 'final' },
+      { homeTeam: 'New York Knicks', awayTeam: 'Toronto Raptors', startTime: new Date('2026-10-22T23:30:00.000Z'), status: 'in_progress' },
+      { homeTeam: 'Miami Heat', awayTeam: 'Utah Jazz', startTime: new Date('2026-10-23T02:30:00.000Z'), status: 'scheduled' },
+    ]
+  })
+
+  it('has no 6 PM whole-lineup lock: only the player whose game has started today is locked', async () => {
+    const ctx = await resolveFullLineupLockContext(args({ settings: DAILY, now: EVENING }))
+    expect(ctx.locked).toBe(false)
+    expect(ctx.policy).toBe('daily_per_player')
+    // Tatum played YESTERDAY, so he is free again today; Brunson is mid-game.
+    expect(ctx.lockedPlayerIds).toEqual(['brunson'])
+    expect(ctx.perPlayerReasons.brunson).toMatch(/game today has started/)
+  })
+
+  it('a weekly league at the same moment keeps the whole-lineup lock (unchanged)', async () => {
+    const ctx = await resolveFullLineupLockContext(args({ now: EVENING }))
+    expect(ctx.locked).toBe(true)
+    expect(ctx.policy).toBe('daily_slate')
+  })
+
+  it('fails CLOSED when the schedule cannot be read, since per-player locks are its only lock', async () => {
+    h.games = null as never // readWeekGames returning null makes the lock derivation throw
+    const ctx = await resolveFullLineupLockContext(args({ settings: DAILY, now: EVENING }))
+    expect(ctx.locked).toBe(true)
+    expect(ctx.policy).toBe('daily_lock_unavailable')
+  })
+})

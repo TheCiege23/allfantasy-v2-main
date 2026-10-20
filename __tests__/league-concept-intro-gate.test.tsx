@@ -141,7 +141,7 @@ describe('LeagueConceptIntroGate', () => {
           settings={{}}
         />,
       )
-      expect(await videoSrc()).toBe('/media/league-intros/redraft-league-intro.mp4')
+      expect(await videoSrc()).toBe('/media/create-league/concept/videos/Redraft.mp4')
     })
 
     it('omitting sport preserves the previous behaviour exactly', async () => {
@@ -154,7 +154,7 @@ describe('LeagueConceptIntroGate', () => {
           settings={{}}
         />,
       )
-      expect(await videoSrc()).toBe('/media/league-intros/redraft-league-intro.mp4')
+      expect(await videoSrc()).toBe('/media/create-league/concept/videos/Redraft.mp4')
     })
 
     it('a commissioner-set custom intro still outranks the sport clip', async () => {

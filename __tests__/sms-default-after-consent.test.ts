@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   sendSms: vi.fn(async () => ({ ok: true })),
 }))
 
+vi.mock('@/lib/notifications/durableTransport', () => ({ deliverDurably: async (_message: unknown, send: () => Promise<void>) => { await send(); return 'sent' } }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/user-settings', () => ({ getSettingsProfile: async () => h.profile }))
 vi.mock('@/lib/platform/notification-service', () => ({ createPlatformNotification: vi.fn(async () => ({})) }))
@@ -23,7 +24,7 @@ vi.mock('@/lib/resend-client', () => ({
 }))
 vi.mock('@/lib/twilio-client', () => ({ sendSms: h.sendSms }))
 vi.mock('@/lib/notifications/smsDailyCap', () => ({ reserveSmsToday: vi.fn(async () => true) }))
-vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: vi.fn(async () => ({})) }))
+vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: vi.fn(async () => []) }))
 
 import {
   hasLiveSmsConsentRecord,
@@ -74,7 +75,7 @@ describe('the resolver', () => {
 describe('the dispatcher, end to end', () => {
   beforeEach(() => h.sendSms.mockClear())
 
-  async function send(category: string, notificationPreferences: unknown) {
+  async function send(category: string, notificationPreferences: unknown, leagueId?: string) {
     h.profile = {
       userId: 'u-1',
       email: null,
@@ -83,11 +84,16 @@ describe('the dispatcher, end to end', () => {
       timezone: 'UTC',
       notificationPreferences,
     }
-    await dispatchNotification({ userIds: ['u-1'], category: category as never, type: 't', title: 'Your RB is out', severity: 'critical' })
+    await dispatchNotification({ userIds: ['u-1'], category: category as never, type: 't', title: 'League update', severity: 'high', leagueId })
   }
 
-  it('consent + an injury alert = a text, with no settings ever saved', async () => {
+  it('consent does not allow non-league injury texts', async () => {
     await send('injury_alerts', { smsConsent: consent })
+    expect(h.sendSms).not.toHaveBeenCalled()
+  })
+
+  it('consent plus a league draft alert still sends a text', async () => {
+    await send('draft_alerts', { smsConsent: consent }, 'league-1')
     expect(h.sendSms).toHaveBeenCalledTimes(1)
   })
 

@@ -9,6 +9,7 @@ import type { League, LeagueLifecycleState, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logAction } from '@/server/services/auditService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
 
 export type LeagueLifecycleAction =
   | 'draft_pick'
@@ -207,6 +208,68 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
   archived: new Set(['standings_view', 'legacy_view']),
 }
 
+/*
+ * 🛑 A DYNASTY LEAGUE'S OFFSEASON IS WHEN ITS MANAGERS ARE MOST ACTIVE, AND THE TABLE ABOVE LOCKED IT.
+ * `offseason` and `pre_draft` grant no player actions, which is right for a redraft or keeper league —
+ * its rosters are about to be thrown back or cut to keepers — and wrong for a dynasty league, whose
+ * whole roster carries into next season. Every host lets a dynasty league trade players and future
+ * picks, add, drop and claim between the championship and the rookie draft.
+ *
+ * So these four are granted on top of the table, for the dynasty family only:
+ *   offseason → always.
+ *   pre_draft → only before a YEAR-TWO-PLUS (rookie) draft. A brand-new league's startup draft also
+ *               sits in pre_draft, and before it there are no rosters to trade from.
+ * `drafting` stays closed: rookie-pick trades during the draft go through the draft room.
+ *
+ * ⚠ The context is loaded by `assertLifecycleActionAllowed` only when it can change the answer, so no
+ * other action or state pays for the extra reads. Callers of the pure functions pass it themselves;
+ * without it the answer is exactly the table's.
+ */
+export const DYNASTY_OFFSEASON_MOVE_ACTIONS: ReadonlySet<LeagueLifecycleAction> = new Set([
+  'trade_act',
+  'roster_edit',
+  'waiver_claim_submit',
+  'waiver_process_run',
+])
+
+export type LifecycleLeagueContext = {
+  /** Dynasty, devy or C2C (`isDynastyFamilyLeague`). */
+  dynastyFamily: boolean
+  /** The league has finished a draft or a season before, so its rosters exist (year two or later). */
+  hasPriorSeason: boolean
+}
+
+export function isDynastyOffseasonMoveAllowed(
+  action: LeagueLifecycleAction,
+  state: LeagueLifecycleState,
+  ctx: LifecycleLeagueContext | null | undefined,
+): boolean {
+  if (!ctx?.dynastyFamily || !DYNASTY_OFFSEASON_MOVE_ACTIONS.has(action)) return false
+  if (state === 'offseason') return true
+  return state === 'pre_draft' && ctx.hasPriorSeason
+}
+
+function dynastyContextCanMatter(action: LeagueLifecycleAction, state: LeagueLifecycleState): boolean {
+  return DYNASTY_OFFSEASON_MOVE_ACTIONS.has(action) && (state === 'offseason' || state === 'pre_draft')
+}
+
+/**
+ * Reads the dynasty context for one league. `hasPriorSeason` only decides `pre_draft`, so it is only
+ * queried there and reads false in every other phase.
+ */
+export async function loadLifecycleLeagueContext(
+  leagueId: string,
+  league: { leagueType?: string | null; isDynasty?: boolean | null; lifecycleState?: LeagueLifecycleState | null },
+): Promise<LifecycleLeagueContext> {
+  const dynastyFamily = isDynastyFamilyLeague(league)
+  if (!dynastyFamily || league.lifecycleState !== 'pre_draft') return { dynastyFamily, hasPriorSeason: false }
+  const [completedDrafts, completedSeasons] = await Promise.all([
+    prisma.draftSession.count({ where: { leagueId, status: 'completed' } }),
+    prisma.redraftSeason.count({ where: { leagueId, status: 'complete' } }),
+  ])
+  return { dynastyFamily, hasPriorSeason: completedDrafts > 0 || completedSeasons > 0 }
+}
+
 export function normalizeLifecycleState(raw: string | null | undefined): LeagueLifecycleState {
   const s = String(raw || 'in_season') as LeagueLifecycleState
   if (s in TRANSITIONS) return s
@@ -245,16 +308,19 @@ export function validateTransition(
 export function isActionAllowed(
   action: LeagueLifecycleAction,
   state: LeagueLifecycleState,
-  opts?: { commissionerOverride?: boolean; roleIsElevated?: boolean },
+  opts?: { commissionerOverride?: boolean; roleIsElevated?: boolean; league?: LifecycleLeagueContext | null },
 ): boolean {
   if (opts?.commissionerOverride && opts?.roleIsElevated) {
     return true
   }
   const set = ACTIONS[state]
-  return Boolean(set?.has(action))
+  return Boolean(set?.has(action)) || isDynastyOffseasonMoveAllowed(action, state, opts?.league)
 }
 
-export function getAllowedActions(league: Pick<League, 'lifecycleState' | 'locked' | 'emergencyPaused'>): {
+export function getAllowedActions(
+  league: Pick<League, 'lifecycleState' | 'locked' | 'emergencyPaused'>,
+  ctx?: LifecycleLeagueContext | null,
+): {
   state: LeagueLifecycleState
   actions: LeagueLifecycleAction[]
   locked: boolean
@@ -262,6 +328,9 @@ export function getAllowedActions(league: Pick<League, 'lifecycleState' | 'locke
 } {
   const state = getLeagueLifecycleState(league)
   const list = [...(ACTIONS[state] ?? new Set())]
+  for (const action of DYNASTY_OFFSEASON_MOVE_ACTIONS) {
+    if (!list.includes(action) && isDynastyOffseasonMoveAllowed(action, state, ctx)) list.push(action)
+  }
   return {
     state,
     actions: list,
@@ -401,6 +470,8 @@ export async function loadLeagueForLifecycle(leagueId: string) {
       lifecycleMetadata: true,
       settings: true,
       status: true,
+      leagueType: true,
+      isDynasty: true,
     },
   })
 }
@@ -453,9 +524,13 @@ export async function assertLifecycleActionAllowed(
     }
   }
 
+  const league = dynastyContextCanMatter(action, state)
+    ? await loadLifecycleLeagueContext(leagueId, { ...row, lifecycleState: state })
+    : null
   const allowed = isActionAllowed(action, state, {
     commissionerOverride: opts?.commissionerOverride,
     roleIsElevated: elevated,
+    league,
   })
 
   if (!allowed) {

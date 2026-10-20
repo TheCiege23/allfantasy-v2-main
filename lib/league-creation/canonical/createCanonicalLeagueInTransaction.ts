@@ -30,6 +30,8 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
+import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
+import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 
 type Tx = Prisma.TransactionClient
 
@@ -91,8 +93,9 @@ function leagueModeColumns(formatId: LeagueFormatId): Partial<Prisma.LeagueUnche
     // 🛑 `draftPickTrading` defaults to false, and nothing at create set it — so every native dynasty
     // league refused future-pick trades (PICK_TRADING_BLOCKED) until a commissioner found the toggle.
     // A league that holds a rookie draft every year trades its picks by default; the commissioner can
-    // still switch it off.
-    draftPickTrading: isDynasty,
+    // still switch it off. A redraft league trades its current draft's picks by default too (future
+    // picks are refused there by the trade engine). Keeper and the specialty formats stay off.
+    draftPickTrading: isDynasty || formatId === 'redraft',
     bestBallMode: formatId === 'best_ball',
     guillotineMode: formatId === 'guillotine',
     survivorMode: formatId === 'survivor',
@@ -788,13 +791,16 @@ export async function createCanonicalLeagueInTransaction(
       formatId === 'devy' ? readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6) : 4
     const dynastyFallbackRookieRounds =
       formatId === 'devy' ? readNumber(foundationDefaults.devyConfig, 'rookieDraftRounds', 4) : 4
+    // NCAAF's bracket window first, then the sport's own season length (dailySportSeasonShape.ts for
+    // NBA/NHL/MLB) — never a flat 14, which left a daily sport's playoff start past its season's end.
+    const dynastyFallbackRegularSeasonWeeks = ncaafRegularSeasonEndWeek ?? dynastyDefaultRegularSeasonWeeksFor(sport)
     const dynastyFallbackRookieDraftType =
       formatId === 'devy' ? readString(foundationDefaults.devyConfig, 'rookieDraftType', 'linear') : 'linear'
     await tx.dynastyLeagueConfig.upsert({
       where: { leagueId: league.id },
       create: {
         leagueId: league.id,
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         useMaxPfForNonPlayoff: true,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
@@ -811,7 +817,7 @@ export async function createCanonicalLeagueInTransaction(
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
       update: {
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),
@@ -865,6 +871,7 @@ export async function createCanonicalLeagueInTransaction(
     },
   })
 
+  const defaultWaiverDaysList = defaultProcessingDaysList(waiverDefaults.processing_days)
   await tx.leagueWaiverSettings.create({
     data: {
       leagueId: league.id,
@@ -876,6 +883,8 @@ export async function createCanonicalLeagueInTransaction(
       tiebreakRule: (waiverDefaults.claim_priority_behavior as string) ?? null,
       lockType: (waiverDefaults.game_lock_behavior as string) ?? null,
       instantFaAfterClear: waiverDefaults.free_agent_unlock_behavior === 'instant',
+      // Daily sports run on every default day; single-day sports (NFL) write no list — unchanged.
+      ...(defaultWaiverDaysList ? { processingDays: defaultWaiverDaysList } : {}),
     },
   })
 
