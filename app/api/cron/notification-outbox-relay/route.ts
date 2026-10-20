@@ -5,9 +5,7 @@
  * promising since it was written ("Twilio / Resend dispatch reads from this table in a later
  * worker") and that never existed. See lib/notifications/outboxRelay.ts for the full account.
  *
- * Scheduled every 5 minutes in cron-schedule.json, matching `/api/cron/waivers` — the job that
- * produces most of this queue's volume. A waiver result that arrives 5 minutes late is fine; one
- * that never arrives is what this fixes.
+ * Scheduled every minute. Also drives multi-sport game engagement alerts in the same slot.
  *
  * Query params:
  *   limit   — rows per pass (default 100, max 500)
@@ -16,6 +14,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { runSportsEngagement } from "@/lib/engagement-alerts/runSportsEngagement"
 import { relayNotificationOutbox } from "@/lib/notifications/outboxRelay"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
@@ -39,7 +38,7 @@ async function handle(req: NextRequest) {
   const startedAt = Date.now()
   // Shares the authenticated five-minute schedule. The pass reads only commissioner-opted
   // league-chat channels and enforces its own short budget; dry runs never import messages.
-  const discordInbound = dryRun ? null : await (async () => {
+  const discordPromise = dryRun ? Promise.resolve(null) : (async () => {
     try {
       const { runDiscordInboundPass } = await import('@/lib/discord/inboundPass')
       return await withSyncJobRun({jobName:DISCORD_JOB,trigger:'cron'},
@@ -53,6 +52,10 @@ async function handle(req: NextRequest) {
   })()
 
   try {
+    // Share the existing minute scheduler slot; a sports feed failure cannot stop retries.
+    const engagementPromise = dryRun ? Promise.resolve(null) : runSportsEngagement().catch(e => ({
+      games: 0, delivered: 0, errors: [e instanceof Error ? e.message : String(e)],
+    }))
     const run = () => relayNotificationOutbox({ limit, dryRun })
 
     /*
@@ -74,11 +77,12 @@ async function handle(req: NextRequest) {
           status: r.failed > 0 ? ("partial" as const) : ("success" as const),
         }))
 
-    const result = await relayPromise
+    const [result, engagement, discordInbound] = await Promise.all([relayPromise, engagementPromise, discordPromise])
 
     return NextResponse.json({
       ok: true,
       dryRun,
+      engagement,
       ...result,
       discordInbound,
       durationMs: Date.now() - startedAt,
