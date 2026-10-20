@@ -2,10 +2,22 @@
 
 import { useCallback, useRef, useState } from 'react'
 import type { WriteAuthorityEnvelope } from '@/lib/league/write-authority'
+import { fetchWithMidSeasonConfirmation } from '@/lib/league/midSeasonConfirmation'
 
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
-export function useAutosave(leagueId: string) {
+export type AutosaveOptions = {
+  /**
+   * Asked when the server answers 409 `mid_season_confirmation_required` (a scoring or roster key
+   * changed after the season started). Yes re-sends with `confirmMidSeasonChange: true`; no leaves
+   * the change unsaved. Without it such a save simply reports `error`.
+   */
+  confirmMidSeason?: (message: string) => Promise<boolean>
+}
+
+export function useAutosave(leagueId: string, options?: AutosaveOptions) {
+  const confirmRef = useRef(options?.confirmMidSeason)
+  confirmRef.current = options?.confirmMidSeason
   const [status, setStatus] = useState<AutosaveStatus>('idle')
   /**
    * Write Authority reported by the last successful PATCH. On an imported (SHADOW) league the
@@ -19,14 +31,19 @@ export function useAutosave(leagueId: string) {
     async (partial: Record<string, unknown>) => {
       setStatus('saving')
       try {
-        const res = await fetch('/api/league/settings', {
+        const init: RequestInit = {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leagueId, ...partial }),
-        })
+        }
+        const confirm = confirmRef.current
+        const res = confirm
+          ? await fetchWithMidSeasonConfirmation('/api/league/settings', init, confirm)
+          : await fetch('/api/league/settings', init)
         if (!res.ok) {
-          setStatus('error')
+          const failed = (await res.clone().json().catch(() => null)) as { cancelled?: boolean } | null
+          setStatus(failed?.cancelled ? 'idle' : 'error')
           return
         }
         const saved = (await res.json().catch(() => ({}))) as {

@@ -65,6 +65,7 @@ export function useLeagueSettingsSectionAutosave(
       // The modal's league comes from page props nothing refreshes; remember what was saved so a
       // reopened tab does not re-seed the old value (lib/league-settings/savedLeagueOverrides.ts).
       recordSavedLeagueOverrides(leagueId, updates)
+      window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId } }))
       if (mySeq === seqRef.current) {
         onSuccessRef.current?.(data)
       }

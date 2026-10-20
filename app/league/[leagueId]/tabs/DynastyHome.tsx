@@ -19,14 +19,15 @@ interface TaxiPlayer {
   id: string
   name: string
   position: string
-  eligibilityYearsLeft: number
+  /** Null when the player's pro-experience year is unknown — the badge is hidden rather than guessed. */
+  eligibilityYearsLeft: number | null
 }
 
 interface FuturePick {
   id: string
   year: number
   round: number
-  fromTeam: string
+  fromTeam: string | null
   type: 'own' | 'traded_away' | 'incoming'
 }
 
@@ -49,15 +50,16 @@ function useDynastyData(leagueId: string) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    // Taxi and picks come from one `dynasty-hub` read (the old `/dynasty/taxi` and `/dynasty/picks`
+    // URLs never existed, so both views were always empty).
     Promise.all([
-      fetch(`/api/leagues/${leagueId}/dynasty/taxi`).then((r) => (r.ok ? r.json() : { taxi: [] })),
-      fetch(`/api/leagues/${leagueId}/dynasty/picks`).then((r) => (r.ok ? r.json() : { picks: [] })),
+      fetch(`/api/leagues/${leagueId}/dynasty-hub`).then((r) => (r.ok ? r.json() : { taxi: [], picks: [] })),
       fetch(`/api/leagues/${leagueId}/standings`).then((r) => (r.ok ? r.json() : { standings: [] })),
     ])
-      .then(([taxiRes, picksRes, standingsRes]) => {
+      .then(([hubRes, standingsRes]) => {
         if (cancelled) return
-        setTaxi(taxiRes.taxi ?? [])
-        setPicks(picksRes.picks ?? [])
+        setTaxi(hubRes.taxi ?? [])
+        setPicks(hubRes.picks ?? [])
         setStandings(standingsRes.standings ?? [])
       })
       .catch(() => {
@@ -183,9 +185,11 @@ function TaxiSquadView({ taxi }: { taxi: TaxiPlayer[] }) {
             <p className="text-sm font-semibold text-white">{p.name}</p>
             <p className="text-[11px] text-white/45">{p.position}</p>
           </div>
-          <span className="rounded-md bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium text-purple-200">
-            {p.eligibilityYearsLeft} yr{p.eligibilityYearsLeft !== 1 ? 's' : ''} left
-          </span>
+          {p.eligibilityYearsLeft != null && (
+            <span className="rounded-md bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium text-purple-200">
+              {p.eligibilityYearsLeft} yr{p.eligibilityYearsLeft !== 1 ? 's' : ''} left
+            </span>
+          )}
         </div>
       ))}
     </div>
@@ -212,7 +216,11 @@ function FuturePicksView({ picks }: { picks: FuturePick[] }) {
               {pick.year} Round {pick.round}
             </p>
             <p className="text-[11px] text-white/45">
-              {pick.type === 'incoming' ? `From ${pick.fromTeam}` : pick.type === 'traded_away' ? `To ${pick.fromTeam}` : 'Own pick'}
+              {pick.type === 'incoming'
+                ? `From ${pick.fromTeam ?? 'another team'}`
+                : pick.type === 'traded_away'
+                  ? `To ${pick.fromTeam ?? 'another team'}`
+                  : 'Own pick'}
             </p>
           </div>
           <span

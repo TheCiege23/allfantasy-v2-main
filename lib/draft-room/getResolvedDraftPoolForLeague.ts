@@ -9,6 +9,7 @@ import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { resolveRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
@@ -167,6 +168,12 @@ export type GetResolvedDraftPoolResult = {
   devyConfig?: { enabled: boolean; devyRounds: number[] }
   c2cConfig?: { enabled: boolean; collegeRounds: number[] }
   isIdp?: boolean
+  /**
+   * Whether a "rookies only" session's filter actually narrowed the board. See
+   * `resolveRookieFilterState` — `fallback_no_rookie_data` means the full pool is being
+   * shown on a rookies-only board, and the draft room says so.
+   */
+  rookieFilterState?: RookieFilterState
 }
 
 type SportPoolRow = {
@@ -918,6 +925,21 @@ export function applyDraftModePoolFilters(
   session: { draftModeLabel?: string | null; playerPool?: string | null } | null | undefined,
   rostered: ReadonlyArray<{ playerId: string | null; playerName: string | null }>,
 ): NormalizedDraftEntry[] {
+  return applyDraftModePoolFiltersWithState(entries, session, rostered).entries
+}
+
+export { resolveRookieFilterState, type RookieFilterState }
+
+/**
+ * `applyDraftModePoolFilters`, also reporting whether a rookies-only filter could be applied
+ * (`fallback_no_rookie_data` = the full pool is kept; the draft room must say so, or veterans
+ * appear on a "rookies only" board unexplained).
+ */
+export function applyDraftModePoolFiltersWithState(
+  entries: NormalizedDraftEntry[],
+  session: { draftModeLabel?: string | null; playerPool?: string | null } | null | undefined,
+  rostered: ReadonlyArray<{ playerId: string | null; playerName: string | null }>,
+): { entries: NormalizedDraftEntry[]; rookieFilterState: RookieFilterState } {
   let out = entries
   if (isFollowUpDraftMode(session?.draftModeLabel) && rostered.length > 0) {
     out = filterExcludedDraftEntries(
@@ -927,13 +949,17 @@ export function applyDraftModePoolFilters(
     )
   }
   // The board matches what pick validation (`validateSpecialtyDraftPools`) already enforces.
+  // ⚠ Not in the `fallback_no_rookie_data` case: validation refuses a rookies-only pick only when
+  // its metadata says `isRookie: false`, and the draft room sends `true` or nothing — so with no
+  // rookie data every pick is accepted. The banner copy says exactly that.
   const pool = String(session?.playerPool ?? '').toLowerCase()
-  if (pool === 'rookies_only' && out.some((e) => e.isRookie === true)) {
+  const rookieFilterState = resolveRookieFilterState(out, session)
+  if (rookieFilterState === 'applied') {
     out = out.filter((e) => e.isRookie === true)
   } else if (pool === 'veterans_only') {
     out = out.filter((e) => e.isRookie !== true)
   }
-  return out
+  return { entries: out, rookieFilterState }
 }
 
 function filterExcludedDraftEntries(
@@ -2499,6 +2525,7 @@ export async function getResolvedDraftPoolForLeague(
     options.excludeDraftedPlayerIds,
   )
 
+  let rookieFilterState: RookieFilterState = 'not_requested'
   if (isFollowUpDraftMode(draftSession?.draftModeLabel)) {
     // The league's CURRENT rosters only: last season's rows are never marked dropped, so reading
     // every season would hide a player a team has since released.
@@ -2513,9 +2540,13 @@ export async function getResolvedDraftPoolForLeague(
           })
           .catch(() => [] as Array<{ playerId: string; playerName: string }>)
       : []
-    entries = applyDraftModePoolFilters(entries, draftSession, rostered)
+    const filtered = applyDraftModePoolFiltersWithState(entries, draftSession, rostered)
+    entries = filtered.entries
+    rookieFilterState = filtered.rookieFilterState
   } else {
-    entries = applyDraftModePoolFilters(entries, draftSession, [])
+    const filtered = applyDraftModePoolFiltersWithState(entries, draftSession, [])
+    entries = filtered.entries
+    rookieFilterState = filtered.rookieFilterState
   }
 
   // Phase 2: filter out teamless (free-agent/released) players from the live pool.
@@ -2589,5 +2620,6 @@ export async function getResolvedDraftPoolForLeague(
         ? { enabled: c2cEnabled, collegeRounds: rawC2cConfig?.collegeRounds ?? [] }
         : undefined,
     isIdp: effectiveLeagueTemplate.idpEnabled || undefined,
+    rookieFilterState,
   }
 }

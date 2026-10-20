@@ -3,6 +3,7 @@
  * Defines roster slots, scoring defaults, schedule parameters,
  * waiver timing, and playoff structures per sport.
  */
+import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 export type RedraftSportConfig = {
   sport: string
@@ -107,9 +108,9 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     lineupFrequency: 'daily',
     defaultScoringFormat: 'points',
     supportedScoringFormats: ['points', 'categories_9cat', 'categories_8cat'],
-    regularSeasonWeeks: 20,
-    defaultPlayoffStartWeek: 21,
-    defaultPlayoffTeams: 6,
+    regularSeasonWeeks: regularSeasonWeeksFor('NBA'),
+    defaultPlayoffStartWeek: playoffStartWeekFor('NBA'),
+    defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.NBA.playoffTeams,
     supportedPlayoffSizes: [4, 6, 8],
     defaultTeamCount: 12,
     defaultDraftRounds: 13,
@@ -144,9 +145,9 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     lineupFrequency: 'daily',
     defaultScoringFormat: 'points',
     supportedScoringFormats: ['points', 'categories_5x5', 'categories_6x6'],
-    regularSeasonWeeks: 21,
-    defaultPlayoffStartWeek: 22,
-    defaultPlayoffTeams: 6,
+    regularSeasonWeeks: regularSeasonWeeksFor('MLB'),
+    defaultPlayoffStartWeek: playoffStartWeekFor('MLB'),
+    defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.MLB.playoffTeams,
     supportedPlayoffSizes: [4, 6, 8],
     defaultTeamCount: 12,
     defaultDraftRounds: 20,
@@ -184,9 +185,9 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     lineupFrequency: 'daily',
     defaultScoringFormat: 'points',
     supportedScoringFormats: ['points', 'categories'],
-    regularSeasonWeeks: 21,
-    defaultPlayoffStartWeek: 22,
-    defaultPlayoffTeams: 6,
+    regularSeasonWeeks: regularSeasonWeeksFor('NHL'),
+    defaultPlayoffStartWeek: playoffStartWeekFor('NHL'),
+    defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.NHL.playoffTeams,
     supportedPlayoffSizes: [4, 6, 8],
     defaultTeamCount: 12,
     defaultDraftRounds: 14,

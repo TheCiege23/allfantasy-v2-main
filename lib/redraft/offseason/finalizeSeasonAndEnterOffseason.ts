@@ -16,7 +16,10 @@ import { finalizeRotoSeason, type RotoFinalizeResult } from './finalizeRotoSeaso
  *   1. finalize the bracket        — crowns the champion; idempotent
  *   2. enter the offseason         — writes LeagueSeason + FranchiseSeason,
  *                                    transitions lifecycleState to `offseason`
- *   3. open the keeper offseason   — keeper/dynasty leagues only
+ *   3. open the keeper offseason   — keeper/dynasty leagues only. AWAITED: for a dynasty
+ *                                    league this is what creates next season and carries every
+ *                                    roster into it, and a fire-and-forget promise is dropped
+ *                                    whenever the serverless process ends first.
  *
  * ⚠ STEPS 2 AND 3 RUN ONLY ON A FIRST FINALIZE. Re-finalizing is safe and
  * common (the cron may retry), but re-archiving is not — and `enterRedraftOffseason`
@@ -34,6 +37,8 @@ import { finalizeNflRedraftPlayoffRuntimeSeason } from '@/lib/playoff-runtime'
 import { supportsKeeperDeclarations } from '@/lib/league/keeper-policy'
 import { triggerKeeperOffseason } from '@/lib/keeper/offseasonEngine'
 import { enterRedraftOffseason } from './RedraftOffseasonService'
+import { isDynastyFamilyLeague } from './carryDynastyRosters'
+import { ensureDynastyNextSeason } from './startDynastyNewSeason'
 
 export type FinalizeSeasonResult =
   | {
@@ -44,6 +49,8 @@ export type FinalizeSeasonResult =
       offseasonEntered: boolean
       offseasonSnapshotId: string | null
       keeperOffseasonTriggered: boolean
+      /** The keeper offseason ran to the end — for a dynasty league, next season exists with its rosters. */
+      keeperOffseasonCompleted: boolean
       /** The runtime state and events, for callers that render them. */
       result: Awaited<ReturnType<typeof finalizeNflRedraftPlayoffRuntimeSeason>> | RotoFinalizeResult
     }
@@ -76,6 +83,7 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   let offseasonEntered = false
   let offseasonSnapshotId: string | null = null
   let keeperOffseasonTriggered = false
+  let keeperOffseasonCompleted = false
 
   // Roto retries repair a failed archive; the archive service is idempotent.
   if (!alreadyFinalized || isRoto) {
@@ -107,15 +115,40 @@ export async function finalizeSeasonAndEnterOffseason(input: {
 
     if (keeperEligible && !alreadyFinalized) {
       keeperOffseasonTriggered = true
-      // ⚠ NOT AWAITED, MATCHING THE ROUTE. This opens a keeper window and can
-      // create next season's shell plus a full generated schedule — real work
-      // that must not hold the caller open. Its own failures are logged inside.
-      triggerKeeperOffseason(input.leagueId, input.seasonId).catch((error) => {
+      /*
+       * 🛑 THIS WAS NOT AWAITED, "SO IT WOULD NOT HOLD THE CALLER OPEN". It is the call that creates
+       * next season's shell, its schedule and — for a dynasty league — every carried roster, and an
+       * unawaited promise on a serverless request or a cron tick is simply dropped when the process
+       * is done with the response. Nothing retried it: a re-finalize skips this block by design.
+       * Awaited, with a failure still caught so the crowned champion is reported either way.
+       */
+      try {
+        await triggerKeeperOffseason(input.leagueId, input.seasonId)
+        keeperOffseasonCompleted = true
+      } catch (error) {
         console.error('[finalize-season] triggerKeeperOffseason failed', {
           leagueId: input.leagueId,
           seasonId: input.seasonId,
           error,
         })
+      }
+    }
+  }
+
+  /*
+   * A RE-FINALIZE REPAIRS A DYNASTY TRANSITION THAT DID NOT FINISH. The keeper offseason runs once,
+   * on the first finalize; if it failed part-way, the next season or its rosters are missing and
+   * nothing else would notice until a commissioner clicked something. The shell and carryover are
+   * both idempotent, so re-running them here is safe however many times the cron retries.
+   */
+  if (alreadyFinalized && leagueScoring && isDynastyFamilyLeague(leagueScoring)) {
+    try {
+      await ensureDynastyNextSeason(input.leagueId, input.seasonId)
+    } catch (error) {
+      console.error('[finalize-season] dynasty next-season repair failed', {
+        leagueId: input.leagueId,
+        seasonId: input.seasonId,
+        error,
       })
     }
   }
@@ -128,6 +161,7 @@ export async function finalizeSeasonAndEnterOffseason(input: {
     offseasonEntered,
     offseasonSnapshotId,
     keeperOffseasonTriggered,
+    keeperOffseasonCompleted,
     result,
   }
 }

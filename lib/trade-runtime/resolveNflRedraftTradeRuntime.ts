@@ -3,7 +3,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
-import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { isReserveRosterSlot, resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { resolveRedraftTradeGovernance } from '@/lib/redraft/tradeGovernance'
 import { applyRedraftFaabDeltasInTransaction } from '@/lib/redraft/faabTransfer'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
@@ -297,6 +297,54 @@ export async function resolveNflRedraftTradeRuntime(input: {
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
+  return buildResolvedTradeRuntime(season, rules, input, {})
+}
+
+/**
+ * The same runtime for ANY sport and format — what proposal validation uses where the NFL redraft
+ * runtime declines (`lib/redraft/tradeProposalValidation.ts`).
+ *
+ * 🛑 BEFORE THIS, EVERY DYNASTY LEAGUE (NFL INCLUDED) AND EVERY NBA / NHL / MLB LEAGUE got an
+ * ownership-only check: no lineup lock, no roster limit, no league-wide move lock. Nothing below is
+ * NFL-specific — the lock is derived from each sport's own schedule (`lineupLock.ts`: NFL and NCAAF
+ * weeks, NBA / NHL / MLB date-windowed weeks), and the roster config is resolved per sport — so the
+ * checks are the runtime's own, not a second copy of them.
+ *
+ * One difference, and only here: players in a reserve slot (IR, taxi…) are not counted against the
+ * active roster limit, which is computed with those slots already subtracted. The NFL redraft runtime
+ * keeps its count exactly as it was.
+ *
+ * ⚠ OUTSIDE THE SEASON THERE IS NO LINEUP LOCK (`inSeason: false`). The lock is "his game this week
+ * has kicked off", and it never unlocks within the week — so read against a finished season's last
+ * week, every player who played it is locked, and an offseason trade could never be made.
+ *
+ * ⚠ `state.sport` still reads 'NFL' — the state type's literal. Nothing on the validation path reads it.
+ */
+export async function resolveRedraftTradeRuntime(input: {
+  seasonId?: string | null
+  leagueId?: string | null
+  /** The server's week (lib/trade-deadline/tradeDeadlineWindow.ts). Null falls back to the stored week. */
+  week?: number | null
+  /** False when the league is between seasons: no lineup lock is derived. Defaults to true. */
+  inSeason?: boolean
+  now?: Date
+}): Promise<NflRedraftTradeRuntimeResolved> {
+  const season = await resolveSeason(input)
+  if (!season) return { ok: false, reason: 'season_not_found' }
+  const rules = await resolveCanonicalLeagueRules(season.leagueId)
+  if (!rules) return { ok: false, reason: 'league_not_found' }
+  return buildResolvedTradeRuntime(season, rules, input, {
+    isRosterLimitExemptSlot: isReserveRosterSlot,
+    skipLineupLock: input.inSeason === false,
+  })
+}
+
+async function buildResolvedTradeRuntime(
+  season: NonNullable<Awaited<ReturnType<typeof resolveSeason>>>,
+  rules: NonNullable<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>,
+  input: { week?: number | null; now?: Date },
+  opts: { isRosterLimitExemptSlot?: (slotType: string | null | undefined) => boolean; skipLineupLock?: boolean },
+): Promise<NflRedraftTradeRuntimeResolved> {
   const week = positiveWeek(input.week, season.currentWeek || 1)
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
   const rosterConfig = resolveRedraftRosterConfig(season.sport, league?.settings ?? null)
@@ -311,20 +359,22 @@ export async function resolveNflRedraftTradeRuntime(input: {
   })
   // `RedraftRosterPlayer.isLocked` is never stored as true: the lineup lock is derived from the
   // game schedule at read time (lib/redraft/lineupLock.ts), so it is only meaningful after this.
-  const { players: rosterPlayers } = await hydrateRedraftLineupLocksForRosters(prisma, {
-    sport: season.sport,
-    season: season.season,
-    week,
-    leagueSettings: league?.settings ?? null,
-    players: storedRosterPlayers,
-    now: input.now,
-    // Lock on each player's current club, not the team stored when he was added (lineupLockCurrentTeam.ts).
-    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
-      sport: season.sport,
-      platform: league?.platform ?? null,
-      playerIds: storedRosterPlayers.map((p) => p.playerId),
-    }),
-  })
+  const { players: rosterPlayers } = opts.skipLineupLock
+    ? { players: storedRosterPlayers.map((player) => ({ ...player, isLocked: false })) }
+    : await hydrateRedraftLineupLocksForRosters(prisma, {
+        sport: season.sport,
+        season: season.season,
+        week,
+        leagueSettings: league?.settings ?? null,
+        players: storedRosterPlayers,
+        now: input.now,
+        // Lock on each player's current club, not the team stored when he was added (lineupLockCurrentTeam.ts).
+        currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+          sport: season.sport,
+          platform: league?.platform ?? null,
+          playerIds: storedRosterPlayers.map((p) => p.playerId),
+        }),
+      })
   const playersByRosterId = new Map<string, typeof rosterPlayers>()
   for (const player of rosterPlayers) {
     const list = playersByRosterId.get(player.rosterId) ?? []
@@ -400,6 +450,7 @@ export async function resolveNflRedraftTradeRuntime(input: {
     activeRosterLimit,
     pickInventorySupported: false,
     now: input.now,
+    isRosterLimitExemptSlot: opts.isRosterLimitExemptSlot,
   })
 
   return {

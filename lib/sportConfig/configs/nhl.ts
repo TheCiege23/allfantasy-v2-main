@@ -1,4 +1,5 @@
 import type { SportConfigFull } from '../types'
+import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 /** Stat keys aligned with `nhlAdapter` (g, a, ppp, sog, hits, blks). */
 export const NHL_CONFIG: SportConfigFull = {
@@ -23,6 +24,31 @@ export const NHL_CONFIG: SportConfigFull = {
     { key: 'g_sv', label: 'Save (G)', defaultPoints: 0.2, isToggleable: false, group: 'goalie', sport: 'NHL' },
     { key: 'g_so', label: 'Shutout (G)', defaultPoints: 5, isToggleable: true, group: 'goalie', sport: 'NHL' },
     { key: 'g_ga', label: 'Goal Against (G)', defaultPoints: -1, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    // Wired 2026-10 from fields the box already carries. 0 by default: they score only what a
+    // commissioner's saved panel sets (lib/nhl-scoring/nhlScoringEngineContract.ts).
+    { key: 'pts', label: 'Point (G+A)', defaultPoints: 0, isToggleable: true, group: 'offense', sport: 'NHL' },
+    { key: 'ppg', label: 'Power Play Goal', defaultPoints: 0, isToggleable: true, group: 'special_teams', sport: 'NHL' },
+    { key: 'ppa', label: 'Power Play Assist', defaultPoints: 0, isToggleable: true, group: 'special_teams', sport: 'NHL' },
+    { key: 'shg', label: 'Short-Handed Goal', defaultPoints: 0, isToggleable: true, group: 'special_teams', sport: 'NHL' },
+    { key: 'sha', label: 'Short-Handed Assist', defaultPoints: 0, isToggleable: true, group: 'special_teams', sport: 'NHL' },
+    { key: 'fow', label: 'Faceoff Win', defaultPoints: 0, isToggleable: true, group: 'offense', sport: 'NHL' },
+    { key: 'fol', label: 'Faceoff Loss', defaultPoints: 0, isToggleable: true, group: 'negative', sport: 'NHL' },
+    { key: 'tk', label: 'Takeaway', defaultPoints: 0, isToggleable: true, group: 'defense', sport: 'NHL' },
+    { key: 'gv', label: 'Giveaway', defaultPoints: 0, isToggleable: true, group: 'negative', sport: 'NHL' },
+    { key: 'so_g', label: 'Shootout Goal', defaultPoints: 0, isToggleable: true, group: 'offense', sport: 'NHL' },
+    { key: 'hat_trick', label: 'Hat Trick (game)', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'three_ast_game', label: '3+ Assist Game', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'five_pt_game', label: '5+ Point Game', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'multi_g_game', label: 'Multi-Goal Game', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'multi_a_game', label: 'Multi-Assist Game', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'ten_sog_game', label: '10+ Shot Game', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'five_hit_game', label: '5+ Hit Game', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'five_blk_game', label: '5+ Block Game', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    { key: 'g_loss', label: 'Loss (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'g_otl', label: 'OT/Shootout Loss (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'g_sa', label: 'Shot Against (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'g_40sv_game', label: '40+ Save Game (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'g_50sv_game', label: '50+ Save Game (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
   ],
 
   scoringPresets: [{ name: 'Standard', categories: [] }],
@@ -49,9 +75,9 @@ export const NHL_CONFIG: SportConfigFull = {
     G: ['G'],
   },
 
-  defaultSeasonWeeks: 22,
-  defaultPlayoffStartWeek: 20,
-  defaultPlayoffTeams: 4,
+  defaultSeasonWeeks: DAILY_SPORT_SEASON_SHAPE.NHL.totalWeeks,
+  defaultPlayoffStartWeek: playoffStartWeekFor('NHL'),
+  defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.NHL.playoffTeams,
   defaultMatchupPeriodDays: 7,
   lineupLockType: 'daily',
 
@@ -76,9 +102,9 @@ export const NHL_CONFIG: SportConfigFull = {
       key: 'seasonWeeks',
       label: 'Regular Season Weeks',
       type: 'number',
-      defaultValue: 20,
+      defaultValue: regularSeasonWeeksFor('NHL'),
       min: 14,
-      max: 24,
+      max: DAILY_SPORT_SEASON_SHAPE.NHL.totalWeeks,
       section: 'schedule',
       locksAfterStart: true,
     },
@@ -86,7 +112,7 @@ export const NHL_CONFIG: SportConfigFull = {
       key: 'playoffTeams',
       label: 'Playoff Teams',
       type: 'select',
-      defaultValue: 4,
+      defaultValue: DAILY_SPORT_SEASON_SHAPE.NHL.playoffTeams,
       options: [
         { value: 4, label: '4 teams' },
         { value: 6, label: '6 teams' },

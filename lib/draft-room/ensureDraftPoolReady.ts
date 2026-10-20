@@ -45,6 +45,7 @@ export type DraftPoolSnapshotPayload = {
   devyConfig?: unknown
   c2cConfig?: unknown
   isIdp?: boolean
+  rookieFilterState?: string
   meta?: {
     source?: 'db-cache' | 'memory-cache'
     entryCount?: number
@@ -437,6 +438,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
             devyConfig: resolved.devyConfig,
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
+            rookieFilterState: resolved.rookieFilterState,
           } as unknown as object,
           expiresAt,
         },
@@ -454,6 +456,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
             devyConfig: resolved.devyConfig,
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
+            rookieFilterState: resolved.rookieFilterState,
           } as unknown as object,
           syncedAt: new Date(),
           expiresAt,

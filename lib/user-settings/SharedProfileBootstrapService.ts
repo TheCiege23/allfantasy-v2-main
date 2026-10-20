@@ -1,4 +1,4 @@
-import { SUPPORTED_SPORTS, isSupportedSport } from "@/lib/sport-scope"
+import { SUPPORTED_SPORTS, LIVE_ONLY_SPORTS, isLiveSport } from "@/lib/sport-scope"
 import { resolveSignupTimezone } from "@/lib/signup/TimezoneSelectorService"
 import { resolveLanguage } from "@/lib/i18n/constants"
 import { normalizeStoredTheme } from "@/lib/theme/constants"
@@ -17,10 +17,10 @@ function normalizePreferredSports(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null
   const normalized = value
     .map((entry) => String(entry).toUpperCase())
-    .filter((entry): entry is string => isSupportedSport(entry))
+    .filter((entry): entry is string => isLiveSport(entry))
   if (normalized.length === 0) return null
   const deduped = Array.from(new Set(normalized))
-  const ordered = SUPPORTED_SPORTS.filter((sport) => deduped.includes(sport))
+  const ordered = [...SUPPORTED_SPORTS, ...LIVE_ONLY_SPORTS].filter((sport) => deduped.includes(sport))
   return ordered
 }
 

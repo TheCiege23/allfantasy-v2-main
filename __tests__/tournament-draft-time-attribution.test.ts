@@ -63,7 +63,7 @@ describe('attribution: the acting user is recorded, the authorizing user is chec
     const res = await executeLeagueSettingsPatch('owner', { leagueId: 'L', draftDateUtc: AT }, { actingUserId: 'co1', source: 'tournament' })
     expect(res.status).toBe(200)
     // Authorization unchanged: still checked as the owner.
-    expect(m.requireCommissionerRole).toHaveBeenCalledWith('L', 'owner')
+    expect(m.requireCommissionerRole).toHaveBeenCalledWith('L', 'owner', ['league'])
     expect(m.resolveForUser).toHaveBeenCalledWith('owner', 'commissioner_ai_tools')
     // Attribution: the row, the league audit entry and the league event name the co-commissioner.
     expect(m.prisma.leagueSettings.upsert.mock.calls[0][0].update.updatedBy).toBe('co1')

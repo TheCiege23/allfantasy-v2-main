@@ -12,12 +12,14 @@
  * - Player rankings attached to history
  * - Previous season → AF League History
  * - All settings preserved (roster, scoring, draft, etc.)
+ * - Redraft: one renew also creates next season's draft, in the order the commissioner picks
+ *   (random / standings worst-to-first / reverse standings / manual ordered list).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { X, Check, AlertTriangle, Search as SearchIcon, Globe } from 'lucide-react'
+import { X, Check, AlertTriangle, Search as SearchIcon, Globe, ArrowUp, ArrowDown } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 // ---------------------------------------------------------------------------
@@ -41,6 +43,29 @@ interface OrphanMember {
   id: string
   teamName: string
   ownerName: string | null
+}
+
+interface DraftTeam {
+  rosterId: string
+  displayName: string
+}
+
+type DraftOrderMode = 'random' | 'standings' | 'reverse_standings' | 'manual'
+
+const DRAFT_ORDER_OPTIONS: { value: DraftOrderMode; label: string; description: string }[] = [
+  { value: 'standings', label: 'Last season’s standings', description: 'Worst record picks first; the champion picks last.' },
+  { value: 'reverse_standings', label: 'Reverse standings', description: 'The champion picks first; the worst record picks last.' },
+  { value: 'random', label: 'Random', description: 'Shuffled by AllFantasy when you renew.' },
+  { value: 'manual', label: 'Manual', description: 'Set the exact order yourself.' },
+]
+
+/** Moves one entry of `list` up (-1) or down (+1). Out-of-range moves return the list unchanged. */
+export function moveDraftTeam<T>(list: readonly T[], index: number, delta: -1 | 1): T[] {
+  const target = index + delta
+  if (index < 0 || index >= list.length || target < 0 || target >= list.length) return [...list]
+  const next = [...list]
+  ;[next[index], next[target]] = [next[target]!, next[index]!]
+  return next
 }
 
 const LEAGUE_TYPES = [
@@ -97,6 +122,8 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
   const [dispersalDraftEligible, setDispersalDraftEligible] = useState(false)
   const [step, setStep] = useState(1)
   const [tournamentHubPath, setTournamentHubPath] = useState<string | null>(null)
+  const [draftOrder, setDraftOrder] = useState<DraftOrderMode>('standings')
+  const [manualOrder, setManualOrder] = useState<DraftTeam[]>([])
 
   // Post-renewal state
   const [result, setResult] = useState<{
@@ -104,6 +131,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
     orphanCount: number
     dispersalDraftEligible: boolean
     listedInFinder: boolean
+    draft?: { sessionId: string; orderMode: DraftOrderMode; slotOrder: { slot: number; rosterId: string; displayName: string }[] } | null
   } | null>(null)
 
   useEffect(() => {
@@ -144,6 +172,10 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
         setRenewalCompleted(data.renewalCompleted ?? false)
         setIsListedInFinder(data.isListedInFinder ?? false)
         setDispersalDraftEligible(data.dispersalDraftEligible ?? false)
+        const teams: DraftTeam[] = Array.isArray(data.draftTeams) ? data.draftTeams : []
+        setManualOrder(teams)
+        const saved = String(data.defaultDraftOrder ?? 'standings')
+        setDraftOrder(DRAFT_ORDER_OPTIONS.some((o) => o.value === saved) ? (saved as DraftOrderMode) : 'standings')
         const hub = data.tournamentFeeder?.renewFromHubPath
         setTournamentHubPath(typeof hub === 'string' && hub.startsWith('/') ? hub : null)
       })
@@ -188,6 +220,12 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
           duesEnabled: isDuesEnabled,
           duesAmount,
           listInFinder,
+          ...(selectedType === 'redraft'
+            ? {
+                draftOrder,
+                manualOrder: draftOrder === 'manual' ? manualOrder.map((t) => t.rosterId) : undefined,
+              }
+            : {}),
         }),
       })
       const data = await res.json()
@@ -207,7 +245,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
       onRenewed?.()
     } catch { setError('Request failed') }
     finally { setSubmitting(false) }
-  }, [leagueId, selectedType, currentLeagueType, members, checkedMembers, isDuesEnabled, duesAmount, listInFinder, onRenewed, router])
+  }, [leagueId, selectedType, currentLeagueType, members, checkedMembers, isDuesEnabled, duesAmount, listInFinder, draftOrder, manualOrder, onRenewed, router])
 
   if (!isOpen) return null
 
@@ -236,6 +274,19 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
                   {currentSeason} season saved to AF League History. All settings preserved.
                 </p>
               </div>
+
+              {result.draft && result.draft.slotOrder.length > 0 && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4" data-testid="renew-draft-created">
+                  <p className="text-[13px] font-semibold text-white">{result.nextSeason} draft created</p>
+                  <ol className="mt-2 space-y-0.5 text-[12px] text-white/55">
+                    {result.draft.slotOrder.map((s) => (
+                      <li key={s.rosterId}>
+                        {s.slot}. {s.displayName}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
               {/* Orphan summary */}
               {result.orphanCount > 0 && (
@@ -461,6 +512,52 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
                         ? 'Rosters remain with teams for keeper processing (aligned with Sleeper keeper carry).'
                         : 'Rosters and managers stay with the league (Sleeper-style dynasty continuity).'}
                   </p>
+
+                  {selectedType === 'redraft' && (
+                    <div className="space-y-2 pt-2" data-testid="renew-draft-order">
+                      <label htmlFor="renew-draft-order-select" className="text-[11px] font-bold uppercase tracking-wider text-white/40">
+                        {nextSeason} draft order
+                      </label>
+                      <select
+                        id="renew-draft-order-select"
+                        value={draftOrder}
+                        onChange={(e) => setDraftOrder(e.target.value as DraftOrderMode)}
+                        className="w-full rounded-lg border border-white/15 bg-[#0a1120] px-3 py-2 text-[13px] text-white/85"
+                      >
+                        {DRAFT_ORDER_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-white/35">
+                        {DRAFT_ORDER_OPTIONS.find((o) => o.value === draftOrder)?.description}
+                      </p>
+                      {draftOrder === 'manual' && (
+                        manualOrder.length === 0 ? (
+                          <p className="text-[11px] text-amber-300/70">No teams found to order.</p>
+                        ) : (
+                          <ol className="space-y-1" aria-label="Manual draft order">
+                            {manualOrder.map((team, i) => (
+                              <li key={team.rosterId}
+                                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                                <span className="w-6 text-[12px] font-bold text-cyan-300/80">{i + 1}</span>
+                                <span className="flex-1 truncate text-[13px] text-white/80">{team.displayName}</span>
+                                <button type="button" aria-label={`Move ${team.displayName} up`} disabled={i === 0}
+                                  onClick={() => setManualOrder((list) => moveDraftTeam(list, i, -1))}
+                                  className="rounded p-1 text-white/50 hover:bg-white/10 disabled:opacity-25">
+                                  <ArrowUp className="h-4 w-4" />
+                                </button>
+                                <button type="button" aria-label={`Move ${team.displayName} down`} disabled={i === manualOrder.length - 1}
+                                  onClick={() => setManualOrder((list) => moveDraftTeam(list, i, 1))}
+                                  className="rounded p-1 text-white/50 hover:bg-white/10 disabled:opacity-25">
+                                  <ArrowDown className="h-4 w-4" />
+                                </button>
+                              </li>
+                            ))}
+                          </ol>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

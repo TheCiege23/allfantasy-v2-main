@@ -289,7 +289,8 @@ export async function getLiveADP(
     try {
       const currentYear = new Date().getFullYear();
       const rookies = await (prisma as any).rookieRanking.findMany({
-        where: { year: { in: [currentYear, currentYear + 1] } },
+        // NFL dynasty ADP only: rankings for other sports live in the same table.
+        where: { sport: 'NFL', year: { in: [currentYear, currentYear + 1] } },
         orderBy: { rank: 'asc' },
       });
       if (rookies && rookies.length > 0) {
