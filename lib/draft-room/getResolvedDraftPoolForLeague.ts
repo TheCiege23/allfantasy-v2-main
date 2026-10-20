@@ -8,7 +8,8 @@ import { prisma } from '@/lib/prisma'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
-import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { normalizePlayer, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { cooperativeMap } from '@/lib/async-cooperative-map'
 import { entryRookieVerdict, hasRookieVerdicts, resolveRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
@@ -1988,7 +1989,7 @@ export async function getResolvedDraftPoolForLeague(
   )
   perfSprMaps()
 
-  const enrichedList = rawListFiltered.map((row) => {
+  const enrichedList = await cooperativeMap(rawListFiltered, (row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const position = row.position ?? row.pos ?? ''
     const team = row.team ?? row.teamAbbr ?? null
@@ -2587,7 +2588,7 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
-  let entries: NormalizedDraftEntry[] = normalizePlayerList(dedupedEnrichedList, sport).map((entry, index) => ({ ...entry, draftIdProvenance: dedupedEnrichedList[index]?.draftIdProvenance }))
+  let entries: NormalizedDraftEntry[] = await cooperativeMap(dedupedEnrichedList, (row) => ({ ...normalizePlayer(row, sport), draftIdProvenance: row.draftIdProvenance }))
   if (nbaSurvivorRoster) {
     const activeRoster = nbaSurvivorRoster
     entries = entries.filter((entry) =>
