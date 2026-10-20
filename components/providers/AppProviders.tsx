@@ -7,6 +7,7 @@ import SessionAppProvider from "@/components/providers/SessionAppProvider"
 import { ThemeProvider } from "@/components/theme/ThemeProvider"
 import { PHProvider, PostHogUserIdentifier } from "@/components/providers/PostHogProvider"
 import { GeoRefusalWatcher } from "@/components/geo/GeoRefusalWatcher"
+import { MobileViewport } from '@/components/mobile/MobileViewport'
 import { AdOptOutSync } from "@/components/privacy/AdOptOutSync"
 
 export function AppProviders({
@@ -22,6 +23,7 @@ export function AppProviders({
         <SessionAppProvider session={session}>
           {/* PostHogUserIdentifier must be inside SessionAppProvider so useSession() works */}
           <PostHogUserIdentifier />
+          <MobileViewport />
           <GeoRefusalWatcher />
           {/* Carries a "Do Not Sell or Share" choice to every browser the person signs in on. */}
           <AdOptOutSync />
