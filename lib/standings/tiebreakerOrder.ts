@@ -38,8 +38,8 @@ export const TIEBREAKER_LABELS: Record<TiebreakerKey, { en: string; es: string }
   coin_flip: { en: 'Coin flip', es: 'Moneda al aire' },
 }
 
-/** The order a league starts from: the same chain the seeding runtime already applies. */
-export const DEFAULT_TIEBREAKER_ORDER: readonly TiebreakerKey[] = ['head_to_head', 'points_for', 'points_against', 'all_play', 'coin_flip']
+/** The order a league starts from: points for first, as the standings board and the seeds both default. */
+export const DEFAULT_TIEBREAKER_ORDER: readonly TiebreakerKey[] = ['points_for', 'head_to_head', 'points_against', 'all_play', 'coin_flip']
 
 /** The commissioner's order, or null when the league has not chosen one (or the value is unreadable). */
 export function readTiebreakerOrder(settings: unknown): TiebreakerKey[] | null {

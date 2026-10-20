@@ -67,9 +67,9 @@ const GAMES = [
   [2, 'b', 'c', 60, 120],
 ] as const
 
-function seeds(customTiebreakers: string[] | null, seedingRules = 'standard_standings') {
+function seeds(customTiebreakers: string[] | null, seedingRules = 'standard_standings', standingsTiebreakers = ['points_for', 'head_to_head']) {
   const rules: NflRedraftPlayoffRulesInput = {
-    playoffs: { teamCount: 4, seedingRules, standingsTiebreakers: ['points_for', 'head_to_head'], customTiebreakers },
+    playoffs: { teamCount: 4, seedingRules, standingsTiebreakers, customTiebreakers },
     schedule: { regularSeasonLength: 2 },
   }
   const record = (id: string) => ({ y: [1, 1], b: [1, 1], c: [2, 0], d: [0, 2] })[id]!
@@ -82,9 +82,17 @@ function seeds(customTiebreakers: string[] | null, seedingRules = 'standard_stan
   }).seeds.map((s) => s.rosterId)
 }
 
+const seedsFrom = (stored: string[]) => seeds(null, 'standard_standings', stored)
+
 describe('playoff seeds follow the commissioner\'s order', () => {
-  it('without one, the existing rule: head-to-head moves ahead of points for', () => {
-    expect(seeds(null)).toEqual(['c', 'b', 'y', 'd'])
+  it('without one, points for comes before head-to-head — the same default as the standings board', () => {
+    expect(seeds(null)).toEqual(['c', 'y', 'b', 'd'])
+    // Even from a list stored head-to-head first (the #2557 sport default).
+    expect(seedsFrom(['win_pct', 'head_to_head', 'points_for'])).toEqual(['c', 'y', 'b', 'd'])
+  })
+
+  it('a commissioner who wants head-to-head first can still have it', () => {
+    expect(seeds(['head_to_head', 'points_for'])).toEqual(['c', 'b', 'y', 'd'])
   })
 
   it('points for first is honoured exactly — not reordered behind head-to-head', () => {
