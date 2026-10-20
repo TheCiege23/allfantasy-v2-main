@@ -1090,6 +1090,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.wv.faab": "FAAB (budget)",
     "lsHub.wv.rolling": "Rolling waivers",
     "lsHub.wv.reverse": "Reverse standings",
+    "lsHub.wv.standard": "Standard waivers (fixed priority)",
+    "lsHub.wv.fcfs": "Free agency (first come, first served)",
     "lsHub.wv.note": "Changes apply to the canonical league record and save automatically.",
     "lsHub.wv.type": "Waiver type",
     "lsHub.wv.budget": "FAAB budget",

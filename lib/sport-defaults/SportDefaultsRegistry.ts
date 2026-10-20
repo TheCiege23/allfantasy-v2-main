@@ -456,9 +456,26 @@ const WAIVER_DEFAULTS: Record<SportType, WaiverDefaults> = {
   },
 }
 
+/**
+ * Redraft leagues default to FAAB blind bidding with a $100 budget in NFL, NBA, NHL and MLB
+ * (owner's decision, 2026-10-20). Keyed on the `redraft` format id, which is what the canonical
+ * create path passes (`resolveLeagueFormat` -> `getWaiverDefaults(sport, format.id)`). The
+ * sport's STANDARD base is deliberately untouched: `settings-service` falls back to it for an
+ * existing league with no waiver row (a redraft league's `leagueVariant` is null), so changing the
+ * base would silently flip existing NBA/NHL leagues from rolling/reverse standings to FAAB.
+ * Every other waiver type stays a commissioner choice in league settings.
+ */
+const REDRAFT_FAAB_WAIVER_OVERRIDE: Partial<WaiverDefaults> = {
+  waiver_type: 'faab',
+  faab_enabled: true,
+  FAAB_budget_default: 100,
+  claim_priority_behavior: 'faab_highest',
+}
+
 const WAIVER_VARIANT_OVERRIDES: Partial<Record<SportType, Record<string, Partial<WaiverDefaults>>>> = {
   NFL: {
     STANDARD: {},
+    REDRAFT: REDRAFT_FAAB_WAIVER_OVERRIDE,
     PPR: { max_claims_per_period: 12 },
     HALF_PPR: { max_claims_per_period: 12 },
     SUPERFLEX: {
@@ -514,6 +531,9 @@ const WAIVER_VARIANT_OVERRIDES: Partial<Record<SportType, Record<string, Partial
       max_claims_per_period: null,
     },
   },
+  NBA: { REDRAFT: REDRAFT_FAAB_WAIVER_OVERRIDE },
+  NHL: { REDRAFT: REDRAFT_FAAB_WAIVER_OVERRIDE },
+  MLB: { REDRAFT: REDRAFT_FAAB_WAIVER_OVERRIDE },
   NCAAF: {
     IDP: {
       waiver_type: 'faab',
