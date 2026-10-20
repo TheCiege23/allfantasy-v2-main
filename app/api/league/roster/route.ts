@@ -9,8 +9,7 @@ import { expandStarterSlots } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupLockService'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
-import { getRedraftDefaultContract } from '@/lib/league-concepts/redraftDefaults'
-import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { expandLockedRedraftStarterSlots, resolveLockedRedraftLineupContract } from '@/lib/league/lineupStarterSlots'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
@@ -62,35 +61,6 @@ function teamNameFromMetadata(metadata: SleeperUser['metadata']): string | null 
   return typeof tn === 'string' ? tn : null
 }
 
-function expandLockedRedraftStarterSlots(order: string[]): ReturnType<typeof expandStarterSlots> {
-  const totals = order.reduce<Record<string, number>>((acc, raw) => {
-    const key = raw === 'FLX' ? 'FLEX' : raw
-    acc[key] = (acc[key] ?? 0) + 1
-    return acc
-  }, {})
-
-  const seen: Record<string, number> = {}
-
-  return order.map((raw, index) => {
-    const key = raw === 'FLX' ? 'FLEX' : raw
-    seen[key] = (seen[key] ?? 0) + 1
-
-    const label = totals[key] > 1 ? `${key}${seen[key]}` : key
-    const allowedPositions =
-      key === 'FLEX'
-        ? ['RB', 'WR', 'TE']
-        : key === 'DEF'
-          ? ['DEF', 'DST', 'D/ST']
-          : [key]
-
-    return {
-      index,
-      label,
-      allowedPositions,
-      isFlexible: key === 'FLEX',
-    }
-  })
-}
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as {
     user?: { id?: string; name?: string | null; email?: string | null }
@@ -213,7 +183,8 @@ export async function GET(req: NextRequest) {
       // Template hydration failure should not block base roster rendering.
     }
 
-    const useLockedFootballRedraftSlots = isNflRedraftCoreDashboardLeague({
+    // The same resolver the lineup engine validates slot positions against (lib/league/lineupStarterSlots.ts).
+    const lockedRedraftContract = resolveLockedRedraftLineupContract({
       sport: leagueSport,
       leagueType: league.leagueType,
       isDynasty: league.isDynasty,
@@ -221,35 +192,19 @@ export async function GET(req: NextRequest) {
       bestBallMode: league.bestBallMode,
       guillotineMode: league.guillotineMode,
       keeperPhaseActive: league.keeperPhaseActive,
+      settings: league.settings,
     })
-
-    if (useLockedFootballRedraftSlots) {
-      const settingsRecord =
-        league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
-          ? (league.settings as Record<string, unknown>)
-          : {}
-
-      const contract = getRedraftDefaultContract({
-        sport: leagueSport,
-        draftType: settingsRecord.requested_draft_type ?? settingsRecord.draft_type ?? 'snake',
-        scoringPresetId:
-          typeof settingsRecord.scoring_preset_id === 'string'
-            ? settingsRecord.scoring_preset_id
-            : null,
-      })
-
-      if (contract) {
-        starterSlots = expandLockedRedraftStarterSlots(contract.rosterTemplate.starterSlotOrder)
-        slotLimits = {
-          starters: starterSlots.length,
-          bench: contract.rosterTemplate.benchSlots,
-          ir: contract.rosterTemplate.irSlots,
-          taxi: 0,
-          devy: 0,
-        }
-        starterAllowedPositions = contract.rosterTemplate.draftablePlayerPositions
-        rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-default`
+    if (lockedRedraftContract) {
+      starterSlots = expandLockedRedraftStarterSlots(lockedRedraftContract.rosterTemplate.starterSlotOrder)
+      slotLimits = {
+        starters: starterSlots.length,
+        bench: lockedRedraftContract.rosterTemplate.benchSlots,
+        ir: lockedRedraftContract.rosterTemplate.irSlots,
+        taxi: 0,
+        devy: 0,
       }
+      starterAllowedPositions = lockedRedraftContract.rosterTemplate.draftablePlayerPositions
+      rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-default`
     }
 const leagueWeek = weekFromLeagueSettings(league.settings)
     const lockCtx = await resolveFullLineupLockContext({
