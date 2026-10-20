@@ -22,10 +22,8 @@ import { triggerCommissionerRatingPrompt } from '@/lib/commissioner/Commissioner
  *                                    roster into it, and a fire-and-forget promise is dropped
  *                                    whenever the serverless process ends first.
  *
- * ⚠ STEPS 2 AND 3 RUN ONLY ON A FIRST FINALIZE. Re-finalizing is safe and
- * common (the cron may retry), but re-archiving is not — and `enterRedraftOffseason`
- * short-circuits an already-offseason league before its transaction, so a second
- * pass would silently write nothing while reporting success.
+ * Archive retries run even after champion persistence; the archive is idempotent.
+ * Keeper setup retains its first-finalize gate and dynasty repair path.
  *
  * ⚠ AND A FAILURE IN 2 OR 3 MUST NOT FAIL THE CALL. The champion is already
  * crowned and persisted by then; throwing would leave a league with a champion,
@@ -86,8 +84,8 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   let keeperOffseasonTriggered = false
   let keeperOffseasonCompleted = false
 
-  // Roto retries repair a failed archive; the archive service is idempotent.
-  if (!alreadyFinalized || isRoto) {
+  // Every format retries a failed archive; the archive service is idempotent.
+  { // A completed champion may still need its archive repaired on a retry.
     try {
       const offseason = 'format' in result && result.format === 'roto'
         ? await enterRedraftOffseason(input.seasonId, input.actorUserId, {finishOrder:result.finalStandings.map(r=>r.rosterId)})

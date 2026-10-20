@@ -150,6 +150,11 @@ export async function enterRedraftOffseason(
       franchiseId: franchise?.id ?? null,
       franchiseName: franchise?.teamName ?? roster.teamName ?? roster.ownerName,
       managerUserId: roster.ownerId,
+      ownerId: roster.ownerId,
+      managerAvatar: roster.avatarUrl,
+      teamName: roster.teamName,
+      isChampion: tournament ? tournament.championRosterIds.includes(roster.id) : bracketResult ? roster.id === bracketResult.championRosterId : index === 0,
+      isRunnerUp: tournament ? tournament.runnerUpRosterIds.includes(roster.id) : bracketResult ? roster.id === bracketResult.runnerUpRosterId : index === 1,
       managerName: roster.ownerName,
       rosterId: roster.id,
       rank: tournament?.finishByRosterId.get(roster.id) ?? index + 1,
@@ -181,7 +186,8 @@ export async function enterRedraftOffseason(
     : null
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    let snapshot = existing
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`season-archive:${seasonId}`}, 0))`
+    let snapshot = await tx.leagueSeason.findUnique({ where: { leagueId_season: { leagueId: season.leagueId, season: season.season } } })
     let created = false
     if (!snapshot) {
       snapshot = await tx.leagueSeason.create({

@@ -33,7 +33,7 @@ describe('resolveSportLeagueIntro', () => {
   })
 
   it('returns null for a sport with no shipped clip, so the concept intro still plays', () => {
-    expect(resolveSportLeagueIntro({ sport: 'NBA', conceptKey: 'redraft' })).toBeNull()
+    expect(resolveSportLeagueIntro({ sport: 'NBA', conceptKey: 'redraft' })?.video).toBe('/media/create-league/sports/videos/Basketball.mp4')
     expect(resolveSportLeagueIntro({ sport: 'NCAAB', conceptKey: 'redraft' })).toBeNull()
   })
 
