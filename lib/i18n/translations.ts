@@ -2443,6 +2443,12 @@ export const translations: Record<string, Record<string, string>> = {
   "draftRoom.playerPanel.rookieFilterFallbackTitle": "Rookie filter unavailable for this sport",
   "draftRoom.playerPanel.rookieFilterFallbackBody":
     "Rookie data isn't available for this sport yet, so this rookies-only draft shows the full player pool. Picks aren't checked for rookie status — confirm a player is a rookie before drafting.",
+  "draftRoom.playerPanel.rookieFilterFallbackSportTitle": "Rookie status unavailable for {{sport}}",
+  "draftRoom.playerPanel.rookieFilterFallbackSportBody":
+    "Rookie status isn't available for {{sport}} players yet, so this rookies-only draft shows the full player pool and picks aren't checked. Confirm a player is a rookie before drafting.",
+  "draftRoom.playerPanel.rookieFilterPartialTitle": "Rookie status is incomplete for {{sport}}",
+  "draftRoom.playerPanel.rookieFilterPartialBody":
+    "Rookie status isn't available for most {{sport}} players yet, so most picks aren't checked. Players our stats show are not rookies have been removed and can't be drafted — confirm anyone else is a rookie before drafting.",
 
   "draftRoom.autopick.label": "Autopick",
 

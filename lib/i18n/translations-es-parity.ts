@@ -406,6 +406,12 @@ export const translationsEsParity: Record<string, string> = {
   "draftRoom.playerPanel.rookieFilterFallbackTitle": "Filtro de rookies no disponible para este deporte",
   "draftRoom.playerPanel.rookieFilterFallbackBody":
     "Los datos de rookies aún no están disponibles para este deporte, así que este draft de solo rookies muestra todo el pool de jugadores. Los picks no se verifican por condición de rookie: confirma que un jugador es rookie antes de draftearlo.",
+  "draftRoom.playerPanel.rookieFilterFallbackSportTitle": "Estado de rookie no disponible en {{sport}}",
+  "draftRoom.playerPanel.rookieFilterFallbackSportBody":
+    "El estado de rookie aún no está disponible para los jugadores de {{sport}}, así que este draft de solo rookies muestra todo el pool de jugadores y los picks no se verifican. Confirma que un jugador es rookie antes de draftearlo.",
+  "draftRoom.playerPanel.rookieFilterPartialTitle": "Estado de rookie incompleto en {{sport}}",
+  "draftRoom.playerPanel.rookieFilterPartialBody":
+    "El estado de rookie aún no está disponible para la mayoría de los jugadores de {{sport}}, así que la mayoría de los picks no se verifican. Los jugadores que nuestras estadísticas muestran que no son rookies se quitaron y no se pueden draftear: confirma que los demás son rookies antes de draftearlos.",
 
   "draftRoom.autopick.label": "Auto-pick",
 

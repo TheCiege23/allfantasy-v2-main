@@ -373,6 +373,7 @@ export async function GET(
         c2cConfig: resolved.c2cConfig,
         isIdp: resolved.isIdp,
         rookieFilterState: resolved.rookieFilterState,
+        provenNonRookies: resolved.provenNonRookies,
       }, {
         source: 'rebuilt',
         entryCount: Number(resolved.count ?? resolved.entries.length),

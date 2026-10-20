@@ -9,7 +9,7 @@ import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
-import { resolveRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
+import { entryRookieVerdict, hasRookieVerdicts, resolveRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
@@ -67,6 +67,13 @@ import {
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import {
+  isSeasonStatsRookieSport,
+  loadSeasonStatsRookieVerdicts,
+  rollingInsightsIdOfPoolRow,
+  type RookieVerdict,
+} from '@/lib/draft-room/seasonStatsRookieStatus'
+import { rookieClassYear } from '@/lib/draft-room/rookieFilterPredicate'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
@@ -174,6 +181,11 @@ export type GetResolvedDraftPoolResult = {
    * shown on a rookies-only board, and the draft room says so.
    */
   rookieFilterState?: RookieFilterState
+  /**
+   * Players a rookies-only verdict pool removed as proven non-rookies. Stored with the warm
+   * snapshot so the pick check can still refuse them (`serverRookieStatus.ts`).
+   */
+  provenNonRookies?: ProvenNonRookie[]
 }
 
 type SportPoolRow = {
@@ -930,16 +942,25 @@ export function applyDraftModePoolFilters(
 
 export { resolveRookieFilterState, type RookieFilterState }
 
+/** A player the rookies-only filter took off the board because stored stats prove he is no rookie. */
+export type ProvenNonRookie = { playerId: string | null; name: string }
+
 /**
  * `applyDraftModePoolFilters`, also reporting whether a rookies-only filter could be applied
  * (`fallback_no_rookie_data` = the full pool is kept; the draft room must say so, or veterans
  * appear on a "rookies only" board unexplained).
+ *
+ * `provenNonRookies` lists the entries a verdict pool (MLB/NBA/NHL, `seasonStatsRookieStatus.ts`)
+ * removed as `not_rookie`. The board is the warm snapshot the pick check reads
+ * (`serverRookieStatus.ts`), and on a `partial_rookie_data` board a player's absence cannot mean
+ * "not a rookie" — unknowns stay on it — so without this list a removed veteran picked by a stale
+ * board or a direct API call would read as unknown and be accepted.
  */
 export function applyDraftModePoolFiltersWithState(
   entries: NormalizedDraftEntry[],
   session: { draftModeLabel?: string | null; playerPool?: string | null } | null | undefined,
   rostered: ReadonlyArray<{ playerId: string | null; playerName: string | null }>,
-): { entries: NormalizedDraftEntry[]; rookieFilterState: RookieFilterState } {
+): { entries: NormalizedDraftEntry[]; rookieFilterState: RookieFilterState; provenNonRookies: ProvenNonRookie[] } {
   let out = entries
   if (isFollowUpDraftMode(session?.draftModeLabel) && rostered.length > 0) {
     out = filterExcludedDraftEntries(
@@ -954,12 +975,25 @@ export function applyDraftModePoolFiltersWithState(
   // rookie data every pick is accepted. The banner copy says exactly that.
   const pool = String(session?.playerPool ?? '').toLowerCase()
   const rookieFilterState = resolveRookieFilterState(out, session)
-  if (rookieFilterState === 'applied') {
+  const provenNonRookies: ProvenNonRookie[] = []
+  if (hasRookieVerdicts(out) && (rookieFilterState === 'applied' || rookieFilterState === 'partial_rookie_data')) {
+    // A verdict pool: `unknown` is not "veteran". Applied keeps proven rookies only (there are no
+    // unknowns); partial drops only the proven non-rookies and leaves everyone unknown unchecked.
+    const keep = rookieFilterState === 'applied' ? (e: NormalizedDraftEntry) => entryRookieVerdict(e) === 'rookie'
+      : (e: NormalizedDraftEntry) => entryRookieVerdict(e) !== 'not_rookie'
+    out = out.filter((e) => {
+      if (keep(e)) return true
+      if (entryRookieVerdict(e) === 'not_rookie') {
+        provenNonRookies.push({ playerId: String(e.playerId ?? '').trim() || null, name: String(e.name ?? '') })
+      }
+      return false
+    })
+  } else if (rookieFilterState === 'applied') {
     out = out.filter((e) => e.isRookie === true)
   } else if (pool === 'veterans_only') {
     out = out.filter((e) => e.isRookie !== true)
   }
-  return { entries: out, rookieFilterState }
+  return { entries: out, rookieFilterState, provenNonRookies }
 }
 
 function filterExcludedDraftEntries(
@@ -1654,6 +1688,29 @@ export async function getResolvedDraftPoolForLeague(
     perfFallback()
     fallbackSeasonByPoolKey = fallbackResult.seasonByPoolKey
     playerSeasonStatsDiagnostics = fallbackResult.diagnostics
+  }
+
+  /*
+   * MLB / NBA / NHL rookie verdicts from our own stored season stats (`seasonStatsRookieStatus.ts`,
+   * docs/DYNASTY_PROSPECT_DATA_PLAN.md §4.3), for the league's season. One read of
+   * `player_season_stats`; a failure leaves the pool without verdicts — the old behaviour, which
+   * the board reports as "no rookie data" — rather than failing the draft.
+   */
+  let seasonStatsRookieVerdicts: Map<string, RookieVerdict> | null = null
+  if (isSeasonStatsRookieSport(sport) && poolRows.length > 0) {
+    const perfRookieVerdicts = perfStart('9c. loadSeasonStatsRookieVerdicts')
+    seasonStatsRookieVerdicts = await loadSeasonStatsRookieVerdicts(prisma as never, {
+      sport,
+      season: Number.isInteger(league?.season) ? Number(league?.season) : rookieClassYear(sport),
+      players: poolRows.flatMap((p) => {
+        const riId = rollingInsightsIdOfPoolRow(p)
+        return riId ? [{ riId, age: p.age ?? null }] : []
+      }),
+    }).catch((err) => {
+      console.warn('[draft-pool] season-stats rookie verdicts unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    perfRookieVerdicts()
   }
 
   const nflStatsSeason = sport === 'NFL' ? defaultNflPlayerStatsSeason() : ''
@@ -2451,9 +2508,16 @@ export async function getResolvedDraftPoolForLeague(
         : {}),
       ...(row.isDevy && !row.graduatedToNFL
         ? { isRookie: true }
-        : sport !== 'NFL' && sprAug?.rookieHint === true
-          ? { isRookie: true }
-          : {}),
+        : seasonStatsRookieVerdicts
+          ? (() => {
+              // Every pro row of a verdict pool carries one, so the board can tell "unknown" from
+              // "veteran". The verdict replaces the `gamesPlayed === 0` hint for these sports.
+              const verdict = seasonStatsRookieVerdicts.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '') ?? 'unknown'
+              return verdict === 'rookie' ? { isRookie: true, rookieVerdict: verdict } : { rookieVerdict: verdict }
+            })()
+          : sport !== 'NFL' && sprAug?.rookieHint === true
+            ? { isRookie: true }
+            : {}),
     } as unknown as RawRow
   })
 
@@ -2526,6 +2590,7 @@ export async function getResolvedDraftPoolForLeague(
   )
 
   let rookieFilterState: RookieFilterState = 'not_requested'
+  let provenNonRookies: ProvenNonRookie[] = []
   if (isFollowUpDraftMode(draftSession?.draftModeLabel)) {
     // The league's CURRENT rosters only: last season's rows are never marked dropped, so reading
     // every season would hide a player a team has since released.
@@ -2543,10 +2608,12 @@ export async function getResolvedDraftPoolForLeague(
     const filtered = applyDraftModePoolFiltersWithState(entries, draftSession, rostered)
     entries = filtered.entries
     rookieFilterState = filtered.rookieFilterState
+    provenNonRookies = filtered.provenNonRookies
   } else {
     const filtered = applyDraftModePoolFiltersWithState(entries, draftSession, [])
     entries = filtered.entries
     rookieFilterState = filtered.rookieFilterState
+    provenNonRookies = filtered.provenNonRookies
   }
 
   // Phase 2: filter out teamless (free-agent/released) players from the live pool.
@@ -2621,5 +2688,6 @@ export async function getResolvedDraftPoolForLeague(
         : undefined,
     isIdp: effectiveLeagueTemplate.idpEnabled || undefined,
     rookieFilterState,
+    ...(provenNonRookies.length > 0 ? { provenNonRookies } : {}),
   }
 }

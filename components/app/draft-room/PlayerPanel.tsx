@@ -197,7 +197,8 @@ export type PlayerPanelProps = {
   poolError?: boolean
   /**
    * From the pool API. `fallback_no_rookie_data` = the session is rookies-only but no pool entry
-   * carries a rookie flag, so the server kept the full pool; the panel explains that with a banner.
+   * carries a rookie flag, so the server kept the full pool; `partial_rookie_data` (MLB/NBA/NHL) =
+   * only proven non-rookies were removed. The panel explains either with a banner.
    */
   rookieFilterState?: RookieFilterState
 }
@@ -1268,7 +1269,7 @@ function PlayerPanelInner({
           />
         </div>
       ) : null}
-      {players.length > 0 ? <RookieFilterFallbackBanner rookieFilterState={rookieFilterState} t={t} /> : null}
+      {players.length > 0 ? <RookieFilterFallbackBanner rookieFilterState={rookieFilterState} t={t} sport={sport} /> : null}
       <div
         ref={scrollRef}
         data-testid="draft-player-list-scroll"
