@@ -126,7 +126,7 @@
     },
     {
       "path": "/api/cron/import-news",
-      "schedule": "*/2 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/import-news?xnews=1&sport=NFL",
@@ -210,7 +210,7 @@
     },
     {
       "path": "/api/cron/trade-grade-notify",
-      "schedule": "*/2 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/weekly-awards",

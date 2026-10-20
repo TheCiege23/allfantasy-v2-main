@@ -131,9 +131,10 @@ function getTscOutput() {
     if (!existsSync(path)) usageError(`--from log not found: ${path}`)
     return readFileSync(path, 'utf8')
   }
+  // The full project exceeded 8 GiB in CI (SIGABRT); retain all checks with a 12 GiB heap.
   const r = spawnSync(
     process.execPath,
-    ['--max-old-space-size=8192', './node_modules/typescript/lib/tsc.js', '--noEmit'],
+    ['--max-old-space-size=12288', './node_modules/typescript/lib/tsc.js', '--noEmit'],
     { cwd: root, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 }
   )
 

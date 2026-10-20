@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { PUBLIC_RECEIPT_SELECT } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 /** Only use the frozen server assessment attached to the actual offer. */
 export function acceptedTradeGradeText(result: unknown): string {
@@ -11,7 +12,7 @@ export function acceptedTradeGradeText(result: unknown): string {
 
 export async function loadAcceptedTradeGradeText(tradeId: string): Promise<string> {
   try {
-    const snapshot = await prisma.tradeDecisionSnapshot.findUnique({ where: { tradeId }, select: { decisionResult: true } })
+    const snapshot = await prisma.tradeDecisionSnapshot.findUnique({ where: { tradeId }, select: PUBLIC_RECEIPT_SELECT })
     return acceptedTradeGradeText(snapshot?.decisionResult)
   } catch { return 'Initial grade unavailable; open the trade for details.' }
 }
