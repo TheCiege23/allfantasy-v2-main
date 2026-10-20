@@ -353,14 +353,16 @@ function normalizeTiebreakers(input: NflRedraftPlayoffRulesInput): string[] {
     .filter((key) => !RECORD_KEYS.has(key))
     .map((key) => (key === 'h2h' ? 'head_to_head' : key === 'pf' ? 'points_for' : key))
   const ordered = Array.from(new Set(normalized))
-  // Owner's rule: head-to-head precedes points for. The legacy persisted list had them the other
-  // way round, so when BOTH are configured head-to-head takes points-for's slot. A list that
-  // omits head-to-head is left without it.
+  // Owner's rule (2026-10-20): points for precedes head-to-head, the order the standings board
+  // has always used, so the table and the seeds agree. It reverses #2557's head-to-head-first rule,
+  // and lists persisted in either order exist, so when BOTH are configured points for takes
+  // head-to-head's slot. A list that omits either is left without it. A commissioner who wants
+  // head-to-head first sets their own order (`customTiebreakers`), which is applied as chosen.
   const h2hIndex = ordered.indexOf('head_to_head')
   const pfIndex = ordered.indexOf('points_for')
-  if (h2hIndex > pfIndex && pfIndex >= 0) {
-    ordered.splice(h2hIndex, 1)
-    ordered.splice(pfIndex, 0, 'head_to_head')
+  if (pfIndex > h2hIndex && h2hIndex >= 0) {
+    ordered.splice(pfIndex, 1)
+    ordered.splice(h2hIndex, 0, 'points_for')
   }
   return Array.from(new Set(['win_pct', ...ordered, 'roster_id']))
 }

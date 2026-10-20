@@ -30,15 +30,15 @@ const games = async () => [
 
 describe('the resolver carries the commissioner\'s order', () => {
   it('from the league rules into the seeds', async () => {
-    const custom = await resolveNflRedraftPlayoffRuntime({ preloadedSeason: season as never }, { loadRules: async () => rules(['points_for', 'head_to_head']) as never, loadRegularSeasonMatchups: games })
+    const custom = await resolveNflRedraftPlayoffRuntime({ preloadedSeason: season as never }, { loadRules: async () => rules(['head_to_head', 'points_for']) as never, loadRegularSeasonMatchups: games })
     const legacy = await resolveNflRedraftPlayoffRuntime({ preloadedSeason: season as never }, { loadRules: async () => rules(null) as never, loadRegularSeasonMatchups: games })
     if (!custom.ok || !legacy.ok) throw new Error('resolve failed')
-    expect(custom.state.seeds.map((s) => s.rosterId)).toEqual(['more-points', 'h2h-winner'])
-    expect(legacy.state.seeds.map((s) => s.rosterId)).toEqual(['h2h-winner', 'more-points'])
+    expect(custom.state.seeds.map((s) => s.rosterId)).toEqual(['h2h-winner', 'more-points'])
+    expect(legacy.state.seeds.map((s) => s.rosterId)).toEqual(['more-points', 'h2h-winner'])
   })
 
   it('through a playoff-team-count override, which rebuilds the rules from the resolved state', async () => {
-    const resolved = await resolveNflRedraftPlayoffRuntime({ preloadedSeason: season as never }, { loadRules: async () => rules(['points_for', 'head_to_head']) as never, loadRegularSeasonMatchups: games })
+    const resolved = await resolveNflRedraftPlayoffRuntime({ preloadedSeason: season as never }, { loadRules: async () => rules(['head_to_head', 'points_for']) as never, loadRegularSeasonMatchups: games })
     if (!resolved.ok) throw new Error('resolve failed')
     const rebuilt = buildNflRedraftPlayoffRuntimeState({
       leagueId: resolved.state.leagueId, seasonId: resolved.state.seasonId, season: resolved.state.season, week: resolved.state.week,
@@ -46,7 +46,8 @@ describe('the resolver carries the commissioner\'s order', () => {
       teams: resolved.state.teams,
       regularSeasonMatchups: resolved.regularSeasonMatchups,
     })
-    expect(rebuilt.seeds.map((s) => s.rosterId)).toEqual(['more-points', 'h2h-winner'])
-    expect(rebuilt.settings.tiebreakers).toEqual(['win_pct', 'points_for', 'head_to_head', 'roster_id'])
+    // Without the carried order the rebuild would apply the default (points first) and flip these.
+    expect(rebuilt.seeds.map((s) => s.rosterId)).toEqual(['h2h-winner', 'more-points'])
+    expect(rebuilt.settings.tiebreakers).toEqual(['win_pct', 'head_to_head', 'points_for', 'roster_id'])
   })
 })
