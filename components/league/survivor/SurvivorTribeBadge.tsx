@@ -19,7 +19,7 @@ export function SurvivorTribeBadge({ tribe, className = '' }: { tribe: SurvivorT
     <span
       data-testid="survivor-tribe-badge"
       title={`${tribe.name} tribe`}
-      className={`inline-flex max-w-full items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide ${className}`}
+      className={`inline-flex max-w-full items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-bold uppercase leading-none tracking-wide ${className}`}
       style={{ borderColor: alpha(color, '80'), color, backgroundColor: alpha(color, '1f') }}
     >
       {tribe.markUrl ? (
