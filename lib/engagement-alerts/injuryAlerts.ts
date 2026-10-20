@@ -41,7 +41,11 @@ async function startingLeagues(identity: ResolvedPlayerIdentity, userId: string,
 /** Run after a successful injury sync, including unchanged rows so failed sends can retry. */
 export async function notifySyncedInjuries(sport: string, now = new Date()): Promise<{ delivered: number; errors: number }> {
   const rows = await prisma.sportsInjury.findMany({ where: { sport, expiresAt: { gt: now }, fetchedAt: { gte: new Date(now.getTime() - 10 * 60_000) } }, orderBy: { fetchedAt: 'desc' } })
+  // A refreshed snapshot is not a new injury. Prefer the newest provider event
+  // per player and never bootstrap old reports into a notification flood.
+  rows.sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
   const seen = new Set<string>()
+  const seenPlayers = new Set<string>()
   let delivered = 0
   let errors = 0
   for (const row of rows) {
@@ -50,13 +54,28 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       const resolved = await resolvePlayerNewsIdentity({ sport, playerName: row.playerName, team: row.team })
       if (resolved.status !== 'resolved') continue
       const identity = resolved.identity
+      if (seenPlayers.has(identity.identityId)) continue
+      seenPlayers.add(identity.identityId)
       const status = row.status.trim().toLowerCase()
+      const occurredAt = row.date?.getTime()
+      // Undated feeds need an observed status transition, not first-snapshot fanout.
+      const stateKey = `injury-observation:v1:${sport}:${identity.identityId}:${row.source}`
+      if (!occurredAt) {
+        const previous = await prisma.sportsDataCache.findUnique({ where: { cacheKey: stateKey } })
+        const previousStatus = (previous?.data as { status?: string } | null)?.status
+        if (!previousStatus || previousStatus === status) {
+          await prisma.sportsDataCache.upsert({ where: { cacheKey: stateKey }, update: { data: { status } },
+            create: { cacheKey: stateKey, data: { status }, expiresAt: new Date(now.getTime() + 30 * 86400_000) } })
+          continue
+        }
+      } else if (occurredAt < now.getTime() - 2 * 3600_000 || occurredAt > now.getTime() + 5 * 60_000) continue
       const date = row.date?.toISOString().slice(0, 10) ?? now.toISOString().slice(0, 10)
       const key = createHash('sha256').update(`${sport}:${identity.identityId}:${status}:${date}`).digest('hex')
       if (seen.has(key)) continue
       seen.add(key)
       const audience = await resolvePlayerNewsRecipients(identity)
       if (audience.degraded) errors++
+      let dispatchFailed = false
       for (const [userId, leagueIds] of audience.byUser) {
         const starters = isUnavailableStatus(status) ? await startingLeagues(identity, userId, leagueIds) : []
         // One actionable alert replaces the general injury alert for a starting player.
@@ -73,6 +92,11 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
         })
         delivered += result.delivered
         errors += result.failed
+        dispatchFailed ||= result.failed > 0
+      }
+      if (!occurredAt && !dispatchFailed && !audience.degraded) {
+        await prisma.sportsDataCache.upsert({ where: { cacheKey: stateKey }, update: { data: { status } },
+          create: { cacheKey: stateKey, data: { status }, expiresAt: new Date(now.getTime() + 30 * 86400_000) } })
       }
     } catch (e) { errors++; console.error('[injury-alerts]', sport, row.externalId, e) }
   }

@@ -12,11 +12,11 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import { getMatchupTiebreakerMode } from '@/lib/scoring-engine/scoringSettingsResolved'
 import {
-  getCategoryPresetDefinitions,
   resolveCategoryMatchup,
   type CategoryMatchupResult,
   type TeamStatTotals,
 } from '@/lib/category-scoring'
+import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 
 function resolveScoringMode(settingsJson: unknown): 'points' | 'h2h_category' | 'roto' {
   if (!settingsJson || typeof settingsJson !== 'object') return 'points'
@@ -63,8 +63,9 @@ async function resolveCategoryOutcomesForWeek(
   season: number,
   week: number,
   categoryPresetId: string,
+  settingsJson: unknown,
 ): Promise<void> {
-  const categories = getCategoryPresetDefinitions(categoryPresetId)
+  const categories = resolveLeagueCategories(settingsJson, categoryPresetId)
   if (!categories) {
     throw new Error(`Unsupported category scoring preset: ${categoryPresetId}`)
   }
@@ -155,12 +156,14 @@ export async function resolveMatchupOutcomesForWeek(
     where: { id: leagueId },
     select: { settings: true },
   })
-  const scoringMode = resolveScoringMode(league?.settings ?? null)
+  // The scoring type in force for THIS week (a mid-season switch never re-resolves an earlier week).
+  const weekSettings = settingsForScoringWeek(league?.settings ?? null, season, week)
+  const scoringMode = resolveScoringMode(weekSettings)
   if (scoringMode === 'roto') return // Cumulative category ranks are computed by standingsEngine.
   if (scoringMode === 'h2h_category') {
-    const presetId = resolveCategoryPresetId(league?.settings ?? null)
+    const presetId = resolveCategoryPresetId(weekSettings)
     if (presetId) {
-      await resolveCategoryOutcomesForWeek(leagueId, season, week, presetId)
+      await resolveCategoryOutcomesForWeek(leagueId, season, week, presetId, weekSettings)
       return
     }
     throw new Error('Category scoring requires a category preset; points cannot replace it.')

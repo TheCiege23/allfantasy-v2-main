@@ -19,6 +19,7 @@ import {
   StatusPill,
 } from '@/components/core-app/outlook/OutlookParts'
 import { OutlookScenarioPanel } from '@/components/core-app/outlook/OutlookScenarioPanel'
+import { FirstPickExplainerBlock } from '@/components/scenario-explainer/WhatDoINeed'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { outlookText, ordinalEs, seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
@@ -333,6 +334,8 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
                 {es ? 'Tu equipo tiene muy pocas semanas completas para proyectar un récord.' : 'Your team has too few completed weeks to project a record.'}
               </p>
             )}
+            {/* The #1 pick from the same simulated seasons (lib/scenario-explainer). Hidden when the league has no standings-based order. */}
+            <FirstPickExplainerBlock leagueId={league.leagueId} />
           </>
         ) : tab === 'whatif' ? (
           focus ? (

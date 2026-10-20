@@ -199,7 +199,8 @@ function valuationFor(
 ): Valuation | { refuse: string } {
   if (league) {
     const native = nativeCategoryScoringContext(league.settings, sport)
-    const categories = native ? getCategoryPresetDefinitions(native.presetId) : null
+    // The league's own (possibly commissioner-edited) list, not the preset's.
+    const categories = native ? native.categories : null
     if (categories?.length) return { kind: 'categories', categories }
     // A category league whose categories cannot be read must never fall back to a points grade.
     const unreadable = categoryLeagueReason(league.settings, sport)

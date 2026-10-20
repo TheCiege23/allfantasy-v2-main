@@ -59,6 +59,31 @@
 
 ---
 
+## N-20 — rookies, prospects and draft data for MLB, NHL and NBA (recorded 2026-10-20, no probe)
+
+**Status: OPEN — UNVERIFIED. Do not probe to settle it outside `scripts/probe.sh`.** Raised by the
+redraft draft-pool work (Phase 3.2: "the NBA/NHL/MLB pool should include rookies and prospects,
+labelled"). Read from this contract only; no API was called.
+
+| Question | What the contract says | Confidence |
+|---|---|---|
+| Is there a minor-league (MiLB), junior-hockey (CHL/USHL) or European sport code? | **No.** `sports.codes` lists NHL, NBA, NFL, MLB, NCAABB, NCAAFB, SOCCER, DARTS, PGA only. | contract-level |
+| Is there a draft / draft-pick / prospect endpoint? | **No.** The endpoint list is schedule*, live, play-by-play, team-info/stats, player-info/stats, injuries, depth-charts. | contract-level |
+| Does `player-info/{MLB,NHL,NBA}` carry a draft year, draft round, debut date or years of experience? | **Unknown.** `player_info` documents path and query params only; there is no per-sport field list and **no fixture** for any sport. Our ingest (`lib/sports-data/rollingInsightsTeamsPlayers.ts`) reads nothing draft- or experience-shaped, and `lib/providers/rollingInsightsDocsRegistry.ts` lists `rookie`, `yearsExperience`, `draftYear` as `missingFromDoc`. | none |
+
+**What it blocks.** NHL draftees/prospects and MLB minor leaguers in any draft pool (nothing we
+pay for supplies those players at all), and a sourced rookie label for NHL and MLB pros. NBA rookie
+labelling now reads `SportsPlayer.yearsExp` (see `lib/draft-room/nonNflRookieFields.ts`), but no RI
+writer fills that column — if `player-info` exposes experience it would be the cheapest filler.
+
+**How to resolve, in order.** (1) Ask the vendor whether `player-info` returns draft/debut/experience
+fields for MLB, NHL and NBA. (2) Or, as decision D-6 in `docs/DYNASTY_PROSPECT_DATA_PLAN.md`, run
+`scripts/probe.sh player-info <SPORT>` on **`RSC_TOKEN2`** (these three sports are not on the first
+account) and commit the fixtures in the same change. Prospects themselves (MiLB, NHL rights holders)
+need a different vendor; that is §3 of the same plan and an owner decision.
+
+---
+
 ## Blocking — resolve before shipping that sport
 
 | ID | Gap | Status | Blocks | How to resolve |

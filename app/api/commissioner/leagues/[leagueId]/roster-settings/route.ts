@@ -14,6 +14,7 @@ import {
 } from '@/lib/roster-engine'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
@@ -91,6 +92,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   }
 
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const locked = await settingsLockedResponse(leagueId, 'rosters')
+  if (locked) return locked
 
   const body = await req.json().catch(() => ({}))
   const slots = body.slots as Record<string, number> | undefined

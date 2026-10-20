@@ -1,4 +1,5 @@
-import { accumulateTeamTotals, getCategoryPresetDefinitions, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
+import { accumulateTeamTotals, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
+import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringType'
 /**
  * Aggregate season standings from `team_week_results` (deterministic).
  * Tie order from `scoringSettings.rules.standingsTiebreakerOrder` when present.
@@ -146,7 +147,7 @@ export async function recomputeStandingsForSeason(leagueId: string, season: numb
 
   if (scoringMode === 'roto') {
     const settings=league?.settings as Record<string,any> | null
-    const categories=getCategoryPresetDefinitions(settings?.category_preset_id)
+    const categories=resolveLeagueCategories(settings, settings?.category_preset_id)
     if(!categories) throw new Error('Rotisserie category preset is missing.')
     const stats=new Map<string,TeamStatTotals[]>()
     for(const r of results) {

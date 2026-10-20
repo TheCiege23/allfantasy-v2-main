@@ -45,6 +45,7 @@ import {
   type NflRookieFetchSource,
   type NflRookieLookup,
 } from '@/lib/draft-room/nflRookieLookup'
+import { devyPoolSportForDraftSport, resolveNonNflRookieFields } from '@/lib/draft-room/nonNflRookieFields'
 import {
   canonicalName,
   canonicalPosition,
@@ -1324,9 +1325,12 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   if (strictPoolSeparation && (poolType === 'devy' || poolType === 'college' || poolType === 'startup_college')) {
+    // Scoped to the league's college sport: unscoped, an NBA devy league drew NCAAF players and an
+    // NFL one drew NCAAB players. Sports with no college layer (null) keep the old unscoped read.
+    const devySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false },
+        where: { devyEligible: true, graduatedToNFL: false, ...(devySport ? { sport: devySport } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1479,9 +1483,11 @@ export async function getResolvedDraftPoolForLeague(
     mergeCollegePool && !(strictPoolSeparation && (poolType === 'startup_vet' || poolType === 'startup_pro'))
 
   if (includeCollegeInPool) {
+    // Same sport scoping as the strict path above. `mergeCollegePool` is NFL/NBA only.
+    const mergeDevySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false },
+        where: { devyEligible: true, graduatedToNFL: false, ...(mergeDevySport ? { sport: mergeDevySport } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -2448,12 +2454,15 @@ export async function getResolvedDraftPoolForLeague(
 
             return {}
           })()
-        : {}),
-      ...(row.isDevy && !row.graduatedToNFL
-        ? { isRookie: true }
-        : sport !== 'NFL' && sprAug?.rookieHint === true
-          ? { isRookie: true }
-          : {}),
+        : // Phase 3.2: every other sport takes the NFL path's first source too: an explicit
+          // `SportsPlayer.yearsExp` (pool `experience`). A known value overrules the zero-games
+          // stats heuristic, which is all these sports had before.
+          resolveNonNflRookieFields({
+            rowYearsExp: row.yearsExp,
+            poolExperience: (poolMatch as { experience?: number | null } | undefined)?.experience,
+            rookieHint: sprAug?.rookieHint,
+          })),
+      ...(row.isDevy && !row.graduatedToNFL ? { isRookie: true } : {}),
     } as unknown as RawRow
   })
 

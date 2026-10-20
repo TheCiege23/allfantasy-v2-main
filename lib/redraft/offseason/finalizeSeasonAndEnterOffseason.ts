@@ -1,4 +1,5 @@
 import { finalizeRotoSeason, type RotoFinalizeResult } from './finalizeRotoSeason'
+import { triggerCommissionerRatingPrompt } from '@/lib/commissioner/CommissionerRatingTrigger'
 /**
  * Crown the champion, archive the season, enter the offseason, open the keeper
  * window — as one call, because it is one thing.
@@ -122,6 +123,15 @@ export async function finalizeSeasonAndEnterOffseason(input: {
       }
     }
 
+    if (offseasonEntered && !alreadyFinalized) {
+      // Commish reputation: ask the league to rate its commissioner. Keeper and dynasty leagues were
+      // already asked from the keeper offseason; plain redraft leagues never were. Idempotent per
+      // season, and not awaited — a chat post must not hold the finalize open.
+      promptCommissionerRating(input.leagueId).catch((error) => {
+        console.error('[finalize-season] commissioner rating prompt failed', { leagueId: input.leagueId, error })
+      })
+    }
+
     const leagueMeta = leagueScoring
     const keeperEligible =
       !!leagueMeta && (supportsKeeperDeclarations(leagueMeta.leagueType) || leagueMeta.isDynasty === true)
@@ -185,4 +195,9 @@ function describe(code: string): string {
   if (code === 'NO_WINNER') return 'Final matchup has no winner - run advance first'
   if (code === 'NO_FINAL_ROUND') return 'No playoff rounds found'
   return 'Final playoff round is not yet complete'
+}
+
+async function promptCommissionerRating(leagueId: string): Promise<void> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true } })
+  if (league?.season != null) await triggerCommissionerRatingPrompt(leagueId, league.season)
 }

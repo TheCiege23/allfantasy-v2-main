@@ -27,6 +27,7 @@ import {
   type MlbScoringRow,
 } from '@/lib/mlb-scoring/MlbScoringCategories'
 import { getCategoryPresetDefinitions } from '@/lib/category-scoring'
+import { ScoringTypeEditor } from '@/components/league-settings/ScoringTypeEditor'
 import type { MlbScoringPresetKey } from '@/lib/mlb-scoring/MlbScoringPresets'
 import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
@@ -110,6 +111,8 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const [loading, setLoading] = useState(true)
   const [scoringMode,setScoringMode]=useState('points')
   const [categoryPresetId,setCategoryPresetId]=useState<string|null>(null)
+  /** The league's own list (it may have been edited); the preset's when the route does not send it. */
+  const [categoryLabels,setCategoryLabels]=useState<string[]|null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -120,6 +123,8 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const [selectedPreset, setSelectedPreset] = useState<MlbScoringPresetKey>('af_default')
   const [editedRules, setEditedRules] = useState<Record<string, number>>({})
   const [activeTab, setActiveTab] = useState<string>('batting')
+  /** Bumped when the scoring type changes, so this panel reloads (points table vs categories). */
+  const [reloadNonce, setReloadNonce] = useState(0)
 
   // All categories: 10 standard + premium
   const allCategories: MlbScoringCategory[] = useMemo(
@@ -136,6 +141,7 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         if (!active) return
         setScoringMode(data.scoringMode ?? 'points')
         setCategoryPresetId(data.categoryPresetId ?? null)
+        setCategoryLabels(Array.isArray(data.categoryLabels) ? data.categoryLabels : null)
         setPresets(data.presets ?? [])
         setConfig(data.config ?? null)
         setIsPremium(data.isPremium ?? false)
@@ -149,7 +155,7 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       .catch(() => { if (active) setError(t('lsScore.err.load')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [leagueId])
+  }, [leagueId, reloadNonce])
 
   // ----- derived -----
   const currentPreset = useMemo(
@@ -251,7 +257,8 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   // ----- render -----
   if(scoringMode !== 'points') return <section className="rounded-xl border border-white/10 p-5">
     <h3 className="font-semibold">{scoringMode === 'roto' ? t('lsScore.cat.roto') : t('lsScore.cat.h2h')}</h3>
-    <p className="mt-2 text-sm text-white/70">{t('lsScore.cat.list').replace('{{list}}', (getCategoryPresetDefinitions(categoryPresetId) ?? []).map(c=>c.label).join(', '))}</p>
+    <p className="mt-2 text-sm text-white/70">{t('lsScore.cat.list').replace('{{list}}', (categoryLabels ?? (getCategoryPresetDefinitions(categoryPresetId) ?? []).map(c=>c.label)).join(', '))}</p>
+    <div className="mt-3"><ScoringTypeEditor leagueId={leagueId} isCommissioner={isCommissioner} onChanged={() => setReloadNonce((n) => n + 1)} /></div>
     <p className="mt-2 text-sm text-white/70">{t('lsScore.cat.rateNote')}</p>
   </section>
 
@@ -268,6 +275,8 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
             : t('lsScore.subtitle.readOnly')}
         </p>
       </div>
+
+      <ScoringTypeEditor leagueId={leagueId} isCommissioner={isCommissioner} onChanged={() => setReloadNonce((n) => n + 1)} />
 
       {/* Rule: one config per league */}
       <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">

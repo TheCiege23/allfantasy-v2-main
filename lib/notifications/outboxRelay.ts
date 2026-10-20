@@ -42,6 +42,7 @@ import { sendTemplatedEmail } from "@/lib/resend-client"
 import { getSettingsProfile } from "@/lib/user-settings"
 import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
 import { decidePush } from "./pushGate"
+import { quietHoursSuppression } from "./quietHours"
 import { isCategoryAllowedForLeague } from "./leagueOverrides"
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { pushTagFor } from "./pushTag"
@@ -141,6 +142,8 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
     if (!prefs.globalEnabled || !cat?.enabled || !isCategoryAllowedForLeague(prefs, category, row.leagueId)) {
       return { outcome: 'skipped', error: 'notifications muted' }
     }
+    const quiet = quietHoursSuppression(prefs.quietHours, new Date(), metadata.severity === 'high' ? 'high' : 'medium', profile.timezone)
+    if (quiet.push) return { outcome: 'skipped', error: 'quiet hours; retained in app' }
     if (row.channel === 'email' && (!cat.email || !profile.email || isUndeliverableEmailDomain(profile.email) || emailWithheldByUnsubscribe(profile.emailSubscription, category))) {
       return { outcome: 'skipped', error: 'email unavailable or muted' }
     }
@@ -149,7 +152,7 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
         category, leagueId: row.leagueId, severity: metadata.severity === 'high' ? 'high' : 'medium', fallbackTimezone: profile.timezone,
       })
       if (!decision.allowed) return decision.reason === 'quiet_hours'
-        ? { outcome: 'retry', error: 'quiet hours' } : { outcome: 'skipped', error: decision.reason }
+        ? { outcome: 'skipped', error: 'quiet hours; retained in app' } : { outcome: 'skipped', error: decision.reason }
     }
   }
 
