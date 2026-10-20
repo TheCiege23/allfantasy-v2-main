@@ -1,7 +1,7 @@
 /**
  * Daily sports (NBA/NHL/MLB) must run waivers on EVERY default processing day, not only the first.
  *
- * The sport defaults say NBA runs [Mon, Wed, Fri], MLB [Mon, Thu], NHL [Mon, Wed, Fri], but the
+ * The daily-sport defaults run [Mon, Wed, Fri], but the
  * league-creation writers persisted only `processingDayOfWeek: processing_days[0]` and never the
  * `processingDays` list — so `computeNextWaiverRunAtUtc` scheduled one run a week (Monday).
  *
@@ -60,10 +60,10 @@ describe('LeagueCreationInitializer persists every default processing day', () =
     expect(nextRunFrom(data)).toBe('2026-10-21T12:00:00.000Z')
   })
 
-  it('MLB: [Mon, Thu]', async () => {
+  it('MLB: [Mon, Wed, Fri]', async () => {
     const data = await createFor('MLB')
-    expect(data.processingDays).toEqual([1, 4])
-    expect(nextRunFrom(data)).toBe('2026-10-22T12:00:00.000Z')
+    expect(data.processingDays).toEqual([1, 3, 5])
+    expect(nextRunFrom(data)).toBe('2026-10-21T12:00:00.000Z')
   })
 
   it('NHL: [Mon, Wed, Fri]', async () => {

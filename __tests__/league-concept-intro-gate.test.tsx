@@ -130,7 +130,7 @@ describe('LeagueConceptIntroGate', () => {
       expect(src).not.toContain('/sports/')
     })
 
-    it('a sport with no shipped clip falls through to the concept intro', async () => {
+    it('NBA plays the packaged basketball clip', async () => {
       mockUnseen()
       render(
         <LeagueConceptIntroGate
@@ -141,6 +141,12 @@ describe('LeagueConceptIntroGate', () => {
           settings={{}}
         />,
       )
+      expect(await videoSrc()).toBe('/media/create-league/sports/videos/Basketball.mp4')
+    })
+
+    it('a sport with no shipped clip falls through to the concept intro', async () => {
+      mockUnseen()
+      render(<LeagueConceptIntroGate leagueId="league-college" shouldPlayIntro leagueType="redraft" sport="NCAAB" settings={{}} />)
       expect(await videoSrc()).toBe('/media/create-league/concept/videos/Redraft.mp4')
     })
 

@@ -6,18 +6,6 @@ import { loadLeagueWeekContext, type LineupLockResolveArgs } from '@/lib/roster-
 import { evaluateFullRosterLegalityAsync } from './evaluateFullRosterLegality'
 import type { RosterLegalityFullResult } from './types'
 
-function weekFromSettings(settings: unknown): number {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
-  const o = settings as Record<string, unknown>
-  const w = o.currentWeek ?? o.current_week ?? o.week
-  if (typeof w === 'number' && Number.isFinite(w)) return Math.max(1, w)
-  if (typeof w === 'string') {
-    const n = parseInt(w, 10)
-    return Number.isFinite(n) ? Math.max(1, n) : 1
-  }
-  return 1
-}
-
 export type PersistedRosterRef = {
   id: string
   leagueId: string
@@ -43,8 +31,7 @@ export async function evaluateLegalityForPersistedRoster(
     return null
   }
 
-  const { season } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
-  const leagueWeek = weekFromSettings(league.settings)
+  const { season, week: leagueWeek } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
   const editingWeek = leagueWeek
 
   const ctx: LineupValidationContext = {
@@ -115,8 +102,7 @@ export async function evaluateLegalityForProjectedRoster(
     return null
   }
 
-  const { season } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
-  const leagueWeek = weekFromSettings(league.settings)
+  const { season, week: leagueWeek } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
   const editingWeek = leagueWeek
 
   const ctx: LineupValidationContext = {

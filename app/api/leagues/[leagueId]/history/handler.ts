@@ -9,10 +9,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { computeAllTimeStandings } from '@/lib/league/history-aggregates'
+import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
 interface HistorySeason {
+  id: string
+  teamRecords: Prisma.JsonValue
   season: number
   championName: string | null
   championAvatar: string | null
@@ -63,6 +67,8 @@ export async function GET(
     where: { leagueId },
     orderBy: { season: 'desc' },
     select: {
+      id: true,
+      teamRecords: true,
       season: true,
       championName: true,
       championAvatar: true,
@@ -83,6 +89,8 @@ export async function GET(
   if (!hasCurrent) {
     // Add current active season as a "live" entry
     seasons.unshift({
+      id: `active:${leagueId}:${currentYear}`,
+      teamRecords: [],
       season: currentYear,
       championName: null,
       championAvatar: null,
@@ -122,6 +130,7 @@ export async function GET(
     leagueName: league.name,
     sport: league.sport,
     seasons: unique,
+    allTimeStandings: computeAllTimeStandings(dbSeasons),
     /*
      * ⚠ THE ONLY PLACE THE PRODUCT REPORTS THIS, so it has to report enough to
      * act on. `status` alone said `complete` for 52 production leagues that had
