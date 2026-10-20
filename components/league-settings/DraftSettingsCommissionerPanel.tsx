@@ -30,6 +30,7 @@ import {
   type CustomTimerUnit,
   type DraftPace,
 } from '@/lib/draft/draftSettingsPolicy'
+import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName, utcToWallClock, wallClockToUtc } from '@/lib/timezone'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,17 +71,6 @@ function formatTimer(seconds: number, t: T): string {
   return fill(t('lsEd.dr.v2.customValue'), { value: short })
 }
 
-const pad = (n: number) => String(n).padStart(2, '0')
-
-/** ISO instant → local `YYYY-MM-DD` and `HH:MM` (both in the viewer's own timezone). */
-function splitLocal(iso: string): { date: string; time: string } | null {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -122,6 +112,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   // Draft date/time — empty until the commissioner picks one.
   const [draftDate, setDraftDate] = useState<string>('')
   const [draftTime, setDraftTime] = useState<string>('')
+  // Both are wall-clock in the LEAGUE's timezone, whatever the viewer's browser zone is.
+  const [leagueTimezone, setLeagueTimezone] = useState<string>(DEFAULT_LEAGUE_TIMEZONE)
 
   // Draft order
   const [teams, setTeams] = useState<DraftTeamSlot[]>([])
@@ -165,7 +157,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
     setSlowDraftPauseEnabled(Boolean(data.slowDraftPauseEnabled))
     if (data.slowDraftPauseFrom) setSlowDraftPauseFrom(data.slowDraftPauseFrom)
     if (data.slowDraftPauseTo) setSlowDraftPauseTo(data.slowDraftPauseTo)
-    const local = data.draftDate ? splitLocal(data.draftDate) : null
+    const tz = typeof data.timezone === 'string' && data.timezone ? data.timezone : DEFAULT_LEAGUE_TIMEZONE
+    setLeagueTimezone(tz)
+    const local = data.draftDate ? utcToWallClock(data.draftDate, tz) : null
     if (local) { setDraftDate(local.date); setDraftTime(local.time) }
     if (Array.isArray(data.teams)) setTeams(data.teams)
     setOrderLocked(Boolean(data.draftOrderLocked))
@@ -253,8 +247,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         slowDraftPauseTo,
       }
       if (draftDate) {
-        const local = new Date(`${draftDate}T${draftTime || '19:30'}:00`)
-        if (!Number.isNaN(local.getTime())) payload.draftDate = local.toISOString()
+        const instant = wallClockToUtc(draftDate, draftTime || '19:30', leagueTimezone)
+        if (instant) payload.draftDate = instant.toISOString()
         if (!draftTime) setDraftTime('19:30')
       }
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/settings`, {
@@ -269,7 +263,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
     } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, draftType, effectiveRounds, timerSeconds, cpuAutoPickEnabled, autostartEnabled, slowDraftPauseEnabled, pauseAllowed,
-    slowDraftPauseFrom, slowDraftPauseTo, draftDate, draftTime, flash, t])
+    slowDraftPauseFrom, slowDraftPauseTo, draftDate, draftTime, leagueTimezone, flash, t])
 
   // Randomize draft order — once for everyone, 1–100 times for AF Commissioner (posted to chat).
   const runRandomize = useCallback(async (times: number) => {
@@ -358,6 +352,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.dr.loading')}</div>
 
   const ro = !isCommissioner
+  // Abbreviation at the chosen draft instant, so a November draft reads "EST" even when viewed in summer.
+  const scheduleInstant = draftDate ? wallClockToUtc(draftDate, draftTime || '19:30', leagueTimezone) : null
+  const scheduleTzLabel = `${timeZoneShortName(leagueTimezone, scheduleInstant ?? new Date())} · ${leagueTimezone}`
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden" data-testid="draft-settings-panel">
@@ -380,7 +377,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
             value={draftTime} onChange={setDraftTime} disabled={ro} language={language}
           />
         </div>
-        <p className="text-[11px] text-white/40">{t('lsEd.dr.localTz')}</p>
+        <p className="text-[11px] text-white/40" data-testid="draft-schedule-tz">
+          {fill(t('lsEd.dr.v2.leagueTz'), { tz: scheduleTzLabel })}
+        </p>
         <div className="border-t border-white/10 pt-1">
           <ToggleRow
             id={ids.autostart} label={t('draft.autostart')} description={t('draft.autostartDesc')}

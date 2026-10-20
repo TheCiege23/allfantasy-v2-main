@@ -12,6 +12,7 @@ import { buildInitialLeagueSettings } from './LeagueDefaultSettingsService'
 import { getWaiverDefaults } from './SportDefaultsRegistry'
 import type { SportType } from './types'
 import { toSportType } from './sport-type-utils'
+import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 
 export interface InitializeLeagueOptions {
   leagueId: string
@@ -59,6 +60,9 @@ export async function initializeLeagueWithSportDefaults(
   }
 
   const waiverDef = getWaiverDefaults(sportType, league.leagueVariant ?? undefined)
+  // Daily sports (NBA [1,3,5], MLB [1,4], NHL [1,3,5]) run on every listed day; persisting only
+  // processing_days[0] scheduled them once a week. Single-day sports (NFL) write no list — unchanged.
+  const defaultDaysList = defaultProcessingDaysList(waiverDef.processing_days)
   let waiverApplied = false
   try {
     const existing = await (prisma as any).leagueWaiverSettings.findUnique({
@@ -76,6 +80,7 @@ export async function initializeLeagueWithSportDefaults(
           tiebreakRule: (waiverDef.claim_priority_behavior as string) ?? null,
           lockType: (waiverDef.game_lock_behavior as string) ?? null,
           instantFaAfterClear: waiverDef.free_agent_unlock_behavior === 'instant',
+          ...(defaultDaysList ? { processingDays: defaultDaysList } : {}),
         },
       })
       waiverApplied = true
@@ -94,6 +99,16 @@ export async function initializeLeagueWithSportDefaults(
       for (const [key, value] of Object.entries(defaults)) {
         const current = (existing as Record<string, unknown>)[key]
         if (current === undefined || current === null) patch[key] = value
+      }
+      // Only alongside a day that is itself being filled from defaults: a commissioner-chosen
+      // processingDayOfWeek is never overridden by the sport's default day list.
+      const existingRow = existing as Record<string, unknown>
+      if (
+        defaultDaysList &&
+        'processingDayOfWeek' in patch &&
+        (existingRow.processingDays === undefined || existingRow.processingDays === null)
+      ) {
+        patch.processingDays = defaultDaysList
       }
       if (Object.keys(patch).length > 0) {
         await (prisma as any).leagueWaiverSettings.update({

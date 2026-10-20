@@ -16,7 +16,7 @@ const ET = 'America/New_York'
 export type LineupLockResult = {
   locked: boolean
   reason?: string
-  policy: 'view_only_past' | 'future_week' | 'football_weekly' | 'daily_slate' | 'soccer_matchday'
+  policy: 'view_only_past' | 'future_week' | 'football_weekly' | 'daily_slate' | 'daily_per_player' | 'soccer_matchday'
 }
 
 function wallET(d: Date): Date {
@@ -101,6 +101,13 @@ export function evaluateLineupLock(args: {
   now: Date
   leagueWeek: number
   editingWeek: number
+  /**
+   * The league keeps lineups per day (`isDailyLineupScoringEnabled`). Then there is no whole-lineup
+   * window: each player locks at his own game start for the rest of that day, from the schedule
+   * (`hydrateRedraftLineupLocks` in `daily` mode). The 6 PM ET guess below froze players in late
+   * West Coast games before they played, and left afternoon games open after they started.
+   */
+  dailyLineups?: boolean
 }): LineupLockResult {
   const { sport, now, leagueWeek, editingWeek } = args
   const u = sport.toUpperCase()
@@ -121,6 +128,7 @@ export function evaluateLineupLock(args: {
     return footballWeeklyLock(now)
   }
   if (u === 'NBA' || u === 'NCAAB' || u === 'MLB' || u === 'NHL') {
+    if (args.dailyLineups) return { locked: false, policy: 'daily_per_player' }
     return dailySportLock(now)
   }
   if (u === 'SOCCER') {

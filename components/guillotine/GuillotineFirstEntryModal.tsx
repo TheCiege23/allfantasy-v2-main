@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
-const VIDEO_SRC = '/guillotine/Guillotine.mp4'
+const VIDEO_SRC = '/media/create-league/concept/videos/Guillotine.mp4'
 
 export interface GuillotineFirstEntryModalProps {
   leagueId: string
@@ -22,6 +22,9 @@ export function GuillotineFirstEntryModal({
 }: GuillotineFirstEntryModalProps) {
   const [visible, setVisible] = useState(false)
   const [videoKey, setVideoKey] = useState(0)
+  const [failed, setFailed] = useState(false)
+  const [muted, setMuted] = useState(true)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const markSeen = useCallback(() => {
     if (typeof window !== 'undefined' && leagueId) {
@@ -38,6 +41,7 @@ export function GuillotineFirstEntryModal({
   }, [markSeen, onClose])
 
   const handleReplay = useCallback(() => {
+    setFailed(false)
     setVideoKey((k) => k + 1)
   }, [])
 
@@ -74,16 +78,26 @@ export function GuillotineFirstEntryModal({
       aria-label="Guillotine League intro"
     >
       <div className="relative w-full max-w-2xl rounded-2xl overflow-hidden bg-black shadow-2xl">
-        <video
+        {failed ? <p role="status" className="p-6 text-center text-sm text-white">The intro could not load. Retry or enter your league below.</p> : <video
+          ref={videoRef}
           key={videoKey}
           className="w-full aspect-video"
           src={VIDEO_SRC}
           controls
           autoPlay
+          muted={muted}
+          onVolumeChange={event => setMuted(event.currentTarget.muted)}
+          preload="metadata"
           playsInline
           onEnded={handleVideoEnded}
-        />
+          onError={() => setFailed(true)}
+          style={{ width: '100%', maxHeight: '65dvh', aspectRatio: '16 / 9', objectFit: 'contain' }}
+        />}
         <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white/[0.06]">
+          {!failed && muted ? <button type="button" className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white" onClick={() => {
+            setMuted(false)
+            if (videoRef.current) { videoRef.current.muted = false; void videoRef.current.play()?.catch(() => undefined) }
+          }}>Tap for sound</button> : null}
           <button
             type="button"
             onClick={handleReplay}
@@ -96,7 +110,7 @@ export function GuillotineFirstEntryModal({
             onClick={handleSkip}
             className="rounded-lg bg-cyan-500/90 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500"
           >
-            Skip
+            Enter league
           </button>
         </div>
       </div>

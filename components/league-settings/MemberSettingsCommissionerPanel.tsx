@@ -17,6 +17,7 @@ import { UserMinus, UserPlus, X, Search, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { DuplicateManagerWarningsSection } from '@/components/league-settings/DuplicateManagerWarningsSection'
+import { readTournamentCoCommissioners, SeatlessCoCommissioners, type TournamentCoCommissioner } from '@/components/league-settings/TournamentLeagueNotes'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +68,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
   type MemberFilter = 'all' | 'commissioner' | 'coowner' | 'orphan' | 'assigned'
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all')
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [tournamentCos, setTournamentCos] = useState<TournamentCoCommissioner[]>([])
 
   // Load member data
   const load = useCallback(async () => {
@@ -117,6 +119,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
       if (!res.ok) { setError(data.error ?? t('leagueSettings.loadFailed')); return }
 
       setCanManageMembers(true)
+      setTournamentCos(readTournamentCoCommissioners(data))
 
       const teamsRaw = data.teams ?? [] as Array<Record<string, unknown>>
       const rostersRaw = data.rosters ?? []
@@ -306,6 +309,8 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
       )}
 
       {canManageMembers && <DuplicateManagerWarningsSection leagueId={leagueId} />}
+
+      <SeatlessCoCommissioners people={tournamentCos} />
 
       {canManageMembers ? (
         <div className="flex flex-wrap items-center gap-2">

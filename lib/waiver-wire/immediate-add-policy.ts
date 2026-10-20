@@ -18,12 +18,23 @@ export type DailyPolicySnapshot = {
 
 export function isImmediateAddAllowedToday(
   settings:
-    | { waiverType?: string | null; instantFaAfterClear?: boolean | null; dailyPolicy?: DailyPolicySnapshot | null }
+    | {
+        waiverType?: string | null
+        instantFaAfterClear?: boolean | null
+        freeAgentUnlockBehavior?: string | null
+        dailyPolicy?: DailyPolicySnapshot | null
+      }
     | null
     | undefined,
 ): boolean {
   if (settings?.dailyPolicy) return settings.dailyPolicy.immediateAddsAllowed
-  return settings?.waiverType === 'fcfs' || settings?.instantFaAfterClear === true
+  // 'daily' unlock (NBA/MLB/NHL default): non-waiver players are first-come; the server refuses a
+  // player still on waivers with WAIVER_REQUIRED and the page falls back to the claim form.
+  return (
+    settings?.waiverType === 'fcfs' ||
+    settings?.instantFaAfterClear === true ||
+    settings?.freeAgentUnlockBehavior === 'daily'
+  )
 }
 
 const MODE_LABELS: Record<DailyWaiverMode, string> = {

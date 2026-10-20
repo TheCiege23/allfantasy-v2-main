@@ -25,6 +25,7 @@ import {
 } from '@/lib/schedule-defaults/ScheduleConfigResolver'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
+import { readTiebreakerOrder } from '@/lib/standings/tiebreakerOrder'
 
 type JsonRecord = Record<string, unknown>
 
@@ -238,6 +239,8 @@ export type CanonicalLeagueRules = {
     byeRules: string | null
     reseedBehavior: string | null
     standingsTiebreakers: string[]
+    /** The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts), or null for the default. */
+    customTiebreakers: string[] | null
   }
   schedule: {
     unit: string | null
@@ -529,6 +532,7 @@ export function buildCanonicalLeagueRulesFromResolved({
       byeRules: playoffConfig?.bye_rules ?? null,
       reseedBehavior: playoffConfig?.reseed_behavior ?? null,
       standingsTiebreakers: playoffConfig?.standings_tiebreakers ?? [],
+      customTiebreakers: readTiebreakerOrder(settings),
     },
     schedule: {
       unit: scheduleConfig?.schedule_unit ?? null,
