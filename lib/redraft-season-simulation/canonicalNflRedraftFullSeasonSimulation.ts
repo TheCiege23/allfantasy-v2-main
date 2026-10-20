@@ -338,6 +338,7 @@ function buildRules(): CanonicalLeagueRules {
       byeRules: 'top_seed_byes',
       reseedBehavior: 'none',
       standingsTiebreakers: ['win_pct', 'wins', 'points_for', 'points_against'],
+      byePlan: null,
       customTiebreakers: null,
     },
     schedule: {

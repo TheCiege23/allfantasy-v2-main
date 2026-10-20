@@ -34,6 +34,8 @@ import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { checkByePlan, isNaturalByePlan } from '@/lib/playoff-brackets/byePlan'
 import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
@@ -211,6 +213,36 @@ export type LeagueSettingsPatchOptions = {
    * directions can never chase each other.
    */
   source?: 'tournament'
+}
+
+/**
+ * Commissioner-granted playoff byes (multi-round byes, stepladders) are AF Commissioner
+ * (`advanced_playoff_setup`, docs/AF_COMMISSIONER_SETTINGS_SPEC.md §1.3). Odd team counts are
+ * FREE: the bracket engine pads any field to a power of two with natural byes (owner's rule,
+ * Oct 15 paywall; pinned by __tests__/free-commissioner-locks.test.ts).
+ *
+ * Checked only when the plan CHANGES, so a league keeps a plan saved before its sub lapsed.
+ */
+export async function customPlayoffBracketRefusal(
+  userId: string,
+  body: LeagueSettingsPatchBody,
+  current: { playoffTeams: number | null; byePlan: unknown },
+): Promise<{ status: number; message: string } | null> {
+  const merge = body.settingsMerge && typeof body.settingsMerge === 'object' && !Array.isArray(body.settingsMerge)
+    ? (body.settingsMerge as Record<string, unknown>)
+    : null
+  if (!merge || !('playoff_bye_plan' in merge) || merge.playoff_bye_plan == null) return null
+  const teams = body.playoffTeams != null ? Number(body.playoffTeams) : current.playoffTeams ?? 0
+  const raw = merge.playoff_bye_plan
+  const plan = Array.isArray(raw) ? raw.map((v) => Number(v)) : []
+  const check = checkByePlan(teams, plan)
+  if (!check.ok) return { status: 400, message: check.error }
+  if (isNaturalByePlan(teams, plan)) return null
+  const unchanged = Array.isArray(current.byePlan) && current.byePlan.map(Number).join() === plan.join()
+  if (unchanged) return null
+  const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'advanced_playoff_setup').catch(() => null)
+  if (access?.allowed) return null
+  return { status: 403, message: 'Custom playoff byes require AF Commissioner.' }
 }
 
 /**
@@ -405,6 +437,11 @@ export async function executeLeagueSettingsPatch(
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
   }
+  const bracketRefusal = await customPlayoffBracketRefusal(userId, body, {
+    playoffTeams: league.playoffTeams,
+    byePlan: (league.settings as Record<string, unknown> | null)?.playoff_bye_plan,
+  })
+  if (bracketRefusal) return jsonError(bracketRefusal.message, bracketRefusal.status)
 
   /*
    * Championship length — how many weeks the final is scored over (lib/playoff-runtime/playoffRoundWeeks.ts).
