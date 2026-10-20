@@ -105,7 +105,7 @@ function buildStandardPoolApiCacheKey(leagueId: string): string {
 
 function resolveRosterFingerprint(effectiveLeagueTemplate: EffectiveLeagueTemplate): string {
   const starterEligible = starterEligiblePlayerPositionsFromTemplate(effectiveLeagueTemplate.template)
-  return `${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
+  return `${effectiveLeagueTemplate.sport === 'NBA' ? 'nba-current-roster-v2:' : ''}${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
     starterEligible.size > 0 ? starterEligible : new Set(effectiveLeagueTemplate.allowedPositions),
   )}`
 }

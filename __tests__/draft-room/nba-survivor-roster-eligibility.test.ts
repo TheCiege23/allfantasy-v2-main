@@ -1,3 +1,4 @@
+import { shouldVerifyCurrentNbaRoster } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 import { describe, expect, it } from 'vitest'
 import {
   buildNbaRosterEligibility,
@@ -48,5 +49,20 @@ describe('NBA Survivor current-roster eligibility', () => {
     expect(eligibility.ready).toBe(false)
     expect(nbaSurvivorPlayerIdMatches(eligibility, 'Current Player', 'ri-current')).toBe(false)
     expect(eligibility.reason).toMatch(/current NBA roster/i)
+  })
+})
+
+
+describe('current NBA roster protection by draft format', () => {
+  it.each([
+    ['NBA', 'redraft', false, false, false, false, true],
+    ['NBA', null, false, false, false, false, true],
+    ['NBA', 'survivor', false, false, false, false, true],
+    ['NBA', 'dynasty', true, false, false, false, false],
+    ['NBA', 'devy', true, true, false, true, false],
+    ['NBA', 'c2c', false, false, true, true, false],
+    ['NFL', 'redraft', false, false, false, false, false],
+  ])('%s %s selects the appropriate roster guard', (sport, variant, isDynasty, isDevy, isC2C, mergeCollegePool, expected) => {
+    expect(shouldVerifyCurrentNbaRoster({ sport: String(sport), variant: variant as string | null, isDynasty: Boolean(isDynasty), isDevy: Boolean(isDevy), isC2C: Boolean(isC2C), mergeCollegePool: Boolean(mergeCollegePool) })).toBe(expected)
   })
 })
