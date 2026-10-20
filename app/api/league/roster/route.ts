@@ -17,7 +17,8 @@ import {
   readSavedRosterLayout,
 } from '@/lib/redraft-core-contract/savedRosterLayout'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
-import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
+import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
+import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -125,6 +126,12 @@ export async function GET(req: NextRequest) {
       guillotineMode: true,
       keeperPhaseActive: true,
       lockAllMoves: true,
+      irAllowOut: true,
+      irAllowCovid: true,
+      irAllowSuspended: true,
+      irAllowNA: true,
+      irAllowDNR: true,
+      irAllowDoubtful: true,
     },
   })
 
@@ -332,9 +339,33 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       })
     }
 
+    // Daily-lineup leagues: the week day by day, for the lineup screen's day picker (null otherwise).
+    let dailyLineups: DailyLineupView | null = null
+    if (resolveWriteAuthority(league.platform) === 'NATIVE' && roster.redraftRosterId) {
+      const redraftRosterId = roster.redraftRosterId
+      // The scoring calendar's week and year, the ones the matchup is scored under.
+      dailyLineups = await prisma.redraftRoster
+        .findUnique({ where: { id: redraftRosterId }, select: { season: { select: { season: true, currentWeek: true } } } })
+        .then((r) =>
+          r?.season
+            ? loadDailyLineupView(prisma, {
+                leagueId,
+                redraftRosterId,
+                season: r.season.season,
+                week: Math.max(1, r.season.currentWeek ?? leagueWeek),
+              })
+            : null,
+        )
+        .catch((e: unknown) => {
+          console.warn('[league/roster] daily lineup view failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+          return null
+        })
+    }
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
+      dailyLineups,
       collegeRights,
       roster: roster.playerData,
       unifiedRoster,
@@ -358,6 +389,16 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       },
       canEditLineup: !lockCtx.locked,
       lineupLockHelp: lockCtx.reason,
+      // The save route's IR rule (`isIrEligibleStatus`) reads these flags; the lineup screen reads the
+      // same rule so it only offers "Move to IR" for a player the server will accept there.
+      irRules: {
+        irAllowOut: league.irAllowOut,
+        irAllowCovid: league.irAllowCovid,
+        irAllowSuspended: league.irAllowSuspended,
+        irAllowNA: league.irAllowNA,
+        irAllowDNR: league.irAllowDNR,
+        irAllowDoubtful: league.irAllowDoubtful,
+      },
       // Lets the client label the save control ("Save shadow lineup") before the user commits,
       // rather than only correcting the story in the success toast afterwards.
       writeAuthority: buildWriteAuthorityEnvelope('lineup', league.platform),
