@@ -31,7 +31,7 @@
 import { describe, expect, it } from "vitest"
 import { readFileSync, existsSync, readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { dirname, resolve, join } from "node:path"
+import { dirname, resolve } from "node:path"
 import {
   BRACKETS_TRANSLATIONS,
   BRACKETS_SUPPORTED_LOCALES,
@@ -475,29 +475,14 @@ describe("brackets hub restore: route budget safety", () => {
     expect(routeFiles).toEqual([])
   })
 
-  it("global app/ route count is within the 2048 budget (no >3 deltas)", () => {
-    const appDir = resolve(root, "app")
-    let count = 0
-    const walk = (dir: string) => {
-      const entries = readdirSync(dir, { withFileTypes: true })
-      for (const entry of entries) {
-        const full = join(dir, entry.name)
-        if (entry.isDirectory()) walk(full)
-        else if (
-          entry.name === "route.ts" ||
-          entry.name === "route.tsx" ||
-          entry.name === "page.ts" ||
-          entry.name === "page.tsx"
-        ) {
-          count++
-        }
-      }
+  it("the live hub destinations resolve to existing pages", () => {
+    // Production uses Railway; a retired Vercel-wide route ceiling does not
+    // validate this hub. Its navigation must still land on real pages.
+    for (const page of [
+      "app/brackets/join/page.tsx",
+      "app/brackets/leagues/new/page.tsx",
+    ]) {
+      expect(existsSync(resolve(root, page)), `${page} must exist`).toBe(true)
     }
-    walk(appDir)
-    // Same sanity envelope used by the readability pass test — keeps
-    // us under the Vercel 2048 ceiling without locking in the exact
-    // 1797 number (the audit script counts more signals).
-    expect(count).toBeGreaterThan(200)
-    expect(count).toBeLessThan(2048)
   })
 })

@@ -152,7 +152,7 @@ function buildDraftSettings(
 
 /** Both spellings, one value each — the mirror `getLeagueDefaults` projects. */
 function buildWaiverSettings(sport: DailyRedraftSport): Record<string, unknown> {
-  const registry = getWaiverDefaults(sport)
+  const registry = getWaiverDefaults(sport, 'redraft')
   const processingDays = [...DAILY_REDRAFT_WAIVER_PROCESSING_DAYS]
   return {
     ...registry,
