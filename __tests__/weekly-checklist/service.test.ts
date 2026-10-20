@@ -46,11 +46,13 @@ beforeEach(() => {
     { seasonId: 'S', status: 'pending', submittedAt: new Date(NOW.getTime() - 40 * 3_600_000), processedAt: null },
     { seasonId: 'S', status: 'processed', submittedAt: NOW, processedAt: new Date(NOW.getTime() - 86_400_000) },
   ]
-  // The resolver's default NFL layout with no league settings: QB, RB, 2 WR, TE, DEF = 6 starters.
-  const full = ['QB', 'RB', 'WR', 'WR', 'TE', 'DEF'].map((s, i) => starter(`P${i}`, s))
+  // The resolver's default NFL layout for a league with no saved roster layout (settings: {}): the redraft
+  // contract's QB, RB, RB, WR, WR, TE, FLX, K, DEF = 9 starters (lib/redraft/sportConfig.ts derives it from
+  // lib/league-concepts/redraftDefaults.ts). It was 6 while ffb371161's cut lineup stood.
+  const full = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLX', 'K', 'DEF'].map((s, i) => starter(`P${i}`, s))
   m.rosters = [
     { id: 'r1', seasonId: 'S', teamName: 'Aces', ownerName: 'a', players: [...full, starter('Bench Guy', 'BN')] },
-    { id: 'r2', seasonId: 'S', teamName: null, ownerName: 'Bo', players: [...full.slice(0, 5), starter('Gone', 'DEF', { droppedAt: new Date() })] },
+    { id: 'r2', seasonId: 'S', teamName: null, ownerName: 'Bo', players: [...full.slice(0, 8), starter('Gone', 'DEF', { droppedAt: new Date() })] },
     { id: 'r3', seasonId: 'S', teamName: 'Comets', ownerName: 'c', players: [...full.slice(1), starter('Hurt QB', 'QB', { injuryStatus: 'Out' })] },
   ]
   m.tradeCount = 1
@@ -83,6 +85,19 @@ describe('readWeeklyChecklist', () => {
     expect((items.lineups as { detail: { en: string } }).detail.en).toContain("Starting someone who can't play: Comets.")
     expect(items.trades).toMatchObject({ status: 'todo' })
     expect(m.tradeWhere).toEqual({ seasonId: 'S', status: 'pending', acceptedAt: { not: null }, vetoMode: 'commissioner' })
+  })
+
+  it("judges a league with a saved layout by ITS layout, not the default (a saved 6-starter lineup stays 6)", async () => {
+    m.league = { ...plain, sport: 'NFL', settings: { starter_slots: { QB: 1, RB: 1, WR: 2, TE: 1, DEF: 1 } }, tradeDeadlineWeek: 11 }
+    const six = ['QB', 'RB', 'WR', 'WR', 'TE', 'DEF'].map((s, i) => starter(`S${i}`, s))
+    m.rosters = [
+      { id: 'r1', seasonId: 'S', teamName: 'Aces', ownerName: 'a', players: [...six, starter('Bench Guy', 'BN')] },
+      { id: 'r2', seasonId: 'S', teamName: null, ownerName: 'Bo', players: six.slice(0, 5) },
+    ]
+    const view = await readWeeklyChecklist('L', NOW)
+    const items = Object.fromEntries((view as { items: Array<{ id: string }> }).items.map((i) => [i.id, i]))
+    expect(items.lineups).toMatchObject({ status: 'todo', title: { en: '1 team needs a lineup fix for week 7' } })
+    expect((items.lineups as { detail: { en: string } }).detail.en).toContain('Empty starting slots: Bo.')
   })
 
   it('says why it does not apply: other formats, no season, or not in season', async () => {
