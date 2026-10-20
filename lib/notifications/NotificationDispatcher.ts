@@ -141,7 +141,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       /*
        * Quiet hours (spec item 16), evaluated in the USER's timezone.
        *
-       * ⚠ THIS SUPPRESSES PUSH AND SMS ONLY. The in-app row below is a log; dropping it
+       * ⚠ THIS SUPPRESSES EXTERNAL ALERTS (PUSH, EMAIL AND SMS). The in-app row below is a log; dropping it
        * would mean the user wakes to no record that anything happened and the unread
        * badge — which counts stored rows — under-reports their night. Quiet hours defer
        * a buzz, they do not delete history.
@@ -238,6 +238,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       // notices (`system_account`) still send, as the unsubscribe page says; a failed read withholds.
       if (
         catPrefs.email &&
+        !quiet.push &&
         availability.email &&
         profile.email &&
         !skipChannels?.email &&
@@ -277,7 +278,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           set('email',{status:'failed',reason:'persistence_failed',attempts})
           console.warn("[NotificationDispatcher] email send failed after retry for user", userId, e)
         }
-      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
+      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
 
       if (allowsLeagueSms(category, effectiveLeagueId) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
         // A Twilio charge per text, previously uncapped. Over the daily cap the text is

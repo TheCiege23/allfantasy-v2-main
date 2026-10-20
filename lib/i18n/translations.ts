@@ -3436,7 +3436,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.testFailed": "Failed to send test notification.",
     "settings.notifications.quietHours": "Quiet hours",
     "settings.notifications.quietHoursHint":
-      "Hold back phone alerts overnight. Anything that arrives still shows up in Notifications — this only stops it buzzing.",
+      "Silence push, email and text alerts during these hours. Updates remain in Notifications; they are not replayed as a morning burst.",
     "settings.notifications.quietHoursFrom": "From",
     "settings.notifications.quietHoursUntil": "Until",
     "settings.notifications.quietHoursAllowUrgent": "Still allow urgent alerts",

@@ -1230,7 +1230,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.quietHoursAllowUrgent": "Permitir igualmente las alertas urgentes",
   "settings.notifications.quietHoursFrom": "Desde",
   "settings.notifications.quietHoursHint":
-    "Retén las alertas del teléfono durante la noche. Todo lo que llegue sigue apareciendo en Notificaciones; esto solo evita que vibre.",
+    "Silencia las alertas push, de correo y de texto durante estas horas. Las novedades quedan en Notificaciones; no se reenvían todas por la mañana.",
   "settings.notifications.quietHoursNoZone":
     "No tienes zona horaria, así que estas horas usan la hora del servidor (UTC). Configura tu zona horaria en Preferencias.",
   "settings.notifications.quietHoursSameHour":
