@@ -382,6 +382,7 @@ async function loadRosterGamesCount(
   const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
   if (!league) return null
   return loadGamesCountScoring({
+    leagueId: args.leagueId,
     leagueSettings: league.settings,
     sport: String(league.sport ?? '').toUpperCase(),
     rosterId: args.rosterId,
@@ -423,6 +424,7 @@ async function scoreRosterStartersDaily(args: {
   const playerIds = players.map((p: (typeof players)[number]) => p.playerId)
   // "Which games count" applies across the days he STARTED: only those days' games are eligible.
   const gamesCount = await loadGamesCountScoring({
+    leagueId: args.leagueId,
     leagueSettings: league.settings,
     sport,
     rosterId: args.rosterId,

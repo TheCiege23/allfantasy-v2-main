@@ -17,9 +17,11 @@
  * write can never change a score.
  *
  * 🛑 `all` NEVER TOUCHES THE TWO TABLES THIS FEATURE ADDS. `player_week_game_scores` and
- * `redraft_games_count_choices` arrive with migration `20261020180000_games_count_setting`, and a
+ * `redraft_games_count_choices` arrive with migration `20261020190000_games_count_setting`, and a
  * query against a table production lacks raises P2021. Every reader and writer is behind
- * `gamesCountActive`, which is false for every league until a commissioner picks another mode.
+ * `gamesCountActive`, which is false for every league until a commissioner picks another mode — and
+ * a non-default mode is honoured only once both tables exist (`gamesCountTablesExist`); without them it
+ * scores as `all`. When the setting may change at all is lib/redraft/gamesCountSwitch.ts.
  *
  * Pure and client-safe: the settings panel and the player card import it.
  */

@@ -379,11 +379,22 @@ he was benched is not eligible: it can be neither counted, picked nor locked. In
 league every game of a started player is eligible. Bench points (the guillotine tiebreak), best ball,
 devy and C2C scoring are unchanged.
 
-Storage (migration `20261020180000_games_count_setting`, **not applied**): `player_week_game_scores`
+Storage (migration `20261020190000_games_count_setting`, **not applied**): `player_week_game_scores`
 (one row per player per real game, written by the weekly stat sync for opted-in leagues only) and
 `redraft_games_count_choices` (the picks and locks). Manager API: `GET/POST /api/redraft/games-count`.
 UI: the commissioner radio group in the league settings sport-config panel, and a "This week's games"
 section on the player card for the manager's own players.
 
-> 🛑 Apply the migration before any league leaves `all`. Opting in on a database without the tables
-> fails that league's scoring with P2021.
+**When it may change** (`lib/redraft/gamesCountSwitch.ts`, enforced by the settings PATCH):
+
+- Changing the mode or N is refused (409 `games_count_season_in_progress`) while a season is under way:
+  allowed before the draft, after it but before week 1 starts, and once the season is `complete`. A
+  running season with unknown week dates is refused. Going back to "All games" is a change too.
+- Leaving "All games" is refused (409 `games_count_storage_unavailable`) until BOTH tables exist,
+  probed by effect with `to_regclass`. Going back to "All games" never needs the tables.
+- A `sportConfig` blob that does not mention the two keys keeps the stored values, so a stale blob cannot
+  turn the rule off by omission.
+
+**Fail safe.** If a non-default mode is stored while the tables are missing, scoring and the stat sync
+treat the league as "All games" and log a `[games-count]` warning; the manager API answers 409
+`games_count_storage_unavailable`. Nothing throws P2021.

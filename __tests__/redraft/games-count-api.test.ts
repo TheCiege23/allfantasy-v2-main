@@ -18,6 +18,7 @@ const db = vi.hoisted(() => ({
   sportsDataCache: { findUnique: vi.fn(), findMany: vi.fn() },
   playerWeekGameScore: { findMany: vi.fn() },
   redraftGamesCountChoice: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() },
+  $queryRaw: vi.fn(),
 }))
 const auth = vi.hoisted(() => ({
   member: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async (
 vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false }))
 
 import { applyGamesCountAction, getGamesCountState } from '@/lib/redraft/gamesCountService'
+import { resetGamesCountTablesProbe } from '@/lib/redraft/gamesCountStore'
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const BEST2 = { sportConfig: { gamesCountMode: 'best_n', gamesCountBestN: 2 } }
@@ -46,6 +48,7 @@ let schedule: Sched[]
 
 function arrange(settings: unknown, over: { slot?: string; stats?: Array<[string, string, number]>; choice?: Record<string, unknown> | null } = {}) {
   auth.member.mockResolvedValue({ ok: true })
+  db.$queryRaw.mockResolvedValue([{ ok: true }])
   auth.lookup.mockResolvedValue({ season: { id: 's1', leagueId: 'L1' }, roster: { id: 'r1', leagueId: 'L1' } })
   db.league.findUnique.mockResolvedValue({ sport: 'NBA', settings })
   db.league.findFirst.mockResolvedValue({ sport: 'NBA', settings })
@@ -76,7 +79,10 @@ function arrange(settings: unknown, over: { slot?: string; stats?: Array<[string
 const act = (input: Parameters<typeof applyGamesCountAction>[0]['input'], now = NOW) =>
   applyGamesCountAction({ leagueId: 'L1', userId: 'u1', playerId: 'p1', input, now })
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  resetGamesCountTablesProbe()
+})
 
 describe('refusals before anything is read from the new tables', () => {
   it('403 for a non-member', async () => {
@@ -93,6 +99,22 @@ describe('refusals before anything is read from the new tables', () => {
     expect(r).toMatchObject({ ok: false, status: 409, code: 'games_count_off' })
     expect(db.playerWeekGameScore.findMany).not.toHaveBeenCalled()
     expect(db.redraftGamesCountChoice.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('fail safe: tables missing → 409 games_count_storage_unavailable, no query against them, a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      arrange(LOCK)
+      db.$queryRaw.mockResolvedValue([{ ok: false }])
+      expect(await act({ action: 'lock', gameId: 'g2' })).toMatchObject({ ok: false, status: 409, code: 'games_count_storage_unavailable' })
+      expect(await getGamesCountState({ leagueId: 'L1', userId: 'u1', playerIds: ['p1'] })).toMatchObject({ status: 409 })
+      expect(db.playerWeekGameScore.findMany).not.toHaveBeenCalled()
+      expect(db.redraftGamesCountChoice.findUnique).not.toHaveBeenCalled()
+      expect(db.redraftGamesCountChoice.upsert).not.toHaveBeenCalled()
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[games-count] api'))
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('403 for a member with no team in the league (roster ownership)', async () => {

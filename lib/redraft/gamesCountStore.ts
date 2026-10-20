@@ -15,7 +15,7 @@ import {
  * weekly stat sync, and the managers' picks / lock-ins.
  *
  * 🛑 CALL NOTHING HERE FOR A LEAGUE WHOSE SETTING IS `all`. Both tables arrive with migration
- * `20261020180000_games_count_setting`; querying a table production lacks raises P2021. Every caller
+ * `20261020190000_games_count_setting`; querying a table production lacks raises P2021. Every caller
  * gates on `readGamesCountSetting(...).mode !== 'all'` first, which no league satisfies until a
  * commissioner opts in.
  *
@@ -60,6 +60,45 @@ export type GamesCountDb = {
 
 export function gamesCountDb(client: unknown = prisma): GamesCountDb {
   return client as GamesCountDb
+}
+
+export type TableProbeDb = {
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>
+}
+
+/** A positive answer is kept for the process: tables are not dropped under a running server. */
+let tablesSeen = false
+
+/** Tests only: forget a positive probe. */
+export function resetGamesCountTablesProbe(): void {
+  tablesSeen = false
+}
+
+/**
+ * True when BOTH games-count tables exist — checked by effect with `to_regclass`, which never throws on
+ * a missing table, so this opens by itself once the migration is applied. Any failure of the probe
+ * itself reads as "missing": every caller treats missing as "count every game", the safe direction.
+ */
+export async function gamesCountTablesExist(db: unknown = prisma): Promise<boolean> {
+  if (tablesSeen) return true
+  let ok = false
+  try {
+    const rows = await (db as TableProbeDb).$queryRaw<Array<{ ok: boolean }>>`SELECT (to_regclass('public.player_week_game_scores') IS NOT NULL
+        AND to_regclass('public.redraft_games_count_choices') IS NOT NULL) AS ok`
+    ok = rows?.[0]?.ok === true
+  } catch {
+    ok = false
+  }
+  if (ok) tablesSeen = true
+  return ok
+}
+
+/** The fail-safe log line, one shape for scoring, the sync and the API. */
+export function warnGamesCountStorageMissing(where: string, leagueId: string): void {
+  console.warn(
+    `[games-count] ${where}: league ${leagueId} counts only some games, but the games-count tables do not exist ` +
+      '(migration 20261020190000_games_count_setting not applied). Counting every game instead.',
+  )
 }
 
 /** playerId → that player's games this week, chronological. */
@@ -155,10 +194,18 @@ export async function loadGamesCountScoring(args: {
   season: number
   week: number
   players: ReadonlyArray<{ playerId: string; sport: string }>
+  /** For the fail-safe warning only. */
+  leagueId?: string
   db?: GamesCountDb
 }): Promise<GamesCountScoring | null> {
   const setting = readGamesCountSetting(args.leagueSettings, args.sport)
   if (setting.mode === 'all') return null
+  // A non-default mode on a database without the tables (set through some door the settings PATCH does
+  // not guard) must never throw P2021 into a matchup: score it as every game, and say so.
+  if (!(await gamesCountTablesExist(args.db ?? prisma))) {
+    warnGamesCountStorageMissing('scoring', args.leagueId ?? '?')
+    return null
+  }
   const db = args.db ?? gamesCountDb()
   const games = new Map<string, StoredWeekGame[]>()
   for (const playerSport of new Set(args.players.map((p) => p.sport))) {

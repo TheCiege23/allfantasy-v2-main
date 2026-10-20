@@ -24,7 +24,7 @@ import {
   type GamesCountSetting,
   type WeekGame,
 } from './gamesCount'
-import { gamesCountDb, loadWeekGameScores, type GamesCountDb } from './gamesCountStore'
+import { gamesCountDb, gamesCountTablesExist, loadWeekGameScores, warnGamesCountStorageMissing, type GamesCountDb } from './gamesCountStore'
 
 /**
  * The manager's side of "which games count" (lib/redraft/gamesCount.ts): read a started player's games
@@ -124,6 +124,11 @@ async function loadContext(args: {
   const sport = String(league.sport ?? '').toUpperCase()
   const setting = readGamesCountSetting(league.settings, sport)
   if (setting.mode === 'all') return refuse(409, 'games_count_off', 'This league counts every game; there is nothing to choose.')
+  // Fail safe: a non-default mode without its tables is scored as every game, so there is nothing to choose.
+  if (!(await gamesCountTablesExist(args.db ?? prisma))) {
+    warnGamesCountStorageMissing('api', leagueId)
+    return refuse(409, 'games_count_storage_unavailable', 'This league counts every game for now; choosing games is not available yet.')
+  }
 
   const lookup = await resolveRedraftRosterLookupReadOnly({ userId: args.userId, leagueId })
   if (!lookup.season || !lookup.roster || lookup.roster.leagueId !== leagueId) {

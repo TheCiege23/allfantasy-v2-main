@@ -42,7 +42,12 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 import { dayKey, isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
-import { gamesCountDb, writePlayerWeekGameScores } from '@/lib/redraft/gamesCountStore'
+import {
+  gamesCountDb,
+  gamesCountTablesExist,
+  warnGamesCountStorageMissing,
+  writePlayerWeekGameScores,
+} from '@/lib/redraft/gamesCountStore'
 import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 
 export type WeeklyScoreSyncSummary = {
@@ -248,7 +253,12 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const dailyLineupScoring = isDailySport && isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport)
   // A league that counts only some games (best-N / lock-in, lib/redraft/gamesCount.ts) is scored per
   // GAME, so its sync also keeps each player's per-game stats. Off for every other league.
-  const gamesCountScoring = isDailySport && gamesCountActive(survivorLeague?.settings ?? null, sport)
+  let gamesCountScoring = isDailySport && gamesCountActive(survivorLeague?.settings ?? null, sport)
+  // Fail safe: without its tables the league is synced (and scored) as every game, never P2021.
+  if (gamesCountScoring && !(await gamesCountTablesExist(prisma))) {
+    warnGamesCountStorageMissing('stat sync', season.leagueId)
+    gamesCountScoring = false
+  }
   const exileEntries = survivorLeague?.survivorMode && isNativePlatform(survivorLeague.platform)
     ? await prisma.exileWeeklyEntry.findMany({
         where: { leagueId: season.leagueId, week },

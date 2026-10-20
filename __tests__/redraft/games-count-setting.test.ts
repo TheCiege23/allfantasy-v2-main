@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   prisma: {
     league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    redraftSeason: { findMany: vi.fn() },
+    $queryRaw: vi.fn(),
     leagueWaiverSettings: { findUnique: vi.fn() },
     leagueSettings: { upsert: vi.fn() },
   },
@@ -37,6 +39,8 @@ import {
   selectCountingGames,
   type WeekGame,
 } from '@/lib/redraft/gamesCount'
+import { resetGamesCountTablesProbe } from '@/lib/redraft/gamesCountStore'
+import { gamesCountTimingRefusal, keepGamesCountFields } from '@/lib/redraft/gamesCountSwitch'
 
 const sc = (sportConfig: Record<string, unknown>) => ({ sportConfig })
 
@@ -82,7 +86,11 @@ describe('the commissioner settings PATCH', () => {
   let settingsInDb: Record<string, unknown>
   beforeEach(() => {
     vi.clearAllMocks()
+    resetGamesCountTablesProbe()
     settingsInDb = {}
+    // No season yet (pre-draft) and the tables exist, unless a test says otherwise.
+    m.prisma.redraftSeason.findMany.mockResolvedValue([])
+    m.prisma.$queryRaw.mockResolvedValue([{ ok: true }])
     const leagueRow = { id: 'L', sport: 'NBA', platform: 'manual', leagueSize: 12, timezone: 'UTC', teams: [], leagueSettings: null, get settings() { return settingsInDb } }
     m.prisma.league.findFirst.mockImplementation(async () => leagueRow)
     m.prisma.league.findUnique.mockImplementation(async () => ({ settings: settingsInDb }))
@@ -115,6 +123,107 @@ describe('the commissioner settings PATCH', () => {
     const res = await executeLeagueSettingsPatch('u1', { leagueId: 'L', sportConfig: { gamesCountMode: 'best_n', gamesCountBestN: 3 } })
     expect(res.status).toBe(200)
     expect(readGamesCountSetting(settingsInDb, 'NBA')).toEqual({ mode: 'best_n', n: 3 })
+  })
+
+  const patchMode = (sportConfig: Record<string, unknown>) => executeLeagueSettingsPatch('u1', { leagueId: 'L', sportConfig })
+
+  it('409 games_count_storage_unavailable leaving "All games" before the tables exist — and writes nothing', async () => {
+    m.prisma.$queryRaw.mockResolvedValue([{ ok: false }])
+    for (const sc of [{ gamesCountMode: 'lock_in' }, { gamesCountMode: 'best_n', gamesCountBestN: 2 }]) {
+      const res = await patchMode(sc)
+      expect(res.status).toBe(409)
+      expect((await res.json()).code).toBe('games_count_storage_unavailable')
+    }
+    // The probe throwing (no such function, no connection) is "missing" too.
+    m.prisma.$queryRaw.mockRejectedValue(new Error('boom'))
+    expect((await patchMode({ gamesCountMode: 'lock_in' })).status).toBe(409)
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+
+  it('going back to "All games" is always allowed without the tables', async () => {
+    m.prisma.$queryRaw.mockResolvedValue([{ ok: false }])
+    settingsInDb = { sportConfig: { gamesCountMode: 'lock_in' } }
+    const res = await patchMode({ gamesCountMode: 'all', gamesCountBestN: null })
+    expect(res.status).toBe(200)
+    expect(readGamesCountSetting(settingsInDb, 'NBA')).toEqual({ mode: 'all' })
+  })
+
+  it('probes with to_regclass for BOTH tables', async () => {
+    await patchMode({ gamesCountMode: 'lock_in' })
+    const sql = (m.prisma.$queryRaw.mock.calls[0][0] as TemplateStringsArray).join('')
+    expect(sql).toContain("to_regclass('public.player_week_game_scores') IS NOT NULL")
+    expect(sql).toContain("to_regclass('public.redraft_games_count_choices') IS NOT NULL")
+  })
+
+  describe('the season-in-progress rule', () => {
+    // NBA 2026 week 1 starts 20 Oct; the 1999 season has no recorded dates.
+    const season = (status: string, year = 2026) => [{ sport: 'NBA', season: year, status }]
+    const BEFORE = new Date('2026-10-19T12:00:00.000Z')
+    const AFTER = new Date('2026-10-21T12:00:00.000Z')
+
+    it('pure rule: open in setup, before week 1, and once complete; closed from week 1 on and with unknown dates', () => {
+      expect(gamesCountTimingRefusal([], AFTER)).toBeNull()
+      expect(gamesCountTimingRefusal(season('setup'), AFTER)).toBeNull()
+      expect(gamesCountTimingRefusal(season('active'), BEFORE)).toBeNull()
+      expect(gamesCountTimingRefusal(season('complete'), AFTER)).toBeNull()
+      expect(gamesCountTimingRefusal(season('active'), new Date('2026-10-20T00:00:00.000Z'))?.code).toBe('games_count_season_in_progress')
+      expect(gamesCountTimingRefusal(season('active'), AFTER)?.code).toBe('games_count_season_in_progress')
+      expect(gamesCountTimingRefusal(season('in_season'), AFTER)?.code).toBe('games_count_season_in_progress')
+      expect(gamesCountTimingRefusal(season('playoffs'), AFTER)?.code).toBe('games_count_season_in_progress')
+      expect(gamesCountTimingRefusal(season('active', 1999), BEFORE)?.code).toBe('games_count_season_in_progress')
+    })
+
+    it('the PATCH refuses a mode change, an N change and a change back to "All games" mid-season', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(AFTER)
+      try {
+        m.prisma.redraftSeason.findMany.mockResolvedValue(season('active'))
+        settingsInDb = { sportConfig: { gamesCountMode: 'best_n', gamesCountBestN: 2 } }
+        for (const sc of [
+          { gamesCountMode: 'lock_in' },
+          { gamesCountMode: 'best_n', gamesCountBestN: 3 },
+          { gamesCountMode: 'all', gamesCountBestN: null },
+        ]) {
+          const res = await patchMode(sc)
+          expect(res.status).toBe(409)
+          expect((await res.json()).code).toBe('games_count_season_in_progress')
+        }
+        expect(m.prisma.league.update).not.toHaveBeenCalled()
+        // Re-saving the SAME setting mid-season (the panel autosaves the whole blob) is not a change.
+        expect((await patchMode({ gamesCountMode: 'best_n', gamesCountBestN: 2, enableIDP: false })).status).toBe(200)
+        // A blob that omits the keys keeps the stored values instead of turning the rule off.
+        expect((await patchMode({ enableIDP: true })).status).toBe(200)
+        expect(readGamesCountSetting(settingsInDb, 'NBA')).toEqual({ mode: 'best_n', n: 2 })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('the PATCH allows a change before week 1 and after the season completes', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        vi.setSystemTime(BEFORE)
+        m.prisma.redraftSeason.findMany.mockResolvedValue(season('active'))
+        expect((await patchMode({ gamesCountMode: 'lock_in' })).status).toBe(200)
+        vi.setSystemTime(AFTER)
+        m.prisma.redraftSeason.findMany.mockResolvedValue(season('complete'))
+        expect((await patchMode({ gamesCountMode: 'best_n', gamesCountBestN: 3 })).status).toBe(200)
+        expect(readGamesCountSetting(settingsInDb, 'NBA')).toEqual({ mode: 'best_n', n: 3 })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+})
+
+describe('keepGamesCountFields', () => {
+  it('keeps stored keys only when the incoming blob does not mention them', () => {
+    const stored = { gamesCountMode: 'lock_in', other: 1 }
+    expect(keepGamesCountFields(stored, { x: 2 })).toEqual({ x: 2, gamesCountMode: 'lock_in' })
+    expect(keepGamesCountFields(stored, null)).toEqual({ gamesCountMode: 'lock_in' })
+    expect(keepGamesCountFields(stored, { gamesCountMode: 'all' })).toEqual({ gamesCountMode: 'all' })
+    expect(keepGamesCountFields({}, { x: 2 })).toEqual({ x: 2 })
+    expect(keepGamesCountFields({}, null)).toBeNull()
   })
 })
 

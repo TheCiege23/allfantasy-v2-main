@@ -26,6 +26,7 @@ const db = vi.hoisted(() => ({
   sportsDataCache: { findUnique: vi.fn(), findMany: vi.fn() },
   sportsGame: { findMany: vi.fn() },
   sportsPlayer: { findFirst: vi.fn() },
+  $queryRaw: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/devy/scoringEligibilityEngine', () => ({
@@ -37,6 +38,7 @@ vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async (
 vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false }))
 
 import { calculateScoreFromSportConfig, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
+import { resetGamesCountTablesProbe } from '@/lib/redraft/gamesCountStore'
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const ALL = { sportConfig: {} }
@@ -86,7 +88,11 @@ const pts = (n: number, position = 'PG') => calculateScoreFromSportConfig('L1', 
 const round = (n: number) => Math.round(n * 100) / 100
 const score = () => scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2026 })
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  resetGamesCountTablesProbe()
+  db.$queryRaw.mockResolvedValue([{ ok: true }])
+})
 
 describe('All games — the default', () => {
   it('scores exactly the whole-week rows and never queries the new tables', async () => {
@@ -153,6 +159,34 @@ describe('Lock-In', () => {
     arrange(LOCK, [{ playerId: 'a', lockedGameId: 'g2' }])
     const r = await score()
     expect(r.points).toBe(round((await pts(30)) + (await pts(4, 'SG'))))
+  })
+})
+
+describe('fail safe: a non-default mode without its tables scores as All games', () => {
+  it('weekly and daily: whole-week score, no query against the missing tables, a warning, never a throw', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      arrange(ALL)
+      const base = await score()
+      for (const settings of [LOCK, BEST2]) {
+        arrange(settings)
+        db.$queryRaw.mockResolvedValue([{ ok: false }])
+        // A query against the missing table would raise P2021.
+        db.playerWeekGameScore.findMany.mockRejectedValue(new Error('P2021'))
+        db.redraftGamesCountChoice.findMany.mockRejectedValue(new Error('P2021'))
+        const r = await score()
+        expect(JSON.stringify(r)).toBe(JSON.stringify(base))
+      }
+      arrange({ sportConfig: { ...DAILY, gamesCountMode: 'lock_in' } })
+      db.$queryRaw.mockRejectedValue(new Error('probe failed'))
+      db.playerWeekGameScore.findMany.mockRejectedValue(new Error('P2021'))
+      const daily = await score()
+      arrange({ sportConfig: DAILY })
+      expect(JSON.stringify(daily)).toBe(JSON.stringify(await score()))
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[games-count] scoring'))
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
 
@@ -230,6 +264,21 @@ describe('the stat sync writes per-game rows for an opted-in league only', () =>
       ['G-B', 31, null],
     ])
     expect(db.playerWeekGameScore.deleteMany.mock.calls[0][0].where.gameId.notIn).toEqual(['G-A', 'G-B'])
+  })
+
+  it('fail safe: an opted-in league without the tables syncs as All games, with a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      db.$queryRaw.mockResolvedValue([{ ok: false }])
+      const summary = await runSync(LOCK)
+      expect(db.playerWeeklyScore.upsert).toHaveBeenCalledTimes(1)
+      expect(db.playerWeekGameScore.upsert).not.toHaveBeenCalled()
+      expect(db.playerWeekGameScore.deleteMany).not.toHaveBeenCalled()
+      expect(summary.weekGameScoresUpserted).toBeUndefined()
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[games-count] stat sync'))
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('never touches the per-game table, the schedule, or the extra columns for an all-games league', async () => {

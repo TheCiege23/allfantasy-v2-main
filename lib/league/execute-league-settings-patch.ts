@@ -44,6 +44,7 @@ import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { gamesCountSportConfigError } from '@/lib/redraft/gamesCount'
+import { gamesCountChangeRefusal, gamesCountSettingOf, keepGamesCountFields } from '@/lib/redraft/gamesCountSwitch'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -266,6 +267,24 @@ export async function executeLeagueSettingsPatch(
     if (sportConfig === undefined) continue
     const gamesCountError = gamesCountSportConfigError(sportConfig, String(body.sport ?? league.sport ?? ''))
     if (gamesCountError) return jsonError(gamesCountError, 400)
+  }
+  // A valid value may still not be a permitted CHANGE: not while a season is under way, and never off
+  // "All games" before the tables exist (lib/redraft/gamesCountSwitch.ts). A blob that does not mention
+  // the keys keeps the stored values, so a stale blob cannot turn the rule off by omission.
+  {
+    const storedSportConfig = (league.settings as { sportConfig?: unknown } | null)?.sportConfig
+    const merge = body.settingsMerge as { sportConfig?: unknown } | null | undefined
+    if (body.sportConfig !== undefined) body.sportConfig = keepGamesCountFields(storedSportConfig, body.sportConfig)
+    if (merge && typeof merge === 'object' && !Array.isArray(merge) && 'sportConfig' in merge) {
+      body.settingsMerge = { ...merge, sportConfig: keepGamesCountFields(storedSportConfig, merge.sportConfig) }
+    }
+    const from = gamesCountSettingOf(storedSportConfig, league.sport)
+    for (const sportConfig of [body.sportConfig, (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig]) {
+      if (sportConfig === undefined) continue
+      const to = gamesCountSettingOf(sportConfig, String(body.sport ?? league.sport ?? ''))
+      const refusal = await gamesCountChangeRefusal({ leagueId, from, to })
+      if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    }
   }
 
   if (body.season != null) {
