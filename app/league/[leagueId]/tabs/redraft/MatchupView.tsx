@@ -2,6 +2,7 @@
 
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import type { RedraftLiveScoringClient, RedraftMatchupClient } from '@/lib/redraft/client'
+import { GamesLimitsIndicator, readGamesLimitsSummary } from './GamesLimitsIndicator'
 
 type LiveMatchup = RedraftLiveScoringClient['matchups'][number]
 type LiveTeam = LiveMatchup['home']
@@ -150,6 +151,8 @@ export function MatchupView({
             <p className="text-2xl font-bold text-white">{opponentScore == null ? '—' : opponentScore.toFixed(2)}</p>
           </div>
         </div>
+
+        <GamesLimitsIndicator summary={readGamesLimitsSummary(snapshot, isSelectedAway ? 'away' : 'home')} />
 
         {missing > 0 ? (
           <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-100">

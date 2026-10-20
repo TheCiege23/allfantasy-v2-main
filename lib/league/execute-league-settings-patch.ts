@@ -43,6 +43,8 @@ import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-ser
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -365,6 +367,33 @@ export async function executeLeagueSettingsPatch(
     championshipLengthToStore = n
   }
 
+  /*
+   * Games limits — GP caps (NBA/NHL/MLB), NHL goalie minimum, MLB innings min/max (lib/redraft/gamesLimits.ts).
+   * Stored in `settings.games_limits`; null/{} turns them off. Sport-gated and range-checked (400), and
+   * refused for a league that is not on daily lineups: only the per-day lineup and stat rows say which slot
+   * a game was played in, so anywhere else the setting would save and silently do nothing.
+   * `settingsMerge` can write the same key, so it is held to the same rule.
+   */
+  let gamesLimitsToStore: GamesLimits | null | undefined = undefined
+  {
+    const merge = body.settingsMerge as Record<string, unknown> | null | undefined
+    const viaMerge = merge && typeof merge === 'object' && !Array.isArray(merge) && GAMES_LIMITS_SETTINGS_KEY in merge
+    const raw = body.gamesLimits !== undefined ? body.gamesLimits : viaMerge ? merge[GAMES_LIMITS_SETTINGS_KEY] : undefined
+    if (body.gamesLimits !== undefined || viaMerge) {
+      const effectiveSettings = {
+        ...((league.settings as Record<string, unknown> | null) ?? {}),
+        ...(body.sportConfig !== undefined ? { sportConfig: body.sportConfig } : {}),
+      }
+      const parsed = parseGamesLimits(raw, String(league.sport ?? ''), effectiveSettings)
+      if (!parsed.ok) return jsonError(parsed.error, 400)
+      if (parsed.value && !isDailyLineupScoringEnabled(effectiveSettings, String(league.sport ?? ''))) {
+        return jsonError('Games-played caps, goalie minimums and innings limits need daily lineups to be on for this league.', 400)
+      }
+      gamesLimitsToStore = parsed.value
+      if (viaMerge) merge[GAMES_LIMITS_SETTINGS_KEY] = parsed.value
+    }
+  }
+
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
@@ -523,6 +552,20 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('settingsMerge')
+  }
+
+  if (body.gamesLimits !== undefined && gamesLimitsToStore !== undefined) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          [GAMES_LIMITS_SETTINGS_KEY]: gamesLimitsToStore === null ? null : (gamesLimitsToStore as Prisma.InputJsonValue),
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push(GAMES_LIMITS_SETTINGS_KEY)
   }
 
   /*

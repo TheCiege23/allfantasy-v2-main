@@ -8,6 +8,7 @@ import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
+import { GamesLimitsSettingsPanel } from './settings/GamesLimitsSettingsPanel'
 import { TradeSettingsPanel } from './settings/TradeSettingsPanel'
 import { WaiverLeagueSettingsPanel } from './settings/WaiverLeagueSettingsPanel'
 import { RosterComplianceSettingsPanel } from './settings/RosterComplianceSettingsPanel'
@@ -377,6 +378,12 @@ export function CommissionerSettingsModal({
                 sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                 canEdit={canEdit}
                 scoringConfig={payload?.scoringConfig ?? null}
+              />
+              <GamesLimitsSettingsPanel
+                sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
+                initialData={initialData}
+                canEdit={canEdit}
+                debouncedSave={debouncedSave}
               />
               <details className="border-t border-white/[0.06] bg-[#0a0f18]/40">
                 <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-[#ffb8d1]/80">
