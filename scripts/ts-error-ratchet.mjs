@@ -131,9 +131,18 @@ function getTscOutput() {
     if (!existsSync(path)) usageError(`--from log not found: ${path}`)
     return readFileSync(path, 'utf8')
   }
+  /*
+   * ⚠ THE HEAP IS 12 GB, NOT 8. A full `tsc --noEmit` of this repo now runs right at 8 GB: on
+   * 2026-10-20 a run of origin/main (ddea3cd80) with 14.6 GB free aborted with SIGABRT, V8's
+   * heap-limit exit. CI's ratchet failed on every push to main from b0dff81a4 onward (its log
+   * was not readable from the session that measured this) while a scoped check of the changed
+   * files and their importers showed no new errors — consistent with the heap, not a regression.
+   * An analysis that runs out of heap is not a verdict either way, so it must not be the thing
+   * that decides. `ubuntu-latest` runners have 16 GB; 12 GB leaves the OS and npm room.
+   */
   const r = spawnSync(
     process.execPath,
-    ['--max-old-space-size=8192', './node_modules/typescript/lib/tsc.js', '--noEmit'],
+    ['--max-old-space-size=12288', './node_modules/typescript/lib/tsc.js', '--noEmit'],
     { cwd: root, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 }
   )
 
