@@ -171,10 +171,10 @@ export function ThreadPanel({
 
   const label = kind === 'dm' ? 'DMs' : 'huddles'
 
-  const loadThreads = useCallback(async () => {
-    setError(null)
+  const loadThreads = useCallback(async (quiet = false) => {
+    if (!quiet) setError(null)
     try {
-      const res = await fetch('/api/shared/chat/threads')
+      const res = await fetch('/api/shared/chat/threads', { cache: 'no-store', signal: AbortSignal.timeout(15000) })
       const data = (await res.json().catch(() => ({}))) as {
         threads?: PlatformThread[]
         error?: string
@@ -195,26 +195,13 @@ export function ThreadPanel({
     void loadThreads()
   }, [loadThreads])
 
-  /*
-   * The list used to load once and never again while you looked at it, so a new DM, an unread count
-   * and who is active only changed when you navigated away and back. Every 30s while the list is on
-   * screen and the tab is visible — slower than a conversation's own poll, because the list read is
-   * heavier and nothing in it is a live exchange.
-   */
-  useEffect(() => {
-    if (openThread) return
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void loadThreads()
-    }, 30_000)
-    return () => window.clearInterval(id)
-  }, [openThread, loadThreads])
-
   const loadMessages = useCallback(async (thread: PlatformThread) => {
     if (activeThreadId.current !== thread.id) return
     setError(null)
     try {
       const res = await fetch(
         `/api/shared/chat/threads/${encodeURIComponent(thread.id)}/messages`,
+        { cache: 'no-store', signal: AbortSignal.timeout(15000) },
       )
       const data = (await res.json().catch(() => ({}))) as {
         messages?: PlatformMessage[]
@@ -266,8 +253,8 @@ export function ThreadPanel({
 
   // Near-realtime: without this a message only appeared when the thread was reopened.
   useChatPolling({
-    refresh: () => (openThread ? loadMessages(openThread) : Promise.resolve()),
-    enabled: Boolean(openThread),
+    refresh: () => (openThread ? loadMessages(openThread) : loadThreads(true)),
+    enabled: true,
     active: busy,
   })
 

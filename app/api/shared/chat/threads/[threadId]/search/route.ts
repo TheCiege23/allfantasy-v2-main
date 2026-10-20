@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { resolvePlatformUser } from "@/lib/platform/current-user"
 import { searchPlatformThreadMessages } from "@/lib/platform/chat-service"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
-import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { getLeagueChatMessages } from "@/lib/league-chat/LeagueChatMessageService"
 import { filterBbReadableMessages } from "@/lib/big-brother/bbChatChannelAccess"
 import { bracketMessagesToPlatform } from "@/lib/chat-core/league-message-proxy"
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ threadId:
       })
     }
 
-    const mainLeagueAccess = await canAccessLeagueDraft(leagueId, user.appUserId)
+    const mainLeagueAccess = await resolveLeagueAccess(leagueId, user.appUserId)
     if (!mainLeagueAccess) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 })
     }
