@@ -29,6 +29,8 @@ export type SettingsSubPageId =
   | 'divisions'
   | 'ai'
   | 'commissioner-tools'
+  /** Manual point adjustments per matchup, with a reason (lib/score-adjustments). */
+  | 'score-adjustments'
   /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
   | 'survivor-tribes'
 
@@ -383,6 +385,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       rows: [
         { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
         { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+        { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },
         ...(isSurvivorSettingsLeague(league)
           ? [{ id: 'survivor-tribes', label: 'Survivor tribes', value: 'Tribes, assignment & announce', target: 'survivor-tribes' as const }]
           : []),
