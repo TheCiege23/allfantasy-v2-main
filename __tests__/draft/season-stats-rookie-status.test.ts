@@ -102,11 +102,31 @@ describe('NBA: any prior regular-season games proves not a rookie; nothing prove
   })
 })
 
-describe('NHL: more than 25 prior regular-season games proves not a rookie', () => {
-  it('sums prior seasons', () => {
-    expect(nhlRookieVerdict({ rows: [{ season: '2024', gamesPlayed: 13, stats: {} }, { season: '2025', gamesPlayed: 13, stats: {} }], season: 2026 })).toBe('not_rookie')
-    expect(nhlRookieVerdict({ rows: [{ season: '2025', gamesPlayed: 25, stats: {} }], season: 2026 })).toBe('unknown')
-    expect(nhlRookieVerdict({ rows: [{ season: '2026', gamesPlayed: 82, stats: {} }], season: 2026 })).toBe('unknown')
+describe('NHL: the official rule — >25 games in one prior season, or 6+ in each of two', () => {
+  const nhl = (...games: Array<[number, number]>) =>
+    nhlRookieVerdict({ rows: games.map(([season, gp]) => ({ season: String(season), gamesPlayed: gp, stats: {} })), season: 2026 })
+
+  it('26 games in one season: not a rookie', () => {
+    expect(nhl([2025, 26])).toBe('not_rookie')
+  })
+
+  it('25 games in one season only: unknown', () => {
+    expect(nhl([2025, 25])).toBe('unknown')
+  })
+
+  it('6 and 6 in two seasons: not a rookie', () => {
+    expect(nhl([2024, 6], [2025, 6])).toBe('not_rookie')
+  })
+
+  it('6 and 5: unknown — and the old career-total reading no longer applies', () => {
+    expect(nhl([2024, 6], [2025, 5])).toBe('unknown')
+    // 30 career games, but never more than 5 in a season and never over 25: not proven.
+    expect(nhl([2019, 5], [2020, 5], [2021, 5], [2022, 5], [2023, 5], [2024, 5])).toBe('unknown')
+  })
+
+  it('reads the RI `games_played` key and ignores the season being drafted for', () => {
+    expect(nhlRookieVerdict({ rows: [{ season: '2025', gamesPlayed: null, stats: { games_played: 40 } }], season: 2026 })).toBe('not_rookie')
+    expect(nhl([2026, 82])).toBe('unknown')
   })
 })
 

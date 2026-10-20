@@ -1701,6 +1701,9 @@ export async function getResolvedDraftPoolForLeague(
     const perfRookieVerdicts = perfStart('9c. loadSeasonStatsRookieVerdicts')
     seasonStatsRookieVerdicts = await loadSeasonStatsRookieVerdicts(prisma as never, {
       sport,
+      // ⚠ The league's own season. A rookie draft held AFTER that season ends (league not yet rolled
+      // forward) may want season + 1, so the season just played counts; as written it does not,
+      // which errs lenient — fewer players proven non-rookies, none refused wrongly.
       season: Number.isInteger(league?.season) ? Number(league?.season) : rookieClassYear(sport),
       players: poolRows.flatMap((p) => {
         const riId = rollingInsightsIdOfPoolRow(p)

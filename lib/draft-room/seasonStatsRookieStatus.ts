@@ -54,8 +54,15 @@ export const ROOKIE_STATS_SOURCE = 'rolling_insights'
  */
 export const MLB_ROOKIE_MAX_AT_BATS = 130
 export const MLB_ROOKIE_MAX_INNINGS = 50
-/** NHL (owner's rule): more than 25 regular-season games before season S ends rookie status. */
-export const NHL_ROOKIE_MAX_PRIOR_GAMES = 25
+/**
+ * NHL, the official rookie rule: a player is NOT a rookie for season S if, in any single season
+ * before S, he played more than 25 regular-season NHL games, or he played 6 or more in each of any
+ * two preceding seasons. ⚠ The rule's third clause — 26 or older on September 15 of S — is ignored:
+ * we have no reliable birth dates (pool ages come from a DOB the provider once mangled), so an older
+ * player with little NHL time can read as a rookie-eligible `unknown` when the NHL would not.
+ */
+export const NHL_ROOKIE_MAX_GAMES_IN_ONE_SEASON = 25
+export const NHL_ROOKIE_TWO_SEASON_GAMES = 6
 /**
  * The youngest age at which we assume a player could have had major-league time. Pool ages come
  * from a DOB the provider once mangled (±1 year, `contracts/rolling-insights/GAPS.md`), so this sits
@@ -123,14 +130,20 @@ export function nbaRookieVerdict(args: { rows: readonly StoredSeasonStatsRow[]; 
 }
 
 /**
- * NHL: more than `NHL_ROOKIE_MAX_PRIOR_GAMES` regular-season games before S. The sum over the rows
- * we can read is a LOWER bound on the true total, so exceeding the limit is proof even when other
- * seasons are missing; staying under it proves nothing, so that is `unknown`.
+ * NHL, by the official rule above. Either clause, met by the seasons we CAN read, is proof even when
+ * other seasons are missing (more history can only add games); failing both proves nothing, so that
+ * is `unknown` — never `rookie`, because stored NHL history is too short to show a clean career.
  */
 export function nhlRookieVerdict(args: { rows: readonly StoredSeasonStatsRow[]; season: number }): RookieVerdict {
-  let games = 0
-  for (const row of priorRows(args.rows, args.season)) games += Math.max(0, gamesPlayedOf(row) ?? 0)
-  return games > NHL_ROOKIE_MAX_PRIOR_GAMES ? 'not_rookie' : 'unknown'
+  const gamesBySeason = new Map<number, number>()
+  for (const row of priorRows(args.rows, args.season)) {
+    const year = seasonYear(row.season) as number
+    gamesBySeason.set(year, (gamesBySeason.get(year) ?? 0) + Math.max(0, gamesPlayedOf(row) ?? 0))
+  }
+  const perSeason = [...gamesBySeason.values()]
+  if (perSeason.some((games) => games > NHL_ROOKIE_MAX_GAMES_IN_ONE_SEASON)) return 'not_rookie'
+  if (perSeason.filter((games) => games >= NHL_ROOKIE_TWO_SEASON_GAMES).length >= 2) return 'not_rookie'
+  return 'unknown'
 }
 
 /**
