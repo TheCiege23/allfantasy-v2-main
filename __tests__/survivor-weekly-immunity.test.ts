@@ -16,9 +16,11 @@ const m = vi.hoisted(() => ({
     survivorLeagueConfig: { findUnique: vi.fn() },
     survivorAuditLog: { findMany: vi.fn() },
   },
+  surprise: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: m.db }))
+vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ getActiveSurpriseTribeWeek: m.surprise }))
 
 import {
   awardTribeImmunity,
@@ -98,6 +100,16 @@ describe('awardTribeImmunity', () => {
     m.db.survivorTribeImmunity.upsert.mockResolvedValue({})
     m.db.survivorTribeImmunity.updateMany.mockResolvedValue({ count: 1 })
     m.db.survivorAuditLog.findMany.mockResolvedValue([])
+    m.surprise.mockResolvedValue(null)
+  })
+
+  it('a surprise two-tribe week after the merge is scored like a pre-merge week: the lower temporary tribe gets the necklace', async () => {
+    m.db.survivorGameState.findUnique.mockResolvedValue({ immuneTribeId: null, phase: 'post_merge', mergeTriggeredAt: new Date('2026-12-01T00:00:00Z') })
+    m.db.league.findUnique.mockResolvedValue({ sport: 'NFL', survivorPhase: 'merge', settings: {} })
+    m.surprise.mockResolvedValue({ week: 6, tribeIds: ['vela', 'kora'], benchedUserId: 'c1' })
+    const result = await awardTribeImmunity('L1', 6)
+    // vela (356.8) outscores kora (310): kora attends and its top scorer b1 wears the necklace; the benched c1's lumo row is ignored.
+    expect(result.winners.map(w => [w.tribeId, w.userId])).toEqual([['kora', 'b1']])
   })
 
   it('with the two-highest rule the second tribe is safe too, so only the lowest tribe gets a necklace', async () => {
@@ -215,5 +227,22 @@ describe('council eligibility', () => {
     expect(ctx?.immuneUserIds).toEqual(['a1'])
     expect(ctx?.eligibility.targetUserIds).toEqual(['a2', 'a3'])
     expect(ctx?.scopePlayers).toEqual(scope)
+  })
+
+  it('a surprise council after the merge is scoped to its attending temporary tribe', async () => {
+    vi.clearAllMocks()
+    m.db.survivorTribalCouncil.findFirst.mockResolvedValue({
+      id: 'c9', leagueId: 'L1', week: 9, phase: 'surprise', status: 'voting_open', attendingTribeId: 'tide',
+      votingOpensAt: null, votingDeadline: null, voteDeadlineAt: new Date(Date.now() + 3_600_000), closedAt: null,
+      isRevealed: false, doesNotCountVoteIds: [], idolsPlayed: [], tiePlayerIds: [],
+    })
+    m.db.league.findUnique.mockResolvedValue({ settings: {} })
+    m.db.survivorPlayer.findMany.mockResolvedValue(scope.map(p => ({ userId: p.userId, displayName: p.displayName, redraftRosterId: p.rosterId, tribeId: 'tide' })))
+    m.db.survivorGameState.findUnique.mockResolvedValue({ immunePlayerId: null })
+    m.db.survivorTribeImmunity.findMany.mockResolvedValue([{ tribeId: 'tide', immunityWinnerUserId: 'a3', clearedAt: null }, { tribeId: 'ember', immunityWinnerUserId: 'zz', clearedAt: null }])
+    const ctx = await loadCouncilContext('L1', 'c9')
+    expect(m.db.survivorPlayer.findMany.mock.calls[0][0].where).toEqual({ leagueId: 'L1', playerState: 'active', tribeId: 'tide' })
+    expect(ctx?.immuneUserIds).toEqual(['a3'])
+    expect(ctx?.eligibility.targetUserIds).toEqual(['a1', 'a2'])
   })
 })

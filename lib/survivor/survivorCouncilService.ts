@@ -111,8 +111,9 @@ type ScopeLoad = { scopePlayers: CouncilScopePlayer[]; challengeImmuneUserIds: s
  * week flip.
  */
 async function loadScopePlayers(leagueId: string, phase: string, attendingTribeId: string | null, db: CouncilDatabase = prisma): Promise<ScopeLoad> {
+  // A surprise two-tribe week after the merge scopes the council to its attending tribe too.
   const where: Prisma.SurvivorPlayerWhereInput =
-    (phase === 'pre_merge' || phase === 'revote') && attendingTribeId
+    (phase === 'pre_merge' || phase === 'revote' || phase === 'surprise') && attendingTribeId
       ? { leagueId, playerState: 'active', tribeId: attendingTribeId }
       : { leagueId, playerState: 'active' }
   const players = await db.survivorPlayer.findMany({
@@ -234,6 +235,11 @@ export interface OpenTribalOptions {
   votingOpensAt?: Date | null
   voteDeadlineAt?: Date | null
   actorUserId?: string
+  /**
+   * `surprise`: a post-merge two-tribe week (survivorSurpriseTribes.ts). The council keeps the
+   * attending-tribe scope of a pre-merge council while the season stays merged.
+   */
+  scope?: 'surprise'
 }
 
 /**
@@ -262,9 +268,9 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
     gameState?.activePlayerCount ?? (await prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }))
   const mergedPhase = gameState?.phase === 'merge' || gameState?.phase === 'post_merge' || Boolean(gameState?.mergeTriggeredAt)
   const atOrBelowMerge = activePlayerCount <= settings.mergeActivePlayerCount
-  const phase = mergedPhase || atOrBelowMerge ? 'merge' : 'pre_merge'
+  const phase = opts.scope === 'surprise' ? 'surprise' : mergedPhase || atOrBelowMerge ? 'merge' : 'pre_merge'
 
-  if (phase === 'pre_merge' && !opts.attendingTribeId) {
+  if ((phase === 'pre_merge' || phase === 'surprise') && !opts.attendingTribeId) {
     return { ok: false, status: 422, code: 'attending_tribe_required', error: 'Pre-merge Elimination Council requires the attending (losing) tribe.' }
   }
   if (opts.attendingTribeId) {

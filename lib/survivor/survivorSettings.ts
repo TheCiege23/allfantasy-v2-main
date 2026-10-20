@@ -45,6 +45,11 @@ export interface SurvivorFoundationSettings {
    * the highest tribe is safe. The lowest-scoring tribe that is not safe attends either way.
    */
   twoHighestTribesImmune: boolean
+  /**
+   * Post-merge weeks (0–3) where the cast splits into two surprise tribes for one council. The
+   * weeks are drawn and sealed at the merge; nobody learns them until each one arrives.
+   */
+  postMergeSurpriseTribeWeeks: number
   autoReveal: boolean
   eliminationOutcome: SurvivorEliminationOutcome
   sitOutsEnabled: boolean
@@ -113,6 +118,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   tieRule: 'revote_then_rocks',
   nonVoterAutoCast: true,
   twoHighestTribesImmune: false,
+  postMergeSurpriseTribeWeeks: 0,
   autoReveal: true,
   eliminationOutcome: 'removed_to_waivers',
   sitOutsEnabled: true,
@@ -288,6 +294,7 @@ export function normalizeSurvivorFoundationSettings(
     tieRule: normalizeTieRule(readString(s, ['tieRule'], base.tieRule)),
     nonVoterAutoCast: readBoolean(s, ['nonVoterAutoCast'], base.nonVoterAutoCast),
     twoHighestTribesImmune: readBoolean(s, ['twoHighestTribesImmune'], base.twoHighestTribesImmune),
+    postMergeSurpriseTribeWeeks: clampInt(readNumber(s, ['postMergeSurpriseTribeWeeks'], base.postMergeSurpriseTribeWeeks), 0, 3),
     autoReveal: readBoolean(s, ['autoReveal'], base.autoReveal),
     eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),

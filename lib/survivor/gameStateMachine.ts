@@ -32,6 +32,7 @@ import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from '.
 import { applySurvivorMergeCast } from './survivorMergeCast'
 import { awardTribeImmunity, clearExpiredTribeImmunity } from './survivorTribeImmunity'
 import { resolveWeekImmuneTribeIds } from './survivorCouncilImmunity'
+import { getActiveSurpriseTribeWeek } from './survivorSurpriseTribes'
 import { postImmunityWinLine } from './leagueChatPoster'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
@@ -435,10 +436,13 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
   // top tribe (the top two under that rule) plus any tribe that won it through a challenge, from
   // the same resolver the necklace uses, so a tribe told it is safe is never sent. The unplanned
   // path used to send the FIRST non-immune tribe, which with three or more tribes was wrong.
+  // A surprise two-tribe week after the merge: only its two temporary tribes count, the score
+  // sync's merged pick does not, and the lower tribe alone attends.
+  const surprise = await getActiveSurpriseTribeWeek(leagueId, gs.currentWeek)
   const immunity = await resolveWeekImmuneTribeIds(leagueId, gs.currentWeek, {
     settings: normalizeSurvivorFoundationSettings(leagueRow?.settings as Record<string, unknown> | null),
-    tribeIds: tribes.map((t) => t.id),
-    scoreImmuneTribeId: gs.immuneTribeId,
+    tribeIds: surprise ? surprise.tribeIds : tribes.map((t) => t.id),
+    scoreImmuneTribeId: surprise ? null : gs.immuneTribeId,
   })
   const losingTribe = immunity.attendingTribeId
   const tribeId = losingTribe
@@ -446,8 +450,8 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
   if (plan) {
     const prior = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week: gs.currentWeek }, select: { id: true } })
     if (prior) return
-    const merged = Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase)
-    const opened = await openVerifiedCouncil(leagueId, { week: gs.currentWeek, attendingTribeId: merged ? null : losingTribe, voteDeadlineAt: deadline })
+    const merged = !surprise && (Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase))
+    const opened = await openVerifiedCouncil(leagueId, { week: gs.currentWeek, attendingTribeId: merged ? null : losingTribe, voteDeadlineAt: deadline, ...(surprise ? { scope: 'surprise' as const } : {}) })
     if (!opened.ok) throw new Error(opened.error)
     await scheduleTribalReminders(leagueId, deadline)
     return

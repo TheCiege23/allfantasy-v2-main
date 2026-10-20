@@ -13,6 +13,7 @@ type CouncilSettings = {
   voteChangePolicy: 'first_valid_locks' | 'allow_until_close'
   tieRule: 'revote_then_rocks' | 'rocks_immediately' | 'revote_then_season_points' | 'season_points_only'
   nonVoterAutoCast: boolean
+  postMergeSurpriseTribeWeeks: number
 }
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -40,6 +41,7 @@ export function SurvivorTribalPanel({ leagueId, canEdit }: SurvivorSettingsPanel
         voteChangePolicy: current.voteChangePolicy,
         tieRule: current.tieRule ?? 'revote_then_rocks',
         nonVoterAutoCast: current.nonVoterAutoCast !== false,
+        postMergeSurpriseTribeWeeks: Number.isInteger(current.postMergeSurpriseTribeWeeks) ? current.postMergeSurpriseTribeWeeks : 0,
       })
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load council rules')
@@ -88,6 +90,9 @@ export function SurvivorTribalPanel({ leagueId, canEdit }: SurvivorSettingsPanel
           <SettingsRow label="Tie rule" description="Rocks is a seeded draw among the tied managers, recorded in the audit." control={<Select value={settings.tieRule} onChange={(value) => update('tieRule', value as CouncilSettings['tieRule'])} disabled={!canEdit || saving}><option value="revote_then_rocks">Revote, then rocks</option><option value="rocks_immediately">Rocks immediately</option>{(settings.tieRule === 'revote_then_season_points' || settings.tieRule === 'season_points_only') && <option value={settings.tieRule}>{settings.tieRule === 'season_points_only' ? 'Season points (legacy)' : 'Revote, then season points (legacy)'}</option>}</Select>} />
           <SettingsRow label="Missing ballots" description="A manager who does not vote has a ballot cast for them, for the lowest-scoring manager that week they could have voted for." control={<Toggle checked={settings.nonVoterAutoCast} onChange={(value) => update('nonVoterAutoCast', value)} disabled={!canEdit || saving} />} />
           <SettingsRow label="Vote window (hours)" description="Length of the private voting window after it opens." control={<Input type="number" min={1} max={168} value={settings.voteCloseOffset} onChange={(event) => update('voteCloseOffset', Number(event.target.value))} disabled={!canEdit || saving} className="w-24" />} />
+        </SettingsSection>
+        <SettingsSection id="sv-surprise" title="After the merge">
+          <SettingsRow label="Surprise two-tribe weeks" description="Chimmy picks the weeks at the merge and keeps them sealed. On each one the cast splits in two for a week; the higher-scoring tribe is safe and the other goes to Tribal Council. Never the last two councils. Locks when the draft starts." control={<Select value={String(settings.postMergeSurpriseTribeWeeks)} onChange={(value) => update('postMergeSurpriseTribeWeeks', Number(value))} disabled={!canEdit || saving}><option value="0">None</option><option value="1">One week</option><option value="2">Two weeks</option><option value="3">Three weeks</option></Select>} />
         </SettingsSection>
         <SettingsSection id="sv-ceremony" title="Torch Ceremony">
           <SettingsRow label="Ceremony day" control={<Select value={settings.tribalCouncilDay} onChange={(value) => update('tribalCouncilDay', value)} disabled={!canEdit || saving}>{DAYS.map((day) => <option key={day} value={day}>{day}</option>)}</Select>} />

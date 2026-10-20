@@ -20,6 +20,7 @@ const m = vi.hoisted(() => ({
   verifiedOpen: vi.fn(),
   reminders: vi.fn(),
   effects: vi.fn(),
+  surprise: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: m.db }))
@@ -27,6 +28,7 @@ vi.mock('@/lib/survivor/votingEngine', () => ({ openTribalCouncil: m.legacyOpen,
 vi.mock('@/lib/survivor/survivorCouncilService', () => ({ openTribalCouncil: m.verifiedOpen, closeVoteWindow: vi.fn() }))
 vi.mock('@/lib/survivor/notificationEngine', () => ({ scheduleTribalReminders: m.reminders }))
 vi.mock('@/lib/survivor/SurvivorEffectEngine', () => ({ getWeeklyEffectState: m.effects }))
+vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ getActiveSurpriseTribeWeek: m.surprise }))
 vi.mock('@/lib/survivor/survivorNbaWeeklyScoring', () => ({ scoreNbaSurvivorAllGamesRoster: vi.fn(), scoreNbaSurvivorOneGameRoster: vi.fn() }))
 vi.mock('@/lib/survivor/SurvivorSitOutEngine', () => ({ applySurvivorSitOutToScoring: vi.fn() }))
 
@@ -57,6 +59,7 @@ function arrange(settings: Record<string, unknown>, game: Record<string, unknown
   m.db.survivorTribalCouncil.findFirst.mockResolvedValue(null)
   m.db.survivorGameState.update.mockResolvedValue({})
   m.effects.mockResolvedValue(noEffects())
+  m.surprise.mockResolvedValue(null)
   m.legacyOpen.mockResolvedValue({ id: 'c-legacy' })
   m.verifiedOpen.mockResolvedValue({ ok: true, created: true, councilId: 'c-verified', status: 'voting_open', phase: 'pre_merge', week: 6, voterCount: 4 })
 }
@@ -100,6 +103,19 @@ describe('triggerTribalOpen', () => {
     expect(m.legacyOpen).not.toHaveBeenCalled()
     expect(m.db.survivorWeeklyScore.findMany.mock.calls[0][0].where).toMatchObject({ leagueId: 'L1', week, isFinalized: true, countedTowardTribeTotal: true })
     expect(m.reminders).toHaveBeenCalledWith('L1', expect.any(Date))
+  })
+
+  it('a surprise two-tribe week after the merge sends the lower temporary tribe, scoped to that tribe', async () => {
+    const { plan, week } = plannedSettings()
+    arrange({ survivor_full_season_plan: plan, postMergeSurpriseTribeWeeks: 2 }, { currentWeek: week, phase: 'post_merge', mergeTriggeredAt: new Date('2026-12-01T00:00:00Z'), immuneTribeId: null })
+    m.surprise.mockResolvedValue({ week, tribeIds: ['ember', 'tide'], benchedUserId: 'u9' })
+    m.db.survivorWeeklyScore.findMany.mockResolvedValue([
+      { tribeId: 'ember', finalScore: 150, countedTowardTribeTotal: true },
+      { tribeId: 'tide', finalScore: 90, countedTowardTribeTotal: true },
+      { tribeId: 'merged', finalScore: 500, countedTowardTribeTotal: true },
+    ])
+    await triggerTribalOpen('L1')
+    expect(m.verifiedOpen).toHaveBeenCalledWith('L1', { week, attendingTribeId: 'tide', voteDeadlineAt: expect.any(Date), scope: 'surprise' })
   })
 
   it('does not open a second council in a planned elimination week', async () => {

@@ -32,6 +32,8 @@ vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifie
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
 const redraw = vi.hoisted(() => ({ autoApply: vi.fn() }))
 vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply }))
+const surprise = vi.hoisted(() => ({ ensure: vi.fn(), dissolve: vi.fn() }))
+vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWeek: surprise.ensure, dissolveSurpriseTribes: surprise.dissolve }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
@@ -56,6 +58,16 @@ beforeEach(() => {
 })
 
 describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport => {
+  it('draws the surprise two-tribe week at the top of an elimination-week tick once the rule is on', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup(sport, 1, { finalized: true })
+    db.league.findUnique.mockResolvedValue({ sport, season: 2026, survivorMode: true, platform: 'allfantasy', settings: { survivor_full_season_plan: plan, postMergeSurpriseTribeWeeks: 2 } })
+    state.game.currentWeek = plan.eliminationWeeks[0]
+    await runPlannedSurvivorLeague('league-1', later)
+    expect(surprise.ensure).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0], plan)
+    expect(surprise.ensure.mock.invocationCallOrder[0]).toBeLessThan(engine.triggerTribalOpen.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER)
+  })
+
   it('stops every planned season step while the pause snapshot exists', async () => {
     const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
     await setup(sport, 3, { finalized: true })
@@ -98,6 +110,9 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     // An unanswered tribe-imbalance recommendation gets its default before each council opens.
     expect(redraw.autoApply).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
     expect(redraw.autoApply).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0])
+    // Surprise tribes dissolve before every week flip, and are never drawn while the rule is off.
+    expect(surprise.dissolve).toHaveBeenCalledTimes(engine.advanceWeek.mock.calls.length)
+    expect(surprise.ensure).not.toHaveBeenCalled()
   })
 
   it.each([true, false])('replays every regular-season period to three finalists (Exile return: %s)', async qualifiesToReturn => {

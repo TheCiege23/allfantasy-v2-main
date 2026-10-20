@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { getNextLineupLock } from './sportScheduleEngine'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { resolveWeekImmuneTribeIds } from './survivorCouncilImmunity'
+import { getActiveSurpriseTribeWeek } from './survivorSurpriseTribes'
 
 /** tribeId used for the single post-merge immunity row. */
 export const MERGED_IMMUNITY_TRIBE = 'merge'
@@ -205,9 +206,14 @@ export async function awardTribeImmunity(leagueId: string, week: number, opts: {
     prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, survivorPhase: true, settings: true } }),
     prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, redraftRosterId: true, displayName: true, tribeId: true } }),
   ])
-  const merged = Boolean(game?.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(String(league?.survivorPhase ?? game?.phase ?? ''))
+  // A surprise two-tribe week after the merge is scored like a pre-merge week: the lower temporary
+  // tribe heads to council and its top scorer wears the necklace. Only the two temporary tribes
+  // play that week; a benched manager (odd cast) stays on the merged tribe, safe and necklace-less.
+  const surprise = await getActiveSurpriseTribeWeek(leagueId, week)
+  const merged = !surprise && (Boolean(game?.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(String(league?.survivorPhase ?? game?.phase ?? '')))
+  const cast = surprise ? players.filter(player => player.tribeId && surprise.tribeIds.includes(player.tribeId)) : players
   const scores = await prisma.survivorWeeklyScore.findMany({
-    where: { leagueId, week, userId: { in: players.map(player => player.userId) } },
+    where: { leagueId, week, userId: { in: cast.map(player => player.userId) } },
     select: { userId: true, tribeId: true, finalScore: true, countedTowardTribeTotal: true },
   })
   // The same resolver the council opener uses: the tribe told it is safe is never sent to council.
@@ -216,12 +222,12 @@ export async function awardTribeImmunity(leagueId: string, week: number, opts: {
     : await resolveWeekImmuneTribeIds(leagueId, week, {
         settings: normalizeSurvivorFoundationSettings(league?.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {}),
         scores,
-        tribeIds: [...new Set(players.map(player => player.tribeId).filter((tribeId): tribeId is string => Boolean(tribeId)))],
-        scoreImmuneTribeId: game?.immuneTribeId ?? null,
+        tribeIds: surprise ? surprise.tribeIds : [...new Set(players.map(player => player.tribeId).filter((tribeId): tribeId is string => Boolean(tribeId)))],
+        scoreImmuneTribeId: surprise ? null : game?.immuneTribeId ?? null,
       })
   const winners = computeTribeImmunityWinners({
     scores,
-    candidates: players.map(player => ({ userId: player.userId, rosterId: player.redraftRosterId, displayName: player.displayName, tribeId: player.tribeId })),
+    candidates: cast.map(player => ({ userId: player.userId, rosterId: player.redraftRosterId, displayName: player.displayName, tribeId: player.tribeId })),
     immuneTribeId: merged ? null : game?.immuneTribeId ?? null,
     immuneTribeIds: immunity?.immuneTribeIds ?? [],
     merged,
