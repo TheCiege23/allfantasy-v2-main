@@ -6,6 +6,7 @@ import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { readLineupLockSettings, type LineupLockMode } from '@/lib/redraft/lineupLock'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
+import { lineupModeSwitchRefusal, readLineupMode, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic'
  *
  *   GET  ?seasonId=… → current { mode, manualLockedWeeks, overrides }
  *   POST { seasonId, action, … }
- *     action: 'set_mode'              { mode }
+ *     action: 'set_mode'              { mode }   // 'daily': NBA/NHL/MLB, see below
  *             'manual_lock_week'      { week }
  *             'manual_unlock_week'    { week }
  *             'emergency_unlock'      { week?, rosterId?, playerId? }  // unlock
@@ -23,11 +24,17 @@ export const dynamic = 'force-dynamic'
  * All writes land in `League.settings.sportConfig` (the same blob the lock engine
  * reads) and are audited to `RedraftLeagueTransaction`. The lock itself is derived
  * at request time from the schedule, so these settings take effect immediately.
+ *
+ * `daily` is the daily-lineup mode (lib/redraft/lineupModeSwitch.ts): it writes BOTH
+ * `lineupLockType: 'daily'` and `dailyLineupsEnabled: true`, and any other mode set on a daily league
+ * turns the opt-in off. Either direction is a daily/weekly switch and gets the switch's checks —
+ * NBA/NHL/MLB only (400), and refused (409) while a season is under way, so a week is never locked
+ * one way and scored the other.
  */
 
 /** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
-function canManageLeague(leagueId: string, userId: string): Promise<boolean> {
-  return hasLeagueCommissionerRights(leagueId, userId)
+function canManageLeague(leagueId: string, userId: string, scope?: 'rosters'): Promise<boolean> {
+  return hasLeagueCommissionerRights(leagueId, userId, scope)
 }
 
 type LockOverride = { week?: number; rosterId?: string; playerId?: string }
@@ -36,7 +43,7 @@ function sameOverride(a: LockOverride, b: LockOverride): boolean {
   return (a.week ?? null) === (b.week ?? null) && (a.rosterId ?? null) === (b.rosterId ?? null) && (a.playerId ?? null) === (b.playerId ?? null)
 }
 
-const VALID_MODES: LineupLockMode[] = ['per_player_kickoff', 'first_game_of_week', 'manual']
+const VALID_MODES: LineupLockMode[] = ['per_player_kickoff', 'first_game_of_week', 'manual', 'daily']
 
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -46,14 +53,14 @@ export async function GET(req: NextRequest) {
   const seasonId = req.nextUrl.searchParams?.get('seasonId')?.trim()
   if (!seasonId) return NextResponse.json({ error: 'seasonId required' }, { status: 400 })
 
-  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId }, select: { leagueId: true } })
+  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId }, select: { leagueId: true, sport: true } })
   if (!season) return NextResponse.json({ error: 'Season not found' }, { status: 404 })
   if (!(await canManageLeague(season.leagueId, userId))) {
     return NextResponse.json({ error: 'Forbidden — commissioner only' }, { status: 403 })
   }
 
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
-  const { mode, manualLockedWeeks, overrides } = readLineupLockSettings(league?.settings ?? null)
+  const { mode, manualLockedWeeks, overrides } = readLineupLockSettings(league?.settings ?? null, season.sport)
   return NextResponse.json({ mode, manualLockedWeeks: [...manualLockedWeeks], overrides })
 }
 
@@ -73,9 +80,12 @@ export async function POST(req: NextRequest) {
   const action = body.action?.trim()
   if (!seasonId || !action) return NextResponse.json({ error: 'seasonId and action required' }, { status: 400 })
 
-  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId }, select: { id: true, leagueId: true } })
+  const season = await prisma.redraftSeason.findFirst({
+    where: { id: seasonId },
+    select: { id: true, leagueId: true, sport: true },
+  })
   if (!season) return NextResponse.json({ error: 'Season not found' }, { status: 404 })
-  if (!(await canManageLeague(season.leagueId, userId))) {
+  if (!(await canManageLeague(season.leagueId, userId, 'rosters'))) {
     return NextResponse.json({ error: 'Forbidden — commissioner only' }, { status: 403 })
   }
 
@@ -108,7 +118,15 @@ export async function POST(req: NextRequest) {
       if (!VALID_MODES.includes(mode)) {
         return NextResponse.json({ error: `mode must be one of ${VALID_MODES.join(', ')}` }, { status: 400 })
       }
-      sportConfig.lineupLockType = mode
+      const from = readLineupMode(settings, season.sport)
+      const to = mode === 'daily' ? 'daily' : 'weekly'
+      if (mode === 'daily' || from === 'daily') {
+        const refusal = await lineupModeSwitchRefusal(prisma, { leagueId: season.leagueId, sport: season.sport, from, to })
+        if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+        Object.assign(sportConfig, withLineupMode(sportConfig, to, mode === 'daily' ? undefined : mode))
+      } else {
+        sportConfig.lineupLockType = mode
+      }
       break
     }
     case 'manual_lock_week':
@@ -171,6 +189,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { mode, manualLockedWeeks, overrides: nextOverrides } = readLineupLockSettings({ sportConfig })
+  const { mode, manualLockedWeeks, overrides: nextOverrides } = readLineupLockSettings({ sportConfig }, season.sport)
   return NextResponse.json({ ok: true, action, mode, manualLockedWeeks: [...manualLockedWeeks], overrides: nextOverrides })
 }

@@ -74,11 +74,11 @@
     },
     {
       "path": "/api/cron/notification-outbox-relay",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/import-injuries",
-      "schedule": "*/30 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/import-injuries?sport=NFL&gameWindow=1",

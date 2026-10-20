@@ -41,6 +41,14 @@ import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 import { dayKey, isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { gamesCountActive } from '@/lib/redraft/gamesCount'
+import {
+  gamesCountDb,
+  gamesCountTablesExist,
+  warnGamesCountStorageMissing,
+  writePlayerWeekGameScores,
+} from '@/lib/redraft/gamesCountStore'
+import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -71,6 +79,8 @@ export type WeeklyScoreSyncSummary = {
   scoresUpserted: number
   /** Daily-lineup leagues only: per-day rows written to `player_daily_scores` (see lib/redraft/dailyLineups.ts). */
   dailyScoresUpserted?: number
+  /** Games-count leagues only: `player_week_game_scores` rows written (lib/redraft/gamesCount.ts). */
+  weekGameScoresUpserted?: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
   missingStatPlayerIds: string[]
@@ -241,6 +251,14 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   })
   // A daily-lineup league is scored per day, so its sync also keeps each player's per-day stats.
   const dailyLineupScoring = isDailySport && isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport)
+  // A league that counts only some games (best-N / lock-in, lib/redraft/gamesCount.ts) is scored per
+  // GAME, so its sync also keeps each player's per-game stats. Off for every other league.
+  let gamesCountScoring = isDailySport && gamesCountActive(survivorLeague?.settings ?? null, sport)
+  // Fail safe: without its tables the league is synced (and scored) as every game, never P2021.
+  if (gamesCountScoring && !(await gamesCountTablesExist(prisma))) {
+    warnGamesCountStorageMissing('stat sync', season.leagueId)
+    gamesCountScoring = false
+  }
   const exileEntries = survivorLeague?.survivorMode && isNativePlatform(survivorLeague.platform)
     ? await prisma.exileWeeklyEntry.findMany({
         where: { leagueId: season.leagueId, week },
@@ -372,6 +390,10 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const dailyRowsByPlayer = new Map<string, unknown[]>()
   /** Daily-lineup leagues only: the same rows, keyed by their Eastern game day. */
   const datedRowsByPlayer = new Map<string, Map<string, { day: Date; rows: unknown[] }>>()
+  /** Games-count leagues only: the same rows, keyed by the provider game id (one real game). */
+  const gameRowsByPlayer = new Map<string, Map<string, { day: Date; rows: unknown[] }>>()
+  /** Schedule start instants by game id, read once and only for a games-count league. */
+  let scheduleStartByGame: Map<string, string | null> | null = null
   let dailyWindow: { start: Date; end: Date } | null = null
   if (isDailySport) {
     /**
@@ -435,7 +457,14 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         sportType: { in: candidateSportKeys(sport) },
         gameDate: { gte: window.start, lt: window.end },
       },
-      select: { playerId: true, normalizedStatMap: true, sportType: true, season: true, gameDate: true },
+      select: {
+        playerId: true,
+        normalizedStatMap: true,
+        sportType: true,
+        season: true,
+        gameDate: true,
+        ...(gamesCountScoring ? { gameId: true, providerGameId: true } : {}),
+      },
     })
     for (const row of gameRows) {
       // A preseason game inside the window is not a fantasy game. `/live` returns them beside the
@@ -464,6 +493,19 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         entry.rows.push(row.normalizedStatMap)
         byDay.set(key, entry)
         datedRowsByPlayer.set(rosterId, byDay)
+      }
+      if (gamesCountScoring && row.gameDate) {
+        // An MLB two-way player's batting and pitching lines are two rows (`<game>:batting`,
+        // `<game>:pitching`) of ONE game; the provider game id groups them back together.
+        const r = row as { gameId?: string | null; providerGameId?: string | null }
+        const gameKey = r.providerGameId || String(r.gameId ?? '').split(':')[0]
+        if (gameKey) {
+          const byGame = gameRowsByPlayer.get(rosterId) ?? new Map<string, { day: Date; rows: unknown[] }>()
+          const entry = byGame.get(gameKey) ?? { day: row.gameDate, rows: [] }
+          entry.rows.push(row.normalizedStatMap)
+          byGame.set(gameKey, entry)
+          gameRowsByPlayer.set(rosterId, byGame)
+        }
       }
     }
     dailyWindow = window
@@ -827,6 +869,23 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
             byDay: datedRowsByPlayer.get(playerId) ?? new Map(),
             normalizer,
           }))
+      }
+      if (gamesCountScoring && dailyWindow && normalizer) {
+        if (!scheduleStartByGame) {
+          const schedule = await readRiScheduleWindow(prisma as never, { sport, season: seasonYear, window: dailyWindow })
+          scheduleStartByGame = new Map((schedule ?? []).map((g) => [g.gameId, g.startTime]))
+        }
+        const games: Array<{ gameId: string; gameDay: Date; startTime: Date | null; stats: Record<string, number> }> = []
+        for (const [gameId, { day, rows }] of gameRowsByPlayer.get(playerId) ?? new Map()) {
+          const aggregate = aggregateWeeklyStats(rows, normalizer)
+          if (aggregate.gamesCounted === 0 || !Object.keys(aggregate.stats).length) continue
+          const start = scheduleStartByGame.get(gameId)
+          const startTime = start ? new Date(start) : null
+          games.push({ gameId, gameDay: day, startTime: startTime && !Number.isNaN(startTime.getTime()) ? startTime : null, stats: aggregate.stats })
+        }
+        summary.weekGameScoresUpserted =
+          (summary.weekGameScoresUpserted ?? 0) +
+          (await writePlayerWeekGameScores(gamesCountDb(prisma), { playerId, sport: playerSport, season: seasonYear, week, games }))
       }
       continue
     }

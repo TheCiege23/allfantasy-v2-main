@@ -90,8 +90,8 @@ describe('DraftPlayerCard renders the rookie chip from isRookie', () => {
     expect(src).toMatch(/isRookie\?: boolean/)
   })
 
-  it('the rookie chip is gated on Boolean(isRookie)', () => {
-    expect(src).toMatch(/showRookieBadge = Boolean\(isRookie\)/)
+  it('the rookie chip is fed from isRookie via the shared Rookie/Prospect badge', () => {
+    expect(src).toMatch(/const labelInput = \{ isRookie, isDevy, graduatedToNFL, poolType \}/)
   })
 })
 

@@ -365,7 +365,9 @@ describe('createCanonicalLeagueInTransaction contract', () => {
     }
     // A league that holds a rookie draft every year trades its picks by default; the column's own
     // default (false) left every native dynasty league refusing them until someone found the toggle.
-    expect(tx.league.create.mock.calls[0]?.[0].data.draftPickTrading).toBe(dynastyFamily)
+    // A redraft league (every case here without a dynasty-family specialty, IDP included) trades its
+    // current draft's picks by default too.
+    expect(tx.league.create.mock.calls[0]?.[0].data.draftPickTrading).toBe(true)
     if (specialty === 'idp') {
       expect(tx.idpLeagueConfig.upsert).toHaveBeenCalledTimes(1)
     }
@@ -396,6 +398,17 @@ describe('creation choices persist into runtime records', () => {
     expect(tx.draftSession.create.mock.calls[0]?.[0].data.thirdRoundReversal).toBe(enabled)
     expect(tx.league.create.mock.calls[0]?.[0].data.settings.third_round_reversal).toBe(enabled)
   })
+  it.each([
+    ['keeper', false],
+    ['best_ball', false],
+    ['guillotine', false],
+    ['redraft', true],
+  ])('a %s league starts with draft pick trading %s', async (leagueFormatId, expected) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody() as any, buildEngine({ leagueFormatId }) as any)
+    expect(tx.league.create.mock.calls[0]?.[0].data.draftPickTrading).toBe(expected)
+  })
+
   it('keeps disabled Best Ball trades disabled', async () => {
     const tx = buildTx()
     await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'best_ball', tradeReviewMode: 'none', conceptSetup: { bestBall: { mode: 'underdog' } } }), buildEngine({ leagueFormatId: 'best_ball' }))
