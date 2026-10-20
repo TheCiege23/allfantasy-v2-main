@@ -7,7 +7,7 @@ const { runLayoutCssGate } = require('../scripts/lib/bounded-layout-css-gate.cjs
 
 describe('bounded layout CSS validation', () => {
   it('retains the CSS validator and requires its successful exit', () => {
-    const spawn = vi.fn(() => ({ status: 0 }))
+    const spawn = vi.fn((_executable: string, _args: string[], _options: object) => ({ status: 0 }))
     expect(runLayoutCssGate('/build/.next', { spawn, log: () => {} }).ok).toBe(true)
     expect(spawn.mock.calls[0][1]).toEqual([expect.stringMatching(/layout-css-gate\.cjs$/), '/build/.next'])
     expect(spawn.mock.calls[0][2]).toMatchObject({ timeout: 120000, killSignal: 'SIGKILL' })
