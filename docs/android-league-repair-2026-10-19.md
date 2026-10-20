@@ -28,6 +28,8 @@ The season engine now ignores retained Guillotine configuration when a native le
 
 An isolated test database roundtrip passed native NBA conversion with retained configuration, expansion and safe shrink, occupied-seat and started-draft protection, and persistence of name, timezone, draft clock/rounds/date, waivers, trades and playoffs. Temporary fixtures were removed. The test database emitted existing subscription-schema warnings; the commissioner save assertions passed.
 
+The new team-count label, guidance and validation are translated in English and Spanish. CI's compiler heap is raised from 8 GB to 12 GB using the already validated compiler repair from PR #2588; no error baseline or required check is relaxed. Focused Spanish/parity/repair tests: 23 passed. Compiler gate argument/guard tests: 14 passed.
+
 ## Outstanding release checks
 
 This branch is not deployed. Run normal CI, then verify direct invite entry, settings, and playback with responsive Chrome, as authorized by the user. The local browser fixture is not a physical-device or Samsung Internet certification. On release, re-save Redraft on the reported league to repair its already-stored Guillotine flags; renaming alone never changes league format.

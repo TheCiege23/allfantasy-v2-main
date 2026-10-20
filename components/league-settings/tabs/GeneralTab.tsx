@@ -88,17 +88,17 @@ export function GeneralTab({
         {lastError ? <p role="alert" className="mb-3 text-sm text-red-300">{lastError}</p> : null}
         <div className="space-y-4">
           <label className="block">
-            <span className={SETTINGS_LABEL_CLASS}>Number of teams</span>
+            <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.teamCount')}</span>
             <input type="number" inputMode="numeric" min={2} max={32} value={teamCount} disabled={!canEdit}
               onChange={event => setTeamCount(event.target.value)}
               onBlur={() => {
                 const size = Number(teamCount)
-                if (!Number.isInteger(size) || size < 2 || size > 32) { setCapacityError('Enter a team count between 2 and 32.'); return }
+                if (!Number.isInteger(size) || size < 2 || size > 32) { setCapacityError(t('lsHub.gen.teamCountRange')); return }
                 setCapacityError(null)
                 if (size !== ctx.league.leagueSize) queuePatch({ leagueSize: size })
               }}
               className={SETTINGS_INPUT_CLASS} data-testid="league-settings-general-team-count" />
-            <span className="mt-1 block text-xs text-white/60">Change before drafting. Remove only empty, unclaimed seats.</span>
+            <span className="mt-1 block text-xs text-white/60">{t('lsHub.gen.teamCountHint')}</span>
           </label>
           <label className="block">
             <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.leagueName')}</span>
