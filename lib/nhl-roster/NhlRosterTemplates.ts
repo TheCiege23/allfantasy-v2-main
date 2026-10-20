@@ -5,6 +5,7 @@
  */
 
 import type { RosterSlotDef } from '@/lib/nfl-roster/NflRosterTemplates'
+import { DAILY_REDRAFT_ROSTER_LAYOUTS, dailyRedraftRosterSlotMap } from '@/lib/sportConfig/dailySportRedraftRoster'
 export type { RosterSlotDef }
 export type NhlRosterTemplate = { key: string; label: string; leagueTypes: string[]; slots: Record<string, number>; description: string }
 
@@ -37,7 +38,8 @@ export const NHL_SLOT_MAP = new Map(NHL_ROSTER_SLOTS.map((s) => [s.key, s]))
 
 export const NHL_ROSTER_TEMPLATES: NhlRosterTemplate[] = [
   { key: 'redraft', label: 'Redraft', leagueTypes: ['redraft'], description: 'Standard NHL redraft (Yahoo-compatible base).',
-    slots: { C: 2, LW: 2, RW: 2, D: 4, UTIL: 1, G: 2, BN: 4, IR: 2 } },
+    // The one redraft layout (lib/sportConfig/dailySportRedraftRoster.ts) — never restated here.
+    slots: dailyRedraftRosterSlotMap(DAILY_REDRAFT_ROSTER_LAYOUTS.NHL) },
   { key: 'dynasty', label: 'Dynasty', leagueTypes: ['dynasty'], description: 'Deep dynasty with prospect stash.',
     slots: { C: 2, LW: 2, RW: 2, D: 4, UTIL: 2, G: 2, BN: 10, IR: 3, TAXI: 4, PROSPECT: 8 } },
   { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Extended keeper roster.',

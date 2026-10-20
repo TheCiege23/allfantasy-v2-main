@@ -5,6 +5,7 @@
  */
 
 import type { RosterSlotDef } from '@/lib/nfl-roster/NflRosterTemplates'
+import { DAILY_REDRAFT_ROSTER_LAYOUTS, dailyRedraftRosterSlotMap } from '@/lib/sportConfig/dailySportRedraftRoster'
 export type { RosterSlotDef }
 export type MlbRosterTemplate = { key: string; label: string; leagueTypes: string[]; slots: Record<string, number>; description: string }
 
@@ -39,7 +40,8 @@ export const MLB_SLOT_MAP = new Map(MLB_ROSTER_SLOTS.map((s) => [s.key, s]))
 
 export const MLB_ROSTER_TEMPLATES: MlbRosterTemplate[] = [
   { key: 'redraft', label: 'Redraft', leagueTypes: ['redraft'], description: 'Standard MLB redraft.',
-    slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, CI: 1, MI: 1, OF: 3, UTIL: 1, SP: 2, RP: 2, P: 3, BN: 6, IL: 2, NA: 1 } },
+    // The one redraft layout (lib/sportConfig/dailySportRedraftRoster.ts) — never restated here.
+    slots: dailyRedraftRosterSlotMap(DAILY_REDRAFT_ROSTER_LAYOUTS.MLB) },
   { key: 'dynasty', label: 'Dynasty', leagueTypes: ['dynasty'], description: 'Deep dynasty with prospect stash.',
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, CI: 1, MI: 1, OF: 5, UTIL: 2, SP: 3, RP: 2, P: 4, BN: 12, IL: 4, NA: 5, TAXI: 6, PROSPECT: 10 } },
   { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Extended keeper roster.',

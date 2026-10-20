@@ -7,6 +7,12 @@
 
 import type { LeagueSport } from '@prisma/client'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
+import {
+  DAILY_REDRAFT_ROSTER_LAYOUTS,
+  dailyRedraftReserveCount,
+  dailyRedraftStarterCount,
+  type DailyRedraftSport,
+} from '@/lib/sportConfig/dailySportRedraftRoster'
 
 export type ConceptPresetSeed = {
   presetKey: string
@@ -36,6 +42,32 @@ export type ConceptPresetSeed = {
 const REDRAFT_DRAFT_TYPES = ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'auto', 'offline']
 const KEEPER_DRAFT_TYPES = ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'auto', 'offline', 'team']
 const DEVY_DRAFT_TYPES = ['devy_snake', 'devy_linear', 'devy_auction', 'snake', 'linear', 'auction', 'mock_draft', 'auto', 'offline']
+
+/**
+ * NBA / NHL / MLB redraft — sized from the one layout table, so the preset, the creation contract
+ * (dailySportRedraftDefaults.ts) and the roster the league is bootstrapped with cannot disagree.
+ */
+function dailyRedraftSeed(sport: DailyRedraftSport, feeds: string[]): ConceptPresetSeed {
+  const layout = DAILY_REDRAFT_ROSTER_LAYOUTS[sport]
+  const scoringPreset = `${sport.toLowerCase()}_points`
+  return {
+    presetKey: `af:v2|concept=redraft|sport=${sport}|scoring=${scoringPreset}|draft=snake`,
+    sport,
+    leagueType: 'redraft',
+    scoringPreset,
+    draftTypesAllowed: REDRAFT_DRAFT_TYPES,
+    defaultTeamCount: 12,
+    isLaunchReady: true,
+    readiness: 'launch_ready',
+    visibility: 'public',
+    requiredDataFeeds: feeds,
+    aiEnabledFeatures: ['waiver_advice', 'trade_eval', 'lineup_optimizer', 'draft_assistant'],
+    rosterSlots: dailyRedraftStarterCount(layout),
+    benchSlots: layout.benchSlots,
+    irSlots: dailyRedraftReserveCount(layout),
+    metadata: { modifiers: [], lineupFrequency: 'daily' },
+  }
+}
 
 export const CONCEPT_PRESET_CATALOG: ConceptPresetSeed[] = [
   // ── NFL Redraft ──────────────────────────────────────────────────────────────
@@ -90,6 +122,10 @@ export const CONCEPT_PRESET_CATALOG: ConceptPresetSeed[] = [
     irSlots: 1,
     metadata: { modifiers: [] },
   },
+  // ── NBA / NHL / MLB Redraft ──────────────────────────────────────────────────
+  dailyRedraftSeed('NBA', ['af_nba_schedule', 'af_nba_players', 'af_nba_stats']),
+  dailyRedraftSeed('NHL', ['af_nhl_schedule', 'af_nhl_players', 'af_nhl_stats']),
+  dailyRedraftSeed('MLB', ['af_mlb_schedule', 'af_mlb_players', 'af_mlb_stats']),
   // ── NFL Dynasty ──────────────────────────────────────────────────────────────
   {
     presetKey: 'af:v2|concept=dynasty|sport=NFL|scoring=fb_half_ppr|draft=snake',
