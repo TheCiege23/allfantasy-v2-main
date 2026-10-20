@@ -9,8 +9,7 @@ import {
   resolveRedraftScoringPreset,
 } from '@/lib/league-concepts/redraftDefaults'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
-import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
-import { normalizeToken } from '@/lib/redraft/lineupValidation'
+import { firstPositive, hasSavedRosterLayout, readSavedRosterLayout } from './savedRosterLayout'
 
 type JsonRecord = Record<string, unknown>
 
@@ -70,26 +69,7 @@ function jsonStable(value: unknown): string {
   return JSON.stringify(value)
 }
 
-function nonEmptyRecord(value: unknown): value is JsonRecord {
-  return isRecord(value) && Object.keys(value).length > 0
-}
-
-function nonEmptyArray(value: unknown): value is unknown[] {
-  return Array.isArray(value) && value.length > 0
-}
-
-function readStarterSlots(settings: JsonRecord): JsonRecord | null {
-  if (nonEmptyRecord(settings.starter_slots)) return settings.starter_slots
-  if (isRecord(settings.rosterTemplate) && nonEmptyRecord(settings.rosterTemplate.starterSlots)) {
-    return settings.rosterTemplate.starterSlots
-  }
-  if (isRecord(settings.rosterSettings) && nonEmptyRecord(settings.rosterSettings.starterSlots)) {
-    return settings.rosterSettings.starterSlots
-  }
-  return null
-}
-
-/**
+/*
  * 🛑 A LEAGUE THAT HAS SAVED ANY ROSTER LAYOUT KEEPS EXACTLY THAT LAYOUT (owner, 2026-10-20).
  *
  * This repair runs on every load of the draft page. It used to `deepMergeMissing` the full default
@@ -99,17 +79,8 @@ function readStarterSlots(settings: JsonRecord): JsonRecord | null {
  * (DEF). `starter_slot_order` is an array, so the merge left it alone and the two then disagreed. It
  * also rewrote the known legacy map to the canonical one, which for NCAAF dropped a saved DEF.
  *
- * Every shape the readers use counts as a saved layout: the starter maps here, the slot-order arrays,
- * and whatever `resolveRedraftRosterConfig` (lineup validation's reader) finds, including
- * `roster.config.sections`. Only a league with none of them gets the default layout filled in.
+ * "Has a saved layout" is defined once, in ./savedRosterLayout, and shared with the read paths.
  */
-function hasSavedRosterLayout(sport: 'NFL' | 'NCAAF', settings: JsonRecord): boolean {
-  if (readStarterSlots(settings)) return true
-  for (const key of ['starter_slot_order', 'roster_slot_order', 'compact_roster_slot_order', 'roster_positions', 'rosterPositions']) {
-    if (nonEmptyArray(settings[key])) return true
-  }
-  return resolveRedraftRosterConfig(sport, settings).source === 'commissioner'
-}
 
 /**
  * Default-snapshot keys that describe the roster layout, or are sized from it. None of them may be
@@ -145,47 +116,15 @@ function withoutRosterLayout(defaults: JsonRecord): JsonRecord {
   return out
 }
 
-const NON_STARTER_TOKENS = new Set(['BN', 'BENCH', 'IR', 'RESERVE', 'IL', 'IL_PLUS', 'NA', 'TAXI', 'DEVY'])
-
-function firstPositive(...values: unknown[]): number | null {
-  for (const value of values) {
-    const n = Number(value)
-    if (Number.isFinite(n) && n > 0) return Math.floor(n)
-  }
-  return null
-}
-
 /**
  * Draft rounds for a league WITH a saved layout but no saved round count: its own starters + bench,
  * the same rule the default contract uses (rounds = draftable roster). Null when that cannot be read,
  * and the caller then keeps the previous behaviour (the default round count).
  */
 function savedLayoutDraftRounds(sport: 'NFL' | 'NCAAF', settings: JsonRecord): number | null {
-  const resolved = resolveRedraftRosterConfig(sport, settings)
-  let starters = 0
-  if (resolved.source === 'commissioner') {
-    starters = [...resolved.starterCapacities.values()].reduce((a, b) => a + b, 0)
-  } else {
-    const map = readStarterSlots(settings)
-    if (map) {
-      for (const [key, value] of Object.entries(map)) {
-        if (NON_STARTER_TOKENS.has(normalizeToken(key))) continue
-        starters += firstPositive(value) ?? 0
-      }
-    } else if (nonEmptyArray(settings.starter_slot_order)) {
-      starters = settings.starter_slot_order.length
-    }
-  }
-  if (starters <= 0) return null
-  const rosterSettings = isRecord(settings.rosterSettings) ? settings.rosterSettings : {}
-  const rosterTemplate = isRecord(settings.rosterTemplate) ? settings.rosterTemplate : {}
-  const bench = firstPositive(
-    resolved.source === 'commissioner' ? resolved.benchSlots : null,
-    settings.bench_slots,
-    rosterSettings.benchSlots,
-    rosterTemplate.benchSlots,
-  )
-  return bench == null ? null : starters + bench
+  const layout = readSavedRosterLayout(sport, settings)
+  if (!layout || layout.starterOrder.length === 0 || layout.benchSlots == null) return null
+  return layout.starterOrder.length + layout.benchSlots
 }
 
 function scoringInput(settings: JsonRecord): string | null {
