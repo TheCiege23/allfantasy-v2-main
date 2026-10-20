@@ -133,7 +133,13 @@ function getTscOutput() {
   }
   const r = spawnSync(
     process.execPath,
-    ['--max-old-space-size=8192', './node_modules/typescript/lib/tsc.js', '--noEmit'],
+    /*
+     * 12 GB, not 8: on Node 24 (the version CI and package.json `engines` use) a full check of this
+     * repo peaks at ~8.6 GB resident under an 8 GB heap, i.e. pinned at the ceiling, and on CI it
+     * aborted with SIGABRT (V8 out of memory) on most runs from 2026-10-20. With a 12 GB heap the
+     * same run peaks at ~5.5 GB. GitHub's runners for public repos have 16 GB.
+     */
+    ['--max-old-space-size=12288', './node_modules/typescript/lib/tsc.js', '--noEmit'],
     { cwd: root, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 }
   )
 
