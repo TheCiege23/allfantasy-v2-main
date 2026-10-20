@@ -95,6 +95,34 @@ describe('Taxi squad section — League columns round-trip', () => {
   })
 })
 
+describe('Taxi squad section — NHL / MLB (no prospect pool)', () => {
+  it('a league with taxi can keep or lower it, never raise it, and sees the note', () => {
+    const save = vi.fn()
+    render(<RosterComplianceSettingsPanel initialData={{ ...base, sport: 'NHL', taxiSlots: 3 }} canEdit debouncedSave={save} />)
+    expect(screen.getByTestId('taxi-unavailable-for-sport').textContent).toMatch(/aren.t available for NHL\/MLB leagues/)
+    const options = Array.from((screen.getByTestId('taxi-slots') as HTMLSelectElement).options).map((o) => o.value)
+    expect(options).toEqual(['0', '1', '2', '3'])
+    fireEvent.change(screen.getByTestId('taxi-slots'), { target: { value: '1' } })
+    expect(save).toHaveBeenCalledWith({ taxiSlots: 1 })
+  })
+
+  it('a league with no taxi sees only the note, no controls', () => {
+    render(<RosterComplianceSettingsPanel initialData={{ ...base, sport: 'MLB', taxiSlots: 0 }} canEdit debouncedSave={vi.fn()} />)
+    expect(screen.getByTestId('taxi-unavailable-for-sport')).toBeTruthy()
+    expect(screen.queryByTestId('taxi-slots')).toBeNull()
+    expect(screen.queryByTestId('taxi-years-limit')).toBeNull()
+  })
+
+  it('NFL and NBA keep the full 0–6 choice and no note', () => {
+    for (const sport of ['NFL', 'NBA'] as const) {
+      const { unmount } = render(<RosterComplianceSettingsPanel initialData={{ ...base, sport, taxiSlots: 0 }} canEdit debouncedSave={vi.fn()} />)
+      expect((screen.getByTestId('taxi-slots') as HTMLSelectElement).options).toHaveLength(7)
+      expect(screen.queryByTestId('taxi-unavailable-for-sport')).toBeNull()
+      unmount()
+    }
+  })
+})
+
 describe('Taxi squad section — dynasty lock & promotion rules', () => {
   it('reads the dynasty config and PUTs each rule with the key DynastySettingsPanel used', async () => {
     const calls = dynastyFetch({ taxiLockBehavior: 'once_promoted_no_return', taxiInSeasonMoves: true, taxiPostseasonMoves: false, taxiScoringOn: false, taxiPromotionDeadlineWeek: null })
