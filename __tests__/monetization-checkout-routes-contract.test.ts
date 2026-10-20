@@ -20,12 +20,30 @@ vi.mock("@/lib/monetization/stripeCustomerForUser", () => ({
   duplicatePlanReason: vi.fn().mockReturnValue(null),
 }))
 
+/*
+ * Checkout moved from Stripe Payment Links (STRIPE_CHECKOUT_LINK_*) to server-created Checkout
+ * Sessions priced from the catalog (STRIPE_PRICE_*), so charged == displayed price. The suite
+ * still configured payment links, so both happy paths returned 503 and sat in the baseline. The
+ * Stripe client is doubled at its boundary, so the REAL session builder runs and these assert
+ * what is actually sent to Stripe.
+ */
+const sessionCreateMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/stripe-client", () => ({
+  getStripeClient: () => ({ checkout: { sessions: { create: sessionCreateMock } } }),
+}))
+
+// Never let a unit test reach Meta CAPI (an irreversible conversion) or the analytics table.
+vi.mock("@/lib/meta-capi", () => ({
+  trackMetaServerEvent: vi.fn().mockResolvedValue(null),
+}))
+
 describe("Monetization checkout routes", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1", email: "user@test.dev" } })
-    process.env.STRIPE_CHECKOUT_LINK_AF_PRO_MONTHLY = "https://buy.stripe.com/test_pro_monthly"
-    process.env.STRIPE_CHECKOUT_LINK_AF_TOKENS_10 = "https://buy.stripe.com/test_tokens_10"
+    process.env.STRIPE_PRICE_AF_PRO_MONTHLY = "price_test_pro_monthly"
+    process.env.STRIPE_PRICE_AF_TOKENS_10 = "price_test_tokens_10"
+    sessionCreateMock.mockResolvedValue({ id: "cs_test_1", url: "https://checkout.stripe.com/c/pay/cs_test_1" })
   })
 
   it("resolves subscription checkout link for valid subscription sku", async () => {
@@ -43,13 +61,17 @@ describe("Monetization checkout routes", () => {
       sku: "af_pro_monthly",
       purchaseType: "subscription",
     })
-    const checkoutUrl = new URL(String(payload.url))
-    expect(checkoutUrl.origin + checkoutUrl.pathname).toBe("https://buy.stripe.com/test_pro_monthly")
-    expect(checkoutUrl.searchParams.get("prefilled_email")).toBe("user@test.dev")
-    expect(checkoutUrl.searchParams.get("af_return_path")).toBe("/pricing?from=upgrade")
-    const clientReference = parseStripeCheckoutClientReferenceId(
-      checkoutUrl.searchParams.get("client_reference_id")
-    )
+    expect(payload.url).toBe("https://checkout.stripe.com/c/pay/cs_test_1")
+    expect(sessionCreateMock).toHaveBeenCalledTimes(1)
+    const params = sessionCreateMock.mock.calls[0][0]
+    expect(params).toMatchObject({
+      mode: "subscription",
+      line_items: [{ price: "price_test_pro_monthly", quantity: 1 }],
+      customer_email: "user@test.dev",
+      metadata: { userId: "user-1", sku: "af_pro_monthly", purchaseType: "subscription" },
+    })
+    expect(params.success_url).toContain("/pricing?from=upgrade&checkout=success")
+    const clientReference = parseStripeCheckoutClientReferenceId(params.client_reference_id)
     expect(clientReference).toMatchObject({
       userId: "user-1",
       sku: "af_pro_monthly",
@@ -85,11 +107,16 @@ describe("Monetization checkout routes", () => {
       tokenAmount: 600,
       purchaseType: "tokens",
     })
-    const checkoutUrl = new URL(String(payload.url))
-    expect(checkoutUrl.origin + checkoutUrl.pathname).toBe("https://buy.stripe.com/test_tokens_10")
-    const clientReference = parseStripeCheckoutClientReferenceId(
-      checkoutUrl.searchParams.get("client_reference_id")
-    )
+    expect(payload.url).toBe("https://checkout.stripe.com/c/pay/cs_test_1")
+    const params = sessionCreateMock.mock.calls[0][0]
+    expect(params).toMatchObject({
+      mode: "payment",
+      line_items: [{ price: "price_test_tokens_10", quantity: 1 }],
+    })
+    // An off-site returnPath must never become the post-checkout redirect.
+    expect(params.success_url).not.toContain("malicious.example.com")
+    expect(params.cancel_url).not.toContain("malicious.example.com")
+    const clientReference = parseStripeCheckoutClientReferenceId(params.client_reference_id)
     expect(clientReference).toMatchObject({
       sku: "af_tokens_10",
       userId: "user-1",
@@ -149,8 +176,8 @@ describe("Monetization checkout routes", () => {
     })
   })
 
-  it("fails safely when checkout link mapping is missing", async () => {
-    delete process.env.STRIPE_CHECKOUT_LINK_AF_PRO_MONTHLY
+  it("fails safely when the catalog price id is missing", async () => {
+    delete process.env.STRIPE_PRICE_AF_PRO_MONTHLY
     const { POST } = await import("@/app/api/monetization/checkout/subscription/route")
     const req = createMockNextRequest("http://localhost/api/monetization/checkout/subscription", {
       method: "POST",
@@ -162,5 +189,6 @@ describe("Monetization checkout routes", () => {
     await expect(res.json()).resolves.toMatchObject({
       error: expect.stringContaining("temporarily unavailable"),
     })
+    expect(sessionCreateMock).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,7 @@
 import { getConsensusADP as getMultiPlatformConsensus } from './multi-platform-adp'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { getDynastySportConfig } from '@/lib/dynasty-core/dynastySportConfig'
+import { rookieDraftCalendarYear } from '@/lib/dynasty-core/rookieDraftCalendar'
 
 export interface FantasyCalcPlayerIdentity {
   id: number;
@@ -274,6 +275,8 @@ const PICK_SPORTS_WITH_OWN_CALENDAR = new Set(['MLB', 'NBA', 'NHL', 'SOCCER', 'N
 type PickCalendar = {
   /** 1-12: month the fantasy rookie draft happens; the pre-draft bump counts down to its 1st day. */
   rookieDraftMonth: number
+  /** Calendar year of a `year` pick's draft — MLB's is held the winter before (`rookieDraftCalendar.ts`). */
+  draftYear: (year: number) => number
   /** Value of a pick in `round` (1-based) before slot / time / fever adjustments. */
   roundBase: (round: number) => number
 }
@@ -305,6 +308,7 @@ function sportPickCalendar(sport: string, isDynasty: boolean): PickCalendar {
   }
   return {
     rookieDraftMonth: cfg.offseason.rookieDraftMonth,
+    draftYear: (year) => rookieDraftCalendarYear(cfg.offseason, year),
     roundBase: (round) =>
       round <= rounds
         ? baseValues[Math.max(1, round)]
@@ -333,7 +337,7 @@ function pickValueWithCalendar(year: number, round: number, pickNumber: number |
 
   let daysToDraft: number | null = null;
   if (year >= currentYear && year <= currentYear + 3) {
-    const draftDate = new Date(year, cal.rookieDraftMonth - 1, 1);
+    const draftDate = new Date(cal.draftYear(year), cal.rookieDraftMonth - 1, 1);
     const diffDays = Math.ceil((draftDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     daysToDraft = diffDays > 0 ? diffDays : null;
   }
