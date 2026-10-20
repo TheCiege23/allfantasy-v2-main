@@ -51,7 +51,7 @@ const OFFENSE: NhlScoringCategory = {
     { key: 'game_winning_goals',     label: 'Game-Winning Goal',       helper: 'Bonus on top of goal value', defaultValue: 0, unavailable: true },
     { key: 'overtime_goals',         label: 'Overtime Goal',           defaultValue: 0, unavailable: true },
     { key: 'shots_on_goal',          label: 'Shots on Goal',           defaultValue: 0.5 },
-    { key: 'shooting_pct_bonus',     label: 'Shooting % Bonus',        helper: 'Bonus per point of shooting percentage above 10%', defaultValue: 0, unavailable: true },
+    { key: 'shooting_pct_bonus',     label: 'Shooting % Bonus',        helper: 'Per game: bonus per point of shooting percentage above 10%', defaultValue: 0 },
     { key: 'faceoff_wins',           label: 'Faceoff Wins',            defaultValue: 0 },
     { key: 'faceoff_losses',         label: 'Faceoff Losses',          defaultValue: 0 },
   ],
@@ -110,8 +110,8 @@ const GOALIE_EFFICIENCY: NhlScoringCategory = {
   group: 'goalies',
   rows: [
     { key: 'shutouts',              label: 'Shutout',                   defaultValue: 5 },
-    { key: 'save_pct_bonus',        label: 'Save % Bonus',              helper: 'Bonus per 0.010 save % above .900', defaultValue: 0, unavailable: true },
-    { key: 'gaa_bonus',             label: 'GAA Bonus',                 helper: 'Bonus for GAA below 2.50', defaultValue: 0, unavailable: true },
+    { key: 'save_pct_bonus',        label: 'Save % Bonus',              helper: 'Per game: bonus per 0.010 save % above .900', defaultValue: 0 },
+    { key: 'gaa_bonus',             label: 'GAA Bonus',                 helper: 'Per game with a GAA below 2.50', defaultValue: 0 },
     { key: 'goalie_minutes_played', label: 'Time on Ice (minutes)',     helper: 'Points per minute played', defaultValue: 0 },
   ],
 }

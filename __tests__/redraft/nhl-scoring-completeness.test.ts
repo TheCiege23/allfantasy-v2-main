@@ -91,6 +91,13 @@ const REFERENCE: Record<string, (r: Raw, group: string) => number> = {
   shots_against: (r) => n(r.shots_against),
   shutouts: (r) => n(r.shutouts),
   goalie_minutes_played: (r, g) => goalie(r, g, (x) => toiMinutes(x.time_on_ice)),
+  // Rate bonuses, from the one game's own line (see nhl-rate-bonus-per-game.test.ts).
+  save_pct_bonus: (r, g) =>
+    goalie(r, g, (x) => (n(x.shots_against) > 0 ? Math.max(0, (n(x.saves) / n(x.shots_against) - 0.9) / 0.01) : 0)),
+  gaa_bonus: (r, g) =>
+    goalie(r, g, (x) => (toiMinutes(x.time_on_ice) > 0 && (n(x.goals_allowed) * 60) / toiMinutes(x.time_on_ice) < 2.5 ? 1 : 0)),
+  shooting_pct_bonus: (r) =>
+    n(r.shots_on_goal) > 0 ? Math.max(0, (n(r.goals) / n(r.shots_on_goal)) * 100 - 10) : 0,
 }
 
 const scorableRows = [...new Set(NHL_ALL_SCORING_CATEGORIES.flatMap((c) => c.rows.map((r) => r.key)))].filter(
@@ -136,7 +143,7 @@ describe('every scorable NHL panel row scores real fixture data, through the sto
   it('the rows the fixture really exercises are not all trivially zero', () => {
     // A reference that is 0 everywhere passes the per-row check by agreeing with a broken pipeline.
     // These fields are non-zero somewhere in the six captured games, so each must score something.
-    for (const key of ['goals', 'power_play_goals', 'faceoff_wins', 'takeaways', 'giveaways', 'goalie_losses', 'shots_against', 'goalie_minutes_played', 'multi_goal_game']) {
+    for (const key of ['goals', 'power_play_goals', 'faceoff_wins', 'takeaways', 'giveaways', 'goalie_losses', 'shots_against', 'goalie_minutes_played', 'multi_goal_game', 'save_pct_bonus', 'gaa_bonus', 'shooting_pct_bonus']) {
       const scorer = onlyRowScorer(key)
       const total = lines.reduce((sum, l) => sum + scorer(normalizeNhlGameStats(l.stored).stats), 0)
       expect(total, key).toBeGreaterThan(0)
