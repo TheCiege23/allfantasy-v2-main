@@ -25,6 +25,7 @@
 import type { CategoryDefinition, ScoringMode } from './types'
 import { MLB_FIVE_BY_FIVE, MLB_SIX_BY_SIX } from './MlbCategoryRegistry'
 import { NBA_EIGHT_CAT, NBA_LEGACY_EIGHT_CAT, NBA_NINE_CAT } from './NbaCategoryRegistry'
+import { NHL_STANDARD_CATEGORIES } from './NhlCategoryRegistry'
 
 export type CategoryRecordMode = 'each' | 'most' | 'roto'
 
@@ -41,7 +42,7 @@ const POINTS_ONLY: SportScoringTypes = { modes: ['points'], presets: {}, catalog
 
 /**
  * Mirrors what the engines and `nativeCategoryScoringContext` accept today: NBA H2H categories
- * (no roto), MLB H2H categories and roto. Every other sport is points only on this base.
+ * (no roto), MLB and NHL H2H categories and roto. Every other sport is points only on this base.
  */
 export const SPORT_SCORING_TYPES: Readonly<Record<string, SportScoringTypes>> = {
   NBA: {
@@ -53,6 +54,11 @@ export const SPORT_SCORING_TYPES: Readonly<Record<string, SportScoringTypes>> = 
     modes: ['points', 'h2h_category', 'roto'],
     presets: { mlb_5x5: MLB_FIVE_BY_FIVE, mlb_6x6: MLB_SIX_BY_SIX },
     catalog: MLB_SIX_BY_SIX,
+  },
+  NHL: {
+    modes: ['points', 'h2h_category', 'roto'],
+    presets: { nhl_standard: NHL_STANDARD_CATEGORIES },
+    catalog: NHL_STANDARD_CATEGORIES,
   },
 }
 
