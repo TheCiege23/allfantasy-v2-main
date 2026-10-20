@@ -26,6 +26,7 @@ export function isCloseLateGame(sport: string, g: GameObservation): boolean {
 /** Bootstrap establishes a baseline; never announce an entire game's history on first poll. */
 export function gameStateAlerts(sport: string, previous: GameObservation | null, next: GameObservation): GameAlert[] {
   if (!previous || next.homeScore == null || next.awayScore == null) return []
+  sport = sport.toUpperCase()
   const score = `${next.awayTeam} ${next.awayScore} — ${next.homeTeam} ${next.homeScore}`
   const alerts: GameAlert[] = []
   const periodsPerHalf = ['NFL', 'NCAAF', 'NBA', 'WNBA'].includes(sport) ? 2 : ['NCAAB', 'SOCCER'].includes(sport) ? 1 : null
@@ -34,6 +35,23 @@ export function gameStateAlerts(sport: string, previous: GameObservation | null,
     next.homeLinescores.length >= periodsPerHalf! && next.awayLinescores.length >= periodsPerHalf!
     ? `${next.awayTeam} ${next.awayLinescores.slice(0, periodsPerHalf!).reduce((a, b) => a + b, 0)} — ${next.homeTeam} ${next.homeLinescores.slice(0, periodsPerHalf!).reduce((a, b) => a + b, 0)}` : null
   if (halftime(next) && !halftime(previous) || crossedHalf && halfScore) alerts.push({ key: 'halftime', type: 'game_halftime', title: `${sport} halftime`, body: halfScore ?? score })
+  if (['NBA', 'NHL'].includes(sport) && !final(next)) {
+    const ended = next.period > previous.period ? next.period - 1
+      : /end.*(?:quarter|period)|(?:quarter|period).*end|intermission/i.test(next.statusDetail + ' ' + next.status)
+        || /^(?:0:)?0+(?:\.0+)?$/.test(next.clock ?? '') ? next.period : 0
+    // Reuse the halftime identity for Q2; never replay multiple missed intervals.
+    if (ended > 0 && !(sport === 'NBA' && ended === 2 && alerts.some(a => a.key === 'halftime'))) {
+      const linesAvailable = (next.homeLinescores?.length ?? 0) >= ended && (next.awayLinescores?.length ?? 0) >= ended
+      const atBoundary = ended === next.period
+      if (atBoundary || linesAvailable) {
+        const intervalScore = linesAvailable
+          ? `${next.awayTeam} ${next.awayLinescores!.slice(0, ended).reduce((a,b)=>a+b,0)} — ${next.homeTeam} ${next.homeLinescores!.slice(0, ended).reduce((a,b)=>a+b,0)}` : score
+        const label = ended > (sport === 'NBA' ? 4 : 3) ? 'overtime' : sport === 'NBA' ? 'quarter' : 'period'
+        const half = sport === 'NBA' && ended === 2
+        alerts.push({ key: half ? 'halftime' : `interval:${ended}`, type: half ? 'game_halftime' : 'game_period_end', title: half ? 'NBA halftime' : `${sport}: end of ${label} ${ended}`, body: intervalScore })
+      }
+    }
+  }
   if (final(next) && !final(previous)) alerts.push({ key: 'final', type: 'game_final', title: `${sport} final score`, body: score })
   if (isCloseLateGame(sport, next) && !isCloseLateGame(sport, previous)) alerts.push({ key: 'close', type: 'game_close', title: `${sport}: close game`, body: `${score}. ${next.statusDetail}` })
   return alerts
@@ -41,6 +59,8 @@ export function gameStateAlerts(sport: string, previous: GameObservation | null,
 
 /** Only provider-identified plays qualify; cumulative score changes cannot identify every play. */
 export function gamePlayAlerts(detail: LiveGameDetail): GameAlert[] {
+  // Basketball and hockey use interval summaries instead of noisy per-play alerts.
+  if (['NBA', 'NHL'].includes(detail.sport.toUpperCase())) return []
   const out = new Map<string, GameAlert>()
   const add = (p: { id: string; text: string }, scoring: boolean) => {
     if (!p.id || !p.text) return
