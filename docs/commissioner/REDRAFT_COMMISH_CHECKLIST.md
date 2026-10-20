@@ -36,6 +36,7 @@ _Last updated: 2026-10-20._
 | 🟡 | Co-commissioner permissions — up to 2, each limited to scoring / rosters / trades / money / chat / league setup | Free | #2564 |
 | 🟡 | Settings lock — lock areas for the season; mid-season changes need a league vote | Free | #2568 |
 | ✅ | Trade deadline enforced server-side (other session) | Free | #2554 |
+| 🟡 | Trade deadline day + time — trades close at the moment the commissioner picks (league timezone) or after the deadline week, whichever comes first | Free | #2582 |
 
 ## Rules, playoffs and the league's identity
 
@@ -53,7 +54,7 @@ _Last updated: 2026-10-20._
 
 | | Feature | Tier | Notes |
 |---|---|---|---|
-| ⬜ | Separate trade deadlines for player trades and pick trades | Free | builds on #2554 |
+| ⬜ | Separate deadlines for player trades and pick trades | Free | builds on #2554 and #2582 |
 | ⬜ | Custom tiebreaker order (points for, head-to-head, all-play, points against, coin flip) | Plan | builds on #2557 |
 | ⬜ | League log for members, with a "commish only" toggle | Free | today members only reach a raw JSON viewer on the old league page |
 | ⬜ | One-tap stat-correction review before standings move | Free | |
