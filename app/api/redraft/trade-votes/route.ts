@@ -26,7 +26,7 @@ import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
-import { evaluateTradeWindowForLeague } from '@/lib/league-trade-engine/tradeWindow'
+import { resolveTradeWindowForLeague } from '@/lib/league-trade-engine/tradeWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,7 +118,7 @@ async function finalizeAcceptedTrade(
   // so a proposal made in the deadline week settled whenever it was approved. Server week only
   // (`RedraftSeason.currentWeek` for this season). The proposal is left as it is: a refusal here is
   // not a decision about it, and it expires on its own clock.
-  const settleWindow = await evaluateTradeWindowForLeague(proposal.leagueId, { seasonId: proposal.seasonId })
+  const settleWindow = await resolveTradeWindowForLeague(proposal.leagueId, { seasonId: proposal.seasonId })
   if (settleWindow.refusal) {
     return NextResponse.json({ error: settleWindow.refusal.message, code: settleWindow.refusal.code }, { status: 409 })
   }
@@ -626,7 +626,7 @@ export async function POST(req: NextRequest) {
 
       // Refused BEFORE `acceptedAt` is recorded, so a review-mode trade cannot be accepted past the
       // deadline and then sit as "accepted, awaiting review" for something that can never settle.
-      const acceptWindow = await evaluateTradeWindowForLeague(proposal.leagueId, { seasonId: proposal.seasonId })
+      const acceptWindow = await resolveTradeWindowForLeague(proposal.leagueId, { seasonId: proposal.seasonId })
       if (acceptWindow.refusal) {
         return NextResponse.json({ error: acceptWindow.refusal.message, code: acceptWindow.refusal.code }, { status: 409 })
       }

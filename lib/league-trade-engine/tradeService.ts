@@ -9,7 +9,7 @@ import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import {
-  evaluateTradeWindowForLeague,
+  resolveTradeWindowForLeague,
   resolveServerTradeWeek,
   tradeWindowRefusal,
   TRADE_DEADLINE_CODE,
@@ -799,7 +799,7 @@ export async function acceptAfLeagueTrade(input: {
 
   // Re-checked at accept time, BEFORE any acceptance is recorded: a proposal made in the deadline
   // week must not be accepted the week after, and a locked league accepts nothing. Server week only.
-  const acceptWindow = await evaluateTradeWindowForLeague(input.leagueId)
+  const acceptWindow = await resolveTradeWindowForLeague(input.leagueId)
   if (acceptWindow.refusal) throw new Error(acceptWindow.refusal.message)
 
   const participantRosterIds = [...new Set([

@@ -82,7 +82,7 @@ export function tradeWindowRefusal(
 }
 
 /** Resolve the week server-side and evaluate the window. */
-export async function evaluateTradeWindow(
+export async function resolveTradeWindow(
   league: League,
   opts: { seasonId?: string | null; db?: WeekDb } = {},
 ): Promise<{ currentWeek: number | null; refusal: TradeWindowRefusal | null }> {
@@ -91,7 +91,7 @@ export async function evaluateTradeWindow(
 }
 
 /** Load the league by id and evaluate. A missing league is not this guard's refusal to make. */
-export async function evaluateTradeWindowForLeague(
+export async function resolveTradeWindowForLeague(
   leagueId: string,
   opts: { seasonId?: string | null } = {},
 ): Promise<{ currentWeek: number | null; refusal: TradeWindowRefusal | null }> {
@@ -102,5 +102,5 @@ export async function evaluateTradeWindowForLeague(
     league = null
   }
   if (!league) return { currentWeek: null, refusal: null }
-  return evaluateTradeWindow(league, opts)
+  return resolveTradeWindow(league, opts)
 }
