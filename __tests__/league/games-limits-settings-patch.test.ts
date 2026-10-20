@@ -10,7 +10,8 @@ const m = vi.hoisted(() => ({
     league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     leagueWaiverSettings: { findUnique: vi.fn() },
     leagueSettings: { upsert: vi.fn() },
-    redraftSeason: { findFirst: vi.fn() },
+    redraftSeason: { findFirst: vi.fn(), findMany: vi.fn(async () => []) },
+    $queryRaw: vi.fn(async () => [{ ok: true }]),
     redraftPlayoffRound: { findFirst: vi.fn() },
   },
 }))
@@ -123,5 +124,30 @@ describe('saving games limits', () => {
     expect(form.gamesLimits).toEqual({ gamesPlayedCaps: { PG: 82 } })
     expect(form.dailyLineupsActive).toBe(true)
     expect(form.gamesLimitsCapSlots).toEqual(expect.arrayContaining(['PG', 'SG', 'G', 'UTIL']))
+  })
+})
+
+describe('games limits are not combined with a "which games count" rule', () => {
+  it('400 when turning limits on while games count is not All games, and nothing is stored', async () => {
+    league('NBA', { sportConfig: { ...DAILY_ON, gamesCountMode: 'lock_in' } })
+    const res = await patch({ gamesLimits: { gamesPlayedCaps: { PG: 82 } } })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/can’t be combined/)
+    expect(settingsInDb).not.toHaveProperty('games_limits')
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+
+  it('400 when changing games count off All games while limits are on', async () => {
+    league('NBA', { sportConfig: DAILY_ON, games_limits: { gamesPlayedCaps: { PG: 82 } } })
+    const res = await patch({ sportConfig: { ...DAILY_ON, gamesCountMode: 'best_n', gamesCountBestN: 2 } })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/can’t be combined/)
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+
+  it('turning limits off in the same request as the rule is allowed', async () => {
+    league('NBA', { sportConfig: { ...DAILY_ON, gamesCountMode: 'lock_in' }, games_limits: { gamesPlayedCaps: { PG: 82 } } })
+    expect((await patch({ gamesLimits: null })).status).toBe(200)
+    expect(settingsInDb.games_limits).toBeNull()
   })
 })

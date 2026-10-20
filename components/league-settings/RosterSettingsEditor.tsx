@@ -23,6 +23,7 @@ import { emitLeagueDraftRoomRevalidate } from '@/lib/draft-room/emitLeagueDraftR
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { RosterLabel } from '@/components/league-labels/RosterLabel'
 import { matchRosterLabel } from '@/lib/league-labels/liveValues'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 interface RosterTemplateOption {
   key: string
@@ -106,6 +107,7 @@ function sportLabel(sport: string | null | undefined): string {
 
 export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueId: string; sport?: string | null }) {
   const { t } = useLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const [slotDefs, setSlotDefs] = useState<SlotDef[]>([])
   const [config, setConfig] = useState<RosterConfig | null>(null)
   const [baselineSlots, setBaselineSlots] = useState<Record<string, number>>({})
@@ -198,7 +200,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
     try {
       // Only this sport's keys are ever sent.
       const slots = alignSlotsToSport(pendingSlots, slotDefs).slots
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slots, templateKey: selectedTemplateKey }),
       })
@@ -212,7 +214,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
-  }, [applyPayload, leagueId, pendingSlots, rosterSport, selectedTemplateKey, slotDefs])
+  }, [applyPayload, confirmFetch, leagueId, pendingSlots, rosterSport, selectedTemplateKey, slotDefs])
 
   const resetToSaved = useCallback(() => {
     setPendingSlots(baselineSlots)
@@ -234,7 +236,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
     setError(null)
     setSuccess(false)
     try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings/reset-default`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings/reset-default`, {
         method: 'POST',
       })
       const data = await res.json()
@@ -251,7 +253,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
     } finally {
       setSaving(false)
     }
-  }, [applyPayload, defaultTemplateKey, isCommissioner, leagueId, rosterSport, slotDefs, templates])
+  }, [applyPayload, confirmFetch, defaultTemplateKey, isCommissioner, leagueId, rosterSport, slotDefs, templates])
 
   const groups = useMemo(
     () => buildRosterGroups(slotDefs, pendingSlots, { isCommissioner, sport: rosterSport }),
@@ -288,6 +290,8 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
   )
 
   return (
+    <>
+      {midSeasonDialog}
     <RosterSettingsModalShell title={t('lsEd.ro.title')} subtitle={t('lsEd.ro.subtitle')} badge={badge}>
       <RosterValidationBanner warnings={warnings} errors={error ? [error] : []} />
 
@@ -389,5 +393,6 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
         </div>
       )}
     </RosterSettingsModalShell>
+    </>
   )
 }

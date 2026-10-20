@@ -72,6 +72,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
   dispatchNotification: vi.fn(async () => {
     dispatchedRows.push('sent')
+    return { requested: 1, delivered: 1, suppressed: 0, failed: 0 }
   }),
 }))
 
@@ -137,6 +138,7 @@ beforeEach(async () => {
   const { dispatchNotification } = await import('@/lib/notifications/NotificationDispatcher')
   ;(dispatchNotification as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
     dispatchedRows.push('sent')
+    return { requested: 1, delivered: 1, suppressed: 0, failed: 0 }
   })
 })
 
@@ -274,6 +276,7 @@ describe('dispatchPendingPlayerNewsNotifications — budget', () => {
     ;(dispatchNotification as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       dispatchedRows.push('sent')
       clock.advance(130_000)
+    return { requested: 1, delivered: 1, suppressed: 0, failed: 0 }
     })
 
     const result = await dispatchPendingPlayerNewsNotifications({ budget })

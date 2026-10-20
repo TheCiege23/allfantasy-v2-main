@@ -21,9 +21,9 @@ export const dynamic = 'force-dynamic'
  * NextResponse-friendly async guard. Returns null on success or a
  * NextResponse to return directly on failure.
  */
-async function commissionerGuard(leagueId: string, userId: string): Promise<NextResponse | null> {
+async function commissionerGuard(leagueId: string, userId: string, scope?: 'league'): Promise<NextResponse | null> {
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, scope)
     return survivorHostGuard(leagueId, userId)
   } catch (err) {
     if (err instanceof Response) {
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 })
 
-  const guard2 = await commissionerGuard(leagueId, userId)
+  const guard2 = await commissionerGuard(leagueId, userId, 'league')
   if (guard2) return guard2
 
   const log = async (

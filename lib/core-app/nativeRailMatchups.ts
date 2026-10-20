@@ -2,7 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
-import { buildLeagueStatScorer, isScoringStarterSlot, leagueIsBestBall } from '@/lib/redraft/scoringEngine'
+import { buildLeagueStatScorer, isScoringStarterSlot, leagueIsBestBall, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { loadWeekLineups, weekSlotType, type WeekLineups } from '@/lib/redraft/weekLineupSlots'
 import { managerArtUrl } from './leagueArt'
 import { realManagerName } from './managerName'
@@ -291,6 +292,18 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
         starterCount: lineup.length,
       }
     })
+
+    /*
+     * A daily-lineup league's week is Σ days of that day's starters, which the sum of this week's
+     * starters above cannot express (a player benched on Wednesday still has a whole-week row). Its
+     * line comes from the matchup scorer itself — one call per surviving team, daily leagues only.
+     */
+    if (!bestBall && isDailyLineupScoringEnabled(settings, String(league.sport ?? season.sport))) {
+      for (const t of teams) {
+        const r = await scoreRosterForWeek({ leagueId: l.leagueId, rosterId: t.rosterId, week: l.week, seasonYear: l.season }).catch(() => null)
+        t.points = r && r.scoredStarterCount > 0 ? r.points : null
+      }
+    }
 
     const eliminated = me.isEliminated || choppedWeekByRedraft.has(me.id)
     const mine = teams.find((t) => t.rosterId === me.id) ?? { rosterId: me.id, points: null, projected: null, pricedFrom: 0, starterCount: 0 }

@@ -26,8 +26,8 @@ export const dynamic = 'force-dynamic'
  */
 
 /** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
-function canManageLeague(leagueId: string, userId: string): Promise<boolean> {
-  return hasLeagueCommissionerRights(leagueId, userId)
+function canManageLeague(leagueId: string, userId: string, scope?: 'rosters'): Promise<boolean> {
+  return hasLeagueCommissionerRights(leagueId, userId, scope)
 }
 
 type LockOverride = { week?: number; rosterId?: string; playerId?: string }
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
   const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId }, select: { id: true, leagueId: true } })
   if (!season) return NextResponse.json({ error: 'Season not found' }, { status: 404 })
-  if (!(await canManageLeague(season.leagueId, userId))) {
+  if (!(await canManageLeague(season.leagueId, userId, 'rosters'))) {
     return NextResponse.json({ error: 'Forbidden — commissioner only' }, { status: 403 })
   }
 

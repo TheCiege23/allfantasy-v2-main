@@ -15,6 +15,7 @@ import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
 import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
 import {
   dailySlotFor,
   dayKey,
@@ -28,6 +29,7 @@ import {
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, type LimitLedgerEntry } from './gamesLimits'
 import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
+import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -295,6 +297,9 @@ async function scoreRosterStarters(args: {
   const activeStarters = starters.filter((p: (typeof starters)[number]) =>
     isScoringStarterSlot(weekSlotType(p, weekLineups)),
   )
+  // "Which games count" (lib/redraft/gamesCount.ts). Null — and no query against its tables — unless
+  // the commissioner chose best-N or lock-in, so every other league scores exactly as before.
+  const gamesCount = activeStarters.length > 0 ? await loadRosterGamesCount(args, activeStarters) : null
 
   let pts = 0
   const statMaps: TeamStatTotals[] = []
@@ -316,6 +321,27 @@ async function scoreRosterStarters(args: {
     if (!row) {
       missingPlayerIds.push(p.playerId)
       allFinal = false
+      continue
+    }
+    if (gamesCount) {
+      const games = gamesCount.games.get(p.playerId)
+      // A weekly row with no per-game rows: the sync has not covered him since the setting changed.
+      // Scoring his whole week would silently ignore the rule, so he is missing until it does.
+      if (!games?.length) {
+        missingPlayerIds.push(p.playerId)
+        allFinal = false
+        continue
+      }
+      const counted = await scoreCountedGames({
+        setting: gamesCount.setting,
+        games,
+        choice: gamesCount.choices.get(p.playerId),
+        scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+      })
+      for (const stats of counted.countedStats) statMaps.push(stats as TeamStatTotals)
+      pts += counted.points
+      scoredStarterCount += 1
+      if (!row.isFinalized) allFinal = false
       continue
     }
     statMaps.push(row.stats as TeamStatTotals)
@@ -353,6 +379,24 @@ async function scoreRosterStarters(args: {
   }
 }
 
+/** The league's games-count rule for a weekly-lineup roster, or null when it counts every game. */
+async function loadRosterGamesCount(
+  args: { leagueId: string; rosterId: string; week: number; seasonYear: number },
+  players: ReadonlyArray<{ playerId: string; sport: string }>,
+): Promise<GamesCountScoring | null> {
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
+  if (!league) return null
+  return loadGamesCountScoring({
+    leagueId: args.leagueId,
+    leagueSettings: league.settings,
+    sport: String(league.sport ?? '').toUpperCase(),
+    rosterId: args.rosterId,
+    season: args.seasonYear,
+    week: args.week,
+    players,
+  })
+}
+
 /**
  * DAILY-LINEUP LEAGUES (docs/DAILY_LINEUPS_DESIGN.md §4, lib/redraft/dailyLineups.ts): the week's score
  * is the sum over its Eastern days of each day's starters' points FOR THAT DAY. A player benched on a
@@ -383,6 +427,16 @@ async function scoreRosterStartersDaily(args: {
   const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: [args.rosterId], window })
   const days = daysInWindow(window)
   const playerIds = players.map((p: (typeof players)[number]) => p.playerId)
+  // "Which games count" applies across the days he STARTED: only those days' games are eligible.
+  const gamesCount = await loadGamesCountScoring({
+    leagueId: args.leagueId,
+    leagueSettings: league.settings,
+    sport,
+    rosterId: args.rosterId,
+    season: args.seasonYear,
+    week: args.week,
+    players,
+  })
   const dailyStatsBySport = new Map<string, Awaited<ReturnType<typeof loadPlayerDailyStats>>>()
   for (const playerSport of new Set(players.map((p: (typeof players)[number]) => p.sport))) {
     dailyStatsBySport.set(
@@ -408,6 +462,10 @@ async function scoreRosterStartersDaily(args: {
   let allFinal = true
   const missingPlayerIds: string[] = []
   const statMaps: TeamStatTotals[] = []
+  // Points the games-count rule already decided. The limits step re-sums only the days it was handed,
+  // so these are carried past it rather than lost (the settings PATCH also refuses both rules at once).
+  let gamesCountPts = 0
+  const gamesCountStats: TeamStatTotals[] = []
 
   for (const p of players) {
     const onRoster = daysOnRoster(p, days)
@@ -442,6 +500,26 @@ async function scoreRosterStartersDaily(args: {
       if (!weekly) {
         missingPlayerIds.push(p.playerId)
         allFinal = false
+      } else if (gamesCount && !gamesCount.games.get(p.playerId)?.length) {
+        // Opted in, but no per-game rows yet (see the weekly path): missing, never scored whole-week.
+        missingPlayerIds.push(p.playerId)
+        allFinal = false
+      } else if (gamesCount) {
+        scoredStarterCount += 1
+        if (!weekly.isFinalized) allFinal = false
+        const started = new Set(startedDays.map((d) => dayKey(d)))
+        const counted = await scoreCountedGames({
+          setting: gamesCount.setting,
+          games: (gamesCount.games.get(p.playerId) ?? []).filter((g) => started.has(g.day)),
+          choice: gamesCount.choices.get(p.playerId),
+          scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+        })
+        pts += counted.points
+        gamesCountPts += counted.points
+        for (const stats of counted.countedStats) {
+          statMaps.push(stats as TeamStatTotals)
+          gamesCountStats.push(stats as TeamStatTotals)
+        }
       } else {
         scoredStarterCount += 1
         if (!weekly.isFinalized) allFinal = false
@@ -472,8 +550,8 @@ async function scoreRosterStartersDaily(args: {
   let gamesLimits: GamesLimitsSummary | undefined
   if (limits) {
     const limited = await applyDailyGamesLimits({ league, sport, rosterId: args.rosterId, seasonYear: args.seasonYear, week: args.week, limits, limitDays })
-    pts = limited.points
-    statMaps.splice(0, statMaps.length, ...limited.statMaps)
+    pts = gamesCountPts + limited.points
+    statMaps.splice(0, statMaps.length, ...gamesCountStats, ...limited.statMaps)
     gamesLimits = limited.summary
   }
 
@@ -682,6 +760,16 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     home.points = categoryMatchup.aWins
     away.points = categoryMatchup.bWins
   }
+  // Commissioner score adjustments (lib/score-adjustments): points leagues only, added on top of the
+  // computed score on every rescore so a stat sync can never erase one.
+  const adjustments = scoringMode === 'points' ? readScoreAdjustments(scoringSettings) : []
+  const commissionerAdjustment = adjustments.length
+    ? { home: adjustmentFor(adjustments, matchupId, homeRosterId), away: adjustmentFor(adjustments, matchupId, awayRosterId) }
+    : null
+  if (commissionerAdjustment) {
+    home.points = adjustedScore(home.points, adjustments, matchupId, homeRosterId)
+    away.points = adjustedScore(away.points, adjustments, matchupId, awayRosterId)
+  }
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =
     missingPlayerIds.length === 0 &&
@@ -724,6 +812,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
+          ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
           home,
           away,
           missingPlayerIds,
