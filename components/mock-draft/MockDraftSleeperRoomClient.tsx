@@ -680,6 +680,13 @@ export default function MockDraftSleeperRoomClient({
 
   const draftedIds = useMemo(() => new Set(draftState?.picks.map((pick) => pick.playerId) ?? []), [draftState?.picks])
 
+  useEffect(() => {
+    setQueue((current) => {
+      const remaining = current.filter((id) => !draftedIds.has(id))
+      return remaining.length === current.length ? current : remaining
+    })
+  }, [draftedIds])
+
   const filteredPlayers = useMemo(() => {
     if (!draftState) return []
 
@@ -1720,7 +1727,7 @@ export default function MockDraftSleeperRoomClient({
               </div>
             ) : (
               queuePlayers.map((player, index) => (
-                <div key={player.id} className="rounded-xl border border-orange-400/20 bg-orange-500/10 p-2 text-xs">
+                <div key={player.id} data-testid={`mock-draft-queue-entry-${player.id}`} className="rounded-xl border border-orange-400/20 bg-orange-500/10 p-2 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[11px] font-black text-orange-200">
                       #{index + 1}

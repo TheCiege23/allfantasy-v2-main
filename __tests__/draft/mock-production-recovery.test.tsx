@@ -60,6 +60,20 @@ describe('production mock mobile recovery and clocks', () => {
     expect(saved().state.currentPick).toBe(2)
   })
 
+  it('removes drafted queue entries so the remaining players can be reordered', async () => {
+    const value = checkpoint(); value.queue = ['Alpha', 'Bravo', 'Charlie']
+    localStorage.setItem(key, JSON.stringify(value))
+    render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-resume')
+    fireEvent.click(screen.getByTestId('mock-draft-resume'))
+    const drawer = await openPlayers()
+    fireEvent.click(drawer.getByTestId('mock-draft-player-row-Alpha'))
+    fireEvent.click(screen.getByTestId('mock-draft-pause'))
+    await waitFor(() => expect(saved().queue).toEqual(['Bravo', 'Charlie']))
+    fireEvent.click(within(drawer.getByTestId('mock-draft-queue-entry-Bravo')).getByRole('button', { name: 'Down', exact: true }))
+    await waitFor(() => expect(saved().queue).toEqual(['Charlie', 'Bravo']))
+  })
+
   it('expires from elapsed time on foregrounding and uses the queue exactly once', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     const value = checkpoint(); value.queue = ['Bravo']
