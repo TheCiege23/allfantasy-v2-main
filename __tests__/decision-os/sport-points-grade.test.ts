@@ -240,7 +240,8 @@ describe('leagues this grade must not answer for', () => {
     expect(categoryLeagueReason({ scoring_type: 'headpoint' }, 'NBA')).toBeNull()
     // Each sport names what it does cover, never another sport's setups.
     expect(categoryLeagueReason({ scoring_mode: 'roto' }, 'MLB')).toMatch(/standard 5x5 and 6x6 setups/)
-    expect(categoryLeagueReason({ scoring_mode: 'h2h_category' }, 'NHL')).toMatch(/no NHL category grades yet/)
+    expect(categoryLeagueReason({ scoring_mode: 'h2h_category' }, 'NHL')).toMatch(/standard 10-category head-to-head setup/)
+    expect(categoryLeagueReason({ scoring_mode: 'h2h_category' }, 'NCAAB')).toMatch(/no college basketball category grades yet/)
   })
 
   it('refuses a dynasty or keeper league, which this-season points would misprice', () => {

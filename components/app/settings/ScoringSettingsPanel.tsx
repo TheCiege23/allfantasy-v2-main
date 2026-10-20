@@ -199,7 +199,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
         <div data-testid="category-scoring-settings" className="mt-3 rounded border border-white/15 p-3 text-sm">
           <p>{config.categoryScoring.recordMode === 'each' ? t('scorePanel.record.each') : config.categoryScoring.recordMode === 'roto' ? t('scorePanel.record.roto') : t('scorePanel.record.most')}</p>
           <ul className="mt-2 flex flex-wrap gap-3">{config.categoryScoring.categories.map(category => <li key={category.id}>{category.label} ({category.direction === 'lower' ? t('scorePanel.lowerWins') : t('scorePanel.higherWins')})</li>)}</ul>
-          <p className="mt-2 text-xs text-white/65">{t('scorePanel.pctNote')}</p>
+          <p className="mt-2 text-xs text-white/65">{t(String(config.sport).toUpperCase() === 'NHL' ? 'scorePanel.pctNote.nhl' : 'scorePanel.pctNote')}</p>
         </div>
       )}
       <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-3">

@@ -249,10 +249,11 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const format = normalizeFormat(input.format)
   const engineDraftType = mapCanonicalDraftTypeToEngineCore(input.draftType)
   const scoringPreset = String(input.scoringPreset ?? '').trim()
-  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat'].includes(scoringPreset)
+  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat', 'nba_9cat_roto'].includes(scoringPreset)
+  const nhlCategory = sport === 'NHL' && ['nhl_cat_each', 'nhl_cat_most'].includes(scoringPreset)
   const categoryContext = { sport, leagueType: format, idpSelected: false }
-  if (nbaCategory && !isScoringPresetValidForContext(scoringPreset, categoryContext)) throw new Error('NBA category scoring requires redraft, dynasty or keeper.')
-  const categorySettings = nbaCategory ? buildScoringFromPresetId(scoringPreset, categoryContext).scoringSettings : {}
+  if ((nbaCategory || nhlCategory) && !isScoringPresetValidForContext(scoringPreset, categoryContext)) throw new Error(`${sport} category scoring requires redraft, dynasty or keeper.`)
+  const categorySettings = nbaCategory || nhlCategory ? buildScoringFromPresetId(scoringPreset, categoryContext).scoringSettings : {}
   const survivorContract = format === 'survivor' ? getSurvivorDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount }) : null
   const survivorSnapshot = survivorContract ? buildSurvivorSettingsSnapshot({ sport, draftType: input.draftType, scoringPresetId: survivorContract.scoring_preset_id, teamCount: input.managerCount }) : null
   const redraftContract =

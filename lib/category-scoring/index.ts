@@ -8,10 +8,12 @@
 import type { CategoryDefinition, CategoryPresetId } from './types'
 import { MLB_FIVE_BY_FIVE, MLB_SIX_BY_SIX } from './MlbCategoryRegistry'
 import { NBA_EIGHT_CAT, NBA_LEGACY_EIGHT_CAT, NBA_NINE_CAT } from './NbaCategoryRegistry'
+import { NHL_TEN_CAT } from './NhlCategoryRegistry'
 
 export * from './types'
 export * from './NbaCategoryRegistry'
 export * from './MlbCategoryRegistry'
+export * from './NhlCategoryRegistry'
 export * from './CategoryMatchupResolver'
 
 /**
@@ -27,5 +29,6 @@ export function getCategoryPresetDefinitions(
   if (presetId === 'nba_8cat') return NBA_LEGACY_EIGHT_CAT
   if (presetId === 'nba_8cat_standard') return NBA_EIGHT_CAT
   if (presetId === 'nba_9cat') return NBA_NINE_CAT
+  if (presetId === 'nhl_10cat') return NHL_TEN_CAT
   return null
 }

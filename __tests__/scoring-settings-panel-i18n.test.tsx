@@ -129,6 +129,17 @@ describe('🛑 the panel reads Spanish in Spanish', () => {
     }
   })
 
+  it('an NHL category league names its own rate stat (SV%), not basketball makes and attempts', async () => {
+    h.language = 'es'
+    h.config = { ...CATEGORY, sport: 'NHL', categoryScoring: { mode: 'h2h_category', presetId: 'nhl_10cat', recordMode: 'most', categories: [{ id: 'nhl_ga', label: 'GA', direction: 'lower' }, { id: 'nhl_sv_pct', label: 'SV%', direction: 'higher' }] } }
+    stubPermission(false)
+    const r = render(<ScoringSettingsPanel leagueId="l1" />)
+    await r.findByTestId('category-scoring-settings')
+    expect(r.container.textContent).toContain('SV% usa el total de paradas')
+    expect(r.container.textContent).not.toContain('Las categorías de porcentaje usan')
+    expect(englishIn(r.container)).toEqual([])
+  })
+
   it('no league selected', () => {
     h.language = 'es'
     const r = render(<ScoringSettingsPanel leagueId="" />)
