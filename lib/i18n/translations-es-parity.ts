@@ -2820,6 +2820,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.cr.notes": "Notas del comisionado sobre el formato (fusión JSON)",
   "lsHub.tr.pickTrading": "Permitir trades de picks del draft",
   "lsHub.tr.review": "Ventana de revisión (horas)",
+  "lsHub.tr.noDeadline": "Sin límite (dejar vacío)",
   "lsHub.tr.deadline": "Límite de trades (n.º de semana)",
   "lsHub.po.quick": "Calendario rápido",
   "lsHub.po.teams": "Equipos en playoffs",

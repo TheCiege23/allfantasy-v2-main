@@ -5,6 +5,7 @@ import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSecti
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
+import { tryGetSportConfig } from '@/lib/sportConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
@@ -27,6 +28,8 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
     setPlayoffStartWeek(chosenStartWeek)
   }, [ctx.league.playoffTeams, chosenStartWeek])
 
+  const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
+  const startWeekMax = Math.max(seasonWeeks, chosenStartWeek)
   const teamCap = ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12
 
   // A tournament conference league has no league playoffs; its fields would do nothing.
@@ -62,14 +65,14 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
             </span>
             <input
               type="number"
-              min={10}
-              max={18}
+              min={1}
+              max={startWeekMax}
               value={playoffStartWeek}
               disabled={!canEdit}
               onChange={(e) => {
                 const v = Number(e.target.value)
                 setPlayoffStartWeek(v)
-                queuePatch({ playoffStartWeek: v })
+                if (e.target.value !== '' && e.target.validity.valid && Number.isInteger(v)) queuePatch({ playoffStartWeek: v })
               }}
               className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
             />

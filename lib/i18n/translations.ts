@@ -1135,6 +1135,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.cr.notes": "Commissioner concept notes (JSON merge)",
     "lsHub.tr.pickTrading": "Allow draft pick trading",
     "lsHub.tr.review": "Review window (hours)",
+    "lsHub.tr.noDeadline": "No deadline (leave blank)",
     "lsHub.tr.deadline": "Trade deadline (week #)",
     "lsHub.po.quick": "Quick schedule",
     "lsHub.po.teams": "Playoff teams",
