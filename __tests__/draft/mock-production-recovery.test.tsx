@@ -88,6 +88,31 @@ describe('production mock mobile recovery and clocks', () => {
     expect(saved().state.turnDeadlineMs - Date.now()).toBe(8000)
   })
 
+  it('reconciles an overdue CPU turn once on foregrounding', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    localStorage.setItem(key, JSON.stringify(checkpoint({ onTheClock: 2, currentPick: 2, pausedRemainingMs: 3000 })))
+    render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-resume')
+    fireEvent.click(screen.getByTestId('mock-draft-resume'))
+    act(() => { vi.setSystemTime(Date.now() + 10000); document.dispatchEvent(new Event('visibilitychange')) })
+    await waitFor(() => expect(saved().state.picks).toHaveLength(1))
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(saved().state.picks).toHaveLength(1)
+  })
+
+  it('reset clears the checkpoint so reload starts at setup', async () => {
+    localStorage.setItem(key, JSON.stringify(checkpoint()))
+    const view = render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-reset')
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(screen.getByTestId('mock-draft-reset'))
+    await waitFor(() => expect(localStorage.getItem(key)).toBeNull())
+    view.unmount()
+    render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-entry-open')
+    expect(screen.queryByText(/Recovered your mock draft/)).toBeNull()
+  })
+
   it('does not restore another account or another league checkpoint', async () => {
     localStorage.setItem(key, JSON.stringify(checkpoint()))
     render(<MockDraftSleeperRoomClient viewerId="someone-else" />)

@@ -791,15 +791,16 @@ export default function MockDraftSleeperRoomClient({
   )
 
   const handlePick = useCallback(
-    (player: AvailablePlayer, isAiPick: boolean) => {
+    (player: AvailablePlayer, isAiPick: boolean, expectedOverall?: number) => {
       setDraftState((current) => {
         if (!current || current.status !== 'drafting') return current
+        if (expectedOverall != null && current.currentPick !== expectedOverall) return current
         if (current.picks.some((pick) => pick.playerId === player.id)) return current
 
         const round = Math.ceil(current.currentPick / current.settings.teamCount)
         const pickInRound = ((current.currentPick - 1) % current.settings.teamCount) + 1
         const team = current.teams.find((entry) => entry.slot === current.onTheClock)
-        if (!team) return current
+        if (!team || team.isUser === isAiPick) return current
 
         const pick: DraftPick = {
           overall: current.currentPick,
@@ -909,7 +910,7 @@ export default function MockDraftSleeperRoomClient({
             ? topThree[1].player
             : topThree[0].player
 
-      handlePick(selected, true)
+      handlePick(selected, true, latestState.currentPick)
     }
     const timeout = window.setTimeout(pickCpu, Math.max(0, (deadline ?? Date.now()) - Date.now()))
     const onVisible = () => { if (!document.hidden && (deadline ?? 0) <= Date.now()) pickCpu() }
@@ -934,7 +935,7 @@ export default function MockDraftSleeperRoomClient({
       null
 
     if (fallbackPlayer) {
-      handlePick(fallbackPlayer, false)
+      handlePick(fallbackPlayer, false, draftState.currentPick)
     }
   }, [draftState, draftedIds, handlePick, onTheClockTeam?.isUser, queue])
 
@@ -1823,7 +1824,7 @@ export default function MockDraftSleeperRoomClient({
                 }}
                 onClick={() => {
                   if (drafted || !isUserTurn) return
-                  handlePick(player, false)
+                  handlePick(player, false, draftState.currentPick)
                 }}
                 className={`min-w-0 flex flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
                   isUserTurn && !drafted ? 'hover:bg-white/8' : 'cursor-default'
