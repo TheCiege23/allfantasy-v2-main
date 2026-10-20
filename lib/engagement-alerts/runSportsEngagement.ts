@@ -15,16 +15,21 @@ export async function runSportsEngagement() {
     const started = Date.now()
     const report = await withSyncJobRun({ jobName: 'cron-sports-engagement', trigger: 'cron', provider: 'espn_live', sport: 'ALL' }, async () => {
       const errors: string[] = []
+      const bySport: Record<string, { audience: number; games: number; delivered: number; source?: string; durationMs: number; status: string }> = {}
       let games = 0
       let delivered = 0
       // Sport work runs concurrently, so a slow football feed cannot starve another sport.
       await Promise.all([...SUPPORTED_SPORTS, ...LIVE_ONLY_SPORTS].map(async sport => {
+        const sportStarted = Date.now()
+        const metrics = bySport[sport] = { audience: 0, games: 0, delivered: 0, durationMs: 0, status: 'running' } as typeof bySport[string]
         try {
           const users = await sportAlertAudience(sport)
-          if (!users.length) return
+          metrics.audience = users.length
+          if (!users.length) { metrics.status = 'no_audience'; return }
           const slate = await getLiveScoresForSport({ sport, forceRefresh: true })
+          metrics.source = slate.source
           // Summary ids belong to ESPN. Never send an RI game id to an ESPN endpoint.
-          if (slate.source !== 'espn_live') { errors.push(`${sport}: ESPN scoreboard unavailable`); return }
+          if (slate.source !== 'espn_live') { metrics.status = 'source_unavailable'; errors.push(`${sport}: ESPN scoreboard unavailable`); return }
           const queue = rotateForFairness(slate.scores.filter(g => {
             const state = resolveGameState(g.status)
             const untilStart = Date.parse(g.startTime) - Date.now()
@@ -39,16 +44,21 @@ export async function runSportsEngagement() {
               const game = queue[index++]!
               try {
                 const summary = await engagementGameDetail(sport, game.gameId)
-                delivered += await observeGameAlerts(sport, game, summary.failed || summary.stale ? null : summary.detail, users)
+                const count = await observeGameAlerts(sport, game, summary.failed || summary.stale ? null : summary.detail, users)
+                delivered += count
+                metrics.delivered += count
+                metrics.games++
                 if (summary.failed) errors.push(`${sport}/${game.gameId}: play feed unavailable`)
                 games++
               } catch (e) { errors.push(`${sport}/${game.gameId}: ${e instanceof Error ? e.message : String(e)}`) }
             }
           }))
-        } catch (e) { errors.push(`${sport}: ${e instanceof Error ? e.message : String(e)}`) }
+          metrics.status = errors.some(e => e.startsWith(`${sport}:`) || e.startsWith(`${sport}/`)) ? 'partial' : 'success'
+        } catch (e) { metrics.status = 'failed'; errors.push(`${sport}: ${e instanceof Error ? e.message : String(e)}`) }
+        finally { metrics.durationMs = Date.now() - sportStarted }
       }))
-      return { games, delivered, errors }
-    }, r => ({ rowsRead: r.games, rowsUpdated: r.delivered, status: r.errors.length ? 'partial' : 'success', metadata: { errors: r.errors } }))
+      return { games, delivered, errors, bySport }
+    }, r => ({ rowsRead: r.games, rowsUpdated: r.delivered, status: r.errors.length ? 'partial' : 'success', metadata: { errors: r.errors, bySport: r.bySport } }))
     return report
   } finally { await releaseAutomationLock('sports-engagement', owner) }
 }

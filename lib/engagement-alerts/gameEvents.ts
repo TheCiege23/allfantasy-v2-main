@@ -2,7 +2,7 @@ import type { LiveScoreRow } from '@/lib/sports-live-scores-service'
 import type { LiveGameDetail } from '@/lib/live/espnGameSummary'
 
 export type GameAlert = { key: string; type: string; title: string; body: string }
-export type GameObservation = Pick<LiveScoreRow, 'gameId' | 'homeTeam' | 'awayTeam' | 'homeScore' | 'awayScore' | 'status' | 'statusDetail' | 'period' | 'clock' | 'completed'> & Partial<Pick<LiveScoreRow, 'homeLinescores' | 'awayLinescores'>>
+export type GameObservation = Pick<LiveScoreRow, 'gameId' | 'homeTeam' | 'awayTeam' | 'homeScore' | 'awayScore' | 'status' | 'statusDetail' | 'period' | 'clock' | 'completed'> & Partial<Pick<LiveScoreRow, 'homeLinescores' | 'awayLinescores' | 'eventName' | 'playoffSeries' | 'homeTeamId' | 'awayTeamId' | 'season' | 'startTime'>>
 
 const final = (g: GameObservation) => g.completed || /final|full_time|completed/i.test(g.status)
 const halftime = (g: GameObservation) => /halftime|half.time|^ht$/i.test(`${g.status} ${g.statusDetail}`.trim())

@@ -1,5 +1,6 @@
 import 'server-only'
-import { isSupportedSport } from '@/lib/sport-scope'
+import { listSportsAlertAudience } from '@/lib/notifications/sportAudience'
+import { postseasonAlerts } from './postseasonEvents'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { gamePlayAlerts, gameStateAlerts, type GameObservation } from './gameEvents'
@@ -15,17 +16,17 @@ export async function observeGameAlerts(sport: string, observation: GameObservat
   const state = cached?.data as unknown as GameAlertState | null
   const plays = detail ? gamePlayAlerts(detail) : []
   const seen = new Set(state?.seen ?? [])
-  const alerts = state ? [...gameStateAlerts(sport, state.observation, observation), ...(state.playsInitialized ? plays : [])] : []
+  const alerts = [...postseasonAlerts(sport, observation), ...(state ? [...gameStateAlerts(sport, state.observation, observation), ...(state.playsInitialized ? plays : [])] : [])]
   if (!state?.playsInitialized) for (const p of plays) seen.add(p.key)
   let sent = 0
   for (const alert of alerts) {
     if (seen.has(alert.key)) continue
     const eventKey = `${cacheKey}:${alert.key}`
     const result = await dispatchNotification({
-      userIds: [...new Set(userIds)], category: alert.type === 'game_scoring_play' || alert.type === 'game_big_play' ? 'performance_alerts' : 'matchup_results',
+      userIds: [...new Set(userIds)], category: alert.type === 'postseason_clinch' ? 'breaking_news' : alert.type === 'game_scoring_play' || alert.type === 'game_big_play' ? 'performance_alerts' : 'matchup_results',
       type: alert.type, title: alert.title, body: alert.body,
       actionHref: `/core/live?sport=${encodeURIComponent(sport)}`,
-      severity: alert.type === 'game_close' ? 'high' : 'medium',
+      severity: alert.type === 'game_close' || alert.type === 'postseason_clinch' ? 'high' : 'medium',
       dedupePrefix: eventKey, skipChannels: { sms: true },
       meta: { sport, gameId: observation.gameId, eventKey, pushTag: eventKey, triggeredAt: new Date().toISOString() },
     })
@@ -40,10 +41,4 @@ export async function observeGameAlerts(sport: string, observation: GameObservat
 }
 
 /** Explicit sport interests plus members of leagues in that sport; never broadcast across sports. */
-export async function sportAlertAudience(sport: string): Promise<string[]> {
-  const [profiles, leagues] = await Promise.all([
-    prisma.userProfile.findMany({ where: { preferredSports: { array_contains: [sport] } }, select: { userId: true } }),
-    isSupportedSport(sport) ? prisma.league.findMany({ where: { sport }, select: { userId: true, teams: { select: { claimedByUserId: true } } } }) : Promise.resolve([]),
-  ])
-  return [...new Set([...profiles.map(p => p.userId), ...leagues.flatMap(l => [l.userId, ...l.teams.map(t => t.claimedByUserId)])].filter((id): id is string => !!id))]
-}
+export const sportAlertAudience = listSportsAlertAudience

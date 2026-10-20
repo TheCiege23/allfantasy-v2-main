@@ -1,4 +1,5 @@
 import "server-only"
+import { recordSportsDelivery } from "./sportsDeliveryAudit"
 import { deliverDurably } from "./durableTransport"
 import { allowsLeagueSms } from "./channelPolicy"
 import { createPlatformNotification } from "@/lib/platform/notification-service"
@@ -87,6 +88,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
     emailOverride,
   } = params
 
+  const detectedAt = typeof meta?.detectedAt === "string" ? meta.detectedAt : new Date().toISOString()
   const recipients = [...new Set(userIds)]
   const dispatchToUser = async (userId: string) => {
     let transportFailed = false
@@ -307,6 +309,11 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       if (transportFailed || channels.inApp.status === "failed" || Object.values(channels).some(c => c.reason === "dispatch_interrupted")) tally.failed++
       else if (Object.values(channels).every(c => c.status === "suppressed")) tally.suppressed++
       else tally.delivered++
+      if (dedupePrefix && typeof meta?.sport === 'string' && /^(game_|postseason_|breaking_news$)/.test(type)) {
+        try { await recordSportsDelivery({ eventKey: dedupePrefix, type, sport: meta.sport, detectedAt,
+          occurredAt: typeof meta.occurredAt === 'string' ? meta.occurredAt : undefined }, { userId, completedAt: new Date().toISOString(), channels }) }
+        catch { tally.failed++; console.error('[sports-alerts] receipt persistence failed', { eventKey: dedupePrefix }) }
+      }
       if(params.onDeliveryReceipt) {
         try { await params.onDeliveryReceipt({userId,completedAt:new Date().toISOString(),channels}) }
         catch { console.error('[NotificationDispatcher] receipt persistence failed', {userId,type}) }
