@@ -25,6 +25,7 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
   DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
@@ -371,6 +372,23 @@ export async function executeLeagueSettingsPatch(
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
 
   /*
+   * The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts) — a Commissioner-plan
+   * setting with its own key. `settingsMerge` would write it around the plan check, so it is refused
+   * there. Clearing it back to the default is free, so a lapsed plan is never stuck with a custom order.
+   */
+  const merge = body.settingsMerge
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TIEBREAKER_ORDER_KEY in merge) {
+    return jsonError('Set the tiebreaker order with tiebreakerOrder, not settingsMerge.', 400)
+  }
+  let tiebreakerOrderToStore: { value: TiebreakerKey[] | null } | null = null
+  if (body.tiebreakerOrder !== undefined) {
+    const parsed = parseTiebreakerOrder(body.tiebreakerOrder)
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value && !hasSub) return jsonError('A custom tiebreaker order is part of the AF Commissioner plan.', 403)
+    tiebreakerOrderToStore = { value: parsed.value }
+  }
+
+  /*
    * Per-day waiver schedule (lib/waivers/dailyWaiverSchedule.ts). Stored in `League.settings`, and
    * DERIVED into the columns the waiver engine already schedules from — UTC processing weekdays,
    * UTC process time, customDailyWaivers — so the cron only runs on days that process claims. Set
@@ -523,6 +541,15 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('settingsMerge')
+  }
+
+  if (tiebreakerOrderToStore) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [TIEBREAKER_ORDER_KEY]: tiebreakerOrderToStore.value } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(TIEBREAKER_ORDER_KEY)
   }
 
   /*

@@ -8,8 +8,9 @@ import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffSt
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
+import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
 
-export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
@@ -76,6 +77,16 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           </label>
         </div>
       </div>
+
+      {native ? (
+        <TiebreakerOrderEditor
+          leagueId={leagueId}
+          settings={ctx.league.settings}
+          canEdit={canEdit}
+          hasPlan={hasAfCommissionerSub || Boolean(ctx.hasAfCommissionerSub)}
+          queuePatch={queuePatch}
+        />
+      ) : null}
 
       <div>
         <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.stages')}</h4>
