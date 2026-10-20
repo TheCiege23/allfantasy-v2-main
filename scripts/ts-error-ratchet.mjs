@@ -183,6 +183,18 @@ function getTscOutput() {
   return `${r.stdout || ''}${r.stderr || ''}`
 }
 
+/*
+ * On GitHub Actions, also report a failure as a workflow annotation. The job log is the only other
+ * place the reason appears, and it is not readable from every environment that has to act on the
+ * failure; annotations are served by the check-runs API alongside the conclusion. No-op elsewhere.
+ */
+function annotate(message, file) {
+  if (process.env.GITHUB_ACTIONS !== 'true') return
+  const esc = (v) => String(v).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
+  const where = file ? ` file=${String(file).replace(/[,:]/g, (c) => (c === ',' ? '%2C' : '%3A'))}` : ''
+  console.log(`::error${where},title=TypeScript ratchet::${esc(message)}`)
+}
+
 function parse(text) {
   const byFile = {}
   let total = 0
@@ -214,7 +226,8 @@ function writeBaseline(parsed) {
 }
 
 function main() {
-  const parsed = parse(getTscOutput())
+  const raw = getTscOutput()
+  const parsed = parse(raw)
 
   /*
    * ANTI-VACUITY: the positive control, encoded.
@@ -242,6 +255,7 @@ function main() {
     parsed.total === 0 &&
     !has('--allow-zero')
   ) {
+    annotate(`tsc reported 0 errors but the baseline records ${baselineForSanity.total} — treated as a broken run.`)
     console.error(
       `✗ tsc reported 0 errors but the baseline records ${baselineForSanity.total}.\n` +
         '  A check that cannot fail is worse than no check, so this is treated as a BROKEN RUN,\n' +
@@ -263,6 +277,7 @@ function main() {
       process.exit(0)
     }
     console.error(`✗ redraft-scoped strict gate: ${count} TypeScript error(s) in redraft paths:`)
+    annotate(`redraft-scoped strict gate: ${count} TypeScript error(s) in redraft paths: ${offenders.map(([f, c]) => `${f} (${c})`).join(', ')}`)
     for (const [f, c] of offenders) console.error(`    ${c.toString().padStart(3)}  ${f}`)
     process.exit(1)
   }
@@ -299,6 +314,11 @@ function main() {
     console.error(`\n✗ ${regressions.length} file(s) gained TypeScript errors:`)
     for (const r of regressions.sort((a, b) => b.now - b.was - (a.now - a.was))) {
       console.error(`    ${r.file}: ${r.was} → ${r.now}  (+${r.now - r.was})`)
+      const lines = raw
+        .split(/\r?\n/)
+        .filter((l) => ERROR_LINE.test(l) && l.replace(/\\/g, '/').startsWith(`${r.file}(`))
+        .slice(0, 5)
+      annotate(`${r.file}: ${r.was} → ${r.now} errors\n${lines.join('\n')}`, r.file)
     }
     console.error('\nFix the new errors, or if intentional, re-baseline with `npm run ts:ratchet:update`.')
     process.exit(1)
@@ -313,4 +333,9 @@ function main() {
   process.exit(0)
 }
 
-main()
+try {
+  main()
+} catch (err) {
+  annotate(err instanceof Error ? err.message : String(err))
+  throw err
+}
