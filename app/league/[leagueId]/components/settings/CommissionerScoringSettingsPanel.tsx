@@ -7,6 +7,7 @@ import { dispatchStateRefreshEvent } from '@/lib/state-consistency/state-events'
 import type { LeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { getScoringSettingsLayout, type ScoringLayoutRow } from '@/lib/scoring-defaults/scoring-settings-layout'
 import { templateStatKeyFromUiKey } from '@/lib/league/scoring-stat-metadata'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 const ACCENT = 'bg-[#ff3d81]/15 text-[#ffb8d1] border border-[#ff3d81]/35'
 const PILL_INACTIVE = 'border border-white/[0.1] bg-white/[0.04] text-white/70 hover:bg-white/[0.07]'
@@ -36,6 +37,7 @@ export function CommissionerScoringSettingsPanel({
   canEdit: boolean
   scoringConfig: LeagueScoringConfig | null
 }) {
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const [primaryTab, setPrimaryTab] = useState(() => {
     const l = getScoringSettingsLayout(sport)
     return l.primaryTabs[0]?.id ?? (l.moreTabs?.[0]?.id ?? 'scoring')
@@ -190,7 +192,7 @@ export function CommissionerScoringSettingsPanel({
           enabled: st?.enabled ?? r.enabled,
         }
       })
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/scoring`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/scoring`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rules }),
@@ -248,6 +250,8 @@ export function CommissionerScoringSettingsPanel({
   }
 
   return (
+    <>
+      {midSeasonDialog}
     <div className="flex min-h-0 flex-1 flex-col" data-testid="commissioner-scoring-settings-panel">
       <div className="shrink-0 border-b border-white/[0.06] px-6 pb-4 pt-5">
         <h3 className="text-[17px] font-semibold tracking-tight text-white">Scoring Settings</h3>
@@ -360,5 +364,6 @@ export function CommissionerScoringSettingsPanel({
         {dirty ? <p className="mt-2 text-center text-[11px] text-amber-200/65">Unsaved scoring changes</p> : null}
       </div>
     </div>
+    </>
   )
 }

@@ -11,6 +11,7 @@ import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref } from '@/lib/league/le
 import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, nativeLeagueRecordLinks, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
 import { adjacentLeagueId, unreadBadgeText } from '@/lib/league/leagueRailStatus'
 import { LeagueRailRow, useLeagueRail, type LeagueRailData, type LeagueRailRowView } from './LeagueRail'
+import '@/components/core-app/af-core-shell.css'
 import './native-league.css'
 
 type Props = AppShellProps & {

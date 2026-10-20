@@ -36,6 +36,10 @@
 .nls-seg { display: inline-flex; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
 .nls-seg button { min-height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .nls-seg button[aria-pressed=true], .nls-seg button[aria-selected=true] { background: var(--raised); border-color: var(--line2); color: var(--text); }
+/* Daily-lineup day picker: one segmented row of the week's days, scrollable on a phone. */
+.nls-daypick { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.nls-daypick .nls-seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.nls-daypick .nls-seg button { padding: 0 10px; }
 .nls-iconbtn { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--line2); border-radius: 8px; background: transparent; color: var(--text2); }
 .nls-iconbtn:disabled { opacity: .4; cursor: not-allowed; }
 

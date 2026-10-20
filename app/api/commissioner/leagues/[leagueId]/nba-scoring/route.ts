@@ -18,6 +18,7 @@ import {
 } from '@/lib/nba-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 const featureGate = new FeatureGateService()
 
@@ -72,6 +73,8 @@ export async function PUT(
   if (nativeCategoryScoringContext(league.settings, 'NBA')) return NextResponse.json({ error: 'This league uses categories; point weights do not apply.' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'scoring', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
   const presetKey = (body.presetKey ?? 'af_default') as NbaScoringPresetKey
   const customRules = body.rules as Record<string, number> | undefined
 
@@ -97,5 +100,6 @@ export async function PUT(
   })
 
   const updated = await getLeagueNbaScoringConfig(leagueId)
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'nba-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: updated })
 }

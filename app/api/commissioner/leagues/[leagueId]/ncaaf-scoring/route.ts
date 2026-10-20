@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueNcaafScoringConfig, saveLeagueNcaafScoringConfig, getNcaafScoringPresets, buildFullNcaafScoringConfig, type NcaafScoringPresetKey } from '@/lib/ncaaf-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 const featureGate = new FeatureGateService()
 export const dynamic = 'force-dynamic'
@@ -36,9 +37,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if (locked) return locked
   if (league.sport !== 'NCAAF') return NextResponse.json({ error: 'NCAAF leagues only' }, { status: 400 })
   const body = await req.json().catch(() => ({}))
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'scoring', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
   const presetKey = (body.presetKey ?? 'af_default') as NcaafScoringPresetKey
   if ((presetKey === 'custom' || body.rules) && !(await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring').then(a => a.allowed).catch(() => false)))
     return NextResponse.json({ error: 'premiumRequired' }, { status: 403 })
   await saveLeagueNcaafScoringConfig(leagueId, { presetKey, rules: body.rules ?? buildFullNcaafScoringConfig(presetKey), userId: session.user.id, premiumFeaturesUsed: presetKey === 'custom' })
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'ncaaf-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: await getLeagueNcaafScoringConfig(leagueId) })
 }

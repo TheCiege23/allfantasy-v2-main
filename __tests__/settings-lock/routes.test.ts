@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   startVote: vi.fn(),
   lockedGroups: vi.fn(),
   saveNfl: vi.fn(),
+  decideEdit: vi.fn(),
 }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => m.session) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -26,6 +27,11 @@ vi.mock('@/lib/league/settingsLockService', () => ({
   startUnlockVote: m.startVote,
   lockedGroups: m.lockedGroups,
   lockedGroupsForPatch: vi.fn(async () => []),
+}))
+// The league-phase gate on the same writers (settingsLifecycleGate) is its own concern, tested on its own.
+vi.mock('@/lib/league/settingsLifecycleGate', () => ({
+  decideSettingsEdit: m.decideEdit,
+  recordMidSeasonSettingsChange: vi.fn(async () => undefined),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: vi.fn(async () => ({ userId: 'comm', sport: 'NFL' })) } } }))
 vi.mock('@/lib/nfl-scoring', () => ({
@@ -55,6 +61,7 @@ beforeEach(() => {
   m.view.mockResolvedValue({ season: 2026, seasonUnderway: true, groups: [], votes: [] })
   m.lockedGroups.mockResolvedValue([])
   m.saveNfl.mockResolvedValue(undefined)
+  m.decideEdit.mockResolvedValue({ ok: true, state: 'in_season', midSeason: false })
 })
 
 describe('settings-lock route', () => {
@@ -105,6 +112,8 @@ describe('an area writer while its area is locked', () => {
     expect(await res.json()).toMatchObject({ code: 'settings_locked', lockedGroups: ['scoring'] })
     expect(m.saveNfl).not.toHaveBeenCalled()
     expect(m.lockedGroups).toHaveBeenCalledWith('L', ['scoring'])
+    // A locked area is refused before the phase gate is asked anything.
+    expect(m.decideEdit).not.toHaveBeenCalled()
     m.lockedGroups.mockResolvedValue([])
     expect((await putNfl(nflReq(), ctx)).status).toBe(200)
     expect(m.saveNfl).toHaveBeenCalledTimes(1)
