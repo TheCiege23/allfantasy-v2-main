@@ -282,7 +282,7 @@ export async function GET(request: NextRequest) {
           clipPilotSearched: clipPilot?.searched ?? 0,
           clipPilotFound: clipPilot?.found ?? 0,
           clipPilotErrors: clipPilot?.errors ?? 0,
-          /* NBA/NHL/MLB in-game scoring. `dailyLiveEnabled: []` is the default and means the flag
+          /* NBA/NHL/MLB in-game scoring. `dailyLiveEnabled: []` means the flag
              is off; per-sport status tells a quiet night ('no-live-games') from a stuck feed. */
           dailyLiveEnabled: dailySports,
           dailyLive: summariseDailyLive(daily),

@@ -34,7 +34,7 @@ function getSeasonAccent(index: number) {
     return {
       pill: 'border-[#ff3d81]/30 bg-[#ff3d81]/12 text-[#ffd7e5]',
       card: 'border-[#ff3d81]/18 bg-[linear-gradient(135deg,rgba(255,61,129,0.12),rgba(255,255,255,0.03))]',
-      label: 'Current import layer',
+      label: 'Latest season',
     }
   }
   if (index === 1) {
@@ -69,7 +69,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/league/history?leagueId=${encodeURIComponent(league.id)}`)
+      const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/history`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load history')
       setSeasons(data.seasons ?? [])
@@ -284,8 +284,8 @@ export function HistoryTab({ league }: HistoryTabProps) {
           {sortedSeasons.map((s, index) => {
             const recs = (s.teamRecords as unknown[]) ?? []
             const open = expanded[s.season] ?? false
-            const sorted = [...(recs as { wins?: number; pointsFor?: number; managerName?: string }[])].sort(
-              (a, b) => (b.wins ?? 0) - (a.wins ?? 0),
+            const sorted = [...(recs as { rank?: number; wins?: number; pointsFor?: number; managerName?: string }[])].sort(
+              (a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || (b.wins ?? 0) - (a.wins ?? 0),
             )
             const mostPts = sorted.reduce(
               (best, cur) => ((cur.pointsFor ?? 0) > (best?.pointsFor ?? 0) ? cur : best),

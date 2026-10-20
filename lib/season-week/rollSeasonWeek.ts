@@ -374,11 +374,11 @@ export async function rollPostseason(
   const db = options.prisma ?? defaultPrisma
 
   const seasons = await db.redraftSeason.findMany({
-    where: engineSeasonScope({
+    where: { AND: [engineSeasonScope({
       includeShadowLeagues: options.includeShadowLeagues,
-      statuses: [REDRAFT_SEASON_STATUS.REGULAR_SEASON_COMPLETE, REDRAFT_SEASON_STATUS.PLAYOFFS],
-    }),
-    select: { id: true, leagueId: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
+      statuses: [REDRAFT_SEASON_STATUS.REGULAR_SEASON_COMPLETE, REDRAFT_SEASON_STATUS.PLAYOFFS, REDRAFT_SEASON_STATUS.COMPLETE],
+    }), { OR: [{ status: { not: REDRAFT_SEASON_STATUS.COMPLETE } }, { league: { lifecycleState: 'completed' } }] }] },
+    select: { id: true, leagueId: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true, lifecycleState: true } } },
     take: options.limit ?? 200,
   })
 
@@ -390,6 +390,7 @@ export async function rollPostseason(
 
   for (const season of seasons) {
     const base = { seasonId: season.id, leagueId: season.leagueId, status: season.status }
+    if (season.status === REDRAFT_SEASON_STATUS.COMPLETE && season.league?.lifecycleState !== 'completed') continue
 
     if ((season.league?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto') {
       if (options.dryRun) { held++; outcomes.push({...base,step:'held',detail:'dryRun'}); continue }
@@ -437,6 +438,12 @@ export async function rollPostseason(
     }
 
     try {
+      if (season.status === REDRAFT_SEASON_STATUS.COMPLETE) {
+        const outcome = await finalizeSeasonAndEnterOffseason({ seasonId: season.id, leagueId: season.leagueId, actorUserId: WEEK_ROLLER_ACTOR })
+        if (outcome.ok && outcome.offseasonEntered) { finalized++; outcomes.push({ ...base, step: 'finalized', championRosterId: outcome.championRosterId, offseasonEntered: true }) }
+        else { held++; outcomes.push({ ...base, step: 'held', detail: outcome.ok ? 'OFFSEASON_ARCHIVE_PENDING' : outcome.code }) }
+        continue
+      }
       const round = await advanceNflRedraftPlayoffRuntimeRound({
         seasonId: season.id,
         actorUserId: WEEK_ROLLER_ACTOR,

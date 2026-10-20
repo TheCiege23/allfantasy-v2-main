@@ -255,8 +255,8 @@ describe('Pool resolver dedupe + isRookie derivation (Commits N/O still pinned)'
     expect(src).toMatch(/dedupedEnrichedList = dedupeEnrichedRawRows\(/)
   })
 
-  it('runs through normalizePlayerList to canonicalise the served entries', () => {
-    expect(src).toMatch(/normalizePlayerList\(dedupedEnrichedList, sport\)/)
+  it('cooperatively normalizes the served entries', () => {
+    expect(src).toMatch(/cooperativeMap\(dedupedEnrichedList,[\s\S]*?normalizePlayer\(row, sport\)/)
   })
 
   it('marks non-graduated devy as rookie regardless of yearsExp', () => {

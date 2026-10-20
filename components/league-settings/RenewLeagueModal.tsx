@@ -222,6 +222,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
           listInFinder,
           ...(selectedType === 'redraft'
             ? {
+                expectedSeason: currentSeason,
                 draftOrder,
                 manualOrder: draftOrder === 'manual' ? manualOrder.map((t) => t.rosterId) : undefined,
               }
@@ -245,7 +246,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
       onRenewed?.()
     } catch { setError('Request failed') }
     finally { setSubmitting(false) }
-  }, [leagueId, selectedType, currentLeagueType, members, checkedMembers, isDuesEnabled, duesAmount, listInFinder, draftOrder, manualOrder, onRenewed, router])
+  }, [leagueId, currentSeason, selectedType, currentLeagueType, members, checkedMembers, isDuesEnabled, duesAmount, listInFinder, draftOrder, manualOrder, onRenewed, router])
 
   if (!isOpen) return null
 

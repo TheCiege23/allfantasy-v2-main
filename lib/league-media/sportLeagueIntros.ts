@@ -6,14 +6,15 @@
  * alternative, and they only outrank a concept intro for the GENERIC formats below: a Zombie
  * or Guillotine league keeps its own intro, because the concept is the distinctive thing there.
  *
- * Missing entries fail closed (null), so a sport with no shipped clip — NBA and NCAAB today —
+ * Missing entries fail closed (null), so a sport with no shipped clip — NCAAB today —
  * falls straight through to the concept intro it already had.
  */
 
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 
-/** Shipped under /public/media/league-intros/sports/. NBA + NCAAB have no clip yet. */
+/** Shipped under /public/media/league-intros/sports/. NBA reuses the packaged create-league basketball clip. */
 const SPORT_INTRO_VIDEO: Partial<Record<SupportedSport, string>> = {
+  NBA: '/media/create-league/sports/videos/Basketball.mp4',
   NFL: '/media/league-intros/sports/Football.mp4',
   NCAAF: '/media/league-intros/sports/Football.mp4',
   MLB: '/media/league-intros/sports/Baseball.mp4',
@@ -23,6 +24,7 @@ const SPORT_INTRO_VIDEO: Partial<Record<SupportedSport, string>> = {
 
 /** Poster reuses the packaged create-league sport thumbnails (folder name is `thumbnail`). */
 const SPORT_INTRO_POSTER: Partial<Record<SupportedSport, string>> = {
+  NBA: '/media/create-league/sports/thumbnail/Basketball.png',
   NFL: '/media/create-league/sports/thumbnail/Football.png',
   NCAAF: '/media/create-league/sports/thumbnail/Football.png',
   MLB: '/media/create-league/sports/thumbnail/Baseball.png',
@@ -31,6 +33,7 @@ const SPORT_INTRO_POSTER: Partial<Record<SupportedSport, string>> = {
 }
 
 const SPORT_INTRO_LABEL: Partial<Record<SupportedSport, string>> = {
+  NBA: 'Basketball',
   NFL: 'Football',
   NCAAF: 'Football',
   MLB: 'Baseball',
