@@ -284,10 +284,26 @@ const NHL_GAME_THRESHOLDS: ReadonlyArray<[bonus: string, stat: (s: Record<string
   ['g_50sv_game', (s) => s.g_sv ?? 0, 50],
 ]
 
+/**
+ * Numeric keys every stored NHL line carries that no category scores. `player_id` is folded into
+ * each line by the ingest (the vendor keys the box BY id); without this it was reported as
+ * "Unrecognized NHL provider stat keys (alias table may be wrong): player_id" on every sync.
+ */
+const NHL_KNOWN_UNSCORED = new Set(['player_id', 'time_on_ice_minutes'])
+
 export function normalizeNhlGameStats(raw: unknown): NormalizedGameStats {
-  const result = normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
+  const normalized = normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
+  const result = { ...normalized, unmappedKeys: normalized.unmappedKeys.filter((k) => !NHL_KNOWN_UNSCORED.has(k)) }
   const stats = result.stats
   if (Object.keys(stats).length === 0) return result
+
+  // Goalie minutes played. Skaters carry the same clock, so it is credited by the line's GROUP,
+  // which the ingest stores beside `stats` (rollingInsightsGameLogs.ts `normalizedStatMapFor`).
+  // Only rows ingested after time on ice was stored carry it; older rows simply score 0 here.
+  if (isRecord(raw) && raw.group === 'goalies' && isRecord(raw.stats)) {
+    const minutes = asNumber(raw.stats.time_on_ice_minutes)
+    if (minutes !== undefined) stats.g_toi = minutes
+  }
 
   if (stats.g !== undefined || stats.a !== undefined) stats.pts = (stats.g ?? 0) + (stats.a ?? 0)
   for (const [bonus, stat, min] of NHL_GAME_THRESHOLDS) {
