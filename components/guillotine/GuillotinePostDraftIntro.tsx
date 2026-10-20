@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 
 const STORAGE_KEY_PREFIX = 'guillotine_post_draft_intro_seen_'
-const INTRO_VIDEO_SRC = '/guillotine/Guillotine%20League%20Intro.mp4'
+// The `/guillotine/Guillotine League Intro.mp4` this pointed at was never committed (404).
+const INTRO_VIDEO_SRC = '/league-type-guillotine-intro.mp4'
 
 export interface GuillotinePostDraftIntroProps {
   leagueId: string

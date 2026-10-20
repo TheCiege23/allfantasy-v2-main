@@ -20,6 +20,8 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { leagueTypeState, confirmLeagueType } from '@/lib/career/leagueTypeConfirmation'
+import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +39,31 @@ async function requireMember(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   return { leagueId, userId }
+}
+
+const GUILLOTINE_TYPES = new Set(['guillotine', 'survivor_guillotine'])
+
+/**
+ * Switching a Guillotine league to another format used to rewrite only `leagueType`, leaving
+ * `guillotineMode` / `leagueVariant` set — and most of the app (league shell, intros, settings
+ * home, chop engine) reads those, so the league stayed a Guillotine league everywhere but its
+ * label. Clear them, but only while the structure is still editable: once the draft has started
+ * or a season exists, turning chops off would change a league already being played.
+ */
+async function clearGuillotineFlagsIfSwitchedAway(leagueId: string, type: string): Promise<void> {
+  if (GUILLOTINE_TYPES.has(type)) return
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { guillotineMode: true, leagueVariant: true },
+  })
+  if (!league) return
+  const variantIsGuillotine = String(league.leagueVariant ?? '').toLowerCase().includes('guillotine')
+  if (league.guillotineMode !== true && !variantIsGuillotine) return
+  if (await structuralSettingsLockReason(leagueId)) return
+  await prisma.league.update({
+    where: { id: leagueId },
+    data: { guillotineMode: false, ...(variantIsGuillotine ? { leagueVariant: null } : {}) },
+  })
 }
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
@@ -112,5 +139,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     return NextResponse.json({ error: message }, { status })
   }
 
-  return NextResponse.json({ ...result.state, canConfirm: true })
+  try {
+    await clearGuillotineFlagsIfSwitchedAway(gate.leagueId, body.type)
+  } catch (e) {
+    // The format itself is saved; a failed cleanup leaves the old flags, as before this existed.
+    console.error('[league-type PATCH] guillotine flag cleanup', e)
+    return NextResponse.json({ ...result.state, canConfirm: true })
+  }
+  const state = (await leagueTypeState(gate.leagueId)) ?? result.state
+  return NextResponse.json({ ...state, canConfirm: true })
 }

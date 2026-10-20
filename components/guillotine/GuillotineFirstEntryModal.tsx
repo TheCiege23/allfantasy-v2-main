@@ -3,7 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
-const VIDEO_SRC = '/guillotine/Guillotine.mp4'
+/**
+ * `/guillotine/Guillotine.mp4` was never committed, so this modal 404'd into a black box on every
+ * device. The concept intro is the shipped Guillotine clip (also the catalog's `introVideoUrl`).
+ */
+const VIDEO_SRC = '/league-type-guillotine-intro.mp4'
 
 export interface GuillotineFirstEntryModalProps {
   leagueId: string
@@ -40,6 +44,12 @@ export function GuillotineFirstEntryModal({
   const handleReplay = useCallback(() => {
     setVideoKey((k) => k + 1)
   }, [])
+
+  // A clip that cannot load is not a watched intro: close without marking it seen.
+  const handleVideoError = useCallback(() => {
+    setVisible(false)
+    onClose()
+  }, [onClose])
 
   const handleVideoEnded = useCallback(() => {
     markSeen()
@@ -80,8 +90,11 @@ export function GuillotineFirstEntryModal({
           src={VIDEO_SRC}
           controls
           autoPlay
+          /* Mobile browsers (Android Chrome included) refuse unmuted autoplay; the controls unmute. */
+          muted
           playsInline
           onEnded={handleVideoEnded}
+          onError={handleVideoError}
         />
         <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white/[0.06]">
           <button

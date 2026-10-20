@@ -61,6 +61,17 @@ describe('General tab (native league)', () => {
     expect(patches.general).toEqual([{ name: 'New Name' }, { timezone: 'America/Chicago' }, { logoUrl: 'https://x.test/a.png' }, { logoUrl: null }])
   })
 
+  it('team count is editable on the general section and never offered below joined managers', () => {
+    const teams = Array.from({ length: 6 }, (_, i) => ({ id: `t${i}`, claimedByUserId: i < 5 ? `u${i}` : null }))
+    const r = render(<GeneralTab ctx={ctx({ leagueSize: 6, teams })} canEdit hasAfCommissionerSub={false} />)
+    const select = r.getByTestId('league-settings-general-teams') as HTMLSelectElement
+    expect(select.value).toBe('6')
+    const values = Array.from(select.options).map((o) => Number(o.value))
+    expect(Math.min(...values)).toBe(5)
+    fireEvent.change(select, { target: { value: '10' } })
+    expect(patches.general).toEqual([{ leagueSize: 10 }])
+  })
+
   it('a timezone outside the presets is still selected', () => {
     const r = render(<GeneralTab ctx={ctx({ timezone: 'Asia/Tokyo' })} canEdit hasAfCommissionerSub={false} />)
     expect((r.getByTestId('league-settings-general-timezone') as HTMLSelectElement).value).toBe('Asia/Tokyo')
