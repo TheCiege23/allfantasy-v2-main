@@ -4,24 +4,28 @@
  */
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('@/components/i18n/LanguageProviderClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/components/i18n/LanguageProviderClient')>()
   return { ...actual, useLanguage: () => actual.defaultLanguageValue }
 })
 vi.mock('@/components/subscription/SubscriptionGateModal', () => ({ SubscriptionGateModal: () => null }))
+const queuePatch = vi.hoisted(() => vi.fn())
 vi.mock('@/hooks/useLeagueSettingsSectionAutosave', () => ({
-  useLeagueSettingsSectionAutosave: () => ({ queuePatch: vi.fn(), saving: false }),
+  useLeagueSettingsSectionAutosave: () => ({ queuePatch, saving: false }),
 }))
 
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
+import { TradesTab } from '@/components/league-settings/tabs/TradesTab'
+import { buildLeagueSettingsHome } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { PlayoffsTab } from '@/components/league-settings/tabs/PlayoffsTab'
 
 const fetchMock = vi.fn()
 
 beforeEach(() => {
   fetchMock.mockReset()
+  queuePatch.mockClear()
   // The stored stage config still holds an old sport-default week (14).
   fetchMock.mockResolvedValue({
     ok: true,
@@ -70,5 +74,54 @@ describe('PlayoffsTab seeds both editors from the chosen week', () => {
     render(<PlayoffsTab ctx={ctx({ platform: 'manual', playoffStartWeek: null, settings: { playoff_structure: { playoff_start_week: 16 } } })} canEdit hasAfCommissionerSub={false} />)
     expect((screen.getByRole('spinbutton', { name: /Playoffs start/i }) as HTMLInputElement).value).toBe('16')
     expect((await screen.findByTestId('playoff-stage-start-week')).textContent).toContain('Week 16')
+  })
+})
+
+
+describe('NBA settings use the saved rules and sport calendar', () => {
+  const league = { id: 'L', sport: 'NBA', platform: 'manual', leagueSize: 16, teams: [], playoffTeams: null, playoffStartWeek: null, tradeDeadlineWeek: null, settings: { playoff_structure: { playoff_start_week: 22 } } }
+  const ctx = { league } as never
+
+  it('the playoff summary matches the editor when the columns are unset', () => {
+    const sections = buildLeagueSettingsHome({ league, teams: [], canEdit: true, formatLabel: 'Redraft', scoringLabel: null, rosterSlots: null, draft: null, guillotine: null, inviteUrl: '' })
+    expect(sections.flatMap(s => s.rows).find(r => r.id === 'playoffs')?.value).toBe('6 teams · starts Wk 22')
+  })
+
+  it('accepts the NBA chosen week and later season weeks, while rejecting overflow', async () => {
+    render(<PlayoffsTab ctx={ctx} canEdit hasAfCommissionerSub={false} />)
+    const field = screen.getByRole('spinbutton', { name: /Playoffs start/i }) as HTMLInputElement
+    await screen.findByTestId('playoff-stage-start-week')
+    expect(field.value).toBe('22')
+    expect(field.validity.valid).toBe(true)
+    fireEvent.change(field, { target: { value: '23' } })
+    expect(queuePatch).toHaveBeenLastCalledWith({ playoffStartWeek: 23 })
+    queuePatch.mockClear()
+    fireEvent.change(field, { target: { value: '26' } })
+    expect(queuePatch).not.toHaveBeenCalled()
+    fireEvent.change(field, { target: { value: '' } })
+    expect(queuePatch).not.toHaveBeenCalled()
+    const teams = screen.getByRole('spinbutton', { name: /Playoff teams/i })
+    fireEvent.change(teams, { target: { value: '1' } })
+    expect(queuePatch).not.toHaveBeenCalled()
+    fireEvent.change(teams, { target: { value: '8' } })
+    expect(queuePatch).toHaveBeenLastCalledWith({ playoffTeams: 8 })
+  })
+
+  it('shows no deadline instead of inventing week 14 and can clear a deadline', () => {
+    render(<TradesTab ctx={ctx} canEdit hasAfCommissionerSub={false} />)
+    const field = screen.getByRole('spinbutton', { name: /Trade deadline/i }) as HTMLInputElement
+    expect(field.value).toBe('')
+    expect(field.placeholder).toContain('No deadline')
+    const review = screen.getByRole('spinbutton', { name: /Review window/i })
+    fireEvent.change(review, { target: { value: '' } })
+    fireEvent.change(review, { target: { value: '169' } })
+    expect(queuePatch).not.toHaveBeenCalled()
+    fireEvent.change(field, { target: { value: '22' } })
+    expect(queuePatch).toHaveBeenLastCalledWith({ tradeDeadlineWeek: 22 })
+    fireEvent.change(field, { target: { value: '' } })
+    expect(queuePatch).toHaveBeenLastCalledWith({ tradeDeadlineWeek: null })
+    queuePatch.mockClear()
+    fireEvent.change(field, { target: { value: '26' } })
+    expect(queuePatch).not.toHaveBeenCalled()
   })
 })
