@@ -8,6 +8,9 @@ describe('getLeagueDefaults', () => {
     ['NFL IDP snake', { sport: 'NFL', format: 'idp', draftType: 'snake', scoringPreset: 'fb_idp_ppr' }],
     ['NCAAF devy snake', { sport: 'NCAAF', format: 'devy', draftType: 'snake', scoringPreset: 'ncaaf_devy_ppr' }],
     ['NCAAF C2C snake', { sport: 'NCAAF', format: 'c2c', draftType: 'snake', scoringPreset: 'ncaaf_c2c_ppr' }],
+    ['NBA redraft snake', { sport: 'NBA', format: 'redraft', draftType: 'snake', scoringPreset: 'nba_points' }],
+    ['NHL redraft snake', { sport: 'NHL', format: 'redraft', draftType: 'snake', scoringPreset: 'nhl_points' }],
+    ['MLB redraft snake', { sport: 'MLB', format: 'redraft', draftType: 'snake', scoringPreset: 'mlb_points' }],
   ])('returns durable foundation defaults for %s', (_label, input) => {
     const defaults = getLeagueDefaults({ ...input, managerCount: 12 })
 
@@ -178,10 +181,15 @@ describe('getLeagueDefaults rosterSettings.totalRosterSlots', () => {
     { sport: 'NFL', format: 'keeper', scoringPreset: 'fb_half_ppr' },
     { sport: 'NCAAF', format: 'devy', scoringPreset: 'ncaaf_devy_ppr' },
     { sport: 'NCAAF', format: 'c2c', scoringPreset: 'ncaaf_c2c_ppr' },
+    // The daily-sport redraft presets (lib/league-concepts/dailySportRedraftDefaults.ts). Before them
+    // an NBA/NHL/MLB redraft league had no preset, so this sum was null and League.rosterSize NULL.
+    { sport: 'NBA', format: 'redraft', scoringPreset: 'nba_points' },
+    { sport: 'NHL', format: 'redraft', scoringPreset: 'nhl_points' },
+    { sport: 'MLB', format: 'redraft', scoringPreset: 'mlb_points' },
   ] as const
 
   it.each(KNOWN_ROSTER_FORMATS)(
-    'sums rosterSlots + benchSlots + irSlots + taxiSlots for $format',
+    'sums rosterSlots + benchSlots + irSlots + taxiSlots for $sport $format',
     ({ sport, format, scoringPreset }) => {
       const { rosterSettings } = getLeagueDefaults({ sport, format, draftType: 'snake', scoringPreset, managerCount: 12 })
       const { rosterSlots, benchSlots, irSlots, taxiSlots, totalRosterSlots } = rosterSettings as Record<string, unknown>

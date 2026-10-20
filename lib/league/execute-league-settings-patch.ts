@@ -34,6 +34,8 @@ import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { checkByePlan, isNaturalByePlan } from '@/lib/playoff-brackets/byePlan'
 import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
@@ -59,6 +61,7 @@ import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-ser
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import {
   keepLineupModeFields,
   lineupModeSwitchRefusal,
@@ -210,6 +213,36 @@ export type LeagueSettingsPatchOptions = {
    * directions can never chase each other.
    */
   source?: 'tournament'
+}
+
+/**
+ * Commissioner-granted playoff byes (multi-round byes, stepladders) are AF Commissioner
+ * (`advanced_playoff_setup`, docs/AF_COMMISSIONER_SETTINGS_SPEC.md §1.3). Odd team counts are
+ * FREE: the bracket engine pads any field to a power of two with natural byes (owner's rule,
+ * Oct 15 paywall; pinned by __tests__/free-commissioner-locks.test.ts).
+ *
+ * Checked only when the plan CHANGES, so a league keeps a plan saved before its sub lapsed.
+ */
+export async function customPlayoffBracketRefusal(
+  userId: string,
+  body: LeagueSettingsPatchBody,
+  current: { playoffTeams: number | null; byePlan: unknown },
+): Promise<{ status: number; message: string } | null> {
+  const merge = body.settingsMerge && typeof body.settingsMerge === 'object' && !Array.isArray(body.settingsMerge)
+    ? (body.settingsMerge as Record<string, unknown>)
+    : null
+  if (!merge || !('playoff_bye_plan' in merge) || merge.playoff_bye_plan == null) return null
+  const teams = body.playoffTeams != null ? Number(body.playoffTeams) : current.playoffTeams ?? 0
+  const raw = merge.playoff_bye_plan
+  const plan = Array.isArray(raw) ? raw.map((v) => Number(v)) : []
+  const check = checkByePlan(teams, plan)
+  if (!check.ok) return { status: 400, message: check.error }
+  if (isNaturalByePlan(teams, plan)) return null
+  const unchanged = Array.isArray(current.byePlan) && current.byePlan.map(Number).join() === plan.join()
+  if (unchanged) return null
+  const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'advanced_playoff_setup').catch(() => null)
+  if (access?.allowed) return null
+  return { status: 403, message: 'Custom playoff byes require AF Commissioner.' }
 }
 
 /**
@@ -404,6 +437,11 @@ export async function executeLeagueSettingsPatch(
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
   }
+  const bracketRefusal = await customPlayoffBracketRefusal(userId, body, {
+    playoffTeams: league.playoffTeams,
+    byePlan: (league.settings as Record<string, unknown> | null)?.playoff_bye_plan,
+  })
+  if (bracketRefusal) return jsonError(bracketRefusal.message, bracketRefusal.status)
 
   /*
    * Championship length — how many weeks the final is scored over (lib/playoff-runtime/playoffRoundWeeks.ts).
@@ -457,6 +495,59 @@ export async function executeLeagueSettingsPatch(
     })
     if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
     lineupModeToStore = mode
+  }
+
+  /*
+   * Games limits — GP caps (NBA/NHL/MLB), NHL goalie minimum, MLB innings min/max (lib/redraft/gamesLimits.ts).
+   * Stored in `settings.games_limits`; null/{} turns them off. Sport-gated and range-checked (400), and
+   * refused for a league that is not on daily lineups: only the per-day lineup and stat rows say which slot
+   * a game was played in, so anywhere else the setting would save and silently do nothing.
+   * `settingsMerge` can write the same key, so it is held to the same rule.
+   */
+  let gamesLimitsToStore: GamesLimits | null | undefined = undefined
+  {
+    const merge = body.settingsMerge as Record<string, unknown> | null | undefined
+    const viaMerge = merge && typeof merge === 'object' && !Array.isArray(merge) && GAMES_LIMITS_SETTINGS_KEY in merge
+    const raw = body.gamesLimits !== undefined ? body.gamesLimits : viaMerge ? merge[GAMES_LIMITS_SETTINGS_KEY] : undefined
+    if (body.gamesLimits !== undefined || viaMerge) {
+      const effectiveSettings = {
+        ...((league.settings as Record<string, unknown> | null) ?? {}),
+        ...(body.sportConfig !== undefined ? { sportConfig: body.sportConfig } : {}),
+      }
+      const parsed = parseGamesLimits(raw, String(league.sport ?? ''), effectiveSettings)
+      if (!parsed.ok) return jsonError(parsed.error, 400)
+      // Daily or weekly is decided by the lineup switch above (a sportConfig blob cannot change it).
+      const modeAfter = lineupModeToStore ?? readLineupMode(league.settings, league.sport)
+      if (parsed.value && modeAfter !== 'daily') {
+        return jsonError('Games-played caps, goalie minimums and innings limits need daily lineups to be on for this league.', 400)
+      }
+      gamesLimitsToStore = parsed.value
+      if (viaMerge) merge[GAMES_LIMITS_SETTINGS_KEY] = parsed.value
+    }
+  }
+  // Games limits and a "which games count" rule other than all games are not combined yet: whether a
+  // cap should count every game played or only the games that counted is undecided. Refuse the pair,
+  // whichever side this request changes, before any write.
+  {
+    const storedSettings = (league.settings as Record<string, unknown> | null) ?? {}
+    const sport = String(body.sport ?? league.sport ?? '')
+    const limitsAfter =
+      gamesLimitsToStore !== undefined ? gamesLimitsToStore : readGamesLimits(storedSettings, sport)
+    const mergeSportConfig = (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig
+    const sportConfigAfter =
+      body.sportConfig !== undefined ? body.sportConfig : mergeSportConfig !== undefined ? mergeSportConfig : storedSettings.sportConfig
+    if (limitsAfter && lineupModeToStore === 'weekly') {
+      return jsonError(
+        'Turn off games-played caps, goalie minimums and innings limits before switching this league to weekly lineups.',
+        400,
+      )
+    }
+    if (limitsAfter && gamesCountSettingOf(sportConfigAfter, sport).mode !== 'all') {
+      return jsonError(
+        'Games-played caps, goalie minimums and innings limits can’t be combined with a “which games count” rule yet. Set games count to All games, or turn the limits off.',
+        400,
+      )
+    }
   }
 
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
@@ -709,6 +800,20 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('settingsMerge')
+  }
+
+  if (body.gamesLimits !== undefined && gamesLimitsToStore !== undefined) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          [GAMES_LIMITS_SETTINGS_KEY]: gamesLimitsToStore === null ? null : (gamesLimitsToStore as Prisma.InputJsonValue),
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push(GAMES_LIMITS_SETTINGS_KEY)
   }
 
   if (tiebreakerOrderToStore) {

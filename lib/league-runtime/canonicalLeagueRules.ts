@@ -239,6 +239,8 @@ export type CanonicalLeagueRules = {
     byeRules: string | null
     reseedBehavior: string | null
     standingsTiebreakers: string[]
+    /** Commissioner bye plan, `League.settings.playoff_bye_plan` (see lib/playoff-brackets/byePlan.ts). */
+    byePlan: number[] | null
     /** The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts), or null for the default. */
     customTiebreakers: string[] | null
   }
@@ -532,6 +534,7 @@ export function buildCanonicalLeagueRulesFromResolved({
       byeRules: playoffConfig?.bye_rules ?? null,
       reseedBehavior: playoffConfig?.reseed_behavior ?? null,
       standingsTiebreakers: playoffConfig?.standings_tiebreakers ?? [],
+      byePlan: Array.isArray(settings.playoff_bye_plan) ? settings.playoff_bye_plan.map((v) => Number(v)) : null,
       customTiebreakers: readTiebreakerOrder(settings),
     },
     schedule: {

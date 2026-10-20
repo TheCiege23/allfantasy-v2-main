@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
+import { PlayoffBracketFormatCard } from '@/components/league-settings/PlayoffBracketFormatCard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { tryGetSportConfig } from '@/lib/sportConfig'
@@ -81,6 +82,7 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
         </div>
       </div>
 
+      {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}
       {native ? (
         <TiebreakerOrderEditor
           leagueId={leagueId}

@@ -36,6 +36,7 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
+import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
@@ -514,6 +515,14 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <LineupIntegrity leagueId={league.id} />
         </HubSection>
       ) : null}
+
+      {/*
+        Deadline autopilot — outside the depth gate on purpose: its list and "Remind now" are free,
+        and the card itself says which part is the Commissioner plan (the route enforces it).
+      */}
+      <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
+        <DeadlineAutopilot leagueId={league.id} />
+      </HubSection>
 
       {/*
         Weekly recap review — outside the depth gate: editing the league's own recap before it posts

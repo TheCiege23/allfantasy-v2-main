@@ -16,6 +16,15 @@ import { getRosterOverlayForVariant } from './LeagueVariantRegistry'
 import { getTeamMetadataForSport } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { DAILY_SPORT_SEASON_SHAPE } from '@/lib/sportConfig/dailySportSeasonShape'
+import {
+  DAILY_REDRAFT_ROSTER_LAYOUTS,
+  DAILY_REDRAFT_WAIVER_PROCESSING_DAYS,
+  dailyRedraftDraftableRosterSize,
+  dailyRedraftFlexDefinitions,
+  dailyRedraftReserveCount,
+  dailyRedraftStarterSlots,
+  type DailyRedraftSport,
+} from '@/lib/sportConfig/dailySportRedraftRoster'
 
 export const SPORT_DEFAULTS_CORE_REGISTRY_VERSION = '2026-03-20.1'
 
@@ -89,6 +98,20 @@ const LEAGUE_DEFAULTS: Record<SportType, LeagueDefaults> = {
   },
 }
 
+/** A daily sport's base roster IS its redraft layout — derived, never restated. */
+function dailyRosterDefaults(sport: DailyRedraftSport): RosterDefaults {
+  const layout = DAILY_REDRAFT_ROSTER_LAYOUTS[sport]
+  return {
+    sport_type: sport,
+    starter_slots: dailyRedraftStarterSlots(layout),
+    bench_slots: layout.benchSlots,
+    IR_slots: dailyRedraftReserveCount(layout),
+    taxi_slots: 0,
+    devy_slots: 0,
+    flex_definitions: dailyRedraftFlexDefinitions(layout),
+  }
+}
+
 const ROSTER_DEFAULTS: Record<SportType, RosterDefaults> = {
   NFL: {
     sport_type: 'NFL',
@@ -102,36 +125,10 @@ const ROSTER_DEFAULTS: Record<SportType, RosterDefaults> = {
       { slotName: 'SF', allowedPositions: ['QB', 'RB', 'WR', 'TE'] },
     ],
   },
-  NBA: {
-    sport_type: 'NBA',
-    starter_slots: { PG: 1, SG: 1, SF: 1, PF: 1, C: 1, G: 1, F: 1, UTIL: 1 },
-    bench_slots: 4,
-    IR_slots: 1,
-    taxi_slots: 0,
-    devy_slots: 0,
-    flex_definitions: [{ slotName: 'G', allowedPositions: ['PG', 'SG'] }, { slotName: 'F', allowedPositions: ['SF', 'PF'] }, { slotName: 'UTIL', allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'] }],
-  },
-  MLB: {
-    sport_type: 'MLB',
-    starter_slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, DH: 1, UTIL: 1, SP: 2, RP: 2, P: 1 },
-    bench_slots: 6,
-    IR_slots: 1,
-    taxi_slots: 0,
-    devy_slots: 0,
-    flex_definitions: [
-      { slotName: 'UTIL', allowedPositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH'] },
-      { slotName: 'P', allowedPositions: ['SP', 'RP'] },
-    ],
-  },
-  NHL: {
-    sport_type: 'NHL',
-    starter_slots: { C: 2, LW: 2, RW: 2, D: 2, G: 1, UTIL: 1 },
-    bench_slots: 6,
-    IR_slots: 1,
-    taxi_slots: 0,
-    devy_slots: 0,
-    flex_definitions: [{ slotName: 'UTIL', allowedPositions: ['C', 'LW', 'RW', 'D'] }],
-  },
+  // NBA / MLB / NHL: the one redraft layout per sport (lib/sportConfig/dailySportRedraftRoster.ts).
+  NBA: dailyRosterDefaults('NBA'),
+  MLB: dailyRosterDefaults('MLB'),
+  NHL: dailyRosterDefaults('NHL'),
   NCAAF: {
     sport_type: 'NCAAF',
     starter_slots: { QB: 1, RB: 1, WR: 2, TE: 1, DEF: 1 },
@@ -236,7 +233,8 @@ const DRAFT_DEFAULTS: Record<SportType, DraftDefaults> = {
   NBA: {
     sport_type: 'NBA',
     draft_type: 'snake',
-    rounds_default: 13,
+    // Starters + bench of the one redraft layout.
+    rounds_default: dailyRedraftDraftableRosterSize(DAILY_REDRAFT_ROSTER_LAYOUTS.NBA),
     timer_seconds_default: 90,
     pick_order_rules: 'snake',
     timer_defaults: { per_pick_seconds: 90, auto_pick_enabled: false },
@@ -253,7 +251,8 @@ const DRAFT_DEFAULTS: Record<SportType, DraftDefaults> = {
   MLB: {
     sport_type: 'MLB',
     draft_type: 'snake',
-    rounds_default: 26,
+    // Starters + bench of the one redraft layout.
+    rounds_default: dailyRedraftDraftableRosterSize(DAILY_REDRAFT_ROSTER_LAYOUTS.MLB),
     timer_seconds_default: 90,
     pick_order_rules: 'snake',
     timer_defaults: { per_pick_seconds: 90, auto_pick_enabled: false },
@@ -270,7 +269,8 @@ const DRAFT_DEFAULTS: Record<SportType, DraftDefaults> = {
   NHL: {
     sport_type: 'NHL',
     draft_type: 'snake',
-    rounds_default: 18,
+    // Starters + bench of the one redraft layout.
+    rounds_default: dailyRedraftDraftableRosterSize(DAILY_REDRAFT_ROSTER_LAYOUTS.NHL),
     timer_seconds_default: 90,
     pick_order_rules: 'snake',
     timer_defaults: { per_pick_seconds: 90, auto_pick_enabled: false },
@@ -361,7 +361,7 @@ const WAIVER_DEFAULTS: Record<SportType, WaiverDefaults> = {
   NBA: {
     sport_type: 'NBA',
     waiver_type: 'rolling',
-    processing_days: [1, 3, 5],
+    processing_days: [...DAILY_REDRAFT_WAIVER_PROCESSING_DAYS],
     FAAB_budget_default: null,
     processing_time_utc: '12:00',
     faab_enabled: false,
@@ -377,7 +377,7 @@ const WAIVER_DEFAULTS: Record<SportType, WaiverDefaults> = {
   MLB: {
     sport_type: 'MLB',
     waiver_type: 'faab',
-    processing_days: [1, 4],
+    processing_days: [...DAILY_REDRAFT_WAIVER_PROCESSING_DAYS],
     FAAB_budget_default: 100,
     processing_time_utc: '12:00',
     faab_enabled: true,
@@ -393,7 +393,7 @@ const WAIVER_DEFAULTS: Record<SportType, WaiverDefaults> = {
   NHL: {
     sport_type: 'NHL',
     waiver_type: 'reverse_standings',
-    processing_days: [1, 3, 5],
+    processing_days: [...DAILY_REDRAFT_WAIVER_PROCESSING_DAYS],
     FAAB_budget_default: null,
     processing_time_utc: '12:00',
     faab_enabled: false,

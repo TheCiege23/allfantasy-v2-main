@@ -45,6 +45,13 @@ import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import { ScoringLabel } from '@/components/league-labels/ScoringLabel'
 import { scoringLabelIdForWizard } from '@/lib/league-labels/liveValues'
 import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
+import {
+  applyDynastySportPresetToSetup,
+  findDynastySportPreset,
+  getDynastySportPresets,
+  matchDynastySportPreset,
+} from '@/lib/dynasty-core/DynastySportPresets'
+import { DYNASTY_FORMAT_UI_COPY, dynastyFormatLang, dynastySportPresetCopy } from '@/lib/i18n/dynasty-format-copy'
 
 type WizardStep = 'sport' | 'basics' | 'draft' | 'review'
 
@@ -974,6 +981,47 @@ export function LeagueBasicsStep({
   )
 }
 
+/**
+ * NBA / NHL / MLB dynasty format presets. Choosing one writes the scoring preset and the bench / IR /
+ * taxi depth the dynasty conceptSetup already sends; editing any of those afterwards shows "Custom".
+ */
+export function DynastySportPresetPicker({
+  state,
+  onChange,
+}: Pick<WizardProps, 'state' | 'onChange'>) {
+  const { language } = useLanguage()
+  const lang = dynastyFormatLang(language)
+  const presets = getDynastySportPresets(state.sport)
+  if (getEffectiveLeagueType(state) !== 'dynasty' || state.idpSelected || presets.length === 0) return null
+  const copy = DYNASTY_FORMAT_UI_COPY[lang]
+  const selected = matchDynastySportPreset(state.sport, state.scoringPresetId, state.dynasty)
+  return (
+    <label className="block space-y-2 md:max-w-sm" data-testid="g30-dynasty-sport-preset-field">
+      <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">{copy.formatLabel}</span>
+      <select
+        value={selected?.id ?? ''}
+        onChange={(event) => {
+          const preset = findDynastySportPreset(event.target.value)
+          if (!preset) return
+          onChange({ scoringPresetId: preset.scoringPresetId, dynasty: applyDynastySportPresetToSetup(state.dynasty, preset) })
+        }}
+        className={fieldClass(false)}
+        data-testid="g30-dynasty-sport-preset"
+      >
+        {selected ? null : <option value="">{copy.custom}</option>}
+        {presets.map((preset) => (
+          <option key={preset.id} value={preset.id}>
+            {dynastySportPresetCopy(preset.id, lang).label}
+          </option>
+        ))}
+      </select>
+      <span className="block text-xs leading-5 text-[color:var(--text-secondary)]" data-testid="g30-dynasty-sport-preset-hint">
+        {selected ? dynastySportPresetCopy(selected.id, lang).hint : copy.formatHelp}
+      </span>
+    </label>
+  )
+}
+
 export function DraftStep({
   state,
   onChange,
@@ -1057,6 +1105,8 @@ export function DraftStep({
           size="md"
         />
       </div>
+
+      <DynastySportPresetPicker state={state} onChange={onChange} />
 
       {/* NFL scoring add-ons. TE premium has to say its amount — the commissioner picks it. */}
       {state.sport === 'NFL' ? (

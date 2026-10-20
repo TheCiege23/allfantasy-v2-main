@@ -453,6 +453,36 @@ export async function runRedraftScheduleAction(payload: {
   return (await res.json()) as RedraftScheduleActionResult
 }
 
+/**
+ * Commissioner schedule regeneration. Rebuilds only the weeks that have not started; once a week
+ * has started the route answers 409 `mid_season_confirmation_required` until the call is re-sent
+ * with `confirmMidSeasonChange: true`. Refusals (live draft, archived league, nothing left to
+ * rebuild) come back as 409 with a `code` and the reason in `error`.
+ */
+export type RedraftScheduleRegenerateResult = {
+  ok?: boolean
+  seasonId?: string
+  created?: number
+  regenerated?: boolean
+  regeneratedFromWeek?: number
+  warnings?: string[]
+  code?: string
+  error?: string
+}
+
+export async function regenerateRedraftSchedule(payload: {
+  seasonId: string
+  confirmMidSeasonChange?: boolean
+}): Promise<RedraftScheduleRegenerateResult> {
+  const res = await fetch('/api/redraft/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ ...payload, action: 'regenerate' }),
+  })
+  return (await res.json().catch(() => ({ error: 'Unexpected response' }))) as RedraftScheduleRegenerateResult
+}
+
 export async function fetchRedraftLiveScoring(params: {
   leagueId: string
   seasonId?: string | null

@@ -488,3 +488,52 @@ describe('dynasty regular-season fallback is sport-aware', () => {
     expect(tx.dynastyLeagueConfig.upsert.mock.calls[0]?.[0].create.regularSeasonWeeks).toBe(19)
   })
 })
+
+/*
+ * NHL category leagues. The preset row decides the mode; the league stores the three settings the
+ * category engine reads, and locks one lineup per week like every other category league here.
+ */
+describe('NHL category leagues are created as category leagues', () => {
+  const settingsOf = (tx: ReturnType<typeof buildTx>) => tx.league.create.mock.calls[0]?.[0].data.settings
+
+  it.each([
+    ['nhl_cats_each', 'h2h_category', 'each'],
+    ['nhl_cats_most', 'h2h_category', 'most'],
+    ['nhl_cats_roto', 'roto', 'roto'],
+  ])('%s stores %s / nhl_standard / %s with weekly lineups', async (scoringPreset, mode, recordMode) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ sport: 'NHL', scoringPreset }), buildEngine())
+    expect(settingsOf(tx)).toMatchObject({
+      scoring_mode: mode,
+      category_preset_id: 'nhl_standard',
+      category_record_mode: recordMode,
+      sportConfig: { lineupLockType: 'first_game_of_week' },
+    })
+  })
+
+  it('a rotisserie league has no playoffs', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ sport: 'NHL', scoringPreset: 'nhl_cats_roto' }), buildEngine())
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ playoffTeams: 0, playoffStartWeek: null })
+  })
+
+  it('[control] an NHL points league stays points, with its own lineup lock', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ sport: 'NHL', scoringPreset: 'nhl_points' }), buildEngine())
+    expect(settingsOf(tx).scoring_mode).toBe('points')
+    expect(settingsOf(tx).category_preset_id).toBeNull()
+    expect(settingsOf(tx).sportConfig?.lineupLockType).not.toBe('first_game_of_week')
+  })
+
+  it('refuses a category preset outside redraft, dynasty or keeper', async () => {
+    const tx = buildTx()
+    await expect(
+      createCanonicalLeagueInTransaction(
+        tx as any,
+        'app-user-1',
+        buildBody({ concept: 'guillotine', sport: 'NHL', scoringPreset: 'nhl_cats_each' }),
+        buildEngine({ leagueFormatId: 'guillotine' }),
+      ),
+    ).rejects.toThrow(/NHL category scoring requires redraft, dynasty or keeper/)
+  })
+})

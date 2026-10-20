@@ -5,8 +5,9 @@ The owner ruled on the three scoring questions: matchups are the **daily sum**, 
 **at his own game start**, and a player who has played stays locked **until the next day**. Phase B
 (per-day lineups on both save paths) and phase C (per-day stats and per-day matchup scoring) are in
 `lib/redraft/dailyLineups.ts`, behind the same per-league opt-in, with the migration in
-`prisma/migrations/20261020120000_daily_lineups`. Nothing turns the opt-in on yet. Games-played caps
-and MLB innings limits (phase D) and the UI (phase E) are **not built**.
+`prisma/migrations/20261020120000_daily_lineups`. Nothing turns the opt-in on yet. Games-played caps,
+the NHL goalie minimum and MLB innings limits (phase D) are built behind their own settings (§5c); the
+day-picker UI (phase E) is **not built**.
 
 > 🛑 **Apply the migration before any league gets `dailyLineupsEnabled: true`.** The per-day tables are
 > read and written only for an opted-in league, so the code is inert until then, but an opted-in
@@ -231,6 +232,26 @@ per-day tables.
   set by editing league settings; the AF engine lock stays on the weekly per-player lock from #2520,
   which is stricter than the daily lock and therefore safe.
 
+## 5c. What phase D implements (2026-10-20)
+
+Optional, per league, all off by default; stored in `League.settings.games_limits` (PATCH key `gamesLimits`)
+rather than in `sportConfig`, which the commissioner panel rewrites wholesale. Refused (400) unless the
+league is on daily lineups, because only the per-day rows say which slot a game was played in.
+
+| Rule | Sports | Choice made |
+|---|---|---|
+| Games-played cap per slot, season | NBA, NHL, MLB | Entered per seat, × the league's seats for that slot. Checked at the START of each Eastern day: the day that reaches the cap counts in full (ESPN's practice); later days in that slot score 0 and add nothing to usage. |
+| Goalie minimum, weekly | NHL | Goalie games from starting goalies (`gamesPlayed` on days with `g_*` stats). Below it, the week's goalie stats score 0. The feed has no "started" flag, so a relief appearance counts. |
+| Innings minimum, weekly | MLB | Below it: points leagues lose all pitching that week; category leagues lose only the ERA/WHIP inputs (they go unqualified), W/SV/K still count. |
+| Innings maximum, weekly | MLB | Same day rule as the caps: the day that reaches it counts in full; pitching on later days does not (batting still does). |
+
+Minimums are judged on the stored data as it stands, so the live score is what the week would end at.
+Season cap usage is recomputed from `redraft_daily_lineups` + `player_daily_scores` on every scoring run
+(no new table). The step runs after each started day's points are computed and before they are summed; a
+day no rule touches keeps its exact points, so a league without limits scores byte for byte as before.
+The scorer adds a `gamesLimits` usage summary to the team's `redraftScoring` snapshot; the matchup view
+shows it. Not built: the MLB pitcher starts cap.
+
 ## 6. Data-model changes: a migration IS required (proposed, NOT applied)
 
 Per-day attribution needs a lineup per day and points per day. Neither fits the current unique keys:
@@ -337,7 +358,7 @@ The flag is `League.settings.sportConfig.dailyLineupsEnabled`. Default off, set 
 | **A** *(done, #2514)* | `daily` lock decision, `byTeamDay`, warnings for a requested-but-inactive `daily`. Inert, because nothing sets the flag. | no | flag + sport |
 | **B** *(built)* | Apply §6. Write `redraft_daily_lineups` on every lineup save **on both save paths** (redraft PATCH and `persistRosterLineupWithEngine`) for flagged leagues: the Eastern day of `now`, plus every later day of the week the save covers. A nightly carry-forward for days without a save is optional, because reads already carry forward. | **yes** (owner) | flag |
 | **C** *(built)* | Stat sync writes `player_daily_scores` (the same rows `playerWeeklyScoreService.ts:420-450` already reads, grouped by `gameDate` instead of summed per week). `scoreRosterStarters` for flagged leagues computes Σ days Σ that day's starters. Same for the live-scoring runtime and the week finalizer. Category leagues sum the per-day starter stats. Unflagged leagues keep the weekly path byte for byte. | uses B | flag |
-| **D** | GP caps, goalie starts, MLB innings min/max and starts caps, applied in C's per-day accumulation in chronological order. | no | per-setting |
+| **D** *(built, except the pitcher starts cap)* | GP caps, goalie starts, MLB innings min/max and starts caps, applied in C's per-day accumulation in chronological order. Built as `lib/redraft/gamesLimits.ts` (rules) + `gamesLimitsScoring.ts` (season ledger), stored in `settings.games_limits`; see §5c. | no | per-setting |
 | **E** | UI: a day picker on the lineup screen, a per-day lock banner (`lib/core-app/lineupLock.ts` already formats a lock time), and the commissioner route accepting `daily`. The AF engine lock switches to the schedule-derived per-player lock for flagged leagues (fixes B6/B7 for them). Then default **new** MLB/NBA/NHL leagues to daily. Existing leagues opt in. | no | flag |
 | **F** | Optional: re-evaluate B3 (category leagues forced to `first_game_of_week`) and B9 (Monday-to-Sunday weeks). Both change sealed-week semantics and need their own decision. | no | — |
 

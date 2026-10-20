@@ -284,15 +284,70 @@ const NHL_GAME_THRESHOLDS: ReadonlyArray<[bonus: string, stat: (s: Record<string
   ['g_50sv_game', (s) => s.g_sv ?? 0, 50],
 ]
 
+/**
+ * NHL rate-stat bonuses — save %, GAA and shooting % — evaluated on ONE game's line.
+ *
+ * 🛑 PER GAME, then summed, like the thresholds above. Owner's decision 2026-10-20: each game that
+ * counts for the league earns or misses the bonus on its own. A .940 game and an .880 game are one
+ * bonus, not a .910 week; recomputing the rate from week totals would award a different number
+ * entirely. Which games count is decided downstream, not here: a weekly-lineup league sums every
+ * game the starter played (`aggregateWeeklyStats`), and a daily-lineup league scores each day only
+ * for that day's starters (`player_daily_scores`, lib/redraft/dailyLineups.ts). Because the engine
+ * multiplies each key by a commissioner's value and sums, a week's points are then exactly the sum
+ * of its games' points. There is no per-week mode; adding one means scoring a rate off totals,
+ * which no path here does.
+ *
+ * Each needs its own denominator from the same line, and a game without one earns nothing rather
+ * than a perfect rate: save % needs a shot against, GAA needs goalie minutes (`g_toi`, stored only
+ * on lines ingested since 2026-10-20), shooting % needs a shot on goal.
+ */
+const NHL_SAVE_PCT_FLOOR = 0.9 //   panel: bonus per 0.010 above .900
+const NHL_GAA_CEILING = 2.5 //      panel: bonus for a GAA below 2.50
+const NHL_SHOOTING_PCT_FLOOR = 10 // panel: bonus per point above 10%
+
+function addNhlRateBonuses(stats: Record<string, number>): void {
+  if (stats.g_sv !== undefined) {
+    const shotsAgainst = stats.g_sa ?? stats.g_sv + (stats.g_ga ?? 0)
+    if (shotsAgainst > 0) {
+      const steps = (stats.g_sv / shotsAgainst - NHL_SAVE_PCT_FLOOR) / 0.01
+      if (steps > 0) stats.g_sv_pct_bonus = steps
+    }
+  }
+  if (stats.g_toi !== undefined && stats.g_toi > 0 && stats.g_ga !== undefined) {
+    if ((stats.g_ga * 60) / stats.g_toi < NHL_GAA_CEILING) stats.g_gaa_bonus = 1
+  }
+  if (stats.sog !== undefined && stats.sog > 0) {
+    const points = ((stats.g ?? 0) / stats.sog) * 100 - NHL_SHOOTING_PCT_FLOOR
+    if (points > 0) stats.sh_pct_bonus = points
+  }
+}
+
+/**
+ * Numeric keys every stored NHL line carries that no category scores. `player_id` is folded into
+ * each line by the ingest (the vendor keys the box BY id); without this it was reported as
+ * "Unrecognized NHL provider stat keys (alias table may be wrong): player_id" on every sync.
+ */
+const NHL_KNOWN_UNSCORED = new Set(['player_id', 'time_on_ice_minutes'])
+
 export function normalizeNhlGameStats(raw: unknown): NormalizedGameStats {
-  const result = normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
+  const normalized = normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
+  const result = { ...normalized, unmappedKeys: normalized.unmappedKeys.filter((k) => !NHL_KNOWN_UNSCORED.has(k)) }
   const stats = result.stats
   if (Object.keys(stats).length === 0) return result
+
+  // Goalie minutes played. Skaters carry the same clock, so it is credited by the line's GROUP,
+  // which the ingest stores beside `stats` (rollingInsightsGameLogs.ts `normalizedStatMapFor`).
+  // Only rows ingested after time on ice was stored carry it; older rows simply score 0 here.
+  if (isRecord(raw) && raw.group === 'goalies' && isRecord(raw.stats)) {
+    const minutes = asNumber(raw.stats.time_on_ice_minutes)
+    if (minutes !== undefined) stats.g_toi = minutes
+  }
 
   if (stats.g !== undefined || stats.a !== undefined) stats.pts = (stats.g ?? 0) + (stats.a ?? 0)
   for (const [bonus, stat, min] of NHL_GAME_THRESHOLDS) {
     if (stat(stats) >= min) stats[bonus] = 1
   }
+  addNhlRateBonuses(stats)
   return result
 }
 

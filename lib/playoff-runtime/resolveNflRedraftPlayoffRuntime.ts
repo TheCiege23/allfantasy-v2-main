@@ -369,6 +369,7 @@ export function rulesWithPlayoffTeamOverride(
       byeRules: state.settings.firstRoundByes > 0 ? 'top_seed_byes' : null,
       reseedBehavior: state.settings.reseedAfterEachRound ? 'reseed_after_each_round' : null,
       standingsTiebreakers: state.settings.tiebreakers,
+      byePlan: state.settings.byePlan,
       // Without this the override would re-run the legacy head-to-head-before-points reorder on it.
       customTiebreakers: state.settings.customTiebreakers ?? null,
     },
@@ -427,6 +428,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
           byes: state.settings.firstRoundByes,
           rounds: state.settings.roundCount,
           reseedAfterEachRound: state.settings.reseedAfterEachRound,
+          byePlan: state.settings.byePlan,
           consolationEnabled: state.settings.consolationEnabled,
           generatedAt: new Date().toISOString(),
         },
@@ -440,6 +442,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
           byes: state.settings.firstRoundByes,
           rounds: state.settings.roundCount,
           reseedAfterEachRound: state.settings.reseedAfterEachRound,
+          byePlan: state.settings.byePlan,
           consolationEnabled: state.settings.consolationEnabled,
           generatedAt: new Date().toISOString(),
         },

@@ -28,6 +28,8 @@ import {
   loadPlayerDailyStats,
 } from './dailyLineups'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, type LimitLedgerEntry } from './gamesLimits'
+import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
 import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 
 export function calculateFantasyPoints(
@@ -241,6 +243,8 @@ export type RosterScoreSummary = {
   benchPoints?: number
   /** Best ball only: the lineup the system started this week, and any seat nobody could fill. */
   bestBall?: { assignments: OptimalSlotAssignment[]; unfilledSlots: { slot: string; seat: number }[] }
+  /** Daily-lineup leagues with games limits on only (`gamesLimits.ts`): usage against each limit. */
+  gamesLimits?: GamesLimitsSummary
 }
 
 type BestBallScoringContext = { sport: string; slots: LineupSlotSpec[] }
@@ -441,6 +445,16 @@ async function scoreRosterStartersDaily(args: {
       await loadPlayerDailyStats(prisma, { playerIds, sport: playerSport, season: args.seasonYear, window }),
     )
   }
+  // Games limits (off by default): every started day with a stat line is recorded here, then the
+  // limits step runs AFTER the loop — see `applyDailyGamesLimits` below.
+  const limits = readGamesLimits(league.settings, sport)
+  const limitDays: { entry: LimitLedgerEntry; points: number; position: string | null }[] = []
+  const gamesBySport = new Map<string, Awaited<ReturnType<typeof loadDailyGamesPlayed>>>()
+  if (limits) {
+    for (const playerSport of dailyStatsBySport.keys()) {
+      gamesBySport.set(playerSport, await loadDailyGamesPlayed(prisma, { playerIds, sport: playerSport, season: args.seasonYear, window }))
+    }
+  }
 
   let pts = 0
   let benchPts = 0
@@ -449,6 +463,10 @@ async function scoreRosterStartersDaily(args: {
   let allFinal = true
   const missingPlayerIds: string[] = []
   const statMaps: TeamStatTotals[] = []
+  // Points the games-count rule already decided. The limits step re-sums only the days it was handed,
+  // so these are carried past it rather than lost (the settings PATCH also refuses both rules at once).
+  let gamesCountPts = 0
+  const gamesCountStats: TeamStatTotals[] = []
 
   for (const p of players) {
     const onRoster = daysOnRoster(p, days)
@@ -498,7 +516,11 @@ async function scoreRosterStartersDaily(args: {
           scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
         })
         pts += counted.points
-        for (const stats of counted.countedStats) statMaps.push(stats as TeamStatTotals)
+        gamesCountPts += counted.points
+        for (const stats of counted.countedStats) {
+          statMaps.push(stats as TeamStatTotals)
+          gamesCountStats.push(stats as TeamStatTotals)
+        }
       } else {
         scoredStarterCount += 1
         if (!weekly.isFinalized) allFinal = false
@@ -506,10 +528,32 @@ async function scoreRosterStartersDaily(args: {
           const r = await pointsFor(day)
           pts += r.points
           if (r.stats) statMaps.push(r.stats as TeamStatTotals)
+          if (limits && r.stats) {
+            limitDays.push({
+              entry: {
+                day: dayKey(day),
+                playerId: p.playerId,
+                slot: capSlotKey(slotOn(day), p.position),
+                positions: positionTokens(p.position),
+                gamesPlayed: gamesBySport.get(p.sport)?.get(p.playerId)?.get(dayKey(day))?.gamesPlayed ?? 1,
+                stats: r.stats,
+              },
+              points: r.points,
+              position: p.position,
+            })
+          }
         }
       }
     }
     for (const day of benchDays) benchPts += (await pointsFor(day)).points
+  }
+
+  let gamesLimits: GamesLimitsSummary | undefined
+  if (limits) {
+    const limited = await applyDailyGamesLimits({ league, sport, rosterId: args.rosterId, seasonYear: args.seasonYear, week: args.week, limits, limitDays })
+    pts = gamesCountPts + limited.points
+    statMaps.splice(0, statMaps.length, ...gamesCountStats, ...limited.statMaps)
+    gamesLimits = limited.summary
   }
 
   return {
@@ -521,7 +565,48 @@ async function scoreRosterStartersDaily(args: {
     statTotals: accumulateTeamTotals(statMaps),
     missingPlayerIds,
     allFinal,
+    ...(gamesLimits ? { gamesLimits } : {}),
   }
+}
+
+/**
+ * THE GAMES-LIMITS STEP (lib/redraft/gamesLimits.ts), kept apart from the daily loop on purpose: it takes
+ * the started days whose points the loop already computed, applies the caps / goalie minimum / innings
+ * limits, and re-sums. A day the limits leave alone keeps the exact points the loop computed, so a week no
+ * limit touches totals byte for byte what it did before. Any other rule that decides which games count
+ * (best N, lock-in) belongs BEFORE this step: caps should count only games that counted.
+ */
+async function applyDailyGamesLimits(args: {
+  league: { sport: string; settings: unknown }
+  sport: string
+  rosterId: string
+  seasonYear: number
+  week: number
+  limits: NonNullable<ReturnType<typeof readGamesLimits>>
+  limitDays: { entry: LimitLedgerEntry; points: number; position: string | null }[]
+}): Promise<{ points: number; statMaps: TeamStatTotals[]; summary: GamesLimitsSummary }> {
+  const settings = args.league.settings as Record<string, any> | null
+  const mode = settings?.scoring_mode ?? settings?.scoringSettings?.scoringMode ?? 'points'
+  const prior = args.limits.gamesPlayedCaps
+    ? await loadPriorSeasonLedger(prisma, { rosterId: args.rosterId, sport: args.sport, season: args.seasonYear, week: args.week })
+    : []
+  const { stats, summary } = applyGamesLimits({
+    sport: args.sport,
+    limits: args.limits,
+    scoringMode: mode === 'h2h_category' || mode === 'roto' ? 'category' : 'points',
+    seats: slotSeats(args.sport, args.league.settings),
+    prior,
+    week: args.limitDays.map((d) => d.entry),
+  })
+  const scorer = buildLeagueStatScorer(args.league)
+  let points = 0
+  const statMaps: TeamStatTotals[] = []
+  args.limitDays.forEach((d, i) => {
+    const line = stats[i]
+    points += line === d.entry.stats ? d.points : scorer ? scorer(line, d.position) : 0
+    statMaps.push(line as TeamStatTotals)
+  })
+  return { points, statMaps, summary }
 }
 
 /** Reserve slots that are not the bench: their players count for neither the lineup nor bench points. */

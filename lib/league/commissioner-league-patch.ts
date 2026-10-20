@@ -1,5 +1,7 @@
 import type { League, LeagueSport, Prisma } from '@prisma/client'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { capSlotTokens, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { readLineupMode, type LineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 /** Subset of `League` exposed to commissioner settings UI (GET + PATCH). */
@@ -28,6 +30,12 @@ export type CommissionerSettingsFormData = {
    * league never stored one. Not a column — PATCHed as `championshipLength` (execute-league-settings-patch).
    */
   championshipLength?: number | null
+  /** `settings.games_limits` (lib/redraft/gamesLimits.ts); null = off. PATCHed as `gamesLimits`. */
+  gamesLimits?: GamesLimits | null
+  /** Whether the league scores daily lineups — games limits are refused without it. Read-only here. */
+  dailyLineupsActive?: boolean
+  /** Starter slots a games-played cap may name in this league (NBA/NHL/MLB; empty otherwise). */
+  gamesLimitsCapSlots?: string[]
   /**
    * Daily or weekly lineups (NBA/NHL/MLB; lib/redraft/lineupModeSwitch.ts), read from the two
    * `settings.sportConfig` fields the scorer and the lock read. Not a column — PATCHed as `lineupMode`.
@@ -180,6 +188,9 @@ export function commissionerLeagueFieldsFromRow(
     playoffTeams: league.playoffTeams,
     playoffWeeksPerRound: league.playoffWeeksPerRound,
     championshipLength: readChampionshipLength(league.settings),
+    gamesLimits: readGamesLimits(league.settings, league.sport),
+    dailyLineupsActive: isDailyLineupScoringEnabled(league.settings, league.sport),
+    gamesLimitsCapSlots: ['NBA', 'NHL', 'MLB'].includes(String(league.sport)) ? capSlotTokens(String(league.sport), league.settings) : [],
     lineupMode: readLineupMode(league.settings, league.sport),
     playoffSeedingRule: league.playoffSeedingRule,
     playoffLowerBracket: league.playoffLowerBracket,
