@@ -27,7 +27,7 @@
  *   node scripts/ts-error-ratchet.mjs --allow-zero     # accept a genuine zero-error run
  */
 import { spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, writeSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
 
@@ -188,11 +188,16 @@ function getTscOutput() {
  * place the reason appears, and it is not readable from every environment that has to act on the
  * failure; annotations are served by the check-runs API alongside the conclusion. No-op elsewhere.
  */
-function annotate(message, file) {
+function annotate(message, file, level = 'error') {
   if (process.env.GITHUB_ACTIONS !== 'true') return
   const esc = (v) => String(v).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
-  const where = file ? ` file=${String(file).replace(/[,:]/g, (c) => (c === ',' ? '%2C' : '%3A'))}` : ''
-  console.log(`::error${where},title=TypeScript ratchet::${esc(message)}`)
+  const props = [
+    ...(file ? [`file=${String(file).replace(/[,:]/g, (c) => (c === ',' ? '%2C' : '%3A'))}`] : []),
+    'title=TypeScript ratchet',
+  ].join(',')
+  // writeSync, not console.log: stdout to a pipe is asynchronous in Node, and the process.exit()
+  // that follows every failure can drop a buffered line, which is exactly the line that matters.
+  writeSync(1, `::${level} ${props}::${esc(message)}\n`)
 }
 
 function parse(text) {
@@ -228,6 +233,7 @@ function writeBaseline(parsed) {
 function main() {
   const raw = getTscOutput()
   const parsed = parse(raw)
+  annotate(`tsc reported ${parsed.total} error(s) across ${Object.keys(parsed.byFile).length} file(s)`, undefined, 'notice')
 
   /*
    * ANTI-VACUITY: the positive control, encoded.
