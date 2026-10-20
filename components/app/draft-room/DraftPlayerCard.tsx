@@ -11,6 +11,7 @@ import { PlayerAvatar } from './PlayerAvatar'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
+import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 
 export type DraftPlayerCardProps = {
   /** Normalized display model (preferred) */
@@ -205,7 +206,8 @@ function DraftPlayerCardInner({
   const showPromoted = graduatedToNFL
   const showProBadge = poolType === 'pro'
   const showCollegeBadge = poolType === 'college' || (isDevy && !showProBadge)
-  const showRookieBadge = Boolean(isRookie)
+  // Rookie / Prospect: one resolver for every sport (lib/draft-room/draftRoomPlayerLabel).
+  const labelInput = { isRookie, isDevy, graduatedToNFL, poolType }
 
   const normalized = useMemo(
     () =>
@@ -339,11 +341,7 @@ function DraftPlayerCardInner({
               <span className="rounded-md border border-white/18 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/90">
                 {teamAbbr ?? 'FA'}
               </span>
-              {showRookieBadge ? (
-                <span className="rounded-md border border-lime-300/40 bg-lime-500/18 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-lime-100">
-                  Rookie
-                </span>
-              ) : null}
+              <DraftPlayerLabelBadge player={labelInput} />
               {devyLabel && (
                 <span className="rounded bg-violet-500/25 px-1.5 py-0.5 text-[11px] font-medium text-violet-200" title="Devy / college">
                   {devyLabel}
@@ -443,11 +441,7 @@ function DraftPlayerCardInner({
           <span className="shrink-0 rounded-md border border-white/16 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/88">
             {teamAbbr ?? 'FA'}
           </span>
-          {showRookieBadge ? (
-            <span className="shrink-0 rounded-md border border-lime-300/35 bg-lime-500/18 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-lime-100">
-              Rookie
-            </span>
-          ) : null}
+          <DraftPlayerLabelBadge player={labelInput} className="shrink-0" />
           {isQueued && (
             <span
               className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100"

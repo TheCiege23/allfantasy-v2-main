@@ -94,3 +94,16 @@ would refuse).
 `previousSeasons` lists only snapshots this repo has already stored for the same league name. No
 captured endpoint maps a league id to its prior-season league ids, so multi-season backfill remains
 Sleeper-only.
+
+## F-10 — Does `getPlayerIds?sport=MLB` (or `NHL`) include minor leaguers / prospects? (recorded 2026-10-20, no probe)
+
+`ingestProFantraxIdentities` (`MLB`, and since its generalisation `NHL` and `NBA`) reads this universe weekly but keeps only players it can link to an
+existing Rolling Insights row, so any minor leaguer in it is counted as `unmatched` and discarded.
+There is **no `getPlayerIds` fixture**, and `FantraxPlayerRef` carries only id, name, team and
+position — no level, status or draft field. So even if minor leaguers are present, nothing would
+mark them as prospects.
+
+**Blocks:** an MLB prospect layer in the draft pool from data we already fetch.
+**Needed, without a probe first:** read the `sportsDataCache['fantrax:mlb-identities:last-run']`
+marker (`provided` vs `unmatched`; `fantrax:nhl-identities:last-run` for NHL) to size it. If it is worth pursuing, capture one
+`getPlayerIds?sport=MLB` response as a committed fixture and check for a level/status field.
