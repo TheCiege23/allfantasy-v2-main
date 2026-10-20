@@ -24,7 +24,7 @@ import {
 import type { RunBudget } from '@/lib/cron/runBudget'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
-import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { dispatchNotification, type DispatchNotificationResult } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
 import { decidePlayerNewsEligibility } from '@/lib/notifications/playerNewsEligibility'
 import {
@@ -552,7 +552,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         severity: isInjury ? 'high' : 'medium',
         dedupePrefix: `player-news:${row.id}`,
         meta: { teamName, team: clubAbbr, sport: row.sport, newsCategory: category, followedTeam: clubAbbr, teamNews: true },
-      }).then(() => true, () => false)
+      }).then(result => result.failed === 0, () => false)
       if (!teamSent) {
         // Threw before any handoff: nobody is recorded as told, so the retry reaches the same people.
         await settle(row, 'dispatch-failed')
@@ -676,7 +676,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
      */
     const toldNow: string[] = []
     let anyDispatchFailed = false
-    const sent = (p: Promise<void>) => p.then(() => true, () => false)
+    const sent = (p: Promise<DispatchNotificationResult>) => p.then(result => result.failed === 0, () => false)
 
     for (const [leagueId, userIds] of byLeague) {
       const ok = await sent(dispatchNotification({

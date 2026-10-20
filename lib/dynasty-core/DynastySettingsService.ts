@@ -20,6 +20,7 @@ import type {
   DynastyDraftOrderAuditEntryDto,
 } from './types'
 import type { SportType } from '@/lib/multi-sport/sport-types'
+import { describeRookieDraftWindow, readRookieDraftCalendarSettings } from './rookieDraftCalendar'
 
 /**
  * Get effective dynasty settings for a league (roster, scoring, playoff, rookie draft).
@@ -87,6 +88,7 @@ export async function getEffectiveDynastySettings(
   }
 
   const config = league.dynastyConfig
+  const rookieCalendar = readRookieDraftCalendarSettings(settings)
 
   return {
     leagueSize: league.leagueSize ?? null,
@@ -113,6 +115,9 @@ export async function getEffectiveDynastySettings(
     taxiScoringOn: config?.taxiScoringOn ?? false,
     taxiDeadlineWeek: config?.taxiDeadlineWeek ?? null,
     taxiPromotionDeadlineWeek: config?.taxiPromotionDeadlineWeek ?? null,
+    rookieDraftAutoOpen: rookieCalendar.autoOpen,
+    rookieDraftCustomOpenDate: rookieCalendar.customOpenDate,
+    rookieDraftWindowLabel: describeRookieDraftWindow(league.sport as string | null),
   }
 }
 

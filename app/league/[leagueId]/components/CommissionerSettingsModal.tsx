@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { useAutosave } from '@/lib/hooks/useAutosave'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
@@ -118,7 +119,8 @@ export function CommissionerSettingsModal({
   const [c2cMode, setC2cMode] = useState(false)
   const [c2cConfig, setC2cConfig] = useState<C2CConfigClient | null>(null)
 
-  const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId)
+  const { confirm: confirmMidSeason, dialog: midSeasonDialog } = useMidSeasonConfirm()
+  const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId, { confirmMidSeason })
   const { hasCommissioner } = useEntitlements()
 
   useEffect(() => {
@@ -291,6 +293,7 @@ export function CommissionerSettingsModal({
 
   return (
     <SubscriptionGateProvider>
+    {midSeasonDialog}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-0 backdrop-blur-sm md:p-4"
       role="dialog"
