@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { calculateScoreFromSportConfig, isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
+import { loadDailyLineupView } from '@/lib/redraft/dailyLineupView'
 import type { RosterScorePlayer } from '@/lib/types/liveScoring'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,35 @@ export async function GET(
   })
   const week = Math.max(1, Math.min(40, Number(sp.get('week')) || redraftSeason?.currentWeek || 1))
   const season = Math.max(2000, Math.min(2100, Number(sp.get('season')) || redraftSeason?.season || new Date().getFullYear()))
+
+  /*
+   * A daily-lineup league's week is Σ days of that day's starters, so its breakdown is each player's
+   * points on the days he STARTED (`dailyLineupView.ts`, the scorer's own rule), plus the days.
+   */
+  const daily = await loadDailyLineupView(prisma, { leagueId, redraftRosterId: rosterId, season, week })
+  if (daily) {
+    const rows = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId, playerId: { in: Object.keys(daily.startedPoints) } },
+      select: { playerId: true, playerName: true, position: true, slotType: true },
+    })
+    // Final once the finalizer has sealed his weekly row, as the matchup itself decides.
+    const sealed = await prisma.playerWeeklyScore.findMany({
+      where: { playerId: { in: rows.map((r) => r.playerId) }, week, season, isFinalized: true },
+      select: { playerId: true },
+    })
+    const sealedIds = new Set(sealed.map((r) => r.playerId))
+    const players: RosterScorePlayer[] = rows
+      .map((p) => ({
+        playerName: p.playerName,
+        position: p.position,
+        slotType: p.slotType,
+        pts: daily.startedPoints[p.playerId] ?? 0,
+        isFinalized: sealedIds.has(p.playerId),
+        hasStats: true,
+      }))
+      .sort((a, b) => b.pts - a.pts)
+    return NextResponse.json({ week, season, rosterId, players, daily })
+  }
 
   const players = await prisma.redraftRosterPlayer.findMany({
     where: { rosterId, droppedAt: null },
