@@ -14,6 +14,7 @@ import { applyConceptWeeklyPoints } from '@/lib/scoring-engine/conceptAdjustment
 import { isRosterChopped } from '@/lib/guillotine/guillotineGuard'
 import { isRosterCurrentlyEliminated } from '@/lib/survivor/SurvivorRosterState'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
+import { settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import { publishMatchupLiveTickDebounced } from '@/lib/realtime-events/realtimeEventService'
 import type { TeamStatTotals } from '@/lib/category-scoring'
 import { optimizeBestBallLeagueLineup } from '@/lib/bestball/leagueOptimizer'
@@ -110,7 +111,7 @@ export async function processLeagueWeek(params: {
   const rules = await resolveScoringRulesForLeague(leagueId, league.sport as LeagueSport)
   const snap = parseSettingsSnapshot(league.settings)
   const scoringSettings = (snap?.scoringSettings ?? null) as Record<string, unknown> | null
-  const scoringMode = resolveScoringMode(league.settings)
+  const scoringMode = resolveScoringMode(settingsForScoringWeek(league.settings, season, week))
   const isCategoryMode = scoringMode === 'h2h_category' || scoringMode === 'roto'
   const isBestBallCumulative = league.bestBallMode === true && league.bbMatchupFormat === 'cumulative'
 

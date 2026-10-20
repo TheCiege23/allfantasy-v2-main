@@ -1,4 +1,5 @@
-import { accumulateTeamTotals, getCategoryPresetDefinitions, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
+import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
+import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
@@ -538,10 +539,11 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   const seasonYear = season.season
 
   const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true } })
-  const scoringSettings = scoringLeague?.settings as Record<string, any> | null
+  // The scoring type in force for THIS week: a mid-season switch never re-scores a week played before it.
+  const scoringSettings = settingsForScoringWeek(scoringLeague?.settings as Record<string, any> | null, seasonYear, week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
   const categoryId = scoringSettings?.category_preset_id ?? scoringSettings?.scoringSettings?.categoryPresetId
-  const categories = scoringMode === 'h2h_category' || scoringMode === 'roto' ? getCategoryPresetDefinitions(categoryId) : null
+  const categories = scoringMode === 'h2h_category' || scoringMode === 'roto' ? resolveLeagueCategories(scoringSettings, categoryId) : null
   if (scoringMode !== 'points' && !categories) throw new Error('Category scoring requires a supported native category preset.')
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
@@ -671,9 +673,9 @@ export async function recalculateMatchupsForSeasonWeek(
   week: number,
 ): Promise<{ updated: number; incomplete: number; summaries: MatchupScoreUpdateSummary[] }> {
   const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
-  const settings = season?.league.settings as Record<string,any> | null
+  const settings = settingsForScoringWeek(season?.league.settings as Record<string,any> | null, season?.season, week)
   if (settings?.scoring_mode === 'roto' && season) {
-    const categories=getCategoryPresetDefinitions(settings.category_preset_id)
+    const categories=resolveLeagueCategories(settings, settings.category_preset_id)
     if(!categories) throw new Error('Rotisserie category preset is missing.')
     const rosters=await prisma.roster.findMany({where:{leagueId:season.leagueId,redraftRosterId:{not:null}},select:{id:true,redraftRosterId:true}})
     let incomplete=0

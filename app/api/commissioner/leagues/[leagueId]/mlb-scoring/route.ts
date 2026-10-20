@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueMlbScoringConfig, saveLeagueMlbScoringConfig, getMlbScoringPresets, buildFullMlbScoringConfig, type MlbScoringPresetKey } from '@/lib/mlb-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringType'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const presets = getMlbScoringPresets()
   let isPremium = false
   try { isPremium = (await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring')).allowed } catch {}
-  return NextResponse.json({ scoringMode: (league.settings as Record<string, unknown>)?.scoring_mode ?? 'points', categoryPresetId: (league.settings as Record<string, unknown>)?.category_preset_id ?? null, config, presets, isCommissioner: league.userId === session.user.id, isPremium })
+  const categoryPresetId = (league.settings as Record<string, unknown>)?.category_preset_id ?? null
+  // The league's own (possibly edited) category list, so the panel never shows the preset's instead.
+  const categoryLabels = resolveLeagueCategories(league.settings, categoryPresetId)?.map((c) => c.label) ?? null
+  return NextResponse.json({ scoringMode: (league.settings as Record<string, unknown>)?.scoring_mode ?? 'points', categoryPresetId, categoryLabels, config, presets, isCommissioner: league.userId === session.user.id, isPremium })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {

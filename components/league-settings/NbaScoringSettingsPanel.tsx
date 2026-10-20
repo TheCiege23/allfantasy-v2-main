@@ -32,6 +32,7 @@ import {
   type NbaScoringRow,
 } from '@/lib/nba-scoring/NbaScoringCategories'
 import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
+import { ScoringTypeEditor } from '@/components/league-settings/ScoringTypeEditor'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,6 +113,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const [editedRules, setEditedRules] = useState<Record<string, number>>({})
   const [categoryMode, setCategoryMode] = useState(false)
   const [activeTab, setActiveTab] = useState<string>('general')
+  /** Bumped when the scoring type changes, so this panel reloads (points table vs categories). */
+  const [reloadNonce, setReloadNonce] = useState(0)
 
   // All categories: 9 standard + 1 premium
   const allCategories: NbaScoringCategory[] = useMemo(
@@ -141,7 +144,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       .catch(() => { if (active) setError(t('lsScore.err.load')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [leagueId, allCategories])
+  }, [leagueId, allCategories, reloadNonce])
 
   // ----- derived -----
   const currentPreset = useMemo(() => presets.find((p) => p.key === selectedPreset), [presets, selectedPreset])
@@ -220,7 +223,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   }, [config])
 
   // ----- loading state -----
-  if (categoryMode) return <ScoringSettingsPanel leagueId={leagueId} />
+  const typeEditor = <ScoringTypeEditor leagueId={leagueId} isCommissioner={isCommissioner} onChanged={() => setReloadNonce((n) => n + 1)} />
+  if (categoryMode) return <div className="space-y-5">{typeEditor}<ScoringSettingsPanel key={reloadNonce} leagueId={leagueId} /></div>
 
   if (loading) {
     return (
@@ -244,6 +248,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
             : t('lsScore.subtitle.readOnly')}
         </p>
       </div>
+
+      {typeEditor}
 
       {/* Plate only: the translated preset select below names the option. */}
       <ScoringLabel id={scoringLabelId} size="md" showText={false} />

@@ -1,4 +1,5 @@
-import { accumulateTeamTotals, getCategoryPresetDefinitions, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
+import { accumulateTeamTotals, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
+import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringType'
 import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
@@ -165,7 +166,7 @@ export async function updateStandings(
   if(rotoStats.size) {
     const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
     const settings=season?.league?.settings as Record<string,any> | null
-    const categories=getCategoryPresetDefinitions(settings?.category_preset_id ?? settings?.scoringSettings?.categoryPresetId)
+    const categories=resolveLeagueCategories(settings, settings?.category_preset_id ?? settings?.scoringSettings?.categoryPresetId)
     if(!categories) throw new Error('Rotisserie category preset is missing.')
     const ranked=rankRotisserieTeams([...rows.keys()].map(id=>({id,stats:accumulateTeamTotals(rotoStats.get(id)??[])})),categories)
     for(const [id,value] of ranked) rows.get(id)!.pointsFor=value.total
