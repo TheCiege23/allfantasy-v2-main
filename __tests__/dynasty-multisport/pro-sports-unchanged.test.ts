@@ -33,6 +33,11 @@ import { setLeague, makeReq, ctx, state } from './handlerHarness'
  * college and soccer dynasty models change. `pro-sports-baseline.origin-main.json` was produced by
  * running THIS file against the unmodified origin/main sources (CAPTURE_OUT=<path> writes it).
  * The NFL equivalent is nfl-unchanged.test.ts.
+ *
+ * ⚠ RE-CAPTURED ONCE, DELIBERATELY, for the rookie-draft calendar fix: NHL's rookie draft moved from
+ * August to July (after the late-June Entry Draft), so at the pinned 2027-04-15 the 2027 NHL picks
+ * (56 values, plus 2 in `pickBreakdown`) now carry the 90-day pre-draft bump (x1.03). A structural
+ * diff of old vs new showed those NHL pick values and nothing else changed.
  */
 const POS: Record<string, string[]> = {
   MLB: ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'CF', 'DH', 'UTIL', 'ZZ'],
