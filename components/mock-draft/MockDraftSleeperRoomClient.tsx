@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { mockTurnDurationMs, remainingMockSeconds } from '@/lib/mock-draft/turn-clock'
+import { postChimmyRequest } from '@/lib/chimmy/postRequest'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
@@ -736,7 +737,7 @@ export default function MockDraftSleeperRoomClient({
         ),
       )
 
-      const response = await (await import('@/lib/chimmy/postRequest')).postChimmyRequest(formData)
+      const response = await postChimmyRequest(formData)
 
       const payload = (await response.json().catch(() => ({}))) as { response?: string; error?: string }
       if (!response.ok) {
