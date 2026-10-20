@@ -63,6 +63,16 @@ describe('pairScoreboard', () => {
 })
 
 describe('readPlayoffFormat', () => {
+  it.each([null, undefined, 0])('uses the saved NBA playoff week when the column is %s', (column) => {
+    expect(readPlayoffFormat({ playoff_structure: { playoff_start_week: 22, playoff_weeks: 3, playoff_team_count: 6, first_round_byes: 2 } }, column)).toMatchObject({ startWeek: 22, weeks: 3, teams: 6, byes: 2 })
+  })
+  it.each([null, '', ' ', false])('does not turn an unset numeric setting (%s) into zero', (value) => {
+    expect(readPlayoffFormat({ playoff_start_week: value, playoff_team_count: value, first_round_byes: value, playoff_weeks: value }, null)).toEqual({ teams: null, byes: null, startWeek: null, weeks: null, consolation: null })
+  })
+  it('retains valid zero byes and rejects week zero', () => {
+    expect(readPlayoffFormat({ playoff_start_week: 0, first_round_byes: 0 })).toMatchObject({ startWeek: null, byes: 0 })
+  })
+
   it('prefers playoff_structure, then top level, then the column', () => {
     const f = readPlayoffFormat({ playoff_structure: { playoff_team_count: 6, first_round_byes: 2 }, playoff_team_count: 4, toilet_bowl_enabled: true }, 15)
     expect(f).toEqual({ teams: 6, byes: 2, startWeek: 15, weeks: 3, consolation: 'toilet_bowl' })

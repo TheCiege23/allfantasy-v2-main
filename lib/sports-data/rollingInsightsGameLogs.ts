@@ -285,7 +285,7 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
 }
 
 /** Flatten the recognised numeric fields; everything else stays in `statPayload` verbatim. */
-export function normalizedStatMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'>): Record<string, unknown> {
+export function normalizedStatMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'> & Partial<Pick<RiGameBox, 'gameDate'>>): Record<string, unknown> {
   const stats: Record<string, number> = {}
   for (const [key, value] of Object.entries(line.raw)) {
     const n = num(value)
@@ -298,6 +298,8 @@ export function normalizedStatMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seas
   if (toi) stats.time_on_ice_minutes = Number(toi[1]) + Number(toi[2]) / 60
   return {
     group: line.group,
+    gameStartTimeUtc: box.gameDate?.toISOString() ?? null,
+    timeOnIce: str(line.raw.time_on_ice) ?? null,
     position: str(line.raw.position ?? line.raw.POS) ?? null,
     positionCategory: str(line.raw.position_category) ?? null,
     status: str(line.raw.status) ?? null,
@@ -453,6 +455,7 @@ export async function writeRiGameRows(opts: {
   confidence?: number
   fallbackSeason?: number
   result: Pick<GameLogIngestResult, 'games' | 'lines' | 'written' | 'unresolved' | 'unrecognizedSeasonTypes' | 'errors'>
+  persistSchedule?: boolean
   shouldWriteLine?: (key: { playerId: string; gameId: string }, line: RiBoxLine) => boolean
 }): Promise<void> {
   const { sport, rows, now, result, identityByRiId } = opts
@@ -462,7 +465,7 @@ export async function writeRiGameRows(opts: {
 
   for (const rawGame of rows) {
     const box = normalizeRiGameBox(rawGame)
-    if (!box || box.lines.length === 0) continue
+    if (!box) continue
     result.games += 1
     result.lines += box.lines.length
     if (
@@ -473,6 +476,20 @@ export async function writeRiGameRows(opts: {
       result.unrecognizedSeasonTypes.push(box.seasonTypeLabel ?? '(missing)')
     }
 
+    if (opts.persistSchedule && box.gameDate && box.seasonType) {
+      const full = asRecord(asRecord(rawGame)?.full_box)
+      const home = asRecord(full?.home_team), away = asRecord(full?.away_team)
+      const homeTeam = str(home?.abbrv), awayTeam = str(away?.abbrv)
+      if (homeTeam && awayTeam) {
+        const data = { homeTeam, awayTeam, homeScore: num(home?.score), awayScore: num(away?.score),
+          status: box.status, startTime: box.gameDate, season: box.season ?? fallbackSeason,
+          seasonType: box.seasonType, fetchedAt: now, expiresAt: new Date(now.getTime() + 120_000) }
+        try {
+          await prisma.sportsGame.upsert({ where: { sport_externalId_source: { sport, externalId: box.providerGameId, source: 'rolling_insights' } },
+            create: { sport, externalId: box.providerGameId, source: 'rolling_insights', ...data }, update: data })
+        } catch { result.errors.push('LIVE_GAME_STATE_WRITE_FAILED') }
+      }
+    }
     for (const line of box.lines) {
       const playerId = identityByRiId.get(line.providerPlayerId)
       if (!playerId) {

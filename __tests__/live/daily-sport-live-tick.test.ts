@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * The daily sports were scored from `player_game_stats`, and that table was only written by the
  * 07:00 UTC `import-player-game-stats?multiSport=1` sweep — so a matchup moved once a day while NFL
  * moved during games. `runDailySportLiveTick` is the in-game writer, folded into the existing
- * `live-score-tick` fast-tier cron behind a default-OFF flag.
+ * `live-score-tick` fast-tier cron behind a NBA-enabled flag.
  *
  * The provider transport (`riFetchRows`) is NOT mocked: the 304 rule and the two-account iteration
  * are its behaviour, and the point of these tests is that the tick actually goes through them.
@@ -35,7 +35,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    sportsGame: { findMany: (...a: unknown[]) => h.sportsGameFindMany(...a) },
+    sportsGame: { findMany: (...a: unknown[]) => h.sportsGameFindMany(...a), upsert: vi.fn(async () => ({})) },
     sportsDataCache: {
       findUnique: async ({ where }: { where: { cacheKey: string } }) => {
         const row = h.cache.get(where.cacheKey)
@@ -185,10 +185,10 @@ afterEach(() => {
   delete process.env.DAILY_SPORT_LIVE_SCORING
 })
 
-describe('resolveDailyLiveSports — the flag defaults OFF', () => {
+describe('resolveDailyLiveSports — NBA defaults on; explicit off is respected', () => {
   it('is off when unset, empty, or explicitly off', () => {
-    expect(resolveDailyLiveSports({})).toEqual([])
-    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '' })).toEqual([])
+    expect(resolveDailyLiveSports({})).toEqual(['NBA'])
+    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '' })).toEqual(['NBA'])
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '0' })).toEqual([])
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: 'false' })).toEqual([])
   })
