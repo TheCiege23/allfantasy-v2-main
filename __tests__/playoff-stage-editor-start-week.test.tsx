@@ -98,6 +98,13 @@ describe('NBA settings use the saved rules and sport calendar', () => {
     queuePatch.mockClear()
     fireEvent.change(field, { target: { value: '26' } })
     expect(queuePatch).not.toHaveBeenCalled()
+    fireEvent.change(field, { target: { value: '' } })
+    expect(queuePatch).not.toHaveBeenCalled()
+    const teams = screen.getByRole('spinbutton', { name: /Playoff teams/i })
+    fireEvent.change(teams, { target: { value: '1' } })
+    expect(queuePatch).not.toHaveBeenCalled()
+    fireEvent.change(teams, { target: { value: '8' } })
+    expect(queuePatch).toHaveBeenLastCalledWith({ playoffTeams: 8 })
   })
 
   it('shows no deadline instead of inventing week 14 and can clear a deadline', () => {
@@ -105,6 +112,10 @@ describe('NBA settings use the saved rules and sport calendar', () => {
     const field = screen.getByRole('spinbutton', { name: /Trade deadline/i }) as HTMLInputElement
     expect(field.value).toBe('')
     expect(field.placeholder).toContain('No deadline')
+    const review = screen.getByRole('spinbutton', { name: /Review window/i })
+    fireEvent.change(review, { target: { value: '' } })
+    fireEvent.change(review, { target: { value: '169' } })
+    expect(queuePatch).not.toHaveBeenCalled()
     fireEvent.change(field, { target: { value: '22' } })
     expect(queuePatch).toHaveBeenLastCalledWith({ tradeDeadlineWeek: 22 })
     fireEvent.change(field, { target: { value: '' } })

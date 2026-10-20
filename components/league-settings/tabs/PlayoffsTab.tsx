@@ -54,7 +54,7 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
               onChange={(e) => {
                 const v = Number(e.target.value)
                 setPlayoffTeams(v)
-                queuePatch({ playoffTeams: v })
+                if (e.target.value !== '' && e.target.validity.valid && Number.isInteger(v)) queuePatch({ playoffTeams: v })
               }}
               className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
             />

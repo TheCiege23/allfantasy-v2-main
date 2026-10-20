@@ -1638,21 +1638,21 @@ export const translationsEsParity: Record<string, string> = {
   "member.assigned": "Manager asignado exitosamente.",
 
   // ─── CO-OWNER SETTINGS ───
-  "coowner.title": "Ajustes de Co-propietarios",
-  "coowner.subtitle": "Seleccionar co-propietarios para manejar tu equipo",
+  "coowner.title": "Ajustes de co-comisionados",
+  "coowner.subtitle": "Dar a managers de confianza acceso para gestionar la liga",
   "coowner.search": "Buscar miembros",
-  "coowner.searchLabel": "Buscar Co-propietarios",
-  "coowner.active": "co-propietarios activos",
+  "coowner.searchLabel": "Buscar managers",
+  "coowner.active": "co-comisionados activos",
   "coowner.noMatch": "Ningún miembro coincide con esta búsqueda.",
   "coowner.noMembers": "No hay miembros en esta liga.",
   "coowner.commissioner": "Comisionado",
-  "coowner.coOwner": "Co-propietario",
+  "coowner.coOwner": "Co-comisionado",
   "coowner.member": "Miembro",
   "coowner.add": "Agregar",
   "coowner.remove": "Eliminar",
   "coowner.removed": "eliminado como co-propietario.",
   "coowner.added": "agregado como co-propietario.",
-  "coowner.info": "Los co-propietarios pueden gestionar la alineación del equipo, hacer reclamos, proponer trades y participar en el draft en nombre del manager del equipo. No tienen acceso de nivel comisionado.",
+  "coowner.info": "Los co-comisionados pueden gestionar los ajustes y miembros de la liga. Añade solo a managers a quienes confíes acceso de comisionado.",
   "coowner.readOnlyBanner": "Solo el comisionado puede agregar o eliminar co-propietarios.",
 
   // ─── COMMISSIONER CONTROL ───

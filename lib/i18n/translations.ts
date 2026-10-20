@@ -1174,12 +1174,12 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.del.removing": "Removing…",
     "lsHub.del.remove": "Remove",
     // League-settings panels — these keys had Spanish only, so English showed raw keys.
-    "coowner.searchLabel": "Search Co-Owners",
-    "coowner.active": "active co-owners",
+    "coowner.searchLabel": "Search managers",
+    "coowner.active": "active co-commissioners",
     "coowner.noMatch": "No members match this search.",
     "coowner.noMembers": "There are no members in this league.",
     "coowner.commissioner": "Commissioner",
-    "coowner.coOwner": "Co-Owner",
+    "coowner.coOwner": "Co-commissioner",
     "coowner.remove": "Remove",
     "coowner.add": "Add",
     "division.tribeName": "Tribe Settings",
@@ -3913,10 +3913,10 @@ export const translations: Record<string, Record<string, string>> = {
     "member.readOnlyBanner": "Only the commissioner can manage league members.",
 
     // Co-owner
-    "coowner.title": "Co-owner Settings",
-    "coowner.subtitle": "Select co-owners to run your team",
+    "coowner.title": "Co-commissioner settings",
+    "coowner.subtitle": "Grant trusted managers league-level management access",
     "coowner.search": "Search members",
-    "coowner.info": "Co-owners can manage the team's lineup, make waiver claims, propose trades, and participate in the draft on behalf of the team manager. They do not have commissioner-level access.",
+    "coowner.info": "Co-commissioners can manage league settings and members. Add only managers you trust with commissioner access.",
     "coowner.readOnlyBanner": "Only the commissioner can add or remove co-owners.",
 
     // Dues
