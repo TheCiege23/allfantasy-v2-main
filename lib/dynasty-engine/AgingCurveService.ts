@@ -3,7 +3,7 @@
  * Sport-aware via SportDynastyResolver.
  */
 
-import { getPeakAgeRange } from './SportDynastyResolver'
+import { getPeakAgeRange, isCollegeDynastySport } from './SportDynastyResolver'
 
 export type Horizon = 'next' | 'three' | 'five'
 
@@ -17,6 +17,9 @@ export function ageMultiplier(
   horizon: Horizon
 ): number {
   if (!age || age <= 0) return 1
+  // NCAAF / NCAAB: no age effect at any horizon — players leave college before any decline, and
+  // eligibility (not age) is what ends their value. See COLLEGE_DYNASTY_SPORTS.
+  if (isCollegeDynastySport(sport)) return 1
   const cfg = getPeakAgeRange(sport, position)
   const horizonOffset: Record<Horizon, number> = {
     next: 0,

@@ -15,7 +15,7 @@ import { createCanonicalLeagueInTransaction } from '@/lib/league-creation/canoni
 
 const prismaMock = vi.hoisted(() => ({
   league: { findUnique: vi.fn() },
-  guillotineSeason: { findFirst: vi.fn(), findUnique: vi.fn() },
+  guillotineSeason: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   guillotineElimination: { findFirst: vi.fn(), findMany: vi.fn() },
   guillotinePeriodScore: { findMany: vi.fn() },
   guillotineRosterState: {
@@ -280,6 +280,65 @@ describe('Guillotine full regression matrix', () => {
     resolveTiebreakMock.mockReturnValue({ choppedRosterIds: [], stepUsed: null, reason: 'resolver boundary' })
     await runElimination({ leagueId: 'league-1', weekOrPeriod: 2 })
     expect(resolveTiebreakMock).toHaveBeenCalledWith(expect.objectContaining({ teamsPerChop: 1 }))
+  })
+
+  describe('chop rules (lib/guillotine/chopSchedule.ts, AF Commissioner)', () => {
+    const five = ['a', 'b', 'c', 'd', 'e'].map((rosterId, index) => ({ rosterId, periodPoints: index + 10, seasonPointsCumul: index + 10 }))
+    const withRules = (advanced: Record<string, unknown>) =>
+      prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotine_advanced: advanced } })
+    beforeEach(() => {
+      getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 1, tiebreakerOrder: ['season_points'] })
+      evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: five.map((r) => r.rosterId), scores: five })
+      getDraftSlotByRosterMock.mockResolvedValue(new Map())
+      resolveTiebreakMock.mockReturnValue({ choppedRosterIds: [], stepUsed: null, reason: 'resolver boundary' })
+    })
+
+    it('a schedule step changes how many go from that week on', async () => {
+      withRules({ steps: [{ fromWeek: 10, chops: 2 }], overrides: {}, immunity: 'off' })
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 9, skipChat: true })
+      expect(resolveTiebreakMock).toHaveBeenLastCalledWith(expect.objectContaining({ teamsPerChop: 1 }))
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 10, skipChat: true })
+      expect(resolveTiebreakMock).toHaveBeenLastCalledWith(expect.objectContaining({ teamsPerChop: 2 }))
+    })
+
+    it('a no-chop week chops nobody and says so', async () => {
+      withRules({ steps: [], overrides: { 6: 0 }, immunity: 'off' })
+      const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 6, skipChat: true })
+      expect(out).toMatchObject({ choppedRosterIds: [], reason: 'no chop scheduled' })
+      expect(resolveTiebreakMock).not.toHaveBeenCalled()
+      expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
+    })
+
+    it('a no-chop week moves the season past it, so the weekly driver goes on to the next week', async () => {
+      withRules({ steps: [], overrides: { 6: 0 }, immunity: 'off' })
+      prismaMock.guillotineSeason.findFirst.mockResolvedValue({ id: 'gs1' })
+      prismaMock.guillotineSeason.findUnique.mockResolvedValue({ createdAt: new Date('2026-01-01'), currentScoringPeriod: 5 })
+      prismaMock.guillotineSeason.update.mockResolvedValue({})
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 6, season: 2026, skipChat: true })
+      expect(prismaMock.guillotineSeason.update).toHaveBeenCalledWith({ where: { id: 'gs1' }, data: { currentScoringPeriod: 6 } })
+    })
+
+    it('immunity takes last week’s top scorer out of the chop', async () => {
+      withRules({ steps: [], overrides: {}, immunity: 'top_scorer' })
+      // 'a' is lowest this week but topped last week.
+      prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([{ rosterId: 'a', periodPoints: 150 }, { rosterId: 'b', periodPoints: 90 }])
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, skipChat: true })
+      const candidates = resolveTiebreakMock.mock.calls.at(-1)![0].candidates as Array<{ rosterId: string }>
+      expect(candidates.map((c) => c.rosterId)).toEqual(['b', 'c', 'd', 'e'])
+      expect(prismaMock.guillotinePeriodScore.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ weekOrPeriod: 2 }) }))
+    })
+
+    it('immunity is skipped when it would leave too few teams to chop', async () => {
+      withRules({ steps: [], overrides: { 3: 2 }, immunity: 'top_scorer' })
+      const two = five.slice(0, 2)
+      evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: ['a', 'b', 'x'], scores: [...two, { rosterId: 'x', periodPoints: 99, seasonPointsCumul: 99 }] })
+      // 'a' and 'b' tied for last week's top score: protecting both would leave one team for two chops.
+      prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([{ rosterId: 'a', periodPoints: 150 }, { rosterId: 'b', periodPoints: 150 }])
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, skipChat: true })
+      const call = resolveTiebreakMock.mock.calls.at(-1)![0]
+      expect(call.teamsPerChop).toBe(2)
+      expect((call.candidates as Array<{ rosterId: string }>).map((c) => c.rosterId)).toEqual(['a', 'b', 'x'])
+    })
   })
 
   it('eliminates lowest score, marks roster eliminated, releases players to waivers, and emits events', async () => {

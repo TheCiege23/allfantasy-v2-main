@@ -76,3 +76,35 @@ export async function dailyScheduleImmediateAddRefusal(
   const held = await isPlayerInDropHold(leagueId, addPlayerId, loaded.holdHours, now).catch(() => false)
   return held ? DAILY_DROP_HOLD_MESSAGE : null
 }
+
+export const PENDING_CLAIM_ON_PLAYER_MESSAGE =
+  'This player has a pending waiver claim. Submit a claim for the next waiver run.'
+
+/**
+ * The immediate-add decision for a league whose `free_agent_unlock_behavior` is `'daily'` (the
+ * NBA/MLB/NHL default) when no commissioner daily schedule is enabled: a player who is not on waivers
+ * is a first-come free agent. null = allowed, else the refusal message. A player is still "on
+ * waivers" inside the after-drop waiver period (`League.waiverHours`) or while a pending claim names
+ * him — both still need a claim. Throws on a failed lookup; the caller fails CLOSED (claim required).
+ */
+export async function dailyUnlockImmediateAddRefusal(
+  leagueId: string,
+  addPlayerId: string,
+  now: Date = new Date(),
+): Promise<string | null> {
+  const league = await (prisma as any).league.findUnique({
+    where: { id: leagueId },
+    select: { waiverHours: true },
+  })
+  const holdHours = typeof league?.waiverHours === 'number' ? league.waiverHours : 0
+  const [held, pending] = await Promise.all([
+    isPlayerInDropHold(leagueId, addPlayerId, holdHours, now),
+    (prisma as any).waiverClaim.findFirst({
+      where: { leagueId, addPlayerId, status: 'pending' },
+      select: { id: true },
+    }),
+  ])
+  if (held) return DAILY_DROP_HOLD_MESSAGE
+  if (pending) return PENDING_CLAIM_ON_PLAYER_MESSAGE
+  return null
+}

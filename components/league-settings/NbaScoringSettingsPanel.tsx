@@ -31,6 +31,7 @@ import {
   type NbaScoringCategory,
   type NbaScoringRow,
 } from '@/lib/nba-scoring/NbaScoringCategories'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,6 +94,7 @@ interface Props {
 
 export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, BASKETBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NbaScoringPreset[]>([])
@@ -188,7 +190,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     if (!leagueId) return
     setSaving(true); setError(null); setSuccess(false)
     try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nba-scoring`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nba-scoring`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         // Rules only for a custom table. The route treats any `rules` in the body as a premium
@@ -208,7 +210,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       setTimeout(() => setSuccess(false), 3000)
     } catch { setError(t('lsScore.err.request')) }
     finally { setSaving(false) }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -230,6 +232,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -434,5 +438,6 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NBA')}
       />
     </div>
+    </>
   )
 }

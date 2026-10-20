@@ -88,7 +88,7 @@ export function evaluateDynastyTeamDirection(
       const v = valueOf(p) ?? 0
       total += v
       if (p.isStarterSlot) starterTotal += v
-      const traj = hasAge ? ageTrajectory(p.position, p.age) : 'unknown'
+      const traj = hasAge ? ageTrajectory(p.position, p.age, context.sport) : 'unknown'
       if (traj === 'ascending' || traj === 'prime') young += v
     }
     totalStarterValue = Math.round(starterTotal * 10) / 10

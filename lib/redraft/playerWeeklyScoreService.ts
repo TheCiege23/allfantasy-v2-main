@@ -28,6 +28,7 @@ import {
   knownDailySportSeasons,
   resolveDailySportWeekWindow,
 } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
@@ -39,6 +40,15 @@ import { teamDefenseSleeperId } from '@/lib/core-app/teamDefenseCrosswalk'
 import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
+import { dayKey, isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { gamesCountActive } from '@/lib/redraft/gamesCount'
+import {
+  gamesCountDb,
+  gamesCountTablesExist,
+  warnGamesCountStorageMissing,
+  writePlayerWeekGameScores,
+} from '@/lib/redraft/gamesCountStore'
+import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -67,6 +77,10 @@ export type WeeklyScoreSyncSummary = {
   ncaafMissingByReason?: Partial<Record<'pending' | 'not_ingested' | 'unmatched' | 'no_team' | NcaafReserveAvailability, number>>
   ncaafSeasonAvailability?: Array<{ playerId: string; status: NcaafReserveAvailability; reason: string; evidenceUrl: string }>
   scoresUpserted: number
+  /** Daily-lineup leagues only: per-day rows written to `player_daily_scores` (see lib/redraft/dailyLineups.ts). */
+  dailyScoresUpserted?: number
+  /** Games-count leagues only: `player_week_game_scores` rows written (lib/redraft/gamesCount.ts). */
+  weekGameScoresUpserted?: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
   missingStatPlayerIds: string[]
@@ -233,8 +247,18 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // has released the team for the following week.
   const survivorLeague = await prisma.league.findUnique({
     where: { id: season.leagueId },
-    select: { platform: true, survivorMode: true },
+    select: { platform: true, survivorMode: true, settings: true },
   })
+  // A daily-lineup league is scored per day, so its sync also keeps each player's per-day stats.
+  const dailyLineupScoring = isDailySport && isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport)
+  // A league that counts only some games (best-N / lock-in, lib/redraft/gamesCount.ts) is scored per
+  // GAME, so its sync also keeps each player's per-game stats. Off for every other league.
+  let gamesCountScoring = isDailySport && gamesCountActive(survivorLeague?.settings ?? null, sport)
+  // Fail safe: without its tables the league is synced (and scored) as every game, never P2021.
+  if (gamesCountScoring && !(await gamesCountTablesExist(prisma))) {
+    warnGamesCountStorageMissing('stat sync', season.leagueId)
+    gamesCountScoring = false
+  }
   const exileEntries = survivorLeague?.survivorMode && isNativePlatform(survivorLeague.platform)
     ? await prisma.exileWeeklyEntry.findMany({
         where: { leagueId: season.leagueId, week },
@@ -364,6 +388,13 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * rather than invented ones.
    */
   const dailyRowsByPlayer = new Map<string, unknown[]>()
+  /** Daily-lineup leagues only: the same rows, keyed by their Eastern game day. */
+  const datedRowsByPlayer = new Map<string, Map<string, { day: Date; rows: unknown[] }>>()
+  /** Games-count leagues only: the same rows, keyed by the provider game id (one real game). */
+  const gameRowsByPlayer = new Map<string, Map<string, { day: Date; rows: unknown[] }>>()
+  /** Schedule start instants by game id, read once and only for a games-count league. */
+  let scheduleStartByGame: Map<string, string | null> | null = null
+  let dailyWindow: { start: Date; end: Date } | null = null
   if (isDailySport) {
     /**
      * 🛑 SELECTED BY DATE WINDOW, NOT BY `weekOrRound` — AND AN EARLIER VERSION
@@ -386,6 +417,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     // and those games are ingested like any other.
     // Without an explicit anchor, the shared resolver — which is where a gameweek sport (soccer)
     // differs from seven-day arithmetic. The finalizer reads the same function.
+    // A season past the curated table (dynasty year 2+) is primed from the labelled schedule first.
+    if (!params.seasonStartUtc) await ensureDailySportSeasonStart(sport, seasonYear, { db: prisma as never })
     const window = params.seasonStartUtc
       ? weekWindowFromSeasonStart(params.seasonStartUtc, week)
       : resolveDailySportWeekWindow(sport, seasonYear, week)
@@ -396,7 +429,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const known = knownDailySportSeasons(sport)
       summary.warnings.push(
         `${sport} is a daily sport: a week is a date range, and scoring one needs the regular-season ` +
-          `start date. None was supplied and none is recorded for season ${seasonYear}` +
+          `start date. None was supplied, none is recorded and none could be derived from the stored ` +
+          `schedule for season ${seasonYear}` +
           `${known.length ? ` (recorded: ${known.join(', ')})` : ''}. ` +
           'Add it to `lib/season-week/dailySportSeasonStarts.ts`. No scores were written.',
       )
@@ -423,7 +457,14 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         sportType: { in: candidateSportKeys(sport) },
         gameDate: { gte: window.start, lt: window.end },
       },
-      select: { playerId: true, normalizedStatMap: true, sportType: true, season: true, gameDate: true },
+      select: {
+        playerId: true,
+        normalizedStatMap: true,
+        sportType: true,
+        season: true,
+        gameDate: true,
+        ...(gamesCountScoring ? { gameId: true, providerGameId: true } : {}),
+      },
     })
     for (const row of gameRows) {
       // A preseason game inside the window is not a fantasy game. `/live` returns them beside the
@@ -445,7 +486,29 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const rows = dailyRowsByPlayer.get(rosterId) ?? []
       rows.push(row.normalizedStatMap)
       dailyRowsByPlayer.set(rosterId, rows)
+      if (dailyLineupScoring && row.gameDate) {
+        const byDay = datedRowsByPlayer.get(rosterId) ?? new Map<string, { day: Date; rows: unknown[] }>()
+        const key = dayKey(row.gameDate)
+        const entry = byDay.get(key) ?? { day: row.gameDate, rows: [] }
+        entry.rows.push(row.normalizedStatMap)
+        byDay.set(key, entry)
+        datedRowsByPlayer.set(rosterId, byDay)
+      }
+      if (gamesCountScoring && row.gameDate) {
+        // An MLB two-way player's batting and pitching lines are two rows (`<game>:batting`,
+        // `<game>:pitching`) of ONE game; the provider game id groups them back together.
+        const r = row as { gameId?: string | null; providerGameId?: string | null }
+        const gameKey = r.providerGameId || String(r.gameId ?? '').split(':')[0]
+        if (gameKey) {
+          const byGame = gameRowsByPlayer.get(rosterId) ?? new Map<string, { day: Date; rows: unknown[] }>()
+          const entry = byGame.get(gameKey) ?? { day: row.gameDate, rows: [] }
+          entry.rows.push(row.normalizedStatMap)
+          byGame.set(gameKey, entry)
+          gameRowsByPlayer.set(rosterId, byGame)
+        }
+      }
     }
+    dailyWindow = window
     summary.cacheRowsRead = gameRows.length
   }
 
@@ -794,6 +857,36 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         },
       })
       summary.scoresUpserted += 1
+      if (dailyLineupScoring && dailyWindow && normalizer) {
+        summary.dailyScoresUpserted =
+          (summary.dailyScoresUpserted ?? 0) +
+          (await writePlayerDailyScores({
+            playerId,
+            sport: playerSport,
+            season: seasonYear,
+            week,
+            window: dailyWindow,
+            byDay: datedRowsByPlayer.get(playerId) ?? new Map(),
+            normalizer,
+          }))
+      }
+      if (gamesCountScoring && dailyWindow && normalizer) {
+        if (!scheduleStartByGame) {
+          const schedule = await readRiScheduleWindow(prisma as never, { sport, season: seasonYear, window: dailyWindow })
+          scheduleStartByGame = new Map((schedule ?? []).map((g) => [g.gameId, g.startTime]))
+        }
+        const games: Array<{ gameId: string; gameDay: Date; startTime: Date | null; stats: Record<string, number> }> = []
+        for (const [gameId, { day, rows }] of gameRowsByPlayer.get(playerId) ?? new Map()) {
+          const aggregate = aggregateWeeklyStats(rows, normalizer)
+          if (aggregate.gamesCounted === 0 || !Object.keys(aggregate.stats).length) continue
+          const start = scheduleStartByGame.get(gameId)
+          const startTime = start ? new Date(start) : null
+          games.push({ gameId, gameDay: day, startTime: startTime && !Number.isNaN(startTime.getTime()) ? startTime : null, stats: aggregate.stats })
+        }
+        summary.weekGameScoresUpserted =
+          (summary.weekGameScoresUpserted ?? 0) +
+          (await writePlayerWeekGameScores(gamesCountDb(prisma), { playerId, sport: playerSport, season: seasonYear, week, games }))
+      }
       continue
     }
 
@@ -870,4 +963,54 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
 
   await recordScoreSyncAudit(summary, params.actorId ?? 'system')
   return summary
+}
+
+/**
+ * Daily-lineup leagues: one `player_daily_scores` row per day the player played this week, summed by
+ * the same normalizer as the weekly roll-up. Days with no game have no row and score 0. Rows for days
+ * that no longer have a game (a stat correction, a game re-dated) are removed, so a stale day cannot
+ * keep scoring. See lib/redraft/dailyLineups.ts.
+ */
+async function writePlayerDailyScores(args: {
+  playerId: string
+  sport: string
+  season: number
+  week: number
+  window: { start: Date; end: Date }
+  byDay: Map<string, { day: Date; rows: unknown[] }>
+  normalizer: NonNullable<ReturnType<typeof getDailySportNormalizer>>
+}): Promise<number> {
+  const keep: Date[] = []
+  let written = 0
+  for (const { day, rows } of args.byDay.values()) {
+    const aggregate = aggregateWeeklyStats(rows, args.normalizer)
+    if (aggregate.gamesCounted === 0 || !Object.keys(aggregate.stats).length) continue
+    keep.push(day)
+    await prisma.playerDailyScore.upsert({
+      where: {
+        playerId_sport_season_scoringDay: { playerId: args.playerId, sport: args.sport, season: args.season, scoringDay: day },
+      },
+      update: { week: args.week, stats: aggregate.stats, gamesPlayed: aggregate.gamesCounted, isFinalized: false },
+      create: {
+        playerId: args.playerId,
+        sport: args.sport,
+        season: args.season,
+        week: args.week,
+        scoringDay: day,
+        stats: aggregate.stats,
+        gamesPlayed: aggregate.gamesCounted,
+        isFinalized: false,
+      },
+    })
+    written += 1
+  }
+  await prisma.playerDailyScore.deleteMany({
+    where: {
+      playerId: args.playerId,
+      sport: args.sport,
+      season: args.season,
+      scoringDay: { gte: args.window.start, lt: args.window.end, notIn: keep },
+    },
+  })
+  return written
 }

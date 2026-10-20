@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { loadTeamFuturePicks, type FuturePickCoverage } from '@/lib/league-trade-engine/importedFuturePicks'
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { roundOrdinal } from '@/lib/league-trade-engine/futurePickInventory'
+import { getPeakAgeRange } from '@/lib/dynasty-engine/SportDynastyResolver'
 
 /**
  * My Team's dynasty view: the draft capital you hold, and how old the lineup you are starting is.
@@ -40,8 +41,27 @@ export type DynastyOutlook = {
     | { available: false; reason: string }
 }
 
-/** Dynasty consensus: the age a position's production usually starts to decline. */
+/** Dynasty consensus (NFL): the age a position's production usually starts to decline. */
 export const AGING_FROM: Readonly<Record<string, number>> = { QB: 34, RB: 27, WR: 29, TE: 30 }
+
+/** Sports whose decline age comes from `getPeakAgeRange` rather than the NFL table above. */
+const PEAK_RANGE_SPORTS = new Set(['NBA', 'MLB', 'NHL'])
+
+/**
+ * The age at which `position` is flagged as aging, in `sport`.
+ *
+ * NFL (and a call with no sport) reads `AGING_FROM` exactly as before. NBA/MLB/NHL used to fall
+ * through the NFL-only table, so no basketball, baseball or hockey starter was ever flagged; they now
+ * use the first age past the sport's peak (`getPeakAgeRange(sport, position).peakEnd + 1`) — the same
+ * rule of thumb, from the sport's own peak-age range.
+ */
+export function agingThreshold(sport: string | null | undefined, position: string): number | undefined {
+  const pos = String(position ?? '').toUpperCase()
+  const s = String(sport ?? '').trim().toUpperCase()
+  if (!pos) return undefined
+  if (PEAK_RANGE_SPORTS.has(s)) return getPeakAgeRange(s, pos).peakEnd + 1
+  return AGING_FROM[pos]
+}
 
 type Player = { sleeperId: string; name: string; position: string | null }
 
@@ -50,6 +70,7 @@ export function summariseAges(
   starters: readonly Player[],
   roster: readonly Player[],
   ageOf: ReadonlyMap<string, number>,
+  sport?: string | null,
 ): DynastyOutlook['ages'] {
   const known = starters.filter((p) => ageOf.has(p.sleeperId))
   if (known.length === 0) return { available: false, reason: 'no ages on file for your starters' }
@@ -59,7 +80,7 @@ export function summariseAges(
   const aging = known
     .map((p) => {
       const pos = String(p.position ?? '').toUpperCase()
-      const threshold = AGING_FROM[pos]
+      const threshold = agingThreshold(sport, pos)
       const age = ageOf.get(p.sleeperId)!
       return threshold != null && age >= threshold ? { sleeperId: p.sleeperId, name: p.name, position: pos, age, threshold } : null
     })
@@ -88,6 +109,8 @@ export async function loadDynastyOutlook(args: {
     isDynasty: boolean | null
     season: number | null
     status: string | null
+    /** The league's sport. Scopes the age lookup and picks the aging rule; omitted → NFL behaviour. */
+    sport?: string | null
   }
   /** Your team's provider id (`LeagueTeam.externalId`). */
   teamExternalId: string | null
@@ -97,10 +120,17 @@ export async function loadDynastyOutlook(args: {
   roster: readonly Player[]
 }): Promise<DynastyOutlook> {
   const ids = [...new Set([...args.starters, ...args.roster].map((p) => p.sleeperId))]
+  /*
+   * ⚠ SCOPED BY SPORT WHEN WE KNOW IT. Sleeper ids are per-sport namespaces, so an unscoped
+   * `sleeperId IN (...)` could bind an NBA roster id to an NFL player's age (or vice versa). Every
+   * spelling the sport column is stored under is accepted; no sport → the old unscoped read.
+   */
+  const sportRaw = String(args.league.sport ?? '').trim()
+  const sportFilter = sportRaw ? { sport: { in: [...new Set([sportRaw, sportRaw.toUpperCase(), sportRaw.toLowerCase()])] } } : {}
   const [ageRows, picks] = await Promise.all([
     ids.length
       ? prisma.sportsPlayer
-          .findMany({ where: { sleeperId: { in: ids }, age: { not: null } }, select: { sleeperId: true, age: true }, orderBy: { updatedAt: 'desc' } })
+          .findMany({ where: { sleeperId: { in: ids }, age: { not: null }, ...sportFilter }, select: { sleeperId: true, age: true }, orderBy: { updatedAt: 'desc' } })
           .catch(() => [] as Array<{ sleeperId: string | null; age: number | null }>)
       : Promise.resolve([] as Array<{ sleeperId: string | null; age: number | null }>),
     readPicks(args),
@@ -108,7 +138,7 @@ export async function loadDynastyOutlook(args: {
   // Newest row per id wins (several vendor rows can carry the same Sleeper id).
   const ageOf = new Map<string, number>()
   for (const r of ageRows) if (r.sleeperId && r.age != null && !ageOf.has(r.sleeperId)) ageOf.set(r.sleeperId, r.age)
-  return { picks, ages: summariseAges(args.starters, args.roster, ageOf) }
+  return { picks, ages: summariseAges(args.starters, args.roster, ageOf, args.league.sport) }
 }
 
 async function readPicks(args: Parameters<typeof loadDynastyOutlook>[0]): Promise<DynastyOutlook['picks']> {

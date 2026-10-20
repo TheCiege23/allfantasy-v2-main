@@ -142,6 +142,20 @@ const NHL_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
   g_sv: ['saves', 'g_sv', 'goalie_saves', 'SV'], //               measured: saves
   g_so: ['shutouts', 'g_so', 'goalie_shutouts', 'SO'], //         measured: shutouts
   g_ga: ['goals_allowed', 'g_ga', 'goals_against', 'GA'], //      measured: goals_allowed
+  // Wired 2026-10 for the commissioner panel's rows (lib/nhl-scoring/nhlScoringEngineContract.ts).
+  // Every spelling below is a key in fixtures/live.NHL.json; nothing here is guessed.
+  ppg: ['power_play_goals'], //                                  measured
+  ppa: ['power_play_assists'], //                                measured
+  shg: ['short_handed_goals'], //                                measured
+  sha: ['short_handed_assists'], //                              measured
+  fow: ['faceoffs_won'], //                                      measured
+  fol: ['faceoffs_lost'], //                                     measured
+  tk: ['takeaways'], //                                          measured
+  gv: ['giveaways'], //                                          measured
+  so_g: ['shootout_goals'], //                                   measured
+  g_loss: ['loss'], //                                           measured (goalies; singular, like `win`)
+  g_otl: ['overtime_loss'], //                                   measured (goalies)
+  g_sa: ['shots_against'], //                                    measured (goalies)
 }
 
 /**
@@ -251,8 +265,35 @@ export function normalizeNcaabGameStats(raw: unknown): NormalizedGameStats {
   return { ...result, unmappedKeys: result.unmappedKeys.filter((k) => !NCAAB_KNOWN_UNSCORED.has(k)) }
 }
 
+/**
+ * NHL single-game bonuses the feed does not send, counted from that game's own line.
+ *
+ * 🛑 PER GAME, then summed — the same rule as NBA's double-double above. Two goals on Monday and
+ * one on Thursday is not a hat trick, and a week's totals would say it was.
+ */
+const NHL_GAME_THRESHOLDS: ReadonlyArray<[bonus: string, stat: (s: Record<string, number>) => number, min: number]> = [
+  ['hat_trick', (s) => s.g ?? 0, 3],
+  ['multi_g_game', (s) => s.g ?? 0, 2],
+  ['multi_a_game', (s) => s.a ?? 0, 2],
+  ['three_ast_game', (s) => s.a ?? 0, 3],
+  ['five_pt_game', (s) => (s.g ?? 0) + (s.a ?? 0), 5],
+  ['ten_sog_game', (s) => s.sog ?? 0, 10],
+  ['five_hit_game', (s) => s.hits ?? 0, 5],
+  ['five_blk_game', (s) => s.blks ?? 0, 5],
+  ['g_40sv_game', (s) => s.g_sv ?? 0, 40],
+  ['g_50sv_game', (s) => s.g_sv ?? 0, 50],
+]
+
 export function normalizeNhlGameStats(raw: unknown): NormalizedGameStats {
-  return normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
+  const result = normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
+  const stats = result.stats
+  if (Object.keys(stats).length === 0) return result
+
+  if (stats.g !== undefined || stats.a !== undefined) stats.pts = (stats.g ?? 0) + (stats.a ?? 0)
+  for (const [bonus, stat, min] of NHL_GAME_THRESHOLDS) {
+    if (stat(stats) >= min) stats[bonus] = 1
+  }
+  return result
 }
 
 /**

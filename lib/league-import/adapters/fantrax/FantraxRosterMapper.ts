@@ -19,7 +19,7 @@ export const FantraxRosterMapper: IExternalRosterMapper<FantraxImportPayload> = 
         player_ids: team.rosterPlayerIds,
         starter_ids: team.starterPlayerIds,
         reserve_ids: team.reservePlayerIds,
-        taxi_ids: [],
+        taxi_ids: team.taxiPlayerIds ?? [],
         faab_remaining: team.faabRemaining,
         waiver_priority: team.waiverPriority,
       } satisfies NormalizedRoster

@@ -8,7 +8,9 @@
  * removed (values shown, no way into an editor). The Commissioner tools row is commissioner-only.
  */
 
+import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 
 export type SettingsSubPageId =
   | 'general'
@@ -19,12 +21,16 @@ export type SettingsSubPageId =
   | 'waivers'
   | 'trades'
   | 'guillotine-first-chop'
+  /** Guillotine: chop schedule, double/no-chop weeks and immunity (lib/guillotine/chopSchedule.ts). */
+  | 'guillotine-chop-rules'
   | 'playoffs'
   | 'members'
   | 'co-commissioners'
   | 'divisions'
   | 'ai'
   | 'commissioner-tools'
+  /** Manual point adjustments per matchup, with a reason (lib/score-adjustments). */
+  | 'score-adjustments'
   /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
   | 'survivor-tribes'
 
@@ -78,6 +84,11 @@ export type SettingsHomeDraft = {
 export type SettingsHomeGuillotine = {
   firstChopWeek: number
   endWeek: number | null
+  /** One line per chop rule, from the server (describeSchedule). */
+  scheduleLines?: string[]
+  /** The chop rules as saved, and the base teams per chop they build on. */
+  advanced?: GuillotineAdvanced | null
+  teamsPerChop?: number
   /** The first chop has happened — the start week can no longer move. */
   locked: boolean
 }
@@ -261,7 +272,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       title: 'General',
       rows: [
         { id: 'name', label: 'League name', value: league.name?.trim() || 'Untitled league', ...edit('general') },
-        { id: 'teams', label: 'Teams', value: String(teamCount) },
+        { id: 'teams', label: 'Teams', value: String(teamCount), ...edit('general') },
         { id: 'format', label: 'Format', value: `${input.formatLabel} · ${formatScoringMode(league.settings)}`, ...edit('format') },
       ],
     },
@@ -319,6 +330,13 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           ...(g?.locked ? {} : edit('guillotine-first-chop')),
         },
         {
+          id: 'chop-rules',
+          label: 'Chop rules',
+          value: g ? (g.scheduleLines?.length ? g.scheduleLines.slice(0, 2).join(' ') : 'One chop a week') : LOADING,
+          pending: g == null,
+          ...edit('guillotine-chop-rules'),
+        },
+        {
           id: 'chop-schedule',
           label: 'Chop & waiver schedule',
           value: profile ? `Chop ${profile.chopLabel.replace(/^By /, 'by ')} · Waivers ${profile.waiverLabel}` : 'Weekly',
@@ -338,7 +356,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         {
           id: 'playoffs',
           label: 'Playoffs',
-          value: `${league.playoffTeams ?? 4} teams · starts Wk ${league.playoffStartWeek ?? 14}`,
+          value: `${league.playoffTeams ?? 6} teams · starts Wk ${resolvePlayoffStartWeek(league).week}`,
           ...edit('playoffs'),
         },
       ],
@@ -367,6 +385,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       rows: [
         { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
         { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+        { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },
         ...(isSurvivorSettingsLeague(league)
           ? [{ id: 'survivor-tribes', label: 'Survivor tribes', value: 'Tribes, assignment & announce', target: 'survivor-tribes' as const }]
           : []),
