@@ -125,3 +125,24 @@ describe('NBA settings use the saved rules and sport calendar', () => {
     expect(queuePatch).not.toHaveBeenCalled()
   })
 })
+
+
+describe('weekly sport range compatibility', () => {
+  it('retains NFL week 18 for trade deadlines', () => {
+    const ctx = { league: { id: 'L', sport: 'NFL', tradeDeadlineWeek: 14 } } as never
+    render(<TradesTab ctx={ctx} canEdit hasAfCommissionerSub={false} />)
+    const field = screen.getByRole('spinbutton', { name: /Trade deadline/i }) as HTMLInputElement
+    fireEvent.change(field, { target: { value: '18' } })
+    expect(field.validity.valid).toBe(true)
+    expect(queuePatch).toHaveBeenLastCalledWith({ tradeDeadlineWeek: 18 })
+  })
+  it('retains NFL week 18 for playoff scheduling', async () => {
+    const ctx = { league: { id: 'L', sport: 'NFL', platform: 'manual', playoffStartWeek: 15, leagueSize: 12 } } as never
+    render(<PlayoffsTab ctx={ctx} canEdit hasAfCommissionerSub={false} />)
+    await screen.findByTestId('playoff-stage-start-week')
+    const field = screen.getByRole('spinbutton', { name: /Playoffs start/i }) as HTMLInputElement
+    fireEvent.change(field, { target: { value: '18' } })
+    expect(field.validity.valid).toBe(true)
+    expect(queuePatch).toHaveBeenLastCalledWith({ playoffStartWeek: 18 })
+  })
+})

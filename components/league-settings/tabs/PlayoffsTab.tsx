@@ -29,7 +29,7 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   }, [ctx.league.playoffTeams, chosenStartWeek])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
-  const startWeekMax = Math.max(seasonWeeks, chosenStartWeek)
+  const startWeekMax = Math.max(18, seasonWeeks, chosenStartWeek)
   const teamCap = ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12
 
   // A tournament conference league has no league playoffs; its fields would do nothing.

@@ -22,7 +22,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   }, [ctx.league.tradeReviewHours, ctx.league.tradeDeadlineWeek, ctx.league.draftPickTrading])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
-  const deadlineMax = Math.max(seasonWeeks, ctx.league.tradeDeadlineWeek ?? 0)
+  const deadlineMax = Math.max(18, seasonWeeks, ctx.league.tradeDeadlineWeek ?? 0)
 
   return (
     <div className="space-y-5">
