@@ -8,6 +8,7 @@ import {
 } from '@/lib/redraft/client'
 import { ScheduleView } from './ScheduleView'
 import { WeekControlPanel } from './WeekControlPanel'
+import { ScheduleRegeneratePanel } from './ScheduleRegeneratePanel'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
 /**
@@ -112,6 +113,9 @@ export function CanonicalRedraftScheduleTab({
           schedule={schedule}
           onChanged={() => setReloadToken((n) => n + 1)}
         />
+      ) : null}
+      {isCommissioner && seasonId ? (
+        <ScheduleRegeneratePanel seasonId={seasonId} onChanged={() => setReloadToken((n) => n + 1)} />
       ) : null}
       <ScheduleView schedule={schedule} />
     </div>
