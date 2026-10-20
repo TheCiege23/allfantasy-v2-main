@@ -2790,6 +2790,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.wv.faab": "FAAB (presupuesto)",
   "lsHub.wv.rolling": "Prioridad de reclamo rotativa",
   "lsHub.wv.reverse": "Prioridad de reclamo por clasificación inversa",
+  "lsHub.wv.standard": "Reclamos estándar (prioridad fija)",
+  "lsHub.wv.fcfs": "Agencia libre (por orden de llegada)",
   "lsHub.wv.note": "Los cambios se aplican al registro oficial de la liga y se guardan automáticamente.",
   "lsHub.wv.type": "Tipo de reclamos",
   "lsHub.wv.budget": "Presupuesto FAAB",
