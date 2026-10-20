@@ -3,7 +3,7 @@
  * Sport-aware defaults per PROMPT 331 / sport-scope.
  */
 
-import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { nativeGuillotineState } from '@/lib/league/nativeFormatPatch'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -44,14 +44,6 @@ function parseTiebreakerOrder(raw: unknown): TiebreakStep[] {
     if (out.length) return out
   }
   return [...DEFAULT_TIEBREAKER_ORDER]
-}
-
-/** A retained specialty config is history, not authority over a native league's current format. */
-function nativeGuillotineState(league: { platform?: string | null; leagueType?: string | null; leagueVariant?: string | null; guillotineMode?: boolean | null }): boolean | null {
-  if (!league.platform || !isNativePlatform(league.platform)) return null
-  if (league.guillotineMode || league.leagueType === 'guillotine' || league.leagueVariant === GUILLOTINE_VARIANT) return true
-  if (league.leagueType) return false
-  return null
 }
 
 export async function isGuillotineLeague(leagueId: string): Promise<boolean> {

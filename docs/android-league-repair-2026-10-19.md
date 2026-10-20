@@ -24,7 +24,7 @@ Expose team count in General. Resize native pre-draft seats, draft-session capac
 - Packaged intro codec markers: avc1 and mp4a.
 - Full repository TypeScript check exhausted the default 4 GB heap. An 8 GB retry was stopped after prolonged contention; the scoped new-backend-module check passed. No successful full typecheck is claimed.
 
-The season engine now ignores retained Guillotine configuration when a native league explicitly uses another format. Imported and untyped legacy classification remains compatible.
+The season engine now ignores retained Guillotine configuration when a native league explicitly uses another format. The format hub uses that same rule so converted native leagues leave its Guillotine list. Imported and untyped legacy classification remains compatible.
 
 An isolated test database roundtrip passed native NBA conversion with retained configuration, expansion and safe shrink, occupied-seat and started-draft protection, and persistence of name, timezone, draft clock/rounds/date, waivers, trades and playoffs. Temporary fixtures were removed. The test database emitted existing subscription-schema warnings; the commissioner save assertions passed.
 
