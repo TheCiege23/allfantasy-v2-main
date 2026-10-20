@@ -37,6 +37,7 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -57,7 +58,14 @@ import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
-import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import {
+  keepLineupModeFields,
+  lineupModeSwitchRefusal,
+  parseLineupMode,
+  readLineupMode,
+  withLineupMode,
+  type LineupMode,
+} from '@/lib/redraft/lineupModeSwitch'
 import { gamesCountSportConfigError } from '@/lib/redraft/gamesCount'
 import { gamesCountChangeRefusal, gamesCountSettingOf, keepGamesCountFields } from '@/lib/redraft/gamesCountSwitch'
 
@@ -163,6 +171,10 @@ async function readCurrentLeagueSettings(leagueId: string): Promise<Record<strin
   const cur = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   const s = cur?.settings
   return s && typeof s === 'object' && !Array.isArray(s) ? { ...(s as Record<string, unknown>) } : {}
+}
+
+function asPlainObject(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
 function hasLeagueSettingsRowPatch(body: Record<string, unknown>): boolean {
@@ -428,6 +440,25 @@ export async function executeLeagueSettingsPatch(
   }
 
   /*
+   * Lineups: daily or weekly (NBA/NHL/MLB; lib/redraft/lineupModeSwitch.ts). Checked here, before the
+   * first write below, so a refused switch leaves the rest of the save unapplied too. Refused (400) for
+   * any other sport, and (409) while a season is under way — a week is scored under one mode.
+   */
+  let lineupModeToStore: LineupMode | null = null
+  if (body.lineupMode !== undefined) {
+    const mode = parseLineupMode(body.lineupMode)
+    if (!mode) return jsonError("lineupMode must be 'daily' or 'weekly'", 400)
+    const refusal = await lineupModeSwitchRefusal(prisma, {
+      leagueId,
+      sport: league.sport,
+      from: readLineupMode(league.settings, league.sport),
+      to: mode,
+    })
+    if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    lineupModeToStore = mode
+  }
+
+  /*
    * Games limits — GP caps (NBA/NHL/MLB), NHL goalie minimum, MLB innings min/max (lib/redraft/gamesLimits.ts).
    * Stored in `settings.games_limits`; null/{} turns them off. Sport-gated and range-checked (400), and
    * refused for a league that is not on daily lineups: only the per-day lineup and stat rows say which slot
@@ -446,7 +477,9 @@ export async function executeLeagueSettingsPatch(
       }
       const parsed = parseGamesLimits(raw, String(league.sport ?? ''), effectiveSettings)
       if (!parsed.ok) return jsonError(parsed.error, 400)
-      if (parsed.value && !isDailyLineupScoringEnabled(effectiveSettings, String(league.sport ?? ''))) {
+      // Daily or weekly is decided by the lineup switch above (a sportConfig blob cannot change it).
+      const modeAfter = lineupModeToStore ?? readLineupMode(league.settings, league.sport)
+      if (parsed.value && modeAfter !== 'daily') {
         return jsonError('Games-played caps, goalie minimums and innings limits need daily lineups to be on for this league.', 400)
       }
       gamesLimitsToStore = parsed.value
@@ -464,6 +497,12 @@ export async function executeLeagueSettingsPatch(
     const mergeSportConfig = (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig
     const sportConfigAfter =
       body.sportConfig !== undefined ? body.sportConfig : mergeSportConfig !== undefined ? mergeSportConfig : storedSettings.sportConfig
+    if (limitsAfter && lineupModeToStore === 'weekly') {
+      return jsonError(
+        'Turn off games-played caps, goalie minimums and innings limits before switching this league to weekly lineups.',
+        400,
+      )
+    }
     if (limitsAfter && gamesCountSettingOf(sportConfigAfter, sport).mode !== 'all') {
       return jsonError(
         'Games-played caps, goalie minimums and innings limits can’t be combined with a “which games count” rule yet. Set games count to All games, or turn the limits off.',
@@ -501,6 +540,15 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     if (parsed.value && !hasSub) return jsonError('A custom tiebreaker order is part of the AF Commissioner plan.', 403)
     tiebreakerOrderToStore = { value: parsed.value }
+  }
+
+  // The trade close time is read by every trade gate (lib/trade-deadline/tradeDeadlineTime.ts), where an
+  // unreadable value would mean "no close time" — so it is refused here, and stored as one ISO instant.
+  // (`merge` is the settingsMerge read for the tiebreaker check above.)
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TRADE_DEADLINE_AT_KEY in merge) {
+    const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
   }
 
   /*
@@ -619,17 +667,36 @@ export async function executeLeagueSettingsPatch(
       return jsonError('sportConfig must be an object or null', 400)
     }
     const prev = await readCurrentLeagueSettings(leagueId)
+    // The blob keeps the stored daily/weekly state; only `lineupMode` above may change it.
+    const nextSportConfig = keepLineupModeFields(
+      asPlainObject(prev.sportConfig),
+      body.sportConfig as Record<string, unknown> | null,
+      league.sport,
+    )
     await prisma.league.update({
       where: { id: leagueId },
       data: {
         settings: {
           ...prev,
-          sportConfig:
-            body.sportConfig === null ? Prisma.JsonNull : (body.sportConfig as Prisma.InputJsonValue),
+          sportConfig: nextSportConfig === null ? Prisma.JsonNull : (nextSportConfig as Prisma.InputJsonValue),
         } as Prisma.InputJsonValue,
       },
     })
     updatedFieldNames.push('sportConfig')
+  }
+
+  if (lineupModeToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          sportConfig: withLineupMode(asPlainObject(prev.sportConfig), lineupModeToStore),
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push('lineupMode')
   }
 
   if (body.devyLeagueConfig !== undefined) {
@@ -656,12 +723,21 @@ export async function executeLeagueSettingsPatch(
       return jsonError('settingsMerge must be a plain object', 400)
     }
     const prev = await readCurrentLeagueSettings(leagueId)
+    const merge = { ...(body.settingsMerge as Record<string, unknown>) }
+    // A `sportConfig` merged here keeps the stored daily/weekly state too (see the sportConfig block).
+    if (merge.sportConfig === null || (merge.sportConfig && typeof merge.sportConfig === 'object' && !Array.isArray(merge.sportConfig))) {
+      merge.sportConfig = keepLineupModeFields(
+        asPlainObject(prev.sportConfig),
+        merge.sportConfig as Record<string, unknown> | null,
+        league.sport,
+      )
+    }
     await prisma.league.update({
       where: { id: leagueId },
       data: {
         settings: {
           ...prev,
-          ...(body.settingsMerge as Record<string, unknown>),
+          ...merge,
         } as Prisma.InputJsonValue,
       },
     })

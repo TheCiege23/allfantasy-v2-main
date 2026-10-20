@@ -151,3 +151,28 @@ describe('games limits are not combined with a "which games count" rule', () => 
     expect(settingsInDb.games_limits).toBeNull()
   })
 })
+
+describe('games limits follow the daily/weekly lineup switch', () => {
+  it('a sportConfig blob claiming daily does not unlock limits on a weekly league', async () => {
+    league('NBA', { sportConfig: {} })
+    const res = await patch({ sportConfig: DAILY_ON, gamesLimits: { gamesPlayedCaps: { PG: 82 } } })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/daily lineups/)
+    expect(settingsInDb).not.toHaveProperty('games_limits')
+  })
+
+  it('switching to weekly while limits are on is refused, and nothing is stored', async () => {
+    league('NBA', { sportConfig: DAILY_ON, games_limits: { gamesPlayedCaps: { PG: 82 } } })
+    const res = await patch({ lineupMode: 'weekly' })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/before switching this league to weekly/)
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+
+  it('switching to daily and turning limits on in one request is allowed', async () => {
+    league('NBA', { sportConfig: {} })
+    const res = await patch({ lineupMode: 'daily', gamesLimits: { gamesPlayedCaps: { PG: 82 } } })
+    expect(res.status).toBe(200)
+    expect(settingsInDb.games_limits).toEqual({ gamesPlayedCaps: { PG: 82 } })
+  })
+})
