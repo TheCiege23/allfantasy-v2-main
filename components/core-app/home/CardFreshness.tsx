@@ -21,15 +21,18 @@ import '@/components/core-app/home/af-core-home.css'
 export function CardFreshness({ stamps }: { stamps: CardFreshnessStamp[] | null | undefined }) {
   const { language } = useOptionalLanguage()
   const [nowMs, setNowMs] = useState<number | null>(null)
+  const anyStale = stamps?.some((stamp) => stamp.stale) ?? false
   useEffect(() => {
+    if (!anyStale) return
     setNowMs(Date.now())
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [anyStale])
 
   if (!stamps || stamps.length === 0) return null
-  const anyStale = stamps.some((s) => s.stale)
+  if (!anyStale) return null
   return (
+    <details className="af-cardfresh-details"><summary>{language === 'es' ? 'Actualizaciones retrasadas' : 'Updates delayed'}</summary>
     <p className="af-cardfresh" data-stale={anyStale ? 'true' : 'false'}>
       {stamps.map((stamp, index) => {
         const t = stampText(stamp, language) ?? stampText(stamp, 'en')!
@@ -56,7 +59,7 @@ export function CardFreshness({ stamps }: { stamps: CardFreshnessStamp[] | null 
           </span>
         )
       })}
-    </p>
+    </p></details>
   )
 }
 

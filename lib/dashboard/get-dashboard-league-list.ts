@@ -459,6 +459,7 @@ export async function getDashboardLeagueListForUser(
   userId: string,
   opts?: {
     collapseSeries?: boolean
+    requireCoreLeagues?: boolean
     /**
      * `'full'` (the default) returns every roster of every league with its `playerData`; `'count'`
      * returns roster ids only — enough for the team-count fallback below, and the shape stays an
@@ -605,6 +606,8 @@ export async function getDashboardLeagueListForUser(
       })
       .catch((err: unknown) => {
         console.error('[League List] generic leagues query failed', err)
+        // Core uses this list as its membership gate. A failed read is not an empty list.
+        if (opts?.requireCoreLeagues) throw err
         return []
       }),
     (prisma as any).sleeperLeague

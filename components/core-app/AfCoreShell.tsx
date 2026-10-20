@@ -1774,10 +1774,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             // The live poll overlaid on the server snapshot — shared with the /league rail (RailRowBody.tsx).
             const m = mergeRailMatchup(saved, live)
             const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
-            const mFreshAt = m?.freshAt ? Date.parse(m.freshAt) : Number.NaN
-            const mFreshMinutes = railClock != null && Number.isFinite(mFreshAt)
-              ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
-              : null
             const railName = railLabels.get(l.id) ?? l.name
             // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
             const careerRaw = railCareer?.[railLeagueKey(l.name)] ?? null
@@ -1875,7 +1871,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   isCommissioner={l.isCommissioner}
                   syncPaused={l.syncPaused}
                   delayed={delayed}
-                  freshMinutes={mFreshMinutes}
                   showScoreStatus={railOpen}
                   swing={railSwings[l.id]}
                   careerLine={careerLine}
@@ -2058,7 +2053,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           {props.scope ? (
             <ScopeSwitcher
-              leagues={props.scope.leagues}
+              leagues={props.scope.leagues.map((league) => ({ ...league, imageUrl: leagues.find((row) => row.id === league.id)?.imageUrl }))}
               scopeValue={props.scope.value}
               label={props.scope.label}
               selectedLeagueId={props.selectedLeagueId ?? null}
@@ -2121,28 +2116,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {copy('Admin')}
               </Link>
             ) : null}
-            <span className="af-readonly">
-              {props.nativeLeague ? (language === 'es' ? 'Liga nativa' : 'Native league') : (language === 'es' ? 'Solo lectura' : 'Provider read-only')}
-              <HelpDot
-                title={props.nativeLeague ? 'AllFantasy is the league record' : 'Provider read-only'}
-                body={props.nativeLeague ? 'Validated roster changes are saved to this native AllFantasy league. Roster rules and game locks apply.' : 'AllFantasy reads imported leagues and points you to the provider where you make lineup changes. Provider writes are not supported.'}
-              />
-            </span>
-
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
 
-            {/*
-              `describeAge` says "never synced" for an account with no sync at all; prefixing
-              "synced" to that read "⚠ synced never synced".
-            */}
-            <span
-              className="af-sync af-num"
-              data-stale={syncAge.stale}
-              title={language === 'es' ? 'Última sincronización' : 'Last sync'}
-            >
-              {syncAge.stale ? '⚠ ' : ''}
-              {syncChipText(syncAge.label, language)}
-            </span>
+            <details className="af-data-menu">
+              <summary aria-label={language === 'es' ? 'Actualizaciones de liga' : 'League updates and refresh'}>↻ <span>{language === 'es' ? 'Actualizaciones' : 'Updates'}</span></summary>
+              <div className="af-data-menu-panel">
+                <strong>{language === 'es' ? 'Actualizaciones de liga' : 'League updates'}</strong>
+                <p>{syncChipText(syncAge.label, language)}</p>
+                <SyncNowButton eligibleCount={syncEligibleCount} />
+                <p>{props.nativeLeague ? (language === 'es' ? 'Los cambios se guardan en AllFantasy.' : 'Changes save to AllFantasy.') : (language === 'es' ? 'Cambia la alineación en la plataforma de tu liga.' : 'Make lineup changes on your league’s platform.')}</p>
+              </div>
+            </details>
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
             <ModeToggle className="af-mode-chip" />
@@ -2153,7 +2137,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               "Sync now" controls on one screen is the kind of duplication that
               makes people wonder whether they do different things.
             */}
-            {active === 'home' ? null : <SyncNowButton eligibleCount={syncEligibleCount} />}
 
             {plan ? (
               <span className="af-plan">
@@ -2206,9 +2189,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             surface a manager reaches for after importing a league, so it sits
             where they land, not where they have to go looking.
           */}
-          {active === 'home' ? (
-            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} syncAge={syncAge} totalLeagues={leagues.length} />
-          ) : null}
+
           {/*
             The player card pop-up (design handoff 2026-09-07, STATE 6/7), mounted
             once for the whole shell like the overlays below.

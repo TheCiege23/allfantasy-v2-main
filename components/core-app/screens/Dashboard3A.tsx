@@ -6,6 +6,7 @@ import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import LeagueClipSpotlight from '@/components/core-app/highlights/LeagueClipSpotlight'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -233,9 +234,7 @@ function platformClass(platform: string | null | undefined): string {
  * CDN 404s for some Sleeper avatar ids.
  */
 function Mark({ src, alt, letter }: { src: string | null | undefined; alt: string; letter: string }) {
-  const [failed, setFailed] = useState(false)
-  if (!src || failed) return <>{letter}</>
-  return <img src={src} alt={alt} className="af3a-mark-img" onError={() => setFailed(true)} loading="lazy" />
+  return <LeagueMark src={src} letter={letter} className="af3a-mark-img" />
 }
 
 type PlayerHit = {
@@ -495,7 +494,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             className={`af3a-tile ${platformClass(l.platform)}`}
             title={l.name ?? 'League'}
           >
-            <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={platformTile(l.platform)} />
+            <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={(Array.from(l.name?.trim() || '')[0] ?? platformTile(l.platform)).toUpperCase()} />
           </Link>
         ))}
         {railOverflow > 0 ? (
@@ -603,6 +602,8 @@ export function Dashboard3A(props: Dashboard3AProps) {
         */}
         <GeoRestrictionNotice />
 
+        <div className="af3a-home-leagues">{slots.leagues}</div>
+
         <div className="af3a-body">
           <div className="af3a-col-main">
             {/*
@@ -622,6 +623,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
           </div>
         </div>
 
+        <details className="af3a-insights"><summary>Portfolio &amp; season insights <span>Exposure, results and tools</span></summary>
         {slots.portfolioChart}
 
         {/* ── Bottom three-up ────────────────────────────────────────────── */}
@@ -632,8 +634,6 @@ export function Dashboard3A(props: Dashboard3AProps) {
               <Fragment key={key}>{slots[key]}</Fragment>
             ))}
           </div>
-
-          {slots.leagues}
 
           <section className="af3a-card">
             <header className="af3a-cardhead">
@@ -653,6 +653,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             </div>
           </section>
         </div>
+        </details>
       </div>
     </div>
   )
@@ -1254,7 +1255,7 @@ export function Dash3ALeagues({
       ? `${shownLeagues.length} ${es ? 'de' : 'of'} ${leagueTotal}`
       : `${leagueTotal} ${es ? 'en total' : 'total'}`
   return (
-          <section className="af3a-card">
+          <section className="af3a-card af3a-leagues-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">{es ? 'MIS LIGAS' : 'MY LEAGUES'}</span>
               <span className="af3a-note af3a-push">{leagueTotalLabel}</span>
@@ -1275,22 +1276,24 @@ export function Dash3ALeagues({
                     href={`/core?league=${encodeURIComponent(l.id)}`}
                   >
                     <span className={`af3a-tile ${platformClass(l.platform)}`}>
-                      <Mark src={l.imageUrl} alt={l.name ?? (es ? 'Liga' : 'League')} letter={platformTile(l.platform)} />
+                      <Mark src={l.imageUrl} alt={l.name ?? (es ? 'Liga' : 'League')} letter={Array.from(l.name?.trim() || "L")[0]} />
                     </span>
                     <span className="af3a-league-body">
                       <b>
                         {l.name ?? (es ? 'Liga sin nombre' : 'Untitled league')}
                         {l.isCommissioner ? <CommissionerBadge /> : null}
                       </b>
-                      <em>{l.formatLabel ? formatLabelText(l.formatLabel, language) : es ? 'Liga importada' : 'Imported league'}</em>
+                      <em>{[l.platform === 'manual' ? 'AllFantasy' : l.platform, l.sport, l.formatLabel ? formatLabelText(l.formatLabel, language) : null].filter(Boolean).join(' · ')}</em>
+                      {l.score ? <span className="af3a-league-score"><strong>{l.score.you.toFixed(1)}</strong><span>–</span><strong>{l.score.opponent.toFixed(1)}</strong><small>vs {l.score.opponentName}</small></span> : null}
                     </span>
+                    <span className="af3a-league-arrow" aria-hidden>›</span>
                   </Link>
                 ))}
               </div>
             )}
             <LeagueClipSpotlight leagueIds={shownLeagues.map(l => l.id)} />
             {leagueTotal > shownLeagues.length ? (
-              <Link className="af3a-cardlink" href="/core/portfolio">
+              <Link className="af3a-cardlink" href="/leagues">
                 {es ? <>Ver las {leagueTotal} &rarr;</> : <>Show all {leagueTotal} &rarr;</>}
               </Link>
             ) : null}
