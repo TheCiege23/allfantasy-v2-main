@@ -5,12 +5,11 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { withControlLock } from '@/lib/draft/draftLock'
 import { buildSlotOrderForLeague, startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
-import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { SCHEDULED_REDRAFT_SPORTS, startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
 import { logStructured } from '@/lib/logging/structured'
 
-/** Redraft sports whose scheduled drafts start on the server. */
-export const SCHEDULED_REDRAFT_SPORTS = ['NFL', 'NBA', 'NHL', 'MLB'] as const
+export { SCHEDULED_REDRAFT_SPORTS }
 
 /** How far back a missed draft time still starts (a tick outage must not strand a draft). */
 const LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000
@@ -78,16 +77,21 @@ export async function startScheduledRedraftDrafts(now: Date = new Date()): Promi
     select: {
       leagueId: true,
       draftDateUtc: true,
-      league: { select: { platform: true, sport: true, survivorMode: true, guillotineMode: true, leagueVariant: true } },
+      league: {
+        select: {
+          platform: true, sport: true, leagueType: true, isDynasty: true,
+          survivorMode: true, guillotineMode: true, leagueVariant: true,
+        },
+      },
     },
     orderBy: { draftDateUtc: 'asc' },
     take: 100,
   })
-  // Specialty formats filtered here rather than in SQL: their flag columns are nullable, and a SQL
-  // NOT over a NULL drops the row instead of keeping it.
-  const due = rows.filter(
-    ({ league }) => league.survivorMode !== true && league.guillotineMode !== true && league.leagueVariant !== 'guillotine',
-  )
+  // The one predicate the settings UI also uses to hide the Autostart toggle. It repeats the SQL's
+  // type/dynasty/sport bounds and adds what is filtered here rather than in SQL: the specialty
+  // formats (their flag columns are nullable, and a SQL NOT over a NULL drops the row instead of
+  // keeping it) and the native-platform check.
+  const due = rows.filter(({ league }) => startsAtScheduledTimeRegardlessOfAutostart(league))
   const summary: ScheduledRedraftDraftSummary = { scanned: due.length, started: 0, skipped: 0, skips: [], errors: [] }
   const skip = (leagueId: string, reason: string | null) => {
     summary.skipped++
@@ -100,10 +104,6 @@ export async function startScheduledRedraftDrafts(now: Date = new Date()): Promi
     try {
       // The query already bounds this; it is repeated so a future time can never start a draft.
       if (!draftDateUtc || draftDateUtc.getTime() > now.getTime()) {
-        skip(leagueId, null)
-        continue
-      }
-      if (resolveWriteAuthority(league.platform) !== 'NATIVE') {
         skip(leagueId, null)
         continue
       }
