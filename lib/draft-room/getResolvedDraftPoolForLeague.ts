@@ -1126,7 +1126,8 @@ export async function getResolvedDraftPoolForLeague(
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
   const mergeCollegePool = (devyEnabled || c2cEnabled) && (sport === 'NFL' || sport === 'NBA')
   const verifyCurrentNbaRoster = shouldVerifyCurrentNbaRoster({
-    sport, variant: league?.leagueVariant, isDynasty: Boolean(league?.isDynasty),
+    sport, variant: league?.leagueVariant,
+    isDynasty: Boolean(league?.isDynasty) || String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY'),
     isDevy: isDevyDynasty, isC2C, mergeCollegePool,
   })
   const strictPoolSeparation = (isDevyDynasty && poolType != null) || (isC2C && poolType != null)

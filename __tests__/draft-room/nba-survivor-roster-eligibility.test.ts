@@ -59,6 +59,7 @@ describe('current NBA roster protection by draft format', () => {
     ['NBA', null, false, false, false, false, true],
     ['NBA', 'survivor', false, false, false, false, true],
     ['NBA', 'dynasty', true, false, false, false, false],
+    ['NBA', 'dynasty', false, false, false, false, false],
     ['NBA', 'devy', true, true, false, true, false],
     ['NBA', 'c2c', false, false, true, true, false],
     ['NFL', 'redraft', false, false, false, false, false],

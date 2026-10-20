@@ -93,5 +93,6 @@ export function shouldVerifyCurrentNbaRoster(input: {
   sport: string; variant?: string | null; isDynasty: boolean; isDevy: boolean; isC2C: boolean; mergeCollegePool: boolean
 }): boolean {
   return input.sport === 'NBA' && (input.variant === 'survivor' ||
-    (!input.isDynasty && !input.isDevy && !input.isC2C && !input.mergeCollegePool))
+    (!input.isDynasty && !String(input.variant ?? '').toLowerCase().includes('dynasty') &&
+      !input.isDevy && !input.isC2C && !input.mergeCollegePool))
 }
