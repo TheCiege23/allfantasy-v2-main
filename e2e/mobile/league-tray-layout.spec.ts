@@ -56,9 +56,8 @@ function tile(i: number): string {
     <span class="af-rail-row">
       <span class="af-rail-row-headline">
         <span class="af-rail-row-name">NFL Dynasty 2026 League ${i + 1}</span>
-        <span class="af-rail-row-fresh">now</span>
       </span>
-      <span class="af-rail-score-status">W5 scores updated 8:03 PM</span>
+      <span class="af-rail-row-meta"><span>sleeper</span><span>Week 5</span></span>
       <span class="af-rail-row-line">
         <span class="af-rail-row-labels"><span></span><span>SCORE</span><span>SLPR</span><span>AF</span></span>
         ${side("allfantasyreview")}
