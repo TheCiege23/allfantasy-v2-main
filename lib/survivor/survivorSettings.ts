@@ -10,6 +10,12 @@ export type SurvivorEliminationOutcome = 'removed_to_waivers' | 'exile_island'
 export type SurvivorScreenshotsPolicy = 'host_dm_private' | 'allowed_except_host_ai_dms'
 export type SurvivorConductPolicy = 'game_deception_allowed_platform_abuse_banned'
 export type SurvivorNbaWeeklyScoringMode = 'all_games' | 'one_game_per_player'
+/** When hidden idols stop being playable: at the merge, once fewer than N managers remain, or after week N. */
+export type SurvivorIdolExpiryMode = 'merge' | 'players_left' | 'week'
+export const SURVIVOR_IDOL_EXPIRY_MODES = ['merge', 'players_left', 'week'] as const
+/** Shot in the Dark: one safe draw in this many (owner's call, 2026-10-20; default 1 in 6). */
+export const SURVIVOR_SHOT_IN_THE_DARK_ODDS = [4, 5, 6] as const
+export type SurvivorShotInTheDarkOdds = (typeof SURVIVOR_SHOT_IN_THE_DARK_ODDS)[number]
 
 export interface SurvivorFoundationSettings {
   tribeCount: number
@@ -38,8 +44,15 @@ export interface SurvivorFoundationSettings {
   sitOutsEnabled: boolean
   noConsecutiveSitOuts: boolean
   nbaWeeklyScoringMode: SurvivorNbaWeeklyScoringMode
+  /** `players_left` mode: idols stay playable while at least this many managers remain. */
   idolExpiryRemainingPlayers: number
+  /** Legacy mirror of the players-left rule (invalid once this many remain); readers use survivorIdolExpiry. */
   idolInvalidRemainingPlayers: number
+  /** One league rule for idol expiry, shown in the reveal DM and the vault. */
+  idolExpiryMode: SurvivorIdolExpiryMode
+  /** `week` mode: the last scoring week an idol may be played. */
+  idolExpiryWeek: number
+  shotInTheDarkOdds: SurvivorShotInTheDarkOdds
   idolCount: number
   idolsEnabled: boolean
   powerupsEnabled: boolean
@@ -107,6 +120,9 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   nbaWeeklyScoringMode: 'all_games',
   idolExpiryRemainingPlayers: 5,
   idolInvalidRemainingPlayers: 4,
+  idolExpiryMode: 'players_left',
+  idolExpiryWeek: 10,
+  shotInTheDarkOdds: 6,
   idolCount: 7,
   idolsEnabled: true,
   powerupsEnabled: true,
@@ -135,6 +151,14 @@ function readNumber(input: SettingsRecord, keys: string[], fallback: number): nu
     }
   }
   return fallback
+}
+
+function normalizeIdolExpiryMode(value: string): SurvivorIdolExpiryMode {
+  return (SURVIVOR_IDOL_EXPIRY_MODES as readonly string[]).includes(value) ? value as SurvivorIdolExpiryMode : 'players_left'
+}
+
+function normalizeShotOdds(value: number): SurvivorShotInTheDarkOdds {
+  return (SURVIVOR_SHOT_IN_THE_DARK_ODDS as readonly number[]).includes(value) ? value as SurvivorShotInTheDarkOdds : 6
 }
 
 function readBoolean(input: SettingsRecord, keys: string[], fallback: boolean): boolean {
@@ -284,6 +308,9 @@ export function normalizeSurvivorFoundationSettings(
       1,
       defaultTeamCount,
     ),
+    idolExpiryMode: normalizeIdolExpiryMode(readString(s, ['idolExpiryMode'], base.idolExpiryMode)),
+    idolExpiryWeek: clampInt(readNumber(s, ['idolExpiryWeek'], base.idolExpiryWeek), 1, 52),
+    shotInTheDarkOdds: normalizeShotOdds(readNumber(s, ['shotInTheDarkOdds'], base.shotInTheDarkOdds)),
     idolCount: clampInt(readNumber(s, ['idolCount', 'survivorIdolCount'], Math.ceil(defaultTeamCount / 3)), 1, 40),
     idolsEnabled: readBoolean(s, ['idolsEnabled', 'survivorIdolsEnabled'], base.idolsEnabled),
     powerupsEnabled: readBoolean(s, ['powerupsEnabled'], base.powerupsEnabled),

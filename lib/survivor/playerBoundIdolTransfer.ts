@@ -1,5 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from './survivorIdolSeedingEngine'
+import { normalizeSurvivorFoundationSettings } from './survivorSettings'
+import { survivorIdolExpiryRule, survivorIdolExpiryText } from './survivorIdolExpiry'
 
 type MoveReason = 'trade' | 'trade_reversal' | 'waiver_drop' | 'waiver_claim' | 'stolen_player'
 const WAIVER_IDOL_ROSTER_ID = '__survivor_waivers__'
@@ -94,9 +96,10 @@ async function noticeIdolArrival(
   tx: Prisma.TransactionClient,
   input: { leagueId: string; ownerUserId: string; idolId: string; ledgerId: string; playerId: string; powerType: string },
 ) {
-  const league = await tx.league.findUnique({ where: { id: input.leagueId }, select: { userId: true } })
+  const league = await tx.league.findUnique({ where: { id: input.leagueId }, select: { userId: true, settings: true } })
   if (!league?.userId) return
   const spec = SURVIVOR_IDOL_CATALOG[input.powerType as SurvivorIdolPowerType]
+  const expiryText = survivorIdolExpiryText(survivorIdolExpiryRule(normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null)))
   const player = await tx.sportsPlayer.findFirst({
     where: { sport: 'NBA', OR: [{ id: input.playerId }, { externalId: input.playerId }, { sleeperId: input.playerId }] },
     select: { name: true, imageUrl: true },
@@ -107,13 +110,13 @@ async function noticeIdolArrival(
       id: `survivor-idol:${input.ledgerId}:arrival`,
       leagueId: input.leagueId,
       userId: league.userId,
-      message: `@Chimmy: ${playerName} arrived carrying a hidden ${spec?.label ?? 'idol'}. ${spec?.description ?? ''} It's yours now and stays with that player through trades and waivers. Keep this between us.`.replace(/\s+/g, ' ').trim(),
+      message: `@Chimmy: ${playerName} arrived carrying a hidden ${spec?.label ?? 'idol'}. ${spec?.description ?? ''} ${expiryText} It's yours now and stays with that player through trades and waivers. Keep this between us.`.replace(/\s+/g, ' ').trim(),
       type: 'system',
       imageUrl: player?.imageUrl ?? null,
       isPrivate: true,
       visibleToUserId: input.ownerUserId,
       messageSubtype: 'chimmy_private',
-      metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, idolId: input.idolId, playerId: input.playerId, playerName: player?.name ?? null, playerImageUrl: player?.imageUrl ?? null },
+      metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, idolId: input.idolId, playerId: input.playerId, playerName: player?.name ?? null, playerImageUrl: player?.imageUrl ?? null, idolLabel: spec?.label ?? null, idolDescription: spec?.description ?? null, expiryText },
     },
   })
 }

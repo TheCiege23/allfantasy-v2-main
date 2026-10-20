@@ -14,6 +14,7 @@ import {
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { lockSurvivorIdolDraw } from './survivorIdolConfigService'
 import { survivorIdolStoredPowerType, survivorIdolTypeIdForPower } from './survivorIdolTypes'
+import { survivorIdolExpiryRule, survivorIdolExpiryText, survivorIdolRowExpiry } from './survivorIdolExpiry'
 
 export type SurvivorIdolSeedOutcome =
   | { ok: true; seeded: boolean; alreadySeeded: boolean; voteShieldCount: number; ownerCount: number; seed: number | null }
@@ -58,6 +59,10 @@ export async function seedSurvivorIdols(
   const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorIdolCount: true, userId: true } })
   if (!league) return { ok: false, status: 422, code: 'league_missing', error: 'League not found.' }
   const settings = normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null)
+  // One league rule for expiry, stamped on every idol and told to its holder.
+  const expiryRule = survivorIdolExpiryRule(settings)
+  const rowExpiry = survivorIdolRowExpiry(expiryRule)
+  const expiryText = survivorIdolExpiryText(expiryRule)
   const tribeCount = Math.max(1, Math.floor(opts.tribeCount ?? (await db.survivorTribe.count({ where: { leagueId } })) ?? 4))
   // The league's idol types: drawn at draft lock (or now, if lock was missed). Null keeps the
   // legacy power-pool path for leagues with a commissioner-saved pool or before migration.
@@ -133,12 +138,13 @@ export async function seedSurvivorIdols(
           isTradable: true,
           currentOwnerUserId: a.ownerUserId,
           originalOwnerUserId: a.ownerUserId,
-          expiresAtMerge: a.expiresAtMerge,
-          validUntilPhase: a.expiresAtMerge ? 'merge' : 'final_5',
+          expiresAtMerge: rowExpiry.expiresAtMerge,
+          expiresAtWeek: rowExpiry.expiresAtWeek,
+          validUntilPhase: rowExpiry.validUntilPhase,
           playWindowRule: 'before_reveal',
           rarity: 'common',
           assignedAt: new Date(),
-          auditLog: { assignedSource: 'phase2_seed', playerId: a.playerId, expiresAtRemainingPlayers: a.expiresAtRemainingPlayers, ...(type ? { idolTypeId: type.id } : {}) },
+          auditLog: { assignedSource: 'phase2_seed', playerId: a.playerId, expiry: expiryRule, ...(type ? { idolTypeId: type.id } : {}) },
         },
         select: { id: true },
       })
@@ -154,13 +160,13 @@ export async function seedSurvivorIdols(
           id: `survivor-idol:${idol.id}:notice`,
           leagueId,
           userId: league.userId,
-          message: `@Chimmy: ${player?.name ?? a.playerName ?? 'Your drafted player'} holds your secret ${spec.label}. ${spec.description} Keep this between us; the official idol follows that player through trades and waivers.`,
+          message: `@Chimmy: ${player?.name ?? a.playerName ?? 'Your drafted player'} holds your secret ${spec.label}. ${spec.description} ${expiryText} Keep this between us; the official idol follows that player through trades and waivers.`,
           type: 'system',
           imageUrl: player?.imageUrl ?? null,
           isPrivate: true,
           visibleToUserId: a.ownerUserId,
           messageSubtype: 'chimmy_private',
-          metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, idolId: idol.id, playerId: a.playerId, playerName: player?.name ?? a.playerName ?? null, playerImageUrl: player?.imageUrl ?? null, idolTypeId: type?.id ?? survivorIdolTypeIdForPower(a.powerType) },
+          metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, idolId: idol.id, playerId: a.playerId, playerName: player?.name ?? a.playerName ?? null, playerImageUrl: player?.imageUrl ?? null, idolTypeId: type?.id ?? survivorIdolTypeIdForPower(a.powerType), idolLabel: spec.label, idolDescription: spec.description, expiryText },
         },
       })
       const arr = idsByOwner.get(a.ownerUserId) ?? []

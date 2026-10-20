@@ -35,6 +35,7 @@ import { seasonWeekBoundsForSport } from '@/lib/survivor/survivorSeasonCalendar'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/lib/survivor/SurvivorSitOutEngine'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { survivorIdolExpiryRule, survivorIdolExpiryText } from '@/lib/survivor/survivorIdolExpiry'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
@@ -403,6 +404,7 @@ export async function GET(
     myTribeId: myTribeId ?? undefined,
     myTribeSource: myTribeId ? getTribeChatSource(myTribeId) : null,
     myIdols,
+    idolExpiryText: survivorIdolExpiryText(survivorIdolExpiryRule(normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>))),
     myActiveEffects,
     myExileStatus,
     nbaWeeklyScoringMode: normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>).nbaWeeklyScoringMode,
