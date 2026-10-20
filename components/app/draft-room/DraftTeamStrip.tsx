@@ -16,6 +16,7 @@ import React, { useMemo } from 'react'
 import { getManagerColorBySlot } from '@/lib/draft-room'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { BotPersonalityBadge } from '@/components/league-feed/BotPersonalityBadge'
+import { SurvivorTribeBadge } from '@/components/league/survivor/SurvivorTribeBadge'
 
 export interface DraftTeamStripTeamMeta {
   rosterId: string
@@ -173,6 +174,7 @@ export function DraftTeamStrip({
               >
                 {displayName}
               </span>
+              {entry.tribe ? <SurvivorTribeBadge tribe={entry.tribe} className="max-w-full" /> : null}
               {meta?.aiArchetypeLabel ? (
                 <BotPersonalityBadge archetypeLabel={meta.aiArchetypeLabel} compact className="max-w-full" />
               ) : null}

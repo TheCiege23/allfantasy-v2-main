@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { normalizeSurvivorFoundationSettings, buildSurvivorSettingsSnapshotPatch } from '@/lib/survivor/survivorSettings'
-import { canonicalTribeSlots, validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
+import { canonicalTribeSlots, resolveTribeEmblem, validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import type { Prisma } from '@prisma/client'
 import { normalizeTribePlan } from '@/lib/survivor/survivorTribePlan'
@@ -37,9 +37,24 @@ export async function GET(_req: NextRequest, ctx: Context) {
     : []
   const draft = await prisma.draftSession.findFirst({ where: { leagueId, sessionKind: 'live' }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } })
   const assigned = await prisma.survivorTribeMember.count({ where: { tribe: { leagueId } } })
+  /* The tribes as they exist (written at lock, before the draft): identity for everyone, members for the commissioner. */
+  const tribeRows = assigned > 0 ? await prisma.survivorTribe.findMany({
+    where: { leagueId, isActive: true, isMerged: false },
+    select: { id: true, slotIndex: true, name: true, catalogId: true, logoUrl: true, colorHex: true, primaryColor: true, secondaryColor: true, members: { select: { rosterId: true } } },
+    orderBy: { slotIndex: 'asc' },
+  }) : []
+  const nameByRoster = new Map(participants.flatMap(p => (p.rosterId ? [[p.rosterId, p.displayName] as const] : [])))
+  const tribes = tribeRows.map(t => {
+    const emblem = resolveTribeEmblem(t, league?.sport)
+    return {
+      id: t.id, slotIndex: t.slotIndex, name: t.name, colorHex: t.colorHex ?? t.primaryColor ?? null,
+      crestUrl: emblem.crestUrl, markUrl: emblem.markUrl, customLogo: Boolean(t.logoUrl && !emblem.catalogId), memberCount: t.members.length,
+      members: access.decisions.canUpdateSettings ? t.members.map(m => nameByRoster.get(m.rosterId) ?? 'Manager').sort() : undefined,
+    }
+  })
   return NextResponse.json({ sport: league?.sport, managers: settings.defaultTeamCount, tribeCount: settings.tribeCount,
     slots: settings.survivorTribeSlots, locked: Boolean((draft && ['in_progress', 'paused', 'completed'].includes(draft.status)) || assigned || plan?.lockedAt), canEdit: access.decisions.canUpdateSettings,
-    participants, plan, planLocked: Boolean(plan?.lockedAt) })
+    participants, plan, planLocked: Boolean(plan?.lockedAt), tribes })
 }
 export async function PUT(req: NextRequest, ctx: Context) {
   const { leagueId, userId, access } = await viewer(ctx)
@@ -81,9 +96,9 @@ export async function PUT(req: NextRequest, ctx: Context) {
 
 /**
  * POST — "Lock tribes & announce" (handoff §5.4). Commissioner only, before the draft starts. The
- * plan is validated server-side against the current cast and saved capacities (4–6 per tribe), then
- * frozen in league settings; the post-draft setup assigns tribes from it. Optionally announces the
- * tribes in league chat.
+ * plan is validated server-side against the current cast and saved capacities, the tribes and their
+ * members are WRITTEN (keyed by roster, so they exist before the draft and the room can show them),
+ * and the plan is frozen in league settings. Optionally announces the tribes in league chat.
  */
 export async function POST(req: NextRequest, ctx: Context) {
   const { leagueId, userId, access } = await viewer(ctx)
@@ -115,6 +130,6 @@ export async function POST(req: NextRequest, ctx: Context) {
       }),
     })
     if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: outcome.status })
-    return NextResponse.json({ ok: true, plan: outcome.plan, announced: outcome.announced })
+    return NextResponse.json({ ok: true, plan: outcome.plan, announced: outcome.announced, tribes: outcome.tribes })
   })
 }
