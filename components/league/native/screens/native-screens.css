@@ -36,6 +36,10 @@
 .nls-seg { display: inline-flex; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
 .nls-seg button { min-height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .nls-seg button[aria-pressed=true], .nls-seg button[aria-selected=true] { background: var(--raised); border-color: var(--line2); color: var(--text); }
+/* Daily-lineup day picker: one segmented row of the week's days, scrollable on a phone. */
+.nls-daypick { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.nls-daypick .nls-seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.nls-daypick .nls-seg button { padding: 0 10px; }
 .nls-iconbtn { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--line2); border-radius: 8px; background: transparent; color: var(--text2); }
 .nls-iconbtn:disabled { opacity: .4; cursor: not-allowed; }
 
@@ -158,6 +162,21 @@
 .nls-swapper li button { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 14px; width: 100%; min-height: 52px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); text-align: left; }
 .nls-swapper li button:hover:not(:disabled) { border-color: var(--accent-line); }
 .nls-swapper li button:disabled { opacity: .45; cursor: not-allowed; }
+.nls-swapper-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+/* Drag and drop: a grip column only when the lineup is editable. */
+.nls-lrow[data-dnd=true] { grid-template-columns: 28px 52px minmax(0, 1fr) auto 84px; padding-left: 14px; }
+.nls-drag-cell { display: flex; align-items: center; justify-content: center; }
+/* touch-action: none on the HANDLE only, so the rest of the row still scrolls on a phone. */
+.nls-drag { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 40px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: grab; touch-action: none; }
+.nls-drag:hover, .nls-drag:focus-visible { background: var(--chip); color: var(--text2); }
+.nls-drag[data-dragging=true] { cursor: grabbing; opacity: .4; }
+.nls-lrow[data-drop=ok], .nls-dropzone[data-drop=ok] { box-shadow: inset 0 0 0 1px var(--accent-line); }
+.nls-lrow[data-drop=no] { opacity: .5; }
+.nls-lrow[data-over=true][data-drop=ok], .nls-dropzone[data-over=true][data-drop=ok] { background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: inset 0 0 0 2px var(--accent); }
+.nls-lrow[data-over=true][data-drop=no], .nls-dropzone[data-over=true][data-drop=no] { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--bad) 60%, transparent); }
+.nls-drag-overlay { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid var(--accent-line); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); cursor: grabbing; }
+.nls-lrow-action { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.nls-lock-reason { max-width: 180px; color: var(--muted); font-size: 11px; line-height: 1.3; text-align: right; }
 .nls-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
 .nls-stat { padding: 14px 16px; border-radius: 8px; background: var(--surface2); }
 .nls-stat dt { margin-bottom: 8px; color: var(--faint); font: 700 11px var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
@@ -295,6 +314,14 @@
   .nls-lrow .nls-lrow-action { grid-column: 2 / -1; justify-self: end; }
   .nls-lrow .nls-proj { font-size: 16px; }
   .nls-swapper { padding: 10px 14px 14px; }
+  /* `[data-size=sm]` out-specifies the 44px rule above, which left Move/Locked at 36px on a phone. */
+  .nls-btn[data-size=sm] { min-height: 44px; }
+  .nls-lrow[data-dnd=true] { grid-template-columns: 44px 44px minmax(0, 1fr) auto; padding-left: 4px; gap: 8px; }
+  .nls-lrow[data-dnd=true] .nls-lrow-action { grid-column: 3 / -1; }
+  .nls-drag { width: 44px; height: 44px; }
+  .nls-lrow-action { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+  .nls-lock-reason { max-width: none; }
+  .nls-swapper-actions > .nls-btn { flex: 1 1 100%; }
 
   .nls-search { max-width: none; flex-basis: 100%; }
   .nls-table th[data-hide=phone], .nls-table td[data-hide=phone] { display: none; }

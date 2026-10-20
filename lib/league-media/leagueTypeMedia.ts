@@ -14,12 +14,13 @@ export type LeagueTypeMedia = {
 const FALLBACK_THUMBNAIL = '/af-crest.svg'
 
 const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
+  // The legacy redraft-league-intro.mp4 contains Guillotine artwork; use the packaged Redraft clip.
   redraft: {
     label: 'Redraft',
     thumbnail: '/images/league-types/redraft.png',
     defaultLeagueImageUrl: '/images/league-types/redraft.png',
-    selectionVideo: '/media/league-intros/redraft-league-intro.mp4',
-    introVideo: '/media/league-intros/redraft-league-intro.mp4',
+    selectionVideo: '/media/create-league/concept/videos/Redraft.mp4',
+    introVideo: '/media/create-league/concept/videos/Redraft.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
   },
   dynasty: {

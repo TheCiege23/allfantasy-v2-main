@@ -335,6 +335,40 @@ export function LeagueShell({
   const league = useMemo(() => normalizeBigBrotherShellLeague(storedLeague), [storedLeague])
   const router = useRouter()
   const pathname = usePathname()
+  // Server props own the league name, format and joined seats. Refresh after saves and when
+  // returning from an invite, rather than leaving the original page snapshot on screen.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let pendingSave = false
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (document.querySelector('input:focus, textarea:focus, select:focus')) return
+        pendingSave = false
+        router.refresh()
+      }, 600)
+    }
+    const saved = (event: Event) => {
+      if ((event as CustomEvent<{ leagueId?: string }>).detail?.leagueId === league.id) { pendingSave = true; refresh() }
+    }
+    const onBlur = () => { if (pendingSave) refresh() }
+    document.addEventListener('focusout', onBlur)
+    window.addEventListener('af:league-settings-saved', saved)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    const interval = setInterval(() => {
+      if (isNativePlatform(league.platform) && !document.querySelector('input:focus, textarea:focus, select:focus')) refresh()
+    }, 30000)
+    return () => {
+      clearTimeout(timer)
+      clearInterval(interval)
+      window.removeEventListener('af:league-settings-saved', saved)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+      document.removeEventListener('focusout', onBlur)
+    }
+  }, [league.id, league.platform, router])
   // Use a league-specific storage key so league and dashboard have independent collapse states.
   // Start with room for league controls; the league switcher remains one click away.
   const myLeaguesRail = useMyLeaguesRailCollapse({
