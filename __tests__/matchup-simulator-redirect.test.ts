@@ -72,8 +72,11 @@ describe('links to the tool point at the destination, not at the hop', () => {
     expect(src).toContain("href: '/core/matchup'")
   })
 
-  it("the SEO tool config's open-tool link is /core/matchup", async () => {
+  // Owner decision 2026-10-20: the tool card (hub + /tools/matchup-simulator CTA) opens the Simulation
+  // Lab, not /core/matchup. It still never links the /matchup-simulator hop. Covered in depth by
+  // __tests__/tool-hub-simulation-lab.test.ts.
+  it("the SEO tool config's open-tool link is the Simulation Lab, not the hop", async () => {
     const { TOOL_CONFIG } = await import('@/lib/seo-landing/config')
-    expect(TOOL_CONFIG['matchup-simulator'].openToolHref).toBe('/core/matchup')
+    expect(TOOL_CONFIG['matchup-simulator'].openToolHref).toBe('/app/simulation-lab')
   })
 })

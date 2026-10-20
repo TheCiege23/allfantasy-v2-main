@@ -414,8 +414,10 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'Matchup Simulator',
     benefitSummary:
       'Simulate seasons, playoffs, and matchups. Use data-driven scenarios for redraft and dynasty.',
-    // /matchup-simulator is a 308 to /core/matchup since 2026-09-29 — link the destination.
-    openToolHref: '/core/matchup',
+    // Owner decision 2026-10-20: this card (season, playoff and dynasty simulations) opens the
+    // Simulation Lab. It pointed at /core/matchup from 2026-09-29 (5acd6ddad), when the old
+    // /matchup-simulator page became a 308 there and the lab's API routes were missing.
+    openToolHref: '/app/simulation-lab',
     examples: [
       'Season and playoff simulations',
       'Head-to-head and scoring projections',
