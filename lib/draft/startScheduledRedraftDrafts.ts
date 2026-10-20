@@ -60,8 +60,9 @@ async function setupBlocker(
 
 /**
  * Called by the minute draft tick (`/api/cron/draft-tick`). Starts native redraft drafts (NFL, NBA,
- * NHL, MLB) whose commissioner turned on "Autostart Draft" and whose `LeagueSettings.draftDateUtc`
- * has passed, through the same `startDraftSession` the commissioner's Start button calls.
+ * NHL, MLB) whose `LeagueSettings.draftDateUtc` has passed, through the same `startDraftSession` the
+ * commissioner's Start button calls. A scheduled redraft draft starts at its time whether or not
+ * "Autostart Draft" is on (owner's decision, 2026-10-20): the draft time is the commitment.
  *
  * Survivor and Guillotine leagues are left to `startScheduledSurvivorDrafts`, which carries their
  * extra seat rules. Idempotency: the session is re-read under the control lock, and
@@ -71,7 +72,6 @@ async function setupBlocker(
 export async function startScheduledRedraftDrafts(now: Date = new Date()): Promise<ScheduledRedraftDraftSummary> {
   const rows = await prisma.leagueSettings.findMany({
     where: {
-      autostart: true,
       draftDateUtc: { lte: now, gte: new Date(now.getTime() - LOOKBACK_MS) },
       league: { is: { leagueType: 'redraft', isDynasty: false, sport: { in: [...SCHEDULED_REDRAFT_SPORTS] } } },
     },

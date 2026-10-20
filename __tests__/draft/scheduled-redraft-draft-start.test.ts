@@ -57,10 +57,10 @@ describe('scheduled redraft draft start', () => {
     expect(m.notifyStart).toHaveBeenCalledWith('league-1')
   })
 
-  it('scans only autostart redraft leagues in NFL, NBA, NHL and MLB whose draft time has passed', async () => {
+  it('scans redraft leagues in NFL, NBA, NHL and MLB whose draft time has passed, whatever the Autostart toggle says', async () => {
     await startScheduledRedraftDrafts(NOW)
     const where = m.due.mock.calls[0][0].where
-    expect(where.autostart).toBe(true)
+    expect(where).not.toHaveProperty('autostart')
     expect(where.draftDateUtc).toEqual({ lte: NOW, gte: expect.any(Date) })
     expect(where.league.is).toMatchObject({ leagueType: 'redraft', isDynasty: false })
     expect([...where.league.is.sport.in].sort()).toEqual(['MLB', 'NBA', 'NFL', 'NHL'])
