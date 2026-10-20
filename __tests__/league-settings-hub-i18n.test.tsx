@@ -129,7 +129,7 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
 
   it.each([
     // Waivers is a section of General now (2026-10-14), not its own tab. FAAB fields show only when FAAB is in use.
-    ['general', ['Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Reclamos y agentes libres', 'Tipo de reclamos', 'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario']],
+    ['general', ['Número de equipos', 'Solo se pueden quitar plazas vacías sin manager.', 'Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Reclamos y agentes libres', 'Tipo de reclamos', 'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario']],
     ['trades', ['Permitir trades de picks del draft', 'Ventana de revisión (horas)', 'Límite de trades (n.º de semana)']],
     ['playoffs', ['Calendario rápido', 'Equipos en playoffs', 'Inicio de playoffs (semana)', 'Fases y brackets']],
     ['scoring', []],

@@ -27,6 +27,12 @@ import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/reco
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 import { evaluateRedraftTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import {
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_MESSAGE,
+  REDRAFT_MOVES_LOCKED_STATUS,
+  isRedraftLeagueMovesLocked,
+} from '@/lib/redraft/tradeMoveLock'
 
 export const dynamic = 'force-dynamic'
 
@@ -367,6 +373,21 @@ function reviewIdFrom(value: unknown): string | null {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null
 }
 
+/**
+ * 🛑 THE COMMISSIONER'S MOVE LOCK (`League.lockAllMoves`) — this route never read it, for any sport.
+ *
+ * Unlike the deadline, it binds at SETTLEMENT as well as at acceptance: a trade accepted before the lock may
+ * not be approved or voted through while moves are frozen. Rejections and vetoes move nothing and stay open.
+ * The code is the NFL trade runtime's `MOVE_LOCKED`. See lib/redraft/tradeMoveLock.ts.
+ */
+async function refuseIfMovesLocked(leagueId: string): Promise<NextResponse | null> {
+  if (!(await isRedraftLeagueMovesLocked(leagueId))) return null
+  return NextResponse.json(
+    { error: REDRAFT_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
+    { status: REDRAFT_MOVES_LOCKED_STATUS },
+  )
+}
+
 async function upsertDecision(
   proposalId: string,
   decision: 'accepted' | 'rejected' | 'vetoed' | 'cancelled' | 'expired' | 'processed',
@@ -614,6 +635,10 @@ export async function POST(req: NextRequest) {
         )
       }
 
+      // The move lock first, as the trade runtime orders it ahead of the deadline.
+      const lockedAtAccept = await refuseIfMovesLocked(proposal.leagueId)
+      if (lockedAtAccept) return lockedAtAccept
+
       /*
        * 🛑 THE DEADLINE BINDS AT ACCEPTANCE, AND THIS PATH NEVER CHECKED IT. A proposal made before the
        * deadline could be accepted — and, under `no_veto`, settled — any week after it.
@@ -730,6 +755,8 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         )
       }
+      const lockedAtApproval = await refuseIfMovesLocked(proposal.leagueId)
+      if (lockedAtApproval) return lockedAtApproval
       const approved = await finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'commissioner_approved', 'commissioner')
       await noteCommissionerReview(proposal.id, { commissionerDecision: 'approve', reviewId: reviewIdFrom(body.reviewId) })
       return approved
@@ -778,6 +805,13 @@ export async function POST(req: NextRequest) {
     }
     if (isProposerOwner || isReceiverOwner) {
       return NextResponse.json({ error: 'Trade parties cannot vote on their own proposal' }, { status: 403 })
+    }
+
+    // An approve vote can be the one that settles the trade, so it is refused before it is recorded. A veto
+    // vote moves nothing and stays open.
+    if (action === 'vote_approve') {
+      const lockedAtVote = await refuseIfMovesLocked(proposal.leagueId)
+      if (lockedAtVote) return lockedAtVote
     }
 
     const voteValue = action === 'vote_approve' ? 'approve' : 'veto'

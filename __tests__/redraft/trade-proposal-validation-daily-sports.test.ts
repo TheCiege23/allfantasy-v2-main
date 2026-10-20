@@ -18,6 +18,8 @@ const h = vi.hoisted(() => {
     storedWeek: 1,
     scheduleWeek: 6,
     deadlineWeek: null as number | null,
+    lockAllMoves: false,
+    rulesMissing: false,
   }
   const rosters = [
     { id: 'alpha', leagueId: 'league-1', seasonId: 'season-1', teamName: 'Alpha', ownerName: 'A', ownerId: 'user-a', faabBalance: 100, waiverPriority: 1, playoffSeed: 1 },
@@ -53,6 +55,7 @@ const h = vi.hoisted(() => {
         platform: 'sleeper',
         tradeDeadlineWeek: state.deadlineWeek,
         lifecycleState: 'in_season',
+        lockAllMoves: state.lockAllMoves,
       }),
     },
     redraftRoster: {
@@ -85,11 +88,17 @@ const h = vi.hoisted(() => {
 vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
 vi.mock('@/lib/league-runtime', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/league-runtime')>()),
-  resolveCanonicalLeagueRules: vi.fn(async () => ({
-    ...h.rules,
-    general: { ...h.rules.general, sport: h.state.sport },
-    trades: { ...h.rules.trades, deadlineWeek: h.state.deadlineWeek },
-  })),
+  resolveCanonicalLeagueRules: vi.fn(async () =>
+    h.state.rulesMissing
+      ? null
+      : {
+          ...h.rules,
+          general: { ...h.rules.general, sport: h.state.sport },
+          // The canonical rules read `League.lockAllMoves` too, so the fixture keeps the two in step.
+          roster: { ...h.rules.roster, lockAllMoves: h.state.lockAllMoves },
+          trades: { ...h.rules.trades, deadlineWeek: h.state.deadlineWeek },
+        },
+  ),
 }))
 vi.mock('@/lib/redraft/lineupLock', () => ({ hydrateRedraftLineupLocksForRosters: h.hydrate }))
 vi.mock('@/lib/redraft/lineupLockCurrentTeam', () => ({ resolveCurrentLockTeams: async () => new Map() }))
@@ -104,7 +113,7 @@ const validate = (assets: Asset[]) =>
 
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(h.state, { locked: new Set<string>(), storedWeek: 1, scheduleWeek: 6, deadlineWeek: null })
+  Object.assign(h.state, { locked: new Set<string>(), storedWeek: 1, scheduleWeek: 6, deadlineWeek: null, lockAllMoves: false, rulesMissing: false })
 })
 
 describe.each(['NBA', 'NHL', 'MLB'])('%s league: the league-wide runtime decides', (sport) => {
@@ -153,5 +162,37 @@ describe.each(['NBA', 'NHL', 'MLB'])('%s league: the league-wide runtime decides
       ok: true,
       source: 'league_runtime',
     })
+  })
+})
+
+/*
+ * 🛑 THE COMMISSIONER'S "LOCK ALL MOVES" (`League.lockAllMoves`) refuses every NBA / NHL / MLB proposal, whichever
+ * branch the validator takes — including the ownership fallback, which used to check only the deadline.
+ */
+describe.each(['NBA', 'NHL', 'MLB'])('%s league: lock all moves', (sport) => {
+  beforeEach(() => {
+    h.state.sport = sport
+  })
+
+  const oneForOne = () => [player('alpha-pg', 'alpha', 'beta'), player('beta-sf', 'beta', 'alpha')]
+
+  it('🛑 refuses a valid trade while moves are locked, with MOVE_LOCKED', async () => {
+    h.state.lockAllMoves = true
+    await expect(validate(oneForOne())).resolves.toMatchObject({ ok: false, code: 'MOVE_LOCKED' })
+  })
+
+  it('allows the same trade once the lock is lifted', async () => {
+    h.state.lockAllMoves = false
+    await expect(validate(oneForOne())).resolves.toMatchObject({ ok: true, source: 'league_runtime' })
+  })
+
+  it('🛑 refuses under the lock even with no league rules to build a runtime from (the ownership fallback)', async () => {
+    Object.assign(h.state, { lockAllMoves: true, rulesMissing: true })
+    await expect(validate(oneForOne())).resolves.toMatchObject({ ok: false, code: 'MOVE_LOCKED' })
+  })
+
+  it('the ownership fallback still allows the trade without the lock', async () => {
+    Object.assign(h.state, { lockAllMoves: false, rulesMissing: true })
+    await expect(validate(oneForOne())).resolves.toMatchObject({ ok: true, source: 'ownership_fallback' })
   })
 })

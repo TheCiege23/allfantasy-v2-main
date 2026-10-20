@@ -1,4 +1,7 @@
+import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@/lib/league/structuralSettingsLock', () => ({ structuralSettingsLockReason: vi.fn().mockResolvedValue(null) }))
 
 const h = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
@@ -227,4 +230,18 @@ describe('what to actually ask about', () => {
     }))
     expect(await pendingTypeConfirmations(['L1'])).toEqual([])
   })
+})
+
+it('converts a native Guillotine league to redraft in the format confirmation path', async () => {
+  h.findUnique.mockResolvedValue(league({ platform: 'manual', guillotineMode: true, leagueVariant: 'guillotine', settings: { inviteCode: 'KEEP', guillotine_mode: true } }))
+  await confirmLeagueType({ leagueId: 'L1', type: 'redraft', userId: 'u1' })
+  expect(h.update.mock.calls[0][0].data).toMatchObject({ leagueType: 'redraft', leagueVariant: 'redraft', guillotineMode: false, isDynasty: false,
+    settings: { inviteCode: 'KEEP', guillotine_mode: false, leagueTypeConfirmation: { type: 'redraft' } } })
+})
+
+it('refuses a runtime flag change after drafting even when the saved type already says redraft', async () => {
+  h.findUnique.mockResolvedValue(league({ platform: 'manual', guillotineMode: true, leagueVariant: 'guillotine' }))
+  vi.mocked(structuralSettingsLockReason).mockResolvedValueOnce('after the draft has started')
+  expect(await confirmLeagueType({ leagueId: 'L1', type: 'redraft', userId: 'u1' })).toEqual({ ok: false, reason: 'structure-locked' })
+  expect(h.update).not.toHaveBeenCalled()
 })

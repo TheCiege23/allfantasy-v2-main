@@ -260,6 +260,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
       actionHref: event.actionHref,
       actionLabel: event.actionLabel,
       skipChannels,
+      leagueId: event.leagueId,
       meta: {
         ...event.meta,
         ...extraMeta,
@@ -269,7 +270,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
       severity,
       productType: 'app',
       dedupePrefix: event.meta?.idempotencyKey ? sourceKey : undefined,
-    })
+    }).then(result => { if (result?.failed > 0) throw new Error('Notification dispatch failed') })
 
   try {
     /*
@@ -278,7 +279,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
      * only the push is held. The in-app row records which it was, which is what the next alert's
      * budget counts.
      */
-    if (event.type === 'live_score_swing' && !event.skipChannels?.push) {
+    if (event.type === 'live_score_swing' && event.source !== 'live-plays' && !event.skipChannels?.push) {
       const pushTier = livePushTier(severity)
       const { push, held } = await splitByLivePushBudget(userIds, pushTier)
       if (push.length > 0) await send(push, event.skipChannels, { pushBudget: 'pushed', pushTier })

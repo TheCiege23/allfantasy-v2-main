@@ -6,6 +6,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { readSavedLeagueOverrides } from '@/lib/league-settings/savedLeagueOverrides'
 import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName } from '@/lib/timezone'
 import { fromLocalInput, readDeadlineAt, toLocalInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { tryGetSportConfig } from '@/lib/sportConfig'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
@@ -14,7 +15,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'trades', { enabled: canEdit })
 
   const [tradeReviewHours, setTradeReviewHours] = useState(ctx.league.tradeReviewHours ?? 48)
-  const [tradeDeadlineWeek, setTradeDeadlineWeek] = useState(ctx.league.tradeDeadlineWeek ?? 14)
+  const [tradeDeadlineWeek, setTradeDeadlineWeek] = useState(ctx.league.tradeDeadlineWeek?.toString() ?? '')
   const [draftPickTrading, setDraftPickTrading] = useState(ctx.league.draftPickTrading ?? true)
 
   // The close time is an instant; the field shows and takes it as wall-clock time in the LEAGUE's
@@ -30,7 +31,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
   useEffect(() => {
     setTradeReviewHours(ctx.league.tradeReviewHours ?? 48)
-    setTradeDeadlineWeek(ctx.league.tradeDeadlineWeek ?? 14)
+    setTradeDeadlineWeek(ctx.league.tradeDeadlineWeek?.toString() ?? '')
     setDraftPickTrading(ctx.league.draftPickTrading ?? true)
     setCloseAt(seedCloseAt())
     setSavedCloseAt(seedCloseAt())
@@ -45,6 +46,9 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
     setSavedCloseAt(local)
     queuePatch({ settingsMerge: { [TRADE_DEADLINE_AT_KEY]: iso } })
   }
+
+  const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
+  const deadlineMax = Math.max(18, seasonWeeks, ctx.league.tradeDeadlineWeek ?? 0)
 
   return (
     <div className="space-y-5">
@@ -79,7 +83,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
             onChange={(e) => {
               const v = Number(e.target.value)
               setTradeReviewHours(v)
-              queuePatch({ tradeReviewHours: v })
+              if (e.target.value !== '' && e.target.validity.valid && Number.isInteger(v)) queuePatch({ tradeReviewHours: v })
             }}
             className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
           />
@@ -91,13 +95,16 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           <input
             type="number"
             min={1}
-            max={18}
+            max={deadlineMax}
+            placeholder={t('lsHub.tr.noDeadline')}
             value={tradeDeadlineWeek}
             disabled={!canEdit}
             onChange={(e) => {
-              const v = Number(e.target.value)
+              const v = e.target.value
               setTradeDeadlineWeek(v)
-              queuePatch({ tradeDeadlineWeek: v })
+              if (v === '' || (e.target.validity.valid && Number.isInteger(Number(v)))) {
+                queuePatch({ tradeDeadlineWeek: v === '' ? null : Number(v) })
+              }
             }}
             className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
           />

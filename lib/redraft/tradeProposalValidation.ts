@@ -27,6 +27,10 @@
  * refused by last season's deadline. The NFL redraft branch keeps its own check first, unchanged, and then
  * also answers to the server's week — which only differs for an imported season, whose stored week nothing
  * maintains.
+ *
+ * THE MOVE LOCK (`League.lockAllMoves`, lib/redraft/tradeMoveLock.ts). The NFL redraft runtime checks it
+ * itself, first, and that branch is left alone so an NFL refusal stays exactly what it was. Every other branch
+ * checks it here, before the deadline — the ownership fallback never looked at it.
  */
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -38,8 +42,13 @@ import {
   type NflRedraftTradeAssetInput,
 } from '@/lib/trade-runtime'
 import { evaluateRedraftTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import {
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_MESSAGE,
+  isRedraftLeagueMovesLocked,
+} from '@/lib/redraft/tradeMoveLock'
 
-export type RedraftProposalValidationSource = 'nfl_runtime' | 'league_runtime' | 'ownership_fallback'
+export type RedraftProposalValidationSource = 'nfl_runtime' | 'league_runtime' | 'ownership_fallback' | 'league_lock'
 
 export type RedraftProposalValidation =
   | { ok: true; warnings: string[]; source: RedraftProposalValidationSource }
@@ -53,7 +62,7 @@ export type RedraftProposalValidationInput = {
   assets: NflRedraftTradeAssetInput[]
 }
 
-type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster'>
+type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster' | 'league'>
 
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
@@ -73,6 +82,11 @@ export async function validateRedraftTradeProposalAtCreation(
       return { ok: false, code: 'TRADE_DEADLINE_PASSED', message: tradeDeadlinePassedMessage(deadline), source: 'nfl_runtime' }
     }
     return { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
+  }
+
+  // Ahead of the deadline, as the runtime orders them: under the lock nothing else about the trade matters.
+  if (await isRedraftLeagueMovesLocked(input.leagueId, db)) {
+    return { ok: false, code: REDRAFT_MOVES_LOCKED_CODE, message: REDRAFT_MOVES_LOCKED_MESSAGE, source: 'league_lock' }
   }
 
   // The server's week, read even when no deadline is set: the lineup lock is derived at it. An imported

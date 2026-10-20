@@ -8,6 +8,7 @@
  * removed (values shown, no way into an editor). The Commissioner tools row is commissioner-only.
  */
 
+import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 
@@ -269,7 +270,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       title: 'General',
       rows: [
         { id: 'name', label: 'League name', value: league.name?.trim() || 'Untitled league', ...edit('general') },
-        { id: 'teams', label: 'Teams', value: String(teamCount) },
+        { id: 'teams', label: 'Teams', value: String(teamCount), ...edit('general') },
         { id: 'format', label: 'Format', value: `${input.formatLabel} · ${formatScoringMode(league.settings)}`, ...edit('format') },
       ],
     },
@@ -353,7 +354,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         {
           id: 'playoffs',
           label: 'Playoffs',
-          value: `${league.playoffTeams ?? 4} teams · starts Wk ${league.playoffStartWeek ?? 14}`,
+          value: `${league.playoffTeams ?? 6} teams · starts Wk ${resolvePlayoffStartWeek(league).week}`,
           ...edit('playoffs'),
         },
       ],

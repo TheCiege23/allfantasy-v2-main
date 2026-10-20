@@ -19,10 +19,21 @@ import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leag
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
+import {
+  decideSettingsEdit,
+  lifecycleSectionsTouchedByPatch,
+  recordMidSeasonSettingsChange,
+  type SettingsEditDecision,
+  type LifecycleGatedSection,
+} from '@/lib/league/settingsLifecycleGate'
+import { MID_SEASON_CONFIRM_FLAG } from '@/lib/league/midSeasonConfirmation'
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
@@ -44,6 +55,8 @@ import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-ser
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { gamesCountSportConfigError } from '@/lib/redraft/gamesCount'
+import { gamesCountChangeRefusal, gamesCountSettingOf, keepGamesCountFields } from '@/lib/redraft/gamesCountSwitch'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -218,6 +231,23 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  /*
+   * 🛑 THE DECLARED SECTION IS NOT WHAT THE PATCH WRITES. The section-less door (useAutosave → this
+   * function with no `section`) never ran the lifecycle gate at all, and a sectioned request can
+   * name one section while carrying another's keys. So a body that writes scoring or roster columns
+   * runs those sections' gates too — the scoring/roster policy in settingsLifecycleGate.ts, where a
+   * mid-season change needs `confirmMidSeasonChange: true` in the body.
+   */
+  const confirmedMidSeason: Array<{ section: LifecycleGatedSection; decision: SettingsEditDecision }> = []
+  for (const touched of lifecycleSectionsTouchedByPatch(body)) {
+    if (touched === patchOptions?.section) continue
+    const decision = await decideSettingsEdit(leagueId, userId, touched, body)
+    if (!decision.ok) return NextResponse.json(decision.body, { status: decision.status })
+    if (decision.midSeason) confirmedMidSeason.push({ section: touched, decision })
+  }
+  // A request flag, never a column or a settings key.
+  delete (body as Record<string, unknown>)[MID_SEASON_CONFIRM_FLAG]
+
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
     include: { leagueSettings: true, teams: true },
@@ -257,6 +287,33 @@ export async function executeLeagueSettingsPatch(
 
   if (body.sport != null && !LEAGUE_SPORTS.has(String(body.sport))) {
     return jsonError('Invalid sport', 400)
+  }
+
+  // "Which games count" (lib/redraft/gamesCount.ts) rides in `sportConfig`: a bad mode, a best-N other
+  // than 2 or 3, or a non-all mode outside NBA/NHL/MLB is refused here — before any write below. The
+  // `settingsMerge` door can replace `sportConfig` wholesale too, so it is checked the same way.
+  for (const sportConfig of [body.sportConfig, (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig]) {
+    if (sportConfig === undefined) continue
+    const gamesCountError = gamesCountSportConfigError(sportConfig, String(body.sport ?? league.sport ?? ''))
+    if (gamesCountError) return jsonError(gamesCountError, 400)
+  }
+  // A valid value may still not be a permitted CHANGE: not while a season is under way, and never off
+  // "All games" before the tables exist (lib/redraft/gamesCountSwitch.ts). A blob that does not mention
+  // the keys keeps the stored values, so a stale blob cannot turn the rule off by omission.
+  {
+    const storedSportConfig = (league.settings as { sportConfig?: unknown } | null)?.sportConfig
+    const merge = body.settingsMerge as { sportConfig?: unknown } | null | undefined
+    if (body.sportConfig !== undefined) body.sportConfig = keepGamesCountFields(storedSportConfig, body.sportConfig)
+    if (merge && typeof merge === 'object' && !Array.isArray(merge) && 'sportConfig' in merge) {
+      body.settingsMerge = { ...merge, sportConfig: keepGamesCountFields(storedSportConfig, merge.sportConfig) }
+    }
+    const from = gamesCountSettingOf(storedSportConfig, league.sport)
+    for (const sportConfig of [body.sportConfig, (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig]) {
+      if (sportConfig === undefined) continue
+      const to = gamesCountSettingOf(sportConfig, String(body.sport ?? league.sport ?? ''))
+      const refusal = await gamesCountChangeRefusal({ leagueId, from, to })
+      if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    }
   }
 
   if (body.season != null) {
@@ -323,7 +380,7 @@ export async function executeLeagueSettingsPatch(
   const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule })
   if (keeperRefusal) return jsonError(keeperRefusal.message, keeperRefusal.status)
 
-  const teamCount = league.leagueSize ?? league.teams.length
+  const teamCount = body.leagueSize != null ? Number(body.leagueSize) : league.leagueSize ?? league.teams.length
   if (body.playoffTeams != null) {
     const pt = Number(body.playoffTeams)
     if (Number.isFinite(pt) && pt > Math.max(1, teamCount)) {
@@ -435,7 +492,17 @@ export async function executeLeagueSettingsPatch(
   const updatedFieldNames: string[] = []
 
   const { data: leaguePatch, keys: leagueKeys } = buildLeagueUpdateFromBody(body)
-  if (Object.keys(leaguePatch).length > 0) {
+  if (typeof body.leagueType === 'string' && isNativePlatform(league.platform)) {
+    Object.assign(leaguePatch, nativeFormatPatch(body.leagueType, league.settings))
+  }
+  if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize && isNativePlatform(league.platform)) {
+    try {
+      await resizeNativeLeague(leagueId, Number(body.leagueSize), leaguePatch)
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : 'Could not change league size', 409)
+    }
+    updatedFieldNames.push(...leagueKeys)
+  } else if (Object.keys(leaguePatch).length > 0) {
     await prisma.league.update({
       where: { id: leagueId },
       data: leaguePatch,
@@ -743,6 +810,16 @@ export async function executeLeagueSettingsPatch(
       section: patchOptions?.section ?? null,
     },
   }).catch(() => {})
+
+  for (const { section, decision } of confirmedMidSeason) {
+    await recordMidSeasonSettingsChange(decision, {
+      leagueId,
+      userId: actorUserId,
+      section,
+      source: patchOptions?.section ? `settings-patch:${patchOptions.section}` : 'settings-patch',
+      detail: { updatedFields: [...new Set(updatedFieldNames)].slice(0, 40) },
+    })
+  }
 
   void import('@/lib/league-events/publisher')
     .then(({ publishLeagueFanoutEvent }) =>

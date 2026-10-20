@@ -1,16 +1,5 @@
 // @vitest-environment node
-/**
- * "I'm still waiting for approval from twilio on phone alerts but I want it to be working code
- * wise before it's ready so when approval happens, its instantaneous." (owner, 2026-09-25)
- *
- * So this runs the REAL chain — message notifier → NotificationDispatcher → twilio-client.sendSms
- * — and stubs only the `twilio` SDK itself (no network) plus the other channels' senders. The one
- * thing that changes between the two cases is the Twilio environment. If this goes green with
- * Twilio configured, flipping the env vars on is the whole launch.
- *
- * The recipient here has a VERIFIED phone and has switched the direct-messages SMS channel ON —
- * SMS is opt-in for every category, and the last case proves the default sends nothing.
- */
+/** League SMS uses the real dispatcher and Twilio adapter; standalone DMs remain push/email only. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
@@ -24,6 +13,7 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/notifications/durableTransport', () => ({ deliverDurably: async (_message: unknown, send: () => Promise<unknown>) => { await send(); return 'sent' } }))
 vi.mock('twilio', () => {
   h.twilioFactory.mockImplementation(() => ({ messages: { create: h.messagesCreate } }))
   return { default: h.twilioFactory }
@@ -84,6 +74,7 @@ vi.mock('@/lib/prisma', () => {
   }
 })
 
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { notifyDirectMessageRecipients } from '@/lib/chat-notifications/chatMessageNotifier'
 
 const TWILIO_ENV = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_API_KEY', 'TWILIO_API_SECRET', 'TWILIO_PHONE_NUMBER'] as const
@@ -93,7 +84,7 @@ let saved: Record<string, string | undefined> = {}
 const CONSENT = { consentedAt: '2026-09-01T00:00:00Z', phone: '+13615550199' }
 
 const SMS_ON = {
-  categories: { direct_messages: { enabled: true, inApp: true, email: true, sms: true, push: true } },
+  categories: { draft_alerts: { enabled: true, inApp: true, email: true, sms: true, push: true } },
   smsConsent: CONSENT,
 }
 
@@ -111,6 +102,8 @@ const sendDm = () =>
     body: 'Trade deadline is tonight — you in?',
     now: new Date('2026-09-25T18:00:00Z'), // 1pm Chicago: outside any default quiet hours
   })
+
+const sendLeague = () => dispatchNotification({ userIds: ['bob'], leagueId: 'league-1', category: 'draft_alerts', type: 'draft_start', title: 'Draft starting', body: 'Your league draft is starting.' })
 
 beforeEach(() => {
   saved = {}
@@ -138,32 +131,28 @@ afterEach(() => {
 })
 
 describe('🛑 DM texts: working code now, live the moment Twilio is configured', () => {
-  it('Twilio CONFIGURED: the DM goes out as a text to the verified phone, with the opt-out line', async () => {
+  it('sends an opted-in league alert with the opt-out line', async () => {
     configureTwilio()
-    const r = await sendDm()
-    expect(r.recipients).toEqual([{ userId: 'bob', outcome: 'alerted', email: true }])
-
+    await sendLeague()
     expect(h.messagesCreate).toHaveBeenCalledTimes(1)
-    const sms = h.messagesCreate.mock.calls[0][0] as { from: string; to: string; body: string }
-    expect(sms.to).toBe('+13615550199')
-    expect(sms.from).toBe('+13615550100')
-    // The text says THAT there is a message. The sender's name and words are user-written and
-    // stay in-app/push/email — not sent over the A2P campaign.
-    expect(sms.body).toMatch(/new direct message/i)
-    expect(sms.body).not.toContain('Dana')
-    expect(sms.body).not.toContain('Trade deadline')
-    expect(sms.body).toMatch(/reply stop/i)
+    expect(h.messagesCreate.mock.calls[0][0]).toMatchObject({ to: '+13615550199', from: '+13615550100', body: expect.stringMatching(/reply stop/i) })
+    expect(h.bell).toHaveBeenCalledTimes(1)
+    expect(h.push).toHaveBeenCalledTimes(1)
+    expect(h.email).toHaveBeenCalledTimes(1)
+  })
 
-    // The other channels go out alongside it.
-    expect(h.bell).toHaveBeenCalledWith(expect.objectContaining({ userId: 'bob', type: 'direct_message' }))
-    expect(h.push).toHaveBeenCalledWith('bob', expect.objectContaining({ title: 'Dana', tag: 'dm-thread-1' }))
+  it('does not text a standalone DM even with an old DM SMS preference enabled', async () => {
+    configureTwilio()
+    h.profilePrefs = { ...SMS_ON, categories: { direct_messages: { enabled: true, inApp: true, email: true, sms: true, push: true } } }
+    await sendDm()
+    expect(h.messagesCreate).not.toHaveBeenCalled()
+    expect(h.push).toHaveBeenCalledTimes(1)
     expect(h.email).toHaveBeenCalledTimes(1)
   })
 
   it('Twilio NOT configured (today): no text is attempted, nothing throws, and bell/push/email still go', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const r = await sendDm()
-    expect(r.recipients[0].outcome).toBe('alerted')
+    await sendLeague()
     expect(h.twilioFactory).not.toHaveBeenCalled()
     expect(h.messagesCreate).not.toHaveBeenCalled()
     expect(h.bell).toHaveBeenCalledTimes(1)
@@ -177,7 +166,7 @@ describe('🛑 DM texts: working code now, live the moment Twilio is configured'
   it('SMS stays OFF by default even with Twilio configured — a user has to opt in', async () => {
     configureTwilio()
     h.profilePrefs = null // never opened settings
-    await sendDm()
+    await sendLeague()
     expect(h.messagesCreate).not.toHaveBeenCalled()
     expect(h.bell).toHaveBeenCalledTimes(1)
     expect(h.push).toHaveBeenCalledTimes(1)
@@ -188,7 +177,7 @@ describe('🛑 a verified phone is not consent — the stored opt-in is', () => 
   it('sends nothing to a verified phone with the SMS switch on but no consent record', async () => {
     configureTwilio()
     h.profilePrefs = { categories: SMS_ON.categories }
-    await sendDm()
+    await sendLeague()
     expect(h.messagesCreate).not.toHaveBeenCalled()
     expect(h.bell).toHaveBeenCalledTimes(1)
   })
@@ -196,14 +185,14 @@ describe('🛑 a verified phone is not consent — the stored opt-in is', () => 
   it('sends nothing when the consent was given for a number the user has since replaced', async () => {
     configureTwilio()
     h.profilePrefs = { ...SMS_ON, smsConsent: { ...CONSENT, phone: '+12015550123' } }
-    await sendDm()
+    await sendLeague()
     expect(h.messagesCreate).not.toHaveBeenCalled()
   })
 
   it('sends nothing once the consent is revoked by a STOP', async () => {
     configureTwilio()
     h.profilePrefs = { ...SMS_ON, smsConsent: { ...CONSENT, revokedAt: '2026-09-20T00:00:00Z' } }
-    await sendDm()
+    await sendLeague()
     expect(h.messagesCreate).not.toHaveBeenCalled()
   })
 
@@ -213,7 +202,7 @@ describe('🛑 a verified phone is not consent — the stored opt-in is', () => 
     h.profileUpdate.mockReset()
     h.profileUpdate.mockResolvedValue({})
     h.messagesCreate.mockRejectedValue(Object.assign(new Error('Attempt to send to unsubscribed recipient +13615550199'), { code: 21610 }))
-    await sendDm()
+    await sendLeague()
     expect(h.profileUpdate).toHaveBeenCalledTimes(1)
     const written = h.profileUpdate.mock.calls[0][0] as { where: { userId: string }; data: { notificationPreferences: { smsConsent: Record<string, string> } } }
     expect(written.where.userId).toBe('bob')
