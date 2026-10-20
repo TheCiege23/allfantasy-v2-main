@@ -30,6 +30,7 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
+import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
 
 type Tx = Prisma.TransactionClient
 
@@ -788,13 +789,16 @@ export async function createCanonicalLeagueInTransaction(
       formatId === 'devy' ? readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6) : 4
     const dynastyFallbackRookieRounds =
       formatId === 'devy' ? readNumber(foundationDefaults.devyConfig, 'rookieDraftRounds', 4) : 4
+    // NCAAF's bracket window first, then the sport's own season length (dailySportSeasonShape.ts for
+    // NBA/NHL/MLB) — never a flat 14, which left a daily sport's playoff start past its season's end.
+    const dynastyFallbackRegularSeasonWeeks = ncaafRegularSeasonEndWeek ?? dynastyDefaultRegularSeasonWeeksFor(sport)
     const dynastyFallbackRookieDraftType =
       formatId === 'devy' ? readString(foundationDefaults.devyConfig, 'rookieDraftType', 'linear') : 'linear'
     await tx.dynastyLeagueConfig.upsert({
       where: { leagueId: league.id },
       create: {
         leagueId: league.id,
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         useMaxPfForNonPlayoff: true,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
@@ -811,7 +815,7 @@ export async function createCanonicalLeagueInTransaction(
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
       update: {
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),

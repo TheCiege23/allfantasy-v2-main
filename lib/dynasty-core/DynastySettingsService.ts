@@ -8,10 +8,10 @@ import { getDynastyRosterPresetList } from './DynastyRosterPresets'
 import { getDynastyScoringPresetList } from './DynastyScoringPresets'
 import { getDynastyPlayoffPresetList } from './DynastyPlayoffPresets'
 import {
-  DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS,
   DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS,
   DYNASTY_DEFAULT_ROOKIE_DRAFT_TYPE,
   ROOKIE_PICK_ORDER_METHODS,
+  dynastyDefaultRegularSeasonWeeksFor,
   isDynastyFootballSport,
 } from './constants'
 import type {
@@ -56,7 +56,7 @@ export async function getEffectiveDynastySettings(
   const playoffStructure = (settings.playoff_structure as Record<string, unknown>) ?? {}
   const regularSeasonWeeks =
     (settings.regular_season_weeks as number) ??
-    (league.dynastyConfig?.regularSeasonWeeks ?? DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS)
+    (league.dynastyConfig?.regularSeasonWeeks ?? dynastyDefaultRegularSeasonWeeksFor(league.sport as string | null))
 
   const sportType = (league.sport as SportType) ?? 'NFL'
   let rosterSummary: { slotName: string; count: number }[] = []
@@ -166,8 +166,16 @@ export async function upsertDynastyConfig(
     where: { leagueId },
   })
 
+  // Only a brand-new config with no length supplied needs the sport, so only then is it read.
+  const regularSeasonWeeks =
+    payload.regularSeasonWeeks ??
+    existing?.regularSeasonWeeks ??
+    dynastyDefaultRegularSeasonWeeksFor(
+      (await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } }))?.sport ?? null,
+    )
+
   const data = {
-    regularSeasonWeeks: payload.regularSeasonWeeks ?? existing?.regularSeasonWeeks ?? DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS,
+    regularSeasonWeeks,
     rookiePickOrderMethod: payload.rookiePickOrderMethod ?? existing?.rookiePickOrderMethod ?? 'max_pf',
     useMaxPfForNonPlayoff: payload.useMaxPfForNonPlayoff ?? existing?.useMaxPfForNonPlayoff ?? true,
     rookieDraftRounds: payload.rookieDraftRounds ?? existing?.rookieDraftRounds ?? DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS,

@@ -2247,7 +2247,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsEd.dr.noAction": "No se realizó ninguna acción",
   "lsEd.dr.loading": "Cargando ajustes del draft...",
   "lsEd.dr.subtitle": "Define la hora del draft, el tiempo por pick, el orden del draft y los keepers/dynasty",
-  "lsEd.dr.localTz": "Según tu zona horaria local",
+  "lsEd.dr.v2.leagueTz": "La fecha y la hora están en la zona horaria de la liga: {{tz}}",
   "lsEd.dr.snake": "Serpiente",
   "lsEd.dr.linear": "Lineal",
   "lsEd.dr.auction": "Subasta",

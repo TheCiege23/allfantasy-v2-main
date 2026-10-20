@@ -26,6 +26,7 @@ import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import { evaluateRedraftTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -609,6 +610,22 @@ export async function POST(req: NextRequest) {
       if (proposal.acceptedAt) {
         return NextResponse.json(
           { error: 'This trade has already been accepted and is awaiting review.' },
+          { status: 409 },
+        )
+      }
+
+      /*
+       * 🛑 THE DEADLINE BINDS AT ACCEPTANCE, AND THIS PATH NEVER CHECKED IT. A proposal made before the
+       * deadline could be accepted — and, under `no_veto`, settled — any week after it.
+       *
+       * ⚠ ONLY HERE, NOT AT SETTLEMENT. Commissioner approval and a league vote both require
+       * `acceptedAt`, which only this gate writes, so a trade accepted before the deadline may finish
+       * its review after it — what Sleeper and ESPN do. See lib/trade-deadline/tradeDeadlineWindow.ts.
+       */
+      const deadline = await evaluateRedraftTradeDeadline(proposal.leagueId)
+      if (deadline.passed && deadline.deadlineWeek != null) {
+        return NextResponse.json(
+          { error: tradeDeadlinePassedMessage(deadline.deadlineWeek), code: 'TRADE_DEADLINE_PASSED' },
           { status: 409 },
         )
       }

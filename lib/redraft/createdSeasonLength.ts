@@ -1,6 +1,7 @@
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
+import { readChampionshipLength, weeksForPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 /** Respect a dynasty commissioner's regular season length when materializing the first season. */
 export function resolveCreatedSeasonWeeks(league: {
   bestBallMode?: boolean | null
@@ -23,7 +24,17 @@ export function resolveCreatedSeasonWeeks(league: {
   if (!Number.isInteger(regularWeeks) || Number(regularWeeks) < 1) return sportDefaultWeeks
   const teams = league.playoffTeams ?? 0
   const rounds = teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
-  return Number(regularWeeks) + rounds * Math.max(1, league.playoffWeeksPerRound ?? 1)
+  const perRound = Math.max(1, league.playoffWeeksPerRound ?? 1)
+  if (rounds === 0) return Number(regularWeeks)
+  // The final can run longer than the other rounds (`championship_length`, 2 for MLB/NHL); size the
+  // season to the weeks the bracket will actually be played in (lib/playoff-runtime/playoffRoundWeeks.ts).
+  const finalWeeks = weeksForPlayoffRound({
+    roundNumber: rounds,
+    weeksPerRound: perRound,
+    finalRoundNumber: rounds,
+    championshipLength: readChampionshipLength(league.settings),
+  })
+  return Number(regularWeeks) + (rounds - 1) * perRound + finalWeeks
 }
 
 /** A guillotine season ends at its last chop week; without one, the created length stands. */
