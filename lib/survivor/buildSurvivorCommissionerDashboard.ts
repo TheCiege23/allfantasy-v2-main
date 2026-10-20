@@ -58,7 +58,11 @@ export type SurvivorCommissionerDashboardResult =
       } | null
       config: Awaited<ReturnType<typeof getSurvivorConfig>>
       week: number
-      tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
+      tribes: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number] & {
+        emoji: ReturnType<typeof extractLeadingTribeIcon>
+        /** Members carry the manager behind the roster so the host can move them by name. */
+        members: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number]['members'][number] & { userId: string | null; displayName: string | null }>
+      }>
       tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
       council: { id: string; week: number; status: string; isRevealed: boolean } | null
       privateBallots: []
@@ -163,9 +167,18 @@ export async function buildSurvivorCommissionerDashboard(
     getPendingTribeRedraw(leagueId),
   ])
 
+  const activeCast = tribeRows.length
+    ? await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, displayName: true, redraftRosterId: true } })
+    : []
+  const castByRoster = new Map(activeCast.filter(player => player.redraftRosterId).map(player => [player.redraftRosterId as string, player]))
   const tribes = tribeRows.map((tribe: Awaited<ReturnType<typeof getTribesWithMembers>>[number]) => ({
     ...tribe,
     emoji: extractLeadingTribeIcon(tribe.name),
+    members: tribe.members.map(member => ({
+      ...member,
+      userId: castByRoster.get(member.rosterId)?.userId ?? null,
+      displayName: castByRoster.get(member.rosterId)?.displayName ?? null,
+    })),
   }))
 
   const afPlan = resolveAfPlanFromEntitlement(entitlementSnapshot.plans, entitlementSnapshot.status)

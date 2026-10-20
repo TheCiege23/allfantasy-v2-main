@@ -30,6 +30,8 @@ vi.mock('@/lib/survivor/juryEngine', () => ({ ensureJuryVotingOpen: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifiedSlateChallenges: vi.fn(), settleVerifiedSlateChallenges: vi.fn() }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
+const redraw = vi.hoisted(() => ({ autoApply: vi.fn() }))
+vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
@@ -93,6 +95,9 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     expect(state.active).toBe(3)
     expect(skipped).toBe(qualifies ? 0 : 1)
     expect(resolvedWeeks.size).toBe(plan.eliminationWeeks.length)
+    // An unanswered tribe-imbalance recommendation gets its default before each council opens.
+    expect(redraw.autoApply).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
+    expect(redraw.autoApply).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0])
   })
 
   it.each([true, false])('replays every regular-season period to three finalists (Exile return: %s)', async qualifiesToReturn => {

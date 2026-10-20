@@ -21,6 +21,7 @@ import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
+import { autoApplyPendingTribeRedraw } from './survivorTribeRedrawDecision'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
 
@@ -102,6 +103,9 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
         return 'final_three_preserved'
       }
       if (active < 3) return 'cast_below_final_three'
+      // A tribe-imbalance recommendation nobody answered gets its default, a random redraw, now:
+      // the commissioner has had until this council to choose otherwise.
+      await autoApplyPendingTribeRedraw(leagueId, week)
       await tryAutomaticPhaseAdvance(leagueId)
       await triggerTribalOpen(leagueId)
       return 'council_opened'
