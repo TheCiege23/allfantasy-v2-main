@@ -47,7 +47,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       id: 'redraft',
       title: 'Redraft',
       subtitle: 'Fresh draft every season',
-      introVideoUrl: '/media/league-intros/redraft-league-intro.mp4',
+      introVideoUrl: '/media/create-league/concept/videos/Redraft.mp4',
       introPosterUrl: '/images/league-types/redraft.png',
     },
     {
