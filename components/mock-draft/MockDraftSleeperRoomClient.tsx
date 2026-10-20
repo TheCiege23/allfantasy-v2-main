@@ -1342,13 +1342,13 @@ export default function MockDraftSleeperRoomClient({
             </div>
           ) : null}
 
-          {!loadingLeagues && leagues.length === 0 ? (
+          {!selectedLeague && !loadingLeagues && leagues.length === 0 ? (
             <div className="rounded-3xl border border-white/8 bg-[#0c1224] p-8 text-center text-sm text-white/55">
               No Sleeper leagues are available on this account yet.
             </div>
           ) : null}
 
-          {!loadingLeagues && leagues.length > 0 ? (
+          {!selectedLeague && !loadingLeagues && leagues.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
               {leagues.map((league) => (
                 <button

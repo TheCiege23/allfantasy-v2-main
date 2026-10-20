@@ -154,7 +154,7 @@ describe('native NBA league entry and checkpoint', () => {
     }
     const fetchMock = vi.fn(async (input: string, options?: RequestInit) => {
       expect(options?.method ?? 'GET').toBe('GET')
-      if (input.startsWith('/api/league/list')) return new Response(JSON.stringify({ leagues: [] }))
+      if (input.startsWith('/api/league/list')) return new Response(JSON.stringify({ leagues: [{ id: 'imported-nfl', name: 'Other NFL league', sport: 'NFL', platform: 'sleeper' }] }))
       if (input.startsWith('/api/mock-draft/adp?')) return new Response(JSON.stringify({ entries: checkpoint().state.availablePlayers.map(player => ({ ...player, playerId: player.id })) }))
       if (input.startsWith('/api/mock-draft?')) return new Response(JSON.stringify({ league }))
       throw new Error(`Unexpected request: ${input}`)
@@ -162,6 +162,8 @@ describe('native NBA league entry and checkpoint', () => {
     vi.stubGlobal('fetch', fetchMock)
     const view = render(<MockDraftSleeperRoomClient viewerId="viewer" initialLeagueId="native-nba" initialSport="NBA" />)
     await screen.findByText(/16 teams.*9 rounds.*Points.*snake/)
+    expect(screen.queryByTestId('mock-draft-league-card-imported-nfl')).toBeNull()
+    expect(screen.queryByText('No Sleeper leagues are available on this account yet.')).toBeNull()
     expect((screen.getByTestId('mock-draft-league-seat-select') as HTMLSelectElement).value).toBe('1')
     fireEvent.click(screen.getByTestId('mock-draft-league-start'))
     await screen.findByTestId('mock-draft-pause')
