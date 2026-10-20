@@ -15440,6 +15440,50 @@ model PlayerDailyScore {
   @@map("player_daily_scores")
 }
 
+/// One player's stats for ONE game in a fantasy week, sport-wide like `PlayerWeeklyScore`. Written by the
+/// weekly stat sync only for leagues whose "which games count" setting is not `all`
+/// (lib/redraft/gamesCount.ts); read only by those leagues' scoring and the games-count API.
+model PlayerWeekGameScore {
+  id        String    @id @default(cuid())
+  playerId  String
+  sport     String
+  season    Int
+  week      Int
+  /// The provider game id (`PlayerGameStat.providerGameId`) — one row per real game, even for an MLB
+  /// two-way player whose batting and pitching lines are stored as two game-stat rows.
+  gameId    String    @db.VarChar(128)
+  gameDay   DateTime  @db.Date
+  startTime DateTime?
+  stats     Json
+  updatedAt DateTime  @updatedAt
+
+  @@unique([playerId, sport, season, gameId])
+  @@index([sport, season, week])
+  @@index([playerId, sport, season, week])
+  @@map("player_week_game_scores")
+}
+
+/// A manager's "which games count" choice for one started player in one week: the games he picked
+/// (`best_n`) or the game he locked in (`lock_in`). See lib/redraft/gamesCount.ts.
+model RedraftGamesCountChoice {
+  id              String    @id @default(cuid())
+  leagueId        String
+  rosterId        String
+  season          Int
+  week            Int
+  playerId        String    @db.VarChar(128)
+  pickedGameIds   String[]  @default([])
+  lockedGameId    String?   @db.VarChar(128)
+  lockedAt        DateTime?
+  updatedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([rosterId, season, week, playerId])
+  @@index([leagueId, season, week])
+  @@map("redraft_games_count_choices")
+}
+
 model PlayerWeeklyScore {
   id          String   @id @default(cuid())
   playerId    String

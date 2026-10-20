@@ -356,3 +356,34 @@ change mid-week: the commissioner route should only flip it between weeks.
 6. **B6 follow-up**: confirm whether the AF engine save path lets a player who has already played be
    benched on a later day of the same week. If it does, that is a live scoring exploit independent of
    this design.
+
+---
+
+## 10. Which games count (2026-10-20)
+
+A commissioner setting for NBA, NHL and MLB, in `League.settings.sportConfig` as `gamesCountMode`
+(`all` | `best_n` | `lock_in`) and `gamesCountBestN` (2 or 3), read only through
+`readGamesCountSetting` in `lib/redraft/gamesCount.ts`. The settings PATCH refuses a bad value with a
+400; anything invalid that reaches the blob another way reads as `all`.
+
+- **All games** — the default and the behaviour before the setting. A league on `all` never queries
+  the two tables below.
+- **Best N** — the manager may pick which N of a started player's games count; unpicked slots are
+  filled by his best remaining games (ties: the earlier game, then the game id).
+- **Lock-In** — after a game finishes and before his next game starts, the manager may lock that
+  game in; it is his score for the week and later games do not count. Never locked: his **last**
+  game of the week counts. A lock cannot be undone.
+
+**With daily lineups (§5b) the rule applies per player across the days he STARTED.** A game on a day
+he was benched is not eligible: it can be neither counted, picked nor locked. In a weekly-lineup
+league every game of a started player is eligible. Bench points (the guillotine tiebreak), best ball,
+devy and C2C scoring are unchanged.
+
+Storage (migration `20261020180000_games_count_setting`, **not applied**): `player_week_game_scores`
+(one row per player per real game, written by the weekly stat sync for opted-in leagues only) and
+`redraft_games_count_choices` (the picks and locks). Manager API: `GET/POST /api/redraft/games-count`.
+UI: the commissioner radio group in the league settings sport-config panel, and a "This week's games"
+section on the player card for the manager's own players.
+
+> 🛑 Apply the migration before any league leaves `all`. Opting in on a database without the tables
+> fails that league's scoring with P2021.

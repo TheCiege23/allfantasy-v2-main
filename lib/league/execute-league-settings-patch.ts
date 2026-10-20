@@ -43,6 +43,7 @@ import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-ser
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { gamesCountSportConfigError } from '@/lib/redraft/gamesCount'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -256,6 +257,15 @@ export async function executeLeagueSettingsPatch(
 
   if (body.sport != null && !LEAGUE_SPORTS.has(String(body.sport))) {
     return jsonError('Invalid sport', 400)
+  }
+
+  // "Which games count" (lib/redraft/gamesCount.ts) rides in `sportConfig`: a bad mode, a best-N other
+  // than 2 or 3, or a non-all mode outside NBA/NHL/MLB is refused here — before any write below. The
+  // `settingsMerge` door can replace `sportConfig` wholesale too, so it is checked the same way.
+  for (const sportConfig of [body.sportConfig, (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig]) {
+    if (sportConfig === undefined) continue
+    const gamesCountError = gamesCountSportConfigError(sportConfig, String(body.sport ?? league.sport ?? ''))
+    if (gamesCountError) return jsonError(gamesCountError, 400)
   }
 
   if (body.season != null) {
