@@ -923,7 +923,7 @@ function ImpactSummary({
   placement: 'side' | 'inline'
 }) {
   return (
-    <div className="af-live-impact" data-placement={placement}>
+    <div className="af-live-impact" data-placement={placement} data-roster={data.hasRosterData || data.rosterFailed}>
       <h2 className="af-label">
         Your live impact <TopicTip topic="liveImpactTotal" />
       </h2>

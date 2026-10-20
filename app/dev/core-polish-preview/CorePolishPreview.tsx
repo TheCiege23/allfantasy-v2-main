@@ -19,11 +19,11 @@ const game = {
   winProbability: null, topPerformer: null, leaders: [], situation: null, venue: null, broadcast: null,
   espnDetail: true, leadersArePregame: false, tieIns: [], leaguesAffected: 0,
 }
-const data = {
+const data: LivePageData = {
   sport: 'NFL', scope: 'all', counts: [{sport:'NFL',label:'NFL',slateCount:1},{sport:'NBA',label:'NBA',slateCount:0}],
   games: [game], impact: { totalPoints: 0, livePlayers: 0, liveGames: 1, biggestMover: null, plays: [], upNext: [] },
-  lockAlerts: [], fetchedAt: new Date().toISOString(), hasRosterData: false, loadFailed: false,
-} as LivePageData
+  lockAlerts: [], fetchedAt: new Date().toISOString(), hasRosterData: false, loadFailed: false, rosterFailed: false, top25: null,
+}
 
 export default function CorePolishPreview() {
   const [view, setView] = useState<'home' | 'live'>('home')

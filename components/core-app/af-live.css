@@ -3180,14 +3180,12 @@
 }
 
 
-/* Keep personal impact close, without burying the slate under secondary panels. */
+/* Keep empty roster guidance below the games on phones. */
 @media (max-width: 1080px) {
-  .af-core .af-live-side { display: contents; }
-  .af-core .af-live-side > * { order: 1; }
-  .af-core .af-live-side[data-roster='true'] > .af-live-impact { order: -1; padding: 14px 16px; }
-  .af-core .af-live-side[data-roster='true'] .af-live-impact-total { margin-block: 6px; }
+  .af-core .af-live-impact[data-placement='inline'] { padding: 14px 16px; }
+  .af-core .af-live-impact[data-placement='inline'][data-roster='false'] { display: none; }
+  .af-core .af-live-side .af-live-impact[data-placement='side'][data-roster='false'] { display: flex; }
 }
-
 
 @media (max-width: 720px) {
   .af-core .af-live-bar-top { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 8px; }
