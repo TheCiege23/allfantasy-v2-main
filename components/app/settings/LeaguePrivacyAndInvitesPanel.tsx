@@ -149,7 +149,12 @@ export default function LeaguePrivacyAndInvitesPanel({ leagueId }: { leagueId: s
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setInviteResult(json.error ?? 'Failed to send invite.')
+        if (type === 'email' && json.code === 'EMAIL_SEND_FAILED' && typeof json.inviteUrl === 'string') {
+          setInviteResult(`Email couldn't be sent. Share this invite manually: ${json.inviteUrl}`)
+          setData((prev) => (prev ? { ...prev, inviteLink: json.inviteUrl } : prev))
+        } else {
+          setInviteResult(json.error ?? 'Failed to send invite.')
+        }
         return
       }
       const resultUrl = typeof json.inviteUrl === 'string' ? json.inviteUrl : null

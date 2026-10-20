@@ -82,6 +82,13 @@ export async function POST(
   const settings = (league.settings as Record<string, unknown>) || {}
   let inviteCode = (settings.inviteCode as string) ?? null
   let inviteExpiresAt = settings.inviteExpiresAt as string | null | undefined
+  // Do not send a link the join endpoint will reject, or silently reactivate it.
+  if (inviteExpiresAt && (!Number.isFinite(Date.parse(inviteExpiresAt)) || Date.parse(inviteExpiresAt) <= Date.now())) {
+    return NextResponse.json(
+      { ok: false, sent: false, code: "INVITE_EXPIRED", error: "This invite has expired. Generate a new invite link before sending." },
+      { status: 410 }
+    )
+  }
   if (!inviteCode || !inviteExpiresAt) {
     inviteCode = inviteCode || generateInviteToken(8)
     inviteExpiresAt = inviteExpiresAt || getDefaultFantasyInviteExpiry()
@@ -106,28 +113,31 @@ export async function POST(
     try {
       const { getResendClient } = await import("@/lib/resend-client")
       const { client, fromEmail } = getResendClient()
-      // Idempotency key: league + one-way hash of recipient email (no PII stored in key)
-      const emailHash = createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 16)
-      const sent = await client.emails.send(
-        {
-          from: fromEmail,
-          to: email,
-          // The league name is commissioner-controlled: escape it for HTML, and keep the
-          // subject to one short line. Unescaped, a name like `<a href=…>` made this a
-          // phishing template sent from our own domain.
-          subject: `You're invited to join ${subjectSafe(leagueName)} on AllFantasy`,
-          html: `You've been invited to join <strong>${escapeHtml(leagueName)}</strong>. Use this link to join: <a href="${escapeHtml(inviteUrl)}">${escapeHtml(inviteUrl)}</a>`,
-        },
-        { idempotencyKey: buildEmailIdempotencyKey("league-invite", league.id, emailHash) }
-      )
-      if (sent.error) {
-        return NextResponse.json({ error: sent.error.message || "Failed to send email", inviteUrl }, { status: 500 })
+      const message = {
+        from: fromEmail,
+        to: email,
+        subject: `You're invited to join ${subjectSafe(leagueName)} on AllFantasy`,
+        html: `You've been invited to join <strong>${escapeHtml(leagueName)}</strong>. Use this link to join: <a href="${escapeHtml(inviteUrl)}">${escapeHtml(inviteUrl)}</a>`,
+      }
+      // A regenerated link or edited league name is a different email. Reusing
+      // league + recipient alone makes Resend reject that change for 24 hours.
+      // Hash the complete payload: exact retries deduplicate, changed mail sends,
+      // and recipient addresses / raw invite tokens never appear in the key.
+      const messageHash = createHash("sha256").update(JSON.stringify(message)).digest("hex")
+      const sent = await client.emails.send(message, {
+        idempotencyKey: buildEmailIdempotencyKey("league-invite", league.id, messageHash),
+      })
+      if (sent.error || !sent.data?.id) {
+        return NextResponse.json(
+          { ok: false, sent: false, code: "EMAIL_SEND_FAILED", error: "We couldn't send the invite email. Try again or share the invite link.", inviteUrl },
+          { status: 502 }
+        )
       }
       return NextResponse.json({ ok: true, inviteUrl, sent: true, sentTo: email })
-    } catch (e) {
+    } catch {
       return NextResponse.json(
-        { ok: true, inviteUrl, sent: false, error: (e as Error).message },
-        { status: 200 }
+        { ok: false, sent: false, code: "EMAIL_SEND_FAILED", error: "We couldn't send the invite email. Try again or share the invite link.", inviteUrl },
+        { status: 502 }
       )
     }
   }
