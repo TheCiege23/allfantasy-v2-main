@@ -28,6 +28,8 @@ import { finalizeSeasonAndEnterOffseason } from '@/lib/redraft/offseason/finaliz
 import { REDRAFT_SEASON_STATUS, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveRegularSeasonEndWeek } from './leagueSeasonWeek'
 import { activateImportedMlbSeasons } from './activateImportedMlbSeasons'
+import { activateDynastyNewSeasonsAtKickoff, type KickoffActivationOutcome } from '@/lib/redraft/offseason/startDynastyNewSeason'
+import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
 import { resolveSeasonWeekForRedraftSeason } from './seasonWeekService'
 import type { LeagueSeasonWeekResolution } from './types'
 
@@ -150,6 +152,8 @@ export type WeekRollSummary = {
   held: number
   failed: number
   outcomes: SeasonRollOutcome[]
+  /** Dynasty seasons started at their sport's week 1 this run — see `activateDynastyNewSeasonsAtKickoff`. */
+  dynastyKickoff?: KickoffActivationOutcome[]
 }
 
 export type RollSeasonWeeksOptions = {
@@ -173,6 +177,27 @@ export async function rollSeasonWeeks(
   const db = options.prisma ?? defaultPrisma
   const now = options.now ?? new Date()
   if (!options.dryRun) await activateImportedMlbSeasons(db, now, options.limit ?? 200)
+  /*
+   * A dynasty league's next season sits in `setup` until something starts it, and this scope only
+   * reads running seasons — so without this a league that skipped its rookie draft was never
+   * scored. Runs BEFORE the read below so a season started now is rolled in the same pass. It never
+   * starts a season while a draft is open; a failure here must not stop the roller.
+   */
+  const dynastyKickoff = options.dryRun
+    ? []
+    : await activateDynastyNewSeasonsAtKickoff({
+        now,
+        limit: options.limit ?? 200,
+        actorUserId: WEEK_ROLLER_ACTOR,
+        nativePlatforms: NATIVE_PLATFORM_VALUES,
+        resolveWeek: async (seasonId) => {
+          const r = await resolveSeasonWeekForRedraftSeason(seasonId, { prisma: db, now })
+          return r.ok ? { ok: true, phase: r.phase } : { ok: false, reason: r.reason }
+        },
+      }).catch((error) => {
+        console.error('[season-week-roll] dynasty kickoff activation failed', error)
+        return [] as KickoffActivationOutcome[]
+      })
 
   const seasons = await db.redraftSeason.findMany({
     where: engineSeasonScope({ includeShadowLeagues: options.includeShadowLeagues }),
@@ -255,7 +280,7 @@ export async function rollSeasonWeeks(
     }
   }
 
-  return { considered: seasons.length, advanced, held, failed, outcomes }
+  return { considered: seasons.length, advanced, held, failed, outcomes, dynastyKickoff }
 }
 
 /** Recorded on every audit row and event the advance emits. */
