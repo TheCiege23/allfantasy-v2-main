@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueMlbScoringConfig, saveLeagueMlbScoringConfig, getMlbScoringPresets, buildFullMlbScoringConfig, type MlbScoringPresetKey } from '@/lib/mlb-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const scoringMode = (league.settings as Record<string, unknown>)?.scoring_mode ?? 'points'
   if (scoringMode !== 'points') return NextResponse.json({error:'This league uses category scoring; points presets cannot replace its format.'},{status:409})
   const body = await req.json().catch(() => ({}))
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'scoring', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
   const presetKey = (body.presetKey ?? 'af_default') as MlbScoringPresetKey
   const customRules = body.rules as Record<string, number> | undefined
   if (presetKey === 'custom' || customRules) {
@@ -45,5 +48,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     if (!isPremium) return NextResponse.json({ error: 'premiumRequired' }, { status: 403 })
   }
   await saveLeagueMlbScoringConfig(leagueId, { presetKey, rules: customRules ?? buildFullMlbScoringConfig(presetKey), userId: session.user.id, premiumFeaturesUsed: presetKey === 'custom' })
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'mlb-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: await getLeagueMlbScoringConfig(leagueId) })
 }

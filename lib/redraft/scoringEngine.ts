@@ -4,14 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
-import {
-  expandSportConfigToggles,
-  getScoringCategories,
-  resolveSportConfigKey,
-  tryGetSportConfig,
-} from '@/lib/sportConfig'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
-import { bridgeUiRulesToEngineCategoryPoints } from '@/lib/nfl-scoring/scoringKeyBridge'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
@@ -20,9 +13,9 @@ import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
-import { importedNcaafScoring } from './importedNcaafScoring'
-import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
+import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
 import {
   dailySlotFor,
   dayKey,
@@ -34,6 +27,7 @@ import {
   loadPlayerDailyStats,
 } from './dailyLineups'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -87,18 +81,7 @@ export function pointsForCategory(cat: ScoringCategory, rawStats: Record<string,
   return raw * pts
 }
 
-export function applyScoringPresetToRecPoints(
-  categories: ScoringCategory[],
-  preset: string,
-  overrides: Record<string, number>,
-): ScoringCategory[] {
-  if (overrides.rec != null) return categories
-  if (preset === 'CUSTOM') return categories
-  const recPts =
-    preset === 'PPR' ? 1 : preset === 'HALF_PPR' ? 0.5 : preset === 'STANDARD' ? 0 : null
-  if (recPts === null) return categories
-  return categories.map((c) => (c.key === 'rec' ? { ...c, defaultPoints: recPts } : c))
-}
+export { applyScoringPresetToRecPoints }
 
 /**
  * Pure scorer: sum fantasy points for one player's raw weekly stats against a
@@ -184,36 +167,6 @@ function playerPositions(position: string | null | undefined): string[] {
     .filter(Boolean)
 }
 
-type SportConfigBlob = Record<string, unknown>
-
-function readSportConfig(league: { settings: unknown }): SportConfigBlob {
-  const s = league.settings as Record<string, unknown> | null | undefined
-  const raw = s?.sportConfig
-  return raw && typeof raw === 'object' && raw !== null ? (raw as SportConfigBlob) : {}
-}
-
-/**
- * Legacy fallback (R1): derive engine overrides from `settings.nfl_scoring_config`
- * (the UI store) when the canonical `sportConfig.categoryPoints` is absent — so
- * leagues last saved before the UI→engine bridge still score their commissioner
- * settings. Only fires when categoryPoints is empty.
- */
-function bridgeLegacyNflScoringConfig(league: { settings: unknown }): Record<string, number> {
-  const s = league.settings as Record<string, unknown> | null | undefined
-  const legacy = s?.nfl_scoring_config as Record<string, unknown> | undefined
-  const rules = legacy?.rules as Record<string, number> | undefined
-  if (!rules || typeof rules !== 'object') return {}
-  return bridgeUiRulesToEngineCategoryPoints(rules)
-}
-
-function togglesFromSportConfig(sc: SportConfigBlob): string[] {
-  const t: string[] = []
-  if (sc.enableIDP === true) t.push('IDP')
-  if (sc.enableSuperflex === true) t.push('SUPERFLEX')
-  if (sc.enableTEPremium === true) t.push('TE_PREMIUM')
-  return t
-}
-
 /** A league's own scoring, resolved once: raw stat line (and the player's position) to fantasy points. */
 export type LeagueStatScorer = (rawStats: Record<string, number>, position?: string | null) => number
 
@@ -246,41 +199,9 @@ export async function calculateScoreFromSportConfig(
  * trade grade must score a stat line the same way, so they share this rather than a copy.
  */
 export function buildLeagueStatScorer(league: { sport: string; settings: unknown }): LeagueStatScorer | null {
-  const sport = resolveSportConfigKey(String(league.sport))
-  const cfg = tryGetSportConfig(sport)
-  if (!cfg) return null
-
-  const sc = readSportConfig(league)
-  const toggles = togglesFromSportConfig(sc)
-  const expanded = expandSportConfigToggles(toggles)
-  let categories = getScoringCategories(cfg.sport, expanded)
-  const preset = String(sc.scoringPreset ?? 'PPR')
-  // R1 precedence: the canonical engine store wins. For legacy leagues that only
-  // have the UI store (`nfl_scoring_config`, written before the bridge existed),
-  // derive engine overrides from it so their commissioner scoring is honored too.
-  let overrides =
-    typeof sc.categoryPoints === 'object' && sc.categoryPoints !== null
-      ? (sc.categoryPoints as Record<string, number>)
-      : {}
-  if (Object.keys(overrides).length === 0) {
-    const settings = league.settings as Record<string, unknown> | null
-    const savedPanel = storeSavedByPerson(settings?.ncaaf_scoring_config)
-    const imported = savedPanel ? null : importedNcaafScoring(cfg.sport, settings, cfg.scoringCategories)
-    // Explicit commissioner edits retain precedence. Untouched seeded panel defaults cannot
-    // override the actual source weights or reintroduce penalties the source never awards.
-    if (imported) {
-      categories = imported.categories
-      overrides = imported.overrides
-    } else {
-      overrides = bridgeSportUiScoringStore(cfg.sport, league.settings) ?? bridgeLegacyNflScoringConfig(league)
-    }
-  }
-  categories = applyScoringPresetToRecPoints(categories, preset, overrides)
-
-  if (cfg.sport === 'NCAAF' && overrides.te_premium !== undefined && !categories.some(c => c.key === 'te_premium')) {
-    categories = [...categories, cfg.scoringCategories.find(c => c.key === 'te_premium')!]
-  }
-  const resolved = categories
+  const rules = resolveLeagueScoringRules(league)
+  if (!rules) return null
+  const { categories: resolved, overrides } = rules
   return (rawStats, position) =>
     scoreStatsWithCategories(resolved, applyTePremiumStat(resolved, rawStats, position), overrides)
 }
@@ -372,6 +293,9 @@ async function scoreRosterStarters(args: {
   const activeStarters = starters.filter((p: (typeof starters)[number]) =>
     isScoringStarterSlot(weekSlotType(p, weekLineups)),
   )
+  // "Which games count" (lib/redraft/gamesCount.ts). Null — and no query against its tables — unless
+  // the commissioner chose best-N or lock-in, so every other league scores exactly as before.
+  const gamesCount = activeStarters.length > 0 ? await loadRosterGamesCount(args, activeStarters) : null
 
   let pts = 0
   const statMaps: TeamStatTotals[] = []
@@ -393,6 +317,27 @@ async function scoreRosterStarters(args: {
     if (!row) {
       missingPlayerIds.push(p.playerId)
       allFinal = false
+      continue
+    }
+    if (gamesCount) {
+      const games = gamesCount.games.get(p.playerId)
+      // A weekly row with no per-game rows: the sync has not covered him since the setting changed.
+      // Scoring his whole week would silently ignore the rule, so he is missing until it does.
+      if (!games?.length) {
+        missingPlayerIds.push(p.playerId)
+        allFinal = false
+        continue
+      }
+      const counted = await scoreCountedGames({
+        setting: gamesCount.setting,
+        games,
+        choice: gamesCount.choices.get(p.playerId),
+        scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+      })
+      for (const stats of counted.countedStats) statMaps.push(stats as TeamStatTotals)
+      pts += counted.points
+      scoredStarterCount += 1
+      if (!row.isFinalized) allFinal = false
       continue
     }
     statMaps.push(row.stats as TeamStatTotals)
@@ -430,6 +375,24 @@ async function scoreRosterStarters(args: {
   }
 }
 
+/** The league's games-count rule for a weekly-lineup roster, or null when it counts every game. */
+async function loadRosterGamesCount(
+  args: { leagueId: string; rosterId: string; week: number; seasonYear: number },
+  players: ReadonlyArray<{ playerId: string; sport: string }>,
+): Promise<GamesCountScoring | null> {
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
+  if (!league) return null
+  return loadGamesCountScoring({
+    leagueId: args.leagueId,
+    leagueSettings: league.settings,
+    sport: String(league.sport ?? '').toUpperCase(),
+    rosterId: args.rosterId,
+    season: args.seasonYear,
+    week: args.week,
+    players,
+  })
+}
+
 /**
  * DAILY-LINEUP LEAGUES (docs/DAILY_LINEUPS_DESIGN.md §4, lib/redraft/dailyLineups.ts): the week's score
  * is the sum over its Eastern days of each day's starters' points FOR THAT DAY. A player benched on a
@@ -460,6 +423,16 @@ async function scoreRosterStartersDaily(args: {
   const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: [args.rosterId], window })
   const days = daysInWindow(window)
   const playerIds = players.map((p: (typeof players)[number]) => p.playerId)
+  // "Which games count" applies across the days he STARTED: only those days' games are eligible.
+  const gamesCount = await loadGamesCountScoring({
+    leagueId: args.leagueId,
+    leagueSettings: league.settings,
+    sport,
+    rosterId: args.rosterId,
+    season: args.seasonYear,
+    week: args.week,
+    players,
+  })
   const dailyStatsBySport = new Map<string, Awaited<ReturnType<typeof loadPlayerDailyStats>>>()
   for (const playerSport of new Set(players.map((p: (typeof players)[number]) => p.sport))) {
     dailyStatsBySport.set(
@@ -509,6 +482,22 @@ async function scoreRosterStartersDaily(args: {
       if (!weekly) {
         missingPlayerIds.push(p.playerId)
         allFinal = false
+      } else if (gamesCount && !gamesCount.games.get(p.playerId)?.length) {
+        // Opted in, but no per-game rows yet (see the weekly path): missing, never scored whole-week.
+        missingPlayerIds.push(p.playerId)
+        allFinal = false
+      } else if (gamesCount) {
+        scoredStarterCount += 1
+        if (!weekly.isFinalized) allFinal = false
+        const started = new Set(startedDays.map((d) => dayKey(d)))
+        const counted = await scoreCountedGames({
+          setting: gamesCount.setting,
+          games: (gamesCount.games.get(p.playerId) ?? []).filter((g) => started.has(g.day)),
+          choice: gamesCount.choices.get(p.playerId),
+          scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+        })
+        pts += counted.points
+        for (const stats of counted.countedStats) statMaps.push(stats as TeamStatTotals)
       } else {
         scoredStarterCount += 1
         if (!weekly.isFinalized) allFinal = false
@@ -686,6 +675,16 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     home.points = categoryMatchup.aWins
     away.points = categoryMatchup.bWins
   }
+  // Commissioner score adjustments (lib/score-adjustments): points leagues only, added on top of the
+  // computed score on every rescore so a stat sync can never erase one.
+  const adjustments = scoringMode === 'points' ? readScoreAdjustments(scoringSettings) : []
+  const commissionerAdjustment = adjustments.length
+    ? { home: adjustmentFor(adjustments, matchupId, homeRosterId), away: adjustmentFor(adjustments, matchupId, awayRosterId) }
+    : null
+  if (commissionerAdjustment) {
+    home.points = adjustedScore(home.points, adjustments, matchupId, homeRosterId)
+    away.points = adjustedScore(away.points, adjustments, matchupId, awayRosterId)
+  }
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =
     missingPlayerIds.length === 0 &&
@@ -728,6 +727,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
+          ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
           home,
           away,
           missingPlayerIds,

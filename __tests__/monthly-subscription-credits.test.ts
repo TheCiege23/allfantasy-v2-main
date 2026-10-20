@@ -28,6 +28,27 @@ vi.mock("@/lib/tokens/TokenSpendService", () => ({
   }),
 }))
 
+// e026876bf (pricing overhaul) took tokens OFF subscriptions: every plan's included credits are
+// 0, and grantMonthlyCreditsFromInvoice bails on <= 0. This suite still asserted the old
+// 100/250/300/3500/15000 grants and sat in the baseline. The real policy runs by default (so
+// "subscriptions grant nothing" is asserted against the shipped numbers); the call-contract tests
+// below override it with a positive allowance so the grant path stays covered if one returns.
+const policyMock = vi.hoisted(() => ({ override: null as null | ((i: { planId: string; interval: string }) => number) }))
+vi.mock("@/lib/tokens/subscription-policy", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/tokens/subscription-policy")>()
+  return {
+    ...actual,
+    getIncludedPremiumCreditsForSubscription: (input: Parameters<typeof actual.getIncludedPremiumCreditsForSubscription>[0]) =>
+      policyMock.override ? policyMock.override(input) : actual.getIncludedPremiumCreditsForSubscription(input),
+  }
+})
+
+// File-level so an override can never leak into the next describe block.
+beforeEach(() => {
+  policyMock.override = null
+  grantMonthlySubscriptionCreditsMock.mockClear()
+})
+
 // ---------------------------------------------------------------------------
 // grantMonthlyCreditsFromInvoice
 // Tests verify: plan lookup → token amount → call contract
@@ -37,6 +58,7 @@ vi.mock("@/lib/tokens/TokenSpendService", () => ({
 describe("grantMonthlyCreditsFromInvoice", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    policyMock.override = null
     prismaMock.userSubscription.findFirst.mockResolvedValue(null)
     grantMonthlySubscriptionCreditsMock.mockResolvedValue(null)
   })
@@ -104,7 +126,7 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     expect(grantMonthlySubscriptionCreditsMock).not.toHaveBeenCalled()
   })
 
-  it("grants 250 tokens for af_pro_monthly plan", async () => {
+  it("grants no tokens for af_pro_monthly (tokens are off subscriptions)", async () => {
     const { grantMonthlyCreditsFromInvoice } = await import(
       "@/lib/subscription/webhookHandlers"
     )
@@ -114,18 +136,12 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     const invoice = {
       id: "in_pro_cycle",
       billing_reason: "subscription_cycle",
-      subscription: "sub_pro",
+      subscription: "sub_user_pro",
     }
     await grantMonthlyCreditsFromInvoice(invoice as any, "user_pro")
 
-    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledOnce()
-    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith({
-      userId: "user_pro",
-      tokenAmount: 250,
-      planFamily: "af_pro",
-      invoiceId: "in_pro_cycle",
-      billingReason: "subscription_cycle",
-    })
+    expect(prismaMock.userSubscription.findFirst).toHaveBeenCalled()
+    expect(grantMonthlySubscriptionCreditsMock).not.toHaveBeenCalled()
   })
 
   it("skips grant for the retired af_all_access_monthly sku (removed from catalog)", async () => {
@@ -148,7 +164,7 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     expect(grantMonthlySubscriptionCreditsMock).not.toHaveBeenCalled()
   })
 
-  it("grants 300 tokens for af_war_room_monthly plan", async () => {
+  it("grants no tokens for af_war_room_monthly", async () => {
     const { grantMonthlyCreditsFromInvoice } = await import(
       "@/lib/subscription/webhookHandlers"
     )
@@ -158,16 +174,15 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     const invoice = {
       id: "in_wr_cycle",
       billing_reason: "subscription_cycle",
-      subscription: "sub_wr",
+      subscription: "sub_user_wr",
     }
     await grantMonthlyCreditsFromInvoice(invoice as any, "user_wr")
 
-    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ tokenAmount: 300, planFamily: "af_war_room" })
-    )
+    expect(prismaMock.userSubscription.findFirst).toHaveBeenCalled()
+    expect(grantMonthlySubscriptionCreditsMock).not.toHaveBeenCalled()
   })
 
-  it("grants 100 tokens for af_commissioner_monthly plan", async () => {
+  it("grants no tokens for af_commissioner_monthly", async () => {
     const { grantMonthlyCreditsFromInvoice } = await import(
       "@/lib/subscription/webhookHandlers"
     )
@@ -177,20 +192,20 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     const invoice = {
       id: "in_comm_cycle",
       billing_reason: "subscription_cycle",
-      subscription: "sub_comm",
+      subscription: "sub_user_comm",
     }
     await grantMonthlyCreditsFromInvoice(invoice as any, "user_comm")
 
-    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ tokenAmount: 100, planFamily: "af_commissioner" })
-    )
+    expect(prismaMock.userSubscription.findFirst).toHaveBeenCalled()
+    expect(grantMonthlySubscriptionCreditsMock).not.toHaveBeenCalled()
   })
 
-  it("passes exact invoiceId to grantMonthlySubscriptionCredits for idempotency", async () => {
+  it("passes the exact grant contract, invoiceId included for idempotency, when a plan has an allowance", async () => {
     const { grantMonthlyCreditsFromInvoice } = await import(
       "@/lib/subscription/webhookHandlers"
     )
 
+    policyMock.override = ({ interval }) => (interval === "year" ? 1200 : 100)
     prismaMock.userSubscription.findFirst.mockResolvedValue({ sku: "af_pro_monthly" })
 
     const invoice = {
@@ -200,9 +215,14 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     }
     await grantMonthlyCreditsFromInvoice(invoice as any, "user_idem")
 
-    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ invoiceId: "in_unique_abc123" })
-    )
+    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledOnce()
+    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith({
+      userId: "user_idem",
+      tokenAmount: 100,
+      planFamily: "af_pro",
+      invoiceId: "in_unique_abc123",
+      billingReason: "subscription_cycle",
+    })
   })
 
   it("looks up subscription by correct userId + stripeSubscriptionId", async () => {
@@ -237,11 +257,12 @@ describe("TokenSpendService.grantMonthlySubscriptionCredits — null guards", ()
   // there are no credits to grant (plan with 0 credits).
   // Direct null-guard for the service method itself is in the integration path.
 
-  it("yearly SKU also resolves correct plan family", async () => {
+  it("yearly SKU also resolves correct plan family and the yearly allowance", async () => {
     const { grantMonthlyCreditsFromInvoice } = await import(
       "@/lib/subscription/webhookHandlers"
     )
 
+    policyMock.override = ({ planId, interval }) => (planId === "pro" && interval === "year" ? 1200 : 0)
     prismaMock.userSubscription.findFirst.mockResolvedValue({ sku: "af_pro_yearly" })
 
     const invoice = {
@@ -251,13 +272,12 @@ describe("TokenSpendService.grantMonthlySubscriptionCredits — null guards", ()
     }
     await grantMonthlyCreditsFromInvoice(invoice as any, "user_pro_y")
 
-    // af_pro_yearly belongs to plan family af_pro and grants the yearly allowance.
     expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ tokenAmount: 3500, planFamily: "af_pro" })
+      expect.objectContaining({ tokenAmount: 1200, planFamily: "af_pro" })
     )
   })
 
-  it("yearly Supreme grants the annual flagship allowance", async () => {
+  it("grants no tokens for af_supreme_yearly", async () => {
     const { grantMonthlyCreditsFromInvoice } = await import(
       "@/lib/subscription/webhookHandlers"
     )
@@ -267,12 +287,11 @@ describe("TokenSpendService.grantMonthlySubscriptionCredits — null guards", ()
     const invoice = {
       id: "in_supreme_yearly",
       billing_reason: "subscription_create",
-      subscription: "sub_supreme_yearly",
+      subscription: "sub_user_supreme_y",
     }
     await grantMonthlyCreditsFromInvoice(invoice as any, "user_supreme_y")
 
-    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ tokenAmount: 15000, planFamily: "af_supreme" })
-    )
+    expect(prismaMock.userSubscription.findFirst).toHaveBeenCalled()
+    expect(grantMonthlySubscriptionCreditsMock).not.toHaveBeenCalled()
   })
 })

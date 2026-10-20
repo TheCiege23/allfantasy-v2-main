@@ -41,7 +41,7 @@ import {
 import { logAction } from '@/server/services/auditService'
 import { CHAMPIONSHIP_ROUND_WHERE } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { resolveLiveRookieDraftSlots } from '@/lib/rookie-order/liveRookieOrderService'
-import { resolveWeightedLotterySlotOrderForLeague } from '@/lib/draft/resolve-draft-context'
+import { ensureRookieDraftLottery } from '@/lib/draft-lottery/rookieDraftLottery'
 
 export type NextDraftKind = 'rookie' | 'standard'
 
@@ -160,7 +160,7 @@ export function placeKeeperRounds<T extends { rosterId: string; roundCost: numbe
   return placed
 }
 
-async function championAndRunnerUp(seasonId: string): Promise<{ championId: string | null; runnerUpId: string | null }> {
+export async function championAndRunnerUp(seasonId: string): Promise<{ championId: string | null; runnerUpId: string | null }> {
   const finalRound = await prisma.redraftPlayoffRound
     .findFirst({
       // The title bracket only: consolation rounds share this table at `100 + n`, so without the
@@ -273,8 +273,22 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
      * (`liveRookieOrderService.ts`: "the next rookie draft is seated from it automatically") was
      * silently ignored on exactly the draft it exists for. Same precedence as
      * `buildSlotOrderForLeague`: lottery, then the live order, then worst-to-first.
+     *
+     * The lottery is THIS draft's draw: one run after the previous draft finished, or — when the
+     * league chose the lottery and nobody pressed "Run" — one run now, stored and audited
+     * (`rookieDraftLottery.ts`). A league that has not chosen it is not touched.
      */
-    const lottery = await resolveWeightedLotterySlotOrderForLeague(leagueId).catch(() => null)
+    const lottery = (
+      await ensureRookieDraftLottery({
+        leagueId,
+        season: incoming.season,
+        previousDraftEndedAt: previous.completedAt ?? previous.updatedAt ?? null,
+        actorUserId,
+      }).catch((error) => {
+        console.warn('[next-draft] rookie lottery unavailable; using standings', { leagueId, error: String(error) })
+        return null
+      })
+    )?.slotOrder ?? null
     if (seatsEveryRoster(lottery, draftRosters)) {
       slotOrder = lottery
       orderSource = 'lottery'
@@ -287,7 +301,9 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
     }
 
     const method = dynasty?.rookiePickOrderMethod ?? 'max_pf'
-    if (!slotOrder && outgoingId && (method === 'max_pf' || method === 'reverse_standings')) {
+    // A lottery league whose draw could not run (not yet eligible, no standings) falls back to
+    // worst-to-first — never to `buildSlotOrderForLeague`, which would seat a stale stored draw.
+    if (!slotOrder && outgoingId && (method === 'max_pf' || method === 'reverse_standings' || method === 'weighted_lottery')) {
       const standings = await prisma.redraftRoster.findMany({
         where: { leagueId, seasonId: outgoingId },
         select: { id: true, ownerId: true, ownerName: true, teamName: true, wins: true, losses: true, ties: true, pointsFor: true },

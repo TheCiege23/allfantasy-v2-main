@@ -1,4 +1,5 @@
 import { isPointsOnlySeeding } from '@/lib/playoff-defaults/seedingRule'
+import { allPlayShares, coinFlipDraw, parseTiebreakerOrder } from '@/lib/standings/tiebreakerOrder'
 import type {
   CanonicalLeagueRuntimeEvent,
   CanonicalLeagueRuntimeEventType,
@@ -24,6 +25,11 @@ export type NflRedraftPlayoffRulesInput = {
     byeRules?: string | null
     reseedBehavior?: string | null
     standingsTiebreakers?: string[] | null
+    /**
+     * The commissioner's own order (`League.settings.tiebreaker_order`, lib/standings/tiebreakerOrder.ts).
+     * When set it is applied EXACTLY as chosen after record — none of the legacy reordering below.
+     */
+    customTiebreakers?: string[] | null
   }
   schedule: {
     regularSeasonLength?: number | null
@@ -105,6 +111,8 @@ export type NflRedraftPlayoffSettings = {
   /** The league chose `points_only` seeding: record is NOT the primary sort. */
   pointsOnlySeeding: boolean
   tiebreakers: string[]
+  /** The commissioner's own order when one applied (lib/standings/tiebreakerOrder.ts), else absent. */
+  customTiebreakers?: string[] | null
   supported: boolean
   supportWarnings: string[]
 }
@@ -323,8 +331,17 @@ const RECORD_KEYS = new Set(['win_pct', 'winning_percentage'])
  * A league whose seeding rule is `points_only` is an explicit commissioner choice and is left
  * exactly as it was: points for, then roster id.
  */
+/** The commissioner's order, when one is set and the league seeds by record (points-only ignores it). */
+function customOrder(input: NflRedraftPlayoffRulesInput): string[] | null {
+  if (isPointsOnlySeeding(input.playoffs.seedingRules)) return null
+  const custom = parseTiebreakerOrder(input.playoffs.customTiebreakers ?? null)
+  return custom.ok ? custom.value : null
+}
+
 function normalizeTiebreakers(input: NflRedraftPlayoffRulesInput): string[] {
   if (isPointsOnlySeeding(input.playoffs.seedingRules)) return ['points_for', 'roster_id']
+  const custom = customOrder(input)
+  if (custom) return ['win_pct', ...custom, 'roster_id']
   const raw = input.playoffs.standingsTiebreakers?.length
     ? input.playoffs.standingsTiebreakers
     : input.playoffs.tiebreakerRules?.length
@@ -336,14 +353,16 @@ function normalizeTiebreakers(input: NflRedraftPlayoffRulesInput): string[] {
     .filter((key) => !RECORD_KEYS.has(key))
     .map((key) => (key === 'h2h' ? 'head_to_head' : key === 'pf' ? 'points_for' : key))
   const ordered = Array.from(new Set(normalized))
-  // Owner's rule: head-to-head precedes points for. The legacy persisted list had them the other
-  // way round, so when BOTH are configured head-to-head takes points-for's slot. A list that
-  // omits head-to-head is left without it.
+  // Owner's rule (2026-10-20): points for precedes head-to-head, the order the standings board
+  // has always used, so the table and the seeds agree. It reverses #2557's head-to-head-first rule,
+  // and lists persisted in either order exist, so when BOTH are configured points for takes
+  // head-to-head's slot. A list that omits either is left without it. A commissioner who wants
+  // head-to-head first sets their own order (`customTiebreakers`), which is applied as chosen.
   const h2hIndex = ordered.indexOf('head_to_head')
   const pfIndex = ordered.indexOf('points_for')
-  if (h2hIndex > pfIndex && pfIndex >= 0) {
-    ordered.splice(h2hIndex, 1)
-    ordered.splice(pfIndex, 0, 'head_to_head')
+  if (pfIndex > h2hIndex && h2hIndex >= 0) {
+    ordered.splice(pfIndex, 1)
+    ordered.splice(h2hIndex, 0, 'points_for')
   }
   return Array.from(new Set(['win_pct', ...ordered, 'roster_id']))
 }
@@ -387,6 +406,7 @@ function resolveSettings(input: {
       tiebreakers.includes('division_record'),
     pointsOnlySeeding: isPointsOnlySeeding(input.rules.playoffs.seedingRules),
     tiebreakers,
+    customTiebreakers: customOrder(input.rules),
     supported: supportWarnings.length === 0,
     supportWarnings,
   }
@@ -432,8 +452,17 @@ function normalizeTeam(input: NflRedraftPlayoffTeamInput): NflRedraftPlayoffTeam
   }
 }
 
-function tiebreakerValue(team: NflRedraftPlayoffTeamState, key: string): number | string {
+/** Values that need more than the team row: the all-play share and the season's coin-flip draw. */
+type TiebreakerContext = { allPlay: Map<string, number>; coinSeed: string }
+
+const EMPTY_CONTEXT: TiebreakerContext = { allPlay: new Map(), coinSeed: '' }
+
+function tiebreakerValue(team: NflRedraftPlayoffTeamState, key: string, ctx: TiebreakerContext = EMPTY_CONTEXT): number | string {
   switch (key) {
+    case 'all_play':
+      return ctx.allPlay.get(team.rosterId) ?? 0
+    case 'coin_flip':
+      return coinFlipDraw(ctx.coinSeed, team.rosterId)
     case 'win_pct':
     case 'winning_percentage':
       return team.winPct
@@ -505,6 +534,29 @@ export function buildHeadToHeadIndex(
   return index
 }
 
+/** Each counted regular-season week's points by roster, for the `all_play` tiebreaker — the same rows head-to-head counts. */
+export function regularSeasonWeekScores(
+  matchups: NflRedraftRegularSeasonMatchupInput[] | null | undefined,
+  regularSeasonEndWeek: number | null,
+): Map<number, Map<string, number>> {
+  const weeks = new Map<number, Map<string, number>>()
+  for (const matchup of matchups ?? []) {
+    const home = matchup.homeRosterId
+    const away = matchup.awayRosterId
+    const week = intOrNull(matchup.week)
+    if (!home || !away || home === away || week == null) continue
+    if (matchup.isMedianMatchup) continue
+    if (matchup.type != null && normalizedText(matchup.type) !== 'regular') continue
+    if (!COMPLETE_STATUSES.has(normalizedText(matchup.status))) continue
+    if (regularSeasonEndWeek != null && week > regularSeasonEndWeek) continue
+    const row = weeks.get(week) ?? new Map<string, number>()
+    row.set(home, numberOrZero(matchup.homeScore))
+    row.set(away, numberOrZero(matchup.awayScore))
+    weeks.set(week, row)
+  }
+  return weeks
+}
+
 /**
  * Head-to-head score of each team WITHIN a group still tied on every earlier key.
  *
@@ -551,6 +603,7 @@ function rankTeams(
   tiebreakers: string[],
   h2h: HeadToHeadIndex,
   h2hOut?: Map<string, number>,
+  ctx: TiebreakerContext = EMPTY_CONTEXT,
 ): NflRedraftPlayoffTeamState[] {
   const rank = (group: NflRedraftPlayoffTeamState[], keyIndex: number): NflRedraftPlayoffTeamState[] => {
     if (group.length <= 1) return group
@@ -562,7 +615,7 @@ function rankTeams(
       for (const [rosterId, score] of scores) h2hOut?.set(rosterId, score)
       valueOf = (team) => scores.get(team.rosterId) ?? 0
     } else {
-      valueOf = (team) => tiebreakerValue(team, key)
+      valueOf = (team) => tiebreakerValue(team, key, ctx)
     }
     const valued = group.map((team) => ({ team, value: valueOf(team) }))
     valued.sort((a, b) => {
@@ -587,6 +640,7 @@ function seedTeams(
   teams: NflRedraftPlayoffTeamState[],
   settings: NflRedraftPlayoffSettings,
   h2h: HeadToHeadIndex = new Map(),
+  ctx: TiebreakerContext = EMPTY_CONTEXT,
 ): {
   teams: NflRedraftPlayoffTeamState[]
   seeds: NflRedraftPlayoffSeedState[]
@@ -594,8 +648,8 @@ function seedTeams(
   eliminatedRosterIds: string[]
 } {
   const h2hScores = new Map<string, number>()
-  const sorted = rankTeams(teams, settings.tiebreakers, h2h, h2hScores)
-  const ranked = (subset: NflRedraftPlayoffTeamState[]) => rankTeams(subset, settings.tiebreakers, h2h)
+  const sorted = rankTeams(teams, settings.tiebreakers, h2h, h2hScores, ctx)
+  const ranked = (subset: NflRedraftPlayoffTeamState[]) => rankTeams(subset, settings.tiebreakers, h2h, undefined, ctx)
   const selectedRosterIds: string[] = []
   const qualifiedBy = new Map<string, NflRedraftPlayoffQualifiedBy>()
 
@@ -629,7 +683,7 @@ function seedTeams(
     const tiebreakerValues = Object.fromEntries(
       settings.tiebreakers.map((key) => [
         key,
-        HEAD_TO_HEAD_KEYS.has(key) ? h2hScores.get(team.rosterId) ?? 0 : tiebreakerValue(team, key),
+        HEAD_TO_HEAD_KEYS.has(key) ? h2hScores.get(team.rosterId) ?? 0 : tiebreakerValue(team, key, ctx),
       ]),
     )
     return {
@@ -1017,7 +1071,11 @@ export function buildNflRedraftPlayoffRuntimeState(input: {
   const now = input.now ?? new Date()
   const settings = resolveSettings({ rules: input.rules, teamCount: input.teams.length })
   const h2h = buildHeadToHeadIndex(input.regularSeasonMatchups, settings.regularSeasonEndWeek)
-  const seeded = seedTeams(input.teams.map(normalizeTeam), settings, h2h)
+  const seeded = seedTeams(input.teams.map(normalizeTeam), settings, h2h, {
+    allPlay: allPlayShares(regularSeasonWeekScores(input.regularSeasonMatchups, settings.regularSeasonEndWeek)),
+    // The standings board seeds the same draw from league + season, so the two never disagree.
+    coinSeed: `${input.leagueId}:${input.season}`,
+  })
   const seedByRosterId = new Map(seeded.seeds.map((seed) => [seed.rosterId, seed.seed]))
   const normalizedMatchups = (input.matchups ?? []).map((matchup) => normalizeMatchup(matchup, seedByRosterId))
   const championshipRounds = groupRounds(normalizedMatchups, 'championship')
