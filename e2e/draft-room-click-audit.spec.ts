@@ -2011,7 +2011,8 @@ test.describe('@draft-room click audit', () => {
     }
     await openCommissionerControls(page)
     const commissionerClose = page.getByTestId('draft-commissioner-close')
-    await expect(commissionerClose).toBeVisible()
+    // The control center is a lazy client chunk; await its real controls after the overlay opens.
+    await expect(commissionerClose).toBeVisible({ timeout: 30_000 })
     const closeBounds = await commissionerClose.boundingBox()
     expect(closeBounds).not.toBeNull()
     expect(closeBounds!.width).toBeGreaterThanOrEqual(44)
