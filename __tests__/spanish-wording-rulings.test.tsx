@@ -697,8 +697,9 @@ describe('a waiver CLAIM is «reclamo», app-wide', () => {
       expect(es[key], key).toBe(spanish)
       expect(en[key], key).toBe(english)
     }
-    expect(es['coowner.info']).toContain('hacer reclamos, proponer trades')
-    expect(en['coowner.info']).toContain('make waiver claims, propose trades')
+    expect(es['coowner.info']).toContain('gestionar los ajustes y miembros de la liga')
+    expect(en['coowner.info']).toContain('manage league settings and members')
+    expect(en['coowner.info']).not.toContain('do not have commissioner')
   })
 })
 

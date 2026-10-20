@@ -35,6 +35,9 @@ type Effective = {
   taxiScoringOn?: boolean
   taxiDeadlineWeek?: number | null
   taxiPromotionDeadlineWeek?: number | null
+  rookieDraftAutoOpen?: boolean
+  rookieDraftCustomOpenDate?: string | null
+  rookieDraftWindowLabel?: string | null
 }
 
 type Presets = {
@@ -548,6 +551,51 @@ export default function DynastySettingsPanel({
 
           {lotteryResult && showLotteryReveal && (
             <LotteryReveal result={lotteryResult} onClose={() => setShowLotteryReveal(false)} />
+          )}
+        </div>
+      )}
+
+      {/* Rookie draft calendar: auto-open on the sport's window (lib/dynasty-core/rookieDraftCalendar.ts) */}
+      {effective && (
+        <div>
+          <h4 className="text-xs font-medium text-white/80">Rookie draft calendar</h4>
+          <p className="mt-1 text-xs text-white/65">
+            {effective.rookieDraftWindowLabel
+              ? <>Default window: <span className="text-white/90">{effective.rookieDraftWindowLabel}</span>, after the real draft. </>
+              : null}
+            {effective.rookieDraftAutoOpen
+              ? effective.rookieDraftCustomOpenDate
+                ? `Opens automatically on ${effective.rookieDraftCustomOpenDate}.`
+                : 'Opens automatically when the window opens.'
+              : 'Created by the commissioner (auto-open is off).'}
+            {' '}An opened draft waits in pre-draft until the commissioner starts it.
+          </p>
+          {isCommissioner && (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                <input
+                  type="checkbox"
+                  checked={typeof patch.rookieDraftAutoOpen === 'boolean' ? patch.rookieDraftAutoOpen : Boolean(effective.rookieDraftAutoOpen)}
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieDraftAutoOpen: e.target.checked }))}
+                />
+                Open the rookie draft automatically
+              </label>
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                Custom open date
+                <input
+                  type="date"
+                  className="rounded border border-white/20 bg-black/40 px-2 py-0.5 text-xs text-white"
+                  value={
+                    typeof patch.rookieDraftCustomOpenDate === 'string'
+                      ? patch.rookieDraftCustomOpenDate
+                      : patch.rookieDraftCustomOpenDate === null
+                        ? ''
+                        : effective.rookieDraftCustomOpenDate ?? ''
+                  }
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieDraftCustomOpenDate: e.target.value || null }))}
+                />
+              </label>
+            </div>
           )}
         </div>
       )}

@@ -25,7 +25,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
-vi.mock('@/lib/notifications/sportAudience', () => ({ listUserIdsPlayingSport: h.players }))
+vi.mock('@/lib/notifications/sportAudience', () => ({ listUserIdsPlayingSport: h.players, listSportsAlertAudience: h.players }))
 vi.mock('@/lib/follows/teamFollowAlerts', () => ({ withinDailyCap: async (ids: string[]) => ids }))
 vi.mock('@/lib/follows/teamScoreAlerts', () => ({ TEAM_SCORE_ALERTS_PER_DAY: 20 }))
 vi.mock('@/lib/follows/teamFollows', () => ({

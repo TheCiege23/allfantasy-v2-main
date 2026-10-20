@@ -95,6 +95,17 @@ function defaultsFor(sport: string): ResolvedRosterConfig {
   return { starterCapacities, benchSlots, irSlots, taxiSlots, maxRosterSize: starters + benchSlots + irSlots + taxiSlots, source: 'defaults' }
 }
 
+/**
+ * A roster slot whose capacity `maxRosterSize - irSlots - taxiSlots` leaves out — IR / IL / reserve
+ * and taxi / devy / minors — read with the same tokens that sized those slots, so a player sitting in
+ * one is not counted against the active limit those slots were subtracted from.
+ */
+export function isReserveRosterSlot(slotType: string | null | undefined): boolean {
+  if (!slotType) return false
+  const token = normalizeToken(slotType)
+  return IR_TOKENS.has(token) || TAXI_TOKENS.has(token)
+}
+
 export function resolveRedraftRosterConfig(sport: string, leagueSettings: unknown): ResolvedRosterConfig {
   const raw = extractRawSlotMap(leagueSettings)
   if (!raw) return defaultsFor(sport)

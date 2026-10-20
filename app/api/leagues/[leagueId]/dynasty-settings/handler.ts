@@ -32,6 +32,7 @@ import {
   isDynastyFootballSport,
 } from '@/lib/dynasty-core/constants'
 import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/lib/taxi/constants'
+import { ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY, normalizeCustomOpenDate } from '@/lib/dynasty-core/rookieDraftCalendar'
 
 export const dynamic = 'force-dynamic'
 
@@ -153,6 +154,28 @@ export async function PUT(
   if (body.regular_season_weeks != null) settingsPatch.regular_season_weeks = Number(body.regular_season_weeks)
   if (body.playoff_structure != null && typeof body.playoff_structure === 'object')
     settingsPatch.playoff_structure = body.playoff_structure
+
+  // Rookie-draft calendar: auto-open on the sport's window, and an optional custom open date.
+  if (body.rookieDraftAutoOpen !== undefined || body.rookieDraftCustomOpenDate !== undefined) {
+    // Only the keys sent are written, so an unset auto-open keeps following the platform default.
+    const stored = ((league.settings as Record<string, unknown> | null)?.[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY] ?? {}) as Record<string, unknown>
+    const calendar: Record<string, unknown> = { ...(typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) }
+    if (body.rookieDraftAutoOpen !== undefined) {
+      if (typeof body.rookieDraftAutoOpen !== 'boolean') {
+        return NextResponse.json({ error: 'rookieDraftAutoOpen must be true or false.' }, { status: 400 })
+      }
+      calendar.autoOpen = body.rookieDraftAutoOpen
+    }
+    if (body.rookieDraftCustomOpenDate !== undefined) {
+      const raw = body.rookieDraftCustomOpenDate
+      const date = raw === null || raw === '' ? null : normalizeCustomOpenDate(raw)
+      if (raw !== null && raw !== '' && !date) {
+        return NextResponse.json({ error: 'rookieDraftCustomOpenDate must be a date (YYYY-MM-DD) or empty.' }, { status: 400 })
+      }
+      calendar.customOpenDate = date
+    }
+    settingsPatch[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY] = calendar
+  }
 
   // When only playoff_team_count is updated, merge matching dynasty preset (first_round_byes, playoff_weeks) so bracket stays consistent
   const newCount = body.playoff_team_count != null ? Number(body.playoff_team_count) : null

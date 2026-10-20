@@ -19,7 +19,7 @@ import { leagueIdentityColumns, type LeagueIdentityColumn } from '@/lib/player-i
  *
  * User decision, 2026-09-13: every score and every play of 20+ yards, to the
  * managers STARTING the player (a benched player's touchdown scores nothing for
- * you), by push + the in-app bell — never email or SMS.
+ * you), by push + the in-app bell — email when enabled, and never SMS.
  *
  * ⚠ NEVER ALERT ON A NEGATIVE DELTA. A cumulative stat going DOWN is a stat
  * correction, not a play — the vendor reprocesses for ~12h after a game and
@@ -65,6 +65,7 @@ export type NotifyResult = {
   eventsConsidered: number
   eventsAlertable: number
   notificationsSent: number
+  failed?: boolean
   skipped: 'no-events' | 'no-rosters' | null
 }
 
@@ -564,15 +565,10 @@ function notificationFor(
     userIds,
     severity: severityFor(event),
     source: 'live-plays',
-    actionHref: '/core/live?sport=NFL',
+    actionHref: `/core/live?sport=${encodeURIComponent('NFL')}`,
     actionLabel: 'Live scores',
-    /*
-     * ⚠ NEVER EMAIL A BIG PLAY. The category default is in-app + email, and
-     * an email per play on a Sunday is an inbox flood that burns the sending
-     * domain. In-app + push (matchup_results is a push category) is the
-     * whole interrupt.
-     */
-    skipChannels: { email: true, sms: true },
+    // Email follows the user's category preference; texts are league operations only.
+    skipChannels: { sms: true },
     meta: {
       gameId: event.gameId,
       playerId: event.playerId,
@@ -690,7 +686,10 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
   }
 
   try {
-    await ingestBatch(batch)
+    const results = await ingestBatch(batch)
+    if (results?.some((result) => !result.dispatched && result.reason === 'dispatch_error')) {
+      throw new Error('Live play dispatch failed')
+    }
   } catch {
     // A failed send must not take down the tick that produced the score.
     return {
@@ -698,6 +697,7 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
       eventsAlertable: alertable.length,
       notificationsSent: 0,
       skipped: null,
+      failed: true,
     }
   }
 

@@ -4,8 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
-import { ingest, injuryAlert } from '@/lib/notification-engine'
-import { headshotsByRiId, ownersByPlayerId } from '@/lib/live/bigPlayNotifier'
+import { notifySyncedInjuries } from '@/lib/engagement-alerts/injuryAlerts'
 
 const UPSERT_BATCH_SIZE = 100
 
@@ -160,51 +159,9 @@ export async function runInjuryImporter(options?: {
       )
       imported += batch.length
 
-      // Fire notifications for high-severity injuries (out, IR, suspended).
-      // Recipients are resolved the way big-play alerts resolve them — through
-      // PlayerIdentityMap to the managers who actually roster the player. An
-      // event with neither userIds nor leagueId is a guaranteed no-op inside
-      // ingest() ('no_target_users'), which is exactly what this loop used to
-      // be. Rows whose playerId has no identity mapping are skipped, not
-      // guessed at. Email/SMS are skipped on purpose: the in-app row (with the
-      // engine's 60-minute per-user cooldown) is the alert; injury email
-      // belongs to the digest, not a per-report blast.
-      //
-      // 🛑 ONLY RI-KEYED ROWS REACH THE LOOKUPS. `ownersByPlayerId` and `headshotsByRiId` read every
-      // id as a Rolling Insights id, and Sleeper / ESPN ids are bare numbers too. Measured 2026-10-12:
-      // all 69 `sleeper_live` Out rows whose id matched an RI id belonged to a DIFFERENT player, so
-      // that player's managers were told "X — Out" under the wrong photo. No alert beats a wrong one.
-      const highSeverity = batch.filter((r) =>
-        r.riKeyed && ['out', 'ir', 'injured reserve', 'suspended'].includes(r.status.toLowerCase())
-      )
-      const capped = highSeverity.slice(0, 5)
-      if (capped.length > 0) {
-        const cappedIds = Array.from(new Set(capped.map((r) => r.playerId).filter(Boolean)))
-        // Scoped to this pass's sport: a player id is only unique within one sport.
-        const owners = await ownersByPlayerId(cappedIds, { sport }).catch(() => new Map<string, string[]>())
-        // Only for players someone rosters, and never at the cost of the alert itself.
-        const headshots = owners.size > 0
-          ? await headshotsByRiId([...owners.keys()], sport).catch(() => new Map<string, string>())
-          : new Map<string, string>()
-        for (const row of capped) {
-          const userIds = owners.get(row.playerId)
-          if (!userIds || userIds.length === 0) continue
-          void ingest({
-            ...injuryAlert({
-              playerName: row.playerName,
-              team: row.team,
-              status: row.status,
-              sport: row.sport,
-              bodyPart: row.bodyPart,
-              notes: row.notes,
-              imageUrl: headshots.get(row.playerId) ?? null,
-              userIds,
-            }),
-            skipChannels: { email: true, sms: true },
-          })
-        }
-      }
+
     }
+    await notifySyncedInjuries(sport)
   }
 
   return { imported, sports, priorityWindow }

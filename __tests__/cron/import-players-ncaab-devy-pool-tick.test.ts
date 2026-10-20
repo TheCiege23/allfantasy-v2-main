@@ -10,7 +10,7 @@
  *   - declined below the runway floor, without calling the seed, and still recorded;
  *   - a seed that throws does not stop the intel sweep or the psych rotation behind it.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const h = vi.hoisted(() => ({
@@ -93,19 +93,23 @@ beforeEach(() => {
   h.remainingMs = null
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 describe('runs when the budget allows', () => {
   it('calls the weekly-gated writer with a deadline that leaves the intel sweep its runway', async () => {
     h.remainingMs = 230_000
     h.ingest.mockResolvedValue({ seeded: 900, fetched: 910, totalInPool: 4000, complete: true, resumeFrom: 0, source: 'rolling_insights', errors: 0 })
 
+    // Measure the deadline contract independently of CI scheduling and async import latency.
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-20T03:00:00Z').getTime())
     const before = Date.now()
     const body = await (await intelTick()).json()
 
     expect(h.ingest).toHaveBeenCalledTimes(1)
     const { deadlineAt } = h.ingest.mock.calls[0][0] as { deadlineAt: number }
     // At most 45s, and never into the 150s the devy intel sweep refuses to start without.
-    expect(deadlineAt - before).toBeLessThanOrEqual(230_000 - 150_000 + 50)
-    expect(deadlineAt - before).toBeLessThanOrEqual(45_000 + 50)
+    expect(deadlineAt - before).toBeLessThanOrEqual(230_000 - 150_000)
+    expect(deadlineAt - before).toBeLessThanOrEqual(45_000)
     expect(deadlineAt).toBeGreaterThan(before)
 
     const row = h.heartbeats.find((b) => b.jobName === JOB)

@@ -6,6 +6,8 @@ const db = vi.hoisted(() => ({
   sportsPlayer: { findFirst: vi.fn() },
   waiverTransaction: { create: vi.fn() },
   redraftRosterPlayer: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+  redraftSeason: { findFirst: vi.fn() },
+  redraftRoster: { findMany: vi.fn() },
   $transaction: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
@@ -147,5 +149,79 @@ describe('executeImmediateAddDrop', () => {
       where: { id: 'row-drop1', droppedAt: null },
       data: { droppedAt: expect.any(Date) },
     })
+  })
+})
+
+/*
+ * A dynasty team's `Roster.redraftRosterId` stays on its year-one roster after the year-two shell is
+ * built and the roster carried there. An offseason (or year-two) move must land on the newest season,
+ * or it is lost on a season nothing reads again.
+ */
+describe('dynasty: moves follow the team into the newest season', () => {
+  function dynastyWorld(linkedSeasonStatus: string) {
+    db.league.findUnique.mockResolvedValue({ platform: 'allfantasy', sport: 'NFL', leagueType: 'dynasty', isDynasty: true })
+    db.redraftSeason.findFirst.mockResolvedValue({ id: 'season-2' })
+    db.redraftRoster.findMany.mockImplementation(async ({ where }: { where: { id?: { in: string[] }; seasonId?: string } }) => {
+      if (where.id) {
+        return [
+          { id: 'rd1', ownerId: 'user-a', seasonId: 'season-1', season: { status: linkedSeasonStatus } },
+          { id: 'rd2', ownerId: 'user-b', seasonId: 'season-1', season: { status: linkedSeasonStatus } },
+        ]
+      }
+      expect(where.seasonId).toBe('season-2')
+      return [
+        { id: 'next1', ownerId: 'user-a' },
+        { id: 'next2', ownerId: 'user-b' },
+      ]
+    })
+  }
+
+  it('an offseason trade moves the carried row on next season, not the finished one', async () => {
+    dynastyWorld('complete')
+    // The carried copy lives on next season's roster; the year-one row is history.
+    liveRows({ 'next1:p9': { id: 'carried-p9', position: 'RB' }, 'rd1:p9': { id: 'old-p9', position: 'RB' } })
+    await planRedraftRosterMoveWrites(db as never, {
+      leagueId: 'L1',
+      acquisitionType: 'trade',
+      moves: [{ playerId: 'p9', fromRosterId: 'r1', toRosterId: 'r2' }],
+    })
+    expect(db.redraftRosterPlayer.updateMany).toHaveBeenCalledTimes(1)
+    expect(db.redraftRosterPlayer.updateMany).toHaveBeenCalledWith({
+      where: { id: 'carried-p9', droppedAt: null },
+      data: expect.objectContaining({ rosterId: 'next2', acquisitionType: 'trade' }),
+    })
+  })
+
+  it('an offseason add lands on next season\'s roster', async () => {
+    dynastyWorld('complete')
+    await planRedraftRosterMoveWrites(db as never, {
+      leagueId: 'L1',
+      acquisitionType: 'free_agent',
+      moves: [{ playerId: 'add1', fromRosterId: null, toRosterId: 'r1' }],
+    })
+    expect(db.redraftRosterPlayer.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ rosterId: 'next1', playerId: 'add1' }),
+    })
+  })
+
+  it('a linked season that is still running keeps its moves', async () => {
+    dynastyWorld('active')
+    await planRedraftRosterMoveWrites(db as never, {
+      leagueId: 'L1',
+      acquisitionType: 'free_agent',
+      moves: [{ playerId: 'add1', fromRosterId: null, toRosterId: 'r1' }],
+    })
+    expect(db.redraftRosterPlayer.create).toHaveBeenCalledWith({ data: expect.objectContaining({ rosterId: 'rd1' }) })
+  })
+
+  it('a redraft league is never redirected and never pays for the lookup', async () => {
+    db.league.findUnique.mockResolvedValue({ platform: 'allfantasy', sport: 'NFL', leagueType: 'redraft', isDynasty: false })
+    await planRedraftRosterMoveWrites(db as never, {
+      leagueId: 'L1',
+      acquisitionType: 'free_agent',
+      moves: [{ playerId: 'add1', fromRosterId: null, toRosterId: 'r1' }],
+    })
+    expect(db.redraftSeason.findFirst).not.toHaveBeenCalled()
+    expect(db.redraftRosterPlayer.create).toHaveBeenCalledWith({ data: expect.objectContaining({ rosterId: 'rd1' }) })
   })
 })

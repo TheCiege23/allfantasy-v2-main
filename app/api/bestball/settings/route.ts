@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (err) {
     if (err instanceof Response) return err
     throw err

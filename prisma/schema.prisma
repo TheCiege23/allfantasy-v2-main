@@ -14563,6 +14563,7 @@ model RedraftRoster {
   playoffWinningMatchups   RedraftPlayoffMatchup[]    @relation("RedraftPlayoffWinnerRoster")
   playoffSeeds             RedraftPlayoffSeed[]
   players                  RedraftRosterPlayer[]
+  dailyLineups             RedraftDailyLineup[]
   /// Back-relation for `Roster.redraftRosterId`. See that field for why the link exists and why it
   /// is incomplete; nothing here should assume every redraft roster has a `Roster` counterpart —
   /// 60 of them do not.
@@ -15392,6 +15393,95 @@ model RedraftPlayoffMatchup {
   @@index([roundId, status])
   @@index([seasonId])
   @@map("redraft_playoff_matchups")
+}
+
+/// Daily lineups (MLB/NBA/NHL, `sportConfig.dailyLineupsEnabled`): the slot each rostered player held
+/// on one US Eastern scoring day. A day with no row carries forward the most recent earlier day.
+/// See docs/DAILY_LINEUPS_DESIGN.md §4 and lib/redraft/dailyLineups.ts.
+model RedraftDailyLineup {
+  id         String        @id @default(cuid())
+  leagueId   String
+  rosterId   String
+  season     Int
+  week       Int
+  scoringDay DateTime      @db.Date
+  playerId   String        @db.VarChar(128)
+  slotType   String        @db.VarChar(32)
+  lockedAt   DateTime?
+  source     String        @default("user") @db.VarChar(32)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  roster     RedraftRoster @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+
+  @@unique([rosterId, scoringDay, playerId])
+  @@index([leagueId, season, week])
+  @@index([rosterId, season, week])
+  @@map("redraft_daily_lineups")
+}
+
+/// One player's summed stats for one US Eastern scoring day, sport-wide like `PlayerWeeklyScore`.
+/// Written by the weekly stat sync for daily-lineup leagues only.
+model PlayerDailyScore {
+  id           String   @id @default(cuid())
+  playerId     String
+  sport        String
+  season       Int
+  week         Int
+  scoringDay   DateTime @db.Date
+  stats        Json
+  gamesPlayed  Int      @default(0)
+  gamesStarted Int      @default(0)
+  inningsOuts  Int?
+  isFinalized  Boolean  @default(false)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([playerId, sport, season, scoringDay])
+  @@index([sport, season, week])
+  @@map("player_daily_scores")
+}
+
+/// One player's stats for ONE game in a fantasy week, sport-wide like `PlayerWeeklyScore`. Written by the
+/// weekly stat sync only for leagues whose "which games count" setting is not `all`
+/// (lib/redraft/gamesCount.ts); read only by those leagues' scoring and the games-count API.
+model PlayerWeekGameScore {
+  id        String    @id @default(cuid())
+  playerId  String
+  sport     String
+  season    Int
+  week      Int
+  /// The provider game id (`PlayerGameStat.providerGameId`) — one row per real game, even for an MLB
+  /// two-way player whose batting and pitching lines are stored as two game-stat rows.
+  gameId    String    @db.VarChar(128)
+  gameDay   DateTime  @db.Date
+  startTime DateTime?
+  stats     Json
+  updatedAt DateTime  @updatedAt
+
+  @@unique([playerId, sport, season, gameId])
+  @@index([sport, season, week])
+  @@index([playerId, sport, season, week])
+  @@map("player_week_game_scores")
+}
+
+/// A manager's "which games count" choice for one started player in one week: the games he picked
+/// (`best_n`) or the game he locked in (`lock_in`). See lib/redraft/gamesCount.ts.
+model RedraftGamesCountChoice {
+  id              String    @id @default(cuid())
+  leagueId        String
+  rosterId        String
+  season          Int
+  week            Int
+  playerId        String    @db.VarChar(128)
+  pickedGameIds   String[]  @default([])
+  lockedGameId    String?   @db.VarChar(128)
+  lockedAt        DateTime?
+  updatedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([rosterId, season, week, playerId])
+  @@index([leagueId, season, week])
+  @@map("redraft_games_count_choices")
 }
 
 model PlayerWeeklyScore {
@@ -19474,4 +19564,90 @@ model CoreBracketPick {
 
   @@unique([userId, sport, seasonYear])
   @@map("core_bracket_picks")
+}
+
+/// Dynasty prospects for MLB / NBA / NHL — minor-league, junior, college and international players
+/// who are dynasty assets before they debut (docs/DYNASTY_PROSPECT_DATA_PLAN.md §4.2).
+///
+/// One row per VENDOR record: `sport` + `source` + `sourcePlayerId`. A vendor's id is never stored or
+/// matched without its source (lib/player-identity/externalIdNamespace.ts) — and sport is in the key
+/// because some vendors number players per sport, so the same id is two people in two sports.
+///
+/// Written only by lib/dynasty-prospects/ingestProspects.ts and read only through
+/// lib/dynasty-prospects/prospectReads.ts, both behind DYNASTY_PROSPECT_STORAGE_ENABLED. No vendor is
+/// chosen yet, so nothing writes this table until one is.
+model ProspectPlayer {
+  id              String    @id @default(cuid())
+  /// MLB | NBA | NHL
+  sport           String    @db.VarChar(16)
+  /// The vendor slug that owns `sourcePlayerId`, e.g. "sportradar", "eliteprospects".
+  source          String    @db.VarChar(32)
+  sourcePlayerId  String    @db.VarChar(64)
+  name            String
+  normalizedName  String
+  position        String?   @db.VarChar(16)
+  birthDate       DateTime? @db.Date
+  nationality     String?   @db.VarChar(48)
+  /// Pro organisation that holds the player's rights (MLB org / NHL club); null when unsigned.
+  currentOrg      String?   @db.VarChar(64)
+  /// The team he plays for now (a MiLB affiliate, a CHL club, a college).
+  currentTeam     String?   @db.VarChar(96)
+  /// AAA / AA / A+ / A / CPX / DSL; CHL / NCAA / USHL / SHL / AHL; NCAA / GLEAGUE / INTL.
+  currentLevel    String?   @db.VarChar(24)
+  draftYear       Int?
+  draftRound      Int?
+  draftPick       Int?
+  draftOverall    Int?
+  /// Pro team that drafted him; may differ from `currentOrg` after a trade.
+  draftTeam       String?   @db.VarChar(64)
+  /// The vendor's estimated year of major-league arrival.
+  etaYear         Int?
+  /// prospect | graduated | released | unknown — graduated rows are kept, not deleted.
+  status          String    @default("prospect") @db.VarChar(16)
+  /// Our own SportsPlayer.id once he debuts and is linked. No foreign key: SportsPlayer rows are
+  /// re-imported by provider ingestion, and a prospect row must survive that.
+  sportsPlayerId  String?
+  /// sha256 of the normalised vendor record; the writer skips rows whose hash is unchanged.
+  payloadHash     String    @db.VarChar(64)
+  statsPayload    Json?
+  rawPayload      Json?
+  sourceUpdatedAt DateTime?
+  lastSyncedAt    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([sport, source, sourcePlayerId])
+  @@index([sport, status])
+  @@index([sport, draftYear])
+  @@index([sport, normalizedName])
+  @@index([sportsPlayerId])
+  @@map("prospect_players")
+}
+
+/// A per-sport, per-season rookie verdict WITH its reason, so the draft room can read a stored answer
+/// instead of guessing from `gamesPlayed === 0` (docs/DYNASTY_PROSPECT_DATA_PLAN.md §2.5, §4.3).
+///
+/// `playerKey` is a NAMESPACED key built by lib/dynasty-prospects/playerKey.ts — `sports_player:<id>`
+/// or `vendor:<source>:<id>` — never a bare provider id. One row per sport + season + player + source:
+/// two sources may disagree, and the reader reports that rather than hiding it.
+model RookieEligibilityRecord {
+  id          String   @id @default(cuid())
+  sport       String   @db.VarChar(16)
+  /// The league season the verdict is for, labelled by its START year (NBA/NHL 2026 = 2026-27).
+  season      Int
+  playerKey   String   @db.VarChar(160)
+  isRookie    Boolean
+  /// Who decided: a vendor slug, or an in-house rule set.
+  source      String   @db.VarChar(32)
+  /// Human-readable reason, e.g. "drafted 2026 round 1" or "career AB 88 < 130".
+  basis       String
+  evidence    Json?
+  payloadHash String   @db.VarChar(64)
+  computedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([sport, season, playerKey, source])
+  @@index([sport, season, isRookie])
+  @@map("rookie_eligibility_records")
 }

@@ -365,7 +365,9 @@ describe('createCanonicalLeagueInTransaction contract', () => {
     }
     // A league that holds a rookie draft every year trades its picks by default; the column's own
     // default (false) left every native dynasty league refusing them until someone found the toggle.
-    expect(tx.league.create.mock.calls[0]?.[0].data.draftPickTrading).toBe(dynastyFamily)
+    // A redraft league (every case here without a dynasty-family specialty, IDP included) trades its
+    // current draft's picks by default too.
+    expect(tx.league.create.mock.calls[0]?.[0].data.draftPickTrading).toBe(true)
     if (specialty === 'idp') {
       expect(tx.idpLeagueConfig.upsert).toHaveBeenCalledTimes(1)
     }
@@ -396,6 +398,17 @@ describe('creation choices persist into runtime records', () => {
     expect(tx.draftSession.create.mock.calls[0]?.[0].data.thirdRoundReversal).toBe(enabled)
     expect(tx.league.create.mock.calls[0]?.[0].data.settings.third_round_reversal).toBe(enabled)
   })
+  it.each([
+    ['keeper', false],
+    ['best_ball', false],
+    ['guillotine', false],
+    ['redraft', true],
+  ])('a %s league starts with draft pick trading %s', async (leagueFormatId, expected) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody() as any, buildEngine({ leagueFormatId }) as any)
+    expect(tx.league.create.mock.calls[0]?.[0].data.draftPickTrading).toBe(expected)
+  })
+
   it('keeps disabled Best Ball trades disabled', async () => {
     const tx = buildTx()
     await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'best_ball', tradeReviewMode: 'none', conceptSetup: { bestBall: { mode: 'underdog' } } }), buildEngine({ leagueFormatId: 'best_ball' }))
@@ -433,5 +446,45 @@ describe('zombie leagues carry their variant', () => {
     const tx = buildTx()
     await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody(), buildEngine())
     expect(tx.league.create.mock.calls[0]?.[0].data.leagueVariant).toBeNull()
+  })
+})
+
+
+/*
+ * 🛑 A DYNASTY LEAGUE WITH NO CHOSEN SEASON LENGTH GOT 14 WEEKS IN EVERY SPORT. For NBA/NHL/MLB that
+ * sized the season at 14 + 3 playoff rounds — mid-February for the NBA — while the league's playoff
+ * start came from the sport's own shape, past the season's end. The fallback now reads
+ * `dailySportSeasonShape.ts`, the same table the playoff start does; NFL keeps 14.
+ */
+describe('dynasty regular-season fallback is sport-aware', () => {
+  it.each([
+    ['NBA', 22],
+    ['NHL', 24],
+    ['MLB', 23],
+    ['NFL', 14],
+  ])('%s dynasty with no regularSeasonWeeks stores %i', async (sport, weeks) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(
+      tx as any,
+      'app-user-1',
+      buildBody({ concept: 'dynasty', sport, scoringPreset: undefined, conceptSetup: {} }),
+      buildEngine({ leagueFormatId: 'dynasty' }),
+    )
+    const upsert = tx.dynastyLeagueConfig.upsert.mock.calls[0]?.[0]
+    expect(upsert.create.regularSeasonWeeks).toBe(weeks)
+    expect(upsert.update.regularSeasonWeeks).toBe(weeks)
+    // The stored length and the league's playoff start describe ONE season: playoffs follow it.
+    if (sport !== 'NFL') expect(tx.league.create.mock.calls[0]?.[0].data.playoffStartWeek).toBe(weeks + 1)
+  })
+
+  it('[control] a commissioner-chosen length still wins', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(
+      tx as any,
+      'app-user-1',
+      buildBody({ concept: 'dynasty', sport: 'NBA', scoringPreset: undefined, conceptSetup: { regularSeasonWeeks: 19 } }),
+      buildEngine({ leagueFormatId: 'dynasty' }),
+    )
+    expect(tx.dynastyLeagueConfig.upsert.mock.calls[0]?.[0].create.regularSeasonWeeks).toBe(19)
   })
 })
