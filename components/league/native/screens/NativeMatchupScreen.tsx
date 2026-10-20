@@ -8,6 +8,7 @@ import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
 import { Card, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { TournamentBracketCard } from './TournamentBracketCard'
 
 /**
  * Matchup — handoff §3, `Matchup.png` / `MobileMatchup.png`.
@@ -215,6 +216,9 @@ export function NativeMatchupScreen({ league, onSelectTab }: { league: UserLeagu
           </div>
         </section>
       ) : null}
+
+      {/* Divisions-tournament conference leagues, bracket weeks only: the entrant's bracket game. */}
+      <TournamentBracketCard leagueId={league.id} settings={league.settings} week={week} />
 
       {payload ? (
         <div className="nls-cols">

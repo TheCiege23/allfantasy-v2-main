@@ -103,6 +103,8 @@ export type LiveRookieOrderView = {
   draftSeason: number
   basedOnSeason: number
   source: 'native' | 'imported'
+  /** The league's platform (sleeper, espn, …) — imported leagues apply the order there by hand. */
+  platform: string | null
   result: RookieOrderResult
   notes: string[]
   settings: LiveRookieOrderSettings
@@ -118,7 +120,7 @@ export async function refreshLiveRookieOrder(
   leagueId: string,
   opts: { config?: RookieOrderConfig; entitled?: boolean } = {},
 ): Promise<LiveRookieOrderView | null> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, settings: true, platform: true } })
   if (!league) return null
   const loaded = await loadRookieOrderInput(leagueId)
   if (!loaded) return null
@@ -153,6 +155,7 @@ export async function refreshLiveRookieOrder(
     draftSeason: loaded.season + 1,
     basedOnSeason: loaded.season,
     source: loaded.source,
+    platform: league.platform ?? null,
     result,
     notes: loaded.notes,
     settings: saved,

@@ -24,7 +24,7 @@ const AUDIT_TEXT: Record<string, string> = {
   divisions_blueprint_created: 'Tournament plan saved', divisions_blueprint_updated: 'Tournament plan updated',
   divisions_registration_opened: 'Registration opened', divisions_entry_joined: 'Entrant joined', divisions_entry_withdrawn: 'Entrant left',
   divisions_waitlist_promoted: 'Waitlist spot filled', divisions_leagues_placed: 'Leagues placed', divisions_conference_leagues_provisioned: 'Conference leagues set up', divisions_draft_scheduled: 'Draft time set',
-  divisions_draft_times_synced: 'Draft times sent to leagues', divisions_co_commissioners_synced: 'Co-commissioners updated in leagues', divisions_co_commissioner_added: 'Co-commissioner added', divisions_co_commissioner_removed: 'Co-commissioner removed',
+  divisions_draft_times_synced: 'Draft times sent to leagues', divisions_conference_schedules_applied: 'Tournament schedule applied to leagues', divisions_co_commissioners_synced: 'Co-commissioners updated in leagues', divisions_co_commissioner_added: 'Co-commissioner added', divisions_co_commissioner_removed: 'Co-commissioner removed',
   divisions_corrections_closed: 'Stat corrections confirmed closed', divisions_tie_calls: 'Commissioner tie call', divisions_seeding_committed: 'Seeding committed',
   divisions_bubble_notified: 'Bubble alerts sent', divisions_round_advanced: 'Round advanced', divisions_championship_committed: 'Champion crowned',
 }
@@ -109,7 +109,8 @@ export function DivisionControl({ control, preview = false }: { control: Control
               <button type="button" disabled={busy || !ack} onClick={() => act({ action: 'close_and_place' }, 'Leagues placed. Everyone has been told.')} className="min-h-12 w-full rounded-xl bg-[#e8b84a] font-bold text-[#1a1204] disabled:opacity-40">Close registration and place leagues</button>
             </div>
           )}
-          {control.leagues.length > 0 && <LeagueSetup leagues={control.leagues} audits={control.audits} disabled={busy || preview} onRetry={() => act({ action: 'provision_leagues' }, 'League setup ran. Check each conference below.')} />}
+          {control.leagues.length > 0 && <LeagueSetup leagues={control.leagues} audits={control.audits} disabled={busy || preview} onRetry={() => act({ action: 'provision_leagues' }, 'League setup ran. Check each conference below.')}
+            onApplySchedule={() => act({ action: 'apply_schedule' }, json => `Tournament schedule applied. ${typeof json.summary === 'string' ? json.summary : ''}`.trim())} />}
           {control.leagues.length > 0 && (
             <div>
               <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Draft times</h3>
@@ -272,7 +273,7 @@ export function DivisionControl({ control, preview = false }: { control: Control
 type SetupProblem = { league: string; outcome: string; error: string | null }
 
 /** Each conference's real league: ready (with a link), or not yet — with the last run's reason and a retry. */
-export function LeagueSetup({ leagues, audits, disabled, onRetry }: { leagues: Control['leagues']; audits: Control['audits']; disabled: boolean; onRetry: () => void }) {
+export function LeagueSetup({ leagues, audits, disabled, onRetry, onApplySchedule }: { leagues: Control['leagues']; audits: Control['audits']; disabled: boolean; onRetry: () => void; onApplySchedule?: () => void }) {
   const waiting = leagues.filter(l => !l.ready)
   const last = audits.find(a => a.action === 'divisions_conference_leagues_provisioned')
   const problems = new Map(((last?.data as { problems?: SetupProblem[] } | null)?.problems ?? []).map(p => [p.league, p]))
@@ -281,7 +282,13 @@ export function LeagueSetup({ leagues, audits, disabled, onRetry }: { leagues: C
       <div className="mb-2 flex flex-wrap items-center gap-3">
         <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Conference leagues · {leagues.length - waiting.length} of {leagues.length} ready</h3>
         {waiting.length > 0 && <button type="button" disabled={disabled} onClick={onRetry} className="ml-auto min-h-11 rounded-xl bg-[#e8b84a] px-4 font-bold text-[#1a1204] disabled:opacity-40">Set up {waiting.length} remaining league{waiting.length === 1 ? '' : 's'}</button>}
+        {onApplySchedule && leagues.some(l => l.ready) && (
+          <button type="button" disabled={disabled} onClick={onApplySchedule} className={(waiting.length > 0 ? '' : 'ml-auto ') + 'min-h-11 rounded-xl border border-white/15 px-4 text-sm font-bold'}>Apply tournament schedule</button>
+        )}
       </div>
+      {onApplySchedule && leagues.some(l => l.ready) && (
+        <p className="mb-2 text-sm text-slate-400">Puts leagues created before the tournament calendar on it: one regular season through the championship week, no league playoffs. A league whose season has started is left as it is.</p>
+      )}
       <ul className="grid gap-2 sm:grid-cols-2">
         {leagues.map(l => {
           const problem = problems.get(l.name)

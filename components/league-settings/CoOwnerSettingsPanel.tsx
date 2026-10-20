@@ -17,6 +17,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, UserPlus, UserMinus, Shield, ShieldCheck } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  CO_COMMISSIONER_SCOPES,
+  MAX_CO_COMMISSIONERS,
+  type CoCommissionerScope,
+} from '@/lib/league/coCommissionerScopes'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +54,21 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
   const [members, setMembers] = useState<TeamMember[]>([])
   const [query, setQuery] = useState('')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  /** Each co-commissioner's permissions, by team id (GET /api/league/settings/co-commissioners). */
+  const [scopes, setScopes] = useState<Record<string, CoCommissionerScope[]>>({})
+
+  const loadScopes = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/league/settings/co-commissioners?leagueId=${encodeURIComponent(leagueId)}`, { cache: 'no-store' })
+      if (!res.ok) return
+      const data = (await res.json()) as { scopes?: Record<string, { scopes: CoCommissionerScope[] }> }
+      const next: Record<string, CoCommissionerScope[]> = {}
+      for (const [teamId, v] of Object.entries(data.scopes ?? {})) next[teamId] = v.scopes
+      setScopes(next)
+    } catch {
+      /* permissions are shown once they load; the list itself still works */
+    }
+  }, [leagueId])
 
   // Load league teams
   const load = useCallback(async () => {
@@ -92,6 +112,30 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
   }, [leagueId])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { void loadScopes() }, [loadScopes])
+
+  // Grant or take away one area for one co-commissioner (head commissioner only).
+  const toggleScope = useCallback(async (member: TeamMember, scope: CoCommissionerScope) => {
+    const current = scopes[member.teamId] ?? [...CO_COMMISSIONER_SCOPES]
+    const next = current.includes(scope) ? current.filter((s) => s !== scope) : [...current, scope]
+    setActionLoading(member.teamId)
+    setError(null)
+    setSuccess(null)
+    try {
+      const res = await fetch('/api/league/settings/co-commissioners', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, memberId: member.teamId, scopes: next }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(data.error ?? t('coowner.updateFailed')); return }
+      setScopes((prev) => ({ ...prev, [member.teamId]: CO_COMMISSIONER_SCOPES.filter((s) => next.includes(s)) }))
+    } catch {
+      setError(t('leagueSettings.requestFailed'))
+    } finally {
+      setActionLoading(null)
+    }
+  }, [leagueId, scopes])
 
   // Toggle co-commissioner status
   const toggleCoOwner = useCallback(async (member: TeamMember) => {
@@ -115,6 +159,8 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
         `${member.ownerName || member.teamName} ${member.isCoCommissioner ? t('coowner.removed') : t('coowner.added')}`
       )
       setTimeout(() => setSuccess(null), 3000)
+      // A new co-commissioner starts with every permission; a removed one loses theirs.
+      void loadScopes()
       // Update local state
       setMembers((prev) =>
         prev.map((m) =>
@@ -128,7 +174,7 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
     } finally {
       setActionLoading(null)
     }
-  }, [leagueId])
+  }, [leagueId, loadScopes])
 
   // Filtered members
   const filtered = useMemo(() => {
@@ -193,6 +239,10 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
         </div>
       )}
 
+      <p className="text-[11px] text-white/40" data-testid="co-commish-cap">
+        {t('coowner.cap').replace('{{max}}', String(MAX_CO_COMMISSIONERS))}
+      </p>
+
       {/* Member list */}
       <div className="space-y-1">
         {filtered.length === 0 ? (
@@ -206,8 +256,8 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
             const isLoading = actionLoading === member.teamId
 
             return (
+              <div key={member.teamId}>
               <div
-                key={member.teamId}
                 className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition ${
                   isCo || isMain ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'
                 }`}
@@ -251,7 +301,8 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
                 {isCommissioner && !isMain && (
                   <button
                     type="button"
-                    disabled={isLoading}
+                    disabled={isLoading || (!isCo && coOwnerCount >= MAX_CO_COMMISSIONERS)}
+                    title={!isCo && coOwnerCount >= MAX_CO_COMMISSIONERS ? t('coowner.capReached').replace('{{max}}', String(MAX_CO_COMMISSIONERS)) : undefined}
                     onClick={() => toggleCoOwner(member)}
                     className={`flex shrink-0 items-center gap-1 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition disabled:opacity-50 ${
                       isCo
@@ -272,6 +323,44 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
                     )}
                   </button>
                 )}
+              </div>
+              {isCo && !isMain && (isCommissioner || member.teamId in scopes) && (
+                <fieldset className="mb-2 ml-12 mt-1" data-testid="co-commish-scopes">
+                  <legend className="mb-1 text-[11px] font-semibold text-white/50">
+                    {isCommissioner ? t('coowner.canManage') : t('coowner.manages')}
+                  </legend>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CO_COMMISSIONER_SCOPES.map((scope) => {
+                      const held = (scopes[member.teamId] ?? CO_COMMISSIONER_SCOPES).includes(scope)
+                      const label = t(`coowner.scope.${scope}`)
+                      const help = t(`coowner.scope.${scope}Help`)
+                      if (!isCommissioner) {
+                        return held ? (
+                          <span key={scope} title={help} className="rounded border border-white/10 px-2 py-1 text-[11px] text-white/60">{label}</span>
+                        ) : null
+                      }
+                      return (
+                        <label
+                          key={scope}
+                          title={help}
+                          className={`flex min-h-[32px] cursor-pointer items-center gap-1.5 rounded border px-2 py-1 text-[11px] ${
+                            held ? 'border-cyan-500/30 bg-cyan-950/20 text-cyan-200' : 'border-white/10 text-white/45'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={held}
+                            disabled={isLoading}
+                            onChange={() => void toggleScope(member, scope)}
+                            aria-label={`${member.ownerName || member.teamName}: ${label}`}
+                          />
+                          {label}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </fieldset>
+              )}
               </div>
             )
           })

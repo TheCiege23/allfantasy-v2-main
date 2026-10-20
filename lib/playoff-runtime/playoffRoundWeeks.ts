@@ -12,6 +12,14 @@
  * the season's last playoff week came out ~100 weeks late, and the rookie draft read the
  * consolation final as the championship. Use `isChampionshipRoundNumber` or
  * `CHAMPIONSHIP_ROUND_WHERE` for any query that means the title bracket.
+ *
+ * ⚠ THE FINAL CAN BE LONGER THAN THE OTHER ROUNDS. `championship_length` (League.settings
+ * `playoff_structure`) is 2 for MLB and NHL by default, and was written at creation and shown to the
+ * commissioner while every reader here played the final in `playoffWeeksPerRound` weeks — so the
+ * last week of those seasons went unplayed and the title was decided on one week. The final round
+ * now spans `max(playoffWeeksPerRound, championship_length)` weeks; earlier rounds are untouched,
+ * and a league whose championship length is unset or no longer than its rounds plays exactly the
+ * weeks it always did. It is never shorter than the other rounds: the setting lengthens the final.
  */
 
 /** Consolation rounds are written at this offset (`generateNflRedraftPlayoffRuntimeBracket`). */
@@ -30,24 +38,58 @@ export function normalizeWeeksPerRound(value: unknown): number {
   return Number.isFinite(n) && n >= 1 ? n : 1
 }
 
-/** The fantasy weeks a championship round spans, in order. */
-export function playoffRoundWeeks(input: {
+/**
+ * The league's stored `championship_length`, or null when it has none. Read from
+ * `settings.playoff_structure` first and the top level second — the order `getBracketConfigForLeague`
+ * uses. Deliberately NOT the sport default: a league that never stored one keeps the final it has.
+ */
+export function readChampionshipLength(settings: unknown): number | null {
+  const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
+  const structure =
+    s.playoff_structure && typeof s.playoff_structure === 'object' && !Array.isArray(s.playoff_structure)
+      ? (s.playoff_structure as Record<string, unknown>)
+      : {}
+  const raw = structure.championship_length ?? s.championship_length
+  if (raw == null || raw === '') return null
+  const n = Math.floor(Number(raw))
+  return Number.isFinite(n) && n >= 1 ? n : null
+}
+
+/** How many weeks a championship round lasts: the final may run longer than the rounds before it. */
+export function weeksForPlayoffRound(input: {
+  roundNumber: number
+  weeksPerRound?: number | null
+  /** The bracket's last championship round; without it every round is a regular round. */
+  finalRoundNumber?: number | null
+  championshipLength?: number | null
+}): number {
+  const perRound = normalizeWeeksPerRound(input.weeksPerRound)
+  const isFinal =
+    input.finalRoundNumber != null && Math.floor(input.roundNumber) === Math.floor(input.finalRoundNumber)
+  if (!isFinal || input.championshipLength == null) return perRound
+  return Math.max(perRound, normalizeWeeksPerRound(input.championshipLength))
+}
+
+type PlayoffRoundWeeksInput = {
   playoffStartWeek: number
   roundNumber: number
   weeksPerRound?: number | null
-}): number[] {
+  finalRoundNumber?: number | null
+  championshipLength?: number | null
+}
+
+/** The fantasy weeks a championship round spans, in order. */
+export function playoffRoundWeeks(input: PlayoffRoundWeeksInput): number[] {
   const perRound = normalizeWeeksPerRound(input.weeksPerRound)
   const round = Math.max(1, Math.floor(input.roundNumber))
+  // Only the final is ever longer, so every round's FIRST week is unchanged by championship length.
   const first = Math.max(1, Math.floor(input.playoffStartWeek)) + (round - 1) * perRound
-  return Array.from({ length: perRound }, (_, i) => first + i)
+  const length = weeksForPlayoffRound({ ...input, roundNumber: round })
+  return Array.from({ length }, (_, i) => first + i)
 }
 
 /** The last fantasy week of a championship round. */
-export function lastWeekOfPlayoffRound(input: {
-  playoffStartWeek: number
-  roundNumber: number
-  weeksPerRound?: number | null
-}): number {
+export function lastWeekOfPlayoffRound(input: PlayoffRoundWeeksInput): number {
   const weeks = playoffRoundWeeks(input)
   return weeks[weeks.length - 1]
 }

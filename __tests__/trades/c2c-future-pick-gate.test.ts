@@ -24,7 +24,14 @@ import {
 
 const PICK_ID = 'pick-2027-r1'
 
-function leagueWithC2C(c2cTrading: boolean | undefined, leagueType = 'redraft') {
+/*
+ * ⚠ DEFAULTS TO DYNASTY, NOT REDRAFT, SINCE THE REDRAFT PICK RULE (2026-10-19). A redraft league now
+ * refuses every future-season pick with `future_picks_not_allowed_in_redraft`
+ * (`lib/league-trade-engine/redraftDraftPicks.ts`), before this gate is reached, so a 2027 pick in a
+ * 2026 redraft league can no longer isolate the C2C flag. Cross-layer picks belong to multi-season
+ * leagues, which is where this gate is exercised now.
+ */
+function leagueWithC2C(c2cTrading: boolean | undefined, leagueType = 'dynasty') {
   return buildEngineTestLeague({
     leagueType,
     settings: {
