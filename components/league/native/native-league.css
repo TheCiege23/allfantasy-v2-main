@@ -5,7 +5,7 @@
  * define are set here, derived from its tokens. Rail column is /core's open rail: 300px, 68px closed. */
 .af-core.nl-workspace {
   --raised:color-mix(in srgb,var(--text) 6%,var(--surface));--gold:var(--p-gold-fg);
-  display:grid;grid-template-columns:300px 232px minmax(0,1fr);height:100dvh;overflow:hidden;background:var(--bg);background-image:var(--hero);background-repeat:no-repeat;color:var(--text);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:14px;
+  display:grid;grid-template-columns:300px 232px minmax(0,1fr);height:100vh;height:100dvh;overflow:hidden;background:var(--bg);background-image:var(--hero);background-repeat:no-repeat;color:var(--text);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:14px;
 }
 .af-core.nl-workspace[data-rail-collapsed=true]{grid-template-columns:68px 232px minmax(0,1fr)}
 .nl-workspace *{box-sizing:border-box}
@@ -259,7 +259,12 @@
 /* Rail ring, record line, platform tag and unread badge (2026-10-18, handoff §2). All colours are
  * /core tokens: green = --good, red = --bad, amber (needs you) = --warn. */
 .nl-rail-crest{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;align-self:flex-start}
-.nl-workspace .nl-rail-art{position:relative;overflow:visible}
+.nl-workspace .nl-rail-art{position:relative;display:grid;place-items:center;flex:none;width:42px;height:42px;min-width:42px;max-width:42px;border-radius:12px;overflow:visible}
+/* This rail also mounts without AfCoreShell's stylesheet (a direct phone invite). */
+.nl-workspace .nl-rail-art>img{display:block;width:42px;height:42px;max-width:42px;object-fit:cover}
+.nl-workspace .nl-rail-crest{width:52px;max-width:52px}
+.nl-workspace .nl-mobile-rail{max-height:88px;min-height:76px}
+.nl-workspace .nl-mobile-rail .nl-rail-tile{width:60px;max-width:60px;min-width:60px;flex:0 0 60px}
 .nl-workspace .nl-rail-art>img{border-radius:inherit}
 .nl-workspace .nl-rail-art[data-ring]{outline:2px solid var(--line2);outline-offset:2px}
 .nl-workspace .nl-rail-art[data-ring=good]{outline-color:var(--good)}
