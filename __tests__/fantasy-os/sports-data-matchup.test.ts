@@ -15,7 +15,7 @@ const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8')
 const SERVICE = 'lib/sports-evidence/matchupIntegration.ts'
 // The Game Day OS normalizer + assembler this suite also pinned had no production caller and were
 // removed (lib/shared-services/game-day); the certified service and the matchup read route remain.
-const ROUTE = 'app/api/leagues/[leagueId]/matchup-center/route.ts'
+const ROUTE = 'app/api/leagues/[leagueId]/matchup-center/handler.ts'
 const noProvider = (src: string) => /(from ['"]@\/lib\/sleeper|from ['"]@\/lib\/espn|sleeper-client|espn-client|api\.sleeper\.app|site\.api\.espn\.com)/.test(src)
 
 describe('5E-g Matchup — service (informational + finality evidence)', () => {
