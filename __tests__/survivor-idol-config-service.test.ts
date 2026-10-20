@@ -91,7 +91,55 @@ describe('saving idol setup', () => {
     const result = await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 8, hideFromCommish: false, pointSurgePct: 20, tributePct: 5 }, db as never)
     expect(result).toMatchObject({ ok: true, config: { count: 8, pointSurgePct: 20, tributePct: 5 } })
     expect(db.row).toMatchObject({ count: 8, resolvedTypeIds: [], resolvedAt: null })
-    expect(db.league.update).toHaveBeenCalledWith({ where: { id: 'league-1' }, data: { survivorIdolCount: 8 } })
+    expect(db.league.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'league-1' }, data: { survivorIdolCount: 8 } }))
+  })
+
+  it('saves the idol expiry week, clears it on null, and leaves it alone when a client does not send it', async () => {
+    const { saveSurvivorIdolConfig } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb()
+    db.league.update.mockImplementation(async (args: { data: { survivorIdolExpiryWeek?: number | null } }) => ({ survivorIdolExpiryWeek: args.data.survivorIdolExpiryWeek ?? 9 }) as never)
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, expiryWeek: 11 }, db as never)).toMatchObject({ ok: true, expiryWeek: 11 })
+    expect(db.league.update.mock.calls[0][0]).toMatchObject({ data: { survivorIdolCount: 7, survivorIdolExpiryWeek: 11 } })
+    await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, expiryWeek: null }, db as never)
+    expect(db.league.update.mock.calls[1][0].data).toEqual({ survivorIdolCount: 7, survivorIdolExpiryWeek: null })
+    await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7 }, db as never)
+    expect(db.league.update.mock.calls[2][0].data).toEqual({ survivorIdolCount: 7 })
+  })
+
+  it('saves the idol play cutoff into League.settings (0 removes it) and shows it in the view', async () => {
+    const { saveSurvivorIdolConfig, getSurvivorIdolSetupView } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb()
+    let settings: Record<string, unknown> = { scoring: 'ppr' }
+    db.league.findUnique.mockImplementation(async () => ({ survivorIdolCount: 7, survivorIdolExpiryWeek: null, settings }) as never)
+    db.league.update.mockImplementation(async (args: { data: { settings?: Record<string, unknown> } }) => { if (args.data.settings) settings = args.data.settings; return { survivorIdolExpiryWeek: null } as never })
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, playCutoffHours: 6 }, db as never)).toMatchObject({ ok: true, playCutoffHours: 6 })
+    expect(settings).toEqual({ scoring: 'ppr', idolPlayCutoffHours: 6 })
+    expect((await getSurvivorIdolSetupView('league-1', { isCommissioner: false }, db as never)).playCutoffHours).toBe(6)
+    await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7 }, db as never)
+    expect(settings).toEqual({ scoring: 'ppr', idolPlayCutoffHours: 6 }) // absent = unchanged
+    await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, playCutoffHours: 0 }, db as never)
+    expect(settings).toEqual({ scoring: 'ppr' })
+    for (const playCutoffHours of [-1, 73, 1.5, '6']) {
+      expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, playCutoffHours }, db as never)).toMatchObject({ ok: false, status: 400 })
+    }
+  })
+
+  it('refuses an expiry week outside 1–30 or not a whole week', async () => {
+    const { saveSurvivorIdolConfig } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb()
+    for (const expiryWeek of [0, 31, 4.5, '6']) {
+      expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, expiryWeek }, db as never)).toMatchObject({ ok: false, status: 400 })
+    }
+    expect(db.league.update).not.toHaveBeenCalled()
+  })
+
+  it('shows the saved expiry week in the setup view', async () => {
+    const { getSurvivorIdolSetupView } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb()
+    db.league.findUnique.mockImplementation(async () => ({ survivorIdolCount: 7, survivorIdolExpiryWeek: 12 }) as never)
+    expect((await getSurvivorIdolSetupView('league-1', { isCommissioner: true }, db as never)).expiryWeek).toBe(12)
+    db.league.findUnique.mockImplementation(async () => ({ survivorIdolCount: 7, survivorIdolExpiryWeek: null }) as never)
+    expect((await getSurvivorIdolSetupView('league-1', { isCommissioner: false }, db as never)).expiryWeek).toBeNull()
   })
 
   it('refuses a pick that is not exactly count - 2 and an out-of-range count', async () => {

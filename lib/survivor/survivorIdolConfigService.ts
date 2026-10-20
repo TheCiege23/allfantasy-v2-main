@@ -14,6 +14,7 @@ import {
   type SurvivorIdolCategory,
   type SurvivorIdolTypeDef,
 } from './survivorIdolTypes'
+import { SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS, normalizeSurvivorFoundationSettings } from './survivorSettings'
 import {
   isSurvivorIdolCount,
   resolveSurvivorIdolTypeIds,
@@ -143,6 +144,10 @@ export type SurvivorIdolSetupView = {
   resolvedTypeIds: string[] | null
   resolved: boolean
   saved: boolean
+  /** Last week idols can be played; null = no week limit (merge-expiring idols still expire at the merge). */
+  expiryWeek: number | null
+  /** Hours before votes close after which idols can no longer be played; 0 = right up to the close. */
+  playCutoffHours: number
 }
 
 /** Pure projection of the setup for one viewer; every secrecy rule lives here. */
@@ -152,6 +157,8 @@ export function projectSurvivorIdolSetup(input: {
   fallbackCount: number | null
   isCommissioner: boolean
   locked: boolean
+  expiryWeek?: number | null
+  playCutoffHours?: number
 }): SurvivorIdolSetupView {
   const { row, isCommissioner } = input
   const values: SurvivorIdolConfigValues = row
@@ -167,6 +174,8 @@ export function projectSurvivorIdolSetup(input: {
     resolvedTypeIds: canSeeTypes && resolved ? row!.resolvedTypeIds : null,
     resolved,
     saved: Boolean(row),
+    expiryWeek: isSurvivorIdolExpiryWeek(input.expiryWeek) ? input.expiryWeek : null,
+    playCutoffHours: isSurvivorIdolPlayCutoff(input.playCutoffHours) ? input.playCutoffHours : 0,
   }
 }
 
@@ -174,20 +183,37 @@ export async function getSurvivorIdolSetupView(leagueId: string, viewer: { isCom
   const [types, locked, league] = await Promise.all([
     loadSurvivorIdolTypes(db),
     isSurvivorDraftStarted(leagueId, db),
-    db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true } }),
+    db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true, survivorIdolExpiryWeek: true, settings: true } }),
   ])
   let row: ConfigRow | null = null
   if (await survivorIdolTablesReady(db)) {
     try { row = await readConfigRow(leagueId, db) } catch { row = null }
   }
-  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, isCommissioner: viewer.isCommissioner, locked })
+  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, isCommissioner: viewer.isCommissioner, locked, expiryWeek: league?.survivorIdolExpiryWeek ?? null, playCutoffHours: normalizeSurvivorFoundationSettings((league?.settings as Record<string, unknown> | null) ?? {}).idolPlayCutoffHours })
+}
+
+export const SURVIVOR_IDOL_EXPIRY_WEEK_MAX = 30
+
+export function isSurvivorIdolExpiryWeek(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= SURVIVOR_IDOL_EXPIRY_WEEK_MAX
+}
+
+/** The cutoff choices the setup offers. Any whole hour 0–72 is accepted from the API. */
+export const SURVIVOR_IDOL_PLAY_CUTOFF_CHOICES = [0, 1, 2, 3, 6, 12, 24, 48] as const
+
+export function isSurvivorIdolPlayCutoff(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS
 }
 
 export type SaveSurvivorIdolConfigResult =
-  | { ok: true; config: SurvivorIdolConfigValues }
+  | { ok: true; config: SurvivorIdolConfigValues; expiryWeek: number | null; playCutoffHours: number | null }
   | { ok: false; status: 400 | 409 | 422 | 503; code: string; error: string }
 
-export function parseSurvivorIdolConfigInput(body: unknown): { ok: true; value: SurvivorIdolConfigValues } | { ok: false; error: string } {
+/**
+ * `expiryWeek`: the last week an idol can be played. Absent leaves the saved week alone (older
+ * clients never send it); null clears it.
+ */
+export function parseSurvivorIdolConfigInput(body: unknown): { ok: true; value: SurvivorIdolConfigValues; expiryWeek: number | null | undefined; playCutoffHours: number | undefined } | { ok: false; error: string } {
   const raw = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}
   const mode = raw.mode === 'pick' ? 'pick' : raw.mode === 'random' || raw.mode == null ? 'random' : null
   if (!mode) return { ok: false, error: 'Mode must be random or pick.' }
@@ -199,8 +225,15 @@ export function parseSurvivorIdolConfigInput(body: unknown): { ok: true; value: 
   const tribute = raw.tributePct == null ? SURVIVOR_TRIBUTE_DEFAULT_PCT : Number(raw.tributePct)
   if (!Number.isInteger(surge) || surge < 1 || surge > 100) return { ok: false, error: 'Point surge must be a whole percent from 1 to 100.' }
   if (!Number.isInteger(tribute) || tribute < 1 || tribute > 50) return { ok: false, error: 'Tribute must be a whole percent from 1 to 50.' }
+  const expiryWeek = raw.expiryWeek === undefined ? undefined : raw.expiryWeek === null ? null : raw.expiryWeek
+  if (expiryWeek != null && !isSurvivorIdolExpiryWeek(expiryWeek)) return { ok: false, error: `Idol expiry must be a week from 1 to ${SURVIVOR_IDOL_EXPIRY_WEEK_MAX}, or no limit.` }
+  // Absent leaves the saved cutoff alone, like expiryWeek.
+  const playCutoffHours = raw.playCutoffHours === undefined ? undefined : raw.playCutoffHours
+  if (playCutoffHours !== undefined && !isSurvivorIdolPlayCutoff(playCutoffHours)) return { ok: false, error: `The idol play cutoff must be a whole number of hours from 0 to ${SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS}.` }
   return {
     ok: true,
+    expiryWeek: expiryWeek as number | null | undefined,
+    playCutoffHours: playCutoffHours as number | undefined,
     value: {
       mode, count, hideFromCommish: mode === 'random' && raw.hideFromCommish === true,
       pickedTypeIds: mode === 'pick' ? picked as string[] : [], pointSurgePct: surge, tributePct: tribute,
@@ -232,9 +265,32 @@ export async function saveSurvivorIdolConfig(leagueId: string, body: unknown, db
   } catch {
     return { ok: false, status: 503, code: 'not_migrated', error: 'Idol setup is not available until the database is updated.' }
   }
-  // Legacy readers (seeding fallback, FAQ, host copy) read the league column.
-  await db.league.update({ where: { id: leagueId }, data: { survivorIdolCount: value.count } })
-  return { ok: true, config: value }
+  // Legacy readers (seeding fallback, FAQ, host copy) read the league columns; seeding stamps the
+  // expiry week onto every idol it creates.
+  const league = await db.league.update({
+    where: { id: leagueId },
+    data: { survivorIdolCount: value.count, ...(parsed.expiryWeek !== undefined ? { survivorIdolExpiryWeek: parsed.expiryWeek } : {}) },
+    select: { survivorIdolExpiryWeek: true },
+  })
+  // The cutoff is a council setting (League.settings.idolPlayCutoffHours, read by
+  // normalizeSurvivorFoundationSettings), written under the league row lock: settings is shared.
+  let playCutoffHours: number | null = null
+  if (parsed.playCutoffHours !== undefined) {
+    const hours = parsed.playCutoffHours
+    const write = async (t: Prisma.TransactionClient) => {
+      await t.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
+      const row = await t.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+      const next = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
+      if (hours === 0) delete next.idolPlayCutoffHours
+      else next.idolPlayCutoffHours = hours
+      await t.league.update({ where: { id: leagueId }, data: { settings: next as object } })
+    }
+    const tx = db as typeof prisma
+    if (typeof tx.$transaction === 'function') await tx.$transaction(write)
+    else await write(db as Prisma.TransactionClient)
+    playCutoffHours = hours
+  }
+  return { ok: true, config: value, expiryWeek: league?.survivorIdolExpiryWeek ?? null, playCutoffHours }
 }
 
 export type LockedSurvivorIdolDraw = { typeIds: string[]; types: SurvivorIdolTypeDef[]; drawnNow: boolean }

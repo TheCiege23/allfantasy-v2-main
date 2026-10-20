@@ -30,7 +30,15 @@ export type SurvivorIdolSetupData = {
   resolvedTypeIds: string[] | null
   resolved: boolean
   saved: boolean
+  /** Last week idols can be played; null = no week limit. Older servers omit it. */
+  expiryWeek?: number | null
+  /** Hours before votes close after which idols can't be played; 0 = up to the close. */
+  playCutoffHours?: number
 }
+
+const EXPIRY_WEEKS = Array.from({ length: 30 }, (_, i) => i + 1)
+const PLAY_CUTOFF_CHOICES = [0, 1, 2, 3, 6, 12, 24, 48]
+const cutoffLabel = (h: number) => (h === 0 ? 'Any time before votes close' : `At least ${h} hour${h === 1 ? '' : 's'} before votes close`)
 
 const PICK_FILTERS: Array<'All' | SurvivorIdolCategory> = ['All', 'Votes', 'Scoring', 'Roster', 'Game', 'Bluff']
 
@@ -60,6 +68,8 @@ function SealedCard() {
 export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }: { leagueId: string; leagueName?: string; canEdit: boolean; initialData?: SurvivorIdolSetupData }) {
   const [data, setData] = useState<SurvivorIdolSetupData | null>(initialData ?? null)
   const [draft, setDraft] = useState<SetupConfig | null>(initialData?.config ?? null)
+  const [expiryWeek, setExpiryWeek] = useState<number | null>(initialData?.expiryWeek ?? null)
+  const [playCutoffHours, setPlayCutoffHours] = useState<number>(initialData?.playCutoffHours ?? 0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'All' | SurvivorIdolCategory>('All')
   const [rollKey, setRollKey] = useState(0)
@@ -73,6 +83,8 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
       if (!response.ok) throw new Error(payload.error ?? 'Could not load idol setup')
       setData(payload)
       setDraft(payload.config)
+      setExpiryWeek(payload.expiryWeek ?? null)
+      setPlayCutoffHours(payload.playCutoffHours ?? 0)
       setLoadError(null)
     } catch (cause) {
       setLoadError(cause instanceof Error ? cause.message : 'Could not load idol setup')
@@ -122,12 +134,14 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
     setSaving(true); setMessage(null)
     try {
       const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/idol-setup`, {
-        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft),
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...draft, expiryWeek, playCutoffHours }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error ?? 'Could not save idol setup')
       setData(payload)
       setDraft(payload.config)
+      setExpiryWeek(payload.expiryWeek ?? null)
+      setPlayCutoffHours(payload.playCutoffHours ?? 0)
       setMessage({ tone: 'ok', text: draft.mode === 'random' ? 'Locked in. The server makes the final draw when the draft locks.' : 'Locked in. These idols hide in the draft.' })
     } catch (cause) {
       setMessage({ tone: 'error', text: cause instanceof Error ? cause.message : 'Could not save idol setup' })
@@ -240,6 +254,23 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
             </label>
           </div>
           <p className="svs-note">{surgeLive && tributeLive ? 'Point surge adds this much to a team’s score for one week. Tribute takes this share of one opponent’s points.' : 'These apply once Point surge and Tribute can be played. Until then they are not in any draw.'}</p>
+          <div className="svs-values">
+            <label>Idols expire
+              <select value={expiryWeek ?? ''} disabled={!editable} data-testid="svs-idol-expiry" onChange={event => { setExpiryWeek(event.target.value ? Number(event.target.value) : null); setMessage(null) }}>
+                <option value="">No week limit</option>
+                {EXPIRY_WEEKS.map(week => <option key={week} value={week}>After week {week}</option>)}
+              </select>
+            </label>
+          </div>
+          <p className="svs-note">{expiryWeek ? `An unplayed idol can be played through week ${expiryWeek}, then it is gone. Managers see this in the league rules.` : 'Idols stay playable all season, except any that expire at the merge.'}</p>
+          <div className="svs-values">
+            <label>Play idols by
+              <select value={playCutoffHours} disabled={!editable} data-testid="svs-idol-play-cutoff" onChange={event => { setPlayCutoffHours(Number(event.target.value)); setMessage(null) }}>
+                {PLAY_CUTOFF_CHOICES.map(h => <option key={h} value={h}>{cutoffLabel(h)}</option>)}
+              </select>
+            </label>
+          </div>
+          <p className="svs-note">{playCutoffHours ? `Every idol is in ${playCutoffHours} hour${playCutoffHours === 1 ? '' : 's'} before votes close, so the last-minute scramble is votes only. Voting still runs to the close.` : 'Idols can be played right up until votes close.'}</p>
         </section>
 
         <section className="svs-panel svs-know">

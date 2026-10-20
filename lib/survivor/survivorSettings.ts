@@ -39,6 +39,8 @@ export interface SurvivorFoundationSettings {
   nbaWeeklyScoringMode: SurvivorNbaWeeklyScoringMode
   idolExpiryRemainingPlayers: number
   idolInvalidRemainingPlayers: number
+  /** Hours before votes close after which no idol can be played; 0 = right up to the close. */
+  idolPlayCutoffHours: number
   idolCount: number
   idolsEnabled: boolean
   powerupsEnabled: boolean
@@ -106,6 +108,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   nbaWeeklyScoringMode: 'all_games',
   idolExpiryRemainingPlayers: 5,
   idolInvalidRemainingPlayers: 4,
+  idolPlayCutoffHours: 0,
   idolCount: 7,
   idolsEnabled: true,
   powerupsEnabled: true,
@@ -200,6 +203,34 @@ function normalizeEliminationOutcome(value: string): SurvivorEliminationOutcome 
   return 'removed_to_waivers'
 }
 
+/**
+ * The idol timing rules managers read (FAQ, Chimmy). Each line is a rule something enforces:
+ * the expiry week (play check + `expireStaleIdols`), merge expiry (`expiresAtMerge`), and the
+ * remaining-players cutoff (`idolInvalidRemainingPlayers`, checked on every play).
+ */
+export function idolTimingRuleLines(input: { expiryWeek: number | null | undefined; invalidRemainingPlayers: number; playCutoffHours?: number }): string[] {
+  return [
+    input.expiryWeek ? `Idols expire after Week ${input.expiryWeek}` : 'No week limit on idols (some expire at the merge)',
+    `Idols stop working once ${input.invalidRemainingPlayers} players remain`,
+    ...(input.playCutoffHours ? [idolPlayCutoffMessage(input.playCutoffHours)] : []),
+  ]
+}
+
+export const SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS = 72
+
+/**
+ * The last moment an idol can be played at a council: the vote close, or earlier by the
+ * commissioner's play cutoff (`idolPlayCutoffHours`, idol setup) so every play is in before the
+ * final scramble. Votes themselves, including an Extra Vote's ballot, still run to the close.
+ */
+export function idolPlayDeadline(council: { voteDeadlineAt: Date }, cutoffHours = 0): Date {
+  return cutoffHours > 0 ? new Date(council.voteDeadlineAt.getTime() - cutoffHours * 3_600_000) : council.voteDeadlineAt
+}
+
+export function idolPlayCutoffMessage(hours: number): string {
+  return `Idols must be played at least ${hours} hour${hours === 1 ? '' : 's'} before votes close.`
+}
+
 export function normalizeSurvivorFoundationSettings(
   input: SettingsRecord | null | undefined,
 ): SurvivorFoundationSettings {
@@ -283,6 +314,7 @@ export function normalizeSurvivorFoundationSettings(
       1,
       defaultTeamCount,
     ),
+    idolPlayCutoffHours: clampInt(readNumber(s, ['idolPlayCutoffHours'], base.idolPlayCutoffHours), 0, SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS),
     idolCount: clampInt(readNumber(s, ['idolCount', 'survivorIdolCount'], Math.ceil(defaultTeamCount / 3)), 1, 40),
     idolsEnabled: readBoolean(s, ['idolsEnabled', 'survivorIdolsEnabled'], base.idolsEnabled),
     powerupsEnabled: readBoolean(s, ['powerupsEnabled'], base.powerupsEnabled),

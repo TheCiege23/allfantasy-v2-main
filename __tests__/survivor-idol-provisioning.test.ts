@@ -36,6 +36,30 @@ describe('native Survivor idol provisioning', () => {
     expect(db.survivorAuditEntry.create.mock.calls[0][0].data.data).not.toHaveProperty('seed')
   })
 
+  it('stamps the commissioner’s expiry week on every seeded idol, and none when no week is set', async () => {
+    const make = (survivorIdolExpiryWeek: number | null) => ({
+      survivorIdol: { count: vi.fn(async () => 0), create: vi.fn(async () => ({ id: 'idol-1' })) },
+      league: { findUnique: vi.fn(async () => ({ settings: {}, survivorIdolCount: 1, survivorIdolExpiryWeek, userId: 'commissioner' })) },
+      survivorTribe: { count: vi.fn(async () => 1) },
+      draftSession: { findFirst: vi.fn(async () => ({ id: 'draft-1', status: 'completed', sessionKind: 'real' })) },
+      survivorPlayer: { findMany: vi.fn(async () => [{ userId: 'user-1', redraftRosterId: 'generic-1' }]), findUnique: vi.fn(async () => ({ idolIds: [] })), update: vi.fn(async () => ({})) },
+      roster: { findMany: vi.fn(async () => [{ id: 'generic-1', redraftRosterId: 'season-1' }]) },
+      draftPick: { findMany: vi.fn(async () => [{ playerId: 'nba-1', playerName: 'Player One', rosterId: 'generic-1', assetType: 'player' }]) },
+      survivorLeagueConfig: { findUnique: vi.fn(async () => ({ id: 'config-1', idolCount: 1, idolPowerPool: ['vote_shield'] })) },
+      survivorIdolLedgerEntry: { create: vi.fn(async () => ({})) },
+      sportsPlayer: { findFirst: vi.fn(async () => null) },
+      leagueChatMessage: { create: vi.fn(async () => ({})) },
+      survivorAuditEntry: { create: vi.fn(async () => ({})) },
+    })
+    const { seedSurvivorIdols } = await import('@/lib/survivor/survivorIdolProvisioning')
+    const withWeek = make(11)
+    expect(await seedSurvivorIdols('league-1', { db: withWeek as never, seed: 123 })).toMatchObject({ ok: true })
+    expect(withWeek.survivorIdol.create.mock.calls[0][0].data.expiresAtWeek).toBe(11)
+    const noWeek = make(null)
+    await seedSurvivorIdols('league-1', { db: noWeek as never, seed: 123 })
+    expect(noWeek.survivorIdol.create.mock.calls[0][0].data.expiresAtWeek).toBeNull()
+  })
+
   it('seeds exactly the league idol types sealed at draft lock, one idol per slot, repeats included', async () => {
     const resolved = ['immunity', 'steal-three', 'vote-steal', 'vote-steal', 'vote-steal', 'extra-vote', 'extra-vote']
     const picks = Array.from({ length: 9 }, (_, index) => ({ playerId: `nba-${index}`, playerName: `Player ${index}`, rosterId: 'generic-1', assetType: 'player' }))

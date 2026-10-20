@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { EXILE_KEY_POSITION_BY_SPORT, IDOL_POWER_DESCRIPTIONS } from './constants'
 import { getSportSchedule } from './sportScheduleEngine'
+import { idolTimingRuleLines, normalizeSurvivorFoundationSettings } from './survivorSettings'
 
 /**
  * Generate and pin the Main Island FAQ in the league chat channel.
@@ -21,7 +22,7 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
       sport: true, survivorPlayerCount: true, survivorTribeCount: true,
       survivorMergeTrigger: true, survivorMergeWeek: true, survivorMergeAtCount: true,
       survivorJuryStart: true, survivorIdolsEnabled: true, survivorIdolCount: true,
-      survivorIdolExpiryWeek: true, survivorExileEnabled: true,
+      survivorIdolExpiryWeek: true, survivorExileEnabled: true, settings: true,
       survivorSelfVoteAllowed: true, survivorRocksEnabled: true, survivorTieRule: true,
       survivorRevealMode: true, survivorChallengeMode: true, survivorTokenEnabled: true,
       survivorBossResetEnabled: true,
@@ -71,7 +72,7 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
 • To play: message @Chimmy "I want to use my idol"
 • To check your idols: message @Chimmy "Do I have an idol?"
 • Idols are attached to PLAYERS — if a player is traded or picked up from waivers, the idol goes with them
-• ${league.survivorIdolExpiryWeek ? `Idols expire after Week ${league.survivorIdolExpiryWeek}` : 'Idols expire when 5 players remain (default)'}
+${idolTimingRuleLines({ expiryWeek: league.survivorIdolExpiryWeek, invalidRemainingPlayers: normalizeSurvivorFoundationSettings(league.settings ?? {}).idolInvalidRemainingPlayers, playCutoffHours: normalizeSurvivorFoundationSettings(league.settings ?? {}).idolPlayCutoffHours }).map((l) => `• ${l}`).join('\n')}
 • When an idol is played, it is announced in league chat
 
 ---
