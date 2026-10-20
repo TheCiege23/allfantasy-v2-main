@@ -356,3 +356,45 @@ change mid-week: the commissioner route should only flip it between weeks.
 6. **B6 follow-up**: confirm whether the AF engine save path lets a player who has already played be
    benched on a later day of the same week. If it does, that is a live scoring exploit independent of
    this design.
+
+---
+
+## 10. Which games count (2026-10-20)
+
+A commissioner setting for NBA, NHL and MLB, in `League.settings.sportConfig` as `gamesCountMode`
+(`all` | `best_n` | `lock_in`) and `gamesCountBestN` (2 or 3), read only through
+`readGamesCountSetting` in `lib/redraft/gamesCount.ts`. The settings PATCH refuses a bad value with a
+400; anything invalid that reaches the blob another way reads as `all`.
+
+- **All games** — the default and the behaviour before the setting. A league on `all` never queries
+  the two tables below.
+- **Best N** — the manager may pick which N of a started player's games count; unpicked slots are
+  filled by his best remaining games (ties: the earlier game, then the game id).
+- **Lock-In** — after a game finishes and before his next game starts, the manager may lock that
+  game in; it is his score for the week and later games do not count. Never locked: his **last**
+  game of the week counts. A lock cannot be undone.
+
+**With daily lineups (§5b) the rule applies per player across the days he STARTED.** A game on a day
+he was benched is not eligible: it can be neither counted, picked nor locked. In a weekly-lineup
+league every game of a started player is eligible. Bench points (the guillotine tiebreak), best ball,
+devy and C2C scoring are unchanged.
+
+Storage (migration `20261020190000_games_count_setting`, **not applied**): `player_week_game_scores`
+(one row per player per real game, written by the weekly stat sync for opted-in leagues only) and
+`redraft_games_count_choices` (the picks and locks). Manager API: `GET/POST /api/redraft/games-count`.
+UI: the commissioner radio group in the league settings sport-config panel, and a "This week's games"
+section on the player card for the manager's own players.
+
+**When it may change** (`lib/redraft/gamesCountSwitch.ts`, enforced by the settings PATCH):
+
+- Changing the mode or N is refused (409 `games_count_season_in_progress`) while a season is under way:
+  allowed before the draft, after it but before week 1 starts, and once the season is `complete`. A
+  running season with unknown week dates is refused. Going back to "All games" is a change too.
+- Leaving "All games" is refused (409 `games_count_storage_unavailable`) until BOTH tables exist,
+  probed by effect with `to_regclass`. Going back to "All games" never needs the tables.
+- A `sportConfig` blob that does not mention the two keys keeps the stored values, so a stale blob cannot
+  turn the rule off by omission.
+
+**Fail safe.** If a non-default mode is stored while the tables are missing, scoring and the stat sync
+treat the league as "All games" and log a `[games-count]` warning; the manager API answers 409
+`games_count_storage_unavailable`. Nothing throws P2021.
