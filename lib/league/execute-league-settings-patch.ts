@@ -13,6 +13,8 @@ import {
 import { keeperProvenanceFromCommissionerSave } from '@/lib/league-contract/keeperProvenance'
 import { CO_COMMISSIONER_SCOPES_KEY, scopesForSettingsPatch } from '@/lib/league/coCommissionerScopes'
 import { requireCommissionerRole } from '@/lib/league/permissions'
+import { SETTINGS_LOCK_KEY, lockedMessage } from '@/lib/league/settingsLock'
+import { lockedGroupsForPatch } from '@/lib/league/settingsLockService'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
@@ -496,6 +498,25 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
   }
+
+  /*
+   * Settings lock (lib/league/settingsLock.ts): an area the league locked for the season changes only
+   * after a league vote. Checked HERE — after every validation, before the first write, and before
+   * the daily-waiver block below rewrites `body` with derived keys — against the values that would
+   * actually change, so re-saving a section unchanged is never refused. The lock itself is not
+   * writable through `settingsMerge`: that would make it removable by the very save it guards.
+   */
+  if (
+    body.settingsMerge && typeof body.settingsMerge === 'object' &&
+    Object.prototype.hasOwnProperty.call(body.settingsMerge, SETTINGS_LOCK_KEY)
+  ) {
+    return jsonError('The settings lock is changed in Settings lock, not here.', 400)
+  }
+  const lockedNow = await lockedGroupsForPatch(leagueId, league as unknown as Record<string, unknown>, body).catch((e) => {
+    console.warn('[executeLeagueSettingsPatch] settings lock check failed, allowing the save', e instanceof Error ? e.message : e)
+    return []
+  })
+  if (lockedNow.length) return jsonError(lockedMessage(lockedNow), 423)
 
   /*
    * Per-day waiver schedule (lib/waivers/dailyWaiverSchedule.ts). Stored in `League.settings`, and

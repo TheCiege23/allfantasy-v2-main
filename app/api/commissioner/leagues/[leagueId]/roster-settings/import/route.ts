@@ -7,6 +7,7 @@ import {
   previewImportedRosterForLeague,
 } from '@/lib/roster-engine'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +25,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   const sourcePlatform = String(body.sourcePlatform ?? '').trim()
   const importedConfig = body.importedConfig as Record<string, number> | undefined
 
+  // A preview changes nothing; only applying an import is a roster-settings write.
+  const locked = action !== 'preview' ? await settingsLockedResponse(leagueId, 'rosters') : null
+  if (locked) return locked
   if (!sourcePlatform) return NextResponse.json({ error: 'sourcePlatform required' }, { status: 400 })
   if (!importedConfig || typeof importedConfig !== 'object') {
     return NextResponse.json({ error: 'importedConfig required' }, { status: 400 })
