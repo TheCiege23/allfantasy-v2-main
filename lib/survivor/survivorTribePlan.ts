@@ -25,9 +25,12 @@ export type SurvivorTribePlan = {
 
 export type PlanParticipant = { userId: string; displayName: string; /** 0–100, null = no AF data. */ strength: number | null }
 
-/** Handoff §5.4 validation: every tribe holds 4–6 managers. */
-export const TRIBE_MIN_MANAGERS = 4
-export const TRIBE_MAX_MANAGERS = 6
+/**
+ * Tribes are equal shares of the cast (owner's call, 2026-10-20: 12–24 managers in 2, 3 or 4
+ * tribes). The capacities already carry that split; the floor only stops a degenerate plan.
+ */
+export const TRIBE_MIN_MANAGERS = 3
+export const TRIBE_MAX_MANAGERS = 12
 
 export const DEFAULT_TRIBE_PLAN: Omit<SurvivorTribePlan, 'seed' | 'mapping'> = {
   mode: 'random',
@@ -153,7 +156,7 @@ export function validateTribePlan(mapping: Readonly<Record<string, number>>, par
   const sizes = new Array<number>(tribeCount).fill(0)
   for (const p of participants) sizes[mapping[p.userId]!]! += 1
   for (let s = 0; s < tribeCount; s++) {
-    if (sizes[s]! < TRIBE_MIN_MANAGERS || sizes[s]! > TRIBE_MAX_MANAGERS) return `Every tribe needs ${TRIBE_MIN_MANAGERS}–${TRIBE_MAX_MANAGERS} managers (tribe ${s + 1} has ${sizes[s]}).`
+    if (sizes[s]! < TRIBE_MIN_MANAGERS || sizes[s]! > TRIBE_MAX_MANAGERS) return `Every tribe needs ${TRIBE_MIN_MANAGERS}–${TRIBE_MAX_MANAGERS} managers (tribe ${s + 1} has ${sizes[s]}). Tribes are equal shares of the cast.`
     if (sizes[s] !== capacities[s]) return `Tribe ${s + 1} has ${sizes[s]} managers but its capacity is ${capacities[s]}. Move a manager or change the capacities.`
   }
   return null

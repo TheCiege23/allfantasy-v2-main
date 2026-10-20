@@ -165,10 +165,10 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
     // 29566580a (feat(survivor): add phase 1 foundation) deliberately widened the cast from
     // [16, 20, 24] to a contiguous 16-20 and did not update this assertion, leaving the file
     // red on main. The catalog is the authoritative side.
-    // 2026-10-12: new leagues are offered 16 or 20 (four tribes of four or five), a subset of the
-    // 16-20 the engine accepts, so every offered size still survives the server clamp below.
+    // 2026-10-20: new leagues are offered 12–24 in the eight sizes that split into 2, 3 or 4
+    // equal tribes; every offered size still survives the server clamp below.
     const survivorTeams = LEAGUE_CREATE_OPTIONS_CATALOG_V1.teamCountOptionsByConceptSport.survivor?.NFL
-    expect(survivorTeams).toEqual([16, 20])
+    expect(survivorTeams).toEqual([12, 15, 16, 18, 20, 21, 22, 24])
     for (const size of survivorTeams ?? []) expect(SURVIVOR_CAST_SIZE_OPTIONS).toContain(size)
   })
 
@@ -204,9 +204,10 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
       }
     }
 
-    // Control: the clamp is doing something, so the loops above are not vacuous.
-    expect(clampSurvivorCastSize(24)).toBe(20)
-    expect(clampSurvivorCastSize(30)).toBe(20)
+    // Control: the clamp is doing something, so the loops above are not vacuous. 24 is a real
+    // cast now, so the out-of-range probes sit beyond both ends of the list.
+    expect(clampSurvivorCastSize(10)).toBe(12)
+    expect(clampSurvivorCastSize(30)).toBe(24)
   })
 
   it('every offered Survivor cast size can pick a tribe count', () => {
