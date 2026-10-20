@@ -623,7 +623,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
           </div>
         </div>
 
-        <details className="af3a-insights"><summary>Portfolio &amp; season insights <span>Exposure, results and tools</span></summary>
+        <details className="af3a-insights"><summary>{es ? 'Análisis de tus ligas y temporada' : 'Portfolio & season insights'} <span>{es ? 'Exposición, resultados y herramientas' : 'Exposure, results and tools'}</span></summary>
         {slots.portfolioChart}
 
         {/* ── Bottom three-up ────────────────────────────────────────────── */}

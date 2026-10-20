@@ -281,7 +281,7 @@ export default function CoreLeagueContextBar({
         </strong>
       </div>
 
-      <details className="af-lctx-details"><summary>League details</summary>
+      <details className="af-lctx-details"><summary>{es ? 'Detalles de la liga' : 'League details'}</summary>
       <div className="af-lctx-statuses">
         {coverageHref && leagueWorkspaceMode(platform, language).authority !== 'NATIVE' ? (
           /*
