@@ -1,4 +1,5 @@
 "use client"
+import { allowsLeagueSms } from "@/lib/notifications/channelPolicy"
 
 import { ChevronDown, ChevronRight } from "lucide-react"
 import type { NotificationCategoryId, NotificationChannelPrefs } from "@/lib/notification-settings"
@@ -131,7 +132,7 @@ export function NotificationCategoryRenderer({
                 <span style={{ color: "var(--text)" }}>{delivery.email}</span>
               </label>
             )}
-            {deliveryAvailability.sms && (
+            {deliveryAvailability.sms && allowsLeagueSms(categoryId, "settings") && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

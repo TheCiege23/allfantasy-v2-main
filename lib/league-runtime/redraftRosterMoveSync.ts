@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
 import { slotTypeFor } from './redraftSlotType'
 
 /**
@@ -62,6 +63,55 @@ async function resolvePlayerMeta(db: Db, sport: string, playerId: string): Promi
   }
 }
 
+/**
+ * `Roster.redraftRosterId` → the redraft roster a move must land on, for a dynasty-family league.
+ *
+ * 🛑 THE LINK IS SET ONCE AND NEVER FOLLOWS THE LEAGUE INTO NEXT SEASON. `reconcileRosterRedraftLinks`
+ * fills only NULL links, so a dynasty team stays linked to its year-one `RedraftRoster` after
+ * `ensureNextRedraftSeasonShell` has built year two and `carryDynastyRostersForward` has copied the
+ * roster there. Every offseason trade, add and drop therefore landed on the FINISHED season, which
+ * nothing reads again — the roster page, the rookie draft and next season all read the newest one.
+ * That is the move Sleeper loses when it is made after the championship and before advancing, and the
+ * second carryover (`createNextLeagueDraft`) then copied the moved players back onto their old teams.
+ *
+ * So when the linked roster's season is complete and the league has a newer season, the move goes to
+ * the same team (`ownerId`, which the shell copies) in the newest season. The link itself is not
+ * rewritten: settled trades and scoring history still resolve through it to the season they belong to.
+ *
+ * Dynasty family only. A redraft or keeper league's next season starts from a draft or a keeper
+ * window, never from last season's rows, and its offseason has no player moves to place.
+ */
+async function currentSeasonRedraftRosters(
+  db: Db,
+  leagueId: string,
+  linkedIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (linkedIds.length === 0) return out
+  const newest = await db.redraftSeason.findFirst({
+    where: { leagueId },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  })
+  if (!newest) return out
+  const linked = await db.redraftRoster.findMany({
+    where: { id: { in: linkedIds }, leagueId },
+    select: { id: true, ownerId: true, seasonId: true, season: { select: { status: true } } },
+  })
+  const stale = linked.filter((r) => r.seasonId !== newest.id && r.season?.status === 'complete')
+  if (stale.length === 0) return out
+  const current = await db.redraftRoster.findMany({
+    where: { seasonId: newest.id, leagueId, ownerId: { in: stale.map((r) => r.ownerId) } },
+    select: { id: true, ownerId: true },
+  })
+  const byOwner = new Map(current.map((r) => [r.ownerId, r.id]))
+  for (const r of stale) {
+    const target = byOwner.get(r.ownerId)
+    if (target) out.set(r.id, target)
+  }
+  return out
+}
+
 export async function planRedraftRosterMoveWrites(
   db: Db,
   input: PlanRedraftRosterMoveInput,
@@ -71,7 +121,7 @@ export async function planRedraftRosterMoveWrites(
 
   const league = await db.league.findUnique({
     where: { id: input.leagueId },
-    select: { platform: true, sport: true },
+    select: { platform: true, sport: true, leagueType: true, isDynasty: true },
   })
   if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return []
   const sport = String(league.sport ?? 'NFL')
@@ -81,7 +131,16 @@ export async function planRedraftRosterMoveWrites(
     where: { id: { in: rosterIds }, leagueId: input.leagueId },
     select: { id: true, redraftRosterId: true },
   })
-  const linkOf = new Map(rosters.map((r) => [r.id, r.redraftRosterId ?? null]))
+  const current = isDynastyFamilyLeague(league)
+    ? await currentSeasonRedraftRosters(
+        db,
+        input.leagueId,
+        rosters.map((r) => r.redraftRosterId).filter((x): x is string => Boolean(x)),
+      )
+    : new Map<string, string>()
+  const linkOf = new Map(
+    rosters.map((r) => [r.id, r.redraftRosterId ? current.get(r.redraftRosterId) ?? r.redraftRosterId : null]),
+  )
   const link = (rosterId: string | null) => (rosterId ? linkOf.get(rosterId) ?? null : null)
 
   const writes: Prisma.PrismaPromise<unknown>[] = []

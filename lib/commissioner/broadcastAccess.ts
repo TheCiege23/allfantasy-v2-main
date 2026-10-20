@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole } from '@/lib/league/permissions'
+import { coCommissionerAllowed } from '@/lib/league/coCommissionerScopes'
+import { isTournamentCoCommissioner } from '@/lib/league/tournamentCoCommissioners'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 /**
@@ -27,13 +29,31 @@ const SENDING_ROLES = new Set(['commissioner', 'co_commissioner'])
 
 export type BroadcastRefusal = 'forbidden' | 'imported'
 
+type FlaggedTeam = { leagueId: string; id?: string; isCommissioner: boolean; isCoCommissioner: boolean }
+
+/**
+ * A co-commissioner the head commissioner limited (lib/league/coCommissionerScopes) may send only
+ * with the chat permission. A tournament grant carries every permission.
+ */
+function coCommissionerMaySend(settings: unknown, userId: string, teams: readonly FlaggedTeam[]): boolean {
+  const coTeamIds = teams.filter((t) => t.isCoCommissioner && !t.isCommissioner).map((t) => String(t.id))
+  return !coTeamIds.length || isTournamentCoCommissioner(settings, userId) || coCommissionerAllowed(settings, coTeamIds, ['chat'])
+}
+
 /** Why this user may not broadcast to this league, or null when they may. */
 export async function broadcastRefusal(leagueId: string, userId: string): Promise<BroadcastRefusal | null> {
   const [league, role] = await Promise.all([
-    prisma.league.findFirst({ where: { id: leagueId }, select: { platform: true } }),
+    prisma.league.findFirst({ where: { id: leagueId }, select: { platform: true, settings: true } }),
     getLeagueRole(leagueId, userId),
   ])
   if (!league || !SENDING_ROLES.has(role ?? '')) return 'forbidden'
+  if (role === 'co_commissioner') {
+    const teams = await prisma.leagueTeam.findMany({
+      where: { leagueId, claimedByUserId: userId, isCoCommissioner: true },
+      select: { leagueId: true, id: true, isCommissioner: true, isCoCommissioner: true },
+    })
+    if (!coCommissionerMaySend(league.settings, userId, teams)) return 'forbidden'
+  }
   return isNativePlatform(league.platform) ? null : 'imported'
 }
 
@@ -59,17 +79,21 @@ export async function listBroadcastLeagues(userId: string, among?: string[]): Pr
         OR: [{ isCommissioner: true }, { isCoCommissioner: true }],
         ...(among ? { leagueId: { in: among } } : {}),
       },
-      select: { leagueId: true },
+      select: { leagueId: true, id: true, isCommissioner: true, isCoCommissioner: true },
     }),
   ])
   const ownedIds = new Set(owned.map((l) => l.id))
   const otherIds = [...new Set(flagged.map((t) => t.leagueId))].filter((id) => !ownedIds.has(id))
   const others =
     otherIds.length > 0
-      ? await prisma.league.findMany({ where: { id: { in: otherIds } }, select: { id: true, platform: true } })
+      ? await prisma.league.findMany({ where: { id: { in: otherIds } }, select: { id: true, platform: true, settings: true } })
       : []
   const roles = await Promise.all(others.map((l) => getLeagueRole(l.id, userId)))
-  const confirmed = others.filter((_, i) => SENDING_ROLES.has(roles[i] ?? ''))
+  const allowed = others.map((l, i) =>
+    roles[i] !== 'co_commissioner' ||
+    coCommissionerMaySend((l as { settings?: unknown }).settings, userId, flagged.filter((t) => t.leagueId === l.id)),
+  )
+  const confirmed = others.filter((_, i) => SENDING_ROLES.has(roles[i] ?? '') && allowed[i])
   return [...owned, ...confirmed].map((l) => ({
     id: l.id,
     platform: String(l.platform ?? ''),

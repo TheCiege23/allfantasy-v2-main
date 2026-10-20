@@ -129,6 +129,12 @@ export type NflRedraftTradeTeamState = {
   players: NflRedraftTradePlayerInput[]
   lockedPlayerIds: string[]
   validationIssues: Array<{ code: string; severity: string; message: string; playerId?: string | null }>
+  /**
+   * Players held in a reserve slot (IR, taxi, minors…) that the roster limit does not count. Present
+   * only when the caller supplied `isRosterLimitExemptSlot` — never on the NFL redraft runtime, whose
+   * count has always been every active player.
+   */
+  rosterLimitExemptPlayerIds?: string[]
 }
 
 export type NflRedraftTradeAssetState = {
@@ -402,8 +408,13 @@ export function resolveNflRedraftTradeSettings(input: {
 function toTeamState(input: {
   settings: NflRedraftTradeSettings
   roster: NflRedraftTradeRosterInput
+  isRosterLimitExemptSlot?: (slotType: string | null | undefined) => boolean
 }): NflRedraftTradeTeamState {
   const players = activePlayers(input.roster.players.map(normalizePlayer))
+  const exemptIds = input.isRosterLimitExemptSlot
+    ? players.filter((player) => input.isRosterLimitExemptSlot!(player.slotType)).map((player) => player.playerId)
+    : null
+  const counted = players.length - (exemptIds?.length ?? 0)
   return {
     rosterId: input.roster.rosterId,
     displayName: input.roster.displayName ?? null,
@@ -411,12 +422,13 @@ function toTeamState(input: {
     ownerName: input.roster.ownerName ?? null,
     faabBalance: Math.max(0, finiteNumber(input.roster.faabBalance, 0)),
     waiverPriority: positiveInt(input.roster.waiverPriority, 999),
-    activeRosterCount: players.length,
+    activeRosterCount: counted,
     activeRosterLimit: input.settings.activeRosterLimit,
-    rosterFull: players.length >= input.settings.activeRosterLimit,
+    rosterFull: counted >= input.settings.activeRosterLimit,
     players,
     lockedPlayerIds: players.filter((player) => player.isLocked).map((player) => player.playerId),
     validationIssues: input.roster.validationIssues ?? [],
+    ...(exemptIds ? { rosterLimitExemptPlayerIds: exemptIds } : {}),
   }
 }
 
@@ -498,6 +510,12 @@ export function buildNflRedraftTradeRuntimeState(input: {
   now?: Date
   activeRosterLimit?: number | null
   pickInventorySupported?: boolean | null
+  /**
+   * Slots whose players the roster limit does not count (reserve: IR, taxi…). Omitted by the NFL
+   * redraft runtime, which keeps counting every active player; supplied by the league-wide runtime
+   * (`resolveRedraftTradeRuntime`), where a dynasty taxi squad would otherwise read as an overfull roster.
+   */
+  isRosterLimitExemptSlot?: (slotType: string | null | undefined) => boolean
 }): NflRedraftTradeRuntimeState {
   const now = input.now ?? new Date()
   const settings = resolveNflRedraftTradeSettings({
@@ -506,7 +524,9 @@ export function buildNflRedraftTradeRuntimeState(input: {
     activeRosterLimit: input.activeRosterLimit,
     pickInventorySupported: input.pickInventorySupported,
   })
-  const teams = input.rosters.map((roster) => toTeamState({ settings, roster }))
+  const teams = input.rosters.map((roster) =>
+    toTeamState({ settings, roster, isRosterLimitExemptSlot: input.isRosterLimitExemptSlot }),
+  )
   const proposals = (input.proposals ?? [])
     .map((proposal) => toProposalState(proposal, now))
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso))
@@ -584,6 +604,8 @@ export function validateNflRedraftTradeProposal(input: {
 
   const rosterIds = new Set([input.proposerRosterId, input.receiverRosterId])
   const ownerByPlayerId = playerOwnerMap(input.state.teams)
+  // Empty on the NFL redraft runtime, so every outgoing player leaves the sender's count as before.
+  const limitExempt = new Set(input.state.teams.flatMap((team) => team.rosterLimitExemptPlayerIds ?? []))
   const seenAssets = new Set<string>()
   const playerDelta = new Map<string, number>([
     [input.proposerRosterId, 0],
@@ -630,7 +652,10 @@ export function validateNflRedraftTradeProposal(input: {
       if (owner.player.isLocked && !input.commissionerOverride) {
         return validationFailure('LOCKED_PLAYER', `${owner.player.playerName} is locked and cannot be traded.`)
       }
-      playerDelta.set(asset.fromRosterId, (playerDelta.get(asset.fromRosterId) ?? 0) - 1)
+      // A reserve-slot player was never in the sender's count; he arrives on the bench, so he is in the receiver's.
+      if (!limitExempt.has(asset.playerId)) {
+        playerDelta.set(asset.fromRosterId, (playerDelta.get(asset.fromRosterId) ?? 0) - 1)
+      }
       playerDelta.set(asset.toRosterId, (playerDelta.get(asset.toRosterId) ?? 0) + 1)
       outgoing.get(asset.fromRosterId)?.push(asset.playerId)
       incoming.get(asset.toRosterId)?.push(asset.playerId)

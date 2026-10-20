@@ -36,6 +36,7 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
+import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { DisputeDesk } from '@/components/disputes/DisputeDesk'
@@ -243,6 +244,9 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           </p>
         </div>
       ) : null}
+
+      {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
+      {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />

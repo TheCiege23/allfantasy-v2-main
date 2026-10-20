@@ -123,7 +123,7 @@ export async function GET(
       isCommissioner(leagueId, userId),
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { sport: true, leagueVariant: true },
+        select: { sport: true, leagueVariant: true, timezone: true },
       }),
       (async () => {
         const { isIdpLeague, getRosterDefaultsForIdpLeague, getIdpLeagueConfig } = await import('@/lib/idp')
@@ -219,6 +219,8 @@ export async function GET(
       teams,
       draftStatus: draftSessionStatus?.status ?? 'pre_draft',
       draftDate: lsRow?.draftDateUtc?.toISOString() ?? null,
+      // The draft date/time inputs are wall-clock in THIS zone, not the viewer's browser zone.
+      timezone: league?.timezone || 'America/New_York',
       autostartEnabled: lsRow?.autostart ?? false,
       slowDraftPauseEnabled: lsRow?.slowDraftPause ?? (variant.draftUISettings.timerMode === 'overnight_pause'),
       slowDraftPauseFrom: lsRow?.slowPauseFrom ?? variant.draftUISettings.slowDraftPauseWindow?.start ?? null,

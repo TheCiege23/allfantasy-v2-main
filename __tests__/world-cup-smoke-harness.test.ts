@@ -798,8 +798,11 @@ describe("STEP-7 — saveWorldCupBracketPickForEntry (reseeded official fixtures
       entries: [],
       includeThirdPlace: false,
     })
-    prismaMocks.$transaction.mockImplementation(async (callback: (tx: typeof prismaMocks) => Promise<unknown>) =>
-      callback(prismaMocks)
+    // Both Prisma forms: the save runs an interactive callback, and the recalculation it
+    // triggers writes the leaderboard with the batch (array) form.
+    prismaMocks.$transaction.mockImplementation(
+      async (arg: ((tx: typeof prismaMocks) => Promise<unknown>) | Promise<unknown>[]) =>
+        typeof arg === "function" ? arg(prismaMocks) : Promise.all(arg)
     )
   })
 

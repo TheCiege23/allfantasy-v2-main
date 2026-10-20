@@ -19,6 +19,8 @@
  *
  * ⚠ A ROUND CAN SPAN SEVERAL WEEKS. `League.playoffWeeksPerRound` was editable in the playoff
  * settings and read by nothing; the round's score is the sum of its weeks (`playoffRoundWeeks`).
+ * The FINAL can be longer still — `championship_length` (2 for MLB/NHL) — so the bracket's last
+ * round is passed in as `finalRoundNumber`, and the final is not written until its last week seals.
  *
  * ⚠ WEEKS ARE SEALED FOR THE TEAMS STILL PLAYING ONLY. The finalizer's coverage floor is measured
  * over every roster it is given, and an eliminated team's abandoned lineup — injured starters, a
@@ -34,7 +36,7 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { finalizeWeekWithRefresh, type WeekFinalizerDeps } from '@/lib/redraft/weekFinalizer'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
-import { CHAMPIONSHIP_ROUND_WHERE, playoffRoundWeeks } from './playoffRoundWeeks'
+import { CHAMPIONSHIP_ROUND_WHERE, playoffRoundWeeks, readChampionshipLength } from './playoffRoundWeeks'
 
 export type PlayoffRoundScoreOutcome =
   /** The season is not in its playoffs (still regular season, or already complete). */
@@ -155,12 +157,15 @@ export async function scoreActivePlayoffRound(
 
   const league = await db.league.findFirst({
     where: { id: season.leagueId },
-    select: { playoffWeeksPerRound: true },
+    select: { playoffWeeksPerRound: true, settings: true },
   })
   const weeks = playoffRoundWeeks({
     playoffStartWeek: season.playoffStartWeek,
     roundNumber: active.roundNumber,
     weeksPerRound: league?.playoffWeeksPerRound,
+    // Every championship round is generated up front, so the highest one IS the final.
+    finalRoundNumber: rounds[rounds.length - 1].roundNumber,
+    championshipLength: readChampionshipLength(league?.settings),
   })
   const withRound = { ...result, roundNumber: active.roundNumber, weeks }
   if (params.calendarWeek < weeks[0]) return { ...withRound, outcome: 'round_not_started' }

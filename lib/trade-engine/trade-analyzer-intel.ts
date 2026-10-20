@@ -39,6 +39,8 @@ const defaultDeps: TradeAnalyzerIntelDeps = {
     }),
   findTopRookieRankings: () =>
     prisma.rookieRanking.findMany({
+      // The analyzer's intel is NFL; other sports' rookie rankings share this table.
+      where: { sport: 'NFL' },
       orderBy: [{ year: 'desc' }, { rank: 'asc' }],
       take: 20,
     }),
