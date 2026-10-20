@@ -33,6 +33,7 @@ import {
   REDRAFT_MOVES_LOCKED_STATUS,
   isRedraftLeagueMovesLocked,
 } from '@/lib/redraft/tradeMoveLock'
+import { postDraftRosterMoveRefusal } from '@/server/services/postDraftRosterLockService'
 
 export const dynamic = 'force-dynamic'
 
@@ -652,6 +653,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           { error: tradeDeadlinePassedMessage(deadline), code: 'TRADE_DEADLINE_PASSED' },
           { status: 409 },
+        )
+      }
+
+      // Post-draft roster lock: an offer made before the draft ended cannot settle during it.
+      // After the existing refusals (already accepted, deadline) so their behaviour is unchanged.
+      const postDraftLock = await postDraftRosterMoveRefusal(proposal.leagueId, 'trade')
+      if (postDraftLock) {
+        return NextResponse.json(
+          { error: postDraftLock.error, code: postDraftLock.code, unlocksAt: postDraftLock.unlocksAt },
+          { status: postDraftLock.status },
         )
       }
 
