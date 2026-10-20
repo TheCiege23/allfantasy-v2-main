@@ -56,9 +56,7 @@ describe('tool hub → Simulation Lab', () => {
     expect(getToolCanonical('simulation-lab')).toBe('https://allfantasy.ai/tools/simulation-lab')
   })
 
-  it('analytics keep reporting the pre-rename path for this card', () => {
-    expect(TOOL_CONFIG['simulation-lab'].analyticsPath).toBe('/tools/matchup-simulator')
-  })
+  // landing_tool_visit reports /tools/simulation-lab: see tool-landing-analytics-path.test.tsx.
 
   it('no hub card opens /core/matchup through the simulator tool', () => {
     const hrefs = getAllTools().map((t) => `${t.slug} -> ${t.openToolHref}`)

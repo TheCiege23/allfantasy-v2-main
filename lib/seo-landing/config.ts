@@ -81,8 +81,6 @@ export interface ToolConfig {
   relatedToolSlugs: ToolSlug[]
   keywords: string[]
   faqs?: { q: string; a: string }[]
-  /** Path reported to landing analytics when it must outlive a slug rename (defaults to /tools/<slug>). */
-  analyticsPath?: string
 }
 
 export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
@@ -409,15 +407,13 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     keywords: ['AI draft assistant', 'fantasy draft help', 'draft assistant', 'Chimmy AI'],
   },
   // Renamed from 'matchup-simulator' 2026-10-20 (owner decision). /tools/matchup-simulator is a 308
-  // to /tools/simulation-lab (app/tools/matchup-simulator/page.tsx). Analytics keep the old path:
-  // see analyticsPath below.
+  // to /tools/simulation-lab (app/tools/matchup-simulator/page.tsx). Analytics report the new path.
   'simulation-lab': {
     slug: 'simulation-lab',
     title: 'Simulation Lab – Season, Playoff & Dynasty Simulations | AllFantasy',
     description:
       'AllFantasy Simulation Lab: run season and playoff scenarios, project head-to-head outcomes, and explore dynasty simulations.',
     headline: 'Simulation Lab',
-    analyticsPath: '/tools/matchup-simulator',
     benefitSummary:
       'Simulate seasons, playoffs, and matchups. Use data-driven scenarios for redraft and dynasty.',
     // Owner decision 2026-10-20: this card (season, playoff and dynasty simulations) opens the
