@@ -27,7 +27,7 @@
  *   node scripts/ts-error-ratchet.mjs --allow-zero     # accept a genuine zero-error run
  */
 import { spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, writeSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
 
@@ -131,9 +131,14 @@ function getTscOutput() {
     if (!existsSync(path)) usageError(`--from log not found: ${path}`)
     return readFileSync(path, 'utf8')
   }
-  // The full project exceeded 8 GiB in CI (SIGABRT); retain all checks with a 12 GiB heap.
   const r = spawnSync(
     process.execPath,
+    /*
+     * 12 GB, not 8: on Node 24 (the version CI and package.json `engines` use) a full check of this
+     * repo peaks at ~8.6 GB resident under an 8 GB heap, i.e. pinned at the ceiling, and on CI it
+     * aborted with SIGABRT (V8 out of memory) on most runs from 2026-10-20. With a 12 GB heap the
+     * same run peaks at ~5.5 GB. GitHub's runners for public repos have 16 GB.
+     */
     ['--max-old-space-size=12288', './node_modules/typescript/lib/tsc.js', '--noEmit'],
     { cwd: root, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 }
   )
@@ -184,6 +189,23 @@ function getTscOutput() {
   return `${r.stdout || ''}${r.stderr || ''}`
 }
 
+/*
+ * On GitHub Actions, also report a failure as a workflow annotation. The job log is the only other
+ * place the reason appears, and it is not readable from every environment that has to act on the
+ * failure; annotations are served by the check-runs API alongside the conclusion. No-op elsewhere.
+ */
+function annotate(message, file, level = 'error') {
+  if (process.env.GITHUB_ACTIONS !== 'true') return
+  const esc = (v) => String(v).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
+  const props = [
+    ...(file ? [`file=${String(file).replace(/[,:]/g, (c) => (c === ',' ? '%2C' : '%3A'))}`] : []),
+    'title=TypeScript ratchet',
+  ].join(',')
+  // writeSync, not console.log: stdout to a pipe is asynchronous in Node, and the process.exit()
+  // that follows every failure can drop a buffered line, which is exactly the line that matters.
+  writeSync(1, `::${level} ${props}::${esc(message)}\n`)
+}
+
 function parse(text) {
   const byFile = {}
   let total = 0
@@ -215,7 +237,9 @@ function writeBaseline(parsed) {
 }
 
 function main() {
-  const parsed = parse(getTscOutput())
+  const raw = getTscOutput()
+  const parsed = parse(raw)
+  annotate(`tsc reported ${parsed.total} error(s) across ${Object.keys(parsed.byFile).length} file(s)`, undefined, 'notice')
 
   /*
    * ANTI-VACUITY: the positive control, encoded.
@@ -243,6 +267,7 @@ function main() {
     parsed.total === 0 &&
     !has('--allow-zero')
   ) {
+    annotate(`tsc reported 0 errors but the baseline records ${baselineForSanity.total} — treated as a broken run.`)
     console.error(
       `✗ tsc reported 0 errors but the baseline records ${baselineForSanity.total}.\n` +
         '  A check that cannot fail is worse than no check, so this is treated as a BROKEN RUN,\n' +
@@ -264,6 +289,7 @@ function main() {
       process.exit(0)
     }
     console.error(`✗ redraft-scoped strict gate: ${count} TypeScript error(s) in redraft paths:`)
+    annotate(`redraft-scoped strict gate: ${count} TypeScript error(s) in redraft paths: ${offenders.map(([f, c]) => `${f} (${c})`).join(', ')}`)
     for (const [f, c] of offenders) console.error(`    ${c.toString().padStart(3)}  ${f}`)
     process.exit(1)
   }
@@ -300,6 +326,11 @@ function main() {
     console.error(`\n✗ ${regressions.length} file(s) gained TypeScript errors:`)
     for (const r of regressions.sort((a, b) => b.now - b.was - (a.now - a.was))) {
       console.error(`    ${r.file}: ${r.was} → ${r.now}  (+${r.now - r.was})`)
+      const lines = raw
+        .split(/\r?\n/)
+        .filter((l) => ERROR_LINE.test(l) && l.replace(/\\/g, '/').startsWith(`${r.file}(`))
+        .slice(0, 5)
+      annotate(`${r.file}: ${r.was} → ${r.now} errors\n${lines.join('\n')}`, r.file)
     }
     console.error('\nFix the new errors, or if intentional, re-baseline with `npm run ts:ratchet:update`.')
     process.exit(1)
@@ -314,4 +345,9 @@ function main() {
   process.exit(0)
 }
 
-main()
+try {
+  main()
+} catch (err) {
+  annotate(err instanceof Error ? err.message : String(err))
+  throw err
+}
