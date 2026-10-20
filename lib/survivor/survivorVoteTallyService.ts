@@ -7,6 +7,9 @@ import { getCouncilShots } from './survivorShotInTheDark'
 import { afterCouncilRevealed } from './shareCards/hooks'
 import { isCouncilReadComplete } from './survivorRevealGate'
 import { createSurvivorChatMessage } from './survivorChatBridge'
+import { hasIndependentSurvivorHost } from './survivorHostIndependence'
+import { drawSurvivorStones } from './survivorStones'
+import { notifySurvivorCommissionerOnce } from './survivorCommissionerAlerts'
 
 /**
  * SURVIVOR VOTE TALLY (canonical Phase 3) — deterministic, no fabrication.
@@ -37,7 +40,7 @@ export interface CouncilTally {
   blockedByIdol: boolean
   isTie: boolean
   tieUserIds: string[]
-  tiePhase: 'revote_required' | 'season_points_decided' | 'commissioner_tiebreak_required' | null
+  tiePhase: 'revote_required' | 'season_points_decided' | 'commissioner_tiebreak_required' | 'stones_decided' | null
   eliminatedUserId: string | null
   eliminatedName: string | null
   eliminatedRosterId: string | null
@@ -201,9 +204,20 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
       eliminatedName = ctx.scopePlayers.find(player => player.userId === bottom[0])?.displayName ?? null
       isTie = false
       tiePhase = 'season_points_decided'
-    } else {
+    } else if (await hasIndependentSurvivorHost(leagueId, prisma)) {
       tieUserIds = bottom
       tiePhase = 'commissioner_tiebreak_required'
+    } else {
+      // No human host may decide a secret tie in a league whose commissioner plays, and a council
+      // left at commissioner_tiebreak_required blocks the week forever. The stones decide: a draw
+      // among the exact-tied managers, seeded from the council so the audit can replay it.
+      const drawn = drawSurvivorStones(bottom, `survivor-stones:${leagueId}:${councilId}:${council.week}`)
+      eliminatedUserId = drawn.eliminatedUserId
+      eliminatedRosterId = ctx.userToRoster[drawn.eliminatedUserId] ?? null
+      eliminatedName = ctx.scopePlayers.find(player => player.userId === drawn.eliminatedUserId)?.displayName ?? null
+      tieBreakSeasonPoints = { totals, lowest, candidates, stones: drawn } as Prisma.InputJsonValue
+      isTie = false
+      tiePhase = 'stones_decided'
     }
   }
 
@@ -238,6 +252,14 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
       tieBreakSeasonPoints,
     },
   })
+  if (tiePhase === 'commissioner_tiebreak_required') {
+    await notifySurvivorCommissionerOnce(leagueId, 'tie_unresolved', {
+      dedupeKey: councilId, week: council.week,
+      title: `Week ${council.week} council is tied and needs your call`,
+      body: 'The revote and finalized season points both ended level. Open the Tribal Council controls and pick between the tied managers.',
+      deepLinkPath: `/survivor/${leagueId}/tribal`, urgency: 'critical',
+    }).catch(() => {})
+  }
 
   await prisma.survivorAuditEntry.create({
     data: {
@@ -283,7 +305,7 @@ async function publishVerdictInTx(tx: Prisma.TransactionClient, leagueId: string
   }).join('\n')
   const ballots = seq.length ? seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : scroll.status === 'taken_by_vote_steal' ? ' (Taken — does not count)' : scroll.status === 'blocked_by_shot' ? ' (blocked by Shot in the Dark)' : scroll.status === 'forfeited_by_shot' ? ' (forfeited by Shot in the Dark)' : ' (does not count)'}.`).join('\n') : 'No ballots were cast.'
   const opensRevote = council.isTie && council.tiePhase === 'revote_required' && council.phase !== 'revote'
-  const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : ''}`
+  const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : council.tiePhase === 'stones_decided' ? ' The revote and finalized season points were tied, so the stones decided.' : ''}`
   if (channel) {
     await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
       contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shotAnnouncement ? `${shotAnnouncement}\n` : ''}${ballots}\n${outcome}` } })
