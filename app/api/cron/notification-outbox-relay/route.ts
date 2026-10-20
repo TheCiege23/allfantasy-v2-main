@@ -36,7 +36,7 @@ async function handle(req: NextRequest) {
   const limit = limitRaw && /^\d{1,3}$/.test(limitRaw) ? Number(limitRaw) : undefined
 
   const startedAt = Date.now()
-  // Shares the authenticated five-minute schedule. The pass reads only commissioner-opted
+  // Shares the authenticated minute schedule. The pass reads only commissioner-opted
   // league-chat channels and enforces its own short budget; dry runs never import messages.
   const discordPromise = dryRun ? Promise.resolve(null) : (async () => {
     try {
@@ -92,7 +92,7 @@ async function handle(req: NextRequest) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[cron/notification-outbox-relay] failed:", message)
     return NextResponse.json(
-      { ok: false, error: message.slice(0, 240), discordInbound, durationMs: Date.now() - startedAt },
+      { ok: false, error: message.slice(0, 240), discordInbound: await discordPromise, durationMs: Date.now() - startedAt },
       { status: 500 },
     )
   }
