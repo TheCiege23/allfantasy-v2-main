@@ -21,6 +21,7 @@ describe('native Survivor idol provisioning', () => {
       sportsPlayer: { findFirst: vi.fn(async () => ({ name: 'Player One', imageUrl: 'https://example.com/player-one.png' })) },
       leagueChatMessage: { create: vi.fn(async () => ({})) },
       survivorAuditEntry: { create: vi.fn(async () => ({})) },
+      survivorNotification: { create: vi.fn(async () => ({ id: 'notif' })) },
     }
     const { seedSurvivorIdols } = await import('@/lib/survivor/survivorIdolProvisioning')
     const result = await seedSurvivorIdols('league-1', { db: db as never, seed: 123 })
@@ -34,6 +35,11 @@ describe('native Survivor idol provisioning', () => {
       metadata: expect.objectContaining({ survivorIdolReveal: true, playerId: 'nba-1' }),
     }) }))
     expect(db.survivorAuditEntry.create.mock.calls[0][0].data.data).not.toHaveProperty('seed')
+    // Push and email: "you hold an idol", written inside the seeding transaction, never naming it.
+    expect(db.survivorNotification.create).toHaveBeenCalledTimes(1)
+    const notice = db.survivorNotification.create.mock.calls[0][0].data
+    expect(notice).toMatchObject({ type: 'idol_found', recipientUserId: 'user-1', isSpoilerSafe: true, status: 'pending' })
+    expect(`${notice.title} ${notice.body}`).not.toMatch(/vote shield|immunity|steal/i)
   })
 
   it('seeds exactly the league idol types sealed at draft lock, one idol per slot, repeats included', async () => {
@@ -61,6 +67,7 @@ describe('native Survivor idol provisioning', () => {
       sportsPlayer: { findFirst: vi.fn(async () => ({ name: 'Player', imageUrl: null })) },
       leagueChatMessage: { create: vi.fn(async () => ({})) },
       survivorAuditEntry: { create: vi.fn(async () => ({})) },
+      survivorNotification: { create: vi.fn(async () => ({ id: 'notif' })) },
     }
     const { seedSurvivorIdols } = await import('@/lib/survivor/survivorIdolProvisioning')
     const result = await seedSurvivorIdols('league-1', { db: db as never, seed: 5 })
@@ -98,6 +105,7 @@ describe('seeding never creates an idol without a play engine', () => {
       sportsPlayer: { findFirst: vi.fn(async () => ({ name: 'Player', imageUrl: null })) },
       leagueChatMessage: { create: vi.fn(async () => ({})) },
       survivorAuditEntry: { create: vi.fn(async () => ({})) },
+      survivorNotification: { create: vi.fn(async () => ({ id: 'notif' })) },
     }
     const { seedSurvivorIdols } = await import('@/lib/survivor/survivorIdolProvisioning')
     const result = await seedSurvivorIdols('league-1', { db: db as never, seed: 9 })

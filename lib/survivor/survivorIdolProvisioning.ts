@@ -14,6 +14,7 @@ import {
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { lockSurvivorIdolDraw } from './survivorIdolConfigService'
 import { survivorIdolStoredPowerType, survivorIdolTypeIdForPower } from './survivorIdolTypes'
+import { SURVIVOR_NOTIFICATION_SPECS, survivorNotificationCopy } from './survivorNotificationCatalog'
 
 export type SurvivorIdolSeedOutcome =
   | { ok: true; seeded: boolean; alreadySeeded: boolean; voteShieldCount: number; ownerCount: number; seed: number | null }
@@ -177,6 +178,21 @@ export async function seedSurvivorIdols(
           data: { idolIds: Array.from(new Set([...(player.idolIds ?? []), ...ids])) },
         })
       }
+    }
+
+    // Push and email ("you hold an idol", never which one) for every holder, written in the same
+    // transaction as the idols so a rolled-back seed queues nothing. The legacy path did this;
+    // the native path only wrote the private chat card.
+    const idolFound = survivorNotificationCopy({ kind: 'idol_found' })
+    const idolSpec = SURVIVOR_NOTIFICATION_SPECS.idol_found
+    for (const ownerUserId of ownerIds) {
+      await tx.survivorNotification.create({
+        data: {
+          leagueId, type: 'idol_found', recipientUserId: ownerUserId,
+          title: idolFound.title, body: idolFound.body, deepLinkPath: idolSpec.path(leagueId),
+          urgency: idolSpec.urgency, isSpoilerSafe: true, scheduledFor: new Date(), status: 'pending',
+        },
+      })
     }
 
     // Commissioner-only summary audit (NOT public — hidden ownership stays hidden).
