@@ -8,6 +8,7 @@
  */
 
 import { useMemo, useState, type CSSProperties } from 'react'
+import { ChopExplainerBlock } from '@/components/scenario-explainer/WhatDoINeed'
 import Link from 'next/link'
 import {
   SpecialtyCard,
@@ -340,6 +341,9 @@ export function GuillotineSpecialtyHome({
           </Link>
         </div>
       </div>
+
+      {/* What do I need to avoid the chop — lib/scenario-explainer. Hidden until there are chop scores to model. */}
+      <ChopExplainerBlock leagueId={leagueId} />
 
       {home?.lastChop ? <GuillotineChopMoment leagueId={leagueId} lastChop={home.lastChop} aliveCount={alive} waiverLabel={home.waiverLabel} /> : null}
     </SpecialtyShell>

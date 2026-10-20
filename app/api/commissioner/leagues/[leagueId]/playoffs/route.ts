@@ -7,6 +7,7 @@ import { getPlayoffConfigForLeague } from '@/lib/playoff-defaults/PlayoffConfigR
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key)
@@ -45,6 +46,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const locked = await settingsLockedResponse(params.leagueId, 'playoffs')
+  if (locked) return locked
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const league = await (prisma as any).league.findUnique({

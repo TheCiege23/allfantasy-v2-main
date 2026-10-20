@@ -392,7 +392,7 @@ export function NotificationsSettingsSection({
                 quietHours: {
                   startHour: p.quietHours?.startHour ?? 22,
                   endHour: p.quietHours?.endHour ?? 7,
-                  allowCritical: p.quietHours?.allowCritical ?? true,
+                  allowCritical: p.quietHours?.allowCritical ?? false,
                   ...p.quietHours,
                   enabled: e.target.checked,
                 },
@@ -441,7 +441,7 @@ export function NotificationsSettingsSection({
             <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
               <input
                 type="checkbox"
-                checked={prefs.quietHours?.allowCritical !== false}
+                checked={prefs.quietHours?.allowCritical === true}
                 onChange={(e) => {
                   setDirty(true)
                   setPrefs((p) => ({

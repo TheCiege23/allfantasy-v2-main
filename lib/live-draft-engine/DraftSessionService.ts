@@ -687,19 +687,25 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     getDraftConfigForLeague(leagueId),
     getDraftUISettingsForLeague(leagueId),
   ])
-  if (ls) {
-    await prisma.draftSession.update({
-      where: { id: session.id },
-      data: {
-        aiAutoPick: ls.aiAutoPick,
-        cpuAutoPick: ls.cpuAutoPick,
-        playerPool: ls.playerPool,
-        alphabeticalSort: ls.alphabeticalSort,
-        startedAt: startedAtNow,
-        version: { increment: 1 },
-      },
-    })
-  }
+  /*
+   * CLAIM THE SESSION BEFORE STARTING IT: a conditional update on status AND the version just read.
+   * Only one caller can match, so two overlapping draft ticks, a tick and the commissioner's Start
+   * button, or a double click cannot both start the draft. The control lock callers take is not
+   * enough on its own: it fails open on a lock-store outage and its TTL is shorter than a start.
+   * Every later write below is pinned to the claimed version.
+   */
+  const claim = await prisma.draftSession.updateMany({
+    where: { id: session.id, status: 'pre_draft', version: session.version },
+    data: {
+      ...(ls
+        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
+        : {}),
+      startedAt: startedAtNow,
+      version: { increment: 1 },
+    },
+  })
+  if (claim.count !== 1) return { ok: false, reason: 'session_not_ready' }
+  const claimedVersion = session.version + 1
 
   // G15.2b — best-effort emit (never throws). Past the pre_draft guard above, so the
   // draft is committing to start; deterministic key → exactly one event per session.
@@ -726,10 +732,10 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     } catch (e) {
       console.warn('[startDraftSession] Salary cap startup ledger init non-fatal:', e)
     }
-    await updateSessionWithArchive(session, {
+    if (!(await startClaimedSession(session, {
       status: 'in_progress', pausedRemainingSeconds: null, overnightFrozenPickSeconds: null,
       startedAt: startedAtNow, completedAt: null, version: { increment: 1 },
-    }, 'start')
+    }, claimedVersion))) return { ok: false, reason: 'session_not_ready' }
     await ensureDraftingLifecycleForActiveSession(leagueId)
     return { ok: true }
   }
@@ -737,13 +743,31 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
   const timerSeconds = computeEffectivePickTimerSeconds(ls, config, uiSettings)
   const timerEndAt =
     timerSeconds != null && timerSeconds > 0 ? new Date(Date.now() + timerSeconds * 1000) : null
-  await updateSessionWithArchive(session, {
+  if (!(await startClaimedSession(session, {
     status: 'in_progress', timerSeconds, timerEndAt, pausedRemainingSeconds: null,
     overnightFrozenPickSeconds: null, startedAt: startedAtNow, completedAt: null,
     version: { increment: 1 },
-  }, 'start')
+  }, claimedVersion))) return { ok: false, reason: 'session_not_ready' }
   await ensureDraftingLifecycleForActiveSession(leagueId)
   return { ok: true }
+}
+
+/**
+ * The in_progress transition, pinned to the version `startDraftSession` claimed. A P2025 means
+ * another writer moved the session after the claim; that start lost, and it is not an error.
+ */
+async function startClaimedSession(
+  session: Parameters<typeof updateSessionWithArchive>[0],
+  data: Prisma.DraftSessionUpdateInput,
+  claimedVersion: number,
+): Promise<boolean> {
+  try {
+    await updateSessionWithArchive(session, data, 'start', {}, claimedVersion)
+    return true
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code === 'P2025') return false
+    throw error
+  }
 }
 
 export async function pauseDraftSession(leagueId: string, pausedByUserId?: string | null): Promise<boolean> {

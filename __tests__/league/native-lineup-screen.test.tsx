@@ -239,6 +239,51 @@ describe('NativeLineupScreen', () => {
     expect(ids(saves(calls)[1].roster.bench)).toContain('qb1')
   })
 
+  describe('slot positions survive a reload', () => {
+    // QB, RB, FLEX. The manager emptied RB and kept Bijan in FLEX.
+    const flexSlots = [
+      { index: 0, label: 'QB', allowedPositions: ['QB'], isFlexible: false },
+      { index: 1, label: 'RB', allowedPositions: ['RB'], isFlexible: false },
+      { index: 2, label: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'], isFlexible: true },
+    ]
+    const flexRoutes = (starters: Array<Record<string, unknown>>) => ({
+      ...baseRoutes(three()),
+      '/api/league/roster': {
+        ...roster(three()),
+        starterSlots: flexSlots,
+        roster: { lineup_sections: { starters, bench: [{ id: 'rb1', position: 'RB' }], ir: [], taxi: [], devy: [] } },
+      },
+    })
+    const starterNames = (container: HTMLElement) =>
+      [...container.querySelectorAll('.nls-rows')[0].querySelectorAll('li strong')].map((el) => el.textContent?.trim())
+
+    it('loads the saved positions: the empty slot stays where the manager left it', async () => {
+      stubFetch(flexRoutes([{ id: 'qb1', position: 'QB', slotIndex: 0 }, { id: 'rb2', position: 'RB', slotIndex: 2 }]))
+      const { container } = render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+      await screen.findByText('Bijan Robinson')
+      expect(starterNames(container)).toEqual(['Jalen Hurts', 'Empty', 'Bijan Robinson'])
+    })
+
+    it('an old lineup without positions is re-seated as before', async () => {
+      stubFetch(flexRoutes([{ id: 'qb1', position: 'QB' }, { id: 'rb2', position: 'RB' }]))
+      const { container } = render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+      await screen.findByText('Bijan Robinson')
+      expect(starterNames(container)).toEqual(['Jalen Hurts', 'Bijan Robinson', 'Empty'])
+    })
+
+    it('every saved starter carries his slot index', async () => {
+      const calls = stubFetch(flexRoutes([{ id: 'qb1', position: 'QB', slotIndex: 0 }, { id: 'rb2', position: 'RB', slotIndex: 2 }]))
+      render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+      await screen.findByText('Bijan Robinson')
+      fireEvent.click(screen.getAllByRole('button', { name: 'Move' })[0])
+      fireEvent.click(screen.getByRole('button', { name: /Move to bench/ }))
+      await waitFor(() => expect(saves(calls)).toHaveLength(1))
+      const sent = saves(calls)[0].roster as unknown as Record<string, Array<{ id: string; slotIndex?: number }>>
+      expect(sent.starters.map((r) => [r.id, r.slotIndex])).toEqual([['rb2', 2]])
+      expect(sent.bench.every((r) => r.slotIndex === undefined)).toBe(true)
+    })
+  })
+
   it('IR: an eligible injured bench player moves to IR, and an IR player moves back to the bench', async () => {
     const hurt = { ...wire('rb2', 'Bijan Robinson', 'RB', 0), injuryStatus: 'IR' }
     const calls = stubFetch(

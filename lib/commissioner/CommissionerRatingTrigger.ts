@@ -7,6 +7,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
+import { markRatingPromptSeason } from '@/lib/commish-reputation/reputationService'
 
 const RATING_MSG_SUBTYPE = 'commissioner_rating_prompt'
 
@@ -62,17 +63,10 @@ export async function triggerCommissionerRatingPrompt(
     return { sent: false, reason: 'Chat post failed' }
   }
 
-  // 5. Mark as posted for this season (prevent duplicates)
+  // 5. Mark as posted for this season (prevent duplicates). A locked single-key write: spreading the
+  //    settings read in step 2 back over the row would drop any rating submitted in between.
   try {
-    await prisma.league.update({
-      where: { id: leagueId },
-      data: {
-        settings: {
-          ...settings,
-          last_rating_prompt_season: season,
-        },
-      },
-    })
+    await markRatingPromptSeason(leagueId, season)
   } catch {
     // Non-fatal — message was already posted
   }

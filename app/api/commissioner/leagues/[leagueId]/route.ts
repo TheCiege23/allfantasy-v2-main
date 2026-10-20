@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { leagueChatThreadLinkRefusal } from '@/lib/league/leagueChatThreadLink'
 import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
+import { settingsPatchLockedResponse } from '@/lib/league/settingsLockGuard'
 
 const ALLOWED_KEYS = ['name', 'scoring', 'status', 'avatarUrl', 'rosterSize', 'leagueSize', 'starters', 'sport', 'season'] as const
 const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'benchSize', 'rosterPositions'] as const
@@ -28,6 +29,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
   // Only this league's own chat may be linked (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusal(leagueId, body?.leagueChatThreadId)
   if (chatLinkRefusal) return NextResponse.json({ error: chatLinkRefusal }, { status: 400 })
+  // An area the league locked for the season changes only after a league vote (lib/league/settingsLock.ts).
+  const written = [...ALLOWED_KEYS, ...SETTINGS_KEYS].filter((k) => body?.[k] !== undefined)
+  const locked = await settingsPatchLockedResponse(leagueId, Object.fromEntries(written.map((k) => [k, body[k]])))
+  if (locked) return locked
   const updates: Record<string, unknown> = {}
   for (const key of ALLOWED_KEYS) {
     if (body[key] !== undefined) updates[key] = body[key]
