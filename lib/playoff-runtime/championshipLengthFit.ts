@@ -1,5 +1,11 @@
 /**
- * Would a championship length push the final past the end of the league's season?
+ * Would a playoff settings change push the final past the end of the league's season?
+ *
+ * Every setting that moves the final is checked here: the playoff team count (rounds =
+ * ceil(log2(teams)) — 9 to 16 teams is four rounds, which overruns every sport's default window), the
+ * start week, weeks per round and the championship length (lib/playoff-runtime/playoffFit.ts). Only the
+ * championship length used to be checked, so a commissioner could raise the field to twelve on an NFL
+ * league starting in week 15 and get a week-18 final the 17-week season never plays.
  *
  * 🛑 A FINAL THAT ENDS AFTER THE SEASON NEVER SEALS. `totalWeeks` is fixed when the season is created
  * and nothing resizes it, so lengthening the final on, say, an NFL league whose playoffs start in week
@@ -25,18 +31,27 @@ import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
 import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound, readChampionshipLength } from './playoffRoundWeeks'
+import { maxPlayoffTeamsThatFit, playoffRoundsForTeams } from './playoffFit'
 
-export type ChampionshipLengthOverflow = {
+export type PlayoffFitOverflow = {
   lastPlayoffWeek: number
   seasonWeeks: number
   /** Where `seasonWeeks` came from. */
   basis: 'season' | 'creation'
+  playoffStartWeek: number
+  /** The largest field that fits with the requested start week, weeks per round and final; 0 when none. */
+  maxPlayoffTeams: number
+  /** False once a bracket is generated: its rounds are fixed, so the team count no longer moves the final. */
+  teamsDecideRounds: boolean
 }
+/** @deprecated Kept for its callers; the check now covers every playoff setting. */
+export type ChampionshipLengthOverflow = PlayoffFitOverflow
 
 type LeagueForFit = {
   id: string
   sport?: unknown
   settings?: unknown
+  leagueSize?: number | null
   playoffTeams?: number | null
   playoffWeeksPerRound?: number | null
   playoffStartWeek?: number | null
@@ -45,8 +60,17 @@ type LeagueForFit = {
   bbContestId?: string | null
 }
 
-function withChampionshipLength(settings: unknown, championshipLength: number): Record<string, unknown> {
+/** The values a save would write; a key left undefined keeps the league's current value. */
+export type PlayoffFitChange = {
+  playoffTeams?: number | null
+  playoffStartWeek?: number | null
+  playoffWeeksPerRound?: number | null
+  championshipLength?: number | null
+}
+
+function withChampionshipLength(settings: unknown, championshipLength: number | null): Record<string, unknown> {
   const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
+  if (championshipLength == null) return s
   const structure =
     s.playoff_structure && typeof s.playoff_structure === 'object' && !Array.isArray(s.playoff_structure)
       ? (s.playoff_structure as Record<string, unknown>)
@@ -54,13 +78,20 @@ function withChampionshipLength(settings: unknown, championshipLength: number): 
   return { ...s, playoff_structure: { ...structure, championship_length: championshipLength } }
 }
 
-/** Null when the new length fits (or does not move the final later); the overrun otherwise. */
-export async function championshipLengthOverflow(
-  input: { league: LeagueForFit; championshipLength: number },
+/** Null when the change fits (or does not move the final later); the overrun otherwise. */
+export async function playoffFitOverflow(
+  input: { league: LeagueForFit; change: PlayoffFitChange },
   deps: { prisma?: PrismaClient } = {},
-): Promise<ChampionshipLengthOverflow | null> {
+): Promise<PlayoffFitOverflow | null> {
   const db = deps.prisma ?? (defaultPrisma as unknown as PrismaClient)
-  const { league, championshipLength } = input
+  const { league, change } = input
+  const pick = <T,>(next: T | null | undefined, current: T | null | undefined) => (next !== undefined ? next : current)
+
+  const currentLength = readChampionshipLength(league.settings)
+  const nextLength = pick(change.championshipLength, currentLength) ?? null
+  const nextTeams = Number(pick(change.playoffTeams, league.playoffTeams) ?? 0)
+  const currentTeams = Number(league.playoffTeams ?? 0)
+  const nextPerRound = pick(change.playoffWeeksPerRound, league.playoffWeeksPerRound)
 
   const season = await db.redraftSeason.findFirst({
     where: { leagueId: league.id },
@@ -68,12 +99,13 @@ export async function championshipLengthOverflow(
     select: { id: true, totalWeeks: true, playoffStartWeek: true },
   })
 
-  let rounds: number
-  let playoffStartWeek: number
+  let nextRounds: number
+  let currentRounds: number
+  let nextStart: number
+  let currentStart: number
   let seasonWeeks: number
-  let basis: ChampionshipLengthOverflow['basis']
-  const teams = Number(league.playoffTeams ?? 0)
-  const roundsFromTeams = teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
+  let basis: PlayoffFitOverflow['basis']
+  let teamsDecideRounds = true
 
   if (season) {
     const finalRound = await db.redraftPlayoffRound.findFirst({
@@ -81,12 +113,17 @@ export async function championshipLengthOverflow(
       orderBy: { roundNumber: 'desc' },
       select: { roundNumber: true },
     })
-    rounds = finalRound?.roundNumber ?? roundsFromTeams
-    playoffStartWeek = season.playoffStartWeek
+    teamsDecideRounds = finalRound == null
+    nextRounds = finalRound?.roundNumber ?? playoffRoundsForTeams(nextTeams)
+    currentRounds = finalRound?.roundNumber ?? playoffRoundsForTeams(currentTeams)
+    // The season stores its own start week; a start week saved in this request is what the bracket
+    // will be built from.
+    currentStart = season.playoffStartWeek
+    nextStart = change.playoffStartWeek != null ? Number(change.playoffStartWeek) : season.playoffStartWeek
     seasonWeeks = season.totalWeeks
     basis = 'season'
   } else {
-    // The season `ensureRedraftSeason` would create — sized with the NEW length, as creation would.
+    // The season `ensureRedraftSeason` would create — sized with the NEW settings, as creation would.
     const cfg = tryGetSportConfig(leagueSportToConfigSport(String(league.sport ?? 'NFL')))
     const dynastyConfig =
       league.dynastyConfig !== undefined
@@ -96,33 +133,73 @@ export async function championshipLengthOverflow(
             select: { dynastyConfig: { select: { regularSeasonWeeks: true } } },
           })) as { dynastyConfig?: { regularSeasonWeeks: number } | null } | null)?.dynastyConfig ?? null
     seasonWeeks = resolveCreatedSeasonWeeks(
-      { ...league, dynastyConfig, settings: withChampionshipLength(league.settings, championshipLength) },
+      {
+        ...league,
+        dynastyConfig,
+        playoffTeams: nextTeams,
+        playoffWeeksPerRound: nextPerRound,
+        settings: withChampionshipLength(league.settings, nextLength),
+      },
       cfg?.defaultSeasonWeeks ?? 17,
     )
-    const leagueStart = Number(league.playoffStartWeek)
-    playoffStartWeek =
-      Number.isInteger(leagueStart) && leagueStart >= 2 && leagueStart <= seasonWeeks
-        ? leagueStart
-        : cfg?.defaultPlayoffStartWeek ?? 15
-    rounds = roundsFromTeams
+    const startFor = (raw: unknown) => {
+      const n = Number(raw)
+      return Number.isInteger(n) && n >= 2 && n <= seasonWeeks ? n : cfg?.defaultPlayoffStartWeek ?? 15
+    }
+    currentStart = startFor(league.playoffStartWeek)
+    nextStart = startFor(pick(change.playoffStartWeek, league.playoffStartWeek))
+    nextRounds = playoffRoundsForTeams(nextTeams)
+    currentRounds = playoffRoundsForTeams(currentTeams)
     basis = 'creation'
   }
-  if (rounds < 1) return null
+  if (nextRounds < 1) return null
 
-  const lastWeek = (length: number | null) =>
-    lastWeekOfPlayoffRound({
-      playoffStartWeek,
-      roundNumber: rounds,
-      weeksPerRound: league.playoffWeeksPerRound,
-      finalRoundNumber: rounds,
-      championshipLength: length,
-    })
-  const next = lastWeek(championshipLength)
-  const current = lastWeek(readChampionshipLength(league.settings))
+  const lastWeek = (start: number, rounds: number, perRound: number | null | undefined, length: number | null) =>
+    rounds < 1
+      ? 0
+      : lastWeekOfPlayoffRound({
+          playoffStartWeek: start,
+          roundNumber: rounds,
+          weeksPerRound: perRound,
+          finalRoundNumber: rounds,
+          championshipLength: length,
+        })
+  const next = lastWeek(nextStart, nextRounds, nextPerRound, nextLength)
+  const current = lastWeek(currentStart, currentRounds, league.playoffWeeksPerRound, currentLength)
   if (next <= seasonWeeks || next <= current) return null
-  return { lastPlayoffWeek: next, seasonWeeks, basis }
+  return {
+    lastPlayoffWeek: next,
+    seasonWeeks,
+    basis,
+    playoffStartWeek: nextStart,
+    maxPlayoffTeams: maxPlayoffTeamsThatFit({
+      seasonWeeks,
+      playoffStartWeek: nextStart,
+      weeksPerRound: nextPerRound,
+      championshipLength: nextLength,
+      leagueSize: league.leagueSize,
+    }),
+    teamsDecideRounds,
+  }
+}
+
+export function playoffFitOverflowMessage(o: PlayoffFitOverflow): string {
+  const head = `Those playoff settings would end the final in week ${o.lastPlayoffWeek}, past the season's last week (${o.seasonWeeks}).`
+  if (!o.teamsDecideRounds) return `${head} Shorten the final or the rounds, or move the playoffs earlier.`
+  if (o.maxPlayoffTeams >= 2) {
+    return `${head} With playoffs starting in week ${o.playoffStartWeek}, at most ${o.maxPlayoffTeams} playoff teams fit — choose ${o.maxPlayoffTeams} or fewer, shorten the rounds or the final, or move the playoffs earlier.`
+  }
+  return `${head} No bracket fits with playoffs starting in week ${o.playoffStartWeek} — move the playoffs earlier or shorten the rounds or the final.`
+}
+
+/** Null when the new length fits (or does not move the final later); the overrun otherwise. */
+export function championshipLengthOverflow(
+  input: { league: LeagueForFit; championshipLength: number },
+  deps: { prisma?: PrismaClient } = {},
+): Promise<ChampionshipLengthOverflow | null> {
+  return playoffFitOverflow({ league: input.league, change: { championshipLength: input.championshipLength } }, deps)
 }
 
 export function championshipLengthOverflowMessage(o: ChampionshipLengthOverflow): string {
-  return `A final that long would end in week ${o.lastPlayoffWeek}, past the season's last week (${o.seasonWeeks}). Shorten the final or move the playoffs earlier.`
+  return playoffFitOverflowMessage(o)
 }

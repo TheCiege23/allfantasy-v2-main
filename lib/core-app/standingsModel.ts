@@ -352,12 +352,14 @@ export function readStandingsRules(
   platform: string | null | undefined,
   /** League id + season, for the coin-flip tiebreaker. */
   coinSeed = '',
+  /** `League.playoffTeams` — read only when the league is native (readPlayoffFormat). */
+  playoffTeamsColumn?: number | null,
 ): StandingsRules {
   /*
    * Field size, byes (the bracket gap, lowered never raised by a stated `first_round_byes`) and the
    * last regular-season week all come from Season Outlook's reader — see `readPlayoffTeams` above.
    */
-  const format = readPlayoffFormat(settings, teamCount)
+  const format = readPlayoffFormat(settings, teamCount, isNativePlatform(platform) ? playoffTeamsColumn : null)
   const key = String(platform ?? '').toLowerCase()
   // Only an AllFantasy-run league's commissioner sets the rule; an imported league follows its platform.
   const custom = isNativePlatform(platform) ? readTiebreakerOrder(settings) : null
