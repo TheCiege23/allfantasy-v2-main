@@ -80,12 +80,11 @@ type SettingsRecord = Record<string, unknown>
 export const SURVIVOR_FOUNDATION_SETTINGS_VERSION = 1
 
 export const SURVIVOR_TEAM_COUNT_OPTIONS = [16, 17, 18, 19, 20] as const
+/** Survivor drafts: a live snake, linear or auction room, the computer drafting every seat, or in person. */
 export const SURVIVOR_CANONICAL_DRAFT_TYPE_IDS = [
   'snake',
-  'auction',
   'linear',
-  'real_time',
-  'by_team',
+  'auction',
   'offline',
   'auto',
 ] as const

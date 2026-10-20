@@ -28,8 +28,19 @@ describe('SURVIVOR_DRAFT_TYPE_IDS', () => {
     expect(SURVIVOR_DRAFT_TYPE_IDS).toContain('snake')
     expect(SURVIVOR_DRAFT_TYPE_IDS).toContain('auction')
   })
-  it('has the Phase 1 canonical draft types', () => {
-    expect(SURVIVOR_DRAFT_TYPE_IDS).toEqual(['snake', 'auction', 'linear', 'real_time', 'by_team', 'offline', 'auto'])
+  it('offers snake, linear, auction, offline and auto drafts', () => {
+    expect(SURVIVOR_DRAFT_TYPE_IDS).toEqual(['snake', 'linear', 'auction', 'offline', 'auto'])
+  })
+  it('runs offline and auto drafts as snake underneath, and maps the retired ids to snake', () => {
+    const auto = getSurvivorDefaultContract({ sport: 'NFL', draftType: 'auto' })!
+    expect(auto.draftSettings).toMatchObject({ draftType: 'snake', requestedDraftType: 'auto' })
+    const offline = getSurvivorDefaultContract({ sport: 'NFL', draftType: 'offline' })!
+    expect(offline.draftSettings).toMatchObject({ draftType: 'snake', requestedDraftType: 'offline' })
+    const linear = getSurvivorDefaultContract({ sport: 'NFL', draftType: 'linear' })!
+    expect(linear.draftSettings).toMatchObject({ draftType: 'linear', requestedDraftType: 'linear' })
+    for (const legacy of ['by_team', 'team', 'real_time', 'realtime']) {
+      expect(getSurvivorDefaultContract({ sport: 'NFL', draftType: legacy })!.draftSettings).toMatchObject({ draftType: 'snake', requestedDraftType: 'snake' })
+    }
   })
 })
 

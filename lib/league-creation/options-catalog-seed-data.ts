@@ -164,7 +164,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     c2c: ['snake', 'linear', 'auction', 'offline', 'auto'],
     guillotine: ['snake', 'linear', 'auction', 'offline', 'auto'],
     zombie: ['snake', 'offline', 'auto'],
-    survivor: ['snake', 'auction', 'offline', 'auto'],
+    survivor: ['snake', 'linear', 'auction', 'offline', 'auto'],
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
     big_brother: ['snake', 'offline', 'auto'],
   },

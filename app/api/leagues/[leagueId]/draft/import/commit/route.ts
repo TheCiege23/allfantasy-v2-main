@@ -70,6 +70,7 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     backupId: result.backupId,
+    completed: result.completed === true,
     session: updated,
   })
 }
