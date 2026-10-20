@@ -95,8 +95,8 @@ export function getToolsForSport(sportSlug: SportSlug | null): ToolHubTool[] {
     '/trade-analyzer': '/trade-evaluator',
     '/waiver-wire': '/waiver-ai',
     '/social-pulse': '/social-pulse',
-    // Both hrefs mean the matchup-simulator card, which opens the Simulation Lab (its openToolHref)
-    // since 2026-10-20. From 2026-09-29 to then they aliased to /core/matchup.
+    // Both hrefs mean the simulation-lab card (slug `matchup-simulator` until 2026-10-20), which
+    // opens the lab (its openToolHref). From 2026-09-29 to 2026-10-20 they aliased to /core/matchup.
     '/matchup-simulator': '/app/simulation-lab',
     '/app/simulation-lab': '/app/simulation-lab',
     '/bracket': '/brackets',

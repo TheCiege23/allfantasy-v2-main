@@ -21,7 +21,7 @@ export default function ToolLandingClient({ config }: { config: ToolConfig }) {
       className="min-h-screen flex flex-col mode-readable"
       style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
-      <LandingToolVisitTracker path={`/tools/${config.slug}`} toolName={config.headline} />
+      <LandingToolVisitTracker path={config.analyticsPath ?? `/tools/${config.slug}`} toolName={config.headline} />
       <HomeTopNav />
 
       <article className="flex-1 px-4 py-8 sm:px-6 sm:py-12">

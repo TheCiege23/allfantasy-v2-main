@@ -2023,9 +2023,9 @@ export const translations: Record<string, Record<string, string>> = {
     "toolsHub.tool.ai-draft-assistant.headline": "AI Draft Assistant",
     "toolsHub.tool.ai-draft-assistant.description":
       "Draft smarter with live rankings, strategy tips, and Chimmy's guidance during your draft.",
-    "toolsHub.tool.matchup-simulator.headline": "Matchup Simulator",
-    "toolsHub.tool.matchup-simulator.description":
-      "Simulate matchups before kickoff and understand win probabilities with lineup-level context.",
+    "toolsHub.tool.simulation-lab.headline": "Simulation Lab",
+    "toolsHub.tool.simulation-lab.description":
+      "Simulate seasons, playoffs, and dynasty runs to see expected wins, playoff odds, and title chances.",
     "toolsHub.tool.bracket-challenge.headline": "Bracket Challenge",
     "toolsHub.tool.bracket-challenge.description":
       "Create pools, invite friends, and track live standings with AI support for smarter bracket picks.",
@@ -5895,9 +5895,9 @@ export const translations: Record<string, Record<string, string>> = {
     "toolsHub.tool.ai-draft-assistant.headline": "AI Draft Assistant",
     "toolsHub.tool.ai-draft-assistant.description":
       "Draftea mejor con rankings en vivo, tips de estrategia y guía de Chimmy durante el draft.",
-    "toolsHub.tool.matchup-simulator.headline": "Matchup Simulator",
-    "toolsHub.tool.matchup-simulator.description":
-      "Simula enfrentamientos antes del kickoff y entiende probabilidades de victoria con contexto de alineación.",
+    "toolsHub.tool.simulation-lab.headline": "Laboratorio de simulación",
+    "toolsHub.tool.simulation-lab.description":
+      "Simula temporadas, playoffs y dinastías para ver victorias esperadas, probabilidades de playoffs y opciones de título.",
     "toolsHub.tool.bracket-challenge.headline": "Bracket Challenge",
     "toolsHub.tool.bracket-challenge.description":
       "Crea pools, invita amigos y sigue posiciones en vivo con apoyo de IA para mejores picks.",

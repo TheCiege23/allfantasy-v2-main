@@ -77,6 +77,7 @@ describe('links to the tool point at the destination, not at the hop', () => {
   // __tests__/tool-hub-simulation-lab.test.ts.
   it("the SEO tool config's open-tool link is the Simulation Lab, not the hop", async () => {
     const { TOOL_CONFIG } = await import('@/lib/seo-landing/config')
-    expect(TOOL_CONFIG['matchup-simulator'].openToolHref).toBe('/app/simulation-lab')
+    // Renamed `simulation-lab` 2026-10-20.
+    expect(TOOL_CONFIG['simulation-lab'].openToolHref).toBe('/app/simulation-lab')
   })
 })
