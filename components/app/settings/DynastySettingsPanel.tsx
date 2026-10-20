@@ -611,30 +611,11 @@ export default function DynastySettingsPanel({
             {effective.taxiScoringOn && ' · Scoring on taxi'}
             {(effective.taxiDeadlineWeek ?? effective.taxiPromotionDeadlineWeek) != null && ` · Deadlines: ${effective.taxiDeadlineWeek ?? '—'}/${effective.taxiPromotionDeadlineWeek ?? '—'}`}
           </p>
-          {isCommissioner && constants?.taxiEligibilityYearsOptions && constants?.taxiLockBehaviorOptions && (
-            <div className="mt-2 flex flex-wrap gap-2 items-center">
-              <label className="text-xs text-white/80">
-                Slots: <input type="number" min={0} max={20} className="w-12 rounded border border-white/20 bg-black/40 px-1 py-0.5 text-white" value={effective.taxiSlots ?? 4} onChange={(e) => setPatch((p) => ({ ...p, taxiSlots: Number(e.target.value) || 0 }))} />
-              </label>
-              <select className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white" value={effective.taxiEligibilityYears ?? 1} onChange={(e) => setPatch((p) => ({ ...p, taxiEligibilityYears: Number(e.target.value) }))}>
-                {constants.taxiEligibilityYearsOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <select className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white" value={effective.taxiLockBehavior ?? 'once_promoted_no_return'} onChange={(e) => setPatch((p) => ({ ...p, taxiLockBehavior: e.target.value }))}>
-                {constants.taxiLockBehaviorOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiInSeasonMoves ?? true} onChange={(e) => setPatch((p) => ({ ...p, taxiInSeasonMoves: e.target.checked }))} />
-                In-season moves
-              </label>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiPostseasonMoves ?? false} onChange={(e) => setPatch((p) => ({ ...p, taxiPostseasonMoves: e.target.checked }))} />
-                Postseason moves
-              </label>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiScoringOn ?? false} onChange={(e) => setPatch((p) => ({ ...p, taxiScoringOn: e.target.checked }))} />
-                Scoring on taxi
-              </label>
-            </div>
+          {/* Taxi editing is consolidated in Commissioner settings → Roster → Taxi squad. */}
+          {isCommissioner && (
+            <p className="mt-2 text-xs text-white/50" data-testid="dynasty-taxi-moved-note">
+              Edit taxi squad settings in Commissioner settings → Roster → Taxi squad.
+            </p>
           )}
         </div>
       )}

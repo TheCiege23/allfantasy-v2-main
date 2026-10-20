@@ -33,6 +33,8 @@ import {
 } from '@/lib/dynasty-core/constants'
 import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/lib/taxi/constants'
 import { ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY, normalizeCustomOpenDate } from '@/lib/dynasty-core/rookieDraftCalendar'
+import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
+import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +54,7 @@ export async function GET(
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, isDynasty: true, leagueVariant: true },
+    select: { sport: true, isDynasty: true, leagueVariant: true, status: true, lifecycleState: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -85,6 +87,12 @@ export async function GET(
       roster: footballFormats ? getDynastyRosterPresets() : [],
       scoring: footballFormats ? getDynastyScoringPresets() : [],
       playoff: getDynastyPlayoffPresets(sport),
+      // NBA/NHL/MLB roster + points-scoring formats (lib/dynasty-core/DynastySportPresets). Empty otherwise.
+      sportFormats: getDynastySportPresets(sport),
+    },
+    sportFormatPreset: {
+      current: ((league.settings as Record<string, unknown> | null)?.dynasty_sport_preset_id as string | undefined) ?? null,
+      editable: isDynasty && isLeagueBeforeDraft(league),
     },
     constants: {
       supportedTeamSizes: [...DYNASTY_SUPPORTED_TEAM_SIZES],
@@ -143,6 +151,13 @@ export async function PUT(
         { status: 400 },
       )
     }
+  }
+
+  // A dynasty format preset (NBA/NHL/MLB) is applied on its own, before the draft only.
+  if (body.sportPresetId != null) {
+    const applied = await applyDynastySportPresetToLeague(leagueId, String(body.sportPresetId), userId)
+    if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: applied.status })
+    return NextResponse.json({ ok: true, sportPresetId: applied.presetId, slots: applied.slots })
   }
 
   const priorDynasty = await prisma.dynastyLeagueConfig.findUnique({ where: { leagueId } })
