@@ -25,6 +25,7 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
   DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
@@ -369,6 +370,15 @@ export async function executeLeagueSettingsPatch(
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
+
+  // The trade close time is read by every trade gate (lib/trade-deadline/tradeDeadlineTime.ts), where an
+  // unreadable value would mean "no close time" — so it is refused here, and stored as one ISO instant.
+  const merge = body.settingsMerge
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TRADE_DEADLINE_AT_KEY in merge) {
+    const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
 
   /*
    * Per-day waiver schedule (lib/waivers/dailyWaiverSchedule.ts). Stored in `League.settings`, and

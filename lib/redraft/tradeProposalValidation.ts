@@ -69,8 +69,8 @@ export async function validateRedraftTradeProposalAtCreation(
     })
     if (!result.ok) return { ok: false, code: result.code, message: result.message, source: 'nfl_runtime' }
     const deadline = await evaluateRedraftTradeDeadline(input.leagueId)
-    if (deadline.passed && deadline.deadlineWeek != null) {
-      return { ok: false, code: 'TRADE_DEADLINE_PASSED', message: tradeDeadlinePassedMessage(deadline.deadlineWeek), source: 'nfl_runtime' }
+    if (deadline.passed) {
+      return { ok: false, code: 'TRADE_DEADLINE_PASSED', message: tradeDeadlinePassedMessage(deadline), source: 'nfl_runtime' }
     }
     return { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
   }
@@ -102,11 +102,11 @@ export async function validateRedraftTradeProposalAtCreation(
       : { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
   }
 
-  if (deadline.passed && deadline.deadlineWeek != null) {
+  if (deadline.passed) {
     return {
       ok: false,
       code: 'TRADE_DEADLINE_PASSED',
-      message: tradeDeadlinePassedMessage(deadline.deadlineWeek),
+      message: tradeDeadlinePassedMessage(deadline),
       source: 'ownership_fallback',
     }
   }
