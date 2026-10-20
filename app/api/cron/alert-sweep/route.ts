@@ -65,6 +65,10 @@
  * sweep (15 minutes) of its time. No flag: a commissioner pressed Schedule, and "schedule" that never
  * posts is "save and forget". It reports under `scheduledAnnouncements` and records
  * `cron-scheduled-announcements` only on a run that posted or failed something.
+ * AND THE DEADLINE AUTOPILOT, SHIPPED OFF (lib/deadline-autopilot/autopilotService.ts): the 72 h / 24 h /
+ * 1 h reminders a commissioner switched on, sent to the managers who still have to act. Every sweep, so
+ * the 1 h reminder lands 60 to 55 minutes out. Off unless `DEADLINE_AUTOPILOT_ENABLED=1`. It reports
+ * under `deadlineAutopilot` and records `cron-deadline-autopilot` only on a run that sent something.
  *
  * Query params:
  *   dryRun=1     evaluate and report without sending (both jobs)
@@ -84,6 +88,7 @@
  *   sportWaiverCheck=off    skip the other-sport waiver check this run
  *   chopRelease=off     skip the chop-release alert this run (it is also off unless the flag is set)
  *   scheduledAnnouncements=off  skip posting scheduled league announcements this run
+ *   deadlineAutopilot=off  skip the deadline autopilot this run (it is also off unless the flag is set)
  *
  * FAILS LOUDLY on a systemic error (no push configured, sweep threw). It does NOT fail when
  * zero alerts are found — on a Tuesday in the off-season that is the correct outcome, and a
@@ -114,6 +119,7 @@ import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-aler
 import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
 import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
 import type { ScheduledAnnouncementRun } from '@/lib/commissioner/scheduledAnnouncementService'
+import type { AutopilotRun } from '@/lib/deadline-autopilot/autopilotService'
 import { runFollowFreeAgentCheck, type FollowFreeAgentRun } from '@/lib/follows/followFreeAgentCheck'
 import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
@@ -157,6 +163,7 @@ const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
 const SCHEDULED_ANNOUNCEMENTS_JOB = 'cron-scheduled-announcements'
 /** Posting is a few reads per league; this only stops a pathological backlog from eating the sweep. */
 const SCHEDULED_ANNOUNCEMENTS_BUDGET_MS = 60_000
+const DEADLINE_AUTOPILOT_JOB = 'cron-deadline-autopilot'
 
 /**
  * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
@@ -182,6 +189,7 @@ type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
 type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
 type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
 type ScheduledAnnouncementsReport = ScheduledAnnouncementRun | PhaseRefusal
+type DeadlineAutopilotReport = AutopilotRun | PhaseRefusal
 
 type PhaseArgs = {
   mode: string
@@ -385,6 +393,42 @@ async function scheduledAnnouncementsPhase(args: PhaseArgs): Promise<ScheduledAn
   } catch (err) {
     const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
     console.error('[cron/alert-sweep] scheduled announcements failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
+/**
+ * 🛑 THE FLAG IS READ HERE, BEFORE THE SERVICE IS LOADED. Off, the sweep never touches a league.
+ * The heartbeat is recorded only when reminders went out — an idle run every five minutes is noise.
+ */
+async function deadlineAutopilotPhase(args: PhaseArgs): Promise<DeadlineAutopilotReport> {
+  if (process.env.DEADLINE_AUTOPILOT_ENABLED !== '1') return { ran: false, reason: 'disabled' }
+  if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const { runDeadlineAutopilot } = await import('@/lib/deadline-autopilot/autopilotService')
+    const r = await runDeadlineAutopilot({
+      dryRun: args.dryRun,
+      budgetMs: Math.max(0, Math.min(WEEKLY_CHECK_BUDGET_MS, SWEEP_CEILING_MS - (Date.now() - args.sweepStartedAt))),
+    })
+    if (!args.dryRun && (r.reminders > 0 || r.errors.length > 0)) {
+      await recordSyncJobRun(
+        { jobName: DEADLINE_AUTOPILOT_JOB, sport: null, trigger: 'cron' },
+        {
+          rowsRead: r.leagues,
+          rowsWritten: r.reminders,
+          rowsSkipped: r.notEntitled,
+          errors: r.errors.map((e) => `${e.leagueId}: ${e.error}`),
+          status: r.errors.length > 0 ? 'partial' : 'success',
+          metadata: { recipients: r.recipients, budgetStopped: r.budgetStopped },
+        },
+        Date.now() - started,
+      )
+    }
+    return r
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/alert-sweep] deadline autopilot failed:', message)
     return { ran: false, reason: 'error', error: message }
   }
 }
@@ -947,6 +991,14 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const deadlineAutopilot = singleUser
+      ? ({ ran: false, reason: 'disabled' } as const)
+      : await deadlineAutopilotPhase({
+          mode: (url.searchParams.get('deadlineAutopilot') ?? '').trim().toLowerCase(),
+          dryRun,
+          singleUser,
+          sweepStartedAt: startedAt,
+        })
     const followFreeAgent = await followFreeAgentPhase({
       mode: (url.searchParams.get('followFree') ?? '').trim().toLowerCase(),
       dryRun,
@@ -987,6 +1039,8 @@ async function handle(req: NextRequest) {
       chopRelease,
       /** Scheduled league announcements posted this run — mostly `{ leagues: 0, sent: 0 }`. */
       scheduledAnnouncements,
+      /** The deadline autopilot — `{ ran: false, reason: 'disabled' }` until the flag is set. */
+      deadlineAutopilot,
       /** Followed players newly free in one of your leagues — `seeded` counts follows seen for the first time. */
       followFreeAgent,
       durationMs: Date.now() - startedAt,
