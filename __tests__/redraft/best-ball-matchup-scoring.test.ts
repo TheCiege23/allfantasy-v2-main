@@ -225,4 +225,29 @@ describe('best-ball helpers', () => {
     expect(leagueIsBestBall({ leagueType: 'redraft', bestBallMode: false })).toBe(false)
     expect(leagueIsBestBall(null)).toBe(false)
   })
+
+  describe('commissioner score adjustments (lib/score-adjustments)', () => {
+    const adj = (over: Record<string, unknown>) => ({ id: 'a', matchupId: 'm1', rosterId: 'home', week: 3, points: 5, reason: 'stat fix', byUserId: 'u', at: '2026-10-01T00:00:00Z', ...over })
+
+    it('adds this matchup’s adjustments on top of the computed score on every rescore, and records them', async () => {
+      const settings = { ...SUPERFLEX_SETTINGS, commissioner_score_adjustments: [adj({}), adj({ id: 'b', points: -1.5 }), adj({ id: 'c', rosterId: 'away', points: -2 }), adj({ id: 'd', matchupId: 'other', points: 99 })] }
+      arrange({ bestBallMode: false, leagueType: 'redraft', leagueVariant: null, settings })
+      const home = Math.round(((await pts('q1')) + (await pts('r1')) + (await pts('w1'))) * 100) / 100
+      const away = await pts('a1')
+
+      const summary = await updateMatchupScores('m1')
+
+      expect(summary?.homeScore).toBe(Math.round((home + 3.5) * 100) / 100)
+      expect(summary?.awayScore).toBe(Math.round((away - 2) * 100) / 100)
+      const data = db.redraftMatchup.update.mock.calls[0]![0].data
+      expect(data.homeScore).toBe(summary?.homeScore)
+      expect(data.lineupSnapshots.redraftScoring.commissionerAdjustment).toEqual({ home: 3.5, away: -2 })
+    })
+
+    it('a league with no adjustments is scored and stored exactly as before', async () => {
+      arrange({ bestBallMode: false, leagueType: 'redraft', leagueVariant: null })
+      await updateMatchupScores('m1')
+      expect(db.redraftMatchup.update.mock.calls[0]![0].data.lineupSnapshots.redraftScoring).not.toHaveProperty('commissionerAdjustment')
+    })
+  })
 })
