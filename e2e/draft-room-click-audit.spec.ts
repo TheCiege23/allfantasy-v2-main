@@ -1936,12 +1936,26 @@ test.describe('@draft-room click audit', () => {
     const mobile = page.getByTestId('draft-mobile-layout')
     await expect(page.getByTestId('draft-mobile-quick-dock')).toBeVisible()
 
-    // Helper: click a mobile tab by its testid via JS to bypass fixed-overlay intercepts
+    // Real Chromium touch input: horizontal board scrolling must not change tabs.
+    const boardScroll = mobile.getByTestId('draft-board-grid').locator('..')
+    await boardScroll.scrollIntoViewIfNeeded()
+    const box = await boardScroll.boundingBox()
+    expect(box).not.toBeNull()
+    const touch = await page.context().newCDPSession(page)
+    const y = box!.y + Math.min(85, box!.height / 2)
+    const startX = box!.x + Math.min(270, box!.width - 20)
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y }] })
+    for (let step = 1; step <= 8; step++) {
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: startX - step * 24, y }] })
+    }
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await expect.poll(() => boardScroll.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+    await expect(page.getByTestId('draft-mobile-content')).toHaveAttribute('data-active-tab', 'board')
+    await touch.detach()
+
+    // Use real hit testing so overlays cannot hide an unreachable mobile control.
     async function mobileTabClick(testId: string) {
-      await page.evaluate((tid) => {
-        const el = document.querySelector(`[data-testid="${tid}"]`) as HTMLElement | null
-        el?.click()
-      }, testId)
+      await page.getByTestId(testId).click()
     }
 
     await mobileTabClick('draft-mobile-tab-players')
