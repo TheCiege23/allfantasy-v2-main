@@ -23,7 +23,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
-import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { isImportedPlatform, isNativePlatform } from '@/lib/league/isNativeLeague'
+import { renewNativeRedraft, RedraftRenewalError } from '@/lib/redraft/offseason/renewNativeRedraft'
 import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { checkAndTriggerRatingIfOffseason } from '@/lib/commissioner/CommissionerRatingTrigger'
 import { readBracketResult } from '@/lib/redraft/offseason/RedraftOffseasonService'
@@ -287,6 +288,18 @@ export async function POST(
       },
       { status: 409 },
     )
+  }
+  if (renewalKind === 'redraft_reset' && isNativePlatform(league.platform) && league.sport === 'NBA') {
+    try {
+      return NextResponse.json(await renewNativeRedraft({ leagueId, userId: session.user.id,
+        expectedSeason: typeof body.expectedSeason === 'number' ? body.expectedSeason : league.season ?? new Date().getFullYear(),
+        removeMemberIds, duesEnabled, duesAmount, listInFinder, draftOrder: body.draftOrder, manualOrder: body.manualOrder }))
+    } catch (error) {
+      if (error instanceof RedraftRenewalError) return NextResponse.json({ error: error.message }, { status: error.status })
+      if ((error as { code?: string }).code === 'P2034') return NextResponse.json({ error: 'Concurrent league change. Reload and retry renewal.' }, { status: 409 })
+      console.error('[renew] native NBA renewal did not complete')
+      return NextResponse.json({ error: 'Renewal could not complete. Retry after the season archive is available.' }, { status: 503 })
+    }
   }
   let currentSeason = league.season ?? new Date().getFullYear()
   let nextSeason = currentSeason + 1
