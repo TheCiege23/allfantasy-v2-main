@@ -3,7 +3,7 @@ import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/l
 import { rotateForFairness } from '@/lib/cron/runBudget'
 import { SUPPORTED_SPORTS, LIVE_ONLY_SPORTS } from '@/lib/sport-scope'
 import { getLiveScoresForSport, resolveGameState } from '@/lib/sports-live-scores-service'
-import { engagementGameDetail } from './gameDetail'
+import { engagementGameDetail } from './ingestGameDetail'
 import { observeGameAlerts, sportAlertAudience } from '@/lib/engagement-alerts/gameAlertService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
