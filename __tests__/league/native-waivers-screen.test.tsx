@@ -60,4 +60,35 @@ describe('NativeWaiversScreen', () => {
     const body = JSON.parse(String(calls.find((c) => c.url.includes('/add-drop'))!.init!.body))
     expect(body).toEqual({ addPlayerId: 'p1', dropPlayerId: null })
   })
+
+  it('shows each player\'s headshot, team crest and season stat line — NFL and NBA', async () => {
+    const nfl = {
+      ...player('p1', 'Tank Bigsby', 'RB', 11.2),
+      sport: 'NFL',
+      headshotUrl: 'https://sleepercdn.com/content/nfl/players/9997.jpg',
+      teamLogoUrl: 'https://a.espncdn.com/i/teamlogos/nfl/500/jax.png',
+      normalizedStats: { cacheStats: { rushing_yards: 766, rushing_touchdowns: 7, games_played: 17 } },
+    }
+    stubFetch({ ...base({ waiverType: 'fcfs' }), '/players': { players: [nfl] } })
+    const { unmount } = render(<NativeWaiversScreen league={league} />)
+    expect(await screen.findByText('Tank Bigsby')).toBeTruthy()
+    expect(screen.getByAltText('Tank Bigsby').getAttribute('src')).toBe(nfl.headshotUrl)
+    expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nfl.teamLogoUrl)
+    expect(screen.getByText('RUSH YDS 766 · TD 7')).toBeTruthy()
+    unmount()
+
+    const nba = {
+      id: 'n1', name: 'Jalen Brunson', position: 'PG', team: 'New York Knicks', sport: 'NBA', projectedPoints: null, injuryStatus: null,
+      headshotUrl: 'https://r2.thesportsdb.com/images/media/player/cutout/mr4fe21711892054.png',
+      teamLogoUrl: 'https://r2.thesportsdb.com/images/media/team/badge/knicks.png',
+      normalizedStats: { cacheStats: { points: 1927, total_rebounds: 247, assists: 503, games_played: 74 } },
+      product: { unified: {} },
+    }
+    stubFetch({ ...base({ waiverType: 'fcfs' }), '/players': { players: [nba] } })
+    render(<NativeWaiversScreen league={{ ...league, sport: 'NBA' } as UserLeague} />)
+    expect(await screen.findByText('Jalen Brunson')).toBeTruthy()
+    expect(screen.getByAltText('Jalen Brunson').getAttribute('src')).toBe(nba.headshotUrl)
+    expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nba.teamLogoUrl)
+    expect(screen.getByText('PTS/G 26 · REB/G 3.3 · AST/G 6.8')).toBeTruthy()
+  })
 })

@@ -6,6 +6,7 @@ import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
 import { getPlayerPoolForLeague } from "@/lib/sport-teams/SportPlayerPoolResolver"
 import { normalizePoolRowToUnified } from "@/lib/player-data/normalizeProviderPlayer"
 import { serializeUnifiedPlayerForApi } from "@/lib/player-data/serializeUnifiedPlayerForApi"
+import { loadWaiverPoolEnrichment, type WaiverPoolEnrichment } from "@/lib/waiver-wire/waiverPoolEnrichment"
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -70,42 +71,21 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       )
     })
 
-    const availablePlayerIds = available
-      .map((p: any) => (p.player_id == null ? null : String(p.player_id)))
-      .filter((id: string | null): id is string => Boolean(id))
-    const sportsPlayerRows =
-      availablePlayerIds.length > 0
-        ? await (prisma as any).sportsPlayerRecord
-            .findMany({
-              where: {
-                id: { in: availablePlayerIds },
-                sport: String(league.sport).toUpperCase(),
-              },
-              select: {
-                id: true,
-                stats: true,
-                projections: true,
-                dataSource: true,
-                headshotSource: true,
-                adp: true,
-              },
-            })
-            .catch(() => [])
-        : []
-    const sportsPlayerById = new Map<string, any>(
-      sportsPlayerRows.map((row: any) => [String(row.id), row]),
+    // Photo, crest and season stats, from Postgres (see waiverPoolEnrichment for why this is not
+    // an id join: a pool row's `player_id` is a SportsPlayer UUID that no sports_players row has).
+    const enrichment = await loadWaiverPoolEnrichment(String(league.sport), available).catch(
+      () => new Map<string, WaiverPoolEnrichment>(),
     )
 
-    const players = available.map((p: any) =>
-      serializeUnifiedPlayerForApi(
-        normalizePoolRowToUnified(p, league.sport, {
-          augment: {
-            sportsPlayerRecord:
-              p.player_id == null ? undefined : sportsPlayerById.get(String(p.player_id)),
-          },
+    const players = available.map((p: any) => {
+      const extra = p.player_id == null ? undefined : enrichment.get(String(p.player_id))
+      const row = extra ? { ...p, metadata: { ...(p.metadata ?? {}), ...extra.metadata } } : p
+      return serializeUnifiedPlayerForApi(
+        normalizePoolRowToUnified(row, league.sport, {
+          augment: { sportsPlayerRecord: extra?.sportsPlayerRecord },
         }),
-      ),
-    )
+      )
+    })
 
     return NextResponse.json({ players, rosteredCount: rosteredIds.size })
   } catch (error) {
