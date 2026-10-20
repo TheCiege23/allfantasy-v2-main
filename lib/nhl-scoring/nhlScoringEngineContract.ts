@@ -42,6 +42,9 @@ export const NHL_GATED_ENGINE_KEY_MAP: Readonly<Record<string, string>> = {
   shots_against: 'g_sa',
   forty_save_game: 'g_40sv_game',
   fifty_save_game: 'g_50sv_game',
+  // Goalie time on ice. Added at the same contract version: until now the row was locked at 0 and
+  // the panel saved what it showed, so a v2-saved store holds 0 here and no score moves.
+  goalie_minutes_played: 'g_toi',
 }
 
 /** Whether a stored `nhl_scoring_config` opted into the gated rows (a person saved it on v2+). */

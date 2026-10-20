@@ -285,12 +285,17 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
 }
 
 /** Flatten the recognised numeric fields; everything else stays in `statPayload` verbatim. */
-function normalizedMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'>): Record<string, unknown> {
+export function normalizedStatMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'>): Record<string, unknown> {
   const stats: Record<string, number> = {}
   for (const [key, value] of Object.entries(line.raw)) {
     const n = num(value)
     if (n != null) stats[key] = n
   }
+  // NHL sends time on ice as a "mm:ss" clock (fixtures/live.NHL.json: goalies "58:05", skaters
+  // "15:26"), which `num` cannot read, so it never reached `stats` and the goalie minutes-played
+  // row could not score. Stored as decimal minutes; an unreadable clock is left out, never guessed.
+  const toi = /^(\d{1,3}):([0-5]\d)$/.exec(String(line.raw.time_on_ice ?? '').trim())
+  if (toi) stats.time_on_ice_minutes = Number(toi[1]) + Number(toi[2]) / 60
   return {
     group: line.group,
     position: str(line.raw.position ?? line.raw.POS) ?? null,
@@ -487,7 +492,7 @@ export async function writeRiGameRows(opts: {
         season: box.season ?? fallbackSeason,
         weekOrRound: box.weekOrRound,
         statPayload: toPrismaJsonInput(line.raw),
-        normalizedStatMap: toPrismaJsonInput(normalizedMapFor(line, box)),
+        normalizedStatMap: toPrismaJsonInput(normalizedStatMapFor(line, box)),
         source: SOURCE,
         confidence,
         team: line.team,

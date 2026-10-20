@@ -112,7 +112,7 @@ const GOALIE_EFFICIENCY: NhlScoringCategory = {
     { key: 'shutouts',              label: 'Shutout',                   defaultValue: 5 },
     { key: 'save_pct_bonus',        label: 'Save % Bonus',              helper: 'Bonus per 0.010 save % above .900', defaultValue: 0, unavailable: true },
     { key: 'gaa_bonus',             label: 'GAA Bonus',                 helper: 'Bonus for GAA below 2.50', defaultValue: 0, unavailable: true },
-    { key: 'goalie_minutes_played', label: 'Time on Ice (minutes)',     helper: 'Points per minute played', defaultValue: 0, unavailable: true },
+    { key: 'goalie_minutes_played', label: 'Time on Ice (minutes)',     helper: 'Points per minute played', defaultValue: 0 },
   ],
 }
 
