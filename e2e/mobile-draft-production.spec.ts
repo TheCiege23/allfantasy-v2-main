@@ -7,6 +7,7 @@ test.describe('@mock-draft-room mobile production mock room', () => {
     await page.route('**/api/mock-draft/adp?**', route => route.fulfill({ json: {
       entries: ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India'].map((name, index) => ({ playerId: name, name, position: 'PG', team: 'LAL', adp: index + 1, value: 100 })),
     } }))
+    await page.route('**/api/chat/chimmy', route => route.fulfill({ json: { response: 'Mobile chat reply' } }))
     await page.goto('/e2e/mock-draft-production')
     await page.getByTestId('mock-draft-entry-open').tap()
     await page.getByTestId('mock-draft-open-sport-NBA').tap()
@@ -21,7 +22,7 @@ test.describe('@mock-draft-room mobile production mock room', () => {
     return page.getByRole('dialog', { name: 'Players', exact: true })
   }
 
-  test('manual picks and off-turn touch queue survive reload; drawers remain reachable', async ({ page }) => {
+  test('manual picks and off-turn touch queue survive reload; drawers remain reachable', async ({ page }, testInfo) => {
     const drawer = await players(page)
     await drawer.getByTestId('mock-draft-player-search').fill('Alpha')
     await drawer.getByTestId('mock-draft-player-row-Alpha').tap()
@@ -40,11 +41,19 @@ test.describe('@mock-draft-room mobile production mock room', () => {
     const restored = await players(page)
     await expect(restored.getByText('Bravo', { exact: true }).first()).toBeVisible()
     await expect(restored.getByRole('button', { name: 'Queue Bravo', exact: true })).toBeDisabled()
+    await page.screenshot({ path: testInfo.outputPath('mobile-mock-recovered.png') })
     await restored.getByRole('button', { name: 'Close', exact: true }).tap()
     for (const name of ['Roster', 'Chat']) {
       await page.getByRole('button', { name, exact: true }).tap()
       const panel = page.getByRole('dialog')
       await expect(panel).toBeVisible()
+      if (name === 'Chat') {
+        await panel.getByTestId('mock-draft-chat-input').fill('How is my NBA roster?')
+        const reply = page.waitForResponse(response => response.url().endsWith('/api/chat/chimmy') && response.request().method() === 'POST')
+        await panel.getByTestId('mock-draft-chat-send').tap()
+        expect((await reply).ok()).toBe(true)
+        await expect(panel.getByText('Mobile chat reply', { exact: true })).toBeVisible()
+      }
       await panel.getByRole('button', { name: 'Close', exact: true }).tap()
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
