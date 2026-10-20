@@ -4,6 +4,7 @@ import {
   applyDynastySportPresetToSetup,
   getDynastySportPresets,
   matchDynastySportPreset,
+  presetTaxiSlotCount,
   rosterSlotsWithDynastySportPreset,
 } from '@/lib/dynasty-core/DynastySportPresets'
 import { DEFAULT_V2_STATE, getDefaultDynastySetup, type CreateLeagueV2State, type SupportedSport } from '@/lib/create-league-v2/state'
@@ -69,8 +70,9 @@ describe('NBA / NHL / MLB dynasty format presets', () => {
     }
     expect(pick('NFL')).toEqual([14, 3, 5, 2, 28])
     expect(pick('NBA')).toEqual([8, 3, 4, 2, 24])
-    expect(pick('NHL')).toEqual([9, 3, 4, 2, 26])
-    expect(pick('MLB')).toEqual([12, 4, 6, 2, 34])
+    // NHL / MLB: no taxi (lib/league-creation/prospectStashPolicy.ts).
+    expect(pick('NHL')).toEqual([9, 3, 0, 2, 26])
+    expect(pick('MLB')).toEqual([12, 4, 0, 2, 34])
     expect(resolveValidScoringPresetIdForSelection('', { leagueType: 'dynasty', sport: 'NFL', idpSelected: false })).toBe('fb_half_ppr')
     expect(resolveValidScoringPresetIdForSelection('', { leagueType: 'redraft', sport: 'NBA', idpSelected: false })).toBe('nba_points')
   })
@@ -110,9 +112,11 @@ describe('NBA / NHL / MLB dynasty format presets', () => {
       benchCount: preset.benchCount,
       irCount: preset.irCount,
       taxiSlots: preset.taxiSlotCount,
-      taxiEligibilityYears: preset.taxiEligibilityYears,
       startupRosterDepth: preset.startupRosterDepth,
     })
+    // NHL / MLB send no taxi rules at all (submit.ts), only taxiSlots 0.
+    if (preset.sport === 'NBA') expect(setup.taxiEligibilityYears).toBe(preset.taxiEligibilityYears)
+    else expect(setup).not.toHaveProperty('taxiEligibilityYears')
     expect(validateCreatePayload(body).ok).toBe(true)
 
     const roster = resolveDynastyCreationRoster(preset.sport, setup)
@@ -122,12 +126,29 @@ describe('NBA / NHL / MLB dynasty format presets', () => {
     expect(roster.totalRosterSlots).toBeGreaterThanOrEqual(preset.startupRosterDepth)
   })
 
-  it('MLB minor-league depth is TAXI; the template NA / PROSPECT slots are left as they are', () => {
+  it('NHL / MLB presets carry no taxi; the template NA / PROSPECT slots are left as they are', () => {
+    for (const p of DYNASTY_SPORT_PRESETS) {
+      if (p.sport === 'NBA') expect(p.taxiSlotCount).toBeGreaterThan(0)
+      else expect([p.id, p.taxiSlotCount]).toEqual([p.id, 0])
+    }
+    // The clamp holds even if a row is edited back to a non-zero count.
     const deep = getDynastySportPresets('MLB').find((p) => p.id === 'mlb_dynasty_points_deep')!
-    const slots = rosterSlotsWithDynastySportPreset(templates.MLB.slots, deep)
-    expect(slots.TAXI).toBe(10)
+    expect(presetTaxiSlotCount({ ...deep, taxiSlotCount: 10 })).toBe(0)
+    const slots = rosterSlotsWithDynastySportPreset(templates.MLB.slots, { ...deep, taxiSlotCount: 10 })
+    expect(slots.TAXI ?? 0).toBe(0)
     expect(slots.NA).toBe(templates.MLB.slots.NA)
     expect(slots.PROSPECT).toBe(templates.MLB.slots.PROSPECT)
+    expect(rosterSlotsWithDynastySportPreset({ BN: 3 }, deep)).not.toHaveProperty('TAXI')
+    expect(applyDynastySportPresetToSetup(getDefaultDynastySetup('NHL', 'snake'), { ...getDynastySportPresets('NHL')[1]!, taxiSlotCount: 8 }).taxiSlotCount).toBe(0)
+  })
+
+  it('NHL / MLB preset copy does not promise taxi or minor-league slots', () => {
+    for (const p of DYNASTY_SPORT_PRESETS.filter((x) => x.sport !== 'NBA')) {
+      for (const lang of ['en', 'es'] as const) {
+        const c = DYNASTY_SPORT_PRESET_COPY[p.id]![lang]
+        expect(`${c.label} ${c.hint}`).not.toMatch(/taxi|minor|menores|prospect/i)
+      }
+    }
   })
 
   it('editing any value afterwards reads as Custom', () => {

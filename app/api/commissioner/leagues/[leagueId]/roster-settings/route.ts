@@ -19,6 +19,14 @@ import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 import { syncDraftRoundsToRoster } from '@/lib/draft/syncDraftRoundsToRoster'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  filterRosterTemplatesForProspectPolicy,
+  findAddedProspectStashSlots,
+  isProspectStashSlotKey,
+  sportSupportsProspectStash,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,11 +76,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
     getLeagueRosterConfig(leagueId),
   ])
 
+  // NHL / MLB: do not OFFER taxi / prospect slots. A slot this league already has stays listed, so an
+  // existing league's editor still renders and can reduce it.
+  const currentSlots = config.slots ?? {}
+  const slotDefs = sportSupportsProspectStash(league.sport)
+    ? service.getSlots()
+    : service.getSlots().filter((def) => !isProspectStashSlotKey(def.key) || Number(currentSlots[def.key] ?? 0) > 0)
+
   return NextResponse.json({
     config,
     unifiedConfig,
-    slotDefs: service.getSlots(),
-    templates: service.getTemplates(),
+    slotDefs,
+    templates: filterRosterTemplatesForProspectPolicy(league.sport, service.getTemplates()),
     defaultTemplateKey: defaultTemplate.key,
     isCommissioner: permission.isCommissioner,
     roleAwareReadOnlyMode: permission.readOnly,
@@ -109,6 +124,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     getLeagueRosterConfig(leagueId),
     getComputedDraftRounds(leagueId).catch(() => null),
   ])
+  // NHL / MLB have no prospect pool: refuse adding or growing TAXI / PROSPECT / RIGHTS / MINORS.
+  // Keeping or lowering what the league already has is allowed.
+  const previousSlots = (await registry.getService(league.sport).getConfig(leagueId)).slots ?? {}
+  const addedStash = findAddedProspectStashSlots(league.sport, slots, previousSlots)
+  if (addedStash.length > 0) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE, slots: addedStash },
+      { status: 400 },
+    )
+  }
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
   // Rounds = draftable roster spots, so the draft follows the roster it was just given.
