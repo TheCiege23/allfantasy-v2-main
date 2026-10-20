@@ -17,6 +17,7 @@ import { useCallback, useEffect, useId, useState } from 'react'
 import { ChevronDown, Lock, Hourglass, Sparkles } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
+import { ImportedOrderChecklist } from '@/components/import-assist/ImportedOrderChecklist'
 
 type Config = { nonPlayoff: string; playoff: string; withinRound: string }
 
@@ -33,6 +34,8 @@ type Slot = {
 type LiveView = {
   draftSeason: number
   basedOnSeason: number
+  source?: 'native' | 'imported'
+  platform?: string | null
   result: { phase: 'regular_season' | 'playoffs' | 'final'; maxPfSource: 'max_pf' | 'points_for'; slots: Slot[]; warnings: string[] }
   notes: string[]
   settings: { enabled: boolean; config: Config; finalOrder: { basedOnSeason: number; savedAt: string } | null }
@@ -218,6 +221,10 @@ export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
           <p key={w} className="text-[11px] text-amber-300/70">{w}</p>
         ))}
       </div>
+
+      {view.source === 'imported' && !view.preview && (
+        <ImportedOrderChecklist platform={view.platform ?? null} draftSeason={view.draftSeason} phase={result.phase} slots={result.slots} />
+      )}
 
       <div aria-live="polite">
         {message && (

@@ -8,6 +8,7 @@ import {
   parseWaiverEngineConfig,
   type WaiverEngineConfigJson,
 } from "./waiver-engine-config"
+import { defaultProcessingDaysList, resolveFreeAgentUnlockBehavior } from "./free-agent-unlock"
 
 function toIntOrNull(value: unknown): number | null {
   if (value == null || value === "") return null
@@ -18,6 +19,7 @@ function toIntOrNull(value: unknown): number | null {
 function readLeagueSettingsWaiverOverrides(settings: unknown): {
   waiverType?: string
   processingDayOfWeek?: number | null
+  processingDaysList?: number[] | null
   processingTimeUtc?: string | null
   claimLimitPerPeriod?: number | null
   faabBudget?: number | null
@@ -41,6 +43,7 @@ function readLeagueSettingsWaiverOverrides(settings: unknown): {
           ? src.waiver_mode.trim()
           : undefined,
     processingDayOfWeek: processingDays.length > 0 ? processingDays[0] : undefined,
+    processingDaysList: processingDays.length > 0 ? defaultProcessingDaysList(processingDays) : undefined,
     processingTimeUtc:
       typeof src.waiver_processing_time_utc === "string" && src.waiver_processing_time_utc.trim()
         ? src.waiver_processing_time_utc.trim()
@@ -92,6 +95,12 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
   tiebreakRule: string | null
   lockType: string | null
   instantFaAfterClear: boolean
+  /**
+   * Sport/variant `free_agent_unlock_behavior`, or the league's explicit
+   * `settings.waiver_free_agent_unlock_behavior`. `'daily'` (NBA/MLB/NHL) = players not on waivers
+   * are first-come free agents (see lib/waiver-wire/free-agent-unlock.ts).
+   */
+  freeAgentUnlockBehavior: string | null
   specialtyConceptOverrides: unknown | null
   waiverEngineConfig: WaiverEngineConfigJson
   normalizedWaiverType: string
@@ -107,6 +116,13 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
     }),
     (prisma as any).leagueWaiverSettings.findUnique({ where: { leagueId } }),
   ])
+  const sportForDefaults = (league?.sport as string) || DEFAULT_SPORT
+  const variantForDefaults = league?.leagueVariant ?? null
+  const sportDefaults = getWaiverDefaults(toSportType(sportForDefaults) as any, variantForDefaults ?? undefined)
+  const freeAgentUnlockBehavior = resolveFreeAgentUnlockBehavior(
+    league?.settings,
+    sportDefaults.free_agent_unlock_behavior,
+  )
   if (row) {
     const engineConfig = parseWaiverEngineConfig(row.waiverEngineConfig ?? null)
     const wt = row.waiverType ?? "standard"
@@ -134,6 +150,7 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       tiebreakRule: row.tiebreakRule ?? engineConfig.faab_tiebreaker ?? null,
       lockType: row.lockType ?? null,
       instantFaAfterClear: row.instantFaAfterClear ?? true,
+      freeAgentUnlockBehavior,
       specialtyConceptOverrides: row.specialtyConceptOverrides ?? null,
       waiverEngineConfig: engineConfig,
       normalizedWaiverType: normalizeWaiverTypeForEngine(wt),
@@ -144,9 +161,7 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       commissionerOverrideRules: row.commissionerOverrideRules ?? null,
     }
   }
-  const sport = (league?.sport as string) || DEFAULT_SPORT
-  const variant = league?.leagueVariant ?? null
-  const defaults = getWaiverDefaults(toSportType(sport) as any, variant ?? undefined)
+  const defaults = sportDefaults
   const overrides = readLeagueSettingsWaiverOverrides(league?.settings)
   const resolvedWaiverType = overrides.waiverType ?? defaults.waiver_type ?? "standard"
   const resolvedTiebreakRule =
@@ -170,11 +185,19 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
     faabResetType: null,
     waiverOrderResetPolicy: null,
     postGameWaiverBehavior: null,
-    processingDays: null,
+    // An explicit settings day list wins; otherwise the sport's multi-day default (NBA [1,3,5]) —
+    // but never a default list under a commissioner's single explicit day. NFL stays null.
+    processingDays:
+      overrides.processingDaysList !== undefined
+        ? overrides.processingDaysList
+        : overrides.processingDayOfWeek !== undefined
+          ? null
+          : defaultProcessingDaysList(defaults.processing_days),
     freeAgentWindowRules: null,
     tiebreakRule: resolvedTiebreakRule,
     lockType: resolvedLockType,
     instantFaAfterClear: resolvedInstantFa,
+    freeAgentUnlockBehavior,
     specialtyConceptOverrides: null,
     waiverEngineConfig: {},
     normalizedWaiverType: normalizeWaiverTypeForEngine(resolvedWaiverType),

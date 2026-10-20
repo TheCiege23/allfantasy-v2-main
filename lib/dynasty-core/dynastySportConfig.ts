@@ -57,8 +57,21 @@ export type DynastySportConfig = {
     proDraftMonth: number
     /** Approximate month of free agency open (1-12) */
     freeAgencyMonth: number
-    /** Approximate month of rookie draft window (1-12) */
+    /**
+     * Month (1-12) the fantasy rookie-draft window OPENS — on its 1st. This is the one source of truth
+     * for "when is a dynasty rookie draft held": pick valuation's pre-draft bump counts down to it and
+     * `rookieDraftCalendar.ts` auto-opens the draft on it. It is NOT the real pro draft (`proDraftMonth`):
+     * a fantasy rookie draft follows the real one, once the rookies have teams.
+     */
     rookieDraftMonth: number
+    /** Last month (1-12) of the default window; omitted = the same month. May wrap the year (MLB Nov–Jan). */
+    rookieDraftWindowEndMonth?: number
+    /**
+     * Calendar year of the window relative to the season it seeds (seasons are keyed by the year they
+     * BEGIN). 0 for every sport whose draft falls between its seasons in the new season's year; -1 for
+     * MLB, whose first-year-player draft is held the winter BEFORE the season (Nov 2026 seeds 2027).
+     */
+    rookieDraftYearOffset?: 0 | -1
     /** Approximate month of training camp / preseason (1-12) */
     trainingCampMonth: number
     /** Days for roster cut deadline after rookie draft */
@@ -181,9 +194,13 @@ export const DYNASTY_SPORT_CONFIGS: Record<string, DynastySportConfig> = {
     rookieWindowYears: 3,
     offseason: {
       seasonEndWeek: 24,
+      // The MLB Draft is mid-July, mid-season. Dynasty first-year-player drafts are held in the
+      // offseason after the World Series (was 1: January, priced a 2027 pick as drafted Jan 2027).
       proDraftMonth: 7,
       freeAgencyMonth: 11,
-      rookieDraftMonth: 1,
+      rookieDraftMonth: 11,
+      rookieDraftWindowEndMonth: 1,
+      rookieDraftYearOffset: -1,
       trainingCampMonth: 2,
       rosterCutDeadlineDays: 21,
     },
@@ -225,7 +242,8 @@ export const DYNASTY_SPORT_CONFIGS: Record<string, DynastySportConfig> = {
       // The NHL Entry Draft is held in late June (was 7); free agency opens July 1.
       proDraftMonth: 6,
       freeAgencyMonth: 7,
-      rookieDraftMonth: 8,
+      // The rookie draft follows the late-June Entry Draft in July (was 8: August).
+      rookieDraftMonth: 7,
       trainingCampMonth: 9,
       rosterCutDeadlineDays: 14,
     },

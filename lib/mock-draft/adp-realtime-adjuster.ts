@@ -228,7 +228,8 @@ export function bindNewsToEntries(
 export async function applyRealtimeAdpAdjustments(entries: ADPEntry[], opts?: { isDynasty?: boolean }) {
   const news = await fetchRecentSportsSignals()
   const rookieRanks = await (prisma as any).rookieRanking.findMany({
-    where: { year: { in: [new Date().getFullYear(), new Date().getFullYear() + 1] } },
+    // NFL boards only: other sports' rookie rankings must never re-rank an NFL board.
+    where: { sport: 'NFL', year: { in: [new Date().getFullYear(), new Date().getFullYear() + 1] } },
     select: { name: true, rank: true },
     orderBy: { rank: 'asc' },
     take: 80,

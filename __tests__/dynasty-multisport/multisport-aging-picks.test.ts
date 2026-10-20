@@ -179,7 +179,7 @@ describe('pick valuation is sport-aware', () => {
   it('the pre-draft bump follows each sport\'s rookie-draft month from dynastySportConfig', () => {
     expect(getDynastySportConfig('nfl').offseason.rookieDraftMonth).toBe(5)
     // Mid-April: 16 days before the NFL rookie draft (May), weeks before NBA's (July),
-    // and MLB's January draft has already happened this year.
+    // and MLB's first-year-player draft for 2027 was held last November.
     vi.setSystemTime(new Date('2027-04-15T12:00:00Z'))
     const nfl = getPickValue(2027, 1, true, undefined, undefined, 'NFL')
     const nba = getPickValue(2027, 1, true, undefined, undefined, 'NBA')
@@ -188,10 +188,14 @@ describe('pick valuation is sport-aware', () => {
     expect(nba).toBe(Math.round(6000 * 1.03))
     expect(mlb).toBe(6000)
 
-    // Mid-December: MLB's January draft is now the one inside 30 days; NFL's is not.
-    vi.setSystemTime(new Date('2026-12-15T12:00:00Z'))
+    // Mid-October: a 2027 MLB pick is drafted after the World Series, in November 2026 — inside 30
+    // days; NFL's 2027 draft is not. (Before the calendar fix MLB's month was January of the pick year.)
+    vi.setSystemTime(new Date('2026-10-15T12:00:00Z'))
     expect(getPickValue(2027, 1, true, undefined, undefined, 'MLB')).toBe(Math.round(6000 * 0.92 * 1.06))
     expect(getPickValue(2027, 1, true, undefined, undefined, 'NFL')).toBe(Math.round(6000 * 0.92))
+    // Mid-December: that November draft has happened, so no bump is left on the 2027 pick.
+    vi.setSystemTime(new Date('2026-12-15T12:00:00Z'))
+    expect(getPickValue(2027, 1, true, undefined, undefined, 'MLB')).toBe(Math.round(6000 * 0.92))
   })
 
   it('round curve stretches over the sport\'s rookie-draft length instead of NFL\'s 5-round table', () => {

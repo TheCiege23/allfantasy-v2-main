@@ -18,10 +18,10 @@ import { resolveLeagueVariant } from './LeagueVariantResolver'
 
 /** Per-sport default tiebreakers (order of application). */
 const DEFAULT_TIEBREAKERS: Record<SportType, string[]> = {
-  NFL: ['points_for', 'head_to_head', 'points_against'],
-  NBA: ['points_for', 'head_to_head', 'points_against'],
-  MLB: ['points_for', 'head_to_head', 'points_against'],
-  NHL: ['points_for', 'head_to_head', 'points_against'],
+  NFL: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
+  NBA: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
+  MLB: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
+  NHL: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
   NCAAF: ['points_for', 'head_to_head', 'points_against'],
   NCAAB: ['points_for', 'head_to_head', 'points_against'],
   SOCCER: ['points_for', 'head_to_head', 'points_against'],

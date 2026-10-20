@@ -31,6 +31,14 @@ interface CommissionerInvalidRoster {
   reason?: string
 }
 
+/** `GET /api/leagues/[id]/season/start-new` — the last dynasty rollover's housekeeping. */
+interface DynastyRolloverInfo {
+  seasonId: string
+  movedToBench: Array<{ playerName: string; from: string; reason: string; rosterId: string }>
+  needsCutDown: Array<{ rosterId: string; teamName: string | null; rosterCount: number; maxRosterSize: number; over: number }>
+  taxiUnverified: number
+}
+
 interface CommissionerLineupInfo {
   lineupLockRule: unknown
   invalidRosters: CommissionerInvalidRoster[]
@@ -62,6 +70,8 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
   const [overridePick, setOverridePick] = useState({ playerName: '', position: '', rosterId: '' })
   const [showOverrideForm, setShowOverrideForm] = useState(false)
   const [resetDraftConfirm, setResetDraftConfirm] = useState(false)
+  const [skipRookieDraftConfirm, setSkipRookieDraftConfirm] = useState(false)
+  const [rollover, setRollover] = useState<DynastyRolloverInfo | null>(null)
   const [prestigeSnapshot, setPrestigeSnapshot] = useState<{
     commissionerContext?: {
       lowTrustManagerIds: string[]
@@ -80,6 +90,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
 
   const base = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}`
   const draftControlsUrl = `/api/leagues/${encodeURIComponent(leagueId)}/draft/controls`
+  const startNewSeasonUrl = `/api/leagues/${encodeURIComponent(leagueId)}/season/start-new`
   const leagueBase = `/league/${encodeURIComponent(leagueId)}`
   const { hasAccess } = useEntitlement()
 
@@ -108,6 +119,13 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
           const data = await draftRes.json()
           setDraftState({ session: data?.session ?? null, leagueId })
         }
+        void fetch(startNewSeasonUrl, { cache: 'no-store' })
+          .then(async (res) => {
+            if (!active || !res.ok) return
+            const data = await res.json().catch(() => ({}))
+            setRollover((data?.rollover as DynastyRolloverInfo | null) ?? null)
+          })
+          .catch(() => undefined)
         void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/prestige-governance?includeSnapshot=true&summaryLimit=8`, {
           cache: 'no-store',
         })
@@ -285,6 +303,34 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
       }
     } catch (e: any) {
       toast.error(e?.message || 'Draft control failed')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  /** Dynasty only; the server refuses every other league. A first call never skips the rookie draft. */
+  const startNewSeason = async (skipRookieDraft: boolean) => {
+    setSaving('start_new_season')
+    try {
+      const res = await fetch(startNewSeasonUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skipRookieDraft }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        if (data?.code === 'ROOKIE_DRAFT_NOT_DONE') {
+          setSkipRookieDraftConfirm(true)
+          toast.message(data.error || 'No rookie draft has been held for this season.')
+          return
+        }
+        throw new Error(data.error || 'Failed')
+      }
+      setSkipRookieDraftConfirm(false)
+      if (data?.housekeeping) setRollover(data.housekeeping as DynastyRolloverInfo)
+      toast.success(data?.via === 'already_active' ? 'The new season is already running' : `Season ${data?.season ?? ''} started`)
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not start the new season')
     } finally {
       setSaving(null)
     }
@@ -595,6 +641,28 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
                   Create next season&apos;s draft
                 </Button>
               )}
+              {session && draftStatus === 'completed' && (
+                !skipRookieDraftConfirm ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => startNewSeason(false)}
+                    disabled={!!saving}
+                    title="Dynasty leagues: carry every roster into next season and start it once the rookie draft is done."
+                    data-testid="commissioner-tab-start-new-season"
+                  >
+                    Start new season
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-amber-200">Start the season without a rookie draft?</span>
+                    <Button size="sm" onClick={() => startNewSeason(true)} disabled={!!saving} data-testid="commissioner-tab-start-new-season-skip">
+                      Start without rookie draft
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setSkipRookieDraftConfirm(false)}>Cancel</Button>
+                  </div>
+                )
+              )}
               {/* A completed draft built the rosters and season; the server refuses to reset it. */}
               {session && draftStatus !== 'pre_draft' && draftStatus !== 'completed' && (
                 <>
@@ -614,6 +682,32 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
             </div>
           )}
         </section>
+
+        {rollover && (rollover.needsCutDown.length > 0 || rollover.movedToBench.length > 0) && (
+          <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4" data-testid="commissioner-tab-dynasty-rollover">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <ListChecks className="h-4 w-4" /> New season roster check
+            </h2>
+            {rollover.needsCutDown.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-amber-200">These teams are over the roster limit and must cut down before their lineup can be saved:</p>
+                {rollover.needsCutDown.map((t) => (
+                  <p key={t.rosterId} className="text-xs text-white/80" data-testid={`commissioner-tab-cut-down-${t.rosterId}`}>
+                    {t.teamName || t.rosterId}: {t.rosterCount} of {t.maxRosterSize} ({t.over} over)
+                  </p>
+                ))}
+              </div>
+            )}
+            {rollover.movedToBench.length > 0 && (
+              <p className="mt-2 text-xs text-white/60">
+                Moved to the bench as no longer eligible: {rollover.movedToBench.map((m) => `${m.playerName} (${m.from})`).join(', ')}
+              </p>
+            )}
+            {rollover.taxiUnverified > 0 && (
+              <p className="mt-1 text-xs text-white/50">{rollover.taxiUnverified} taxi player(s) left in place: experience not on file.</p>
+            )}
+          </section>
+        )}
 
         <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
