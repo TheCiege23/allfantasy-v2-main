@@ -19,7 +19,7 @@ import {
 } from './sportWeekSignal'
 import { dailySportWeekForInstant, resolveDailySportSeasonStart } from './dailySportSeasonStarts'
 import { ensureDailySportSeasonStart } from './deriveDailySportSeasonStart'
-import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound, readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import type {
   LeagueSeasonWeekResolution,
   ScheduleRow,
@@ -203,7 +203,7 @@ export async function resolveSeasonWeekForRedraftSeason(
  * regular season ends, and why `mapSportWeekToLeagueWeek` will not emit
  * `season_complete` without it.
  */
-async function resolveLastPlayoffWeek(
+export async function resolveLastPlayoffWeek(
   db: PrismaClient,
   seasonId: string,
   playoffStartWeek: number,
@@ -217,11 +217,14 @@ async function resolveLastPlayoffWeek(
   if (round == null) return null
   const league = await db.league.findUnique({
     where: { id: leagueId },
-    select: { playoffWeeksPerRound: true },
+    select: { playoffWeeksPerRound: true, settings: true },
   })
+  // The round read above is the final, which runs `championship_length` weeks when that is longer.
   return lastWeekOfPlayoffRound({
     playoffStartWeek,
     roundNumber: round.roundNumber,
     weeksPerRound: league?.playoffWeeksPerRound,
+    finalRoundNumber: round.roundNumber,
+    championshipLength: readChampionshipLength(league?.settings),
   })
 }

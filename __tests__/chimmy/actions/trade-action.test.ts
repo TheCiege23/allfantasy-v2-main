@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * "Send this trade" for a native league. Proposing builds a card and sends NOTHING; executing goes
- * through `createAfLeagueTrade`, the Trade Center's own service, with the league's week so the
- * deadline check actually applies.
+ * through `createAfLeagueTrade`, the Trade Center's own service, which resolves the league's week
+ * itself. The pre-flight asks the same server-side resolver — never `settings.currentWeek`.
  */
 
 const h = vi.hoisted(() => ({
@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   create: vi.fn(async () => ({ id: 'T1' })),
   validate: vi.fn(() => ({ ok: true })),
   deadline: vi.fn(() => false),
+  serverWeek: vi.fn(async () => 12 as number | null),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -35,6 +36,7 @@ vi.mock('@/lib/league-trade-engine/tradeSettingsResolver', () => ({
   isPastTradeDeadline: h.deadline,
 }))
 vi.mock('@/lib/league-trade-engine/tradeValidationService', () => ({ validateTradeAssets: h.validate }))
+vi.mock('@/lib/trade-deadline/tradeDeadlineWindow', () => ({ serverWeekForTradeDeadline: h.serverWeek }))
 vi.mock('@/lib/sports-evidence/tradeIntegration', () => ({
   CertifiedTradeIntegrationService: class {
     evaluateTradeProposalSafety = vi.fn(async () => ({ block: false, reason: 'ok' }))
@@ -70,6 +72,7 @@ beforeEach(() => {
   h.appUser.mockImplementation(async ({ where }: { where: { id: string } }) => (where.id.startsWith('u') ? { id: where.id } : null))
   h.validate.mockReturnValue({ ok: true })
   h.deadline.mockReturnValue(false)
+  h.serverWeek.mockResolvedValue(12)
 })
 afterEach(() => {
   if (prevSecret === undefined) delete process.env.NEXTAUTH_SECRET
@@ -122,6 +125,13 @@ describe('proposeTrade', () => {
     expect(out).toMatchObject({ ok: false, text: expect.stringMatching(/deadline has passed/) })
   })
 
+  it("🛑 checks the deadline at the SERVER's week, not the stale `settings.currentWeek` (5)", async () => {
+    await proposeTrade({ leagueId: 'L1', userId: 'u1', give: ["Ja'Marr Chase"], get: ['Justin Jefferson'], now: NOW })
+    expect(h.serverWeek).toHaveBeenCalledWith(LEAGUE, undefined)
+    expect(h.deadline).toHaveBeenCalledWith(LEAGUE, 12)
+    expect(h.validate).toHaveBeenCalledWith(expect.objectContaining({ currentWeek: 12 }))
+  })
+
   it("relays the engine validator's refusal", async () => {
     h.validate.mockReturnValue({ ok: false, code: 'TRADES_DISABLED', message: 'Trades are disabled for this league format or settings.' })
     const out = await proposeTrade({ leagueId: 'L1', userId: 'u1', give: ["Ja'Marr Chase"], get: ['Justin Jefferson'], now: NOW })
@@ -150,7 +160,7 @@ describe('executeTradeAction', () => {
     return v.payload
   }
 
-  it("creates the offer through the Trade Center's service, as the user, with the league week", async () => {
+  it("creates the offer through the Trade Center's service, as the user — the service resolves the week", async () => {
     const p = await payload()
     const r = await executeTradeAction(p, 'u1')
     expect(r).toEqual({ ok: true, tradeId: 'T1', message: expect.any(String) })
@@ -163,7 +173,6 @@ describe('executeTradeAction', () => {
         { itemType: 'player', itemReference: 'p1', fromRosterId: 'r1', toRosterId: 'r2' },
         { itemType: 'player', itemReference: 'p9', fromRosterId: 'r2', toRosterId: 'r1' },
       ],
-      currentWeek: 5,
       metadata: { source: 'chimmy', chimmyActionId: p.actionId },
     })
   })
