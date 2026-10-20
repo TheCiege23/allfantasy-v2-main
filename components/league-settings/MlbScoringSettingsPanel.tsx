@@ -28,6 +28,7 @@ import {
 } from '@/lib/mlb-scoring/MlbScoringCategories'
 import { getCategoryPresetDefinitions } from '@/lib/category-scoring'
 import type { MlbScoringPresetKey } from '@/lib/mlb-scoring/MlbScoringPresets'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,6 +101,7 @@ interface Props {
 
 export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, BASEBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<MlbScoringPreset[]>([])
@@ -201,7 +203,7 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     setError(null)
     setSuccess(false)
     try {
-      const res = await fetch(
+      const res = await confirmFetch(
         `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/mlb-scoring`,
         {
           method: 'PUT',
@@ -227,7 +229,7 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     } finally {
       setSaving(false)
     }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -254,6 +256,8 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   </section>
 
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -479,5 +483,6 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'MLB')}
       />
     </div>
+    </>
   )
 }

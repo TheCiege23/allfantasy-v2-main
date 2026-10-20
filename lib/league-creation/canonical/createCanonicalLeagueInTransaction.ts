@@ -93,8 +93,9 @@ function leagueModeColumns(formatId: LeagueFormatId): Partial<Prisma.LeagueUnche
     // 🛑 `draftPickTrading` defaults to false, and nothing at create set it — so every native dynasty
     // league refused future-pick trades (PICK_TRADING_BLOCKED) until a commissioner found the toggle.
     // A league that holds a rookie draft every year trades its picks by default; the commissioner can
-    // still switch it off.
-    draftPickTrading: isDynasty,
+    // still switch it off. A redraft league trades its current draft's picks by default too (future
+    // picks are refused there by the trade engine). Keeper and the specialty formats stay off.
+    draftPickTrading: isDynasty || formatId === 'redraft',
     bestBallMode: formatId === 'best_ball',
     guillotineMode: formatId === 'guillotine',
     survivorMode: formatId === 'survivor',

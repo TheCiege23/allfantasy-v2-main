@@ -12,6 +12,13 @@ import {
 } from '@/lib/waiver-wire/roster-utils'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { parseInventoryPickId, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
+import {
+  CodedTradeError,
+  checkRedraftPickAsset,
+  isRedraftPickLeague,
+  parseRedraftPickId,
+  transferRedraftDraftPick,
+} from '@/lib/league-trade-engine/redraftDraftPicks'
 import { settleTradeContracts, type SalarySettlementEvidence } from '@/lib/salary-cap/TradeContractSettlement'
 import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
 
@@ -72,7 +79,11 @@ export async function applyTradeAssetsInTransaction(
     tradeId?: string | null
   },
 ): Promise<SalarySettlementEvidence | undefined> {
-  const tournamentLeague = await tx.league.findUnique({ where: { id: input.leagueId }, select: { settings: true } })
+  const tournamentLeague = await tx.league.findUnique({
+    where: { id: input.leagueId },
+    select: { settings: true, leagueType: true, isDynasty: true, season: true },
+  })
+  const redraftLeague = Boolean(tournamentLeague) && isRedraftPickLeague(tournamentLeague ?? {})
   if (seasonSetupBlocked(tournamentLeague?.settings)) throw new Error('Tournament player moves remain locked until season activation.')
   const participantIds = [...new Set([
     input.proposerRosterId,
@@ -115,6 +126,17 @@ export async function applyTradeAssetsInTransaction(
     if (a.itemType === 'rookie_pick' || a.itemType === 'future_pick' || a.itemType === 'devy_pick') {
       const ref = String(a.itemReference ?? '')
       if (!ref) throw new Error('Pick ref required')
+      // A redraft league's current-draft pick lives in the draft session's `tradedPicks`.
+      if (parseRedraftPickId(ref)) {
+        await transferRedraftDraftPick(tx, {
+          leagueId: input.leagueId,
+          ref,
+          fromRosterId: fromId,
+          toRosterId: toId,
+          tradeId: input.tradeId ?? null,
+        })
+        continue
+      }
       // A native dynasty league's future pick lives in `future_draft_picks`, not in `playerData`.
       if (parseInventoryPickId(ref)) {
         await transferNativeFuturePick(tx, {
@@ -130,6 +152,17 @@ export async function applyTradeAssetsInTransaction(
       const toData = dataByRoster.get(toId)
       const pickObj = extractPickObject(fromData, ref)
       if (!pickObj) throw new Error('Pick not found on roster')
+      // An offer made before the redraft rule, or by any path that skipped validation, still cannot
+      // move a future pick in a redraft league.
+      if (redraftLeague) {
+        const season = Number((asRecord(pickObj) ?? {}).season ?? (asRecord(pickObj) ?? {}).year)
+        const check = checkRedraftPickAsset(a, {
+          book: null,
+          currentSeason: Number(tournamentLeague?.season) || null,
+          rosterPickSeason: Number.isFinite(season) && season > 0 ? season : null,
+        })
+        if (!check.ok) throw new CodedTradeError(check.code, check.message)
+      }
       const nextFrom = removePickFromPlayerData(fromData, ref)
       const nextTo = addPickToPlayerData(toData, pickObj)
       dataByRoster.set(fromId, nextFrom)
