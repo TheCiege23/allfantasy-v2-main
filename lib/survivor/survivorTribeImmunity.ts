@@ -11,6 +11,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { getNextLineupLock } from './sportScheduleEngine'
+import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { resolveWeekImmuneTribeIds } from './survivorCouncilImmunity'
 
 /** tribeId used for the single post-merge immunity row. */
 export const MERGED_IMMUNITY_TRIBE = 'merge'
@@ -40,18 +42,21 @@ export interface ImmunityWinner {
 /**
  * Pick the immunity winner(s) for a week.
  *
- * Pre-merge: every tribe except the one that won tribe immunity is headed to Tribal Council, and the
- * top scorer inside each of those tribes wins individual immunity. Post-merge everyone is one tribe,
- * so the single top scorer wins. Only active managers with a counted score and a main roster can win.
- * Ties break on userId so the award is reproducible.
+ * Pre-merge: every tribe except the one(s) that won tribe immunity is headed to Tribal Council, and
+ * the top scorer inside each of those tribes wins individual immunity. Post-merge everyone is one
+ * tribe, so the single top scorer wins. Only active managers with a counted score and a main roster
+ * can win. Ties break on userId so the award is reproducible.
  */
 export function computeTribeImmunityWinners(input: {
   scores: ImmunityScoreRow[]
   candidates: ImmunityCandidate[]
   immuneTribeId: string | null
+  /** Every safe tribe this week (two-highest rule, challenge immunity). Adds to immuneTribeId. */
+  immuneTribeIds?: readonly string[]
   merged: boolean
 }): ImmunityWinner[] {
   const byUser = new Map(input.candidates.map(candidate => [candidate.userId, candidate]))
+  const immuneTribes = new Set([...(input.immuneTribeIds ?? []), ...(input.immuneTribeId ? [input.immuneTribeId] : [])])
   const groups = new Map<string, ImmunityWinner[]>()
   for (const score of input.scores) {
     if (score.countedTowardTribeTotal === false || !Number.isFinite(score.finalScore)) continue
@@ -59,7 +64,7 @@ export function computeTribeImmunityWinners(input: {
     if (!candidate?.rosterId) continue
     const tribeId = input.merged ? MERGED_IMMUNITY_TRIBE : candidate.tribeId ?? score.tribeId
     if (!tribeId) continue
-    if (!input.merged && input.immuneTribeId && tribeId === input.immuneTribeId) continue
+    if (!input.merged && immuneTribes.has(tribeId)) continue
     const list = groups.get(tribeId) ?? []
     list.push({ tribeId, userId: candidate.userId, rosterId: candidate.rosterId, displayName: candidate.displayName, score: score.finalScore })
     groups.set(tribeId, list)
@@ -197,7 +202,7 @@ export async function awardTribeImmunity(leagueId: string, week: number, opts: {
   const now = opts.now ?? new Date()
   const [game, league, players] = await Promise.all([
     prisma.survivorGameState.findUnique({ where: { leagueId }, select: { immuneTribeId: true, phase: true, mergeTriggeredAt: true } }),
-    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, survivorPhase: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, survivorPhase: true, settings: true } }),
     prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, redraftRosterId: true, displayName: true, tribeId: true } }),
   ])
   const merged = Boolean(game?.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(String(league?.survivorPhase ?? game?.phase ?? ''))
@@ -205,10 +210,20 @@ export async function awardTribeImmunity(leagueId: string, week: number, opts: {
     where: { leagueId, week, userId: { in: players.map(player => player.userId) } },
     select: { userId: true, tribeId: true, finalScore: true, countedTowardTribeTotal: true },
   })
+  // The same resolver the council opener uses: the tribe told it is safe is never sent to council.
+  const immunity = merged
+    ? null
+    : await resolveWeekImmuneTribeIds(leagueId, week, {
+        settings: normalizeSurvivorFoundationSettings(league?.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {}),
+        scores,
+        tribeIds: [...new Set(players.map(player => player.tribeId).filter((tribeId): tribeId is string => Boolean(tribeId)))],
+        scoreImmuneTribeId: game?.immuneTribeId ?? null,
+      })
   const winners = computeTribeImmunityWinners({
     scores,
     candidates: players.map(player => ({ userId: player.userId, rosterId: player.redraftRosterId, displayName: player.displayName, tribeId: player.tribeId })),
     immuneTribeId: merged ? null : game?.immuneTribeId ?? null,
+    immuneTribeIds: immunity?.immuneTribeIds ?? [],
     merged,
   })
   const expiresAt = getNextLineupLock(league?.sport ?? 'NFL', now)

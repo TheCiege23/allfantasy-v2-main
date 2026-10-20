@@ -31,6 +31,7 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSur
 import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 import { applySurvivorMergeCast } from './survivorMergeCast'
 import { awardTribeImmunity, clearExpiredTribeImmunity } from './survivorTribeImmunity'
+import { resolveWeekImmuneTribeIds } from './survivorCouncilImmunity'
 import { postImmunityWinLine } from './leagueChatPoster'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
@@ -426,21 +427,20 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
   const hours = tribalVoteWindowHoursFromLeague(leagueRow?.settings)
   const deadline = plan ? nextTorchCeremonyDeadline(new Date(), leagueRow?.settings) : new Date(Date.now() + hours * 60 * 60 * 1000)
 
-  const immune = gs.immuneTribeId
   const tribes = await prisma.survivorTribe.findMany({
     where: { leagueId, isActive: true },
     select: { id: true },
   })
-  const fallbackTribeId =
-    immune && tribes.some((t) => t.id !== immune)
-      ? tribes.find((t) => t.id !== immune)?.id ?? null
-      : tribes[0]?.id ?? null
-  // The lowest scoring non-immune tribe attends, planned season or not. The unplanned path used
-  // to send the FIRST non-immune tribe, which with three or more tribes was simply the wrong one.
-  const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: gs.currentWeek, isFinalized: true, countedTowardTribeTotal: true, tribeId: { not: null } }, select: { tribeId: true, finalScore: true } })
-  const totals = new Map<string, number>()
-  for (const score of scores) if (score.tribeId) totals.set(score.tribeId, (totals.get(score.tribeId) ?? 0) + score.finalScore)
-  const losingTribe = [...totals.entries()].filter(([id]) => id !== immune).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? fallbackTribeId
+  // The lowest scoring tribe that is not immune attends, planned season or not. Immunity is the
+  // top tribe (the top two under that rule) plus any tribe that won it through a challenge, from
+  // the same resolver the necklace uses, so a tribe told it is safe is never sent. The unplanned
+  // path used to send the FIRST non-immune tribe, which with three or more tribes was wrong.
+  const immunity = await resolveWeekImmuneTribeIds(leagueId, gs.currentWeek, {
+    settings: normalizeSurvivorFoundationSettings(leagueRow?.settings as Record<string, unknown> | null),
+    tribeIds: tribes.map((t) => t.id),
+    scoreImmuneTribeId: gs.immuneTribeId,
+  })
+  const losingTribe = immunity.attendingTribeId
   const tribeId = losingTribe
 
   if (plan) {

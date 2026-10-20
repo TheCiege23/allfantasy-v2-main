@@ -40,6 +40,11 @@ export interface SurvivorFoundationSettings {
   tieRule: SurvivorTieRule
   /** A missing ballot is cast for the voter's lowest-scoring eligible target that week. */
   nonVoterAutoCast: boolean
+  /**
+   * The two highest-scoring tribes are safe from Tribal Council (three or more tribes). Off: only
+   * the highest tribe is safe. The lowest-scoring tribe that is not safe attends either way.
+   */
+  twoHighestTribesImmune: boolean
   autoReveal: boolean
   eliminationOutcome: SurvivorEliminationOutcome
   sitOutsEnabled: boolean
@@ -108,6 +113,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   voteChangePolicy: 'allow_until_close',
   tieRule: 'revote_then_rocks',
   nonVoterAutoCast: true,
+  twoHighestTribesImmune: false,
   autoReveal: true,
   eliminationOutcome: 'removed_to_waivers',
   sitOutsEnabled: true,
@@ -282,6 +288,7 @@ export function normalizeSurvivorFoundationSettings(
     voteChangePolicy: normalizeVoteChangePolicy(readString(s, ['voteChangePolicy'], base.voteChangePolicy)),
     tieRule: normalizeTieRule(readString(s, ['tieRule'], base.tieRule)),
     nonVoterAutoCast: readBoolean(s, ['nonVoterAutoCast'], base.nonVoterAutoCast),
+    twoHighestTribesImmune: readBoolean(s, ['twoHighestTribesImmune'], base.twoHighestTribesImmune),
     autoReveal: readBoolean(s, ['autoReveal'], base.autoReveal),
     eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),
