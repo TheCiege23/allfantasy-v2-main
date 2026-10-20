@@ -14,6 +14,11 @@ import {
 } from '@/lib/league-concepts/redraftDefaults'
 import { getBestBallDefaultContract } from '@/lib/league-concepts/bestBallDefaults'
 import {
+  buildDailyRedraftSettingsSnapshot,
+  getDailyRedraftDefaultContract,
+  type DailyRedraftDefaultContract,
+} from '@/lib/league-concepts/dailySportRedraftDefaults'
+import {
   buildKeeperSettingsSnapshot,
   getKeeperDefaultContract,
   type KeeperDefaultContract,
@@ -45,6 +50,8 @@ export type LeagueFoundationDefaults = {
   playoffSettings: Record<string, unknown>
   scheduleSettings: Record<string, unknown>
   redraftContract?: RedraftDefaultContract | null
+  /** NBA / NHL / MLB redraft (the football contract above is NFL / NCAAF only). */
+  dailyRedraftContract?: DailyRedraftDefaultContract | null
   keeperContract?: KeeperDefaultContract | null
   devyContract?: DevyDefaultContract | null
   playerPoolRules?: Record<string, unknown>
@@ -273,6 +280,24 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
           teamCount: input.managerCount,
         })
       : null
+  const dailyRedraftContract =
+    format === 'redraft' && !redraftContract
+      ? getDailyRedraftDefaultContract({
+          sport,
+          draftType: input.draftType,
+          scoringPresetId: scoringPreset || null,
+          teamCount: input.managerCount,
+        })
+      : null
+  const dailyRedraftSnapshot =
+    dailyRedraftContract
+      ? buildDailyRedraftSettingsSnapshot({
+          sport,
+          draftType: input.draftType,
+          scoringPresetId: dailyRedraftContract.scoring_preset_id,
+          teamCount: input.managerCount,
+        })
+      : null
   const keeperContract =
     format === 'keeper'
       ? getKeeperDefaultContract({
@@ -325,9 +350,9 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   })
   const managerCount = numericOr(
     input.managerCount,
-    survivorContract?.teams ?? devyContract?.teams ?? keeperContract?.teams ?? redraftContract?.teams ?? preset?.defaultTeamCount ?? resolution.leagueDefaults.default_team_count ?? 12,
+    survivorContract?.teams ?? devyContract?.teams ?? keeperContract?.teams ?? redraftContract?.teams ?? dailyRedraftContract?.teams ?? preset?.defaultTeamCount ?? resolution.leagueDefaults.default_team_count ?? 12,
   )
-  const canonicalSnapshot = survivorSnapshot ?? redraftSnapshot ?? keeperSnapshot ?? devySnapshot ?? null
+  const canonicalSnapshot = survivorSnapshot ?? redraftSnapshot ?? dailyRedraftSnapshot ?? keeperSnapshot ?? devySnapshot ?? null
   const canonicalDraftSettings = (canonicalSnapshot?.draftSettings as Record<string, unknown> | undefined) ?? null
   const canonicalWaiverSettings = (canonicalSnapshot?.waiverSettings as Record<string, unknown> | undefined) ?? null
   const canonicalPlayoffSettings = (canonicalSnapshot?.playoffSettings as Record<string, unknown> | undefined) ?? null
@@ -454,6 +479,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
     },
     scheduleSettings: scheduleDefaults,
     redraftContract,
+    dailyRedraftContract,
     keeperContract,
     devyContract,
     playerPoolRules: (canonicalSnapshot?.playerPoolRules as Record<string, unknown> | undefined) ?? undefined,

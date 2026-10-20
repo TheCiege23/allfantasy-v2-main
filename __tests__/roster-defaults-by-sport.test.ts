@@ -29,8 +29,10 @@ describe('Default Roster Settings by Sport', () => {
     const slotNames = mlb.slots.map((s) => s.slotName)
 
     expect(slotNames).toEqual(
-      expect.arrayContaining(['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'UTIL', 'BENCH'])
+      expect.arrayContaining(['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'CI', 'MI', 'OF', 'UTIL', 'BENCH'])
     )
+    // No DH starter: a DH-only hitter fills UTIL (lib/sportConfig/dailySportRedraftRoster.ts).
+    expect(slotNames).not.toContain('DH')
     expect(mlb.totalBenchSlots).toBeGreaterThan(0)
   })
 

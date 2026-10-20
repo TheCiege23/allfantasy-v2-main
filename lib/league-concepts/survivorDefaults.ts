@@ -36,7 +36,7 @@
  */
 import { NEW_LEAGUE_EXILE_BOSS_MODE } from '@/lib/survivor/lateSeasonSettings'
 import type { LeagueSport } from '@prisma/client'
-import { getRosterDefaults, getScoringDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
+import { getScoringDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import {
   SURVIVOR_CANONICAL_DRAFT_TYPE_IDS,
   SURVIVOR_DEFAULT_FOUNDATION_SETTINGS,
@@ -268,9 +268,31 @@ function starterCount(slots: Record<string, number>): number {
   return Object.values(slots).reduce((t, n) => t + n, 0)
 }
 
+/**
+ * Survivor's own NBA/NHL roster. It used to read the sport-defaults registry's base roster, which is
+ * now the redraft layout (lib/sportConfig/dailySportRedraftRoster.ts); pinned here so moving the
+ * redraft default does not silently resize a beta survivor league. These are the values it read.
+ */
+const SURVIVOR_DAILY_ROSTERS = {
+  NBA: {
+    starter_slots: { PG: 1, SG: 1, SF: 1, PF: 1, C: 1, G: 1, F: 1, UTIL: 1 } as Record<string, number>,
+    bench_slots: 4,
+    flex_definitions: [
+      { slotName: 'G', allowedPositions: ['PG', 'SG'] },
+      { slotName: 'F', allowedPositions: ['SF', 'PF'] },
+      { slotName: 'UTIL', allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'] },
+    ],
+  },
+  NHL: {
+    starter_slots: { C: 2, LW: 2, RW: 2, D: 2, G: 1, UTIL: 1 } as Record<string, number>,
+    bench_slots: 6,
+    flex_definitions: [{ slotName: 'UTIL', allowedPositions: ['C', 'LW', 'RW', 'D'] }],
+  },
+} as const
+
 function rosterConfig(sport: SurvivorEligibleSport) {
   if (sport === 'NBA' || sport === 'NHL') {
-    const defaults = getRosterDefaults(sport)
+    const defaults = SURVIVOR_DAILY_ROSTERS[sport]
     const starterSlots = defaults.starter_slots
     return { starterSlots, benchSlots: defaults.bench_slots, rosterSize: starterCount(starterSlots) + defaults.bench_slots,
       defensePosition: null, draftablePlayerPositions: sport === 'NBA' ? ['PG', 'SG', 'SF', 'PF', 'C'] : ['C', 'LW', 'RW', 'D', 'G'],
@@ -392,7 +414,7 @@ function buildRosterTemplate(sport: SurvivorEligibleSport): SurvivorRosterTempla
   return {
     rosterMode: 'survivor',
     starterSlots: cfg.starterSlots,
-    flexDefinitions: sport === 'NBA' || sport === 'NHL' ? getRosterDefaults(sport).flex_definitions : [{ slotName: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'] }],
+    flexDefinitions: sport === 'NBA' || sport === 'NHL' ? SURVIVOR_DAILY_ROSTERS[sport].flex_definitions.map((f) => ({ slotName: f.slotName, allowedPositions: [...f.allowedPositions] })) : [{ slotName: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'] }],
     benchSlots: cfg.benchSlots,
     irSlots: 0,
     taxiSlots: 0,

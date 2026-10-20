@@ -1,5 +1,9 @@
 import type { SportConfigFull } from '../types'
 import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
+import { DAILY_REDRAFT_ROSTER_LAYOUTS, dailyRedraftReserveCount, dailyRedraftSlotCount } from '@/lib/sportConfig/dailySportRedraftRoster'
+
+/** Default counts are the one redraft layout (lib/sportConfig/dailySportRedraftRoster.ts). */
+const LAYOUT = DAILY_REDRAFT_ROSTER_LAYOUTS.NHL
 
 /** Stat keys aligned with `nhlAdapter` (g, a, ppp, sog, hits, blks). */
 export const NHL_CONFIG: SportConfigFull = {
@@ -54,16 +58,16 @@ export const NHL_CONFIG: SportConfigFull = {
   scoringPresets: [{ name: 'Standard', categories: [] }],
 
   defaultRosterSlots: [
-    { key: 'C', label: 'Center', eligiblePositions: ['C'], defaultCount: 2, minCount: 1, maxCount: 4, isOptional: false },
-    { key: 'LW', label: 'Left Wing', eligiblePositions: ['LW'], defaultCount: 2, minCount: 1, maxCount: 4, isOptional: false },
-    { key: 'RW', label: 'Right Wing', eligiblePositions: ['RW'], defaultCount: 2, minCount: 1, maxCount: 4, isOptional: false },
-    { key: 'D', label: 'Defenseman', eligiblePositions: ['D'], defaultCount: 4, minCount: 2, maxCount: 6, isOptional: false },
-    { key: 'G', label: 'Goalie', eligiblePositions: ['G'], defaultCount: 1, minCount: 1, maxCount: 3, isOptional: false },
-    { key: 'UTIL', label: 'Utility (F/D)', eligiblePositions: ['C', 'LW', 'RW', 'D'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'C', label: 'Center', eligiblePositions: ['C'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'C'), minCount: 1, maxCount: 4, isOptional: false },
+    { key: 'LW', label: 'Left Wing', eligiblePositions: ['LW'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'LW'), minCount: 1, maxCount: 4, isOptional: false },
+    { key: 'RW', label: 'Right Wing', eligiblePositions: ['RW'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'RW'), minCount: 1, maxCount: 4, isOptional: false },
+    { key: 'D', label: 'Defenseman', eligiblePositions: ['D'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'D'), minCount: 2, maxCount: 6, isOptional: false },
+    { key: 'G', label: 'Goalie', eligiblePositions: ['G'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'G'), minCount: 1, maxCount: 3, isOptional: false },
+    { key: 'UTIL', label: 'Utility (F/D)', eligiblePositions: ['C', 'LW', 'RW', 'D'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'UTIL'), minCount: 0, maxCount: 2, isOptional: true },
   ],
 
-  defaultBenchSlots: 5,
-  defaultIRSlots: 2,
+  defaultBenchSlots: LAYOUT.benchSlots,
+  defaultIRSlots: dailyRedraftReserveCount(LAYOUT),
   defaultTaxiSlots: 0,
   defaultDevySlots: 0,
 
@@ -94,10 +98,10 @@ export const NHL_CONFIG: SportConfigFull = {
   supportsDailyLineups: true,
 
   commissionerSettings: [
-    { key: 'cCount', label: 'C Slots', type: 'number', defaultValue: 2, min: 1, max: 4, section: 'roster' },
-    { key: 'dCount', label: 'D Slots', type: 'number', defaultValue: 4, min: 2, max: 6, section: 'roster' },
-    { key: 'gCount', label: 'G Slots', type: 'number', defaultValue: 1, min: 1, max: 3, section: 'roster' },
-    { key: 'benchSlots', label: 'Bench Slots', type: 'number', defaultValue: 5, min: 2, max: 10, section: 'roster' },
+    { key: 'cCount', label: 'C Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'C'), min: 1, max: 4, section: 'roster' },
+    { key: 'dCount', label: 'D Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'D'), min: 2, max: 6, section: 'roster' },
+    { key: 'gCount', label: 'G Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'G'), min: 1, max: 3, section: 'roster' },
+    { key: 'benchSlots', label: 'Bench Slots', type: 'number', defaultValue: LAYOUT.benchSlots, min: 2, max: 10, section: 'roster' },
     {
       key: 'seasonWeeks',
       label: 'Regular Season Weeks',
