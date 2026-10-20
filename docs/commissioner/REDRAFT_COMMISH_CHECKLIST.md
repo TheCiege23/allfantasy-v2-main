@@ -44,6 +44,7 @@ _Last updated: 2026-10-20._
 |---|---|---|---|
 | 🟡 | Commissioner-granted byes + bracket format picker (odd playoff counts stay free) | Free / Plan | #2498 |
 | ✅ | Playoff seeding by record with a head-to-head tiebreak (other session) | Free | #2557 |
+| 🟡 | Custom tiebreaker order — head-to-head, points for, fewest points against, all-play, coin flip, in the commissioner's order; standings and playoff seeds both follow it | Plan | #2590 |
 | 🟡 | Constitution builder — generated from settings, versioned, amended by league vote | Free / Plan | #2505 |
 | 🟡 | Rule templates library — save, share, start leagues from them | no gate | #2525 |
 | 🟡 | Draft-day kit — order reveal / lottery show, printable board, absent-manager clock | Free | #2518 |
@@ -55,7 +56,6 @@ _Last updated: 2026-10-20._
 | | Feature | Tier | Notes |
 |---|---|---|---|
 | ⬜ | Separate deadlines for player trades and pick trades | Free | builds on #2554 and #2582 |
-| ⬜ | Custom tiebreaker order (points for, head-to-head, all-play, points against, coin flip) | Plan | builds on #2557 |
 | ⬜ | League log for members, with a "commish only" toggle | Free | today members only reach a raw JSON viewer on the old league page |
 | ⬜ | One-tap stat-correction review before standings move | Free | |
 | ⬜ | Undo for commissioner actions until the next dependent event | Free | spec rule §0.3 |
