@@ -238,7 +238,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
     const eff = await getEffectiveLeagueWaiverSettings(leagueId)
     let fcfsProcessWarning: string | undefined
-    if (eff.normalizedWaiverType === "fcfs") {
+    // During the post-draft roster lock a claim QUEUES for the first waiver run; processing it
+    // immediately here would be a free-agent pickup through the back door.
+    const queuedForFirstWaiverRun = gate.postDraftLock?.locked === true
+    if (eff.normalizedWaiverType === "fcfs" && !queuedForFirstWaiverRun) {
       try {
         const { processWaiverClaimsForLeague } = await import("@/lib/waiver-wire/process-engine")
         await processWaiverClaimsForLeague(leagueId, {
@@ -257,7 +260,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
     return NextResponse.json({
       claim,
-      fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !fcfsProcessWarning,
+      fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !queuedForFirstWaiverRun && !fcfsProcessWarning,
+      ...(queuedForFirstWaiverRun ? { queuedForFirstWaiverRun: true } : {}),
       writeAuthority,
       ...(fcfsProcessWarning ? { fcfsProcessWarning } : {}),
       ...(sportsDataDecision ? { sportsDataDecision } : {}),

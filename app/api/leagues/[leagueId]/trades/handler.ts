@@ -11,6 +11,7 @@ import { CertifiedTradeIntegrationService, extractTradePlayerRefs, type TradeSaf
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 import { verifyProposalEvidenceToken } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { postDraftLockErrorResponse } from '@/lib/league/postDraftRosterLock'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,6 +150,8 @@ export async function POST(
     const writeAuthority = await resolveWriteAuthorityEnvelope(leagueId, 'trade')
     return NextResponse.json({ ok: true, tradeId: id, writeAuthority, ...(sportsDataDecision ? { sportsDataDecision } : {}) })
   } catch (e) {
+    const locked = postDraftLockErrorResponse(e)
+    if (locked) return NextResponse.json(locked.body, { status: locked.status })
     const msg = e instanceof Error ? e.message : String(e)
     // A validation refusal carries a machine-readable code (e.g. `future_picks_not_allowed_in_redraft`).
     const rawCode = e instanceof Error ? (e as Error & { code?: unknown }).code : undefined
