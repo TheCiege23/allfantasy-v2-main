@@ -14,6 +14,7 @@ import type {
   VisibilityFilter,
 } from "@/lib/public-discovery/types"
 import { resolveUserCareerTier } from "@/lib/ranking/tier-visibility"
+import { publicReputationForLeagues } from "@/lib/commish-reputation/reputationService"
 
 export const dynamic = "force-dynamic"
 
@@ -84,6 +85,15 @@ export async function GET(req: NextRequest) {
         viewerIsAdmin,
       }
     )
+    // Commish reputation badge, for commissioners who made it public on that league. A failed read
+    // drops the badge, never the listing.
+    const fantasyIds = result.leagues.filter((l) => l.source === "fantasy").map((l) => l.id)
+    const reputations = await publicReputationForLeagues(fantasyIds).catch(() => new Map())
+    if (reputations.size > 0) {
+      result.leagues = result.leagues.map((l) =>
+        l.source === "fantasy" && reputations.has(l.id) ? { ...l, commissionerReputation: reputations.get(l.id) } : l
+      )
+    }
     return NextResponse.json(result, {
       headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
     })
