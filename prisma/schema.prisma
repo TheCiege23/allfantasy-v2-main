@@ -8087,7 +8087,7 @@ model LeagueChatMessage {
   imageUrl          String?
   metadata          Json?
   /// 'draft' = draft-only (when sync off); null = league chat (or draft when sync on)
-  source            String?  @db.VarChar(16)
+  source            String?  @db.VarChar(64)
   createdAt         DateTime @default(now())
   discordMessageId  String?  @db.VarChar(64)
   sourceDiscord     Boolean  @default(false)

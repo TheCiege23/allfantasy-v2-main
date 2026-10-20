@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember, assertLeagueCommissioner } from '@/lib/league/league-access'
 import { canSendToChannel } from '@/lib/survivor/chatPermissionGuard'
 import { publishSurvivorRedraftEvent } from '@/lib/survivor/survivorRedraftStreamHub'
+import { createSurvivorChatMessage } from '@/lib/survivor/survivorChatBridge'
 
 export const dynamic = 'force-dynamic'
 
@@ -160,9 +161,14 @@ export async function POST(req: NextRequest) {
   if (/^(?:@chimmy\s+)?(?:i\s+)?vote\b/i.test(content.trim())) {
     return NextResponse.json({ error: 'Send votes privately in your @Chimmy room.' }, { status: 422 })
   }
+  // Every @Chimmy message is private to its sender. This channel table has no private rows, so the
+  // exchange belongs in league chat, where the shared thread route keeps it between the two of them.
+  if (/^@chimmy\b/i.test(content.trim())) {
+    return NextResponse.json({ error: '@Chimmy messages are private. Send them from league chat or your tribe huddle.' }, { status: 422 })
+  }
 
   const senderName = await getUserDisplayName(userId)
-  const created = await prisma.survivorChatMessage.create({
+  const created = await createSurvivorChatMessage(prisma, {
     data: {
       leagueId: channel.leagueId,
       channelId,

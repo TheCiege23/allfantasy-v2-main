@@ -144,6 +144,15 @@ export async function GET(
     !merged && myRosterId
       ? tribes.find((tribe) => tribe.members.some((member) => member.rosterId === myRosterId))?.id ?? null
       : null
+  // After the merge every active manager shares one huddle: the merged tribe's chat source.
+  const mergedTribe = merged
+    ? await prisma.survivorTribe.findFirst({ where: { leagueId, isMerged: true }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+    : null
+  const myTribeSource = myTribeId
+    ? getTribeChatSource(myTribeId)
+    : merged && mergedTribe && myRosterId && !eliminatedRosterIds.has(myRosterId)
+      ? getTribeChatSource(mergedTribe.id)
+      : null
 
   const rosterIds = new Set<string>([
     ...tribes.flatMap((t) => t.members.map((m) => m.rosterId)),
@@ -401,7 +410,7 @@ export async function GET(
     merged,
     myRosterId: myRosterId ?? undefined,
     myTribeId: myTribeId ?? undefined,
-    myTribeSource: myTribeId ? getTribeChatSource(myTribeId) : null,
+    myTribeSource,
     myIdols,
     myActiveEffects,
     myExileStatus,

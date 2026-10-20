@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { createSurvivorChatMessage, upsertSurvivorChatMessage } from './survivorChatBridge'
 
 const AI_HOST_ID = 'survivor-ai-host'
 const AI_HOST_NAME = '@Chimmy'
@@ -48,9 +49,9 @@ async function postToChannel(
     isPinned: contentType === 'announcement',
   }
   if (messageId) {
-    await (prisma as any).survivorChatMessage.upsert({ where: { id: messageId }, create: data, update: {} })
+    await upsertSurvivorChatMessage(prisma, { where: { id: messageId }, create: data, update: {} })
   } else {
-    await (prisma as any).survivorChatMessage.create({ data })
+    await createSurvivorChatMessage(prisma, { data })
   }
 }
 

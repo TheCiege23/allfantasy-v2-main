@@ -2,6 +2,7 @@ import 'server-only'
 
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 /**
  * MERGE CAST — moves every active manager into one tribe with one chat, in a single transaction.
@@ -28,7 +29,7 @@ export async function applySurvivorMergeCast(leagueId: string, week: number): Pr
     // Old tribe huddles are closed; their history stays readable by the commissioner tools.
     await db.survivorChatChannel.updateMany({ where: { leagueId, channelType: 'tribe', isArchived: false }, data: { isArchived: true, archivedAt: new Date() } })
     if (created) {
-      await db.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'merge', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+      await createSurvivorChatMessage(db, { data: { leagueId, channelId: channel.id, channelType: 'merge', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
         contentType: 'host_announcement', content: `Welcome to the merge. ${active.length} managers remain, and from here on it's every manager for themselves. The top weekly score wins individual immunity, and everyone voted out from now on joins the jury.` } })
       await db.survivorAuditEntry.create({ data: { leagueId, week, category: 'tribe', action: 'merge_cast_applied', data: { members: active.length, mergeChannelId: channel.id }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }

@@ -8,6 +8,7 @@ import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { transferNbaSurvivorRosterPlayer } from './transferNbaSurvivorRosterPlayer'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 type Power = 'triple_steal' | 'island_raid'
 type Result<T> = { ok: true; value: T } | { ok: false; status: 403 | 404 | 409 | 422; code: string; error: string }
@@ -134,7 +135,7 @@ export async function playStealThree(leagueId: string, userId: string, input: { 
       }
       const channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
       if (!channel) throw new Error('Steal 3 league chat is not ready')
-      await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'AF Host', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement', content: `${initial.ownerName} played Steal 3 and took ${chosen.map(row => row.playerName).join(', ')} from ${initial.teams.filter(team => sourceIds.includes(team.rosterId)).map(team => team.teamName).join(', ')}. The raided team has top waiver priority for week ${initial.week}.` } })
+      await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'AF Host', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement', content: `${initial.ownerName} played Steal 3 and took ${chosen.map(row => row.playerName).join(', ')} from ${initial.teams.filter(team => sourceIds.includes(team.rosterId)).map(team => team.teamName).join(', ')}. The raided team has top waiver priority for week ${initial.week}.` } })
       await tx.redraftLeagueTransaction.create({ data: { leagueId, seasonId: initial.seasonId, rosterId: initial.myRosterId, type: 'survivor_steal_three', metadata: { week: initial.week, playerNames: chosen.map(row => row.playerName), dropNames: drops.map(row => row.playerName), sourceRosterIds: sourceIds } } })
       await tx.survivorIdolLedgerEntry.create({ data: { leagueId, idolId: idol.id, eventType: 'played', fromRosterId: idol.rosterId, metadata: { powerType: initial.idol.powerType, week: initial.week, playerIds: chosen.map(row => row.playerId) } } })
       await tx.survivorAuditEntry.create({ data: { leagueId, week: initial.week, category: 'idol', action: 'steal_three_played', actorUserId: userId, relatedEntityId: idol.id, relatedEntityType: 'idol', data: { powerType: initial.idol.powerType, sourceRosterIds: sourceIds, playerIds: chosen.map(row => row.playerId), dropPlayerIds: drops.map(row => row.playerId), waiversClearAt }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
