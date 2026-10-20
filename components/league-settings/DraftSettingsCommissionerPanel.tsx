@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Calendar, Clock, Shuffle, Sparkles, Info, ChevronDown, Trophy, TrendingDown, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
+import { DraftDayKit } from '@/components/draft-day/DraftDayKit'
 import { LiveRookieOrderPanel } from '@/components/league-settings/LiveRookieOrderPanel'
 import {
   LEGACY_TIMER_SECONDS,
@@ -701,6 +702,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         </section>
       )}
 
+      <DraftDayKit leagueId={leagueId} isCommissioner={isCommissioner} />
       {/* ===== LIVE ROOKIE ORDER (Dynasty/C2C/Devy, commissioner only) ===== */}
       {isDynastyLike && isCommissioner && <LiveRookieOrderPanel leagueId={leagueId} />}
 
