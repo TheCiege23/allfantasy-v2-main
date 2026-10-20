@@ -7,6 +7,8 @@ import type { LineupValidationContext, RosterValidationIssue, RosterValidationRe
 import { ROSTER_SECTION_KEYS, type RosterSectionKey } from './types'
 import { resolveConceptRosterLineupRules } from './conceptRosterRules'
 import { isIrEligibleStatus } from './irEligibility'
+import { collectStarterSlotIssues } from '@/lib/league/lineupSlotPositions'
+import { playerEligibleForSlot } from '@/lib/league/lineup-swap'
 
 function playerStatusUpper(row: Record<string, unknown>): string {
   const s = String(row.status ?? row.injury_status ?? '').trim().toUpperCase()
@@ -215,6 +217,16 @@ export function validateCanonicalRosterPayload(
   issues.push(...validateIrSectionAgainstLeague(ctx.league, playerData))
 
   const sections = getNormalizedLineupSections(playerData)
+  if (ctx.starterSlots) {
+    issues.push(
+      ...collectStarterSlotIssues({
+        starters: sections.starters,
+        slots: ctx.starterSlots,
+        previousStarters: ctx.previousPlayerData === undefined ? undefined : getNormalizedLineupSections(ctx.previousPlayerData).starters,
+        eligible: (slot, position) => playerEligibleForSlot(slot, position),
+      }),
+    )
+  }
   if ((ctx.league.taxiSlots ?? 0) <= 0 && sections.taxi.length > 0) {
     issues.push({
       code: 'taxi_disabled',

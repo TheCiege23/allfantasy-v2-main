@@ -49,6 +49,8 @@ import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreen
  * `resolveLineupMove`, so slot eligibility (`playerEligibleForSlot`), lock and IR rules are decided
  * once, and both end in the same `save`. Dropping on an occupied slot swaps; dropping a starter on
  * the bench leaves his slot empty; IR takes only an IR-eligible designation under the league's flags.
+ * Each saved starter carries his slot index (lib/league/lineupSlotPositions.ts), so the empty slot is
+ * still where he left it after a reload.
  */
 type DbRoster = {
   source?: string
@@ -186,7 +188,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       const slots = json.starterSlots ?? []
       if (slots.length) {
         const base = initOrSyncLineupLists(json.roster, slots)
-        // Starters are stored compacted, so a saved empty slot shifts later starters up; re-seat them.
+        // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
+        // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
         const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
         setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
       } else setLists(null)
@@ -276,7 +279,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       setSaving(true)
       try {
         const roster = {
-          starters: next.starters.map((id) => (id ? buildPlayerRow(id, players) : null)).filter((x): x is Record<string, unknown> => x != null),
+          // Each starter carries his slot, so an empty slot reloads where the manager left it.
+          starters: next.starters.flatMap((id, slotIndex) => (id ? [{ ...buildPlayerRow(id, players), slotIndex }] : [])),
           bench: next.bench.map((id) => buildPlayerRow(id, players)),
           // The save route admits an IR row by its status, so send the real designation, not 'healthy'.
           ir: next.ir.map((id) => ({ ...buildPlayerRow(id, players), status: String(players[id]?.injuryStatus ?? 'healthy').toLowerCase() })),
