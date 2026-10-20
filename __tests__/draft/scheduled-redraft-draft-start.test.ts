@@ -29,7 +29,10 @@ const order = (n: number) => Array.from({ length: n }, (_, i) => ({ slot: i + 1,
 const row = (over: Record<string, unknown> = {}, league: Record<string, unknown> = {}) => ({
   leagueId: 'league-1',
   draftDateUtc: new Date('2026-10-20T18:59:00Z'),
-  league: { platform: 'allfantasy', sport: 'NFL', survivorMode: false, guillotineMode: false, leagueVariant: null, ...league },
+  league: {
+    platform: 'allfantasy', sport: 'NFL', leagueType: 'redraft', isDynasty: false,
+    survivorMode: false, guillotineMode: false, leagueVariant: null, ...league,
+  },
   ...over,
 })
 const preDraft = (over: Record<string, unknown> = {}) => ({

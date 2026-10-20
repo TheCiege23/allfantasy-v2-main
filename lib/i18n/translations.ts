@@ -3893,6 +3893,7 @@ export const translations: Record<string, Record<string, string>> = {
     "draft.saveDraftTime": "Save Draft Time",
     "draft.autostart": "Autostart Draft",
     "draft.autostartDesc": "Draft automatically begins at start time.",
+    "draft.autostartScheduledNote": "Drafts start automatically at the scheduled time.",
     "draft.draftType": "Draft Type",
     "draft.timePerPick": "Time Per Pick",
     "draft.slowDraftPause": "Slow Draft Auto-Pause",

@@ -406,6 +406,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'draft' ? (
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
+              league={payload?.league ?? null}
               canEdit={canEdit}
               save={save}
               debouncedSave={debouncedSave}

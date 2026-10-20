@@ -1562,6 +1562,7 @@ export const translationsEsParity: Record<string, string> = {
   "draft.saveDraftTime": "Guardar Hora del Draft",
   "draft.autostart": "Inicio Automático del Draft",
   "draft.autostartDesc": "El draft comienza automáticamente a la hora programada.",
+  "draft.autostartScheduledNote": "Los drafts comienzan automáticamente a la hora programada.",
   "draft.draftType": "Tipo de Draft",
   "draft.timePerPick": "Tiempo por Pick",
   "draft.slowDraftPause": "Pausa Automática de Draft Lento",
