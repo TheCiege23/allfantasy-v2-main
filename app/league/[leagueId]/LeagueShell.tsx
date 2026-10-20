@@ -2315,7 +2315,7 @@ function LeagueTabRouter({
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
         return <CanonicalRedraftScheduleTab leagueId={leagueId} isCommissioner={isCommissioner} />
       }
-      return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} />
+      return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} isCommissioner={isCommissioner} />
     case 'draft':
       if (isPredraftLifecycle) return renderPredraftDraftSetup()
       return (
