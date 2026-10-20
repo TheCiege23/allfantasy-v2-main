@@ -1,5 +1,6 @@
 import type { League, LeagueSport, Prisma } from '@prisma/client'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { readLineupMode, type LineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 /** Subset of `League` exposed to commissioner settings UI (GET + PATCH). */
 export type CommissionerSettingsFormData = {
@@ -27,6 +28,11 @@ export type CommissionerSettingsFormData = {
    * league never stored one. Not a column — PATCHed as `championshipLength` (execute-league-settings-patch).
    */
   championshipLength?: number | null
+  /**
+   * Daily or weekly lineups (NBA/NHL/MLB; lib/redraft/lineupModeSwitch.ts), read from the two
+   * `settings.sportConfig` fields the scorer and the lock read. Not a column — PATCHed as `lineupMode`.
+   */
+  lineupMode?: LineupMode
   playoffSeedingRule?: string | null
   playoffLowerBracket?: string | null
   irSlots?: number | null
@@ -174,6 +180,7 @@ export function commissionerLeagueFieldsFromRow(
     playoffTeams: league.playoffTeams,
     playoffWeeksPerRound: league.playoffWeeksPerRound,
     championshipLength: readChampionshipLength(league.settings),
+    lineupMode: readLineupMode(league.settings, league.sport),
     playoffSeedingRule: league.playoffSeedingRule,
     playoffLowerBracket: league.playoffLowerBracket,
     irSlots: league.irSlots,

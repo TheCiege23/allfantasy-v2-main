@@ -45,6 +45,7 @@ import {
   type NflRookieFetchSource,
   type NflRookieLookup,
 } from '@/lib/draft-room/nflRookieLookup'
+import { devyPoolSportForDraftSport, resolveNonNflRookieFields } from '@/lib/draft-room/nonNflRookieFields'
 import {
   canonicalName,
   canonicalPosition,
@@ -1358,9 +1359,12 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   if (strictPoolSeparation && (poolType === 'devy' || poolType === 'college' || poolType === 'startup_college')) {
+    // Scoped to the league's college sport: unscoped, an NBA devy league drew NCAAF players and an
+    // NFL one drew NCAAB players. Sports with no college layer (null) keep the old unscoped read.
+    const devySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false },
+        where: { devyEligible: true, graduatedToNFL: false, ...(devySport ? { sport: devySport } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1513,9 +1517,11 @@ export async function getResolvedDraftPoolForLeague(
     mergeCollegePool && !(strictPoolSeparation && (poolType === 'startup_vet' || poolType === 'startup_pro'))
 
   if (includeCollegeInPool) {
+    // Same sport scoping as the strict path above. `mergeCollegePool` is NFL/NBA only.
+    const mergeDevySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false },
+        where: { devyEligible: true, graduatedToNFL: false, ...(mergeDevySport ? { sport: mergeDevySport } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -2508,19 +2514,27 @@ export async function getResolvedDraftPoolForLeague(
 
             return {}
           })()
-        : {}),
-      ...(row.isDevy && !row.graduatedToNFL
-        ? { isRookie: true }
-        : seasonStatsRookieVerdicts
-          ? (() => {
+        : (() => {
+            // Phase 3.2 (main): a known `SportsPlayer.yearsExp` wins, as on the NFL path.
+            const fromExp = resolveNonNflRookieFields({
+              rowYearsExp: row.yearsExp,
+              poolExperience: (poolMatch as { experience?: number | null } | undefined)?.experience,
+              // With season-stats verdicts the zero-games hint is replaced by the verdict below.
+              rookieHint: seasonStatsRookieVerdicts ? false : sprAug?.rookieHint,
+            })
+            if (!seasonStatsRookieVerdicts) return fromExp
+            if (fromExp.yearsExp != null) {
               // Every pro row of a verdict pool carries one, so the board can tell "unknown" from
-              // "veteran". The verdict replaces the `gamesPlayed === 0` hint for these sports.
-              const verdict = seasonStatsRookieVerdicts.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '') ?? 'unknown'
-              return verdict === 'rookie' ? { isRookie: true, rookieVerdict: verdict } : { rookieVerdict: verdict }
-            })()
-          : sport !== 'NFL' && sprAug?.rookieHint === true
-            ? { isRookie: true }
-            : {}),
+              // "veteran"; a known experience settles it.
+              const verdict: RookieVerdict = fromExp.yearsExp === 0 ? 'rookie' : 'not_rookie'
+              return { ...fromExp, rookieVerdict: verdict }
+            }
+            // Experience unknown: the verdict from our stored season stats replaces the
+            // `gamesPlayed === 0` hint for these sports.
+            const verdict = seasonStatsRookieVerdicts.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '') ?? 'unknown'
+            return verdict === 'rookie' ? { isRookie: true, rookieVerdict: verdict } : { rookieVerdict: verdict }
+          })()),
+      ...(row.isDevy && !row.graduatedToNFL ? { isRookie: true } : {}),
     } as unknown as RawRow
   })
 

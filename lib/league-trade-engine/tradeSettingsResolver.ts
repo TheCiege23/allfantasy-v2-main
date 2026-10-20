@@ -5,6 +5,7 @@
 import type { League } from '@prisma/client'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import type { TradeReviewType } from '@/lib/league-trade-engine/types'
+import { deadlinePassed, readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
 
 export type ResolvedLeagueTradeSettings = {
   tradeReviewMode: TradeReviewType
@@ -125,8 +126,13 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
   }
 }
 
-export function isPastTradeDeadline(league: League, currentWeek: number | null): boolean {
+/**
+ * `currentWeek` is the server's in-season week (`serverWeekForTradeDeadline`), null when no deadline
+ * applies. In season, the commissioner's close time (`settings.trade_deadline_at`) closes trades too,
+ * whichever comes first.
+ */
+export function isPastTradeDeadline(league: League, currentWeek: number | null, now: Date = new Date()): boolean {
+  if (currentWeek == null) return false
   const s = resolveLeagueTradeSettings(league)
-  if (s.tradeDeadlineWeek == null || currentWeek == null) return false
-  return currentWeek > s.tradeDeadlineWeek
+  return deadlinePassed({ inSeason: true, currentWeek, deadlineWeek: s.tradeDeadlineWeek, deadlineAt: readDeadlineAt(league.settings), now }).passed
 }
