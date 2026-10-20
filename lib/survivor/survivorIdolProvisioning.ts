@@ -55,7 +55,7 @@ export async function seedSurvivorIdols(
     return { ok: true, seeded: false, alreadySeeded: true, voteShieldCount: status.voteShieldCount, ownerCount: 0, seed: null }
   }
 
-  const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorIdolCount: true, userId: true } })
+  const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorIdolCount: true, survivorIdolExpiryWeek: true, userId: true } })
   if (!league) return { ok: false, status: 422, code: 'league_missing', error: 'League not found.' }
   const settings = normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null)
   const tribeCount = Math.max(1, Math.floor(opts.tribeCount ?? (await db.survivorTribe.count({ where: { leagueId } })) ?? 4))
@@ -135,6 +135,8 @@ export async function seedSurvivorIdols(
           originalOwnerUserId: a.ownerUserId,
           expiresAtMerge: a.expiresAtMerge,
           validUntilPhase: a.expiresAtMerge ? 'merge' : 'final_5',
+          // The commissioner's expiry week (idol setup); playable through that week, not after.
+          expiresAtWeek: typeof league.survivorIdolExpiryWeek === 'number' ? league.survivorIdolExpiryWeek : null,
           playWindowRule: 'before_reveal',
           rarity: 'common',
           assignedAt: new Date(),

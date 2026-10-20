@@ -64,6 +64,29 @@ describe('commissioner IdolSetup', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ mode: 'pick', count: 7, pickedTypeIds: ['vote-steal', 'steal-three'] })
   })
 
+  it('saves the idol expiry week with the setup, and shows a saved week', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      return { ok: true, json: async () => ({ ...data({ saved: true }), expiryWeek: body.expiryWeek }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SurvivorIdolSetup leagueId="l" canEdit initialData={data()} />)
+    const select = screen.getByLabelText('Idols expire') as HTMLSelectElement
+    expect(select.value).toBe('')
+    expect(screen.getByText(/Idols stay playable all season/)).toBeTruthy()
+    fireEvent.change(select, { target: { value: '9' } })
+    expect(screen.getByText(/can be played through week 9, then it is gone/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Lock idols for the draft' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ expiryWeek: 9 })
+    await waitFor(() => expect((screen.getByLabelText('Idols expire') as HTMLSelectElement).value).toBe('9'))
+    cleanup()
+    render(<SurvivorIdolSetup leagueId="l" canEdit initialData={{ ...data({ locked: true }), expiryWeek: 12 }} />)
+    const locked = screen.getByLabelText('Idols expire') as HTMLSelectElement
+    expect(locked.value).toBe('12')
+    expect(locked.disabled).toBe(true)
+  })
+
   it('marks Point surge and Tribute values as coming soon while they have no engine', () => {
     render(<SurvivorIdolSetup leagueId="l" canEdit initialData={data()} />)
     const values = screen.getByRole('region', { name: 'League values' })

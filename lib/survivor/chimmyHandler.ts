@@ -15,6 +15,7 @@ import { getCouncil } from './SurvivorTribalCouncilService'
 import { postIdolPlayAnnouncement } from './leagueChatPoster'
 import { IDOL_POWER_DESCRIPTIONS, EXILE_KEY_POSITION_BY_SPORT } from './constants'
 import { getSportSchedule } from './sportScheduleEngine'
+import { idolTimingRuleLines, normalizeSurvivorFoundationSettings } from './survivorSettings'
 
 const FORBIDDEN =
   "I can't share that — information is currency out here."
@@ -160,7 +161,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
       sport: true, survivorPlayerCount: true, survivorTribeCount: true,
       survivorMergeTrigger: true, survivorMergeWeek: true, survivorMergeAtCount: true,
       survivorJuryStart: true, survivorIdolsEnabled: true, survivorIdolCount: true,
-      survivorIdolExpiryWeek: true, survivorExileEnabled: true,
+      survivorIdolExpiryWeek: true, survivorExileEnabled: true, settings: true,
       survivorSelfVoteAllowed: true, survivorRocksEnabled: true, survivorTieRule: true,
       survivorTokenEnabled: true, survivorBossResetEnabled: true,
     },
@@ -171,7 +172,7 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
       return `**Voting Rules:**\n• Vote privately by messaging me\n• Self-voting: ${fullLeague?.survivorSelfVoteAllowed ? 'Allowed' : 'Not allowed'}\n• Tie resolution: ${(fullLeague?.survivorTieRule ?? 'rocks').replace(/_/g, ' ')}\n• Go to Rocks: ${fullLeague?.survivorRocksEnabled !== false ? 'Enabled' : 'Disabled'}\n• Votes MUST be in before the deadline. Late votes don't count.`
     }
     if (lower.includes('idol') || lower.includes('power')) {
-      return `**Idol Rules:**\n• ${fullLeague?.survivorIdolCount ?? 9} idols in the pool, ~30-35% of players receive one\n• Each idol is unique\n• Must be played BEFORE votes are counted — message me "I want to use my idol"\n• Idols are attached to PLAYERS (not you) — if you trade the player, the idol goes with them\n• ${fullLeague?.survivorIdolExpiryWeek ? `Idols expire after Week ${fullLeague.survivorIdolExpiryWeek}` : 'Idols expire at Final 5'}`
+      return `**Idol Rules:**\n• ${fullLeague?.survivorIdolCount ?? 9} idols in the pool, ~30-35% of players receive one\n• Each idol is unique\n• Must be played BEFORE votes are counted — message me "I want to use my idol"\n• Idols are attached to PLAYERS (not you) — if you trade the player, the idol goes with them\n${idolTimingRuleLines({ expiryWeek: fullLeague?.survivorIdolExpiryWeek, invalidRemainingPlayers: normalizeSurvivorFoundationSettings(fullLeague?.settings ?? {}).idolInvalidRemainingPlayers }).map((l) => `• ${l}`).join('\n')}`
     }
     if (lower.includes('merge')) {
       return `**Merge Rules:**\n• Trigger: ${fullLeague?.survivorMergeTrigger === 'week' ? `Week ${fullLeague?.survivorMergeWeek}` : `${fullLeague?.survivorMergeAtCount ?? 10} players remaining`}\n• After merge: individual immunity (highest scorer wins)\n• Pre-merge idols may expire at merge`

@@ -59,10 +59,12 @@ describe('transactional council idols', () => {
     expect(record.extraTargetUserId).toBeUndefined()
     expect(m.db.survivorAuditEntry.create.mock.calls[0][0].data).toMatchObject({ isVisibleToPublic: false, isVisibleToCommissioner: false })
   })
-  it('rejects an idol that reaches its expiry week', async () => {
-    m.db.survivorIdol.findFirst.mockResolvedValue({ id: 'idol', expiresAtWeek: 4 })
+  it('rejects an idol after its expiry week, and allows it in that week ("expire after week N")', async () => {
+    m.db.survivorIdol.findFirst.mockResolvedValue({ id: 'idol', expiresAtWeek: 3 })
     expect(await playVoteSteal('l', 'owner', 'victim')).toMatchObject({ ok: false, code: 'idol_expired' })
     expect(m.db.survivorIdol.updateMany).not.toHaveBeenCalled()
+    m.db.survivorIdol.findFirst.mockResolvedValue({ id: 'idol', expiresAtWeek: 4 })
+    expect(await playVoteSteal('l', 'owner', 'victim')).toMatchObject({ ok: true })
   })
   it('reports transaction failure without a success response', async () => {
     m.db.survivorTribalCouncil.update.mockRejectedValueOnce(new Error('private database details'))
