@@ -182,6 +182,7 @@ export function ThreadPanel({
       if (!res.ok) throw new Error(data.error ?? 'Could not load conversations.')
       // Times are measured against the moment the list arrived, not when the panel mounted.
       setNow(new Date())
+      setError(null)
       setThreads((data.threads ?? []).filter((t) => t.threadType === kind))
     } catch (e) {
       // A failed REFRESH keeps the list on screen (as a failed message poll does); only a first
@@ -1015,3 +1016,4 @@ export function ThreadPanel({
 }
 
 export default ThreadPanel
+
