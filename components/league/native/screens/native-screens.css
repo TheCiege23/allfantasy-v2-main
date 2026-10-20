@@ -200,6 +200,8 @@
 .nls-pcell { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .nls-pcell [data-watch] { margin-left: auto; border: 0; color: var(--faint); }
 .nls-pcell [data-watch][aria-pressed=true] { color: var(--warn); }
+.nls-team-logo { display: inline-block; width: 14px; height: 14px; margin-right: 5px; object-fit: contain; vertical-align: -2px; }
+.nls-player small[data-stats] { color: var(--faint); }
 .nls-fineprint { margin-top: 4px !important; font-size: 13px !important; }
 .nls-claims { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 12px; }
 .nls-claim { display: grid; grid-template-columns: 24px minmax(0, 1fr) 44px; gap: 12px; align-items: start; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
