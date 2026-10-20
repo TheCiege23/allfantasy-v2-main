@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { getPlayoffConfigForLeague } from '@/lib/playoff-defaults/PlayoffConfigResolver'
+import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
+import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
@@ -45,14 +48,44 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   }
 
   const locked = await settingsLockedResponse(params.leagueId, 'playoffs')
-
   if (locked) return locked
+
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const league = await (prisma as any).league.findUnique({
     where: { id: params.leagueId },
-    select: { settings: true },
+    select: {
+      id: true,
+      sport: true,
+      settings: true,
+      playoffTeams: true,
+      playoffWeeksPerRound: true,
+      playoffStartWeek: true,
+      bestBallMode: true,
+      bbContestId: true,
+    },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+
+  // The same two refusals as the settings PATCH (execute-league-settings-patch.ts): the playoff scorer
+  // reads championship_length live, and a final that ends after the season's last week never seals.
+  if (hasOwn(body, 'championshipLength')) {
+    // This panel's input allows 0 and the no-playoff sport default stores 0; both read as "unset".
+    const n = Number(body.championshipLength)
+    if (!Number.isInteger(n) || n < 0 || n > 4) {
+      return NextResponse.json({ error: 'championshipLength must be 0–4 weeks' }, { status: 400 })
+    }
+    if (Math.max(1, n) !== (readChampionshipLength(league.settings) ?? 1)) {
+      const inPlayoffs = await (prisma as any).redraftSeason.findFirst({
+        where: { leagueId: params.leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) {
+        return NextResponse.json({ error: 'Championship length cannot change while the playoffs are being played.' }, { status: 409 })
+      }
+      const overflow = await championshipLengthOverflow({ league, championshipLength: Math.max(1, n) })
+      if (overflow) return NextResponse.json({ error: championshipLengthOverflowMessage(overflow) }, { status: 400 })
+    }
+  }
 
   const settings = (league.settings as Record<string, unknown>) ?? {}
   const currentStructure =
