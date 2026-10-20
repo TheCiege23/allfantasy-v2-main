@@ -18,14 +18,18 @@ Expose team count in General. Resize native pre-draft seats, draft-session capac
 
 ## Validation
 
-- Five targeted Vitest files: 59 tests passed.
+- Seven targeted Vitest files: 68 tests passed, covering the rail, intro, commissioner saves, conversion and retained Guillotine configuration.
 - ESLint of changed backend, General, intro, autosave and LeagueShell: no errors; one existing LeagueShell hook-dependency warning.
 - Browser fixture using the real rail CSS and full-size artwork at 360, 390 and 412 pixels: heading and settings remain visible; artwork stays contained.
 - Packaged intro codec markers: avc1 and mp4a.
 - Full repository TypeScript check exhausted the default 4 GB heap. An 8 GB retry was stopped after prolonged contention; the scoped new-backend-module check passed. No successful full typecheck is claimed.
 
+The season engine now ignores retained Guillotine configuration when a native league explicitly uses another format. Imported and untyped legacy classification remains compatible.
+
+An isolated test database roundtrip passed native NBA conversion with retained configuration, expansion and safe shrink, occupied-seat and started-draft protection, and persistence of name, timezone, draft clock/rounds/date, waivers, trades and playoffs. Temporary fixtures were removed. The test database emitted existing subscription-schema warnings; the commissioner save assertions passed.
+
 ## Outstanding release checks
 
-This branch is not deployed. Run normal CI and a real database resize roundtrip in a test environment, then verify direct invite entry, settings, and playback in Android Chrome and Samsung Internet. The local browser fixture is not a physical-device or Samsung Internet certification. On release, re-save Redraft on the reported league to repair its already-stored Guillotine flags; renaming alone never changes league format.
+This branch is not deployed. Run normal CI, then verify direct invite entry, settings, and playback with responsive Chrome, as authorized by the user. The local browser fixture is not a physical-device or Samsung Internet certification. On release, re-save Redraft on the reported league to repair its already-stored Guillotine flags; renaming alone never changes league format.
 
 Rollback: revert this patch. Do not repeatedly resize live leagues as a rollback mechanism.
