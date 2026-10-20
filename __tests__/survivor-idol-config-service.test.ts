@@ -55,6 +55,11 @@ describe('idol setup secrecy', () => {
     expect(JSON.stringify(manager)).not.toContain('"resolvedTypeIds":["')
     const hidden = projectSurvivorIdolSetup({ ...base, row: { ...row, hideFromCommish: true }, isCommissioner: true })
     expect(hidden.resolvedTypeIds).toBeNull()
+    // A commissioner who PLAYS edits the setup but is a manager for the draw itself.
+    const playing = projectSurvivorIdolSetup({ ...base, row, isCommissioner: true, canSeeDraw: false })
+    expect(playing.isCommissioner).toBe(true)
+    expect(playing.resolvedTypeIds).toBeNull()
+    expect(JSON.stringify(playing)).not.toContain('"resolvedTypeIds":["')
   })
 
   it('shows pick-mode choices to the commissioner only', async () => {
