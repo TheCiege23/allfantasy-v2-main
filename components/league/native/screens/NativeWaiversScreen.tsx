@@ -6,6 +6,9 @@ import { toast } from 'sonner'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import WaiverClaimDrawer from '@/components/waiver-wire/WaiverClaimDrawer'
+import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { adaptWaiverWirePlayer } from '@/lib/player-data/adapters/waiverPlayerAdapter'
 import { waiverPositionMatches } from '@/lib/waiver-wire/SportWaiverResolver'
 import { isImmediateAddAllowedToday, type DailyPolicySnapshot } from '@/lib/waiver-wire/immediate-add-policy'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
@@ -170,6 +173,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     else rows = [...rows].sort((a, b) => (Number(b.projectedPoints ?? -1) || -1) - (Number(a.projectedPoints ?? -1) || -1))
     return rows.slice(0, 120)
   }, [players, tab, watch, claimedIds, pos, q, trend])
+  // The waiver wire's own display adapter: canonical photo / crest, and the season stat line.
+  const shown = useMemo(() => list.map((p) => ({ p, a: adaptWaiverWirePlayer(p) })), [list])
 
   const toggleWatch = (pid: string) => {
     const was = watch.includes(pid)
@@ -315,7 +320,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                 </tr>
               </thead>
               <tbody>
-                {list.map((p) => {
+                {shown.map(({ p, a }) => {
                   const t = trend.get(p.id) ?? 0
                   const pct = rosteredPct(p)
                   const claimed = claimedIds.has(p.id)
@@ -323,10 +328,15 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                     <tr key={p.id}>
                       <td data-align="left">
                         <div className="nls-pcell">
+                          <PlayerHeadshot playerId={p.id} playerName={p.name} headshotUrl={a.displayHeadshotUrl} position={p.position} team={p.team} sport={p.sport || league.sport} size={36} />
                           <PosPill label={p.position} />
                           <div className="nls-player">
                             <strong>{p.name}<InjuryFlag status={p.injuryStatus} /></strong>
-                            <small>{p.team ?? 'FA'}{p.product?.byeWeek ? ` · Bye ${p.product.byeWeek}` : ''}</small>
+                            <small>
+                              {a.displayTeamLogoUrl ? <FallbackImg src={a.displayTeamLogoUrl} alt="" width={14} height={14} className="nls-team-logo" fallback={null} data-testid="waiver-team-logo" /> : null}
+                              {p.team ?? 'FA'}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
+                            </small>
+                            {a.seasonStatsSummary.length ? <small data-stats>{a.seasonStatsSummary.join(' · ')}</small> : null}
                           </div>
                           <button type="button" className="nls-iconbtn" aria-pressed={watch.includes(p.id)} aria-label={watch.includes(p.id) ? `Remove ${p.name} from watchlist` : `Watch ${p.name}`} onClick={() => toggleWatch(p.id)} data-watch>
                             <Star size={16} aria-hidden fill={watch.includes(p.id) ? 'currentColor' : 'none'} />

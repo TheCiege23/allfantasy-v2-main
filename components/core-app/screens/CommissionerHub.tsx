@@ -35,6 +35,7 @@ import {
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
+import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
@@ -417,6 +418,11 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
               <Link href={`/league/${encodeURIComponent(league.id)}/disputes`}>{t('Share the dispute desk with your league →')}</Link>
             </p>
           </div>
+
+          {/* The constitution: written from these settings, changed by league vote. */}
+          <p className="af-ch-setting-why" style={{ marginTop: 12 }}>
+            <Link href={`/league/${encodeURIComponent(league.id)}/constitution`}>{t('League constitution and amendments →')}</Link>
+          </p>
         </HubSection>
 
         {/* ── Access ────────────────────────────────────────────────── */}
@@ -506,6 +512,14 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
         </HubSection>
       </HubDepthGate>
+
+      {/*
+        Deadline autopilot — outside the depth gate on purpose: its list and "Remind now" are free,
+        and the card itself says which part is the Commissioner plan (the route enforces it).
+      */}
+      <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
+        <DeadlineAutopilot leagueId={league.id} />
+      </HubSection>
 
       {/*
         Weekly recap review — outside the depth gate: editing the league's own recap before it posts

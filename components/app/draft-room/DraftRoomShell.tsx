@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield, Radar } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
@@ -113,37 +113,6 @@ export function DraftRoomShell({
       /* ignore */
     }
   }, [allowPremiumDockCollapse])
-
-  const touchStartX = useRef<number | null>(null)
-  const touchStartY = useRef<number | null>(null)
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0]?.clientX ?? null
-    touchStartY.current = e.touches[0]?.clientY ?? null
-  }, [])
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (touchStartX.current === null || touchStartY.current === null) return
-      const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current
-      const dy = (e.changedTouches[0]?.clientY ?? 0) - touchStartY.current
-      touchStartX.current = null
-      touchStartY.current = null
-      if (Math.abs(dx) < 50 || Math.abs(dx) <= Math.abs(dy) * 2) return
-      const tabs = MOBILE_TABS.filter(
-        (tab) =>
-          (tab.id !== 'helper' || helperPanel) &&
-          (tab.id !== 'intel' || intelPanel) &&
-          (tab.id !== 'roster' || rosterPanel) &&
-          (tab.id !== 'keepers' || keeperPanel)
-      )
-      const idx = tabs.findIndex((t) => t.id === mobileTab)
-      if (idx === -1) return
-      const nextIdx = dx < 0 ? Math.min(idx + 1, tabs.length - 1) : Math.max(idx - 1, 0)
-      if (nextIdx !== idx) onMobileTabChange(tabs[nextIdx]!.id)
-    },
-    [helperPanel, intelPanel, rosterPanel, keeperPanel, mobileTab, onMobileTabChange]
-  )
 
   const visibleTabs = MOBILE_TABS.filter(
     (tab) =>
@@ -358,8 +327,6 @@ export function DraftRoomShell({
       <div
         className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden md:hidden"
         data-testid="draft-mobile-layout"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
       >
         {/*
           F.2 — mobile pane uses `overflow-y-auto` (NOT `overflow-auto`) so wide

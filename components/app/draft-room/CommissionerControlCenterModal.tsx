@@ -369,12 +369,12 @@ export function CommissionerControlCenterModal({
 
   return (
     <div className="flex flex-col rounded-xl border border-white/12 bg-[#070f21] shadow-2xl max-h-[90vh] overflow-hidden" data-testid="draft-commissioner-modal">
-      <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 px-4 py-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Settings className="h-5 w-5 text-cyan-400" />
           <h2 className="text-base font-semibold text-white">Commissioner control center</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex max-w-full flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -383,7 +383,7 @@ export function CommissionerControlCenterModal({
             }}
             data-testid="draft-commissioner-open-draft-settings"
             disabled={!onOpenDraftRoomSettings}
-            className="rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
+            className="min-h-[44px] rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
           >
             Room Settings
           </button>
@@ -391,7 +391,7 @@ export function CommissionerControlCenterModal({
             type="button"
             onClick={() => setShowSwapManager(true)}
             data-testid="draft-commissioner-open-swap-manager"
-            className="rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
+            className="min-h-[44px] rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
           >
             Swap Managers
           </button>
@@ -399,7 +399,7 @@ export function CommissionerControlCenterModal({
             type="button"
             onClick={onClose}
             data-testid="draft-commissioner-close"
-            className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
+            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
