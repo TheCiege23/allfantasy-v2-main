@@ -193,7 +193,10 @@ describe('League AI is one of the settings now (it was only in the old control c
       ['league-ai', 'ai'],
       ['commissioner-tools', 'commissioner-tools'],
       ['settings-lock', 'settings-lock'],
+      ['score-adjustments', 'score-adjustments'],
     ])
     expect(buildLeagueSettingsHome(input(false)).some((s) => s.id === 'commissioner')).toBe(false)
+    // Members never get a way into score adjustments.
+    expect(buildLeagueSettingsHome(input(false)).flatMap((s) => s.rows).some((r) => r.target === 'score-adjustments')).toBe(false)
   })
 })

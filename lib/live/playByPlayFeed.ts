@@ -72,7 +72,7 @@ async function getJsonNoCache(url: string): Promise<unknown | null> {
 }
 
 /** Rolling Insights game ids for fixtures being played right now. */
-export async function inProgressRiGameIds(now: Date = new Date()): Promise<string[]> {
+export async function inProgressRiGameIds(now: Date = new Date(), trackedGames: ReadonlySet<string> = new Set()): Promise<string[]> {
   const from = new Date(now.getTime() - 4 * 3_600_000)
   const to = new Date(now.getTime() + 30 * 60_000)
   const rows = await prisma.sportsGame
@@ -89,7 +89,7 @@ export async function inProgressRiGameIds(now: Date = new Date()): Promise<strin
     .catch(() => [])
 
   return rows
-    .filter((r) => normaliseStatus(r.status ?? undefined) === 'in_progress')
+    .filter((r) => normaliseStatus(r.status ?? undefined) === 'in_progress' || normaliseStatus(r.status ?? undefined) === 'final' && trackedGames.has(r.externalId))
     .map((r) => r.externalId)
     .filter(Boolean)
 }
@@ -140,14 +140,14 @@ export type FeedRefreshResult = {
 export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<FeedRefreshResult> {
   const { token, base } = riCredentials()
 
-  const gameIds = await inProgressRiGameIds(now)
+  const cursor = (await readCache<Cursor>(CURSOR_KEY)) ?? {}
+  const gameIds = await inProgressRiGameIds(now, new Set(Object.keys(cursor)))
 
   if (!token) return { gamesPolled: 0, newEvents: 0, idpRowsWritten: 0, alertsSent: 0, skipped: 'no-token' }
 
   if (gameIds.length === 0) return { gamesPolled: 0, newEvents: 0, idpRowsWritten: 0, alertsSent: 0, skipped: 'no-live-games' }
 
 
-  const cursor = (await readCache<Cursor>(CURSOR_KEY)) ?? {}
   const feed = (await readCache<LiveEvent[]>(FEED_KEY)) ?? []
   const fresh: LiveEvent[] = []
   let idpWritten = 0
@@ -158,7 +158,10 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
   for (const gameId of gameIds) {
     const url = `${base}/play-by-play/NFL?RSC_token=${encodeURIComponent(token)}&game_id=${encodeURIComponent(gameId)}`
     const payload = await getJsonNoCache(url)
-    if (!payload) continue
+    if (!payload) {
+      console.warn('[play-feed] game unavailable; retaining its cursor', gameId)
+      continue
+    }
 
     for (const game of parsePlayByPlay(payload)) {
       const since = cursor[game.gameId] ?? -1
@@ -199,8 +202,9 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
    * the only correct input here.
    */
   if (fresh.length > 0) {
-    const notified = await notifyBigPlays(fresh).catch(() => null)
-    alertsSent += notified?.notificationsSent ?? 0
+    const notified = await notifyBigPlays(fresh)
+    if (notified.failed) throw new Error('Play notifications failed; cursor retained for retry')
+    alertsSent += notified.notificationsSent
   }
 
   if (fresh.length > 0) {

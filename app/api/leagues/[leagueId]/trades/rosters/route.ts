@@ -35,6 +35,12 @@ import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-tra
 import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import {
+  FUTURE_PICKS_REDRAFT_REASON,
+  isRedraftPickLeague,
+  loadRedraftPickBook,
+  type RedraftDraftPick,
+} from '@/lib/league-trade-engine/redraftDraftPicks'
 import { valueBookFor, describeValueBook, pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
@@ -459,7 +465,12 @@ export async function GET(
    */
   const allRosterPlayerIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
   const platform = String(league?.platform ?? 'sleeper').trim().toLowerCase()
-  const [accounts, byeByTeam, importedPicks, nativePicks, resolvedForLeague, probabilityByTeam] = await Promise.all([
+  /*
+   * A REDRAFT league trades only its current draft's picks (`redraftDraftPicks.ts`): the picker lists
+   * every unmade pick in this season's draft for both sides, and no future pick at all.
+   */
+  const redraftLeague = Boolean(league) && isRedraftPickLeague({ leagueType: league?.leagueType, isDynasty: league?.isDynasty })
+  const [accounts, byeByTeam, importedPicks, nativePicks, resolvedForLeague, probabilityByTeam, redraftBook] = await Promise.all([
     prisma.appUser
       .findMany({
         where: { id: { in: platformIds } },
@@ -509,7 +520,19 @@ export async function GET(
       ? resolveSleeperRosterPlayers(allRosterPlayerIds, String(league?.sport ?? 'NFL'))
       : resolveProviderRosterPlayers(platform, allRosterPlayerIds, String(league?.sport ?? 'NFL')),
     loadPlayoffProbabilities(leagueId, currentSeason, proposalMode),
+    league && redraftLeague && isDraftPickTradingAllowed(league)
+      ? loadRedraftPickBook(leagueId, undefined, league).catch(() => null)
+      : Promise.resolve(null),
   ])
+  const redraftPicksByRoster = new Map<string, RedraftDraftPick[]>()
+  for (const p of redraftBook?.picks ?? []) {
+    const list = redraftPicksByRoster.get(p.ownerRosterId) ?? []
+    list.push(p)
+    redraftPicksByRoster.set(p.ownerRosterId, list)
+  }
+  /** In a redraft league a pick for a later season is never offered: the engine refuses it. */
+  const offerablePick = (p: { season: number | null }) =>
+    !redraftLeague || p.season == null || currentSeason == null || p.season <= currentSeason
   const accountById = new Map(accounts.map((a) => [a.id, a]))
   const namedTeams = teams.filter(
     (t) => typeof t.platformUserId === 'string' && t.platformUserId.length > 0,
@@ -604,13 +627,13 @@ export async function GET(
         faabRemaining: r.faabRemaining ?? null,
         players,
         picks: [
-          ...listProposablePicks(r.playerData).map((p): TradeableRosterPick => ({
+          ...listProposablePicks(r.playerData).filter(offerablePick).map((p): TradeableRosterPick => ({
             ...p,
             itemType: itemTypeFor(p.season),
             unpricedReason: p.round != null && Number.isFinite(p.round) ? null : pickUnpricedReason(),
             value: null,
           })),
-          ...(importedPicks.picksByRosterId.get(r.id) ?? []).map(
+          ...(importedPicks.picksByRosterId.get(r.id) ?? []).filter(offerablePick).map(
             (p: RosterFuturePick): TradeableRosterPick => ({
               pickId: inventoryPickId(p),
               season: p.season,
@@ -632,6 +655,20 @@ export async function GET(
               round: p.round,
               label: `${p.season} ${roundOrdinal(p.round)}${fromTeam ? ` (${fromTeam})` : ''}`,
               itemType: itemTypeFor(p.season),
+              value: null,
+              unpricedReason: null,
+              proposable: true,
+              fromTeam,
+            }
+          }),
+          ...(redraftPicksByRoster.get(r.id) ?? []).map((p): TradeableRosterPick => {
+            const fromTeam = p.originalRosterId === r.id ? null : p.originalOwnerName || 'another team'
+            return {
+              pickId: p.pickId,
+              season: p.season,
+              round: p.round,
+              label: `${p.season ?? ''} Round ${p.round}, Pick ${p.slot}${fromTeam ? ` (${fromTeam})` : ''}`.trim(),
+              itemType: 'rookie_pick',
               value: null,
               unpricedReason: null,
               proposable: true,
@@ -1120,7 +1157,23 @@ export async function GET(
      * size is unknown, so only picks that changed hands are listed) or `none`. The picker says so
      * rather than letting a short list read as a team with no picks.
      */
-    pickCoverage: nativePicks ? 'complete' : importedPicks.coverage,
+    pickCoverage: nativePicks || (redraftBook && !redraftBook.closed) ? 'complete' : importedPicks.coverage,
+    /*
+     * What the picker may offer. In a redraft league only this season's draft trades: future picks
+     * are hidden and the hand-entry year is pinned, with the reason said on screen.
+     */
+    pickPolicy: redraftLeague
+      ? {
+          mode: 'redraft_current_draft' as const,
+          season: redraftBook?.season ?? currentSeason,
+          futurePicksAllowed: false,
+          futurePicksReason: FUTURE_PICKS_REDRAFT_REASON,
+          draftClosedReason:
+            league && !isDraftPickTradingAllowed(league)
+              ? 'Draft pick trading is turned off in this league’s settings.'
+              : redraftBook?.closedReason ?? null,
+        }
+      : { mode: 'standard' as const, season: currentSeason, futurePicksAllowed: true, futurePicksReason: null, draftClosedReason: null },
     pickPreviewBook,
   });
 }

@@ -342,7 +342,7 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   }
 }
 
-function rulesWithPlayoffTeamOverride(
+export function rulesWithPlayoffTeamOverride(
   state: NflRedraftPlayoffRuntimeState,
   playoffTeams: number,
 ): NflRedraftPlayoffRulesInput {
@@ -369,6 +369,8 @@ function rulesWithPlayoffTeamOverride(
       byeRules: state.settings.firstRoundByes > 0 ? 'top_seed_byes' : null,
       reseedBehavior: state.settings.reseedAfterEachRound ? 'reseed_after_each_round' : null,
       standingsTiebreakers: state.settings.tiebreakers,
+      // Without this the override would re-run the legacy head-to-head-before-points reorder on it.
+      customTiebreakers: state.settings.customTiebreakers ?? null,
     },
     schedule: {
       regularSeasonLength: state.settings.regularSeasonEndWeek,

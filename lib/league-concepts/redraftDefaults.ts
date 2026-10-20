@@ -659,7 +659,7 @@ function buildTradeSettings(sport: FootballRedraftSport): Record<string, unknown
     tradeDeadlineWeek: sport === 'NCAAF' ? 9 : 11,
     rosterLegalityValidation: true,
     tradeHistoryAudit: true,
-    draftPickTradingEnabled: false,
+    draftPickTradingEnabled: true,
     redraftDraftAssetsEnabled: false,
     dynastyValueHidden: true,
     dynastyLanguageHidden: true,

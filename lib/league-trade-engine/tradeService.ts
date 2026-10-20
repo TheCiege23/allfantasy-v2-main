@@ -12,6 +12,12 @@ import { resolveTradeDeadlineStatus, serverWeekForTradeDeadline } from '@/lib/tr
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
+  CodedTradeError,
+  isRedraftPickLeague,
+  loadRedraftPickBook,
+  parseRedraftPickId,
+} from '@/lib/league-trade-engine/redraftDraftPicks'
+import {
   captureGenericRosterState,
   genericTradeActorRole,
   writeGenericTradeExecutionSnapshot,
@@ -519,6 +525,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   // A native dynasty league's future picks are checked against its inventory, not `playerData`.
   const offersNativePick = input.assets.some((a) => parseInventoryPickId(String(a.itemReference ?? '')) != null)
   const nativePicks = offersNativePick ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
+  // A redraft league's current-draft picks; a failed read leaves the book null, which refuses them.
+  const offersRedraftPick = isRedraftPickLeague(league) && input.assets.some((a) => parseRedraftPickId(String(a.itemReference ?? '')) != null)
+  const redraftPicks = offersRedraftPick ? await loadRedraftPickBook(input.leagueId, undefined, league).catch(() => null) : null
   const v = validateTradeAssets({
     league,
     settings,
@@ -528,8 +537,10 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     assets: input.assets,
     currentWeek: await serverWeekForTradeDeadline(league, settings.tradeDeadlineWeek),
     nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
+    redraftDraftPicks: redraftPicks,
   })
-  if (!v.ok) throw new Error(v.message)
+  // The code rides on the error so the route can return it (e.g. `future_picks_not_allowed_in_redraft`).
+  if (!v.ok) throw new CodedTradeError(v.code, v.message)
 
   const expiresHours = input.expiresInHours ?? 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)
@@ -585,6 +596,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
           // A native future pick's item carries its own season and round, read from its id, so
           // every reader of the item (grades, history, notices) can price it without the id format.
           const nativePick = parseInventoryPickId(String(a.itemReference ?? ''))
+          const redraftPick = parseRedraftPickId(String(a.itemReference ?? ''))
+            ? redraftPicks?.picks.find((p) => p.pickId === a.itemReference) ?? null
+            : null
           return {
             itemType: a.itemType,
             itemReference: a.itemReference ?? null,
@@ -598,7 +612,17 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
                   pickRound: nativePick.round,
                   originalRosterId: nativePick.originalRosterId,
                 }
-              : (a.metadata ?? {})) as Prisma.InputJsonValue,
+              : redraftPick
+                ? {
+                    ...(a.metadata ?? {}),
+                    pickSeason: redraftPick.season,
+                    pickRound: redraftPick.round,
+                    pickSlot: redraftPick.slot,
+                    pickOverall: redraftPick.overall,
+                    originalRosterId: redraftPick.originalRosterId,
+                    draftSessionId: redraftPick.sessionId,
+                  }
+                : (a.metadata ?? {})) as Prisma.InputJsonValue,
           }
         }),
       },

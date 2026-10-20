@@ -15,6 +15,7 @@ import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
 import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
 import {
   dailySlotFor,
   dayKey,
@@ -674,6 +675,16 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     home.points = categoryMatchup.aWins
     away.points = categoryMatchup.bWins
   }
+  // Commissioner score adjustments (lib/score-adjustments): points leagues only, added on top of the
+  // computed score on every rescore so a stat sync can never erase one.
+  const adjustments = scoringMode === 'points' ? readScoreAdjustments(scoringSettings) : []
+  const commissionerAdjustment = adjustments.length
+    ? { home: adjustmentFor(adjustments, matchupId, homeRosterId), away: adjustmentFor(adjustments, matchupId, awayRosterId) }
+    : null
+  if (commissionerAdjustment) {
+    home.points = adjustedScore(home.points, adjustments, matchupId, homeRosterId)
+    away.points = adjustedScore(away.points, adjustments, matchupId, awayRosterId)
+  }
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =
     missingPlayerIds.length === 0 &&
@@ -716,6 +727,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
+          ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
           home,
           away,
           missingPlayerIds,

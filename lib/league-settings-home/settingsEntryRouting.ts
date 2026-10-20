@@ -28,6 +28,7 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'ai',
   'commissioner-tools',
   'settings-lock',
+  'score-adjustments',
   'survivor-tribes',
 ]
 

@@ -8,6 +8,12 @@
  *   - 2+ orphans → dispersal draft highlighted
  *   - Optional league finder listing
  *   - Player rankings attached
+ *   - REDRAFT: one action resets every roster, creates next season's RedraftSeason and its draft,
+ *     ordered by the commissioner's choice (`draftOrder`: random | standings | reverse_standings |
+ *     manual + `manualOrder`). See lib/redraft/offseason/renewRedraftLeague.ts.
+ *   - A second renew into the same season is refused (409 `already_renewed`) by
+ *     `isAlreadyRenewedIntoSeason` below — the one route-level guard. `renewRedraftLeague` refuses on
+ *     the season engine's own state too (open draft / `renewedIntoSeason`), inside its transaction.
  * Commissioner only for POST. All members can GET.
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -29,6 +35,13 @@ import {
   resolveLeagueVariantKey,
   shouldResetRostersForRenewal,
 } from '@/lib/leagues/renewalPolicy'
+import { buildSlotOrderForLeague } from '@/lib/live-draft-engine/DraftSessionService'
+import {
+  RENEW_DRAFT_ORDER_MODES,
+  renewRedraftLeague,
+  resolveRenewDraftOrderMode,
+  type RenewRedraftLeagueResult,
+} from '@/lib/redraft/offseason/renewRedraftLeague'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,6 +110,24 @@ export async function GET(
     seasonPhase: settings.season_phase as string | undefined,
     lifecycleState: league.lifecycleState,
   })
+
+  // The draft teams (Roster ids) a manual next-draft order is written in, in seat order.
+  let draftTeams: Array<{ rosterId: string; displayName: string }> = []
+  let savedDraftOrderMethod: string | null = null
+  try {
+    const [rosters, seats, ls] = await Promise.all([
+      prisma.roster.findMany({ where: { leagueId }, select: { id: true } }),
+      buildSlotOrderForLeague(leagueId),
+      prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftOrderMethod: true } }),
+    ])
+    const real = new Set(rosters.map((r) => r.id))
+    draftTeams = seats
+      .filter((s) => real.has(s.rosterId))
+      .map((s) => ({ rosterId: s.rosterId, displayName: s.displayName }))
+    savedDraftOrderMethod = ls?.draftOrderMethod ?? null
+  } catch {
+    draftTeams = []
+  }
 
   let tournamentFeeder: { tournamentId: string; renewFromHubPath: string } | null = null
   try {
@@ -171,7 +202,16 @@ export async function GET(
     }),
     lifecycleState: league.lifecycleState,
     tournamentFeeder,
+    draftTeams,
+    draftOrderModes: RENEW_DRAFT_ORDER_MODES,
+    defaultDraftOrder: resolveRenewDraftOrderMode(savedDraftOrderMethod) ?? 'standings',
   })
+}
+
+function statusForRedraftRenewFailure(code: Extract<RenewRedraftLeagueResult, { ok: false }>['code']): number {
+  if (code === 'LEAGUE_NOT_FOUND') return 404
+  if (code === 'INVALID_DRAFT_ORDER' || code === 'INVALID_MANUAL_ORDER') return 400
+  return 409
 }
 
 export async function POST(
@@ -248,8 +288,8 @@ export async function POST(
       { status: 409 },
     )
   }
-  const currentSeason = league.season ?? new Date().getFullYear()
-  const nextSeason = currentSeason + 1
+  let currentSeason = league.season ?? new Date().getFullYear()
+  let nextSeason = currentSeason + 1
 
   /*
    * 🛑 RENEW ONCE. Every POST advanced `League.season` again, so a double-click or a re-opened modal
@@ -281,6 +321,33 @@ export async function POST(
   }
 
   const changes: { field: string; oldValue: string; newValue: string }[] = []
+
+  // ─── 0. REDRAFT: roster reset + next season + next draft, in one transaction, refused as a
+  // whole before anything below runs. A league with no RedraftSeason (never ran the season engine)
+  // keeps the legacy roster-only reset in step 4b. ───
+  const resetsRosters = shouldResetRostersForRenewal(renewalKind)
+  let redraftRenewal: Extract<RenewRedraftLeagueResult, { ok: true }> | null = null
+  if (resetsRosters) {
+    const result = await renewRedraftLeague(leagueId, session.user.id, {
+      draftOrder: body.draftOrder,
+      manualOrder: body.manualOrder,
+    })
+    if (result.ok) {
+      redraftRenewal = result
+      // The season engine is the authority on which season comes next.
+      nextSeason = result.season
+      currentSeason = result.season - 1
+    } else if (result.code !== 'NO_SEASON') {
+      return NextResponse.json(
+        {
+          error: result.code === 'ALREADY_RENEWED' ? 'already_renewed' : result.code.toLowerCase(),
+          code: result.code,
+          message: result.message,
+        },
+        { status: statusForRedraftRenewFailure(result.code) },
+      )
+    }
+  }
 
   // ─── 1. STORE SEASON HISTORY with rankings ───
   try {
@@ -403,7 +470,7 @@ export async function POST(
   })
 
   // ─── 4b. REDRAFT (Sleeper-style): clear rosters for a full startup draft — keep dynasty/keeper player groups ───
-  if (shouldResetRostersForRenewal(renewalKind)) {
+  if (resetsRosters && !redraftRenewal) {
     const faab = typeof league.waiverBudget === 'number' && Number.isFinite(league.waiverBudget) ? league.waiverBudget : 100
     await prisma.roster.updateMany({
       where: { leagueId },
@@ -504,5 +571,15 @@ export async function POST(
     orphanCount,
     dispersalDraftEligible,
     listedInFinder: listInFinder && orphanCount > 0,
+    draft: redraftRenewal
+      ? {
+          sessionId: redraftRenewal.sessionId,
+          seasonId: redraftRenewal.seasonId,
+          orderMode: redraftRenewal.orderMode,
+          slotOrder: redraftRenewal.slotOrder,
+          waiverClaimsCancelled: redraftRenewal.waiverClaimsCancelled,
+          tradesCancelled: redraftRenewal.tradesCancelled,
+        }
+      : null,
   })
 }

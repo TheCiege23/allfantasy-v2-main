@@ -245,8 +245,7 @@
 .af-core .lsh-error { margin-top: 10px; color: var(--bad); font-size: 13px; }
 .af-core .lsh-ok { margin-top: 10px; color: var(--good); font-size: 13px; }
 
-/* Settings lock panel. `.lsh-secondary` is also defined by the score adjustments editor; the two
-   definitions are identical, so whichever lands second is a no-op. */
+/* Score adjustments editor and settings lock panel (shared button and field styles) */
 .af-core .lsh-secondary {
   min-height: 36px;
   padding: 0 12px;
@@ -260,7 +259,9 @@
 }
 .af-core .lsh-secondary:disabled { opacity: 0.45; cursor: default; }
 .af-core [data-testid='settings-lock'] select,
-.af-core [data-testid='settings-lock'] input[type='text'] {
+.af-core [data-testid='settings-lock'] input[type='text'],
+.af-core [data-testid='score-adjustments'] select,
+.af-core [data-testid='score-adjustments'] input {
   display: block;
   width: 100%;
   min-height: 44px;

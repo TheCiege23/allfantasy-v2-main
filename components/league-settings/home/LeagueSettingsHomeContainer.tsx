@@ -22,6 +22,7 @@ import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
 import { CommissionerCenter } from './CommissionerCenter'
 import { SettingsLockPanel } from './SettingsLockPanel'
+import { ScoreAdjustmentsEditor } from './ScoreAdjustmentsEditor'
 import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 
@@ -164,6 +165,9 @@ export function LeagueSettingsHomeContainer({
       }
       if (id === 'settings-lock') {
         return { title: SUB_PAGE_TITLES[id], content: <SettingsLockPanel leagueId={leagueId} /> }
+      }
+      if (id === 'score-adjustments') {
+        return { title: SUB_PAGE_TITLES[id], content: <ScoreAdjustmentsEditor leagueId={leagueId} /> }
       }
       if (id === 'guillotine-first-chop') {
         if (!guillotineState) return null
