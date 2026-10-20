@@ -148,6 +148,7 @@ export function LeagueTypeConfirm({
         return
       }
       setState(data)
+      window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId } }))
     } catch {
       setError(t('lsRules.lt.saveRetry'))
     } finally {

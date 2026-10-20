@@ -77,9 +77,14 @@ export async function syncConferenceDraftTimes(tournamentId: string, actorId: st
       if (session && !NOT_STARTED_DRAFT_STATUSES.has(session.status)) { outcomes.push({ ...base, outcome: 'skipped_started' }); continue }
       const ls = await prisma.leagueSettings.findUnique({ where: { leagueId: row.leagueId }, select: { draftDateUtc: true } })
       if (ls?.draftDateUtc && ls.draftDateUtc.getTime() === at.getTime()) { outcomes.push({ ...base, outcome: 'unchanged' }); continue }
-      // The league's commissioner is the tournament owner; the tournament route has already checked
-      // that the actor may change tournament settings.
-      const res = await executeLeagueSettingsPatch(shell.commissionerId, { leagueId: row.leagueId, draftDateUtc: at.toISOString() })
+      // Authorized as the league's commissioner — the tournament owner — because the tournament route
+      // has already checked that the actor may change tournament settings. Recorded as the actor, who
+      // may be a co-commissioner rather than the owner. `source` stops the league → tournament copy-back.
+      const res = await executeLeagueSettingsPatch(
+        shell.commissionerId,
+        { leagueId: row.leagueId, draftDateUtc: at.toISOString() },
+        { actingUserId: actorId, source: 'tournament' },
+      )
       if (!res.ok) { outcomes.push({ ...base, outcome: 'failed', error: await patchError(res) }); continue }
       outcomes.push({ ...base, outcome: 'scheduled' })
     } catch (e) {

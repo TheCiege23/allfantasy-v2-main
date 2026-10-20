@@ -9,7 +9,10 @@
  *   - seats — `assignLeagueSeat` / `releaseLeagueSeat`, the one writer for who holds a team;
  *   - draft order labels — `buildSlotOrderForLeague`, as `autoMaterializeDraftForLeague` uses it;
  *   - a scoring label the create preset cannot express alone — `saveLeagueNflScoringConfig`, the
- *     league scoring settings writer.
+ *     league scoring settings writer;
+ *   - the season length — `./conferenceSeasonPlan` on `League.settings`, read by the same
+ *     first-season hook (`ensureRedraftSeason`) the survivor full-season plan uses, so the league
+ *     plays every week through the tournament's championship week with no league playoffs.
  *
  * 🛑 THE LINK IS THE GUARD. `TournamentLeague.leagueId` (already `@unique`) is written the moment a
  * league exists, so a re-run never creates a second league for a conference. Before that, a
@@ -29,8 +32,10 @@ import { assignLeagueSeat, releaseLeagueSeat } from '@/lib/league/leagueSeats'
 import { buildSlotOrderForLeague } from '@/lib/live-draft-engine/DraftSessionService'
 import { saveLeagueNflScoringConfig } from '@/lib/nfl-scoring/NflScoringConfigService'
 import { buildFullNflScoringConfig } from '@/lib/nfl-scoring/NflScoringPresets'
+import { saveLeagueNbaScoringConfig } from '@/lib/nba-scoring/NbaScoringConfigService'
 import { conferenceLeagueCreateBody, type ConferenceLeaguePlan } from './conferenceLeagueSettings'
 import { readSettings } from './divisionsStore'
+import { buildConferenceSeasonPlan, CONFERENCE_SEASON_PLAN_KEY, type ConferenceSeasonPlan } from './conferenceSeasonPlan'
 import { divisionsRulesLabels } from './rules'
 import { syncConferenceCoCommissioners, syncConferenceDraftTimes, type CoCommissionerOutcome, type DraftTimeOutcome } from './conferenceLeagueSync'
 
@@ -124,11 +129,32 @@ async function refreshDraftOrder(leagueId: string) {
   await prisma.draftSession.updateMany({ where: { id: session.id, status: 'pre_draft' }, data: { slotOrder: order as unknown as Prisma.InputJsonValue, version: { increment: 1 } } })
 }
 
-async function applyScoringOverride(leagueId: string, plan: ConferenceLeaguePlan, commissionerId: string) {
-  if (!plan.scoringOverride) return
-  const rules = buildFullNflScoringConfig(plan.scoringOverride.presetKey)
-  if (plan.scoringOverride.tePremiumPoints != null) rules.te_premium = plan.scoringOverride.tePremiumPoints
-  await saveLeagueNflScoringConfig(leagueId, { presetKey: plan.scoringOverride.presetKey, rules, userId: commissionerId })
+export async function applyScoringOverride(leagueId: string, plan: ConferenceLeaguePlan, commissionerId: string) {
+  const o = plan.scoringOverride
+  if (!o) return
+  if (o.presetKey === 'custom') {
+    // Custom scoring: the exact values the commissioner set, stored under the store's own `custom` key.
+    if (o.sport === 'NBA') await saveLeagueNbaScoringConfig(leagueId, { presetKey: 'custom', rules: o.rules, source: 'CUSTOM', userId: commissionerId })
+    else await saveLeagueNflScoringConfig(leagueId, { presetKey: 'custom', rules: o.rules, source: 'CUSTOM', userId: commissionerId })
+    return
+  }
+  const rules = buildFullNflScoringConfig(o.presetKey)
+  if (o.tePremiumPoints != null) rules.te_premium = o.tePremiumPoints
+  await saveLeagueNflScoringConfig(leagueId, { presetKey: o.presetKey, rules, userId: commissionerId })
+}
+
+/**
+ * Write the tournament calendar onto the league so its first season is created to match it.
+ * Idempotent. It only shapes a season created AFTER it is written; a league whose season already
+ * exists keeps the schedule it has here — the commissioner's "Apply tournament schedule"
+ * (./conferenceSchedule) re-applies it to a season that has not started.
+ */
+export async function applySeasonPlan(leagueId: string, plan: ConferenceSeasonPlan) {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  if (!league) throw new ProvisionStepError('The league could not be found.')
+  const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : {}
+  if (JSON.stringify(settings[CONFERENCE_SEASON_PLAN_KEY]) === JSON.stringify(plan)) return
+  await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...settings, [CONFERENCE_SEASON_PLAN_KEY]: plan } as Prisma.InputJsonValue } })
 }
 
 async function createLeague(commissionerId: string, body: unknown): Promise<string> {
@@ -149,7 +175,9 @@ export async function provisionConferenceLeagues(tournamentId: string, actorId: 
   const budget = opts.budgetMs ?? 45_000
   const shell = await prisma.tournamentShell.findUnique({ where: { id: tournamentId }, select: { id: true, format: true, status: true, sport: true, commissionerId: true, formatSettings: true } })
   if (!shell || shell.format !== 'divisions' || !['placed', 'live', 'complete'].includes(shell.status)) return { outcomes: [], complete: false }
-  const sport = readSettings(shell.formatSettings, shell.sport).sport
+  const formatSettings = readSettings(shell.formatSettings, shell.sport)
+  const sport = formatSettings.sport
+  const seasonPlan = buildConferenceSeasonPlan(tournamentId, formatSettings)
   const rules = divisionsRulesLabels(sport, shell.formatSettings)
   const leagues = await prisma.tournamentLeague.findMany({
     where: { tournamentId, divisionId: { not: null }, conferenceId: { not: null } },
@@ -160,7 +188,12 @@ export async function provisionConferenceLeagues(tournamentId: string, actorId: 
   const outcomes: ConferenceLeagueOutcome[] = []
   for (const tl of leagues) {
     const base = { tournamentLeagueId: tl.id, name: tl.name }
-    if (tl.leagueId && tl.status === CONFERENCE_LEAGUE_READY) { outcomes.push({ ...base, outcome: 'ready', leagueId: tl.leagueId }); continue }
+    if (tl.leagueId && tl.status === CONFERENCE_LEAGUE_READY) {
+      // Leagues set up before the calendar was written onto them pick it up on the next run.
+      await applySeasonPlan(tl.leagueId, seasonPlan).catch(() => console.warn('[tournament/divisions] season plan not written', tl.id))
+      outcomes.push({ ...base, outcome: 'ready', leagueId: tl.leagueId })
+      continue
+    }
     if (Date.now() - started > budget) { outcomes.push({ ...base, outcome: 'pending', leagueId: tl.leagueId }); continue }
 
     let leagueId = tl.leagueId
@@ -181,6 +214,7 @@ export async function provisionConferenceLeagues(tournamentId: string, actorId: 
       await prisma.$transaction(tx => seatMembers(tx, id, shell.commissionerId, tl.participants), { maxWait: 10_000, timeout: 30_000 })
       await refreshDraftOrder(id)
       await applyScoringOverride(id, plan, shell.commissionerId)
+      await applySeasonPlan(id, seasonPlan)
       await prisma.tournamentLeague.update({ where: { id: tl.id }, data: { status: CONFERENCE_LEAGUE_READY, currentTeamCount: tl.participants.length } })
       outcomes.push({ ...base, outcome: 'created', leagueId: id })
     } catch (e) {

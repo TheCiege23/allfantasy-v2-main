@@ -35,7 +35,7 @@ export type NflRedraftScoringSettings = {
   categoryPoints: Record<string, number>
   receptionPoints: number | null
   tePremiumEnabled: boolean
-  source: 'canonical_rules' | 'sport_config_fallback'
+  source: 'league_scoring_settings' | 'canonical_rules' | 'sport_config_fallback'
 }
 
 export type NflRedraftRuntimePlayerInput = {
@@ -208,8 +208,9 @@ export type NflRedraftLiveScoringRuntimeState = {
   }
 }
 
-const NON_SCORING_SLOTS = new Set(['bench', 'bn', 'ir', 'taxi', 'devy', 'reserve'])
-const IR_SLOTS = new Set(['ir', 'reserve'])
+// MLB/NBA reserve slots (`il`, `il_plus`, `na`, MLB stash slots) never score either.
+const NON_SCORING_SLOTS = new Set(['bench', 'bn', 'ir', 'taxi', 'devy', 'reserve', 'il', 'il_plus', 'na', 'prospect', 'rights', 'minors'])
+const IR_SLOTS = new Set(['ir', 'reserve', 'il', 'il_plus', 'na'])
 
 function roundScore(value: number): number {
   return Math.round(value * 100) / 100
@@ -268,7 +269,34 @@ function activeTogglesFromRules(rules: CanonicalLeagueRules): string[] {
 export function resolveNflRedraftScoringSettings(input: {
   rules: CanonicalLeagueRules
   categoryPoints?: Record<string, number> | null
+  /**
+   * The league's own scoring as the weekly matchup engine resolves it (`resolveLeagueScoringRules`,
+   * lib/redraft/leagueScoringRules.ts). When given it is AUTHORITATIVE: categories and point values come
+   * from it alone, and neither the template/`LeagueScoringOverride` rules in `rules.scoring.activeRules`
+   * nor `categoryPoints` are consulted — that engine reads neither, and two scorers for one league is
+   * the bug this exists to close. Every DB-backed caller passes it; the template-only resolution below
+   * remains for pure callers (simulation, tests) that have no league settings.
+   */
+  leagueScoring?: { categories: ScoringCategory[]; overrides: Record<string, number> } | null
 }): NflRedraftScoringSettings {
+  if (input.leagueScoring) {
+    const categories = input.leagueScoring.categories
+    const categoryPoints: Record<string, number> = {}
+    for (const [key, value] of Object.entries(input.leagueScoring.overrides ?? {})) {
+      if (typeof value === 'number' && Number.isFinite(value)) categoryPoints[key] = value
+    }
+    const rec = categoryPoints.rec ?? categories.find((category) => category.key === 'rec')?.defaultPoints
+    return {
+      sport: 'NFL',
+      presetId: input.rules.scoring.presetId ?? null,
+      templateId: input.rules.scoring.templateId ?? null,
+      categories,
+      categoryPoints,
+      receptionPoints: typeof rec === 'number' ? rec : null,
+      tePremiumEnabled: categories.some((category) => category.key === 'te_premium'),
+      source: 'league_scoring_settings',
+    }
+  }
   const toggles = activeTogglesFromRules(input.rules)
   const receptionPoints = presetReceptionPoints(input.rules)
   let categories = getScoringCategories('NFL', toggles)
@@ -715,12 +743,16 @@ export function buildNflRedraftLiveScoringRuntimeState(input: {
   matchups: NflRedraftRuntimeMatchupInput[]
   scoreRows: NflRedraftRuntimeScoreInput[]
   categoryPoints?: Record<string, number> | null
+  /** Already-resolved scoring settings; when given, `rules`/`categoryPoints` no longer pick the point values. */
+  settings?: NflRedraftScoringSettings | null
   now?: Date
 }): NflRedraftLiveScoringRuntimeState {
-  const settings = resolveNflRedraftScoringSettings({
-    rules: input.rules,
-    categoryPoints: input.categoryPoints,
-  })
+  const settings =
+    input.settings ??
+    resolveNflRedraftScoringSettings({
+      rules: input.rules,
+      categoryPoints: input.categoryPoints,
+    })
   const scoreRowsByPlayerId = scoreMap(input.scoreRows)
   const teams = input.teams.map((team) => buildNflRedraftTeamScore({ team, scoreRowsByPlayerId, settings }))
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]))

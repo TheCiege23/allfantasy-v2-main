@@ -238,7 +238,9 @@ export const PROBES = {
    * wastes the most time — a false alarm on a healthy job. Append-only is still not enough when a
    * unique key makes most runs insert nothing: see `adp_data` under adp-refresh below.
    */
-  '/api/cron/recompute-allfantasy-adp': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
+  // One fire recomputes NFL, MLB, NBA and NHL (cron ceiling — see the route). The table probe stays
+  // the output check; the route's multisport heartbeat carries per-sport errors for diagnosis.
+  '/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
   /*
    * ⚠ HEARTBEAT, NOT `adp_data.created_at`. That table is append-only, but it is unique per
    * calendar WEEK, so only the first run of each week inserts and every later run writes zero rows

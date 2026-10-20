@@ -4,6 +4,7 @@ import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraf
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
 import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
@@ -17,6 +18,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
 import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
+import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -190,10 +192,12 @@ export async function ensureRedraftSeason(leagueId: string) {
   const createdWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
   const totalWeeks = guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks
   // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
+  // A divisions-tournament conference league has no league playoffs: its bracket weeks are regular
+  // weeks the tournament scores (lib/tournament/divisions/conferenceSeasonPlan.ts).
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
       ? leaguePlayoffStart
       : cfg?.defaultPlayoffStartWeek ?? 15
@@ -637,6 +641,20 @@ export async function syncCompletedDraftToRedraftSeason(
         currentWeek: Math.max(1, season.currentWeek ?? 1, scheduleStartWeek),
       },
     })
+    /*
+     * A dynasty league's rookie draft starting year two: re-check the carried taxi and IR players
+     * and flag any team the draft took over its roster size. A no-op for every other league and for
+     * a first season (see `afterDynastyNewSeasonActivated`), and it must not fail draft completion.
+     */
+    if (season.status === 'setup') {
+      await afterDynastyNewSeasonActivated(leagueId, season.id).catch((err) => {
+        console.warn('[syncCompletedDraftToRedraftSeason] dynasty rollover housekeeping skipped', {
+          leagueId,
+          seasonId: season.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
   }
 
   await ensureScheduleForNewSeason({

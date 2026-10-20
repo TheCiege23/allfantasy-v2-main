@@ -23,7 +23,6 @@ export async function POST(
     proposerRosterId?: string
     receiverRosterId?: string
     assets?: TradeAssetInput[]
-    currentWeek?: number | null
     metadata?: Record<string, unknown>
   }
   if (!body.proposerRosterId || !body.receiverRosterId || !Array.isArray(body.assets)) {
@@ -38,7 +37,8 @@ export async function POST(
       receiverRosterId: body.receiverRosterId,
       assets: body.assets,
       parentTradeId: tradeId,
-      currentWeek: body.currentWeek ?? null,
+      // No week from the body: a counter used to send its own `currentWeek`, which let the requester
+      // pick the week the deadline was checked against. The service resolves the league's own week.
       metadata: body.metadata,
     })
     return NextResponse.json({ ok: true, tradeId: id })

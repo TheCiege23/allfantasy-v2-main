@@ -12,6 +12,7 @@ import {
   type NflRedraftPlayoffRulesInput,
   type NflRedraftPlayoffRuntimeState,
   type NflRedraftPlayoffTeamInput,
+  type NflRedraftRegularSeasonMatchupInput,
 } from './canonicalNflRedraftPlayoffRuntime'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 import { CONSOLATION_ROUND_OFFSET } from './playoffRoundWeeks'
@@ -20,6 +21,8 @@ export type NflRedraftPlayoffRuntimeResolved =
   | {
       ok: true
       state: NflRedraftPlayoffRuntimeState
+      /** The results `state` was seeded with; re-seeding must pass them again or lose head-to-head. */
+      regularSeasonMatchups: NflRedraftRegularSeasonMatchupInput[]
       season: { id: string; leagueId: string; sport: string; season: number; currentWeek: number; status: string }
     }
   | { ok: false; reason: 'season_not_found' | 'league_not_found' | 'not_nfl_redraft' }
@@ -252,10 +255,39 @@ function toMatchupInput(round: {
  */
 export interface PlayoffRuntimeDeps {
   loadRules: (leagueId: string) => Promise<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
+  /** Regular-season results, read only for the `head_to_head` seeding tiebreaker. */
+  loadRegularSeasonMatchups: (seasonId: string) => Promise<NflRedraftRegularSeasonMatchupInput[]>
+}
+
+/**
+ * ⚠ A failed read degrades to "no head-to-head data", which makes that tiebreaker fall through to
+ * the next key (points for). It never blocks seeding: a seeding page that 500s because of a
+ * tiebreaker is worse than a tie broken one key later.
+ */
+async function loadRegularSeasonMatchupsFromDb(seasonId: string): Promise<NflRedraftRegularSeasonMatchupInput[]> {
+  try {
+    const rows = await prisma.redraftMatchup.findMany({
+      where: { seasonId, type: 'regular', isMedianMatchup: false },
+      select: {
+        week: true,
+        type: true,
+        homeRosterId: true,
+        awayRosterId: true,
+        homeScore: true,
+        awayScore: true,
+        status: true,
+        isMedianMatchup: true,
+      },
+    })
+    return Array.isArray(rows) ? rows : []
+  } catch {
+    return []
+  }
 }
 
 const defaultPlayoffRuntimeDeps: PlayoffRuntimeDeps = {
   loadRules: (leagueId) => resolveCanonicalLeagueRules(leagueId),
+  loadRegularSeasonMatchups: loadRegularSeasonMatchupsFromDb,
 }
 
 export async function resolveNflRedraftPlayoffRuntime(input: {
@@ -280,6 +312,8 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
 
   const week = Math.max(1, Math.floor(numberOrNull(input.week) ?? season.currentWeek ?? season.playoffStartWeek ?? 1))
   const matchups = (season.playoffRounds ?? []).flatMap(toMatchupInput)
+  const loadRegularSeasonMatchups = deps.loadRegularSeasonMatchups ?? defaultPlayoffRuntimeDeps.loadRegularSeasonMatchups
+  const regularSeasonMatchups = await loadRegularSeasonMatchups(season.id)
   const state = buildNflRedraftPlayoffRuntimeState({
     leagueId: season.leagueId,
     seasonId: season.id,
@@ -288,6 +322,7 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
     rules,
     teams: season.rosters.map(toTeamInput),
     matchups,
+    regularSeasonMatchups,
     bracketStatus: season.playoffBracket?.status ?? null,
     bracketId: season.playoffBracket?.id ?? null,
   })
@@ -295,6 +330,7 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   return {
     ok: true,
     state,
+    regularSeasonMatchups,
     season: {
       id: season.id,
       leagueId: season.leagueId,
@@ -306,7 +342,7 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   }
 }
 
-function rulesWithPlayoffTeamOverride(
+export function rulesWithPlayoffTeamOverride(
   state: NflRedraftPlayoffRuntimeState,
   playoffTeams: number,
 ): NflRedraftPlayoffRulesInput {
@@ -323,12 +359,19 @@ function rulesWithPlayoffTeamOverride(
       totalRounds: state.settings.roundCount,
       consolationBracketEnabled: state.settings.consolationEnabled,
       thirdPlaceGameEnabled: state.settings.thirdPlaceGameEnabled,
-      seedingRules: state.settings.divisionWinnersEnabled ? 'division_winners_then_standings' : 'standings',
+      // Carry an explicit points-only choice through; 'standings' here would re-seed it by record.
+      seedingRules: state.settings.pointsOnlySeeding
+        ? 'points_only'
+        : state.settings.divisionWinnersEnabled
+          ? 'division_winners_then_standings'
+          : 'standings',
       tiebreakerRules: state.settings.tiebreakers,
       byeRules: state.settings.firstRoundByes > 0 ? 'top_seed_byes' : null,
       reseedBehavior: state.settings.reseedAfterEachRound ? 'reseed_after_each_round' : null,
       standingsTiebreakers: state.settings.tiebreakers,
       byePlan: state.settings.byePlan,
+      // Without this the override would re-run the legacy head-to-head-before-points reorder on it.
+      customTiebreakers: state.settings.customTiebreakers ?? null,
     },
     schedule: {
       regularSeasonLength: state.settings.regularSeasonEndWeek,
@@ -359,6 +402,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
           week: resolved.state.week,
           rules: rulesWithPlayoffTeamOverride(resolved.state, input.playoffTeams),
           teams: resolved.state.teams,
+          regularSeasonMatchups: resolved.regularSeasonMatchups,
         })
       : resolved.state
   const generated = generateNflRedraftPlayoffBracket({

@@ -2,6 +2,7 @@
  * [NEW] lib/dynasty-core/constants.ts
  * Dynasty roster, scoring, playoff constants. Shared base for standard Dynasty, Devy, C2C.
  */
+import { DAILY_SPORT_SEASON_SHAPE, regularSeasonWeeksFor, type DailySeasonSport } from '@/lib/sportConfig/dailySportSeasonShape'
 
 /** Supported league team sizes for dynasty. */
 export const DYNASTY_SUPPORTED_TEAM_SIZES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32] as const
@@ -28,6 +29,16 @@ export const DYNASTY_DEFAULT_12_BENCH = 14
 export const DYNASTY_DEFAULT_IR = 3
 /** Default taxi slots for core dynasty (no devy). */
 export const DYNASTY_DEFAULT_TAXI = 4
+
+/**
+ * The roster, scoring and playoff-week presets below are football formats (QB/RB/WR/TE, PPR, pass
+ * TDs, a week-15 playoff start). They must not be offered to — or saved onto — an MLB, NBA or NHL
+ * league, which the settings API and panel used to do for every sport.
+ */
+export function isDynastyFootballSport(sport: string | null | undefined): boolean {
+  const s = String(sport ?? 'NFL').trim().toUpperCase()
+  return s === 'NFL' || s === 'NCAAF'
+}
 
 /** Roster template format types for dynasty (NFL). */
 export const DYNASTY_ROSTER_PRESETS = [
@@ -59,6 +70,22 @@ export const DYNASTY_PLAYOFF_PRESETS = [
 /** Default regular season weeks (avoid Week 18 title). */
 export const DYNASTY_REGULAR_SEASON_WEEKS_OPTIONS = [13, 14] as const
 export const DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS = 14
+
+/**
+ * The regular-season length a dynasty league gets when nobody chose one.
+ *
+ * 🛑 A FLAT 14 BROKE EVERY NBA/NHL/MLB DYNASTY LEAGUE THAT REACHED IT. `resolveCreatedSeasonWeeks`
+ * sizes the season from this value (14 + 3 playoff rounds = 17 weeks — mid-February for the NBA)
+ * while `League.playoffStartWeek` came from the sport default (NBA 23), so the playoff start lay
+ * past the season's end. The daily sports read `dailySportSeasonShape.ts`, the one table their
+ * season length lives in; football and the sports that table does not list keep 14.
+ */
+export function dynastyDefaultRegularSeasonWeeksFor(sport: string | null | undefined): number {
+  const key = String(sport ?? '').trim().toUpperCase()
+  return key in DAILY_SPORT_SEASON_SHAPE
+    ? regularSeasonWeeksFor(key as DailySeasonSport)
+    : DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS
+}
 
 /** Rookie draft order methods. */
 export const ROOKIE_PICK_ORDER_METHODS = [

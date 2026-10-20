@@ -72,12 +72,7 @@ export function swapViewForClient(swap: { week: number; revealAt: Date | null; r
   return { week: swap.week, sealed: false as const, revealAt: swap.revealAt?.toISOString() ?? null, before, after, members, movedCount: members.filter((m) => m.moved).length }
 }
 
-const NUMBER_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve']
-
-export function swapHeadline(movedCount: number): string {
-  const word = NUMBER_WORDS[movedCount] ?? String(movedCount)
-  return `${word} manager${movedCount === 1 ? '' : 's'} changed tribes`
-}
+export { swapHeadline } from './tribeSwapHeadline'
 
 /** Three catalogue names unused by this league, ordered deterministically per league. */
 export function mergeNameSuggestions(leagueId: string, catalogNames: ReadonlyArray<string>, usedNames: ReadonlyArray<string>, count = 3): string[] {

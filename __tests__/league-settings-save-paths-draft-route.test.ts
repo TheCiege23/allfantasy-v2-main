@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   },
   updateVariant: vi.fn(),
   getVariant: vi.fn(),
+  copyBack: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'commish' } }) }))
@@ -49,6 +50,7 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
 }))
 vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.fn() }))
 vi.mock('@/lib/league/league-settings-draft-sync', () => ({ syncDraftSessionFromLeagueSettings: vi.fn() }))
+vi.mock('@/lib/tournament/divisions/leagueDraftTimeToTournament', () => ({ copyLeagueDraftTimeToTournament: m.copyBack }))
 
 import { PATCH } from '@/app/api/leagues/[leagueId]/draft/settings/route'
 
@@ -71,6 +73,7 @@ beforeEach(() => {
   m.prisma.leagueSettings.upsert.mockImplementation(async ({ update }: { update: Record<string, unknown> }) => ({ leagueId: 'L', ...update }))
   m.getVariant.mockResolvedValue(variant)
   m.updateVariant.mockResolvedValue(variant)
+  m.copyBack.mockResolvedValue('not_linked')
 })
 
 describe('PATCH draft/settings: one save, every copy', () => {
@@ -88,6 +91,16 @@ describe('PATCH draft/settings: one save, every copy', () => {
     const update = m.prisma.leagueSettings.upsert.mock.calls[0][0].update
     expect(update.draftDateUtc).toEqual(new Date('2026-10-20T00:00:00.000Z'))
     expect(update.autostart).toBe(true)
+  })
+
+  it('🛑 a draft date saved here is copied back to a tournament conference record, as the saver', async () => {
+    await patch({ draftDate: '2026-10-20T00:00:00.000Z' })
+    expect(m.copyBack).toHaveBeenCalledWith('L', new Date('2026-10-20T00:00:00.000Z'), 'commish')
+  })
+
+  it('a save without a draft date copies nothing back', async () => {
+    await patch({ autostart: true })
+    expect(m.copyBack).not.toHaveBeenCalled()
   })
 
   it('an invalid draft date is refused before anything is written', async () => {

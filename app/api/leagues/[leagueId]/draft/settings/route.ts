@@ -31,6 +31,7 @@ import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,7 +123,7 @@ export async function GET(
       isCommissioner(leagueId, userId),
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { sport: true, leagueVariant: true },
+        select: { sport: true, leagueVariant: true, timezone: true },
       }),
       (async () => {
         const { isIdpLeague, getRosterDefaultsForIdpLeague, getIdpLeagueConfig } = await import('@/lib/idp')
@@ -218,6 +219,8 @@ export async function GET(
       teams,
       draftStatus: draftSessionStatus?.status ?? 'pre_draft',
       draftDate: lsRow?.draftDateUtc?.toISOString() ?? null,
+      // The draft date/time inputs are wall-clock in THIS zone, not the viewer's browser zone.
+      timezone: league?.timezone || 'America/New_York',
       autostartEnabled: lsRow?.autostart ?? false,
       slowDraftPauseEnabled: lsRow?.slowDraftPause ?? (variant.draftUISettings.timerMode === 'overnight_pause'),
       slowDraftPauseFrom: lsRow?.slowPauseFrom ?? variant.draftUISettings.slowDraftPauseWindow?.start ?? null,
@@ -587,6 +590,12 @@ export async function PATCH(
       if (lsSyncKeys.size > 0) {
         await syncDraftSessionFromLeagueSettings(leagueId, lsRow, leagueForFormat?.leagueSize ?? 0, lsSyncKeys).catch((e) =>
           console.warn('[draft/settings PATCH] league-settings sync', e),
+        )
+      }
+      // A tournament conference league's new draft time goes back onto the tournament's record for it.
+      if (body.draftDate !== undefined) {
+        await copyLeagueDraftTimeToTournament(leagueId, lsRow.draftDateUtc ?? null, userId).catch((e) =>
+          console.warn('[draft/settings PATCH] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error'),
         )
       }
     }

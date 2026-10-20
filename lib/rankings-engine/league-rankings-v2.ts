@@ -252,6 +252,8 @@ export interface LeagueRankingsV2Output {
   phase: 'offseason' | 'in_season' | 'post_draft' | 'post_season'
   isDynasty: boolean
   isSuperFlex: boolean
+  /** Upper-cased league sport, e.g. NFL / NBA. */
+  sport: string
   isIdpLeague: boolean
   isKickerLeague: boolean
   teams: TeamScore[]
@@ -329,6 +331,8 @@ interface LeagueSettings {
   status: string
   week: number
   rosterPositions: string[]
+  /** Upper-cased league sport (NFL when neither the DB row nor Sleeper names one). */
+  sport: string
 }
 
 interface RosterRecord {
@@ -434,6 +438,7 @@ async function fetchLeagueSettings(leagueId: string): Promise<LeagueSettings | n
       leagueType: true,
       specialtyFormat: true,
       status: true,
+      sport: true,
     },
     orderBy: { season: 'desc' },
   })
@@ -458,6 +463,7 @@ async function fetchLeagueSettings(leagueId: string): Promise<LeagueSettings | n
       status,
       week,
       rosterPositions: sleeperLeague?.roster_positions || [],
+      sport: String(dbLeague.sport || sleeperLeague?.sport || 'nfl').toUpperCase(),
     }
   }
 
@@ -483,6 +489,7 @@ async function fetchLeagueSettings(leagueId: string): Promise<LeagueSettings | n
     status: league.status,
     week: Math.max(1, (league.settings as any)?.leg ?? 1),
     rosterPositions,
+    sport: String(league.sport || 'nfl').toUpperCase(),
   }
 }
 
@@ -3534,6 +3541,7 @@ export async function computeLeagueRankingsV2(
     phase,
     isDynasty,
     isSuperFlex: isSF,
+    sport: settings.sport,
     isIdpLeague,
     isKickerLeague,
     teams,

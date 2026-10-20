@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradeProposalValidation'
+import { REDRAFT_MOVES_LOCKED_CODE, REDRAFT_MOVES_LOCKED_STATUS } from '@/lib/redraft/tradeMoveLock'
 import {
   REDRAFT_TRADE_GOVERNANCE_REFUSAL,
   prohibitedRedraftGovernanceFields,
@@ -284,7 +285,9 @@ export async function POST(req: NextRequest) {
     })),
   })
   if (!validation.ok) {
-    return NextResponse.json({ error: validation.message, code: validation.code }, { status: 400 })
+    // The move lock is league state, not a bad request: 409, for every sport — NFL's runtime refusal included.
+    const status = validation.code === REDRAFT_MOVES_LOCKED_CODE ? REDRAFT_MOVES_LOCKED_STATUS : 400
+    return NextResponse.json({ error: validation.message, code: validation.code }, { status })
   }
 
   const created = await prisma.$transaction(async (tx: any) => {
