@@ -120,9 +120,12 @@ describe('redraft core contract hardening', () => {
       players: [
         { playerId: 'qb', playerName: 'QB', position: 'QB', sport: 'NFL', slotType: 'QB' },
         { playerId: 'rb', playerName: 'RB', position: 'RB', sport: 'NFL', slotType: 'RB' },
+        { playerId: 'rb2', playerName: 'RB2', position: 'RB', sport: 'NFL', slotType: 'RB' },
         { playerId: 'wr1', playerName: 'WR1', position: 'WR', sport: 'NFL', slotType: 'WR' },
         { playerId: 'wr2', playerName: 'WR2', position: 'WR', sport: 'NFL', slotType: 'WR' },
         { playerId: 'te', playerName: 'TE', position: 'TE', sport: 'NFL', slotType: 'TE' },
+        { playerId: 'flex', playerName: 'Flex', position: 'WR', sport: 'NFL', slotType: 'FLEX' },
+        { playerId: 'k', playerName: 'K', position: 'K', sport: 'NFL', slotType: 'K' },
         { playerId: 'def', playerName: 'Defense', position: 'DST', sport: 'NFL', slotType: 'DST' },
       ],
     })

@@ -4,6 +4,7 @@
  * waiver timing, and playoff structures per sport.
  */
 import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
+import { getCanonicalRedraftRosterSlotOrder, redraftTeamDefenseEnabled } from '@/lib/league-concepts/redraftDefaults'
 
 export type RedraftSportConfig = {
   sport: string
@@ -58,14 +59,27 @@ export type RedraftSportConfig = {
   flexPositions: Record<string, string[]>
 }
 
+/**
+ * NFL/NCAAF starters are derived from the redraft contract (lib/league-concepts/redraftDefaults.ts):
+ * QB, RB, RB, WR, WR, TE, FLX, K, DEF — no DEF for NCAAF. Restating them here is how ffb371161's cut
+ * lineup outlived the contract it was cut from.
+ */
+function redraftStarterSlots(sport: 'NFL' | 'NCAAF'): string[] {
+  return getCanonicalRedraftRosterSlotOrder({
+    includeBench: false,
+    includeIr: false,
+    defenseEnabled: redraftTeamDefenseEnabled(sport),
+  })
+}
+
 export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
   nfl: {
     sport: 'nfl',
     label: 'NFL',
-    starterSlots: ['QB', 'RB', 'WR', 'WR', 'TE', 'DEF'],
+    starterSlots: redraftStarterSlots('NFL'),
     benchSlots: 6,
     irSlots: 1,
-    totalRosterSize: 13,
+    totalRosterSize: 16,
     lineupFrequency: 'weekly',
     defaultScoringFormat: 'half_ppr',
     supportedScoringFormats: ['ppr', 'half_ppr', 'standard', 'idp'],
@@ -74,7 +88,7 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     defaultPlayoffTeams: 6,
     supportedPlayoffSizes: [4, 6, 8],
     defaultTeamCount: 12,
-    defaultDraftRounds: 12,
+    defaultDraftRounds: 15,
     defaultDraftTimerSeconds: 90,
     defaultWaiverType: 'faab',
     defaultFaabBudget: 100,
@@ -213,10 +227,10 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     sport: 'ncaaf',
     label: 'College Football',
     // No DEF starter: no college team defense exists to draft (see redraftTeamDefenseEnabled).
-    starterSlots: ['QB', 'RB', 'WR', 'WR', 'TE'],
+    starterSlots: redraftStarterSlots('NCAAF'),
     benchSlots: 8,
     irSlots: 1,
-    totalRosterSize: 14,
+    totalRosterSize: 17,
     lineupFrequency: 'weekly',
     defaultScoringFormat: 'half_ppr',
     supportedScoringFormats: ['ppr', 'half_ppr', 'standard'],
@@ -226,7 +240,7 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     defaultPlayoffTeams: 4,
     supportedPlayoffSizes: [4, 6],
     defaultTeamCount: 12,
-    defaultDraftRounds: 14,
+    defaultDraftRounds: 16,
     defaultDraftTimerSeconds: 90,
     defaultWaiverType: 'faab',
     defaultFaabBudget: 100,
