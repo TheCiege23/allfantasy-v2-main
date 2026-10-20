@@ -2760,6 +2760,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.gen.autosaveHint": "Los cambios se guardan automáticamente",
   "lsHub.gen.autosave": "Guardado automático",
   "lsHub.gen.leagueName": "Nombre de la liga",
+  "lsHub.gen.teams": "Equipos",
+  "lsHub.gen.teamsHint": "Se bloquea al empezar el draft. No puede ser menor que los mánagers ya inscritos.",
   "lsHub.gen.timezone": "Zona horaria",
   "lsHub.gen.logoUrl": "URL del logo",
   "lsHub.gen.commishOnly": "Solo el comisionado puede editar los datos básicos de la liga.",

@@ -1048,6 +1048,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.gen.autosaveHint": "Changes save automatically",
     "lsHub.gen.autosave": "Auto-save",
     "lsHub.gen.leagueName": "League name",
+    "lsHub.gen.teams": "Teams",
+    "lsHub.gen.teamsHint": "Locked once the draft starts. Can't go below the managers already in.",
     "lsHub.gen.timezone": "Timezone",
     "lsHub.gen.logoUrl": "Logo URL",
     "lsHub.gen.commishOnly": "Only the commissioner can edit league basics.",

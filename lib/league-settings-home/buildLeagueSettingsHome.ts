@@ -269,7 +269,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       title: 'General',
       rows: [
         { id: 'name', label: 'League name', value: league.name?.trim() || 'Untitled league', ...edit('general') },
-        { id: 'teams', label: 'Teams', value: String(teamCount) },
+        { id: 'teams', label: 'Teams', value: String(teamCount), ...edit('general') },
         { id: 'format', label: 'Format', value: `${input.formatLabel} · ${formatScoringMode(league.settings)}`, ...edit('format') },
       ],
     },

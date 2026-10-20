@@ -230,6 +230,11 @@ export async function executeLeagueSettingsPatch(
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
+    // Shrinking below the managers already in the league would orphan a claimed team.
+    const joined = league.teams.filter((t) => Boolean(t.claimedByUserId)).length
+    if (size < joined) {
+      return jsonError(`leagueSize cannot be below the ${joined} managers already in the league`, 400)
+    }
   }
 
   // The entitlement alone: OR-ing the profile flag kept a lapsed plan's access (livePlanFlags.ts).
