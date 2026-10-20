@@ -23,6 +23,9 @@ import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
@@ -322,7 +325,7 @@ export async function executeLeagueSettingsPatch(
   const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule })
   if (keeperRefusal) return jsonError(keeperRefusal.message, keeperRefusal.status)
 
-  const teamCount = league.leagueSize ?? league.teams.length
+  const teamCount = body.leagueSize != null ? Number(body.leagueSize) : league.leagueSize ?? league.teams.length
   if (body.playoffTeams != null) {
     const pt = Number(body.playoffTeams)
     if (Number.isFinite(pt) && pt > Math.max(1, teamCount)) {
@@ -425,7 +428,17 @@ export async function executeLeagueSettingsPatch(
   const updatedFieldNames: string[] = []
 
   const { data: leaguePatch, keys: leagueKeys } = buildLeagueUpdateFromBody(body)
-  if (Object.keys(leaguePatch).length > 0) {
+  if (typeof body.leagueType === 'string' && isNativePlatform(league.platform)) {
+    Object.assign(leaguePatch, nativeFormatPatch(body.leagueType, league.settings))
+  }
+  if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize && isNativePlatform(league.platform)) {
+    try {
+      await resizeNativeLeague(leagueId, Number(body.leagueSize), leaguePatch)
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : 'Could not change league size', 409)
+    }
+    updatedFieldNames.push(...leagueKeys)
+  } else if (Object.keys(leaguePatch).length > 0) {
     await prisma.league.update({
       where: { id: leagueId },
       data: leaguePatch,
