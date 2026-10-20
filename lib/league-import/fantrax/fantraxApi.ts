@@ -61,8 +61,13 @@ export const FANTRAX_ENDPOINTS = [
  * 'NBA' — `getAdp?sport=NBA` verified 2026-10-13: HTTP 200, a JSON array of 351
  * `{ pos, name: "Last, First", id, ADP }`. The field is `ADP`, not NCAAF's `ADP_PPR`;
  * `getFantraxAdp` already reads both.
+ *
+ * 'NBA' and 'NHL' for `getPlayerIds` — ⚠ NOT CAPTURED. The league import reads them as one more
+ * candidate map, on the assumption that `getPlayerIds` answers every sport in the shape captured for
+ * MLB/CFB. A map that fails to load fails soft (the import needs only the league's own sport to
+ * load), so a wrong assumption costs NBA/NHL detection and nothing else. contracts/fantrax/GAPS.md.
  */
-export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA'
+export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL'
 
 export type FantraxFailure = {
   /**

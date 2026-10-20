@@ -44,6 +44,8 @@ export type NativeGuillotineOutcome =
   | 'refused'
   | 'chopped'
   | 'final_stage_scored'
+  /** The commissioner's schedule skips this week (lib/guillotine/chopSchedule.ts); the season moved past it. */
+  | 'no_chop'
 
 export type NativeGuillotineResult = {
   seasonId: string
@@ -229,6 +231,7 @@ export async function runNativeGuillotineWeek(
     // because score-sync only re-offers it while the league is unarchived.
     if (result?.reason === 'final stage complete') return { ...(await completeSeason(season.id, gSeason, base)), week }
     if (result?.reason === 'final stage scored') return { ...base, outcome: 'final_stage_scored', week }
+    if (result?.reason === 'no chop scheduled') return { ...base, outcome: 'no_chop', week }
     if (!result || result.choppedRosterIds.length === 0) {
       return { ...base, outcome: 'refused', week, reason: result?.reason ?? 'engine_returned_nothing' }
     }

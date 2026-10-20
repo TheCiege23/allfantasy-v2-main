@@ -28,8 +28,10 @@ export type ResolvedRosterConfig = {
 }
 
 const BENCH_TOKENS = new Set(['BENCH', 'BN'])
-const IR_TOKENS = new Set(['IR', 'RESERVE'])
-const TAXI_TOKENS = new Set(['TAXI', 'DEVY'])
+// MLB and NBA templates name their injured list `IL` (MLB adds `IL_PLUS` and the minor-league `NA`);
+// without them here those slots were counted as starter capacity (lib/mlb-roster/MlbRosterTemplates.ts).
+const IR_TOKENS = new Set(['IR', 'RESERVE', 'IL', 'IL_PLUS', 'NA'])
+const TAXI_TOKENS = new Set(['TAXI', 'DEVY', 'PROSPECT', 'RIGHTS', 'MINORS'])
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -91,6 +93,17 @@ function defaultsFor(sport: string): ResolvedRosterConfig {
   const taxiSlots = 0
   const starters = [...starterCapacities.values()].reduce((a, b) => a + b, 0)
   return { starterCapacities, benchSlots, irSlots, taxiSlots, maxRosterSize: starters + benchSlots + irSlots + taxiSlots, source: 'defaults' }
+}
+
+/**
+ * A roster slot whose capacity `maxRosterSize - irSlots - taxiSlots` leaves out — IR / IL / reserve
+ * and taxi / devy / minors — read with the same tokens that sized those slots, so a player sitting in
+ * one is not counted against the active limit those slots were subtracted from.
+ */
+export function isReserveRosterSlot(slotType: string | null | undefined): boolean {
+  if (!slotType) return false
+  const token = normalizeToken(slotType)
+  return IR_TOKENS.has(token) || TAXI_TOKENS.has(token)
 }
 
 export function resolveRedraftRosterConfig(sport: string, leagueSettings: unknown): ResolvedRosterConfig {

@@ -41,7 +41,7 @@ export type RedraftLineupMove = {
 }
 
 const REQUIRED_FOOTBALL_POSITIONS = ['QB', 'RB', 'WR'] as const
-const NON_STARTER_SLOTS = new Set(['BENCH', 'BN', 'IR', 'TAXI', 'DEVY', 'RESERVE'])
+const NON_STARTER_SLOTS = new Set(['BENCH', 'BN', 'IR', 'TAXI', 'DEVY', 'RESERVE', 'IL', 'IL_PLUS', 'NA', 'PROSPECT', 'RIGHTS', 'MINORS'])
 const INJURY_ERROR_STATUSES = new Set([
   'OUT',
   'O',
@@ -104,7 +104,16 @@ function isStarterSlot(slotType: string, capacities: Map<string, number>): boole
   return capacities.has(normalizeToken(slotType))
 }
 
-function isNonStarterSlot(slotType: string): boolean {
+/**
+ * Whether a player's injury designation keeps them out of a starting lineup — the same test
+ * `validateRedraftLineup` applies, exported so other reads (the weekly commissioner checklist) flag
+ * exactly the lineups this validator would refuse.
+ */
+export function cannotStart(player: { injuryStatus?: string | null }): boolean {
+  return INJURY_ERROR_STATUSES.has(normalizeToken(player.injuryStatus)) || isRuledOut(player.injuryStatus)
+}
+
+export function isNonStarterSlot(slotType: string): boolean {
   return NON_STARTER_SLOTS.has(normalizeToken(slotType))
 }
 

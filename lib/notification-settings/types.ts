@@ -121,7 +121,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // the lineup check before the main slate (lib/chimmy-alerts/lineupCheck.ts). One toggle for both —
   // each can also be muted on its own from the Chimmy alert controls (Waivers / Lineup classes).
   lineup_reminders: "Chimmy's weekly lineup & waiver checks",
-  matchup_results: "Matchup results",
+  matchup_results: "Game scores, halftime, close games & finals",
   waiver_processing: "Waiver processing",
   trade_proposals: "Trade proposals",
   // Counters route here too — a toggle that governs an outcome it does not name
@@ -135,7 +135,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   commissioner_alerts: "Commissioner alerts",
   system_account: "System & account alerts",
   injury_alerts: "Player injury alerts",
-  performance_alerts: "Game performance alerts",
+  performance_alerts: "Scoring plays & big plays",
   lineup_alerts: "Starting lineup alerts",
   draft_alerts: "Draft alerts (on the clock, timer, trade offers)",
   draft_intel_alerts: "Draft intelligence (AI queue, Chimmy DMs, recap)",

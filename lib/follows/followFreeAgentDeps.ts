@@ -60,8 +60,8 @@ export const followFreeAgentDeps: FollowFreeAgentDeps = {
   },
   alreadySent: async (sourceKey) =>
     (await prisma.platformNotification.findFirst({ where: { sourceKey }, select: { id: true } }).catch(() => null)) != null,
-  dispatch: (input) =>
-    dispatchNotification({
+  dispatch: async (input) => {
+    const result = await dispatchNotification({
       userIds: [input.userId],
       category: 'followed_players',
       productType: 'app',
@@ -76,5 +76,7 @@ export const followFreeAgentDeps: FollowFreeAgentDeps = {
       meta: input.meta,
       // No registered SMS sender yet (Twilio A2P 10DLC); in-app, email and push go as the user set them.
       skipChannels: { sms: true },
-    }),
+    })
+    if (result.failed > 0) throw new Error('Followed free agent notification dispatch incomplete')
+  },
 }

@@ -7,6 +7,7 @@ import { getSettingsProfile } from "@/lib/user-settings"
 import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
 import { getDeliveryMethodAvailability } from "@/lib/notification-settings/DeliveryMethodResolver"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
+import { isLeagueSmsCategory } from "@/lib/notifications/channelPolicy"
 import { sendSms } from "@/lib/twilio-client"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import type { SmsSendResult } from "./types"
@@ -21,6 +22,9 @@ export async function sendCriticalSms(
   category: NotificationCategoryId,
   message: string
 ): Promise<SmsSendResult> {
+  if (!isLeagueSmsCategory(category)) {
+    return { ok: false, userId, error: "Texts are reserved for league operations" }
+  }
   const profile = await getSettingsProfile(userId)
   if (!profile?.phone) {
     return { ok: false, userId, error: "No phone" }

@@ -9,6 +9,7 @@ import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegis
 import { validateCanonicalRosterPayload } from './rosterValidationService'
 import { syncAfRosterLineupAssignments } from './lineupAssignmentSync'
 import { syncRedraftSlotTypesForLineup } from './redraftSlotSync'
+import { isDailyLineupScoringEnabled, writeDailyLineupForSave } from '@/lib/redraft/dailyLineups'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { recordAfRosterMoveHistory } from './rosterMoveHistory'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
@@ -160,7 +161,7 @@ export async function persistRosterLineupWithEngine(
     }
     const movedLockedPlayer = movedLockedLineupPlayer(roster.playerData, input.nextPlayerData, lockCtx.lockedPlayerIds)
     if (movedLockedPlayer) {
-      return { ok: false, error: 'That player\'s game has started. Their lineup position is locked for today.', status: 403 }
+      return { ok: false, error: 'That player\'s game has started, so their lineup position is locked.', status: 403 }
     }
   }
 
@@ -197,7 +198,31 @@ export async function persistRosterLineupWithEngine(
       tx,
     )
     if (redraftRosterId) {
+      const dailyLineups = isDailyLineupScoringEnabled(league.settings, sport)
+      // The slots this save replaces back-fill the week's earlier days that have no saved lineup yet.
+      const before = dailyLineups
+        ? new Map(
+            (
+              await tx.redraftRosterPlayer.findMany({
+                where: { rosterId: redraftRosterId, droppedAt: null },
+                select: { playerId: true, slotType: true },
+              })
+            ).map((p) => [p.playerId, p.slotType] as const),
+          )
+        : undefined
       await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
+      // A daily-lineup league is scored per day: pin the synced slots to every day the save decides.
+      if (dailyLineups) {
+        await writeDailyLineupForSave(tx, {
+          before,
+          leagueId: input.leagueId,
+          redraftRosterId,
+          sport,
+          season: input.season,
+          week: input.week,
+          source: input.source === 'commissioner_override' ? 'commissioner' : input.source === 'user_save' ? 'user' : 'system',
+        })
+      }
     }
   }) } catch(e) {
     if(e instanceof Error && e.message==='STALE_TEAM_LINEUP') return {ok:false,error:'Your roster changed while saving. Refresh and compare again.',status:409}

@@ -99,7 +99,7 @@ const TEAM_FANS: Record<string, string[]> = {
 
 beforeEach(() => {
   h.dispatch.mockReset()
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
   // The real resolver maps a team string onto a followable team; for these clubs that is the code.
   h.resolveNewsTeam.mockReset()
   h.resolveNewsTeam.mockImplementation(async (_s: string, team: string | null) => (team && TEAM_FANS[team.trim().toUpperCase()] ? team.trim().toUpperCase() : null))

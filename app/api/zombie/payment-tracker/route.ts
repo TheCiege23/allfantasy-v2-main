@@ -107,7 +107,7 @@ export async function PUT(req: Request) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'money')
   } catch (e) {
     if (e instanceof Response) return e
     throw e

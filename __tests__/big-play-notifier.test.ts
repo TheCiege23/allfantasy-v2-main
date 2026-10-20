@@ -205,9 +205,9 @@ describe('the payload', () => {
     expect(n.actionHref).toBe('/core/live?sport=NFL')
   })
 
-  it('never emails or texts a play — in-app + push only', async () => {
+  it('allows email preferences but never texts a play', async () => {
     await notifyBigPlays([ev()])
-    expect(h.ingestBatch.mock.calls[0][0][0].skipChannels).toEqual({ email: true, sms: true })
+    expect(h.ingestBatch.mock.calls[0][0][0].skipChannels).toEqual({ sms: true })
   })
 
   it('never throws when the notification engine fails', async () => {

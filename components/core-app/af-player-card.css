@@ -845,3 +845,51 @@ a.af-pc-news-t:hover {
     background: transparent;
   }
 }
+
+/* ── which games count (GamesCountWeekPanel.tsx) ─────────────────────────── */
+
+.af-pc-games-count {
+  display: grid;
+  gap: 6px;
+}
+
+.af-pc-games-count-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 500 12px/1.4 'Archivo', system-ui, sans-serif;
+  color: var(--muted);
+}
+
+.af-pc-games-count-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.af-pc-games-count-list button,
+.af-pc-games-count-actions button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.af-pc-games-count-list button:disabled,
+.af-pc-games-count-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.af-pc-games-count-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

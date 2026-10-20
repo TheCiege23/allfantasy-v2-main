@@ -32,6 +32,7 @@ import { assignLeagueSeat, releaseLeagueSeat } from '@/lib/league/leagueSeats'
 import { buildSlotOrderForLeague } from '@/lib/live-draft-engine/DraftSessionService'
 import { saveLeagueNflScoringConfig } from '@/lib/nfl-scoring/NflScoringConfigService'
 import { buildFullNflScoringConfig } from '@/lib/nfl-scoring/NflScoringPresets'
+import { saveLeagueNbaScoringConfig } from '@/lib/nba-scoring/NbaScoringConfigService'
 import { conferenceLeagueCreateBody, type ConferenceLeaguePlan } from './conferenceLeagueSettings'
 import { readSettings } from './divisionsStore'
 import { buildConferenceSeasonPlan, CONFERENCE_SEASON_PLAN_KEY, type ConferenceSeasonPlan } from './conferenceSeasonPlan'
@@ -128,19 +129,27 @@ async function refreshDraftOrder(leagueId: string) {
   await prisma.draftSession.updateMany({ where: { id: session.id, status: 'pre_draft' }, data: { slotOrder: order as unknown as Prisma.InputJsonValue, version: { increment: 1 } } })
 }
 
-async function applyScoringOverride(leagueId: string, plan: ConferenceLeaguePlan, commissionerId: string) {
-  if (!plan.scoringOverride) return
-  const rules = buildFullNflScoringConfig(plan.scoringOverride.presetKey)
-  if (plan.scoringOverride.tePremiumPoints != null) rules.te_premium = plan.scoringOverride.tePremiumPoints
-  await saveLeagueNflScoringConfig(leagueId, { presetKey: plan.scoringOverride.presetKey, rules, userId: commissionerId })
+export async function applyScoringOverride(leagueId: string, plan: ConferenceLeaguePlan, commissionerId: string) {
+  const o = plan.scoringOverride
+  if (!o) return
+  if (o.presetKey === 'custom') {
+    // Custom scoring: the exact values the commissioner set, stored under the store's own `custom` key.
+    if (o.sport === 'NBA') await saveLeagueNbaScoringConfig(leagueId, { presetKey: 'custom', rules: o.rules, source: 'CUSTOM', userId: commissionerId })
+    else await saveLeagueNflScoringConfig(leagueId, { presetKey: 'custom', rules: o.rules, source: 'CUSTOM', userId: commissionerId })
+    return
+  }
+  const rules = buildFullNflScoringConfig(o.presetKey)
+  if (o.tePremiumPoints != null) rules.te_premium = o.tePremiumPoints
+  await saveLeagueNflScoringConfig(leagueId, { presetKey: o.presetKey, rules, userId: commissionerId })
 }
 
 /**
  * Write the tournament calendar onto the league so its first season is created to match it.
  * Idempotent. It only shapes a season created AFTER it is written; a league whose season already
- * exists keeps the schedule it has (reported, never rewritten here).
+ * exists keeps the schedule it has here — the commissioner's "Apply tournament schedule"
+ * (./conferenceSchedule) re-applies it to a season that has not started.
  */
-async function applySeasonPlan(leagueId: string, plan: ConferenceSeasonPlan) {
+export async function applySeasonPlan(leagueId: string, plan: ConferenceSeasonPlan) {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   if (!league) throw new ProvisionStepError('The league could not be found.')
   const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : {}

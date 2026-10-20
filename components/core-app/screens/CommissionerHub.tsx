@@ -36,8 +36,10 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
+import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { DisputeDesk } from '@/components/disputes/DisputeDesk'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsBody } from '@/components/core-app/standings/WeekLineupsTable'
@@ -243,6 +245,9 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         </div>
       ) : null}
 
+      {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
+      {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
+
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
       {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
@@ -402,6 +407,14 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
             {league.native && (
               <Link href={`/league/${encodeURIComponent(league.id)}/commissioner/integrity`}>{t('Open integrity monitor →')}</Link>
             )}
+          </div>
+
+          {/* Filed disputes: managers file, the commissioner rules. Works for imported leagues too. */}
+          <div className="af-ch-dispute-desk" style={{ marginTop: 16 }}>
+            <DisputeDesk leagueId={league.id} />
+            <p className="af-ch-setting-why">
+              <Link href={`/league/${encodeURIComponent(league.id)}/disputes`}>{t('Share the dispute desk with your league →')}</Link>
+            </p>
           </div>
         </HubSection>
 

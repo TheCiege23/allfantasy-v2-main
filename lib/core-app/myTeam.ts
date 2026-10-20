@@ -1673,6 +1673,7 @@ async function loadMyTeamData(
           isDynasty: league.isDynasty ?? null,
           season: league.season ?? null,
           status: league.status ?? null,
+          sport,
         },
         teamExternalId: myTeamRow.externalId ?? null,
         rosterCandidates: candidates,

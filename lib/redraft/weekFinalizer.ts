@@ -5,11 +5,13 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { dailySlotFor, daysInWindow, daysOnRoster, droppedInWindow, isDailyLineupScoringEnabled, loadDailyLineups } from './dailyLineups'
 import { isSealedWeek } from './weekSealed'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
@@ -393,6 +395,8 @@ export async function finalizeRedraftWeek(
    */
   let dateWindow: { start: Date; end: Date } | null = null
   if (isDateWindowed) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    await ensureDailySportSeasonStart(sport, season.season, { db: prisma })
     // The stat sync's own resolver, so slate and stats cover the same days — gameweeks for soccer.
     const window = resolveDailySportWeekWindow(sport, season.season, params.week)
     if (!window) return emptyResult(base, 'season_start_unknown')
@@ -487,9 +491,34 @@ export async function finalizeRedraftWeek(
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
   const exileStarterKeys = new Set<string>()
-  for (const p of rosterPlayers) {
-    if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
-    starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+  /*
+   * 🛑 A DAILY-LINEUP LEAGUE'S STARTERS ARE EVERYONE WHO STARTED ON ANY DAY OF THE WEEK. The daily
+   * scorer (`scoreRosterDaily`) needs a sealed weekly row for each of them, so sealing only whoever
+   * holds a starter slot now left a player started on Tuesday and benched on Wednesday unsealed — and
+   * the matchup never went final. A player dropped this week counts for the days he was here.
+   */
+  const dailySettings =
+    !bestBall && dateWindow && rosterIds.length
+      ? await prisma.league.findUnique?.({ where: { id: season.leagueId }, select: { settings: true } })
+      : null
+  if (dateWindow && dailySettings && isDailyLineupScoringEnabled(dailySettings.settings, sport)) {
+    const days = daysInWindow(dateWindow)
+    const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: rosterIds, window: dateWindow })
+    const weekPlayers = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosterIds }, ...droppedInWindow(dateWindow) },
+      select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true, addedAt: true, droppedAt: true },
+    })
+    for (const p of weekPlayers) {
+      const started = daysOnRoster(p, days).some((day) =>
+        countsTowardScore(dailySlotFor(dailyLineups, p.rosterId, p.playerId, day) ?? weekSlotType(p, weekLineups), false),
+      )
+      if (started) starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+    }
+  } else {
+    for (const p of rosterPlayers) {
+      if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
+      starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+    }
   }
   // Closed Exile lineups are separate from the main league roster. They must
   // participate in the same slate and coverage proof before their score can

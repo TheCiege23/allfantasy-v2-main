@@ -10,6 +10,8 @@ import { buildDraftStartingEmail } from './draftEmails'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
 import { getBaseUrl } from '@/lib/get-base-url'
 import type { DraftNotificationEventType, DraftNotificationPayload } from './types'
+import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
+import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const DRAFT_ROOM_PATH = (leagueId: string) => `/league/${leagueId}/draft`
@@ -28,7 +30,7 @@ export async function getAppUserIdForRoster(rosterId: string): Promise<string | 
     select: { platformUserId: true },
   })
   if (!roster?.platformUserId || String(roster.platformUserId).startsWith('orphan-')) return null
-  return roster.platformUserId
+  return (await resolveAppUserIds([roster.platformUserId]))[0] ?? null
 }
 
 /**
@@ -63,6 +65,8 @@ function getTitleAndBody(
 ): { title: string; body: string | null; severity: 'low' | 'medium' | 'high' } {
   const league = payload.leagueName ? ` — ${payload.leagueName}` : ''
   switch (eventType) {
+    case 'draft_three_picks_away':
+      return { title: `You're on the clock in 3 picks${league}`, body: `Get your queue ready${payload.pickLabel ? ` for pick ${payload.pickLabel}` : ''}.`, severity: 'high' }
     case 'draft_on_the_clock':
       return {
         title: `You're on the clock${league}`,
@@ -225,6 +229,7 @@ export async function createDraftNotification(
     meta: { ...payload, leagueId: payload.leagueId },
     severity,
     emailOverride,
+    dedupePrefix: payload.eventKey ? `${eventType}:${payload.leagueId}:${payload.eventKey}` : undefined,
   })
   return true
 }
@@ -284,18 +289,34 @@ export async function notifyOnTheClockAfterPick(leagueId: string): Promise<void>
       slotOrder,
     })
     if (!current) return
-    const appUserId = await getAppUserIdForRoster(current.rosterId)
-    if (!appUserId) return
+    const tradedPicks = Array.isArray(session.tradedPicks) ? session.tradedPicks as unknown as TradedPickRecord[] : []
+    const currentOwner = resolvePickOwner(current.round, current.slot, slotOrder, tradedPicks)
+    const appUserId = await getAppUserIdForRoster(currentOwner?.rosterId ?? current.rosterId)
     const leagueName = await getLeagueName(leagueId)
-    await createDraftNotification(appUserId, 'draft_on_the_clock', {
+    if (appUserId) await createDraftNotification(appUserId, 'draft_on_the_clock', {
       leagueId,
       leagueName,
       pickLabel: current.pickLabel,
       round: current.round,
       slot: current.slot,
       rosterId: current.rosterId,
-      displayName: current.displayName,
+      displayName: currentOwner?.displayName ?? current.displayName,
+      eventKey: `${session.id}:${current.overall}`,
     })
+    if (session.draftType !== 'auction' && current.overall + 3 <= totalPicks) {
+      const upcoming = resolveCurrentOnTheClock({ totalPicks, picksCount: current.overall + 2,
+        teamCount: session.teamCount, draftType: session.draftType as 'snake' | 'linear',
+        thirdRoundReversal: session.thirdRoundReversal, slotOrder })
+      if (upcoming) {
+        const upcomingOwner = resolvePickOwner(upcoming.round, upcoming.slot, slotOrder, tradedPicks)
+        const upcomingUser = await getAppUserIdForRoster(upcomingOwner?.rosterId ?? upcoming.rosterId)
+        if (upcomingUser) await createDraftNotification(upcomingUser, 'draft_three_picks_away', {
+          leagueId, leagueName, pickLabel: upcoming.pickLabel,
+          rosterId: upcomingOwner?.rosterId ?? upcoming.rosterId, eventKey: `${session.id}:${upcoming.overall}`,
+        })
+      }
+    }
+
   } catch {
     // Fire-and-forget
   }

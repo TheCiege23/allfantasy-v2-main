@@ -15,6 +15,7 @@ import { SPORT_TYPES } from './types'
 import { getRosterOverlayForVariant } from './LeagueVariantRegistry'
 import { getTeamMetadataForSport } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
+import { DAILY_SPORT_SEASON_SHAPE } from '@/lib/sportConfig/dailySportSeasonShape'
 
 export const SPORT_DEFAULTS_CORE_REGISTRY_VERSION = '2026-03-20.1'
 
@@ -37,7 +38,7 @@ const LEAGUE_DEFAULTS: Record<SportType, LeagueDefaults> = {
     default_league_name_pattern: 'My NBA League',
     default_team_count: 12,
     default_playoff_team_count: 6,
-    default_regular_season_length: 24,
+    default_regular_season_length: DAILY_SPORT_SEASON_SHAPE.NBA.totalWeeks,
     default_matchup_unit: 'week',
     default_trade_deadline_logic: 'week_based',
   },
@@ -46,7 +47,7 @@ const LEAGUE_DEFAULTS: Record<SportType, LeagueDefaults> = {
     default_league_name_pattern: 'My MLB League',
     default_team_count: 12,
     default_playoff_team_count: 6,
-    default_regular_season_length: 26,
+    default_regular_season_length: DAILY_SPORT_SEASON_SHAPE.MLB.totalWeeks,
     default_matchup_unit: 'week',
     default_trade_deadline_logic: 'week_based',
   },
@@ -55,7 +56,7 @@ const LEAGUE_DEFAULTS: Record<SportType, LeagueDefaults> = {
     default_league_name_pattern: 'My NHL League',
     default_team_count: 12,
     default_playoff_team_count: 6,
-    default_regular_season_length: 25,
+    default_regular_season_length: DAILY_SPORT_SEASON_SHAPE.NHL.totalWeeks,
     default_matchup_unit: 'week',
     default_trade_deadline_logic: 'week_based',
   },
