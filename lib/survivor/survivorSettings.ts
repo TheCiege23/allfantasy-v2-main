@@ -4,7 +4,13 @@ export type SurvivorCommissionerParticipationMode = 'non_participating_host' | '
 export type SurvivorCoCommissionerMode = 'disabled' | 'non_participating_host' | 'same_privacy_as_commissioner'
 export type SurvivorMergeTriggerType = 'week' | 'active_player_count'
 export type SurvivorVoteChangePolicy = 'first_valid_locks' | 'allow_until_close'
-export type SurvivorTieRule = 'revote_then_season_points' | 'season_points_only'
+/**
+ * How a tied council resolves (owner's call, 2026-10-20): revote, then rocks — a seeded draw among
+ * the still-tied managers — or rocks straight away. The two season-points rules remain readable for
+ * leagues created before this.
+ */
+export type SurvivorTieRule = 'revote_then_rocks' | 'rocks_immediately' | 'revote_then_season_points' | 'season_points_only'
+export const SURVIVOR_TIE_RULES = ['revote_then_rocks', 'rocks_immediately', 'revote_then_season_points', 'season_points_only'] as const
 export type SurvivorEliminationOutcome = 'removed_to_waivers' | 'exile_island'
 export type SurvivorScreenshotsPolicy = 'host_dm_private' | 'allowed_except_host_ai_dms'
 export type SurvivorConductPolicy = 'game_deception_allowed_platform_abuse_banned'
@@ -32,6 +38,8 @@ export interface SurvivorFoundationSettings {
   selfVotesAllowed: boolean
   voteChangePolicy: SurvivorVoteChangePolicy
   tieRule: SurvivorTieRule
+  /** A missing ballot is cast for the voter's lowest-scoring eligible target that week. */
+  nonVoterAutoCast: boolean
   autoReveal: boolean
   eliminationOutcome: SurvivorEliminationOutcome
   sitOutsEnabled: boolean
@@ -97,8 +105,9 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   voteCloseOffset: 24,
   lateVotesAllowed: false,
   selfVotesAllowed: false,
-  voteChangePolicy: 'first_valid_locks',
-  tieRule: 'revote_then_season_points',
+  voteChangePolicy: 'allow_until_close',
+  tieRule: 'revote_then_rocks',
+  nonVoterAutoCast: true,
   autoReveal: true,
   eliminationOutcome: 'removed_to_waivers',
   sitOutsEnabled: true,
@@ -188,6 +197,10 @@ function normalizeMergeTrigger(value: string): SurvivorMergeTriggerType {
   return 'week'
 }
 
+function normalizeTieRule(value: string): SurvivorTieRule {
+  return (SURVIVOR_TIE_RULES as readonly string[]).includes(value) ? value as SurvivorTieRule : 'revote_then_rocks'
+}
+
 function normalizeVoteChangePolicy(value: string): SurvivorVoteChangePolicy {
   const raw = value.trim().toLowerCase()
   if (raw === 'allow_until_close' || raw === 'unlocked_until_close') return 'allow_until_close'
@@ -267,7 +280,8 @@ export function normalizeSurvivorFoundationSettings(
     lateVotesAllowed: readBoolean(s, ['lateVotesAllowed'], base.lateVotesAllowed),
     selfVotesAllowed: readBoolean(s, ['selfVotesAllowed', 'survivorSelfVoteAllowed'], base.selfVotesAllowed),
     voteChangePolicy: normalizeVoteChangePolicy(readString(s, ['voteChangePolicy'], base.voteChangePolicy)),
-    tieRule: readString(s, ['tieRule'], base.tieRule) === 'season_points_only' ? 'season_points_only' : 'revote_then_season_points',
+    tieRule: normalizeTieRule(readString(s, ['tieRule'], base.tieRule)),
+    nonVoterAutoCast: readBoolean(s, ['nonVoterAutoCast'], base.nonVoterAutoCast),
     autoReveal: readBoolean(s, ['autoReveal'], base.autoReveal),
     eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),
