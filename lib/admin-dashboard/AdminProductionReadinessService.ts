@@ -297,6 +297,16 @@ async function getTrafficLocations(): Promise<TrafficLocationRow[]> {
   }
 }
 
+/**
+ * Rows for crons that are scheduled only while their event runs. When the schedule declares
+ * NONE of their paths the job has been retired, not lost, and the row is omitted rather than
+ * reported "missing" — ApiHealthService turns "missing" into a CRITICAL. The World Cup sync was
+ * retired from cron-schedule.json after the 2026 final (4491fe57a reused its slot); keeping the
+ * row produced exactly the permanent false critical the matcher comment above warns about. A
+ * PARTIAL declaration still reports, so a half-restored schedule is never hidden.
+ */
+const SEASONAL_CRON_ROWS = new Set(["world-cup-official"])
+
 export async function getAdminProductionReadiness(): Promise<AdminProductionReadiness> {
   const crons = readVercelCrons()
   const trafficLocations = await getTrafficLocations()
@@ -435,7 +445,7 @@ export async function getAdminProductionReadiness(): Promise<AdminProductionRead
         crons,
         note: "Required for draft, start/sit, waiver, trade value, and player identity accuracy.",
       }),
-    ],
+    ].filter((row) => !(SEASONAL_CRON_ROWS.has(row.id) && row.configuredPaths.length === 0)),
     trafficLocations,
     trafficNotes: [
       "AnalyticsEvent currently stores path/referrer/session/user-agent and optional userId/meta.",
