@@ -3915,3 +3915,5 @@ html[data-mode='light'] .af-cm-typing-dots { background: var(--surface); box-sha
   .af-core .af-cm-composer { flex: none; padding: 10px 12px; }
   .af-core .af-cm-tab { font-size: 12px; min-height: 48px; }
 }
+
+.af-core .af-cm-loading { position: fixed; z-index: 90; right: 20px; bottom: calc(82px + env(safe-area-inset-bottom, 0px)); padding: 14px 18px; border: 1px solid var(--line2); border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); font-size: 14px; }

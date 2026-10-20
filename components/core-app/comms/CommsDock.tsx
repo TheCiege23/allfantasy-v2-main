@@ -8,7 +8,10 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import dynamic from 'next/dynamic'
 import type { CommsLeague, CommsTab } from './CommsDrawer'
 import '@/components/core-app/af-comms.css'
-const CommsDrawer = dynamic(() => import('./CommsDrawer'), { ssr: false })
+const CommsDrawer = dynamic(() => import('./CommsDrawer'), {
+  ssr: false,
+  loading: () => <div className="af-cm-loading" role="status">Opening chat…</div>,
+})
 const SupportModal = dynamic(() => import('@/components/core-app/support/SupportModal'), { ssr: false })
 import { useDraggableLauncher } from './useDraggableLauncher'
 import { useChatBadge } from './useChatBadge'
