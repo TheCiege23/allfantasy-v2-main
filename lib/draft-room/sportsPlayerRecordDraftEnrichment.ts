@@ -96,17 +96,31 @@ function extractFppgFromJson(blob: unknown, allowGenericPointsPerGame = true): n
   return null
 }
 
-function extractRookieHint(
+/*
+ * 🛑 A ZERO-GAMES ROW IS NOT A ROOKIE IN MLB, NBA OR NHL (docs/DYNASTY_PROSPECT_DATA_PLAN.md §2.5).
+ * `stats` is the player's LATEST stored season row, so `gamesPlayed === 0` caught an injured veteran
+ * and never a real first-year player, who has no row at all. It also read `gamesPlayed`/`games`/`g`
+ * and never `games_played`, the key Rolling Insights season rows carry. Worse when it did fire: one
+ * flagged row put the pool into "applied" mode (`rookieFilterState.ts`), which
+ * narrowed a rookies-only board to the flagged veterans and refused every real rookie at pick time.
+ * Those three sports now get a verdict from every stored prior season
+ * (`seasonStatsRookieStatus.ts`) instead. Other non-NFL sports keep the old hint unchanged: making
+ * it read `games_played` there would only flag more injured players.
+ */
+const NO_ZERO_GAMES_HINT_SPORTS: ReadonlySet<string> = new Set(['MLB', 'NBA', 'NHL'])
+
+export function extractRookieHint(
   stats: unknown,
   projections: unknown,
   sport: LeagueSport,
 ): boolean | null {
-  const isNfl = String(sport).toUpperCase() === 'NFL'
+  const sportKey = String(sport).toUpperCase()
+  const isNfl = sportKey === 'NFL'
   if (stats && typeof stats === 'object') {
     const s = stats as Record<string, unknown>
     if (s.rookie === true) return true
     if (s.isRookie === true) return true
-    if (!isNfl) {
+    if (!isNfl && !NO_ZERO_GAMES_HINT_SPORTS.has(sportKey)) {
       const gp = Number(s.gamesPlayed ?? s.games ?? s.g)
       if (Number.isFinite(gp) && gp === 0) return true
     }

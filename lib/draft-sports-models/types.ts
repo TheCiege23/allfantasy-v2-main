@@ -158,6 +158,12 @@ export interface NormalizedDraftEntry {
   yearsExp?: number | null
   /** D.7 — convenience flag derived during normalization (yearsExp === 0 || explicit upstream rookie marker). */
   isRookie?: boolean
+  /**
+   * MLB/NBA/NHL: the pool's rookie verdict from our stored season stats
+   * (`lib/draft-room/seasonStatsRookieStatus.ts`). When ANY entry carries one, an entry without a
+   * rookie flag is `unknown` rather than a veteran (`lib/draft-room/rookieFilterState.ts`).
+   */
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown'
   /** Identifies how fantasyPointsPerGame was produced. */
   projectionSource?: ProjectionSourceTag | null
   /** Block B.2-C — rookie inference inputs surfaced from the resolver so the
