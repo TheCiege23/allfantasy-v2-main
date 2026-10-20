@@ -27,6 +27,7 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'divisions',
   'ai',
   'commissioner-tools',
+  'score-adjustments',
   'survivor-tribes',
 ]
 

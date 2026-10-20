@@ -11,6 +11,7 @@ import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
 import { keeperProvenanceFromCommissionerSave } from '@/lib/league-contract/keeperProvenance'
+import { CO_COMMISSIONER_SCOPES_KEY, scopesForSettingsPatch } from '@/lib/league/coCommissionerScopes'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
@@ -37,6 +38,7 @@ import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
   DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
@@ -210,7 +212,8 @@ export async function executeLeagueSettingsPatch(
   const actorUserId = patchOptions?.actingUserId?.trim() || userId
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    // A co-commissioner may only change the areas the head commissioner granted (coCommissionerScopes).
+    await requireCommissionerRole(leagueId, userId, scopesForSettingsPatch(body, patchOptions?.section))
   } catch (err) {
     if (err instanceof Response) return err
     console.error('[executeLeagueSettingsPatch]', err)
@@ -427,10 +430,36 @@ export async function executeLeagueSettingsPatch(
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
+  // 🛑 Co-commissioner permissions have ONE writer, the head-commissioner-only co-commissioners
+  // route. Through `settingsMerge` they would be classified as league setup, so a co-commissioner
+  // holding only that permission could grant themselves every other one.
+  if (
+    body.settingsMerge && typeof body.settingsMerge === 'object' &&
+    Object.prototype.hasOwnProperty.call(body.settingsMerge, CO_COMMISSIONER_SCOPES_KEY)
+  ) {
+    return jsonError('Co-commissioner permissions are changed in Co-commissioner settings, not here.', 400)
+  }
+
+  /*
+   * The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts) — a Commissioner-plan
+   * setting with its own key. `settingsMerge` would write it around the plan check, so it is refused
+   * there. Clearing it back to the default is free, so a lapsed plan is never stuck with a custom order.
+   */
+  const merge = body.settingsMerge
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TIEBREAKER_ORDER_KEY in merge) {
+    return jsonError('Set the tiebreaker order with tiebreakerOrder, not settingsMerge.', 400)
+  }
+  let tiebreakerOrderToStore: { value: TiebreakerKey[] | null } | null = null
+  if (body.tiebreakerOrder !== undefined) {
+    const parsed = parseTiebreakerOrder(body.tiebreakerOrder)
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value && !hasSub) return jsonError('A custom tiebreaker order is part of the AF Commissioner plan.', 403)
+    tiebreakerOrderToStore = { value: parsed.value }
+  }
 
   // The trade close time is read by every trade gate (lib/trade-deadline/tradeDeadlineTime.ts), where an
   // unreadable value would mean "no close time" — so it is refused here, and stored as one ISO instant.
-  const merge = body.settingsMerge
+  // (`merge` is the settingsMerge read for the tiebreaker check above.)
   if (merge && typeof merge === 'object' && !Array.isArray(merge) && TRADE_DEADLINE_AT_KEY in merge) {
     const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
     if (!parsed.ok) return jsonError(parsed.error, 400)
@@ -600,6 +629,15 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('settingsMerge')
+  }
+
+  if (tiebreakerOrderToStore) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [TIEBREAKER_ORDER_KEY]: tiebreakerOrderToStore.value } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(TIEBREAKER_ORDER_KEY)
   }
 
   /*
