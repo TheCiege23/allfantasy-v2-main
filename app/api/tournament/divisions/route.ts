@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { DivisionsBlueprintError } from '@/lib/tournament/divisions/blueprint'
 import { DivisionsOperationError, saveDivisionsBlueprint, updateDivisionsBlueprint } from '@/lib/tournament/divisions/divisionsStore'
 import {
-  addCoCommissioner, advanceRound, callTies, closeAndPlace, commitSeeding, confirmCorrectionsClosed, followTournament, joinTournament,
+  addCoCommissioner, advanceRound, applyTournamentSchedule, callTies, closeAndPlace, commitSeeding, confirmCorrectionsClosed, followTournament, joinTournament,
   leaveTournament, markRevealSeen, notifyBubble, openRegistration, provisionLeagues, removeCoCommissioner, setDraftTime,
 } from '@/lib/tournament/divisions/lifecycle'
 
@@ -23,6 +23,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('follow'), tournamentId: id }),
   z.object({ action: z.literal('close_and_place'), tournamentId: id }),
   z.object({ action: z.literal('provision_leagues'), tournamentId: id }),
+  z.object({ action: z.literal('apply_schedule'), tournamentId: id }),
   z.object({ action: z.literal('reveal_seen'), tournamentId: id }),
   z.object({ action: z.literal('set_draft_time'), tournamentId: id, tournamentLeagueId: id, at: z.string().datetime({ offset: true }) }),
   // staff
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       case 'follow': return NextResponse.json(await followTournament(userId, input.tournamentId))
       case 'close_and_place': return NextResponse.json(await closeAndPlace(userId, input.tournamentId))
       case 'provision_leagues': return NextResponse.json(await provisionLeagues(userId, input.tournamentId))
+      case 'apply_schedule': return NextResponse.json(await applyTournamentSchedule(userId, input.tournamentId))
       case 'reveal_seen': return NextResponse.json(await markRevealSeen(userId, input.tournamentId))
       case 'set_draft_time': return NextResponse.json(await setDraftTime(userId, input.tournamentId, input.tournamentLeagueId, input.at))
       case 'add_co_commissioner': return NextResponse.json(await addCoCommissioner(userId, input.tournamentId, input.username))

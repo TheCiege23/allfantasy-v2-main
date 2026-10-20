@@ -40,6 +40,15 @@ export function computeStarterStrengthIndex(assets: Asset[], starterSlots: numbe
 // CORNERSTONE CLASSIFICATION
 // ============================================
 
+/**
+ * Upper-cased sport when it is NBA, MLB or NHL — sports whose cornerstone rule is a single,
+ * position-agnostic value bar — else null (NFL and unknown sports keep the positional rules).
+ */
+export function nonNflCornerstoneSport(sport: string | null | undefined): 'NBA' | 'MLB' | 'NHL' | null {
+  const s = String(sport ?? '').trim().toUpperCase()
+  return s === 'NBA' || s === 'MLB' || s === 'NHL' ? s : null
+}
+
 export function classifyCornerstone(
   asset: Asset,
   settings: LeagueSettings,
@@ -63,6 +72,21 @@ export function classifyCornerstone(
   }
 
   const pos = (asset.pos || '').toUpperCase()
+
+  /*
+   * NBA/MLB/NHL: the QB/TE/WR/RB/IDP rules below are NFL scarcity rules, so no basketball,
+   * baseball or hockey player could ever be a cornerstone — and MLB "SS"/"C" collide with the IDP
+   * and NFL tokens. Those sports have no SF-QB/TEP-style positional premium, so one value bar,
+   * the same one an elite NFL skill player clears, applies to every position. See
+   * `nonNflCornerstoneSport`.
+   */
+  const nonNfl = nonNflCornerstoneSport(settings.sport)
+  if (nonNfl) {
+    if (asset.value >= thresholds.SKILL_CORNERSTONE) {
+      return { ...asset, isCornerstone: true, cornerstoneReason: `Elite ${nonNfl} cornerstone.` }
+    }
+    return { ...asset, isCornerstone: false, cornerstoneReason: '' }
+  }
 
   if (pos === 'QB') {
     const threshold = settings.isSF ? thresholds.QB_CORNERSTONE_SF : thresholds.QB_CORNERSTONE_1QB

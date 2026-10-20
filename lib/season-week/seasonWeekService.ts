@@ -18,7 +18,8 @@ import {
   toScheduleSportKey,
 } from './sportWeekSignal'
 import { dailySportWeekForInstant, resolveDailySportSeasonStart } from './dailySportSeasonStarts'
-import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { ensureDailySportSeasonStart } from './deriveDailySportSeasonStart'
+import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound, readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import type {
   LeagueSeasonWeekResolution,
   ScheduleRow,
@@ -81,9 +82,20 @@ export async function resolveSportWeek(
    * are never summed into `PlayerWeeklyScore`, matchups never recalculate and
    * standings never update — the league sits at week 1 with nothing red.
    */
+  // A season past the curated table (a dynasty league's year 2) gets its opener from the labelled
+  // schedule; priming here is what lets the week roller activate it at all. Curated years skip the read.
+  const opener = sportHasWeekSignal(scheduleSport)
+    ? null
+    : await ensureDailySportSeasonStart(scheduleSport, seasonYear, { db: db as never, now })
   const dailyAnchor = sportHasWeekSignal(scheduleSport)
     ? null
     : resolveDailySportSeasonStart(scheduleSport, seasonYear)
+
+  // A season past the curated table whose opener is only ESTIMATED is not "this sport has no
+  // calendar": it is a missing date a human can supply. Say so, rather than the generic decline.
+  if (!dailyAnchor && opener?.source === 'estimate') {
+    return { ok: false, reason: 'SEASON_OPENER_UNRECORDED' }
+  }
 
   if (!sportHasWeekSignal(scheduleSport) && !dailyAnchor) {
     // Neither a feed week nor a recorded anchor: still genuinely unknown.
@@ -191,7 +203,7 @@ export async function resolveSeasonWeekForRedraftSeason(
  * regular season ends, and why `mapSportWeekToLeagueWeek` will not emit
  * `season_complete` without it.
  */
-async function resolveLastPlayoffWeek(
+export async function resolveLastPlayoffWeek(
   db: PrismaClient,
   seasonId: string,
   playoffStartWeek: number,
@@ -205,11 +217,14 @@ async function resolveLastPlayoffWeek(
   if (round == null) return null
   const league = await db.league.findUnique({
     where: { id: leagueId },
-    select: { playoffWeeksPerRound: true },
+    select: { playoffWeeksPerRound: true, settings: true },
   })
+  // The round read above is the final, which runs `championship_length` weeks when that is longer.
   return lastWeekOfPlayoffRound({
     playoffStartWeek,
     roundNumber: round.roundNumber,
     weeksPerRound: league?.playoffWeeksPerRound,
+    finalRoundNumber: round.roundNumber,
+    championshipLength: readChampionshipLength(league?.settings),
   })
 }

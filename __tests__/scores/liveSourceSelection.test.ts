@@ -151,3 +151,37 @@ describe('pickFreshestSourceRows — per-week, coverage-gated', () => {
     expect(LIVE_SCORE_SOURCES).not.toContain('cfbd')
   })
 })
+
+describe('a week slate is never handed to a partial feed because the complete one went stale', () => {
+  // Production, 2026-10-19, NBA week 1: thesportsdb 53 games, rolling_insights 20.
+  const STALE = new Date(NOW - 7 * 60 * 60 * 1000) // past the 6h dead-feed window
+  const slate = () => [
+    ...feed('thesportsdb', 53, null, { fetchedAt: STALE }),
+    ...feed('rolling_insights', 20, null),
+  ]
+
+  it('by default the fresh partial feed wins (the scoreboard behaviour, unchanged)', () => {
+    expect(countBySource(pickFreshestSourceRows(slate(), NOW))).toEqual({ rolling_insights: 20 })
+  })
+
+  it('with coverageBarIncludesStale the complete stale feed answers instead', () => {
+    const out = pickFreshestSourceRows(slate(), NOW, 'week', { coverageBarIncludesStale: true })
+    expect(countBySource(out)).toEqual({ thesportsdb: 53 })
+  })
+
+  it('a fresh feed that does cover the week still wins on freshness', () => {
+    const rows = [
+      ...feed('thesportsdb', 53, null, { fetchedAt: STALE }),
+      ...feed('rolling_insights', 50, null),
+    ]
+    const out = pickFreshestSourceRows(rows, NOW, 'week', { coverageBarIncludesStale: true })
+    expect(countBySource(out)).toEqual({ rolling_insights: 50 })
+  })
+
+  it('changes nothing when every feed is fresh', () => {
+    const rows = [...feed('thesportsdb', 53, null), ...feed('rolling_insights', 20, null)]
+    expect(countBySource(pickFreshestSourceRows(rows, NOW, 'week', { coverageBarIncludesStale: true }))).toEqual(
+      countBySource(pickFreshestSourceRows(rows, NOW)),
+    )
+  })
+})

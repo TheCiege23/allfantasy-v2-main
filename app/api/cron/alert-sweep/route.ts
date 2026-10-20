@@ -59,6 +59,13 @@
  * for it. It does nothing — not one read — unless the service carries CHOP_RELEASE_ALERTS_ENABLED=1.
  * It reports under `chopRelease` and records `cron-chimmy-chop-release` only on a run that found a chop.
  *
+ * AND SCHEDULED LEAGUE ANNOUNCEMENTS (2026-10-19, lib/commissioner/scheduledAnnouncementService.ts): a
+ * commissioner's announcement written now and posted at the time they chose. It goes FIRST — it is a
+ * handful of reads and is the one job here a person is watching the clock for — and so lands within one
+ * sweep (15 minutes) of its time. No flag: a commissioner pressed Schedule, and "schedule" that never
+ * posts is "save and forget". It reports under `scheduledAnnouncements` and records
+ * `cron-scheduled-announcements` only on a run that posted or failed something.
+ *
  * Query params:
  *   dryRun=1     evaluate and report without sending (both jobs)
  *   limit=N      cap users processed this run (default 200)
@@ -76,6 +83,7 @@
  *                           only; the daily claim still holds)
  *   sportWaiverCheck=off    skip the other-sport waiver check this run
  *   chopRelease=off     skip the chop-release alert this run (it is also off unless the flag is set)
+ *   scheduledAnnouncements=off  skip posting scheduled league announcements this run
  *
  * FAILS LOUDLY on a systemic error (no push configured, sweep threw). It does NOT fail when
  * zero alerts are found — on a Tuesday in the off-season that is the correct outcome, and a
@@ -105,6 +113,7 @@ import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiv
 import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-alerts/runSportWaiverCheck'
 import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
 import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
+import type { ScheduledAnnouncementRun } from '@/lib/commissioner/scheduledAnnouncementService'
 import { runFollowFreeAgentCheck, type FollowFreeAgentRun } from '@/lib/follows/followFreeAgentCheck'
 import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
@@ -145,6 +154,9 @@ const FOLLOW_FREE_AGENT_JOB = 'cron-follow-free-agent'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
 const SPORT_WAIVER_CHECK_JOB = 'cron-chimmy-sport-waiver-check'
 const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
+const SCHEDULED_ANNOUNCEMENTS_JOB = 'cron-scheduled-announcements'
+/** Posting is a few reads per league; this only stops a pathological backlog from eating the sweep. */
+const SCHEDULED_ANNOUNCEMENTS_BUDGET_MS = 60_000
 
 /**
  * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
@@ -169,6 +181,7 @@ type FollowFreeAgentReport = FollowFreeAgentRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
 type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
 type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
+type ScheduledAnnouncementsReport = ScheduledAnnouncementRun | PhaseRefusal
 
 type PhaseArgs = {
   mode: string
@@ -346,6 +359,36 @@ async function chopReleasePhase(args: PhaseArgs): Promise<ChopReleaseReport> {
   )
 }
 
+/** Scheduled league announcements whose time has come. The heartbeat is written only when one moved. */
+async function scheduledAnnouncementsPhase(args: PhaseArgs): Promise<ScheduledAnnouncementsReport> {
+  if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const { runScheduledAnnouncements } = await import('@/lib/commissioner/scheduledAnnouncementService')
+    const r = await runScheduledAnnouncements({ dryRun: args.dryRun, budgetMs: SCHEDULED_ANNOUNCEMENTS_BUDGET_MS })
+    const moved = r.sent + r.failed + r.refused + r.staleFailed
+    if (!args.dryRun && (moved > 0 || r.errors.length > 0)) {
+      await recordSyncJobRun(
+        { jobName: SCHEDULED_ANNOUNCEMENTS_JOB, sport: null, trigger: 'cron' },
+        {
+          rowsRead: r.leagues,
+          rowsWritten: r.sent,
+          rowsSkipped: r.refused,
+          errors: r.errors.map((e) => `${e.leagueId}: ${e.error}`),
+          status: r.errors.length > 0 || r.failed > 0 || r.staleFailed > 0 ? 'partial' : 'success',
+          metadata: { failed: r.failed, staleFailed: r.staleFailed, budgetStopped: r.budgetStopped },
+        },
+        Date.now() - started,
+      )
+    }
+    return r
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/alert-sweep] scheduled announcements failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
 /**
  * Game-window Sleeper status fold.
  *
@@ -510,6 +553,16 @@ async function handle(req: NextRequest) {
     apnsConfig() !== null
 
   const runSweep = async () => {
+    // Scheduled announcements first: cheap, and the one job a person is waiting on (see the header).
+    const scheduledAnnouncements = singleUser
+      ? ({ ran: false, reason: 'disabled' } as const)
+      : await scheduledAnnouncementsPhase({
+          mode: (url.searchParams.get('scheduledAnnouncements') ?? '').trim().toLowerCase(),
+          dryRun,
+          singleUser,
+          sweepStartedAt: startedAt,
+        })
+
     // Game-window fold FIRST, so this very sweep evaluates against the fresh
     // statuses. Error-swallowed and time-boxed: Sleeper being slow or down must
     // never stop the sweep itself (the race leaves a late fold to finish in the
@@ -932,6 +985,8 @@ async function handle(req: NextRequest) {
       sportWaiverCheck,
       /** The guillotine chop-release alert — `{ ran: false, reason: 'disabled' }` until the flag is set. */
       chopRelease,
+      /** Scheduled league announcements posted this run — mostly `{ leagues: 0, sent: 0 }`. */
+      scheduledAnnouncements,
       /** Followed players newly free in one of your leagues — `seeded` counts follows seen for the first time. */
       followFreeAgent,
       durationMs: Date.now() - startedAt,

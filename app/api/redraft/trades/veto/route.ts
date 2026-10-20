@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 
 /** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
 function isCommissionerOrCo(leagueId: string, userId: string): Promise<boolean> {
-  return hasLeagueCommissionerRights(leagueId, userId)
+  return hasLeagueCommissionerRights(leagueId, userId, 'trades')
 }
 
 /**

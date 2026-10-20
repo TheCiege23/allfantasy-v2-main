@@ -32,9 +32,10 @@ describe('Default League Settings by Sport', () => {
 
   it('keeps expected sport-specific schedule defaults', () => {
     expect(getDefaultLeagueSettings('NFL').regular_season_length).toBe(18)
-    expect(getDefaultLeagueSettings('NBA').regular_season_length).toBe(24)
-    expect(getDefaultLeagueSettings('MLB').regular_season_length).toBe(26)
-    expect(getDefaultLeagueSettings('NHL').regular_season_length).toBe(25)
+    // Full real calendars, from lib/sportConfig/dailySportSeasonShape.ts.
+    expect(getDefaultLeagueSettings('NBA').regular_season_length).toBe(25)
+    expect(getDefaultLeagueSettings('MLB').regular_season_length).toBe(27)
+    expect(getDefaultLeagueSettings('NHL').regular_season_length).toBe(28)
     expect(getDefaultLeagueSettings('NCAAF').regular_season_length).toBe(15)
     expect(getDefaultLeagueSettings('NCAAB').regular_season_length).toBe(18)
 

@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import type { SportType } from './types'
 import { toSportType } from './sport-type-utils'
+import { DAILY_SPORT_SEASON_SHAPE, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 export interface ScheduleTemplateDto {
   templateId: string
@@ -48,8 +49,8 @@ const IN_MEMORY_TEMPLATES: Record<SportType, Omit<ScheduleTemplateDto, 'template
     name: 'MLB_POINTS_DEFAULT',
     formatType: 'DEFAULT',
     matchupType: 'weekly_h2h',
-    regularSeasonWeeks: 26,
-    playoffWeeks: 3,
+    regularSeasonWeeks: regularSeasonWeeksFor('MLB'),
+    playoffWeeks: DAILY_SPORT_SEASON_SHAPE.MLB.playoffWeeks,
     byeWeekWindow: null,
     fantasyPlayoffDefault: null,
     lineupLockMode: 'weekly',
@@ -65,8 +66,8 @@ const IN_MEMORY_TEMPLATES: Record<SportType, Omit<ScheduleTemplateDto, 'template
     name: 'NHL_WEEKLY_H2H',
     formatType: 'DEFAULT',
     matchupType: 'weekly_h2h',
-    regularSeasonWeeks: 25,
-    playoffWeeks: 4,
+    regularSeasonWeeks: regularSeasonWeeksFor('NHL'),
+    playoffWeeks: DAILY_SPORT_SEASON_SHAPE.NHL.playoffWeeks,
     byeWeekWindow: null,
     fantasyPlayoffDefault: null,
     lineupLockMode: 'weekly',
@@ -82,8 +83,8 @@ const IN_MEMORY_TEMPLATES: Record<SportType, Omit<ScheduleTemplateDto, 'template
     name: 'NBA_POINTS_DEFAULT',
     formatType: 'DEFAULT',
     matchupType: 'head_to_head_points',
-    regularSeasonWeeks: 24,
-    playoffWeeks: 4,
+    regularSeasonWeeks: regularSeasonWeeksFor('NBA'),
+    playoffWeeks: DAILY_SPORT_SEASON_SHAPE.NBA.playoffWeeks,
     byeWeekWindow: null,
     fantasyPlayoffDefault: null,
     lineupLockMode: 'weekly',

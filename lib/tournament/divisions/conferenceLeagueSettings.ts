@@ -13,9 +13,14 @@
  * Half PPR. When the tournament pairs one of those rosters with a different scoring label, the
  * league is created with the roster-defining preset and `scoringOverride` names the label's own
  * preset, which the caller writes through the league's scoring settings service afterwards.
- * Pure — no I/O.
+ *
+ * Custom scoring is created from its starting preset (Half PPR / Points) on the chosen roster, and
+ * `scoringOverride` then carries the full custom rule map (`customLiveRules`) under the scoring
+ * store's own `custom` preset key — NFL through `saveLeagueNflScoringConfig`, NBA through
+ * `saveLeagueNbaScoringConfig`. Pure — no I/O.
  */
-import { getRosterLabel, getScoringLabel, type LabelSport } from '@/lib/league-labels/catalog'
+import { customScoringStartingPoint, getRosterLabel, getScoringLabel, type LabelSport } from '@/lib/league-labels/catalog'
+import { customLiveRules } from '@/lib/league-labels/customScoring'
 import type { DivisionsRules } from './rules'
 
 type NflPresetKey = 'af_default' | 'af_ppr' | 'af_standard'
@@ -26,8 +31,16 @@ export type ConferenceLeaguePlan = {
   /** Extra points per tight-end catch (TE Premium), written by the create flow itself. */
   tePremiumPoints: number | null
   /** Set when the create preset cannot express the scoring label on its own. */
-  scoringOverride: { presetKey: NflPresetKey; tePremiumPoints: number | null } | null
+  scoringOverride: ScoringOverride | null
 }
+
+/**
+ * Written onto the created league's scoring store. A preset override names the preset (rules are
+ * built from it); a custom override carries the exact rule map to store.
+ */
+export type ScoringOverride =
+  | { sport: 'NFL'; presetKey: NflPresetKey; tePremiumPoints: number | null; rules?: undefined }
+  | { sport: LabelSport; presetKey: 'custom'; tePremiumPoints: null; rules: Record<string, number> }
 
 export class ConferenceLeagueRulesError extends Error {
   constructor(message: string) {
@@ -44,6 +57,11 @@ const NBA_PRESET: Record<string, string> = { pts: 'nba_points', cat9: 'nba_9cat'
 export function conferenceLeaguePlan(sport: LabelSport, rules: DivisionsRules): ConferenceLeaguePlan {
   const scoring = getScoringLabel(rules.scoringId)
   const roster = getRosterLabel(rules.rosterId)
+  if (scoring?.type === 'custom' && scoring.sports.includes(sport)) {
+    // Create from the starting label (Half PPR / Points) on the chosen roster, then store the custom values.
+    const base = conferenceLeaguePlan(sport, { scoringId: customScoringStartingPoint(sport), rosterId: rules.rosterId })
+    return { ...base, scoringOverride: { sport, presetKey: 'custom', tePremiumPoints: null, rules: customLiveRules(sport, rules.overrides ?? {}) } }
+  }
   if (!scoring?.backing || !scoring.sports.includes(sport)) throw new ConferenceLeagueRulesError(`No ${sport} league preset backs the "${rules.scoringId}" scoring.`)
   if (!roster?.backing || roster.sport !== sport) throw new ConferenceLeagueRulesError(`No ${sport} league preset backs the "${rules.rosterId}" roster.`)
 
@@ -59,7 +77,7 @@ export function conferenceLeaguePlan(sport: LabelSport, rules: DivisionsRules): 
   const template = roster.backing.templateKey
   if (template === 'redraft') return { concept: 'redraft', scoringPreset: NFL_STANDARD_ROSTER_PRESET[presetKey], tePremiumPoints, scoringOverride: null }
   // Superflex and IDP presets seed Half PPR (af_default); anything else is written over it.
-  const scoringOverride = presetKey === 'af_default' ? null : { presetKey, tePremiumPoints }
+  const scoringOverride: ScoringOverride | null = presetKey === 'af_default' ? null : { sport: 'NFL', presetKey, tePremiumPoints }
   return template === 'superflex'
     ? { concept: 'redraft', scoringPreset: 'fb_superflex', tePremiumPoints, scoringOverride }
     : { concept: 'idp', scoringPreset: 'fb_idp', tePremiumPoints, scoringOverride }

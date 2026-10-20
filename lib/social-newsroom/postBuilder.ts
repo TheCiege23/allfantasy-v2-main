@@ -61,6 +61,7 @@ export type SocialPost = {
 
 /** Flavour lines per kind. Generic on purpose — they state no fact. */
 const FUN_LEADS: Record<BreakingKind | 'news', readonly string[]> = {
+  championship_matchup: ['The stage is set'],
   trade: ['New city, who dis? 📦', 'Pack your bags 🧳', 'The group chat is about to explode 💥', 'Blockbuster alert 🎬'],
   signing: ['Pen meets paper ✍️', 'Locked in 🔒', 'Contract szn 💰', 'Ink is dry ✒️'],
   release: ['Roster shake-up 🔄', 'Moves are being made 👀', 'Plot twist incoming 🌀'],
@@ -73,6 +74,7 @@ const FUN_LEADS: Record<BreakingKind | 'news', readonly string[]> = {
 }
 
 const STRAIGHT_LEADS: Record<BreakingKind | 'news', string> = {
+  championship_matchup: 'CHAMPIONSHIP MATCHUP SET',
   trade: '🚨 TRADE',
   signing: '✍️ SIGNING',
   release: '🔄 ROSTER MOVE',
@@ -207,6 +209,7 @@ export function buildStoryPosts(story: StoryInput): SocialPost[] {
 
 /** Engagement prompts per kind. Questions to the audience — never claims. */
 const VIRAL_STORY_PROMPTS: Record<BreakingKind | 'news', readonly string[]> = {
+  championship_matchup: ['Who takes the title?'],
   trade: ['Who won this trade? 👇', 'Grade this trade A–F 👇', 'Winners and losers? Go 👇'],
   signing: ['Grade this deal A–F 👇', 'Worth it? 👍 or 👎', 'Bargain or overpay? 👇'],
   release: ['Where do they land next? 👇', 'Right call? 👍 or 👎'],

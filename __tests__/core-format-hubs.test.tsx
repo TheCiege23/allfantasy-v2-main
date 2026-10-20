@@ -266,3 +266,15 @@ describe('<FormatHub />', () => {
     expect(container.innerHTML).not.toContain('hf_20260914')
   })
 })
+
+it('excludes a converted native redraft from the Guillotine hub despite its retained configuration', async () => {
+  m.league.findMany.mockImplementation(async (args: { select?: { settings?: boolean } }) => args.select?.settings ? [] : [
+    member({ id: 'converted', name: 'NBA Redraft', platform: 'manual', leagueVariant: 'redraft' }),
+    member({ id: 'imported', name: 'Imported Guillotine' }),
+    member({ id: 'native', name: 'Native Guillotine', platform: 'manual', leagueVariant: 'guillotine' }),
+  ])
+  m.guillotineLeagueConfig.findMany.mockResolvedValue(['converted', 'imported', 'native'].map(leagueId => ({ leagueId })))
+  const hub = await getFormatHub(USER, 'guillotine')
+  expect(hub.counts.guillotine).toBe(2)
+  expect(hub.leagues.map(league => league.leagueId).sort()).toEqual(['imported', 'native'])
+})

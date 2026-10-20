@@ -113,4 +113,13 @@ describe('ingest applies the budget to live alerts only', () => {
     expect(h.dispatch).toHaveBeenCalledTimes(1)
     expect(h.dispatch.mock.calls[0][0].meta).not.toHaveProperty('pushBudget')
   })
+  it('never suppresses individual provider plays because the swing budget was exhausted', async () => {
+    h.findMany.mockImplementation(async (args: { where: { meta?: { path?: string[] } } }) =>
+      args.where.meta?.path?.[0] === 'pushBudget' ? Array.from({length: LIVE_PUSH_CAP}, () => pushed('busy', 'minor')) : [])
+    await ingest({ ...play, source: 'live-plays' })
+    expect(h.dispatch).toHaveBeenCalledTimes(1)
+    expect(h.dispatch.mock.calls[0][0].skipChannels.push).not.toBe(true)
+    expect(h.dispatch.mock.calls[0][0].userIds).toEqual(['busy', 'fresh'])
+  })
+
 })

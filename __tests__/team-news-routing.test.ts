@@ -111,7 +111,7 @@ const MCLAURIN_OUT = "Commanders WR Terry McLaurin won't play London game becaus
 
 beforeEach(() => {
   h.dispatch.mockReset()
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
   h.teamFollowers.mockReset()
   h.teamFollowers.mockImplementation(async (_s: string, abbr: string) => FANS[abbr] ?? [])
   h.cap.mockReset()

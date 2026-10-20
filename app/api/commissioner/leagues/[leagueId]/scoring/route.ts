@@ -8,6 +8,7 @@ import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConf
 import { replaceLeagueScoringOverrides } from '@/lib/scoring-defaults/ScoringOverrideService'
 import { normalizeScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
 import { queueLeagueScoringRecalcAfterRulesChange } from '@/lib/scoring-defaults/queueLeagueScoringRecalc'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 type IncomingRule = {
   statKey?: unknown
@@ -81,6 +82,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     )
   }
 
+  const lifecycle = await decideSettingsEdit(params.leagueId, userId, 'scoring', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
+
   const templateRuleByKey = new Map(
     config.rules.map((rule) => [rule.statKey, rule])
   )
@@ -141,6 +145,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     .filter((v): v is { statKey: string; pointsValue: number; enabled: boolean } => v !== null)
 
   await replaceLeagueScoringOverrides(params.leagueId, overrides)
+
+  await recordMidSeasonSettingsChange(lifecycle, { leagueId: params.leagueId, userId: userId, section: 'scoring', source: 'scoring', detail: { overrideCount: overrides.length } })
 
   queueLeagueScoringRecalcAfterRulesChange(params.leagueId)
 

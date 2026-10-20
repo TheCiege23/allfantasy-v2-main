@@ -35,6 +35,12 @@ import {
   parseInventoryPickId,
   transferNativeFuturePick,
 } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
+import {
+  loadRedraftPickBook,
+  parseRedraftPickId,
+  transferRedraftDraftPick,
+} from '@/lib/league-trade-engine/redraftDraftPicks'
 
 export type ReversalBlocker =
   | 'TRADE_NOT_FOUND'
@@ -59,6 +65,13 @@ type TradeItemRef = { itemReference: string | null; fromRosterId: string; toRost
 function nativePickItems(items: TradeItemRef[] | null | undefined): Array<TradeItemRef & { itemReference: string }> {
   return (items ?? []).filter(
     (i): i is TradeItemRef & { itemReference: string } => parseInventoryPickId(String(i.itemReference ?? '')) != null,
+  )
+}
+
+/** The trade's redraft current-draft picks; they live in `DraftSession.tradedPicks`, not roster JSON. */
+function redraftPickItems(items: TradeItemRef[] | null | undefined): Array<TradeItemRef & { itemReference: string }> {
+  return (items ?? []).filter(
+    (i): i is TradeItemRef & { itemReference: string } => parseRedraftPickId(String(i.itemReference ?? '')) != null,
   )
 }
 
@@ -128,6 +141,14 @@ export async function evaluateGenericTradeReversalReadiness(
     const inventory = await loadNativeFuturePicks(trade.leagueId, db)
     for (const p of picks) {
       if (inventory?.ownerByPickId.get(p.itemReference) !== p.toRosterId) blockers.push('PICK_CHANGED_SINCE_EXECUTION')
+    }
+  }
+  // A redraft pick moves back only while it is unmade and still held by the team that received it.
+  const draftPicks = redraftPickItems(trade.items)
+  if (draftPicks.length > 0) {
+    const book = await loadRedraftPickBook(trade.leagueId, db).catch(() => null)
+    for (const p of draftPicks) {
+      if (book?.ownerByPickId.get(p.itemReference) !== p.toRosterId) blockers.push('PICK_CHANGED_SINCE_EXECUTION')
     }
   }
 
@@ -255,10 +276,34 @@ export async function reverseGenericTrade(
           },
         })
       }
+      // Native scoring reads `RedraftRosterPlayer`; move the players' rows back with their JSON.
+      const after = readRosters(snapshot.afterState)
+      const afterIds = new Map(after.map((r) => [r.rosterId, new Set(getRosterPlayerIds(r.playerData))]))
+      await applyRedraftRosterMoves(tx, {
+        leagueId: trade.leagueId,
+        acquisitionType: 'trade',
+        moves: before.flatMap((b) => getRosterPlayerIds(b.playerData)
+          .filter((pid) => !afterIds.get(b.rosterId)?.has(pid))
+          .map((pid) => ({
+            playerId: pid,
+            fromRosterId: after.find((r) => afterIds.get(r.rosterId)?.has(pid))?.rosterId ?? null,
+            toRosterId: b.rosterId,
+          }))),
+        playerDataByRoster: new Map(before.map((b) => [b.rosterId, b.playerData])),
+      })
       // The snapshot restores roster JSON only; a native future pick is moved back here, under
       // the readiness check just re-run in this transaction.
       for (const p of nativePickItems(trade.items)) {
         await transferNativeFuturePick(tx, {
+          leagueId: trade.leagueId,
+          ref: p.itemReference,
+          fromRosterId: p.toRosterId,
+          toRosterId: p.fromRosterId,
+          tradeId: trade.id,
+        })
+      }
+      for (const p of redraftPickItems(trade.items)) {
+        await transferRedraftDraftPick(tx, {
           leagueId: trade.leagueId,
           ref: p.itemReference,
           fromRosterId: p.toRosterId,

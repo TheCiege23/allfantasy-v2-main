@@ -24,6 +24,7 @@ export function PlayoffSettingsPanel({
   const [startWeek, setStartWeek] = useState(initialData.playoffStartWeek ?? 14)
   const [teams, setTeams] = useState(initialData.playoffTeams ?? 6)
   const [weeksPer, setWeeksPer] = useState(initialData.playoffWeeksPerRound ?? 1)
+  const [champLength, setChampLength] = useState(initialData.championshipLength ?? 1)
   const [seeding, setSeeding] = useState((initialData.playoffSeedingRule ?? 'default') as string)
   const [lower, setLower] = useState((initialData.playoffLowerBracket ?? 'toilet') as string)
 
@@ -31,6 +32,7 @@ export function PlayoffSettingsPanel({
     setStartWeek(initialData.playoffStartWeek ?? 14)
     setTeams(initialData.playoffTeams ?? 6)
     setWeeksPer(initialData.playoffWeeksPerRound ?? 1)
+    setChampLength(initialData.championshipLength ?? 1)
     setSeeding(initialData.playoffSeedingRule ?? 'default')
     setLower(initialData.playoffLowerBracket ?? 'toilet')
   }, [initialData])
@@ -103,6 +105,29 @@ export function PlayoffSettingsPanel({
             },
           ]}
         />
+      </div>
+
+      <div>
+        <SettingsSectionLabel>Championship length</SettingsSectionLabel>
+        <SettingsRadioGroup
+          name="playoff-championship-length"
+          value={champLength >= 2 ? '2' : '1'}
+          disabled={disabled}
+          onChange={(v) => {
+            const n = v === '2' ? 2 : 1
+            setChampLength(n)
+            debouncedSave({ championshipLength: n })
+          }}
+          options={[
+            { id: '1', title: 'Same as other rounds', description: 'The final is played over the weeks per round above.' },
+            {
+              id: '2',
+              title: 'Two-week final',
+              description: 'The championship is scored over two weeks (the MLB and NHL default).',
+            },
+          ]}
+        />
+        <SettingsHelper>Locked while the playoffs are being played.</SettingsHelper>
       </div>
 
       <div>

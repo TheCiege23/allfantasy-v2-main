@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getRookieDraftOrderConfig, computeRookieDraftOrder } from '@/lib/league/rookieDraftOrder'
 import { buildRosterIdResolver } from '@/lib/league/league-settings-draft-sync'
+import { resolveLiveRookieDraftSlots } from '@/lib/rookie-order/liveRookieOrderService'
 
 export type RookieDraftSlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 
@@ -24,6 +25,11 @@ export type RookieDraftSlotOrderEntry = { slot: number; rosterId: string; displa
 export async function resolveRookieDraftSlotOrderForLeague(
   leagueId: string,
 ): Promise<RookieDraftSlotOrderEntry[] | null> {
+  // The live order (AF Commissioner automation, `lib/rookie-order/`) wins when it is on and has a
+  // saved final order; otherwise the older worst-to-first / reverse-PF setting below applies.
+  const live = await resolveLiveRookieDraftSlots(leagueId)
+  if (live) return live
+
   const config = await getRookieDraftOrderConfig(leagueId)
   if (!config?.enabled) return null
 

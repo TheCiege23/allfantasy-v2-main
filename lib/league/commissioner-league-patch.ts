@@ -1,4 +1,5 @@
 import type { League, LeagueSport, Prisma } from '@prisma/client'
+import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 
 /** Subset of `League` exposed to commissioner settings UI (GET + PATCH). */
 export type CommissionerSettingsFormData = {
@@ -21,6 +22,11 @@ export type CommissionerSettingsFormData = {
   playoffStartWeek?: number | null
   playoffTeams?: number | null
   playoffWeeksPerRound?: number | null
+  /**
+   * Weeks the final is scored over (`settings.playoff_structure.championship_length`); null when the
+   * league never stored one. Not a column — PATCHed as `championshipLength` (execute-league-settings-patch).
+   */
+  championshipLength?: number | null
   playoffSeedingRule?: string | null
   playoffLowerBracket?: string | null
   irSlots?: number | null
@@ -144,7 +150,7 @@ export function commissionerLeagueFieldsFromRow(
     | 'dynastySeasonPhase'
     | 'keeperConflictRule'
     | 'keeperMissedDeadlineRule'
-  >,
+  > & { settings?: unknown },
 ): CommissionerSettingsFormData {
   return {
     name: league.name,
@@ -167,6 +173,7 @@ export function commissionerLeagueFieldsFromRow(
     playoffStartWeek: league.playoffStartWeek,
     playoffTeams: league.playoffTeams,
     playoffWeeksPerRound: league.playoffWeeksPerRound,
+    championshipLength: readChampionshipLength(league.settings),
     playoffSeedingRule: league.playoffSeedingRule,
     playoffLowerBracket: league.playoffLowerBracket,
     irSlots: league.irSlots,
