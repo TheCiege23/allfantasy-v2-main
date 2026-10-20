@@ -16,23 +16,48 @@ import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupL
 import type { LineupValidationContext } from './types'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
+import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
+import { resolveLineupStarterSlots } from '@/lib/league/lineupStarterSlots'
 
-/** Locked starters keep their exact slot; a locked bench/IR player stays in that section. */
+/**
+ * Locked starters keep their exact slot; a locked bench/IR player stays in that section.
+ *
+ * A starter's slot is his saved slot position (`slotIndex`, lib/league/lineupSlotPositions.ts) when
+ * BOTH lineups carry one — so emptying a slot above him no longer reads as moving him, and moving
+ * him into a different slot is caught. Otherwise (a lineup saved before positions, or by a writer
+ * that sends none) it is his index in the compacted list, as before.
+ */
 export function movedLockedLineupPlayer(before: unknown, after: unknown, lockedPlayerIds: readonly string[]): string | null {
   if (lockedPlayerIds.length === 0) return null
+  type Spot = { section: RosterSectionKey; compact: number; slot: number | null }
   const locations = (data: unknown) => {
     const sections = getNormalizedLineupSections(data)
-    const result = new Map<string, string>()
+    const result = new Map<string, Spot>()
     for (const section of Object.keys(sections) as RosterSectionKey[]) {
       sections[section].forEach((row, index) => {
-        result.set(String(row.id), section === 'starters' ? `${section}:${index}` : section)
+        result.set(String(row.id), { section, compact: index, slot: section === 'starters' ? starterSlotIndexOf(row) : null })
       })
     }
     return result
   }
   const original = locations(before)
   const proposed = locations(after)
-  return lockedPlayerIds.find((id) => original.get(id) !== proposed.get(id)) ?? null
+  const moved = (a: Spot | undefined, b: Spot | undefined) => {
+    if (!a || !b) return a !== b
+    if (a.section !== b.section) return true
+    if (a.section !== 'starters') return false
+    return a.slot != null && b.slot != null ? a.slot !== b.slot : a.compact !== b.compact
+  }
+  return lockedPlayerIds.find((id) => moved(original.get(id), proposed.get(id))) ?? null
+}
+
+/** The per-slot check is extra safety: a layout that cannot be resolved skips it, never fails the save. */
+function lineupStarterSlotsOrUndefined(...args: Parameters<typeof resolveLineupStarterSlots>) {
+  try {
+    return resolveLineupStarterSlots(...args)
+  } catch {
+    return undefined
+  }
 }
 
 function weekFromLeagueSettings(settings: unknown): number {
@@ -124,6 +149,21 @@ export async function persistRosterLineupWithEngine(
     template,
     season: input.season,
     week: input.week,
+    // The layout the lineup screen indexes (GET /api/league/roster), for per-slot checks.
+    starterSlots: lineupStarterSlotsOrUndefined(
+      {
+        sport,
+        leagueType: league.leagueType,
+        isDynasty: league.isDynasty,
+        leagueVariant: league.leagueVariant,
+        bestBallMode: league.bestBallMode,
+        guillotineMode: league.guillotineMode,
+        keeperPhaseActive: league.keeperPhaseActive,
+        settings: league.settings,
+      },
+      template,
+    ),
+    previousPlayerData: roster.playerData,
   }
 
   const validation = validateCanonicalRosterPayload(input.nextPlayerData, ctx)

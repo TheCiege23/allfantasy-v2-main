@@ -1,14 +1,14 @@
 /**
  * POST /api/leagues/templates/from-league
  * Create a template from an existing league (body: { leagueId, name?, description? }).
- * User must own the league.
+ * User must own the league. Saves the rules recipe the create wizard can start from
+ * (lib/rule-templates/recipe.ts) alongside the legacy payload.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { buildTemplatePayloadFromLeague } from '@/lib/league-templates/buildTemplatePayloadFromLeague'
+import { saveTemplateFromLeague } from '@/lib/rule-templates/templateService'
 
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
@@ -28,43 +28,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'leagueId is required' }, { status: 400 })
   }
 
-  const league = await (prisma as any).league.findFirst({
-    where: { id: leagueId, userId: session.user.id },
-    select: {
-      id: true,
-      name: true,
-      sport: true,
-      leagueSize: true,
-      leagueVariant: true,
-      scoring: true,
-      isDynasty: true,
-      rosterSize: true,
-      settings: true,
-    },
+  const result = await saveTemplateFromLeague(session.user.id, {
+    leagueId,
+    name: typeof body.name === 'string' ? body.name : undefined,
+    description: body.description ?? null,
   })
-
-  if (!league) {
+  if (!result.ok) {
     return NextResponse.json({ error: 'League not found or access denied' }, { status: 404 })
   }
-
-  const payload = buildTemplatePayloadFromLeague(league)
-  const name =
-    typeof body.name === 'string' && body.name.trim()
-      ? body.name.trim().slice(0, 120)
-      : (league.name?.trim() || 'League template').slice(0, 120)
-  const description =
-    body.description !== undefined && body.description !== null
-      ? String(body.description).trim().slice(0, 500)
-      : null
-
-  const template = await (prisma as any).leagueTemplate.create({
-    data: {
-      userId: session.user.id,
-      name,
-      description: description || undefined,
-      payload,
-    },
-    select: { id: true, name: true, description: true, payload: true, createdAt: true, updatedAt: true },
-  })
-  return NextResponse.json(template)
+  return NextResponse.json(result.template)
 }

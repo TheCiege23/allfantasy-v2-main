@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueNcaafScoringConfig, saveLeagueNcaafScoringConfig, getNcaafScoringPresets, buildFullNcaafScoringConfig, type NcaafScoringPresetKey } from '@/lib/ncaaf-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 const featureGate = new FeatureGateService()
@@ -32,6 +33,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+  if (locked) return locked
   if (league.sport !== 'NCAAF') return NextResponse.json({ error: 'NCAAF leagues only' }, { status: 400 })
   const body = await req.json().catch(() => ({}))
   const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'scoring', body)

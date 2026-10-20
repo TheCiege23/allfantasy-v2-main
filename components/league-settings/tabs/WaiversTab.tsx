@@ -17,11 +17,17 @@ import {
 } from '@/lib/waivers/dailyWaiverSchedule'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
-/** Option labels are dictionary keys, resolved at render. */
-const WAIVER_TYPES = [
+/**
+ * Every type the waiver engine runs (`WAIVER_TYPES` in lib/waiver-wire/types). The settings route
+ * always accepted all five; this list offered only the first three, so FCFS and standard leagues
+ * could not be chosen here. Option labels are dictionary keys, resolved at render.
+ */
+export const HUB_WAIVER_TYPE_OPTIONS = [
   { value: 'faab', labelKey: 'lsHub.wv.faab' },
   { value: 'rolling', labelKey: 'lsHub.wv.rolling' },
   { value: 'reverse_standings', labelKey: 'lsHub.wv.reverse' },
+  { value: 'standard', labelKey: 'lsHub.wv.standard' },
+  { value: 'fcfs', labelKey: 'lsHub.wv.fcfs' },
 ]
 
 const MODE_LABEL_KEYS: Record<DailyWaiverMode, string> = {
@@ -140,7 +146,7 @@ export function WaiversSection({
             className={SETTINGS_INPUT_CLASS}
             data-testid="league-settings-waiver-type"
           >
-            {WAIVER_TYPES.map((o) => (
+            {HUB_WAIVER_TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value} className="bg-[#0d1117]">
                 {t(o.labelKey)}
               </option>

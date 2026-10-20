@@ -96,6 +96,7 @@ const ES: Record<string, string> = {
   // ── Rules and access ──────────────────────────────────────────────────
   Disputes: 'Disputas',
   'Lineup integrity': 'Integridad de alineaciones',
+  'Weekly recap': 'Resumen semanal',
   'Share the dispute desk with your league →': 'Comparte la mesa de disputas con tu liga →',
   'Open integrity monitor →': 'Abrir el monitor de integridad →',
   '1 person': '1 persona',

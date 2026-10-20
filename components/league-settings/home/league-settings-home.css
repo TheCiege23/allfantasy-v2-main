@@ -245,7 +245,7 @@
 .af-core .lsh-error { margin-top: 10px; color: var(--bad); font-size: 13px; }
 .af-core .lsh-ok { margin-top: 10px; color: var(--good); font-size: 13px; }
 
-/* Score adjustments editor */
+/* Score adjustments editor and settings lock panel (shared button and field styles) */
 .af-core .lsh-secondary {
   min-height: 36px;
   padding: 0 12px;
@@ -258,6 +258,8 @@
   cursor: pointer;
 }
 .af-core .lsh-secondary:disabled { opacity: 0.45; cursor: default; }
+.af-core [data-testid='settings-lock'] select,
+.af-core [data-testid='settings-lock'] input[type='text'],
 .af-core [data-testid='score-adjustments'] select,
 .af-core [data-testid='score-adjustments'] input {
   display: block;
@@ -271,3 +273,4 @@
   color: var(--text);
   font-size: 15px;
 }
+.af-core [data-testid='settings-lock'] input[type='checkbox'] { accent-color: var(--accent, currentColor); }

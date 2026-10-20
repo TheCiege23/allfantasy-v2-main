@@ -9,6 +9,7 @@ import {
 } from '@/lib/roster-engine'
 import { prisma } from '@/lib/prisma'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
 export const dynamic = 'force-dynamic'
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
   if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
 
+  const locked = await settingsLockedResponse(leagueId, 'rosters')
+
+  if (locked) return locked
   await resetLeagueRosterToDefault(leagueId, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
   const config = await registry.getService(league.sport).getConfig(leagueId)

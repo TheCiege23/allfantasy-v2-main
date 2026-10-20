@@ -36,6 +36,7 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
+import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
@@ -511,6 +512,16 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {league.native || league.platform === 'sleeper' ? (
         <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
           <LineupIntegrity leagueId={league.id} />
+        </HubSection>
+      ) : null}
+
+      {/*
+        Weekly recap review — outside the depth gate: editing the league's own recap before it posts
+        is a free commissioner control. Only where a recap runs at all (Sleeper and AllFantasy-run).
+      */}
+      {league.native || league.platform === 'sleeper' ? (
+        <HubSection id="ch-recap" title={t('Weekly recap')}>
+          <WeeklyRecapReview leagueId={league.id} />
         </HubSection>
       ) : null}
 

@@ -16,6 +16,8 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
+const settingsProfile = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/user-settings', () => ({ getSettingsProfile: settingsProfile }))
 const outboxFindMany = vi.fn()
 const outboxUpdateMany = vi.fn()
 const outboxUpdate = vi.fn()
@@ -268,4 +270,19 @@ describe('notification outbox relay', () => {
       expect((call[0] as { data: { status: string } }).data.status).toBe('sent')
     }
   })
+})
+
+it.each(['email', 'push'])('suppresses a queued %s during quiet hours without morning replay', async channel => {
+ vi.useFakeTimers()
+ try {
+  vi.setSystemTime(new Date('2026-10-20T08:00:00Z'))
+  settingsProfile.mockResolvedValue({ email: 'manager@example.com', timezone: 'America/New_York', notificationPreferences: { globalEnabled: true, quietHours: { enabled: true, startHour: 22, endHour: 7, allowCritical: false }, categories: { injury_alerts: { enabled: true, inApp: true, email: true, push: true, sms: false } } } })
+  stageRows([row({ channel, metadata: { notificationCategory: 'injury_alerts', severity: 'high' } })])
+  const result = await relayNotificationOutbox()
+  expect(result.skipped).toBe(1)
+  expect(result.retried).toBe(0)
+  expect(sendNotificationEmail).not.toHaveBeenCalled()
+  expect(sendPushToUser).not.toHaveBeenCalled()
+  expect(writeback().lastError).toContain('quiet hours')
+ } finally { vi.useRealTimers() }
 })

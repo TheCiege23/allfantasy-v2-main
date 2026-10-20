@@ -123,7 +123,10 @@ export async function GET(
       isCommissioner(leagueId, userId),
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { sport: true, leagueVariant: true, timezone: true },
+        select: {
+          sport: true, leagueVariant: true, timezone: true,
+          leagueType: true, isDynasty: true, platform: true, survivorMode: true, guillotineMode: true,
+        },
       }),
       (async () => {
         const { isIdpLeague, getRosterDefaultsForIdpLeague, getIdpLeagueConfig } = await import('@/lib/idp')
@@ -222,6 +225,15 @@ export async function GET(
       // The draft date/time inputs are wall-clock in THIS zone, not the viewer's browser zone.
       timezone: league?.timezone || 'America/New_York',
       autostartEnabled: lsRow?.autostart ?? false,
+      // What `startsAtScheduledTimeRegardlessOfAutostart` needs: the panel hides the Autostart toggle
+      // for leagues whose scheduled draft starts at its time whatever the toggle says.
+      scheduledStartLeague: league
+        ? {
+            sport: league.sport, leagueType: league.leagueType, isDynasty: league.isDynasty,
+            platform: league.platform, survivorMode: league.survivorMode,
+            guillotineMode: league.guillotineMode, leagueVariant: league.leagueVariant,
+          }
+        : null,
       slowDraftPauseEnabled: lsRow?.slowDraftPause ?? (variant.draftUISettings.timerMode === 'overnight_pause'),
       slowDraftPauseFrom: lsRow?.slowPauseFrom ?? variant.draftUISettings.slowDraftPauseWindow?.start ?? null,
       slowDraftPauseTo: lsRow?.slowPauseUntil ?? variant.draftUISettings.slowDraftPauseWindow?.end ?? null,
