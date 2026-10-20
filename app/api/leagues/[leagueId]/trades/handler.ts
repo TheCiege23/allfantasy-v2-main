@@ -150,6 +150,9 @@ export async function POST(
     return NextResponse.json({ ok: true, tradeId: id, writeAuthority, ...(sportsDataDecision ? { sportsDataDecision } : {}) })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 400 })
+    // A validation refusal carries a machine-readable code (e.g. `future_picks_not_allowed_in_redraft`).
+    const rawCode = e instanceof Error ? (e as Error & { code?: unknown }).code : undefined
+    const code = typeof rawCode === 'string' ? rawCode : null
+    return NextResponse.json({ error: msg, ...(code ? { code } : {}) }, { status: 400 })
   }
 }
