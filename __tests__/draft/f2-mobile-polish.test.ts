@@ -161,14 +161,14 @@ describe('F.2 — WarRoomPopup mobile bottom sheet', () => {
   const src = read('components/app/draft-room/WarRoomPopup.tsx')
 
   it('renders a fixed full-width bottom sheet at mobile widths (< sm)', () => {
-    // Mobile (default): fixed inset-x-0 bottom-0, 80vh tall.
-    expect(src).toMatch(/fixed inset-x-0 bottom-0 z-\[55\][\s\S]{0,200}h-\[80vh\]/)
+    // Mobile (default): fixed inset-x-0 bottom-0, 80dvh tall.
+    expect(src).toMatch(/fixed inset-x-0 bottom-0 z-\[55\][\s\S]{0,200}h-\[80dvh\]/)
   })
 
   it('docks to the bottom-right corner at ≥ sm (tablet + desktop)', () => {
     expect(src).toMatch(/sm:bottom-20 sm:right-4 sm:left-auto/)
     expect(src).toMatch(/sm:inset-x-auto/)
-    expect(src).toMatch(/sm:h-\[min\(560px,80vh\)\]/)
+    expect(src).toMatch(/sm:h-\[min\(560px,80dvh\)\]/)
     expect(src).toMatch(/sm:w-\[min\(380px,calc\(100vw-2rem\)\)\]/)
     expect(src).toMatch(/sm:rounded-xl sm:border/)
   })

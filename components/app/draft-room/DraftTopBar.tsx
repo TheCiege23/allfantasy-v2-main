@@ -338,8 +338,20 @@ export function DraftTopBar({
         setMenuOpen(false)
       }
     }
-    window.addEventListener('mousedown', handlePointerDown)
-    return () => window.removeEventListener('mousedown', handlePointerDown)
+    const closeOnResize = () => setMenuOpen(false)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMenuOpen(false); menuButtonRef.current?.focus() }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('resize', closeOnResize)
+    window.visualViewport?.addEventListener('resize', closeOnResize)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('resize', closeOnResize)
+      window.visualViewport?.removeEventListener('resize', closeOnResize)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
   }, [menuOpen])
 
   const effectiveRemaining =
@@ -895,8 +907,8 @@ export function DraftTopBar({
               ? createPortal(
                 <div
                   ref={menuDropdownRef}
-                  className="fixed z-[9999] w-64 overflow-hidden rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
-                  style={{ top: menuPos.top, right: menuPos.right }}
+                  className="fixed z-[9999] w-64 overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                  style={{ top: menuPos.top, right: Math.max(8, menuPos.right), maxHeight: `calc(100dvh - ${menuPos.top + 16}px - env(safe-area-inset-bottom, 0px))`, maxWidth: 'calc(100vw - 16px)' }}
                   data-testid="draft-topbar-menu"
                 >
                 <button

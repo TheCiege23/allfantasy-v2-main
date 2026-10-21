@@ -300,6 +300,7 @@ export const translationsEsParity: Record<string, string> = {
   "draftRoom.shell.mobile.roster": "Mi equipo",
   "draftRoom.shell.mobile.keepers": "Keepers",
   "draftRoom.shell.mobile.chat": "Chat",
+  "draftRoom.shell.mobile.more": "Más",
   "draftRoom.shell.aria.draftSections": "Secciones del draft",
   "draftRoom.shell.hideBottomDock": "Ocultar chat y actividad",
   "draftRoom.shell.showBottomDock": "Mostrar chat y actividad",

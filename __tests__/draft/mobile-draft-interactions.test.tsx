@@ -1,9 +1,10 @@
 import React from 'react'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key }) }))
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
-afterEach(cleanup)
+beforeEach(() => vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))))
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function shell(onChange: (tab: MobileDraftTab) => void) {
   return render(<DraftRoomShell topBar={null} managerStrip={null} draftBoard={<div>Wide board</div>} playerPanel={<div>Players</div>} queuePanel={<div>Queue</div>} chatPanel={<div>Chat</div>} mobileTab="board" onMobileTabChange={onChange} />)
 }
