@@ -1,5 +1,6 @@
 /* Keep these rules on the phone room; desktop tables retain their compact density. */
 @media(max-width:767px){
+  .draft-touch-room{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
   body:has(.draft-touch-room [data-testid=draft-mobile-quick-dock]) [data-testid=war-room-popup-trigger]{display:none}
   .draft-touch-room :is(button,a[aria-label],summary){min-height:44px;min-width:44px;touch-action:manipulation}
   .draft-touch-room :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px;min-height:44px}
