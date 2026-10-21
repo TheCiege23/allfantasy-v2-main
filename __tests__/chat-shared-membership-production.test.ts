@@ -9,8 +9,9 @@ vi.mock('@/lib/chimmy/decisionAnswerContract',()=>({decisionAnswerMeta:vi.fn()})
 vi.mock('@/types/platform-shared',()=>({PlatformChatMessage:vi.fn()}))
 vi.mock('@/lib/chat-core',()=>({isLeagueVirtualRoom:(id:string)=>id.startsWith('league:'),getLeagueIdFromVirtualRoom:(id:string)=>id.slice(7),getMessageQueryOptions:()=>({limit:50}),parseCursor:()=>null}))
 vi.mock('@/lib/chat-core/league-message-proxy',()=>({bracketMessagesToPlatform:vi.fn()}))
-vi.mock('@/lib/live-draft-engine/auth',()=>({getCurrentUserRosterIdForLeague:vi.fn()}))
+vi.mock('@/lib/live-draft-engine/auth',()=>({getCurrentUserRosterIdForLeague:vi.fn(),canAccessLeagueDraft:async()=>false}))
 vi.mock('@/lib/league-chat/LeagueChatMessageService',()=>({getLeagueChatMessages:m.read,createLeagueChatMessage:m.create}))
+vi.mock('@/lib/league-chat/LeagueMessageComposer',()=>({validateMessageBody:()=>({valid:true})}))
 vi.mock('@/lib/discord/sync-outbound',()=>({syncOutboundLeagueChat:async()=>undefined}))
 vi.mock('@/lib/survivor/constants',()=>({parseTribeIdFromSource:vi.fn()}))
 vi.mock('@/lib/survivor/SurvivorChatMembershipService',()=>({getTribeChatMemberRosterIds:vi.fn()}))
@@ -19,7 +20,8 @@ vi.mock('@/lib/survivor/SurvivorCommandParser',()=>({looksLikeOfficialCommand:vi
 vi.mock('@/lib/survivor/types',()=>({SurvivorCommandIntent:vi.fn()}))
 vi.mock('@/lib/survivor/SurvivorTimelineResolver',()=>({resolveSurvivorCurrentWeek:vi.fn()}))
 vi.mock('@/lib/survivor/SurvivorMergeEngine',()=>({isMergeTriggered:vi.fn()}))
-vi.mock('@/lib/prisma',()=>({prisma:{bracketLeagueMember:{findUnique:m.bracket},platformChatThreadMember:{findFirst:m.member}}}))
+vi.mock('@/lib/prisma',()=>({prisma:{bracketLeagueMember:{findUnique:m.bracket},platformChatThreadMember:{findFirst:m.member},leagueEvent:{findMany:async()=>[]}}}))
+vi.mock('@/lib/moderation/BlockUserService',()=>({getBlockedSenderSetForRead:async()=>new Set(),BlockListUnavailableError:class extends Error{}}))
 vi.mock('@/lib/survivor-guillotine/live',()=>({activateSGLivePower:vi.fn()}))
 vi.mock('@/lib/league-access',()=>({resolveLeagueAccess:m.access}))
 vi.mock('@/lib/moderation',()=>({getBlockedUserIds:async()=>[],getBlockedUserIdsForRead:async()=>[],filterMessagesByBlocked:(messages:unknown)=>messages}))
@@ -33,6 +35,8 @@ vi.mock('@/lib/big-brother/BigBrotherLeagueConfig',()=>({isBigBrotherLeague:asyn
 vi.mock('@/lib/big-brother/BigBrotherChatChannels',()=>({getAccessibleBbChannels:async()=>[]}))
 
 import { GET, POST } from '@/app/api/shared/chat/threads/[threadId]/messages/route'
+import { GET as redraftGET, POST as redraftPOST } from '@/app/api/redraft/communication/chat/route'
+import { GET as feedGET } from '@/app/api/redraft/communication/feed/route'
 const context={params:{threadId:'league:l1'}} as any
 const request=(body?:unknown)=>new NextRequest('https://example.test/api/shared/chat/threads/league:l1/messages',body?{method:'POST',body:JSON.stringify(body),headers:{'Content-Type':'application/json'}}:undefined)
 beforeEach(()=>{vi.clearAllMocks();m.user.mockResolvedValue({appUserId:'recipient'});m.bracket.mockResolvedValue(null);m.access.mockResolvedValue({leagueId:'l1',via:'redraft'});m.member.mockResolvedValue({id:'membership'});m.read.mockResolvedValue([{id:'sent-message',body:'From another member'}]);m.create.mockResolvedValue({id:'reply',body:'Reply'});m.platformRead.mockResolvedValue([])})
@@ -44,3 +48,30 @@ describe('shared league membership parity',()=>{
  it('reports storage failure instead of an empty successful DM',async()=>{m.platformRead.mockRejectedValue(new Error('database unavailable'));const r=await GET(request(),{params:{threadId:'private-thread'}} as any);expect(r.status).toBe(503);expect((await r.json()).messages).toBeUndefined()})
 })
 
+describe('redraft communication membership parity',()=>{
+ const readRequest=()=>new NextRequest('https://example.test/api/redraft/communication/chat?leagueId=l1')
+ const sendRequest=()=>new NextRequest('https://example.test/api/redraft/communication/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({leagueId:'l1',body:'Reply'})})
+ it('allows a canonical member without draft access to read, reply and read the feed',async()=>{
+  expect((await redraftGET(readRequest())).status).toBe(200)
+  expect((await redraftPOST(sendRequest())).status).toBe(200)
+  expect((await feedGET(readRequest())).status).toBe(200)
+  expect(m.access).toHaveBeenCalledTimes(3)
+  expect(m.access).toHaveBeenCalledWith('l1','recipient')
+  expect(m.create).toHaveBeenCalledWith('l1','recipient','Reply',expect.anything())
+ })
+ it('rejects nonmembers from all redraft chat entry points',async()=>{
+  m.access.mockResolvedValue(null)
+  expect((await redraftGET(readRequest())).status).toBe(403)
+  expect((await redraftPOST(sendRequest())).status).toBe(403)
+  expect((await feedGET(readRequest())).status).toBe(403)
+  expect(m.read).not.toHaveBeenCalled()
+  expect(m.create).not.toHaveBeenCalled()
+ })
+ it('rejects signed-out callers before reading messages',async()=>{
+  m.user.mockResolvedValue({appUserId:null})
+  expect((await redraftGET(readRequest())).status).toBe(401)
+  expect((await redraftPOST(sendRequest())).status).toBe(401)
+  expect((await feedGET(readRequest())).status).toBe(401)
+  expect(m.read).not.toHaveBeenCalled()
+ })
+})
