@@ -170,10 +170,11 @@ describe('D.2 — PlayerPanel poolLayout integration', () => {
     expect(src).toMatch(/poolLayout === 'sleeper_table'/)
   })
 
-  it('keeps the existing card layout (DraftPlayerCard via PlayerListVirtualized) for non-NFL', () => {
-    // When useTable is false we fall back to the original PlayerListVirtualized.
-    expect(src).toMatch(/<PlayerListVirtualized/)
-    expect(src).toMatch(/return \(\s*<PlayerListVirtualized/)
+  it('keeps the card layout with progressive results for non-NFL', () => {
+    // When useTable is false, cards use natural row heights and progressive results.
+    expect(src).toMatch(/<PlayerListCards/)
+    expect(src).toContain('<ProgressiveDraftPlayerList')
+    expect(src).toMatch(/return \(\s*<PlayerListCards/)
   })
 
   it('wraps the table in an overflow-x-auto container so narrow viewports scroll horizontally', () => {
