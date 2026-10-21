@@ -1159,7 +1159,7 @@ export const translationsEsParity: Record<string, string> = {
   "follows.settings.add": "Agregar equipos",
   "follows.settings.retry": "Reintentar",
   "follows.settings.unfollowAria": "Dejar de seguir a {{team}}",
-  "settings.notifications.category.injury_alerts": "Alertas de lesiones de jugadores",
+  "settings.notifications.category.injury_alerts": "Actualizaciones de lesiones por equipo",
   "settings.notifications.category.league_announcements": "Anuncios de la liga y @all",
   "settings.notifications.category.league_chat": "Mensajes del chat de la liga",
   "settings.notifications.category.league_drama": "Drama de la liga / historias",

@@ -3532,7 +3532,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.category.league_drama": "League drama / storylines",
     "settings.notifications.category.commissioner_alerts": "Commissioner alerts",
     "settings.notifications.category.system_account": "System & account alerts",
-    "settings.notifications.category.injury_alerts": "Player injury alerts",
+    "settings.notifications.category.injury_alerts": "Team injury updates",
     "settings.notifications.category.performance_alerts": "Scoring plays & big plays",
     "settings.notifications.category.lineup_alerts": "Starting lineup alerts",
     "settings.notifications.category.draft_alerts": "Draft alerts (on the clock, timer, trade offers)",
