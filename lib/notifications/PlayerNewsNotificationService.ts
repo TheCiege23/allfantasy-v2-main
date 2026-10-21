@@ -548,7 +548,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       if(isInjury){
         injuryBatch.add([{userIds:cappedFans,category:'followed_teams',type:'player_injury_update',
           title:teamName,body:row.headline,leagueId:null,severity:'high',dedupePrefix:'player-news:'+row.id,
-          meta:{team:clubAbbr,sport:row.sport,newsCategory:category}}],async(users,failed)=>{
+          meta:{team:clubAbbr,teamName,followedTeam:clubAbbr,teamNews:true,injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}],async(users,failed)=>{
           recipients+=users.size;teamFollowerRecipients+=users.size
           if(users.size){await recordToldAbout([...users],story,undefined,{storyOnly:true});notified++}
           await settle(row,failed?'dispatch-failed':users.size?'delivered':'all-suppressed')
@@ -682,7 +682,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       const requests: DispatchNotificationParams[] = []
       const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
         severity:'high' as const, dedupePrefix:'player-news:'+row.id,
-        meta:{team:playerTeam,sport:row.sport,newsCategory:category}}
+        meta:{team:playerTeam??'Players without a current team',injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}
       for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts'})
       if(followersOnly.length)requests.push({...base,userIds:followersOnly,leagueId:null,category:'followed_players',meta:{...base.meta,followed:true}})
       if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams',meta:{...base.meta,followedTeam:teamAbbr}})
@@ -778,7 +778,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     await settle(row, anyDispatchFailed ? 'dispatch-failed' : toldNow.length > 0 ? 'delivered' : 'all-suppressed')
   }
 
-  await injuryBatch.flush()
+  repeatsSuppressed += await injuryBatch.flush()
 
   if (stamped.length > 0) {
     await prisma.playerNewsRecord
