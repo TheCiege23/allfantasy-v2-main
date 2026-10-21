@@ -297,9 +297,9 @@ describe('stale game retry suppression', () => {
   })
 })
 
-it('suppresses even fresh game email retries while preserving fresh game push', async () => {
+it('preserves fresh game email retries', async () => {
   stageRows([row({channel:'email',eventType:'game_period_end',createdAt:new Date()})])
   await relayNotificationOutbox()
-  expect(sendNotificationEmail).not.toHaveBeenCalled()
-  expect(writeback().lastError).toContain('live game email disabled')
+  expect(sendNotificationEmail).toHaveBeenCalled()
+  expect(writeback().status).toBe('sent')
 })

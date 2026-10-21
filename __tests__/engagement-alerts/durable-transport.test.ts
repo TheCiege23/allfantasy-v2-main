@@ -52,8 +52,8 @@ it('does not resend yesterday’s pending game row through the producer callback',
   expect(await deliverDurably(message,send)).toBe('skipped')
   expect(send).not.toHaveBeenCalled()
 })
-it('never adds live game email to the provider retry queue', async () => {
+it('hands off fresh game email when selected', async () => {
   const send=vi.fn()
-  expect(await deliverDurably({...message,channel:'email'},send)).toBe('skipped')
-  expect(send).not.toHaveBeenCalled()
+  expect(await deliverDurably({...message,channel:'email'},send)).toBe('sent')
+  expect(send).toHaveBeenCalled()
 })

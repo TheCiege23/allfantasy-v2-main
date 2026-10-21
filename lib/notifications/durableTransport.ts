@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { gameAlertDeadline, isLiveGameAlert } from './gameAlertFreshness'
+import { gameAlertDeadline } from './gameAlertFreshness'
 import { prisma } from '@/lib/prisma'
 
 export type TransportMessage = {
@@ -16,8 +16,8 @@ export async function deliverDurably(message: TransportMessage, send: () => Prom
   if (!claim.count) return 'existing'
   const storedMetadata = stored.metadata && typeof stored.metadata === 'object' ? stored.metadata as Record<string, unknown> : {}
   const deadline = gameAlertDeadline(message.eventType, stored.createdAt, storedMetadata.expiresAt)
-  if ((message.channel === 'email' && isLiveGameAlert(message.eventType)) || (deadline !== undefined && deadline <= Date.now())) {
-    await prisma.notificationOutbox.update({ where: { id }, data: { status: 'skipped', lastError: 'Live game email disabled or notification expired before delivery', attemptCount: { increment: 1 } } })
+  if (deadline !== undefined && deadline <= Date.now()) {
+    await prisma.notificationOutbox.update({ where: { id }, data: { status: 'skipped', lastError: 'Notification expired before delivery', attemptCount: { increment: 1 } } })
     return 'skipped'
   }
   try {

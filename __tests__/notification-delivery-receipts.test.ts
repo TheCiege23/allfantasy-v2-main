@@ -28,11 +28,11 @@ describe('truthful notification receipts',()=>{
  it('records interrupted reads and does not throw when receipt persistence fails',async()=>{m.profile.mockRejectedValue(new Error('DB down'));m.receipt.mockRejectedValue(new Error('audit down'));await expect(send()).resolves.toMatchObject({failed:1});expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'unknown',reason:'dispatch_interrupted'})})
 })
 
-it.each(['game_scoring_play','game_period_end','game_halftime','game_final','game_close','game_moment_end_period'])('keeps %s in push/in-app without creating an email backlog', async type => {
+it.each(['game_scoring_play','game_period_end','game_halftime','game_final','game_close','game_moment_end_period'])('delivers fresh %s through the selected email and push channels', async type => {
   await dispatchNotification({userIds:['owner'],category:'draft_alerts',type,title:'Game update',onDeliveryReceipt:m.receipt})
-  expect(m.email).not.toHaveBeenCalled()
+  expect(m.email).toHaveBeenCalled()
   expect(m.store).toHaveBeenCalled()
   expect(m.push).toHaveBeenCalled()
   expect(m.push.mock.calls[0][1].expiresAt).toBeDefined()
-  expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'suppressed',reason:'live_game_email_disabled'})
+  expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'accepted',reason:'provider_accepted'})
 })

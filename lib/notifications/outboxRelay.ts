@@ -1,4 +1,4 @@
-import { gameAlertDeadline, isLiveGameAlert } from "./gameAlertFreshness"
+import { gameAlertDeadline } from "./gameAlertFreshness"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
 /**
  * NOTIFICATION OUTBOX RELAY — the delivery half of `notification_outbox`.
@@ -134,10 +134,6 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
   const deadline = gameAlertDeadline(row.eventType, row.createdAt, metadata.expiresAt)
   if (deadline !== undefined && deadline <= Date.now()) {
     return { outcome: 'skipped', error: 'notification expired before delivery' }
-  }
-  // Email providers can retry accepted messages for hours; live updates belong in push/in-app.
-  if (row.channel === 'email' && isLiveGameAlert(row.eventType)) {
-    return { outcome: 'skipped', error: 'live game email disabled; retained in app' }
   }
   const category = metadata.notificationCategory as NotificationCategoryId | undefined
   // Durable dispatcher rows re-evaluate current preferences at retry time.
