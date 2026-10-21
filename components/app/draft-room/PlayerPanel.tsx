@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { measurePlayerRow, useDeferredPlayerMeasurement } from './useDeferredPlayerMeasurement'
 import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -252,11 +253,15 @@ function PlayerListVirtualized({
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
+    getItemKey: (index) => filtered[index].id ?? rowKey(filtered[index]),
+    measureElement: measurePlayerRow,
+    useAnimationFrameWithResizeObserver: true,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => (rs ? PLAYER_ROW_ESTIMATE_HEIGHT_REDRAFT : PLAYER_ROW_ESTIMATE_HEIGHT),
     overscan: rs ? 8 : 5,
   })
 
+  const measureRow = useDeferredPlayerMeasurement(virtualizer.measureElement)
   const items = virtualizer.getVirtualItems()
 
   return (
@@ -273,7 +278,7 @@ function PlayerListVirtualized({
         return (
           <div
             key={p.id ?? rowKey(p)}
-            ref={virtualizer.measureElement}
+            ref={measureRow}
             style={{
               position: 'absolute',
               top: 0,
