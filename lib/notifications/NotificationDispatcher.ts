@@ -11,6 +11,7 @@ import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
+import { gameAlertDeadline, isLiveGameAlert } from "./gameAlertFreshness"
 import { sendPushToUser } from "@/lib/push-notifications"
 import { decidePush } from "@/lib/notifications/pushGate"
 import { retryWithBackoff } from "@/lib/error-handling"
@@ -177,11 +178,12 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         set('inApp',{status:stored?'stored':'failed',reason:stored?'in_app_saved':'storage_failed'})
       } else set('inApp',{status:'suppressed',reason:'channel_off'})
 
+      const deadline = gameAlertDeadline(type, new Date(), meta?.expiresAt)
       const transportMessage = {
         userId, leagueId: effectiveLeagueId, eventType: type, title, body: body ?? title,
         eventKey: dedupePrefix ?? (typeof meta?.eventKey === 'string' ? meta.eventKey : undefined),
         metadata: { ...(meta ?? {}), notificationCategory: category, severity, actionHref, actionLabel,
-          ...(/^(game_(scoring_play|big_play|close)|live_score)/.test(type) ? { expiresAt: new Date(Date.now() + 300_000).toISOString() } : {}),
+          ...(deadline !== undefined ? { expiresAt: new Date(deadline).toISOString() } : {}),
           ...(emailOverride ? { emailOverride } : {}) },
       }
       const pushDelivery = (async () => {
@@ -204,6 +206,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           // One tag per category unless the caller names one per event — see pushTagFor.
           tag: pushTagFor(category, meta),
           type,
+          expiresAt: transportMessage.metadata.expiresAt,
           // The service worker builds league-scoped action buttons from this; it was dropped here.
           leagueId: effectiveLeagueId,
           // A producer that has a picture (headshot, trade card) names it in meta.imageUrl.
@@ -237,6 +240,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       // read it, so alerts kept arriving after the user had clicked it (found 2026-10-03). Account
       // notices (`system_account`) still send, as the unsubscribe page says; a failed read withholds.
       if (
+        !isLiveGameAlert(type) &&
         catPrefs.email &&
         !quiet.push &&
         availability.email &&
@@ -278,7 +282,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           set('email',{status:'failed',reason:'persistence_failed',attempts})
           console.warn("[NotificationDispatcher] email send failed after retry for user", userId, e)
         }
-      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
+      } else set('email',{status:'suppressed',reason:isLiveGameAlert(type)?'live_game_email_disabled':!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
 
       if (allowsLeagueSms(category, effectiveLeagueId) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
         // A Twilio charge per text, previously uncapped. Over the daily cap the text is

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { gameAlertDeadline, isLiveGameAlert } from './gameAlertFreshness'
 import { prisma } from '@/lib/prisma'
 
 export type TransportMessage = {
@@ -10,9 +11,15 @@ export type TransportMessage = {
 export async function deliverDurably(message: TransportMessage, send: () => Promise<void | 'unavailable'>): Promise<'sent' | 'queued' | 'skipped' | 'existing'> {
   const id = createHash('sha256').update(`${message.eventKey ?? randomUUID()}:${message.userId}:${message.channel}`).digest('hex')
   const { eventKey: _, ...data } = message
-  await prisma.notificationOutbox.upsert({ where: { id }, update: {}, create: { id, ...data, metadata: data.metadata as never } })
+  const stored = await prisma.notificationOutbox.upsert({ where: { id }, update: {}, create: { id, ...data, metadata: data.metadata as never }, select: { createdAt: true, metadata: true } })
   const claim = await prisma.notificationOutbox.updateMany({ where: { id, status: 'pending' }, data: { status: 'sending', updatedAt: new Date() } })
   if (!claim.count) return 'existing'
+  const storedMetadata = stored.metadata && typeof stored.metadata === 'object' ? stored.metadata as Record<string, unknown> : {}
+  const deadline = gameAlertDeadline(message.eventType, stored.createdAt, storedMetadata.expiresAt)
+  if ((message.channel === 'email' && isLiveGameAlert(message.eventType)) || (deadline !== undefined && deadline <= Date.now())) {
+    await prisma.notificationOutbox.update({ where: { id }, data: { status: 'skipped', lastError: 'Live game email disabled or notification expired before delivery', attemptCount: { increment: 1 } } })
+    return 'skipped'
+  }
   try {
     const outcome = await send()
     if (outcome === 'unavailable') {

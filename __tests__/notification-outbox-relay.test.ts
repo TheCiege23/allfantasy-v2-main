@@ -286,3 +286,20 @@ it.each(['email', 'push'])('suppresses a queued %s during quiet hours without mo
   expect(writeback().lastError).toContain('quiet hours')
  } finally { vi.useRealTimers() }
 })
+
+describe('stale game retry suppression', () => {
+  it.each(['email', 'push'])('drops legacy %s rows without expiry metadata', async channel => {
+    stageRows([row({ channel, eventType: 'game_final', createdAt: new Date(Date.now() - 86400_000) })])
+    await relayNotificationOutbox()
+    expect(sendNotificationEmail).not.toHaveBeenCalled()
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(outboxUpdate.mock.calls.some(call => call[0].data.lastError === 'notification expired before delivery')).toBe(true)
+  })
+})
+
+it('suppresses even fresh game email retries while preserving fresh game push', async () => {
+  stageRows([row({channel:'email',eventType:'game_period_end',createdAt:new Date()})])
+  await relayNotificationOutbox()
+  expect(sendNotificationEmail).not.toHaveBeenCalled()
+  expect(writeback().lastError).toContain('live game email disabled')
+})

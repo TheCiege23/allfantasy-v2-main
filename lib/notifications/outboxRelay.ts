@@ -1,3 +1,4 @@
+import { gameAlertDeadline, isLiveGameAlert } from "./gameAlertFreshness"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
 /**
  * NOTIFICATION OUTBOX RELAY — the delivery half of `notification_outbox`.
@@ -83,6 +84,7 @@ type OutboxRow = {
   attemptCount: number
   maxAttempts: number
   metadata: unknown
+  createdAt: Date
 }
 
 function emptyChannelTally() {
@@ -129,8 +131,13 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
   if (fatigue.suppress) return { outcome: "skipped", error: fatigue.reason }
 
   const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
-  if (typeof metadata.expiresAt === 'string' && Date.parse(metadata.expiresAt) <= Date.now()) {
+  const deadline = gameAlertDeadline(row.eventType, row.createdAt, metadata.expiresAt)
+  if (deadline !== undefined && deadline <= Date.now()) {
     return { outcome: 'skipped', error: 'notification expired before delivery' }
+  }
+  // Email providers can retry accepted messages for hours; live updates belong in push/in-app.
+  if (row.channel === 'email' && isLiveGameAlert(row.eventType)) {
+    return { outcome: 'skipped', error: 'live game email disabled; retained in app' }
   }
   const category = metadata.notificationCategory as NotificationCategoryId | undefined
   // Durable dispatcher rows re-evaluate current preferences at retry time.
@@ -183,6 +190,7 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
         body: row.body,
         href: actionHrefFrom(row.metadata),
         type: row.eventType,
+        expiresAt: deadline === undefined ? undefined : new Date(deadline).toISOString(),
         leagueId: row.leagueId,
         tag: pushTagFor(category ?? row.eventType, metadata),
         imageUrl: typeof metadata.imageUrl === "string" ? metadata.imageUrl : null,
@@ -325,6 +333,7 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
       attemptCount: true,
       maxAttempts: true,
       metadata: true,
+      createdAt: true,
     },
   })) as OutboxRow[]
 
