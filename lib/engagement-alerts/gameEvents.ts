@@ -14,9 +14,10 @@ export function isCloseLateGame(sport: string, g: GameObservation): boolean {
   const seconds = clock ? Number(clock[1] ?? 0) * 60 + Number(clock[2]) : null
   switch (sport.toUpperCase()) {
     case 'NFL': case 'NCAAF': return gap <= 8 && g.period >= 4 && seconds != null && seconds <= 300
-    case 'NBA': case 'WNBA': return gap <= 5 && g.period >= 4 && seconds != null && seconds <= 300
-    case 'NCAAB': return gap <= 5 && g.period >= 2 && seconds != null && seconds <= 300
-    case 'NHL': return gap <= 1 && g.period >= 3 && seconds != null && seconds <= 300
+    case 'WNBA': return gap <= 5 && g.period >= 4 && seconds != null && seconds <= 300
+    case 'NBA': return gap <= 5 && g.period >= 4 && seconds != null && seconds <= 120
+    case 'NCAAB': return gap <= 5 && g.period >= 2 && seconds != null && seconds <= 120
+    case 'NHL': return gap <= 1 && g.period >= 3 && seconds != null && seconds <= 120
     case 'MLB': case 'NCAABASE': return gap <= 1 && g.period >= 8
     case 'SOCCER': return gap <= 1 && g.period >= 2 && Number.parseInt(g.clock, 10) >= 80
     default: return false
@@ -59,8 +60,16 @@ export function gameStateAlerts(sport: string, previous: GameObservation | null,
 
 /** Only provider-identified plays qualify; cumulative score changes cannot identify every play. */
 export function gamePlayAlerts(detail: LiveGameDetail): GameAlert[] {
-  // Basketball and hockey use interval summaries instead of noisy per-play alerts.
-  if (['NBA', 'NHL'].includes(detail.sport.toUpperCase())) return []
+  const sport = detail.sport.toUpperCase()
+  const restricted = ['NBA', 'NCAAB', 'NHL'].includes(sport)
+  // Use each play's own clock and score, never the current game snapshot.
+  const eligible = (p: { period?: number | null; clock?: string | null; homeScore?: number | null; awayScore?: number | null }) => {
+    if (!restricted) return true
+    const lastPeriod = sport === 'NHL' ? 3 : sport === 'NCAAB' && detail.basketball?.periods !== 'quarters' ? 2 : 4
+    const clock = /^(?:(\d+):)?(\d{1,2}(?:\.\d+)?)$/.exec(p.clock ?? '')
+    if (!clock || p.period == null || p.period < lastPeriod || p.homeScore == null || p.awayScore == null) return false
+    return Number(clock[1] ?? 0) * 60 + Number(clock[2]) <= 120 && Math.abs(p.homeScore - p.awayScore) <= (sport === 'NHL' ? 1 : 5)
+  }
   const out = new Map<string, GameAlert>()
   const add = (p: { id: string; text: string }, scoring: boolean) => {
     if (!p.id || !p.text) return
@@ -70,17 +79,17 @@ export function gamePlayAlerts(detail: LiveGameDetail): GameAlert[] {
   const hasFullPlayList = !!detail.basketball?.plays.length || !!detail.hockey?.plays.length || !!detail.baseball?.atBats.length || detail.drives.some(d => d.plays.length > 0)
   // A summary can list one score both in its sport play list and scoringPlays with different ids.
   // Prefer the full list so one observation does not become two notifications.
-  if (!hasFullPlayList) for (const p of detail.scoringPlays) add(p, true)
+  if (!hasFullPlayList) for (const p of detail.scoringPlays) if (eligible(p)) add(p, true)
   for (const p of detail.basketball?.plays ?? []) {
-    if (p.scoring) add(p, true)
-    else if (/block|steal/i.test(p.type ?? '')) add(p, false)
+    if (p.scoring && eligible(p)) add(p, true)
+    else if (!restricted && /block|steal/i.test(p.type ?? '')) add(p, false)
   }
-  for (const p of detail.hockey?.plays ?? []) if (p.scoring) add(p, true)
+  for (const p of detail.hockey?.plays ?? []) if (p.scoring && eligible(p)) add(p, true)
   for (const ab of detail.baseball?.atBats ?? []) {
-    if (ab.scoring || /home run|triple|grand slam/i.test(ab.resultType ?? '')) add({ id: ab.id, text: ab.result ?? ab.events.join('. ') }, ab.scoring)
+    if (ab.scoring || /home run|grand slam/i.test(ab.resultType ?? '')) add({ id: ab.id, text: ab.result ?? ab.events.join('. ') }, true)
   }
   for (const drive of detail.drives) for (const p of drive.plays) {
-    if (p.scoring || (p.statYardage != null && p.statYardage >= 20)) add(p, p.scoring)
+    if (p.scoring || (p.statYardage != null && p.statYardage >= 19)) add(p, p.scoring)
   }
   return [...out.values()]
 }
