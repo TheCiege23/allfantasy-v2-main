@@ -67,7 +67,30 @@ describe('injury snapshot freshness', () => {
   const now = new Date()
   h.injuries.mockResolvedValue([{ playerName: 'Player', status: 'Out', source: 'espn', date: new Date(now.getTime()-60000) },{ playerName: 'Player', status: 'Active', source: 'espn', date: now }])
   await notifySyncedInjuries('NFL', now)
+  expect(h.dispatch).not.toHaveBeenCalled()
+  expect(h.saveObservation).toHaveBeenCalled()
+ })
+})
+
+describe('healthy recaps are not injury events', () => {
+ it.each(['Active','Healthy','Available'])('baselines a fresh %s recap without email/push fanout', async status => {
+  h.injuries.mockResolvedValue([{playerName:'Elijah Higgins',status,source:'espn',date:new Date(),description:"Higgins caught all three targets during Sunday's win."}])
+  await notifySyncedInjuries('NFL')
+  expect(h.dispatch).not.toHaveBeenCalled()
+  expect(h.recipients).not.toHaveBeenCalled()
+ })
+ it('preserves a confirmed recovery and consumes it only after successful dispatch', async () => {
+  h.observation.mockResolvedValue({data:{status:'questionable'}})
+  h.injuries.mockResolvedValue([{playerName:'Player',status:'Active',source:'espn',date:new Date()}])
+  await notifySyncedInjuries('NFL')
   expect(h.dispatch).toHaveBeenCalledTimes(1)
-  expect(h.dispatch.mock.calls[0][0].title).toBe('Player: active')
+  expect(h.saveObservation.mock.calls.at(-1)[0].update.data.status).toBe('active')
+ })
+ it('does not consume a failed dated recovery', async () => {
+  h.observation.mockResolvedValue({data:{status:'out'}})
+  h.injuries.mockResolvedValue([{playerName:'Player',status:'Active',source:'espn',date:new Date()}])
+  h.dispatch.mockResolvedValue({delivered:0,failed:1})
+  await notifySyncedInjuries('NFL')
+  expect(h.saveObservation).not.toHaveBeenCalled()
  })
 })

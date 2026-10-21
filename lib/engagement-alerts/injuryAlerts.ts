@@ -60,15 +60,20 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       const occurredAt = row.date?.getTime()
       // Undated feeds need an observed status transition, not first-snapshot fanout.
       const stateKey = `injury-observation:v1:${sport}:${identity.identityId}:${row.source}`
-      if (!occurredAt) {
+      const healthyStatus = /^(active|healthy|available)$/i.test(status)
+      if (!occurredAt || healthyStatus) {
         const previous = await prisma.sportsDataCache.findUnique({ where: { cacheKey: stateKey } })
         const previousStatus = (previous?.data as { status?: string } | null)?.status
-        if (!previousStatus || previousStatus === status) {
+        const priorInjury = /^(out|ir|injured reserve|inactive|suspended|out for season|ruled out|questionable|doubtful|probable|day.to.day|injured)$/i.test(previousStatus ?? '')
+        // A dated healthy snapshot can contain an ordinary game recap. Only a
+        // previously observed injury-to-healthy transition is a recovery alert.
+        if (!previousStatus || previousStatus === status || (healthyStatus && !priorInjury)) {
           await prisma.sportsDataCache.upsert({ where: { cacheKey: stateKey }, update: { data: { status } },
             create: { cacheKey: stateKey, data: { status }, expiresAt: new Date(now.getTime() + 30 * 86400_000) } })
           continue
         }
-      } else if (occurredAt < now.getTime() - 2 * 3600_000 || occurredAt > now.getTime() + 5 * 60_000) continue
+      }
+      if (occurredAt && (occurredAt < now.getTime() - 2 * 3600_000 || occurredAt > now.getTime() + 5 * 60_000)) continue
       const date = row.date?.toISOString().slice(0, 10) ?? now.toISOString().slice(0, 10)
       const key = createHash('sha256').update(`${sport}:${identity.identityId}:${status}:${date}`).digest('hex')
       if (seen.has(key)) continue
@@ -94,7 +99,7 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
         errors += result.failed
         dispatchFailed ||= result.failed > 0
       }
-      if (!occurredAt && !dispatchFailed && !audience.degraded) {
+      if (!dispatchFailed && !audience.degraded) {
         await prisma.sportsDataCache.upsert({ where: { cacheKey: stateKey }, update: { data: { status } },
           create: { cacheKey: stateKey, data: { status }, expiresAt: new Date(now.getTime() + 30 * 86400_000) } })
       }
