@@ -1,3 +1,5 @@
+import { createTeamInjuryNewsBatch } from './teamInjuryNewsBatch'
+import type { DispatchNotificationParams } from './NotificationDispatcher'
 /**
  * Player News Notification Service
  *
@@ -436,6 +438,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let retryScheduled = 0
   let ledgerUnpersisted = 0
   const stamped: string[] = []
+  const injuryBatch = createTeamInjuryNewsBatch()
 
   /*
    * 🛑 "CONSIDERED" AND "DELIVERED" WERE ONE STAMP. Every row looked at was stamped
@@ -542,6 +545,16 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         continue
       }
       const teamName = getTeamInfo(club)?.fullName ?? row.playerName
+      if(isInjury){
+        injuryBatch.add([{userIds:cappedFans,category:'followed_teams',type:'player_injury_update',
+          title:teamName,body:row.headline,leagueId:null,severity:'high',dedupePrefix:'player-news:'+row.id,
+          meta:{team:clubAbbr,sport:row.sport,newsCategory:category}}],async(users,failed)=>{
+          recipients+=users.size;teamFollowerRecipients+=users.size
+          if(users.size){await recordToldAbout([...users],story,undefined,{storyOnly:true});notified++}
+          await settle(row,failed?'dispatch-failed':users.size?'delivered':'all-suppressed')
+        })
+        continue
+      }
       const teamSent = await dispatchNotification({
         userIds: cappedFans,
         category: 'followed_teams',
@@ -665,6 +678,29 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const teamFollowersOnly = await withinTeamFollowDailyCap(uncappedTeamFollowers)
     teamFollowCapped += uncappedTeamFollowers.length - teamFollowersOnly.length
 
+    if (isInjury) {
+      const requests: DispatchNotificationParams[] = []
+      const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
+        severity:'high' as const, dedupePrefix:'player-news:'+row.id,
+        meta:{team:playerTeam,sport:row.sport,newsCategory:category}}
+      for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts'})
+      if(followersOnly.length)requests.push({...base,userIds:followersOnly,leagueId:null,category:'followed_players'})
+      if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams'})
+      injuryBatch.add(requests,async (users,failed)=>{
+        const toldNow=[...users]
+        recipients+=users.size
+        followerRecipients+=followersOnly.filter(id=>users.has(id)).length
+        teamFollowerRecipients+=teamFollowersOnly.filter(id=>users.has(id)).length
+        if(toldNow.length){
+          await recordToldAbout(toldNow,news)
+          if(teamHeadline)await recordToldAbout(toldNow,teamHeadline,undefined,{storyOnly:true})
+          notified++
+        }
+        await settle(row,failed?'dispatch-failed':toldNow.length?'delivered':'all-suppressed')
+      })
+      continue
+    }
+
     const icon = CATEGORY_ICONS[category] ?? '📰'
     const label = CATEGORY_LABELS[category] ?? 'News'
     const title = `${icon} ${label}: ${row.playerName}`.slice(0, 256)
@@ -741,6 +777,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     // Every remaining team follower can be capped out, so "nobody sent and nothing failed" is possible.
     await settle(row, anyDispatchFailed ? 'dispatch-failed' : toldNow.length > 0 ? 'delivered' : 'all-suppressed')
   }
+
+  await injuryBatch.flush()
 
   if (stamped.length > 0) {
     await prisma.playerNewsRecord

@@ -85,7 +85,7 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       seen.add(key)
       const audience = await resolvePlayerNewsRecipients(identity)
       if (audience.degraded) errors++
-      const team = row.team?.trim()
+      const team = identity.currentTeam?.trim() || row.team?.trim()
       if (!team) continue
       for (const [userId, leagueIds] of audience.byUser) {
         const starters = isUnavailableStatus(status) ? await startingLeagues(identity, userId, leagueIds) : []
