@@ -54,3 +54,25 @@ describe('game engagement events', () => {
     expect(gameStateAlerts('NBA',game(),game({status:'STATUS_HALFTIME',clock:'0:00'})).map(e=>e.type)).toEqual(['game_halftime'])
   })
  })
+
+describe('sport-specific scoring policy', () => {
+  it.each(['NBA', 'NCAAB', 'NHL'])('limits %s scores to close final two minutes using play timestamps', sport => {
+    const period = sport === 'NBA' ? 4 : sport === 'NHL' ? 3 : 2
+    const play = {id:'score', text:'Score', scoring:true, period, clock:'2:00', homeScore:10, awayScore:9}
+    const detail = (patch = {}) => ({sport, drives:[], scoringPlays:[{...play,...patch}]} as unknown as LiveGameDetail)
+    expect(gamePlayAlerts(detail())).toHaveLength(1)
+    expect(gamePlayAlerts(detail({clock:'2:01'}))).toEqual([])
+    expect(gamePlayAlerts(detail({period:1}))).toEqual([])
+    expect(gamePlayAlerts(detail({awayScore:0}))).toEqual([])
+    expect(gamePlayAlerts(detail({clock:null}))).toEqual([])
+  })
+  it.each(['NFL','NCAAF'])('includes exactly 19 yards and scoring plays for %s', sport => {
+    const plays=[18,19].map(n=>({id:String(n),text:`${n} yard gain`,statYardage:n,scoring:false}))
+    plays.push({id:'td',text:'Touchdown',statYardage:1,scoring:true})
+    expect(gamePlayAlerts({sport,scoringPlays:[],drives:[{plays}]} as unknown as LiveGameDetail).map(x=>x.key)).toEqual(['play:19','play:td'])
+  })
+  it('includes baseball runs and home runs but not non-scoring triples',()=>{
+    const atBats=[{id:'run',scoring:true,result:'Run scores'},{id:'hr',scoring:false,resultType:'home run',result:'Home run'},{id:'triple',scoring:false,resultType:'triple',result:'Triple'}]
+    expect(gamePlayAlerts({sport:'MLB',drives:[],scoringPlays:[],baseball:{atBats}} as unknown as LiveGameDetail).map(x=>x.key)).toEqual(['play:run','play:hr'])
+  })
+})
