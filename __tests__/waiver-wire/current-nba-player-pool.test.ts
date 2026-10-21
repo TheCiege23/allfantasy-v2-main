@@ -37,6 +37,13 @@ describe('NBA waiver listing and transaction eligibility use the same current id
     h.evidence.mockResolvedValue({ ready: false, reason: 'Current NBA roster unavailable' })
     await expect(loadLeagueWaiverPlayerPool(league)).rejects.toThrow('Current NBA roster unavailable')
   })
+  it('passes NFL position and team filters through the existing resolver unchanged', async () => {
+    const original = await h.pool()
+    h.pool.mockClear()
+    expect(await loadLeagueWaiverPlayerPool({ ...league, sport: 'NFL' }, { position: 'RB', teamId: 'SF' })).toBe(original)
+    expect(h.pool).toHaveBeenCalledWith(league.id, 'NFL', { limit: 800, position: 'RB', teamId: 'SF' })
+    expect(h.evidence).not.toHaveBeenCalled()
+  })
   it.each([
     { ...league, sport: 'NFL' as const },
     { ...league, isDynasty: true },
