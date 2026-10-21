@@ -2128,6 +2128,9 @@ test('@draft-room NBA player cards survive mobile resize, search and queue', asy
   await page.goto('/e2e/draft-player-measurement')
   const search = page.getByTestId('draft-player-search-input')
   await expect(search).toBeVisible()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
+  await page.getByTestId('draft-player-load-more').click()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/100 of 562/)
   for (const width of [412, 360, 412]) {
     await page.setViewportSize({ width, height: 844 })
     await search.fill('Jokic')
@@ -2136,6 +2139,7 @@ test('@draft-room NBA player cards survive mobile resize, search and queue', asy
     await expect(page.getByRole('heading', { name: 'Something went wrong' })).toHaveCount(0)
     await search.fill('')
     await expect(row).toContainText('Nikola Jokic')
+    await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
   }
   await search.fill('Jokic')
   await page.getByTestId('draft-player-card-0').getByRole('button', { name: /queue/i }).click()
