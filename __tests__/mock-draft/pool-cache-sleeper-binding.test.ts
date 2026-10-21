@@ -31,7 +31,7 @@ vi.mock('@/lib/multi-platform-adp', () => ({ findMultiADP: () => null }))
 vi.mock('@/lib/mock-draft/sport-player-pool', () => ({ loadSportAwareDraftPlayerPool: vi.fn(async () => []) }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { getCachedMockDraftPool } from '@/lib/mock-draft/mock-draft-pool-cache'
+import { getCachedMockDraftPool, buildMockDraftPoolCacheKey } from '@/lib/mock-draft/mock-draft-pool-cache'
 
 describe('mock-draft pool — Sleeper id binding', () => {
   it("gives QB Josh Allen the QB's id, and refuses the devy namesake rather than verify him by college team", async () => {
@@ -41,5 +41,14 @@ describe('mock-draft pool — Sleeper id binding', () => {
       ['Josh Allen', '4984', '4984'],
       ['Mike Williams', null, null],
     ])
+  })
+})
+
+
+describe('NBA verified roster cache namespace', () => {
+  it('separates old alphabetical payloads and keeps the complete NBA roster budget', () => {
+    expect(buildMockDraftPoolCacheKey({ sport: 'NBA', limit: 1000 })).toMatch(/limit:1000:verified-roster-v2$/)
+    expect(buildMockDraftPoolCacheKey({ sport: 'NBA', limit: 5000 })).toMatch(/limit:1000:verified-roster-v2$/)
+    expect(buildMockDraftPoolCacheKey({ sport: 'NFL', limit: 1000 })).toMatch(/limit:500$/)
   })
 })
