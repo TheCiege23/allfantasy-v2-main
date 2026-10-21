@@ -37,7 +37,7 @@ vi.mock('@/lib/chat-notifications/chatMessageNotifier', () => ({
 }))
 vi.mock('@/lib/chat-core/chimmyPrivateReply', () => ({ generateChimmyPrivateReply: vi.fn(async () => 'answer') }))
 vi.mock('@/lib/chat-core/league-message-proxy', () => ({ bracketMessagesToPlatform: vi.fn(() => []) }))
-vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: vi.fn(async () => true) }))
+vi.mock('@/lib/league-access', () => ({ resolveLeagueAccess: vi.fn(async () => ({ leagueId: 'lg', userId: 'manager-1', role: 'member' })) }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({
   getLeagueChatMessages: vi.fn(async () => []),
   createLeagueChatMessage: h.createLeagueChatMessage,
