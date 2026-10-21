@@ -2426,6 +2426,7 @@ export const translations: Record<string, Record<string, string>> = {
     "draftRoom.shell.mobile.roster": "My team",
     "draftRoom.shell.mobile.keepers": "Keepers",
     "draftRoom.shell.mobile.chat": "Chat",
+    "draftRoom.shell.mobile.more": "More",
     "draftRoom.shell.aria.draftSections": "Draft sections",
     "draftRoom.shell.hideBottomDock": "Hide chat & activity",
     "draftRoom.shell.showBottomDock": "Show chat & activity",
