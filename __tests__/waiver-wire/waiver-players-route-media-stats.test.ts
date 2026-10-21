@@ -14,6 +14,7 @@ const {
   getPlayerPoolForLeagueMock,
   sportsPlayerRecordFindManyMock,
   storedLogoMock,
+  currentRosterMock,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   leagueFindFirstMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   getPlayerPoolForLeagueMock: vi.fn(),
   sportsPlayerRecordFindManyMock: vi.fn(),
   storedLogoMock: vi.fn(),
+  currentRosterMock: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
@@ -31,6 +33,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findFirst: leagueFindFirstMock, findUnique: leagueFindFirstMock },
     roster: { findFirst: rosterFindFirstMock, findMany: rosterFindManyMock },
     sportsPlayerRecord: { findMany: sportsPlayerRecordFindManyMock },
+    sportsPlayer: { findMany: currentRosterMock },
   },
 }))
 vi.mock('@/lib/sport-teams/SportPlayerPoolResolver', () => ({
@@ -63,6 +66,10 @@ async function callRoute() {
 describe('waiver players route — photo, crest and stats from the DB', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    currentRosterMock.mockResolvedValue([
+      { name: 'Jalen Brunson', externalId: '101', source: 'thesportsdb', status: 'Active', team: 'New York Knicks', fetchedAt: new Date(), expiresAt: new Date(Date.now() + 86400000) },
+      { name: 'Someone', externalId: '102', source: 'thesportsdb', status: 'Active', team: 'Utah Jazz', fetchedAt: new Date(), expiresAt: new Date(Date.now() + 86400000) },
+    ])
     getServerSessionMock.mockResolvedValue({ user: { id: 'u1' } })
     rosterFindFirstMock.mockResolvedValue(null)
     rosterFindManyMock.mockResolvedValue([{ playerData: { players: [] } }])
@@ -78,7 +85,7 @@ describe('waiver players route — photo, crest and stats from the DB', () => {
         position: 'SG',
         team: 'New York Knicks',
         team_abbreviation: 'New York Knicks',
-        external_source_id: null,
+        external_source_id: '101',
         image_url: BRUNSON_PHOTO,
         metadata: { source: 'thesportsdb' },
       },
@@ -136,7 +143,7 @@ describe('waiver players route — photo, crest and stats from the DB', () => {
   it('a database failure on the stats read still returns the pool', async () => {
     leagueFindFirstMock.mockResolvedValue({ id: 'l1', sport: 'NBA', userId: 'u1' })
     getPlayerPoolForLeagueMock.mockResolvedValue([
-      { player_id: 'u-1', full_name: 'Someone', position: 'C', team: 'Utah Jazz', team_abbreviation: 'Utah Jazz', external_source_id: null },
+      { player_id: 'u-1', full_name: 'Someone', position: 'C', team: 'Utah Jazz', team_abbreviation: 'Utah Jazz', external_source_id: '102' },
     ])
     sportsPlayerRecordFindManyMock.mockRejectedValue(new Error('db down'))
     const data = await callRoute()
