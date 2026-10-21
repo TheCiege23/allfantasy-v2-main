@@ -30,3 +30,14 @@ it('does not send an unbound team',async()=>{
  const batch=createTeamInjuryNewsBatch(),done=vi.fn();batch.add([request('one','')],done);await batch.flush()
  expect(send).not.toHaveBeenCalled();expect(done).toHaveBeenCalledWith(new Set(),true)
 })
+
+it('leaves unattempted team batches retryable when the run budget expires',async()=>{
+ let exhausted=false
+ const batch=createTeamInjuryNewsBatch({exhausted:()=>exhausted}),first=vi.fn(),second=vi.fn()
+ send.mockImplementation(async()=>{exhausted=true;return {failed:0}})
+ batch.add([request('one','ARI')],first);batch.add([request('two','BUF')],second)
+ await batch.flush()
+ expect(send).toHaveBeenCalledTimes(1)
+ expect(first).toHaveBeenCalledWith(new Set(['u']),false)
+ expect(second).toHaveBeenCalledWith(new Set(),true)
+})

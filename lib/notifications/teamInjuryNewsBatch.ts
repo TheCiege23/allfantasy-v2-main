@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { dispatchNotification, type DispatchNotificationParams } from './NotificationDispatcher'
 
 /** Group only matching recipient/preference scopes; never expose another league's players. */
-export function createTeamInjuryNewsBatch() {
+export function createTeamInjuryNewsBatch(budget?: { exhausted(): boolean }) {
  const items: Array<{requests: DispatchNotificationParams[]; complete: (users: Set<string>, failed: boolean) => Promise<void>}> = []
  return {
   add(requests: DispatchNotificationParams[], complete: (users: Set<string>, failed: boolean) => Promise<void>) { items.push({requests,complete}) },
@@ -16,6 +16,7 @@ export function createTeamInjuryNewsBatch() {
     const entries=groups.get(key)??[];entries.push({index,request,user});groups.set(key,entries)
    })))
    for(const entries of groups.values()) {
+    if(budget?.exhausted()){for(const entry of entries)outcomes[entry.index].failed=true;continue}
     const first=entries[0]
     const members=[...new Map(entries.map(e=>[e.request.dedupePrefix??e.request.body,e.request])).values()]
     const digest=createHash('sha256').update(JSON.stringify([first.request.category,first.request.leagueId,first.request.meta?.team,members.map(m=>m.dedupePrefix??m.body).sort()])).digest('hex')

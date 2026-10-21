@@ -438,7 +438,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let retryScheduled = 0
   let ledgerUnpersisted = 0
   const stamped: string[] = []
-  const injuryBatch = createTeamInjuryNewsBatch()
+  const injuryBatch = createTeamInjuryNewsBatch(input?.budget)
 
   /*
    * 🛑 "CONSIDERED" AND "DELIVERED" WERE ONE STAMP. Every row looked at was stamped
@@ -684,8 +684,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         severity:'high' as const, dedupePrefix:'player-news:'+row.id,
         meta:{team:playerTeam,sport:row.sport,newsCategory:category}}
       for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts'})
-      if(followersOnly.length)requests.push({...base,userIds:followersOnly,leagueId:null,category:'followed_players'})
-      if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams'})
+      if(followersOnly.length)requests.push({...base,userIds:followersOnly,leagueId:null,category:'followed_players',meta:{...base.meta,followed:true}})
+      if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams',meta:{...base.meta,followedTeam:teamAbbr}})
       injuryBatch.add(requests,async (users,failed)=>{
         const toldNow=[...users]
         recipients+=users.size
