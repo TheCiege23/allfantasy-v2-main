@@ -55,7 +55,7 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
   it('mobile content div has min-w-0 + a stable testid + active-tab data attr', () => {
     expect(src).toMatch(/data-testid="draft-mobile-content"/)
     expect(src).toMatch(/data-active-tab=\{mobileTab\}/)
-    expect(src).toMatch(/min-h-\[220px\] min-w-0 p-2\.5/)
+    expect(src).toMatch(/min-h-\[220px\] min-w-0 p-2 pb-3/)
   })
 
   it('Board tab wraps its content in an overflow-x-auto scroll container', () => {

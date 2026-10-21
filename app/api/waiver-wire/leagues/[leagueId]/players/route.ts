@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
-import { getPlayerPoolForLeague } from "@/lib/sport-teams/SportPlayerPoolResolver"
+import { loadLeagueWaiverPlayerPool } from "@/lib/waiver-wire/current-nba-player-pool"
 import { normalizePoolRowToUnified } from "@/lib/player-data/normalizeProviderPlayer"
 import { serializeUnifiedPlayerForApi } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { loadWaiverPoolEnrichment, type WaiverPoolEnrichment } from "@/lib/waiver-wire/waiverPoolEnrichment"
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const [league, rosterAsMember] = await Promise.all([
     (prisma as any).league.findFirst({
       where: { id: leagueId },
-      select: { id: true, sport: true, userId: true },
+      select: { id: true, sport: true, userId: true, isDynasty: true, leagueVariant: true },
     }),
     (prisma as any).roster.findFirst({
       where: { leagueId, platformUserId: userId },
@@ -56,8 +56,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       }
     }
 
-    const pool = await getPlayerPoolForLeague(leagueId, league.sport, {
-      limit: 800,
+    const pool = await loadLeagueWaiverPlayerPool(league, {
       position,
       teamId,
     })

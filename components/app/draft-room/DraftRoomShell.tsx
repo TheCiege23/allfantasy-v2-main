@@ -121,8 +121,8 @@ export function DraftRoomShell({
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
-  const primaryMobileTabs = visibleTabs.filter((tab) => tab.id === 'board' || tab.id === 'players')
-  const secondaryMobileTabs = visibleTabs.filter((tab) => tab.id !== 'board' && tab.id !== 'players')
+  const primaryMobileTabs = visibleTabs.filter((tab) => ['board', 'players', 'queue', 'chat'].includes(tab.id))
+  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'chat'].includes(tab.id))
 
   /**
    * D.6 — when `layout='premium'` is set, we render the premium grid even if
@@ -145,7 +145,7 @@ export function DraftRoomShell({
       : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
 
   return (
-    <div className={surfaceClass} data-testid="draft-room-shell">
+    <div className={surfaceClass} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell">
       {topBar}
       {managerStrip}
 
@@ -345,7 +345,7 @@ export function DraftRoomShell({
           )}
           <div
             key={mobileTab}
-            className="min-h-[220px] min-w-0 p-2.5 pb-12 text-sm transition-opacity duration-150 sm:p-3 sm:pb-14"
+            className="min-h-[220px] min-w-0 p-2 pb-3 text-sm sm:p-3"
             data-testid="draft-mobile-content"
             data-active-tab={mobileTab}
           >
@@ -393,7 +393,7 @@ export function DraftRoomShell({
           ) : null}
           {secondaryMobileTabs.length > 0 ? (
             <div
-              className="safe-area-bottom border-t border-white/10 bg-[#060d1f]/95 px-2 pb-1 pt-1"
+              className="shrink-0 border-t border-white/10 bg-[#060d1f]/95 px-2 py-1"
               data-testid="draft-mobile-quick-dock"
             >
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
@@ -405,7 +405,7 @@ export function DraftRoomShell({
                       type="button"
                       onClick={() => onMobileTabChange(id)}
                       data-testid={`draft-mobile-tab-${id}`}
-                      className={`inline-flex min-h-[38px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition active:scale-[0.98] ${
+                      className={`inline-flex min-h-[44px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition active:scale-[0.98] ${
                         mobileTab === id
                           ? 'border-cyan-400/45 bg-cyan-500/15 text-cyan-100'
                           : 'border-white/15 bg-black/20 text-white/70'

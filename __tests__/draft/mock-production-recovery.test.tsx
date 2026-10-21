@@ -155,7 +155,10 @@ describe('native NBA league entry and checkpoint', () => {
     const fetchMock = vi.fn(async (input: string, options?: RequestInit) => {
       expect(options?.method ?? 'GET').toBe('GET')
       if (input.startsWith('/api/league/list')) return new Response(JSON.stringify({ leagues: [{ id: 'imported-nfl', name: 'Other NFL league', sport: 'NFL', platform: 'sleeper' }] }))
-      if (input.startsWith('/api/mock-draft/adp?')) return new Response(JSON.stringify({ entries: checkpoint().state.availablePlayers.map(player => ({ ...player, playerId: player.id })) }))
+      if (input.startsWith('/api/mock-draft/adp?')) {
+        expect(new URL(input, 'https://allfantasy.ai').searchParams.get('limit')).toBe('1000')
+        return new Response(JSON.stringify({ entries: checkpoint().state.availablePlayers.map(player => ({ ...player, playerId: player.id, adp: player.id === 'Alpha' ? null : player.adp })) }))
+      }
       if (input.startsWith('/api/mock-draft?')) return new Response(JSON.stringify({ league }))
       throw new Error(`Unexpected request: ${input}`)
     })
@@ -173,6 +176,7 @@ describe('native NBA league entry and checkpoint', () => {
     expect(state.settings).toMatchObject({ teamCount: 16, rounds: 9, sport: 'NBA', scoring: 'Points', rosterSlots })
     expect(state.teams).toHaveLength(16)
     expect(state.availablePlayers).toHaveLength(4)
+    expect(state.availablePlayers.find((player: {id:string}) => player.id === 'Alpha')).toMatchObject({adp:null, projectedPts:0})
     expect(state.teams[0].rosterNeeds).toEqual([])
     view.unmount()
     render(<MockDraftSleeperRoomClient viewerId="viewer" initialLeagueId="native-nba" initialSport="NBA" />)

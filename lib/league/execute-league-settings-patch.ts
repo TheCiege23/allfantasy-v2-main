@@ -58,6 +58,11 @@ import {
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  isTaxiIncreaseRefused,
+} from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
@@ -337,6 +342,14 @@ export async function executeLeagueSettingsPatch(
 
   if (body.sport != null && !LEAGUE_SPORTS.has(String(body.sport))) {
     return jsonError('Invalid sport', 400)
+  }
+
+  // NHL / MLB have no prospect pool: the Taxi squad section may keep or lower `taxiSlots`, never grow it.
+  if (body.taxiSlots != null && isTaxiIncreaseRefused(String(league.sport ?? ''), Number(body.taxiSlots), Number(league.taxiSlots ?? 0))) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE },
+      { status: 400 },
+    )
   }
 
   // "Which games count" (lib/redraft/gamesCount.ts) rides in `sportConfig`: a bad mode, a best-N other

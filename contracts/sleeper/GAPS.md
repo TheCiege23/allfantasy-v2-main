@@ -54,3 +54,33 @@ lists `NBA: 'nba'` — but nothing has ever captured it, and no scheduled writer
 | ID | Gap | Status | Blocks | How the code copes today |
 |---|---|---|---|---|
 | `S-09` | **Does the NBA players feed carry `years_exp`, and is `0` a first-year player the way it is for NFL?** Also unknown: whether Sleeper serves any NHL or MLB players feed (the code maps only NFL and NBA). | **UNVERIFIED — no fixture** | Filling `SportsPlayer.yearsExp` for NBA rows, which the draft pool now reads for the Rookie badge (`lib/draft-room/nonNflRookieFields.ts`) | Nothing writes NBA `yearsExp`: `refreshSleeperPlayerRows` is scheduled for `NFL` only (`/api/cron/import-players`), and `SleeperPlayerSeedService` (which would write NBA) has no caller and must not get one (it deletes by source). So NBA rows are labelled only where a row already carries experience; otherwise the badge stays off, which is the honest "unknown". **To resolve:** add an `ENDPOINTS.yaml` + `scripts/probe.sh` for Sleeper, capture `players/nba` once with the fixture committed in the same change, then extend the scheduled `refreshSleeperPlayerRows` phase to `NBA` (it upserts by `sleeperId` and never deletes). |
+
+**S-09 update, 2026-10-20 (no probe).** The owner approved Sleeper `players/nba` `years_exp` as the
+NBA source ("yes [use Sleeper players/nba years_exp]"). It is still blocked, for a contract reason
+rather than a product one: **this directory has no `ENDPOINTS.yaml` and no `scripts/probe.sh`**, so
+there is no sanctioned way to capture the fixture CLAUDE.md requires before a new endpoint/sport
+combination is wired. Nothing in the repo documents the NBA shape either: `FeedPlayer`
+(`lib/sleeper/refreshSleeperPlayerRows.ts`) and `SleeperPlayerRecord` (`SleeperPlayerSeedService`)
+are typed from the NFL feed, and no test or fixture holds an NBA payload.
+
+What is needed, in one change: (1) `contracts/sleeper/ENDPOINTS.yaml` with `players/{sport}` and a
+`scripts/probe.sh` that writes `fixtures/players.nba.json` (the feed is ~5 MB for NFL; commit a
+trimmed sample of ~20 players including at least one 2026 draftee and one 10+ year veteran, plus a
+count of how many entries carry a numeric `years_exp`); (2) from that fixture, answer whether
+`years_exp` is present and whether `0` means a first-year player; (3) only then add `NBA` to the
+scheduled `refreshSleeperPlayerRows` phase in `/api/cron/import-players`.
+
+Two things the later writer must respect, read from code on `main`:
+
+- **NHL and MLB: no Sleeper path exists in code.** `SleeperSport` is `'nfl' | 'nba'`
+  (`lib/autocoach/status-sources/SleeperStatusAdapter.ts`) and `SLEEPER_ENDPOINT_SPORTS` maps only
+  `NFL` and `NBA`. Whether Sleeper serves those sports at all is not established from the network
+  and should not be.
+- **Precedence falls out of the pool, with one trap.** A known `yearsExp` already outranks the
+  stats-derived `rookieVerdict` in `getResolvedDraftPoolForLeague` (`resolveNonNflRookieFields`
+  runs first), so Sleeper wins over history without extra code. But the writer creates
+  `source = 'sleeper'` rows beside the Rolling Insights ones, and `SportPlayerPoolResolver` merges
+  duplicates with `mergeKnownYearsExp`, which returns NULL when two known values disagree. Nothing
+  writes `yearsExp` on the RI rows today, so there is nothing to disagree with — keep it that way,
+  or copy Sleeper's value onto the linked RI row (`PlayerIdentityMap.rollingInsightsId` +
+  `sleeperId`) rather than writing a second opinion.

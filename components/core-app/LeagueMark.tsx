@@ -26,14 +26,15 @@ export function LeagueMark({
   letter: string
   className?: string
 }) {
-  const [failed, setFailed] = useState(false)
-  if (!src || failed) return <>{letter}</>
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  if (!src || failedSrc === src) return <>{letter}</>
   return (
     <img
       src={src}
       alt=""
       className={className}
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(src)}
+      decoding="async"
       loading="lazy"
     />
   )
