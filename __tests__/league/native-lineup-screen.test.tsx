@@ -307,6 +307,17 @@ describe('NativeLineupScreen', () => {
     expect(screen.queryByRole('button', { name: /Move to IR/ })).toBeNull()
   })
 
+  it('the bench shows every bench spot the league set: filled players, then open slots', async () => {
+    stubFetch(baseRoutes([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)], {
+      slotLimits: { starters: 2, bench: 3, ir: 0, taxi: 0, devy: 0 },
+    }))
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Bijan Robinson')
+    expect(screen.getAllByTestId('bench-open-slot')).toHaveLength(2)
+    expect(screen.getByText('1 / 3')).toBeTruthy()
+    expect(screen.queryByText('No one on the bench.')).toBeNull()
+  })
+
   it('IR: an IR player moves back out to the bench', async () => {
     const hurt = { ...wire('rb3', 'Breece Hall', 'RB', 0), injuryStatus: 'IR' }
     const r = roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2), hurt])
