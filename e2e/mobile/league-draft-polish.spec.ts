@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
-test('league section picker and switcher stay tappable through rotation', async ({ page }) => {
+test('league section picker and switcher stay tappable through rotation', async ({ page }, testInfo) => {
+  await page.route('**/api/chat/unread', route => route.fulfill({ json: { byLeague: {} } }))
   await page.goto('/dev/league-mobile-preview')
   const section = page.getByRole('combobox', { name: 'League section', exact: true })
   await expect(section).toBeVisible({ timeout: 60_000 })
@@ -18,9 +19,11 @@ test('league section picker and switcher stay tappable through rotation', async 
   await section.selectOption('draft')
   await expect(page.getByRole('heading', { name: 'draft', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await section.selectOption('native_home')
+  await testInfo.attach('league-mobile', { body: await page.screenshot(), contentType: 'image/png' })
 })
 
-test('draft tools, player search and options work on narrow and short screens', async ({ page }) => {
+test('draft tools, player search and options work on narrow and short screens', async ({ page }, testInfo) => {
   await page.goto('/dev/league-mobile-preview?screen=draft')
   const more = page.getByTestId('draft-mobile-more')
   await expect(more).toBeVisible({ timeout: 60_000 })
@@ -53,4 +56,6 @@ test('draft tools, player search and options work on narrow and short screens', 
   await page.getByTestId('draft-mobile-tab-chat').tap()
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Ready for draft day')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByTestId('draft-mobile-tab-players').tap()
+  await testInfo.attach('draft-mobile', { body: await page.screenshot(), contentType: 'image/png' })
 })
