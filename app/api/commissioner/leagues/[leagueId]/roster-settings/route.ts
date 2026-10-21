@@ -16,6 +16,9 @@ import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeN
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
+import { syncDraftRoundsToRoster } from '@/lib/draft/syncDraftRoundsToRoster'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,9 +105,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
   if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
 
-  const oldConfig = await getLeagueRosterConfig(leagueId)
+  const [oldConfig, roundsBefore] = await Promise.all([
+    getLeagueRosterConfig(leagueId),
+    getComputedDraftRounds(leagueId).catch(() => null),
+  ])
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
+  // Rounds = draftable roster spots, so the draft follows the roster it was just given.
+  const draftRounds = await syncDraftRoundsToRoster(leagueId, {
+    before: roundsBefore,
+    keepManualOverride: await hasAfCommissionerSub(session.user.id),
+  }).catch((e) => {
+    console.warn('[roster-settings PUT] draft rounds sync', e instanceof Error ? e.message : 'unknown error')
+    return null
+  })
   const config = await registry.getService(league.sport).getConfig(leagueId)
   const unifiedConfig = await getLeagueRosterConfig(leagueId)
 
@@ -135,5 +149,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   } catch { /* non-fatal */ }
 
   await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
-  return NextResponse.json({ ok: true, config, unifiedConfig })
+  return NextResponse.json({ ok: true, config, unifiedConfig, draftRounds })
+}
+
+/** AF Commissioner entitlement — the same check the draft settings route uses for a manual round count. */
+async function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  const r = await new EntitlementResolver()
+    .resolveForUser(userId, 'commissioner_ai_tools')
+    .catch(() => ({ hasAccess: false }))
+  return Boolean(r.hasAccess)
 }

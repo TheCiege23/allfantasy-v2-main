@@ -259,6 +259,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   )
   const canIr = useCallback((id: string) => isIrEligibleStatus(data?.irRules ?? STRICT_IR_RULES, players[id]?.injuryStatus), [data, players])
   const irCapacity = data?.slotLimits?.ir ?? null
+  /** Bench spots the commissioner set (roster positions → BN); each unfilled one shows as an open slot. */
+  const benchCapacity = data?.slotLimits?.bench ?? null
   const hasIr = (irCapacity ?? 0) > 0 || Boolean(lists?.ir.some(Boolean))
 
   const nextLock = useMemo(() => {
@@ -638,12 +640,18 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
                   </section>
                   <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dropState({ kind: 'bench' })}>
-                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : null}</h3>
+                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null}</h3>
                     <ul className="nls-rows">
                       {lists.bench.filter(Boolean).map((id) => renderRow(id, null, 'bench'))}
-                      {!lists.bench.some(Boolean) ? (
-                        <li><div className="nls-lrow nls-lrow-empty"><PosPill label="BN" /><span>No one on the bench.</span></div></li>
-                      ) : null}
+                      {benchCapacity != null
+                        ? Array.from({ length: Math.max(0, benchCapacity - lists.bench.filter(Boolean).length) }, (_, i) => (
+                            <li key={`bn-open-${i}`} data-testid="bench-open-slot">
+                              <div className="nls-lrow nls-lrow-empty"><PosPill label="BN" /><div className="nls-player"><strong>Empty</strong><small>Open slot</small></div></div>
+                            </li>
+                          ))
+                        : !lists.bench.some(Boolean) ? (
+                            <li><div className="nls-lrow nls-lrow-empty"><PosPill label="BN" /><span>No one on the bench.</span></div></li>
+                          ) : null}
                     </ul>
                   </DropZone>
                   {hasIr ? (
