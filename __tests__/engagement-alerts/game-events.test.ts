@@ -21,7 +21,7 @@ describe('game engagement events', () => {
     expect(isCloseLateGame(sport as string, game({ period: period as number, clock: clock as string, homeScore: gap as number, awayScore: 0 }))).toBe(expected)
   })
   it('keeps distinct scoring plays while collapsing duplicate observations of one play', () => {
-    const d = { sport: 'NBA', scoringPlays: [{ id: 'a', text: 'Three pointer' }], drives: [], hockey: null,
+    const d = { sport: 'WNBA', scoringPlays: [{ id: 'a', text: 'Three pointer' }], drives: [], hockey: null,
       basketball: { plays: [{ id: 'a', text: 'Three pointer', scoring: true }, { id: 'b', text: 'Layup', scoring: true }] } } as unknown as LiveGameDetail
     expect(gamePlayAlerts(d).map(p => p.key)).toEqual(['play:a', 'play:b'])
   })
@@ -39,3 +39,18 @@ describe('game engagement events', () => {
     for (const category of ['injury_alerts', 'lineup_alerts', 'performance_alerts', 'ai_alerts', 'matchup_results'] as const) expect(allowsLeagueSms(category, 'league')).toBe(false)
   })
 })
+
+ describe('NBA/NHL interval notification policy', () => {
+  it.each(['NBA','NHL'])('suppresses all %s per-play alerts including fallback scores', sport => {
+    expect(gamePlayAlerts({sport,scoringPlays:[{id:'1',text:'Score'}],drives:[],basketball:{plays:[{id:'2',text:'Steal',type:'steal'}]},hockey:{plays:[{id:'3',text:'Goal',scoring:true}]}} as unknown as LiveGameDetail)).toEqual([])
+  })
+  it.each(['NBA','NHL'])('summarizes %s interval scores at the boundary and on the next period', sport => {
+    const end=game({period:1,clock:'0:00',homeScore:25,awayScore:20,statusDetail:'End of period'})
+    expect(gameStateAlerts(sport,game({period:1}),end)).toContainEqual(expect.objectContaining({key:'interval:1',type:'game_period_end',body:'Away 20 — Home 25'}))
+    expect(gameStateAlerts(sport,end,game({period:2,homeLinescores:[25,3],awayLinescores:[20,2]}))).toContainEqual(expect.objectContaining({key:'interval:1',body:'Away 20 — Home 25'}))
+  })
+  it('does not emit a quarter summary during play or duplicate NBA halftime',()=>{
+    expect(gameStateAlerts('NBA',game({period:1}),game({period:1}))).toEqual([])
+    expect(gameStateAlerts('NBA',game(),game({status:'STATUS_HALFTIME',clock:'0:00'})).map(e=>e.type)).toEqual(['game_halftime'])
+  })
+ })
