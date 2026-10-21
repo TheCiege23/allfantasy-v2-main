@@ -88,7 +88,7 @@ interface DraftPick {
   playerName: string
   position: string
   team: string
-  adp: number
+  adp: number | null
   projectedPts: number
   aiReason?: string
   isUser: boolean
@@ -116,7 +116,7 @@ interface AvailablePlayer {
   name: string
   position: string
   team: string
-  adp: number
+  adp: number | null
   projectedPts: number
   ownership: number
   injuryStatus: string | null
@@ -373,7 +373,7 @@ function scorePlayerForTeam(
   picks: DraftPick[],
   availablePlayers: AvailablePlayer[],
 ): number {
-  let score = Math.max(0, 200 - player.adp)
+  let score = Math.max(0, 200 - (player.adp ?? 9999))
   const primaryNeed = needs[0] ?? null
   const roundNumber = Math.ceil((picks.length + 1) / settings.teamCount)
 
@@ -390,7 +390,7 @@ function scorePlayerForTeam(
   }
 
   if (roundNumber > settings.rounds * 0.7) {
-    if (player.ownership < 50 && player.adp > (roundNumber * settings.teamCount * 0.8)) {
+    if (player.ownership < 50 && player.adp != null && player.adp > (roundNumber * settings.teamCount * 0.8)) {
       score += 5
     }
     if (player.isRookie) score += 3
@@ -401,8 +401,8 @@ function scorePlayerForTeam(
 }
 
 function generatePickReason(player: AvailablePlayer, team: TeamSlot, needs: string[], round: number): string {
-  if (needs.includes(player.position)) {
-    return `Filled a ${player.position} need with value at ${player.adp.toFixed(1)} ADP.`
+  if (needs.includes(player.position) && player.adp != null) {
+    return `Filled a ${player.position} need with value at ${player.adp?.toFixed(1) ?? '\u2014'} ADP.`
   }
   if (round > 10 && player.isRookie) {
     return 'Late-round upside swing with rookie growth appeal.'
@@ -509,7 +509,7 @@ function buildPlayerContextMessage(state: DraftState, queue: string[]): string {
   const topAvailable = state.availablePlayers
     .filter((player) => !draftedNames.has(player.id))
     .slice(0, 8)
-    .map((player) => `${player.name} (${player.position}, ${player.team || 'FA'}, ADP ${player.adp.toFixed(1)})`)
+    .map((player) => `${player.name} (${player.position}, ${player.team || 'FA'}, ADP ${player.adp?.toFixed(1) ?? 'unavailable'})`)
     .join(', ')
 
   const rosterSummary = currentTeam
@@ -1037,7 +1037,7 @@ export default function MockDraftSleeperRoomClient({
     const params = new URLSearchParams({
       type,
       pool,
-      limit: '300',
+      limit: nextSettings.sport === 'NBA' ? '1000' : '300',
       sport: nextSettings.sport.toLowerCase(),
       leagueId: selectedLeague?.id ?? '',
       draftType: nextSettings.draftType,
@@ -1064,8 +1064,8 @@ export default function MockDraftSleeperRoomClient({
           name,
           position,
           team: stringFromUnknown(raw.team) ?? '',
-          adp: numberFromUnknown(raw.adp) ?? index + 1,
-          projectedPts: numberFromUnknown(raw.value) ?? Math.max(0, 250 - index),
+          adp: numberFromUnknown(raw.adp) ?? (nextSettings.sport === 'NBA' ? null : index + 1),
+          projectedPts: numberFromUnknown(raw.value) ?? (nextSettings.sport === 'NBA' ? 0 : Math.max(0, 250 - index)),
           ownership: numberFromUnknown(raw.timesDrafted) ?? Math.max(10, 95 - index / 4),
           injuryStatus: stringFromUnknown(raw.injuryStatus),
           tier: Math.max(1, Math.ceil((index + 1) / 12)),
@@ -1074,7 +1074,7 @@ export default function MockDraftSleeperRoomClient({
         } satisfies AvailablePlayer
       })
       .filter((player): player is AvailablePlayer => player != null)
-      .sort((left, right) => left.adp - right.adp)
+      .sort((left, right) => (left.adp ?? Infinity) - (right.adp ?? Infinity))
 
     return mapped
   }, [selectedLeague?.id, selectedLeague?.isDynasty])
@@ -1860,7 +1860,7 @@ export default function MockDraftSleeperRoomClient({
                 {player.injuryStatus ? (
                   <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
                 ) : null}
-                <div className="text-[11px] font-mono text-white/40">{player.adp.toFixed(1)}</div>
+                <div className="text-[11px] font-mono text-white/40">{player.adp?.toFixed(1) ?? '\u2014'}</div>
               </button>
               <button
                 type="button"
@@ -2340,7 +2340,7 @@ export default function MockDraftSleeperRoomClient({
                       </span>
                       <span className="truncate text-sm font-semibold text-white">{pick.playerName}</span>
                     </div>
-                    <div className="mt-1 text-[11px] text-white/35">{pick.team || 'FA'} · ADP {pick.adp.toFixed(1)}</div>
+                    <div className="mt-1 text-[11px] text-white/35">{pick.team || 'FA'} · ADP {pick.adp?.toFixed(1) ?? '\u2014'}</div>
                   </div>
                 ))}
               </div>

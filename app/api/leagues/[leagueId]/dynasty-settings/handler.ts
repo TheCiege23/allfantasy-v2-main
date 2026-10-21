@@ -35,6 +35,12 @@ import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/li
 import { ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY, normalizeCustomOpenDate } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
 import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  isTaxiIncreaseRefused,
+  sportSupportsProspectStash,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,6 +106,8 @@ export async function GET(
       vetoRecommendationCopy: VETO_RECOMMENDATION_COPY,
       taxiEligibilityYearsOptions: [...TAXI_ELIGIBILITY_YEARS_OPTIONS],
       taxiLockBehaviorOptions: [...TAXI_LOCK_BEHAVIOR_OPTIONS],
+      // NHL / MLB: taxi may be kept or lowered, never grown (PUT refuses an increase).
+      taxiSlotsMax: sportSupportsProspectStash(sport) ? 20 : (effective?.taxiSlots ?? 4),
     },
     draftOrderAuditLog: auditLog,
     isDynasty,
@@ -161,6 +169,15 @@ export async function PUT(
   }
 
   const priorDynasty = await prisma.dynastyLeagueConfig.findUnique({ where: { leagueId } })
+
+  // NHL / MLB have no prospect pool: a commissioner may keep or lower an existing taxi squad, never
+  // grow one. The baseline with no config row is 4, the value GET reports for such a league.
+  if (body.taxiSlots != null && isTaxiIncreaseRefused(String(leagueSport), Number(body.taxiSlots), priorDynasty?.taxiSlots ?? 4)) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE },
+      { status: 400 },
+    )
+  }
 
   const settingsPatch: Record<string, unknown> = {}
   if (body.roster_format_type != null) settingsPatch.roster_format_type = String(body.roster_format_type)

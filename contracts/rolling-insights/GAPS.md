@@ -84,6 +84,43 @@ need a different vendor; that is §3 of the same plan and an owner decision.
 
 ---
 
+## N-21 — how much MLB / NBA / NHL season history we store (measured 2026-10-20, read-only SQL, no probe)
+
+**Status: MEASURED.** Asked because the rookie verdicts in `lib/draft-room/seasonStatsRookieStatus.ts`
+and any "no prior rows means rookie" rule are only as good as the seasons behind them. Distinct
+players with a regular-season appearance (games played > 0), by table and season (start year):
+
+| sport | `player_season_stats` `rolling_insights` | `fantasy_stat_lines` `rolling_insights` week 0 | `player_game_stats` `rolling_insights_live` |
+|---|---|---|---|
+| NBA | 2025: 591 | 2025: 591 | 2026 only, preseason (from 2026-10-03) |
+| NHL | 2026: 763 (in progress) | 2025: 1,040 · 2026: 836 | 2026 only |
+| MLB | 2026: 2,759 rows (1,986 players with games across all three tables) | 2025: 1,469 · 2026: 1,986 | 2026 only |
+
+TheSportsDB rows in `player_season_stats` go back to 1999 (MLB) but cover a few hundred players a
+season at most and are deliberately not read (`contracts/thesportsdb/GAPS.md` G-15).
+
+**What it means today.**
+- **One complete prior season at most, per sport.** Under a one-season lookback, "active and no
+  2025 appearance" named 111 NBA players as rookies for 2026, including Tyrese Haliburton (missed
+  2025-26 injured), James Johnson, Georges Niang, Trey Lyles and Elfrid Payton. Absence of rows is
+  not evidence of a rookie at this depth. This is why no history-derived `SportsPlayer.yearsExp` is
+  written: a known `yearsExp` also outranks the official per-sport rookie verdict in the pool, so a
+  season-count rule would override the NHL 25-game and MLB 130-AB rules rather than inform them.
+- **NHL and MLB verdicts read nothing prior for a 2026 league.** `loadSeasonStatsRookieVerdicts`
+  reads only `player_season_stats`, whose RI rows for those two sports exist only for 2026 (the mirror
+  into that table is recent; see the 2026-10-17 note in `lib/stats/rollingInsightsPlayerStats.ts`). Their 2025 seasons sit in `fantasy_stat_lines` only, so every NHL and
+  MLB player is `unknown` where 2025 games would prove many `not_rookie`.
+
+**How to resolve.** Re-run the existing ingestion for explicit past seasons:
+`/api/cron/import-stat-lines?sport=NHL&season=2025` (and `MLB`, and `NBA`/`NHL`/`MLB` for 2022-2024).
+An explicit season disables the bootstrap fallback and goes through the same mirror into
+`player_season_stats`, keyed by RI id, so no identity resolution drops rows. ⚠ Unverified: whether
+`player-stats/{season}` serves past seasons for these sports on `RSC_TOKEN2` (NFL 2025 was probed);
+a 304 or 0 rows is reported, not written. Three or more stored prior seasons is roughly where an
+absence starts to mean something for NBA; MLB's rule needs every season since age 16.
+
+---
+
 ## Blocking — resolve before shipping that sport
 
 | ID | Gap | Status | Blocks | How to resolve |

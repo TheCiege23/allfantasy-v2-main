@@ -2119,3 +2119,30 @@ test.describe('@draft-room single-board regression', () => {
     await assertSingleDraftBoard(page)
   })
 })
+
+
+test('@draft-room NBA player cards survive mobile resize, search and queue', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.setViewportSize({ width: 360, height: 844 })
+  await page.goto('/e2e/draft-player-measurement')
+  const search = page.getByTestId('draft-player-search-input')
+  await expect(search).toBeVisible()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
+  await page.getByTestId('draft-player-load-more').click()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/100 of 562/)
+  for (const width of [412, 360, 412]) {
+    await page.setViewportSize({ width, height: 844 })
+    await search.fill('Jokic')
+    const row = page.getByTestId('draft-player-card-0')
+    await expect(row).toContainText('Nikola Jokic')
+    await expect(page.getByRole('heading', { name: 'Something went wrong' })).toHaveCount(0)
+    await search.fill('')
+    await expect(row).toContainText('Nikola Jokic')
+    await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
+  }
+  await search.fill('Jokic')
+  await page.getByTestId('draft-player-card-0').getByRole('button', { name: /queue/i }).click()
+  await expect(page.getByTestId('measurement-queue')).toHaveText('Nikola Jokic')
+  expect(errors).toEqual([])
+})
