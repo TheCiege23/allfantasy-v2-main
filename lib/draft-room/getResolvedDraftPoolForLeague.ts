@@ -78,7 +78,7 @@ import {
 import { rookieClassYear } from '@/lib/draft-room/rookieFilterPredicate'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
-import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
+import { shouldVerifyCurrentNbaRoster, loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -410,9 +410,10 @@ export async function loadLatestAveragedAdpRowsFromDb(
   format: 'redraft' | 'dynasty',
   twoQuarterbacks = false,
   context?: { season: number; scoring: string | null },
+  options: { allowLiveImport?: boolean } = {},
 ): Promise<AveragedAdpRow[]> {
   if (twoQuarterbacks) {
-    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS }, context?.season)
+    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS }, context?.season, options.allowLiveImport !== false)
     // No 2QB board for this format is better answered by the 1QB board than by nothing.
     if (qbHeavy.length > 0) return qbHeavy
   }
@@ -421,7 +422,7 @@ export async function loadLatestAveragedAdpRowsFromDb(
     : ['halfppr', 'fbhalfppr', 'ncaafhalfppr'].includes(token ?? '') ? ['halfPPR', 'half-ppr', 'half_ppr', 'halfppr']
     : ['standard', 'nonppr', 'fbstandard', 'ncaafstandard'].includes(token ?? '') ? ['standard', 'non-ppr', 'nonppr']
     : context?.scoring ? [context.scoring] : null
-  const scoped = await loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  const scoped = await loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season, options.allowLiveImport !== false)
   /*
    * Outside football the board is one market, not one per scoring system: Fantrax publishes a single
    * NBA board (stored as `standard`), while a league's `scoring` is its own preset id. Requiring the
@@ -429,7 +430,7 @@ export async function loadLatestAveragedAdpRowsFromDb(
    * alphabetical order. Football keeps the strict match — its PPR and standard boards genuinely differ.
    */
   if (scoped.length === 0 && aliases && sport !== 'NFL' && sport !== 'NCAAF') {
-    return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+    return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season, options.allowLiveImport !== false)
   }
   return scoped
 }
@@ -439,6 +440,7 @@ async function loadLatestAveragedAdpRowsForScorings(
   format: 'redraft' | 'dynasty',
   scoring: { in: string[] } | { notIn: string[] },
   season?: number,
+  allowLiveImport = true,
 ): Promise<AveragedAdpRow[]> {
   const sourceExclusions = sport === 'NFL' && season != null && !('in' in scoring && scoring.in.some(value => QB_HEAVY_ADP_SCORINGS.includes(value)))
     ? [...ADP_IMPORT_SOURCES_EXCLUDED, 'fantrax', 'sleeper', 'espn', 'mfl', 'nffc']
@@ -461,6 +463,7 @@ async function loadLatestAveragedAdpRowsForScorings(
   let latest = await findLatest()
   if (!latest) {
     if (
+      allowLiveImport &&
       !dbFirstMode.useDbCacheOnly &&
       !dbFirstMode.disableLiveApiOnPageLoad &&
       !dbFirstMode.disableAdpLiveMergeOnPageLoad
@@ -1122,6 +1125,11 @@ export async function getResolvedDraftPoolForLeague(
   if (isDevyDynasty && !isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_vet'
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
   const mergeCollegePool = (devyEnabled || c2cEnabled) && (sport === 'NFL' || sport === 'NBA')
+  const verifyCurrentNbaRoster = shouldVerifyCurrentNbaRoster({
+    sport, variant: league?.leagueVariant,
+    isDynasty: Boolean(league?.isDynasty) || String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY'),
+    isDevy: isDevyDynasty, isC2C, mergeCollegePool,
+  })
   const strictPoolSeparation = (isDevyDynasty && poolType != null) || (isC2C && poolType != null)
   const useMixedPoolTypeMarkers = mergeCollegePool || c2cEnabled || devyEnabled
   const adpFormat: 'redraft' | 'dynasty' =
@@ -1476,8 +1484,7 @@ export async function getResolvedDraftPoolForLeague(
     } else {
       // An NBA Survivor cast can make hundreds of picks. Without an ADP feed,
       // the display limit is too small to supply a complete verified draft.
-      const initialPoolRows = sport === 'NBA' && league?.leagueVariant === 'survivor'
-        ? poolRows : poolRows.slice(0, limit)
+      const initialPoolRows = verifyCurrentNbaRoster ? poolRows : poolRows.slice(0, limit)
       rawList = initialPoolRows.map<DraftPoolRawRow>((p) => ({
         name: p.full_name,
         position: p.position,
@@ -1581,7 +1588,7 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   let nbaSurvivorRoster: NbaRosterEligibility | null = null
-  if (sport === 'NBA' && league?.leagueVariant === 'survivor') {
+  if (verifyCurrentNbaRoster) {
     const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
     nbaSurvivorRoster = await loadNbaSurvivorRosterEligibility(requiredPlayers)
     if (!nbaSurvivorRoster.ready) throw new Error(nbaSurvivorRoster.reason ?? 'Current NBA roster unavailable')

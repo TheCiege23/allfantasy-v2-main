@@ -510,6 +510,18 @@ export function CommsDrawer({
   const panelRef = useRef<HTMLElement | null>(null)
   /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
   const scrimRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const viewport = window.visualViewport
+    const sync = () => {
+      panelRef.current?.style.setProperty('--af-comms-vh', `${viewport?.height ?? window.innerHeight}px`)
+      panelRef.current?.style.setProperty('--af-comms-top', `${viewport?.offsetTop ?? 0}px`)
+    }
+    sync()
+    viewport?.addEventListener('resize', sync)
+    viewport?.addEventListener('scroll', sync)
+    return () => { viewport?.removeEventListener('resize', sync); viewport?.removeEventListener('scroll', sync) }
+  }, [open])
 
   /*
    * ⚠ 23b's CORE VALUE PROP, AND IT IS REAL. A docked drawer follows the page:

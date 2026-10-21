@@ -281,6 +281,7 @@ export default function CoreLeagueContextBar({
         </strong>
       </div>
 
+      <details className="af-lctx-details"><summary>{es ? 'Detalles de la liga' : 'League details'}</summary>
       <div className="af-lctx-statuses">
         {coverageHref && leagueWorkspaceMode(platform, language).authority !== 'NATIVE' ? (
           /*
@@ -308,8 +309,8 @@ export default function CoreLeagueContextBar({
         )}
         <span className="af-lctx-chip" data-tone={gameDayActive ? 'live' : syncStale ? 'warn' : 'fresh'}>
           {gameDayActive
-            ? es ? 'Actualización de día de partido · 20 s' : 'Game-day view refresh · 20s'
-            : es ? `Sincronizado ${ageText(syncLabel, language)}` : `Synced ${syncLabel}`}
+            ? es ? 'Día de partido' : 'Game day'
+            : syncStale ? (es ? 'Actualizaciones retrasadas' : 'Updates delayed') : (es ? 'Conectado' : 'Connected')}
         </span>
         {decisionSlot !== undefined ? decisionSlot : <CoreLeagueDecisionChip available={Boolean(decisionAvailable)} />}
         <span className="af-lctx-chip" data-tone="chimmy">
@@ -404,7 +405,7 @@ export default function CoreLeagueContextBar({
                         : ''}
           </small>
         </div>
-      </div>
+      </div></details>
 
       {recommendationSlot !== undefined ? (
         recommendationSlot
