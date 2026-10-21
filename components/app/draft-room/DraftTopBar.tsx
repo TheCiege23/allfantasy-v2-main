@@ -466,7 +466,7 @@ export function DraftTopBar({
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
           {isPausedCommissioner ? (
-            <span className="rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
+            <span className="hidden sm:inline rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
               Resume
             </span>
           ) : draftStatus === 'paused' ? (

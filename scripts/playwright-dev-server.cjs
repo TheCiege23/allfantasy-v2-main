@@ -169,6 +169,7 @@ const childEnv = {
     ? { DIRECT_URL: normalizeSupabaseSessionPooler(envFileDb?.directUrl || normalizedDb) }
     : {}),
   AF_NEXT_DIST_DIR: distDir,
+  AF_PLAYWRIGHT_SERVER: "1",
   AUTH_TRUST_HOST: process.env.AUTH_TRUST_HOST || "true",
   NEXTAUTH_URL: process.env.NEXTAUTH_URL || `http://127.0.0.1:${port}`,
   NODE_OPTIONS: process.env.NODE_OPTIONS || "--max-old-space-size=4096",

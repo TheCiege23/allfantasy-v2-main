@@ -56,6 +56,11 @@ test('draft tools, player search and options work on narrow and short screens', 
   await page.getByTestId('draft-mobile-tab-chat').tap()
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Ready for draft day')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByTestId('draft-mobile-tab-board').tap()
+  await expect(page.getByTestId('draft-mobile-content')).toHaveAttribute('data-active-tab', 'board')
+  // Paused commissioners have a separate Resume action; the timer must fit beside the team.
+  const timer = page.getByTestId('draft-topbar-resume-draft')
+  expect(await timer.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
   await page.getByTestId('draft-mobile-tab-players').tap()
   await testInfo.attach('draft-mobile', { body: await page.screenshot(), contentType: 'image/png' })
 })
