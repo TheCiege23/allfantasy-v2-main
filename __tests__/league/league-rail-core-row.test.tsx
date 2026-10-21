@@ -90,7 +90,7 @@ describe('LeagueRailRow', () => {
   it('says so when a league has no matchup on file', () => {
     const view = leagueRailRowView(league({ id: 'n1', platform: 'allfantasy' }), RAIL, NO_LIVE, CLOCK)
     const { getByText } = render(<LeagueRailRow view={view} href="/league/n1" active={false} expanded />)
-    expect(getByText('no head-to-head on file this week')).toBeTruthy()
+    expect(getByText('Matchup not available yet')).toBeTruthy()
   })
 })
 
