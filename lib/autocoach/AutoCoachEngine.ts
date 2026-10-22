@@ -15,6 +15,7 @@ import {
   type RosterSectionKey,
 } from '@/lib/roster/LineupTemplateValidation'
 import { BESTBALL_VARIANTS, isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 import { getNotificationsQueue } from '@/lib/queues/bullmq'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { autoCoachSkipReason, parseAutoCoachUserPreferences } from '@/lib/autocoach/autoCoachPreferences'
@@ -275,6 +276,7 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
       settings: true,
       leagueVariant: true,
       bestBallMode: true,
+      leagueType: true,
       autoCoachEnabled: true,
       platform: true,
       starters: true,
@@ -289,7 +291,8 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
     return []
   }
 
-  if (isBestBallLeague(league.leagueVariant, league.bestBallMode)) {
+  // The full test: an import carries best ball in `settings.best_ball`, not the columns (leagueBestBall.ts).
+  if (isBestBallLeagueRow(league)) {
     return []
   }
 
