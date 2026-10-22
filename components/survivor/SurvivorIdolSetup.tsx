@@ -1,15 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Minus, Plus } from 'lucide-react'
 import {
   SURVIVOR_IDOL_COUNT_OPTIONS,
+  SURVIVOR_IDOL_PICK_COUNT_MAX,
   isSurvivorIdolTypePlayable,
   survivorIdolArt,
   type SurvivorIdolCategory,
   type SurvivorIdolTypeDef,
 } from '@/lib/survivor/survivorIdolTypes'
-import { browserRandomInt, drawBalancedIdolTypes, pickRequirement, playableIdolPool, validatePickedIdolTypes, type SurvivorIdolDrawMode } from '@/lib/survivor/survivorIdolDraw'
+import { browserRandomInt, drawBalancedIdolTypes, pickQuantities, playableIdolPool, validatePickedIdolTypes, withPickQuantity, type SurvivorIdolDrawMode } from '@/lib/survivor/survivorIdolDraw'
 import { SurvivorIdolCard } from './SurvivorIdolCard'
 import './survivorIdols.css'
 
@@ -45,17 +46,25 @@ function groupRepeats(types: SurvivorIdolTypeDef[]): Array<{ type: SurvivorIdolT
   return groups
 }
 
-const comingSoonTag = <span className="svi-tag svi-tag-row svi-soon">Coming soon</span>
-
 function SealedCard() {
   return <div className="svi-sealed"><span className="svi-sealed-mark" aria-hidden>?</span><div><strong>Sealed idol</strong><span>Revealed when someone plays it</span></div></div>
 }
 
+/** How many copies of one idol hide in the draft (pick mode). */
+function QuantityStepper({ name, value, min, max, disabled, onChange }: { name: string; value: number; min: number; max: number; disabled: boolean; onChange: (next: number) => void }) {
+  return <span className="svs-qty" role="group" aria-label={`${name} quantity`}>
+    <button type="button" className="svs-qty-btn" aria-label={`Fewer ${name}`} disabled={disabled || value <= min} onClick={() => onChange(value - 1)}><Minus size={14} strokeWidth={3} /></button>
+    <output className="svs-qty-val" aria-label={`${name} copies`}>{value}</output>
+    <button type="button" className="svs-qty-btn" aria-label={`More ${name}`} disabled={disabled || value >= max} onClick={() => onChange(value + 1)}><Plus size={14} strokeWidth={3} /></button>
+  </span>
+}
+
 /**
- * Commissioner idol setup (survivor-theme handoff, IdolSetup): random balanced draw or picks,
- * 6/7/8 idols with Immunity and Tribe immunity always in, an illustrative preview draw with
- * Re-roll, sealed cards for a playing commissioner, and the league's Point surge / Tribute values.
- * The server makes the real draw when the draft locks.
+ * Commissioner idol setup (survivor-theme handoff, IdolSetup): a random balanced draw of 6/7/8
+ * with Immunity and Tribe immunity always in, an illustrative preview draw with Re-roll, sealed
+ * cards for a playing commissioner, and the league's Point surge / Tribute values — or pick mode
+ * (owner's call, 2026-10-20): a quantity per idol type, 1 to 12 idols in all. Only idols that can be
+ * played today are listed. The server makes the real draw when the draft locks.
  */
 export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }: { leagueId: string; leagueName?: string; canEdit: boolean; initialData?: SurvivorIdolSetupData }) {
   const [data, setData] = useState<SurvivorIdolSetupData | null>(initialData ?? null)
@@ -81,10 +90,9 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
 
   useEffect(() => { if (!initialData) void load() }, [initialData, load])
 
-  const types = useMemo(() => data?.types ?? [], [data?.types])
-  // Only playable types (play-engine registry) can be hidden in a league.
+  // The server already hides catalogue-only types; this keeps an older payload honest.
+  const types = useMemo(() => (data?.types ?? []).filter(isSurvivorIdolTypePlayable), [data?.types])
   const always = useMemo(() => playableIdolPool(types).always, [types])
-  const comingSoonAlways = types.filter(type => type.alwaysIn && !isSurvivorIdolTypePlayable(type))
   const others = types.filter(type => !type.alwaysIn)
   const byId = useMemo(() => new Map(types.map(type => [type.id, type])), [types])
   const editable = Boolean(canEdit && data?.isCommissioner && !data.locked)
@@ -103,26 +111,39 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
   if (!data || !draft) return <p role="status" className="svs-note">Loading idol setup…</p>
 
   const extraCount = Math.max(0, draft.count - always.length)
-  const picked = draft.pickedTypeIds
-  const need = pickRequirement(types, draft.count)
-  const pickReady = draft.mode !== 'pick' || (need.min > 0 && picked.length >= need.min && picked.length <= need.max)
-  const pickedFill = draft.mode === 'pick' && pickReady ? validatePickedIdolTypes(types, draft.count, picked) : null
+  // Pick mode: the list is the multiset of idols, one entry per copy; its length is the count.
+  const picked = draft.mode === 'pick' ? draft.pickedTypeIds : []
+  const quantities = pickQuantities(picked)
+  const pickCheck = draft.mode === 'pick' ? validatePickedIdolTypes(types, picked.length, picked) : null
+  const pickReady = draft.mode !== 'pick' || Boolean(pickCheck?.ok)
+  const total = draft.mode === 'pick' ? picked.length : draft.count
   const sealed = draft.mode === 'random' && draft.hideFromCommish
   const update = (patch: Partial<SetupConfig>) => { setDraft(current => current ? { ...current, ...patch } : current); setMessage(null) }
+  const setQuantity = (id: string, quantity: number) => {
+    const next = withPickQuantity(picked, id, quantity)
+    update({ pickedTypeIds: next, count: Math.max(1, next.length) })
+  }
+  const enterPickMode = () => {
+    // Start from the always-in idols, once each; the commissioner adds copies and other types.
+    const seed = picked.length ? picked : always.map(type => type.id)
+    update({ mode: 'pick', hideFromCommish: false, pickedTypeIds: seed, count: Math.max(1, seed.length) })
+  }
 
   // After lock the server's draw replaces the preview (or stays sealed).
   const lockedDraw = data.resolved && data.resolvedTypeIds ? data.resolvedTypeIds.flatMap(id => byId.get(id) ?? []).filter(type => !type.alwaysIn) : null
-  const pickedShown = pickedFill?.ok ? pickedFill.typeIds.flatMap(id => byId.get(id) ?? []).filter(type => !type.alwaysIn) : picked.flatMap(id => byId.get(id) ?? [])
+  const pickedShown = (pickCheck?.ok ? pickCheck.typeIds : picked).flatMap(id => byId.get(id) ?? []).filter(type => !type.alwaysIn)
   const drawShown = lockedDraw ?? (draft.mode === 'pick' ? pickedShown : preview)
-  const summaryIcons = [...always, ...(sealed || (data.resolved && !data.resolvedTypeIds) ? [] : drawShown)]
-  const sealedSlots = Math.max(0, draft.count - summaryIcons.length)
+  const alwaysShown = draft.mode === 'pick' && !lockedDraw ? picked.flatMap(id => byId.get(id) ?? []).filter(type => type.alwaysIn) : always
+  const summaryIcons = [...alwaysShown, ...(sealed || (data.resolved && !data.resolvedTypeIds) ? [] : drawShown)]
+  const sealedSlots = Math.max(0, total - summaryIcons.length)
 
   async function save() {
     if (!draft || !editable || !pickReady) return
     setSaving(true); setMessage(null)
     try {
       const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/idol-setup`, {
-        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft),
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft.mode === 'pick' ? { ...draft, count: picked.length } : draft),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error ?? 'Could not save idol setup')
@@ -136,7 +157,7 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
 
   const status = data.locked
     ? data.resolved ? (data.resolvedTypeIds ? 'The draft has started. These idols are hidden in this league.' : 'The draft has started. The draw is sealed; you’ll learn what’s in play as idols are played.') : 'The draft has started. Idol settings are locked.'
-    : !pickReady ? (need.min === need.max ? `Pick ${need.min - picked.length} more to lock.` : `Pick at least ${need.min} to lock.`)
+    : !pickReady ? (pickCheck && !pickCheck.ok ? pickCheck.error : `Pick 1 to ${SURVIVOR_IDOL_PICK_COUNT_MAX} idols to lock.`)
       : sealed ? 'The draw is sealed. You’ll find out what’s in play when idols are played, like everyone else.'
         : draft.mode === 'random' ? 'Ready. The server makes the final draw when the draft locks.' : 'Ready to lock.'
 
@@ -156,23 +177,29 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
             <span className="svs-lbl" id="svs-mode-label">How idols are chosen</span>
             <div className="svs-seg" role="radiogroup" aria-labelledby="svs-mode-label" style={{ marginTop: 10 }}>
               <button type="button" role="radio" aria-checked={draft.mode === 'random'} disabled={!editable} onClick={() => update({ mode: 'random' })}>Random, balanced</button>
-              <button type="button" role="radio" aria-checked={draft.mode === 'pick'} disabled={!editable} onClick={() => update({ mode: 'pick', hideFromCommish: false })}>I’ll pick</button>
+              <button type="button" role="radio" aria-checked={draft.mode === 'pick'} disabled={!editable} onClick={enterPickMode}>I’ll pick</button>
             </div>
           </div>
           <div>
             <span className="svs-lbl" id="svs-count-label">Idols in the draft</span>
-            <div className="svs-seg" role="radiogroup" aria-labelledby="svs-count-label" style={{ marginTop: 10 }}>
-              {SURVIVOR_IDOL_COUNT_OPTIONS.map(count => <button key={count} type="button" role="radio" aria-checked={draft.count === count} disabled={!editable} onClick={() => update({ count, pickedTypeIds: picked.slice(0, pickRequirement(types, count).max) })}>{count}</button>)}
-            </div>
+            {draft.mode === 'random' ? (
+              <div className="svs-seg" role="radiogroup" aria-labelledby="svs-count-label" style={{ marginTop: 10 }}>
+                {SURVIVOR_IDOL_COUNT_OPTIONS.map(count => <button key={count} type="button" role="radio" aria-checked={draft.count === count} disabled={!editable} onClick={() => update({ count })}>{count}</button>)}
+              </div>
+            ) : (
+              <p className="svs-status" style={{ marginTop: 10 }} aria-labelledby="svs-count-label" data-testid="svs-pick-total">{total} of {SURVIVOR_IDOL_PICK_COUNT_MAX} · set a quantity per idol below</p>
+            )}
           </div>
         </section>
 
         <section aria-label="Always in every league" className="svs-main" style={{ gap: 10 }}>
-          <span className="svs-lbl">Always in every league<small>Can’t be removed</small></span>
+          <span className="svs-lbl">Always in every league<small>{draft.mode === 'pick' ? 'At least one copy' : 'Can’t be removed'}</small></span>
           <div className="svs-grid">
-            {always.map(type => <SurvivorIdolCard key={type.id} type={type} layout="row" values={draft} headingLevel="h4" aside={<span className="svi-tag svi-tag-row" data-always>Always in</span>} />)}
+            {always.map(type => <SurvivorIdolCard key={type.id} type={type} layout="row" values={draft} headingLevel="h4"
+              aside={draft.mode === 'pick' && editable
+                ? <QuantityStepper name={type.name} value={quantities.get(type.id) ?? 0} min={1} max={SURVIVOR_IDOL_PICK_COUNT_MAX} disabled={!editable} onChange={quantity => setQuantity(type.id, quantity)} />
+                : <span className="svi-tag svi-tag-row" data-always>{draft.mode === 'pick' && (quantities.get(type.id) ?? 0) > 1 ? `Always in ×${quantities.get(type.id)}` : 'Always in'}</span>} />)}
           </div>
-          {comingSoonAlways.length > 0 && <p className="svs-note">{comingSoonAlways.map(type => type.name).join(' and ')} {comingSoonAlways.length === 1 ? 'is' : 'are'} coming soon. {comingSoonAlways.length === 1 ? 'It joins' : 'They join'} every league once {comingSoonAlways.length === 1 ? 'its' : 'their'} play engine is ready, so {comingSoonAlways.length === 1 ? 'it is' : 'they are'} not included for now.</p>}
         </section>
 
         {draft.mode === 'random' ? (
@@ -192,24 +219,20 @@ export function SurvivorIdolSetup({ leagueId, leagueName, canEdit, initialData }
         ) : (
           <section aria-label="Pick idols" className="svs-main" style={{ gap: 10 }}>
             <div className="svs-row">
-              <span className="svs-lbl svs-grow">{need.min === need.max ? `Pick ${need.min} more` : `Pick ${need.min} to ${need.max}`} · {picked.length} picked</span>
+              <span className="svs-lbl svs-grow">Quantity per idol · {total} of {SURVIVOR_IDOL_PICK_COUNT_MAX} picked</span>
               <div className="svs-chips" role="group" aria-label="Filter by group">
                 {PICK_FILTERS.map(name => <button key={name} type="button" className="svs-chip" aria-pressed={filter === name} onClick={() => setFilter(name)}>{name}</button>)}
               </div>
             </div>
-            {need.min !== need.max && <p className="svs-note">Only {need.max} idol {need.max === 1 ? 'type can' : 'types can'} be played today, fewer than the {need.slots} open slots. Pick the ones you want; the empty slots repeat your picks in order.</p>}
+            <p className="svs-note">Choose how many of each idol hide in the draft, up to {SURVIVOR_IDOL_PICK_COUNT_MAX} in all. Only idols that can be played today are listed.</p>
             <div className="svs-grid">
               {others.filter(type => filter === 'All' || type.category === filter).map(type => {
-                const playable = isSurvivorIdolTypePlayable(type)
-                const checked = picked.includes(type.id)
-                const full = picked.length >= need.max
-                return <label key={type.id} className="svs-pick">
-                  <input type="checkbox" checked={checked} disabled={!editable || !playable || (!checked && full)} aria-label={playable ? type.name : `${type.name} (coming soon)`}
-                    onChange={() => update({ pickedTypeIds: checked ? picked.filter(id => id !== type.id) : [...picked, type.id] })} />
-                  <SurvivorIdolCard type={type} layout="row" values={draft} headingLevel="h4" selected={checked} dimmed={!playable || (!checked && full)}
-                    lead={<span className="svs-box" aria-hidden>{checked && <Check size={14} strokeWidth={3} />}</span>}
-                    aside={playable ? undefined : comingSoonTag} />
-                </label>
+                const quantity = quantities.get(type.id) ?? 0
+                const full = total >= SURVIVOR_IDOL_PICK_COUNT_MAX
+                return <div key={type.id} className="svs-pick">
+                  <SurvivorIdolCard type={type} layout="row" values={draft} headingLevel="h4" selected={quantity > 0} dimmed={quantity === 0 && full}
+                    aside={<QuantityStepper name={type.name} value={quantity} min={0} max={full ? quantity : SURVIVOR_IDOL_PICK_COUNT_MAX} disabled={!editable} onChange={next => setQuantity(type.id, next)} />} />
+                </div>
               })}
             </div>
           </section>

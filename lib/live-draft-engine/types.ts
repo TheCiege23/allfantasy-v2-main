@@ -7,11 +7,22 @@ export type DraftSessionStatus = 'pre_draft' | 'in_progress' | 'paused' | 'compl
 
 export type DraftType = 'snake' | 'linear' | 'auction'
 
+/** Survivor: the seat's tribe, shown on the board once tribes are locked before the draft. */
+export interface SlotOrderTribeBadge {
+  id: string
+  name: string
+  colorHex: string | null
+  markUrl: string | null
+  crestUrl: string | null
+}
+
 export interface SlotOrderEntry {
   slot: number
   rosterId: string
   displayName: string
   platformUserId?: string
+  /** Present only on Survivor leagues whose tribes exist and whose plan shows them on the board. */
+  tribe?: SlotOrderTribeBadge | null
 }
 
 /** One traded pick: ownership change for (round, slot) from originalRosterId to newRosterId. */

@@ -1,4 +1,5 @@
 import 'server-only'
+import { isSurvivorIdolExpired, survivorIdolExpiredMessage, survivorIdolExpiryRule } from './survivorIdolExpiry'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -38,9 +39,10 @@ export async function getCouncilIdolPreview(leagueId: string, userId: string, id
   if (!idol) return null
   const definition = idolDefinition(idol.powerType)
   const ctx = await loadCouncilContext(leagueId)
-  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { activePlayerCount: true, immunePlayerId: true, pausedSnapshot: true } })
+  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { activePlayerCount: true, immunePlayerId: true, pausedSnapshot: true, phase: true } })
   const owner = ctx?.scopePlayers.find(p => p.userId === userId)
-  const playable = Boolean(definition.action && ctx && owner && game && game.pausedSnapshot == null && game.activePlayerCount > ctx.settings.idolInvalidRemainingPlayers && idolWindowOpen(ctx.council, definition.when))
+  const expired = Boolean(ctx && game && isSurvivorIdolExpired(survivorIdolExpiryRule(ctx.settings), { activePlayerCount: game.activePlayerCount, week: ctx.council.week, phase: game.phase }))
+  const playable = Boolean(definition.action && ctx && owner && game && game.pausedSnapshot == null && !expired && idolWindowOpen(ctx.council, definition.when))
   return {
     deadline: ctx?.council.voteDeadlineAt.toISOString() ?? null, playable,
     reason: !definition.action ? 'Not playable yet' : !playable ? 'This idol cannot be played in the current council window.' : null,
@@ -81,13 +83,14 @@ async function playPower(
         return { ok: false, status: 403, code: 'not_in_council', error: 'You are not an active player at this council.' }
       }
 
-      // Idol expiry: invalid once we reach the final-N boundary.
-      const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true, activePlayerCount: true } })
+      // Idol expiry: the league's one rule (merge / players left / week), see survivorIdolExpiry.
+      const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true, activePlayerCount: true, phase: true } })
       if (game?.pausedSnapshot != null) return { ok: false, status: 409, code: 'league_paused', error: 'The league is paused.' }
       const activePlayerCount = game?.activePlayerCount ??
         (await tx.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }))
-      if (activePlayerCount <= settings.idolInvalidRemainingPlayers) {
-        return { ok: false, status: 422, code: 'idol_expired', error: `Idols are invalid once ${settings.idolInvalidRemainingPlayers} players remain.` }
+      const expiryRule = survivorIdolExpiryRule(settings)
+      if (isSurvivorIdolExpired(expiryRule, { activePlayerCount, week: council.week, phase: game?.phase ?? council.phase })) {
+        return { ok: false, status: 422, code: 'idol_expired', error: survivorIdolExpiredMessage(expiryRule) }
       }
 
       if (power === 'extra_vote' || power === 'vote_steal') {

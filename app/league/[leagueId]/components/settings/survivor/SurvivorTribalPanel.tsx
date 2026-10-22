@@ -11,6 +11,8 @@ type CouncilSettings = {
   selfVotesAllowed: boolean
   lateVotesAllowed: boolean
   voteChangePolicy: 'first_valid_locks' | 'allow_until_close'
+  /** One safe draw in this many (4, 5 or 6). */
+  shotInTheDarkOdds: 4 | 5 | 6
 }
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -36,6 +38,7 @@ export function SurvivorTribalPanel({ leagueId, canEdit }: SurvivorSettingsPanel
         selfVotesAllowed: current.selfVotesAllowed,
         lateVotesAllowed: current.lateVotesAllowed,
         voteChangePolicy: current.voteChangePolicy,
+        shotInTheDarkOdds: current.shotInTheDarkOdds === 4 || current.shotInTheDarkOdds === 5 ? current.shotInTheDarkOdds : 6,
       })
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load council rules')
@@ -82,6 +85,7 @@ export function SurvivorTribalPanel({ leagueId, canEdit }: SurvivorSettingsPanel
           <SettingsRow label="Late votes count" control={<Toggle checked={settings.lateVotesAllowed} onChange={(value) => update('lateVotesAllowed', value)} disabled={!canEdit || saving} />} />
           <SettingsRow label="Vote change policy" control={<Select value={settings.voteChangePolicy} onChange={(value) => update('voteChangePolicy', value as CouncilSettings['voteChangePolicy'])} disabled={!canEdit || saving}><option value="first_valid_locks">First valid vote locks</option><option value="allow_until_close">Allow changes until close</option></Select>} />
           <SettingsRow label="Vote window (hours)" description="Length of the private voting window after it opens." control={<Input type="number" min={1} max={168} value={settings.voteCloseOffset} onChange={(event) => update('voteCloseOffset', Number(event.target.value))} disabled={!canEdit || saving} className="w-24" />} />
+          <SettingsRow label="Shot in the Dark odds" description="Each manager gets one draw per league. It forfeits their vote for this chance at immunity. Locks when the draft starts." control={<Select value={String(settings.shotInTheDarkOdds)} onChange={(value) => update('shotInTheDarkOdds', Number(value) === 4 ? 4 : Number(value) === 5 ? 5 : 6)} disabled={!canEdit || saving}><option value="4">1 in 4</option><option value="5">1 in 5</option><option value="6">1 in 6 (default)</option></Select>} />
         </SettingsSection>
         <SettingsSection id="sv-ceremony" title="Torch Ceremony">
           <SettingsRow label="Ceremony day" control={<Select value={settings.tribalCouncilDay} onChange={(value) => update('tribalCouncilDay', value)} disabled={!canEdit || saving}>{DAYS.map((day) => <option key={day} value={day}>{day}</option>)}</Select>} />
