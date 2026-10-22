@@ -1,5 +1,6 @@
 import { getDefaultNotificationPreferences } from "./NotificationPreferenceResolver"
 import type { NotificationPreferences } from "./types"
+import { DEFAULT_LIVE_ALERT_LEVEL } from "./liveAlertLevel"
 
 /**
  * The payload Settings › Notifications sends for "Reset to defaults".
@@ -21,6 +22,8 @@ export function buildResetNotificationPreferences(current: NotificationPreferenc
   return {
     ...getDefaultNotificationPreferences(),
     quietHours: { enabled: false, startHour: 22, endHour: 7, allowCritical: true },
+    // Sent explicitly for the same reason as quiet hours: an omitted key survives the server merge.
+    liveAlertLevel: DEFAULT_LIVE_ALERT_LEVEL,
     leagues: Object.fromEntries(Object.keys(current.leagues ?? {}).map((leagueId) => [leagueId, {}])),
   }
 }

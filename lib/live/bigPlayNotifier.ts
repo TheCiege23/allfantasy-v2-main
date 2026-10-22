@@ -1,6 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ingestBatch, type NotificationEvent } from '@/lib/notification-engine'
+import { filterByLiveAlertLevel } from '@/lib/notifications/liveAlertLevelFilter'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 import { headlineFor, PLAY_FEED_SPORT } from '@/lib/live/playFeedPresentation'
 import { headshotUrl } from '@/lib/media-url'
@@ -594,11 +595,12 @@ function notificationFor(
        */
       idempotencyKey: event.idempotencyKey,
       /*
-       * One device notification per play. The dispatcher's default tag is one
-       * per category, so a second touchdown would silently replace the first on
-       * the phone before anyone read it.
+       * One device notification per GAME (owner's call, 2026-10-22): a new play from the same game
+       * replaces the last one on the lock screen instead of stacking a dozen. It still buzzes —
+       * push-service `shouldRenotify` re-alerts on a replaced live-play tag — and every play stays
+       * in the bell. The engine's own dedupe is keyed on `idempotencyKey`, not on this tag.
        */
-      pushTag: `live-play:${event.idempotencyKey}:${side}`,
+      pushTag: `live-play:${event.gameId}`,
       // The player this side of the play is about — the scorer, or the passer on the passer's side.
       ...(imageUrl ? { imageUrl } : {}),
     },
@@ -687,8 +689,15 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
     }
   }
 
+  // The person's live alert level ("Close games only" and "Off" silence starter plays). Fails open.
+  const allowed = new Set(await filterByLiveAlertLevel([...new Set(batch.flatMap((n) => n.userIds ?? []))], 'starter_play', () => true))
+  const permitted = batch.map((n) => ({ ...n, userIds: (n.userIds ?? []).filter((u) => allowed.has(u)) })).filter((n) => n.userIds.length > 0)
+  if (permitted.length === 0) {
+    return { eventsConsidered: events.length, eventsAlertable: alertable.length, notificationsSent: 0, skipped: null }
+  }
+
   try {
-    const results = await ingestBatch(batch)
+    const results = await ingestBatch(permitted)
     if (results?.some((result) => !result.dispatched && result.reason === 'dispatch_error')) {
       throw new Error('Live play dispatch failed')
     }
@@ -706,7 +715,7 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
   return {
     eventsConsidered: events.length,
     eventsAlertable: alertable.length,
-    notificationsSent: batch.length,
+    notificationsSent: permitted.length,
     skipped: null,
   }
 }

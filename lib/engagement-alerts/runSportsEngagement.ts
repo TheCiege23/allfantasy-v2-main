@@ -5,9 +5,8 @@ import { SUPPORTED_SPORTS, LIVE_ONLY_SPORTS } from '@/lib/sport-scope'
 import { getLiveScoresForSport, resolveGameState } from '@/lib/sports-live-scores-service'
 import { engagementGameDetail } from './ingestGameDetail'
 import { observeGameAlerts, sportAlertAudience } from '@/lib/engagement-alerts/gameAlertService'
-import { gameFollowerIds, gameStarterIds } from '@/lib/engagement-alerts/gameStakeholders'
+import { gameFollowerIds, gameStarterIds, startersByUser } from '@/lib/engagement-alerts/gameStakeholders'
 import { topRankedGame } from '@/lib/engagement-alerts/gameEvents'
-import { PLAY_FEED_SPORT } from '@/lib/live/playFeedPresentation'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export async function runSportsEngagement() {
@@ -56,8 +55,11 @@ export async function runSportsEngagement() {
                 const audience = {
                   game: ranked ? [...new Set([...followers, ...starters.users])] : followers,
                   broad: ranked ? users : [],
-                  // NFL starters already get a personal alert for their own player's plays.
-                  ...(sport === PLAY_FEED_SPORT ? { startersByAthlete: starters.byAthlete } : {}),
+                  // Starters get a personal alert for their own player's plays (NFL from bigPlayNotifier,
+                  // the other sports from starterAlerts), so the game alert for that play skips them.
+                  startersByAthlete: starters.byAthlete,
+                  // Every sport: the final becomes a personal recap of the user's starters.
+                  startersByUser: startersByUser(starters.byAthlete),
                 }
                 const count = await observeGameAlerts(sport, game, detail, audience)
                 delivered += count

@@ -231,3 +231,32 @@ describe('channel policy', () => {
     for (const category of ['injury_alerts', 'lineup_alerts', 'performance_alerts', 'ai_alerts', 'matchup_results'] as const) expect(allowsLeagueSms(category, 'league')).toBe(false)
   })
 })
+
+describe('personal starter alerts for NBA, NHL and MLB', () => {
+  it('MLB: a scoring at-bat or homer by the batter', async () => {
+    const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')
+    const out = starterAlerts({ sport: 'MLB', drives: [], scoringPlays: [], players: { b: [{ name: 'Aaron Judge', headshot: 'https://img/b.png', group: 'batting', labels: [], stats: [] }] },
+      baseball: { atBats: [{ id: 'x', batterId: 'b', scoring: false, resultType: 'Home Run', result: 'Judge homered (2-run)', events: [] }, { id: 'y', batterId: 'b', scoring: false, resultType: 'Single', result: 'Single', events: [] }] } } as unknown as LiveGameDetail)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ starterAthleteId: 'b', type: 'game_starter_play', imageUrl: 'https://img/b.png', title: '⭐ Your starter Aaron Judge: 2-run home run' })
+  })
+  it('NHL: the goal scorer and the assists, never the goalie', async () => {
+    const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')
+    const players = Object.fromEntries(['s', 'a', 'g'].map(id => [id, [{ name: id.toUpperCase(), headshot: null, group: 'skaters', labels: [], stats: [] }]]))
+    const out = starterAlerts({ sport: 'NHL', drives: [], scoringPlays: [], players,
+      hockey: { plays: [{ id: 'p', scoring: true, text: 'Goal', period: 1, clock: '5:00', athleteIds: ['s', 'a', 'g'] }], box: { home: { goalies: [{ athleteId: 'g' }] }, away: { goalies: [] } } } } as unknown as LiveGameDetail)
+    expect(out.map(a => [a.starterAthleteId, a.title.split(': ')[1]])).toEqual([['s', 'GOAL'], ['a', 'assist']])
+  })
+  it('basketball: milestones only — the highest points milestone, and a triple-double over a double-double', async () => {
+    const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')
+    const line = (pts: number, reb: number, ast: number) => [{ name: 'Nikola Jokic', headshot: null, group: 'basketball', labels: ['PTS', 'REB', 'AST', 'STL', 'BLK'], stats: [pts, reb, ast, 1, 0].map(String) }]
+    const sent = (pts: number, reb: number, ast: number) => starterAlerts({ sport: 'NBA', drives: [], scoringPlays: [], players: { j: line(pts, reb, ast) } } as unknown as LiveGameDetail).filter(a => !a.silent).map(a => a.key)
+    expect(sent(12, 4, 3)).toEqual([])
+    expect(sent(31, 12, 11)).toEqual(['starter:pts30:j', 'starter:triple_double:j'])
+    expect(sent(22, 11, 2)).toEqual(['starter:pts20:j', 'starter:double_double:j'])
+  })
+  it('sends nothing for football — bigPlayNotifier covers NFL starters', async () => {
+    const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')
+    expect(starterAlerts({ sport: 'NFL', drives: [], scoringPlays: [], players: {} } as unknown as LiveGameDetail)).toEqual([])
+  })
+})

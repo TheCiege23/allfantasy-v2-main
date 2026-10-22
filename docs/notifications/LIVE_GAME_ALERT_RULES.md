@@ -47,9 +47,45 @@ from the 7th on, and the final.
 **Every sport.** One "close game" alert with the score and the TV broadcast ("Watch on CBS"), sent
 to everyone in the sport.
 
+## Your starters (NBA, NHL, MLB)
+
+Alongside the NFL starter alerts, `starterAlerts` in `gameEvents.ts` sends a personal "⭐ Your starter"
+alert only to managers starting the player. These are push and in-app only.
+- **MLB:** a scoring at-bat or home run.
+- **NHL:** a goal or an assist.
+- **NBA, WNBA and NCAAB:** milestones only, meaning 20, 30, 40 or 50 points, a double-double or a
+  triple-double. Only the highest milestone reached in one poll is sent.
+
+Anyone who gets the personal alert is left off the game alert for the same play.
+
+## Recap after every game
+
+When a game ends, anyone starting a player in it gets ONE recap instead of the plain final. The
+recap has the final score and each of their starters' box-score line, for example
+"Patrick Mahomes: 22/32 C/ATT, 280 YDS, 3 TD". It goes by push, in-app and email.
+Followers with no starter in the game get the plain final.
+
+## Live game alert level (Settings › Notifications)
+
+`lib/notification-settings/liveAlertLevel.ts` is the one table the settings screen and every sender
+read.
+- **Everything** (default): all of the above, plus close games and overtime from any game in the
+  sports you play.
+- **My teams & players**: only games where you follow a team or start a player.
+- **Close games only**: close finishes and overtime, nothing else.
+- **Off**: no live game alerts. Trades, drafts, waivers, lineup and injury alerts are not
+  affected.
+
+## Grouping
+
+Every alert from one game shares one device tag, `game:<SPORT>:<gameId>`; NFL starter alerts use
+`live-play:<gameId>`. The newest replaces the last on the lock screen instead of stacking. On the
+web it still buzzes (`shouldRenotify`), and on iPhone `apns-collapse-id` still makes a sound. The
+bell keeps every one.
+
 ## Channels and limits
 
-- **Email**: finals and postseason clinches only. Plays, period scores and close games are push
+- **Email**: finals, game recaps and postseason clinches only. Plays, period scores and close games are push
   and in-app. Starter play alerts no longer email either.
 - **Text**: never for games. Texts are for league operations: draft start, on the clock,
   three picks away, draft paused, trades, waivers, commissioner notices.
@@ -64,3 +100,16 @@ to everyone in the sport.
 `lib/follows/teamScoreAlerts.ts` (from `/api/cron/import-scores`) sent the same halftime, final,
 close and overtime alerts a second and third time. Both are off by default.
 `AF_LEGACY_GAME_ALERTS=1` turns them back on.
+
+## Watching the numbers
+
+`/admin/notification-volume` (also `GET /api/admin/notification-volume?days=7`) shows what was
+actually sent. It reads `notification_outbox`, `platform_notifications`, `EmailPreference` and
+`user_profiles`, and has these views:
+- pushes, emails and texts per day
+- per category and per type
+- per person per day: average, median, 90th percentile, max, and days with 20+
+- the most-notified people in the last 24 hours
+- opt-outs and the spread of live alert levels
+
+Texts are logged from 2026-10-22.

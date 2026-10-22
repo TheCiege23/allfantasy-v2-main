@@ -50,6 +50,10 @@ export type GameAlert = {
   imageUrl?: string | null
   /** Box-score athlete ids named in the play — the caller uses them to avoid double-alerting starters. */
   athleteIds?: string[]
+  /** A personal "your starter" alert: goes ONLY to managers starting this athlete. */
+  starterAthleteId?: string
+  /** Recorded as seen but never sent — a lower milestone passed in the same poll as a higher one. */
+  silent?: boolean
 }
 
 export type GameObservation = Pick<LiveScoreRow, 'gameId' | 'homeTeam' | 'awayTeam' | 'homeScore' | 'awayScore' | 'status' | 'statusDetail' | 'period' | 'clock' | 'completed'> &
@@ -414,4 +418,102 @@ function runsLabel(text: string): string {
   const m = /(\d|two|three|four)[- ]run/i.exec(text)
   const n = m ? ({ two: 2, three: 3, four: 4 } as Record<string, number>)[m[1]!.toLowerCase()] ?? Number(m[1]) : null
   return n && n > 1 ? `${n}-run home run` : 'Home run'
+}
+
+/* ── post-game recap ───────────────────────────────────────────────────────── */
+
+/** Box-score columns worth a line in a recap, most telling first. */
+const RECAP_STATS = ['C/ATT', 'YDS', 'TD', 'INT', 'REC', 'CAR', 'SACKS', 'TOT', 'FG', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'G', 'A', 'SOG', 'SV', 'GA', 'H-AB', 'AB', 'H', 'HR', 'RBI', 'R', 'IP', 'K', 'ER']
+
+/** "Patrick Mahomes: 22/32 C/ATT, 280 YDS, 3 TD" — one starter's day, from the box score. */
+export function recapLine(detail: LiveGameDetail, athleteId: string, max = 4): string | null {
+  const lines = detail.players?.[athleteId]
+  if (!lines?.length) return null
+  const picked: string[] = []
+  for (const label of RECAP_STATS) {
+    for (const line of lines) {
+      const i = line.labels.indexOf(label)
+      const value = i >= 0 ? line.stats[i] : undefined
+      if (value == null || value === '' || value === '0' || value === '0/0' || value === '--') continue
+      if (picked.some(p => p.endsWith(` ${label}`))) continue
+      picked.push(`${value} ${label}`)
+      break
+    }
+    if (picked.length >= max) break
+  }
+  return `${lines[0]!.name}: ${picked.length ? picked.join(', ') : 'did not record a stat'}`
+}
+
+/** One recap per person per finished game: the final, then each of their starters' lines. */
+export function gameRecap(sport: string, g: GameObservation, detail: LiveGameDetail, athleteIds: string[]): GameAlert | null {
+  const lines = [...new Set(athleteIds)].map(id => recapLine(detail, id)).filter((l): l is string => !!l)
+  if (!lines.length) return null
+  const emoji = ({ NFL: '🏈', NCAAF: '🏈', NBA: '🏀', WNBA: '🏀', NCAAB: '🏀', NHL: '🏒', MLB: '⚾', SOCCER: '⚽' } as Record<string, string>)[sport.toUpperCase()] ?? '🏁'
+  return { key: 'recap', type: 'postgame_recap', audience: 'game', severity: 'medium',
+    title: `${emoji} Recap — Final: ${scoreLine(g)}`,
+    body: `${finalBody(g)}\nYour starters:\n${lines.map(l => `• ${l}`).join('\n')}` }
+}
+
+/* ── personal starter alerts: NBA / WNBA / NCAAB, NHL, MLB ─────────────────── */
+
+const POINT_MILESTONES = [20, 30, 40, 50]
+
+function boxNumber(lines: GameDetailPlayerLine[] | undefined, label: string): number | null {
+  for (const line of lines ?? []) {
+    const i = line.labels.indexOf(label)
+    const n = i >= 0 ? Number.parseInt(line.stats[i] ?? '', 10) : NaN
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+/**
+ * "Your starter" alerts for the sports the NFL-only bigPlayNotifier does not cover. Kept deliberately
+ * rare, because these reach a person once per starter:
+ *   MLB    — a scoring at-bat or home run by the batter.
+ *   NHL    — a goal, or an assist on one.
+ *   NBA / WNBA / NCAAB — milestones only: 20/30/40/50 points, a double-double, a triple-double. One
+ *          alert per basket would be the spam this whole module exists to stop.
+ * Each alert names `starterAthleteId`; the caller sends it only to managers starting that athlete.
+ */
+export function starterAlerts(detail: LiveGameDetail): GameAlert[] {
+  const sport = detail.sport.toUpperCase()
+  const out: GameAlert[] = []
+  const abbr = { home: detail.home?.abbrev ?? 'HOME', away: detail.away?.abbrev ?? 'AWAY' }
+  const score = (a: number | null | undefined, h: number | null | undefined) => a != null && h != null ? ` · ${abbr.away} ${a}, ${abbr.home} ${h}` : ''
+  const mk = (id: string, key: string, title: string, body: string, extra: Partial<GameAlert> = {}): void => {
+    const who = athlete(detail, id)
+    if (!who) return
+    out.push({ key: `starter:${key}:${id}`, type: 'game_starter_play', audience: 'game', severity: 'high', starterAthleteId: id,
+      title: `⭐ Your starter ${who.name}: ${title}`, body, imageUrl: who.headshot, athleteIds: [id], ...extra })
+  }
+  if (sport === 'MLB' || sport === 'NCAABASE') {
+    for (const ab of detail.baseball?.atBats ?? []) {
+      const hr = /home run|grand slam/i.test(ab.resultType ?? '')
+      if (!ab.batterId || !ab.id || !(ab.scoring || hr)) continue
+      const text = ab.result ?? ab.events.join('. ')
+      mk(ab.batterId, ab.id, hr ? runsLabel(text) : 'drives in a run', `${text}${score(ab.awayScore, ab.homeScore)}`)
+    }
+  } else if (sport === 'NHL') {
+    const goalies = new Set([...(detail.hockey?.box.home?.goalies ?? []), ...(detail.hockey?.box.away?.goalies ?? [])].map(g => g.athleteId))
+    for (const p of detail.hockey?.plays ?? []) {
+      if (!p.scoring || !p.id) continue
+      const skaters = p.athleteIds.filter(id => !goalies.has(id))
+      const when = periodClock(sport, p.period, p.clock)
+      skaters.forEach((id, i) => mk(id, p.id, i === 0 ? 'GOAL' : 'assist', `${p.text}${score(p.awayScore, p.homeScore)}${when ? ` (${when})` : ''}`))
+    }
+  } else if (BASKETBALL.has(sport)) {
+    for (const [id, lines] of Object.entries(detail.players ?? {})) {
+      const pts = boxNumber(lines, 'PTS')
+      if (pts == null) continue
+      const cats = ['PTS', 'REB', 'AST', 'STL', 'BLK'].map(l => boxNumber(lines, l) ?? 0)
+      const tens = cats.filter(n => n >= 10).length
+      const line = `${pts} PTS, ${cats[1]} REB, ${cats[2]} AST`
+      const passed = POINT_MILESTONES.filter(m => pts >= m)
+      passed.forEach((m, i) => mk(id, `pts${m}`, `${m} points`, line, i < passed.length - 1 ? { silent: true } : {}))
+      if (tens >= 3) mk(id, 'triple_double', 'triple-double', line)
+      if (tens >= 2) mk(id, 'double_double', 'double-double', line, tens >= 3 ? { silent: true } : {})
+    }
+  }
+  return out
 }

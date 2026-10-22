@@ -136,10 +136,12 @@ describe('a passing play is told to both ends', () => {
     expect(h.identityFind.mock.calls[0][0].where.rollingInsightsId.in).toEqual(['101', '202'])
   })
 
-  it('each side is its own device notification', async () => {
+  it('each side is its own notification, grouped under the game on the device', async () => {
     await notifyBigPlays([td])
     const [receiver, passer] = h.ingestBatch.mock.calls[0][0]
-    expect(receiver.meta.pushTag).not.toBe(passer.meta.pushTag)
+    // Different people; a tag only groups on one person's device.
+    expect(receiver.userIds).not.toEqual(passer.userIds)
+    expect(receiver.meta.pushTag).toBe(`live-play:${td.gameId}`)
     expect(receiver.meta.playerId).toBe('101')
     expect(passer.meta.playerId).toBe('202')
   })
@@ -190,11 +192,12 @@ describe('the payload', () => {
     expect(h.ingestBatch.mock.calls[0][0][0].meta.idempotencyKey).toBe('pbp:20260920-1-26:42:BIG_PLAY')
   })
 
-  it('names its own push tag, per play', async () => {
+  it('groups plays from one game under one push tag, keeping a distinct key per play', async () => {
     await notifyBigPlays([ev(), ev({ idempotencyKey: 'pbp:20260920-1-26:55:BIG_PLAY' })])
     const [a, b] = h.ingestBatch.mock.calls[0][0]
-    expect(a.meta.pushTag).toBe('live-play:pbp:20260920-1-26:42:BIG_PLAY:subject')
-    expect(a.meta.pushTag).not.toBe(b.meta.pushTag)
+    expect(a.meta.pushTag).toBe(`live-play:${a.meta.gameId}`)
+    expect(a.meta.pushTag).toBe(b.meta.pushTag)
+    expect(a.meta.idempotencyKey).not.toBe(b.meta.idempotencyKey)
   })
 
   it('reads like a sentence with the yardage, and opens Live Scores', async () => {

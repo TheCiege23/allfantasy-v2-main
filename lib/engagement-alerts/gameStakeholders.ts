@@ -66,3 +66,10 @@ export async function gameStarterIds(sport: string, gameId: string, detail: Live
     return empty
   }
 }
+
+/** Invert athlete → users into user → athletes, for the post-game recap. */
+export function startersByUser(byAthlete: Map<string, Set<string>>): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const [athleteId, users] of byAthlete) for (const u of users) out.set(u, [...(out.get(u) ?? []), athleteId])
+  return out
+}

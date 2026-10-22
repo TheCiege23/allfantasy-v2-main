@@ -21,6 +21,7 @@ import { quietHoursSuppression } from "@/lib/notifications/quietHours"
 import { isCategoryAllowedForLeague } from "@/lib/notifications/leagueOverrides"
 import { pushTagFor } from "@/lib/notifications/pushTag"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
+import { prisma } from "@/lib/prisma"
 
 import type { NotificationDeliveryReceipt, DeliveryChannelOutcome } from './deliveryReceipt'
 export type DispatchNotificationParams = {
@@ -63,6 +64,19 @@ export type DispatchNotificationParams = {
    * is a message and where, and the words stay in-app, email and push.
    */
   smsBody?: string
+}
+
+/** One `sent` row per text in notification_outbox, for lib/admin-dashboard/NotificationVolumeService. Best effort. */
+async function recordSmsSent(input: { userId: string; leagueId: string | null; type: string; title: string; category: NotificationCategoryId }): Promise<void> {
+  try {
+    const now = new Date()
+    await prisma.notificationOutbox.create({ data: {
+      userId: input.userId, leagueId: input.leagueId, channel: "sms", eventType: input.type, title: input.title.slice(0, 200), body: "",
+      status: "sent", sentAt: now, attemptCount: 1, metadata: { notificationCategory: input.category, loggedOnly: true },
+    } })
+  } catch {
+    console.warn("[NotificationDispatcher] SMS log write failed", { type: input.type })
+  }
 }
 
 /**
@@ -294,6 +308,9 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           let smsSent=false,smsProviderId:string|undefined
           try { smsSent=params.onDeliveryReceipt?await sendSms(profile.phone,smsText.slice(0,320),id=>{smsProviderId=id}):await sendSms(profile.phone,smsText.slice(0,320)) } catch { /* Receipt records failure; other channels still run. */ }
           set('sms',{status:smsSent?'accepted':'failed',reason:smsSent?'provider_accepted':'provider_failed',attempts:1,...(smsProviderId?{providerId:smsProviderId}:{})})
+          // Texts had no delivery log, so the admin volume tracker could not count them. Record a
+          // `sent` row — inert to the relay, which only claims `pending` — and never fail the send on it.
+          if (smsSent) await recordSmsSent({ userId, leagueId: effectiveLeagueId, type, title, category })
           if (!smsSent) {
             console.error("[NotificationDispatcher] SMS send returned false", {
               userId,

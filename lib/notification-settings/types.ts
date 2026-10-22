@@ -85,6 +85,11 @@ export interface NotificationPreferences {
    * owner. This shape needs no migration and no backfill, because absence inherits.
    */
   leagues?: Record<string, LeagueNotificationOverride>
+  /**
+   * How much a person hears during live games — see lib/notification-settings/liveAlertLevel.ts.
+   * Absent = 'everything', which is what everyone got before the setting existed.
+   */
+  liveAlertLevel?: 'everything' | 'my_teams' | 'close_games' | 'off'
 }
 
 export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
