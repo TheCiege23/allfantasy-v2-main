@@ -12,7 +12,7 @@ import { getAllowedLeagueTypesForSport, getAllowedSportsForLeagueType } from '@/
 
 describe('NBA Survivor creation pilot and multi-sport season capabilities', () => {
   const now = new Date('2026-09-01T12:00:00Z')
-  it.each(['NBA', 'NHL'] as const)('%s keeps season capabilities while only NBA accepts new creation', sport => {
+  it.each(['NBA', 'NHL'] as const)('%s keeps season capabilities while NHL stays behind the creation gate', sport => {
     expect(getAllowedSportsForType('survivor').includes(sport)).toBe(sport === 'NBA')
     // Owner's call, 2026-10-20: 12–24 managers in 2, 3 or 4 equal tribes.
     expect(getTeamCountOptions(sport, 'survivor')).toEqual([12, 15, 16, 18, 20, 21, 22, 24])
@@ -24,11 +24,13 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
       if (sport !== 'NBA' && !result.ok) expect(result.error).toContain('NBA')
     } finally { vi.useRealTimers() }
   })
-  it('hides new Survivor creation outside NBA across both wizard paths and refuses paid NBA pilot requests', () => {
-    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA'])
-    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA'])
+  it('offers new Survivor creation for NBA and NFL only, across both wizard paths, and refuses paid pilot requests', () => {
+    // Owner's call, 2026-10-22: NFL opens alongside NBA.
+    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA', 'NFL'])
+    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA', 'NFL'])
     expect(getAllowedLeagueTypesForSport('NBA')).toContain('survivor')
-    for (const sport of ['NFL', 'NHL', 'NCAAF'] as const) {
+    expect(getAllowedLeagueTypesForSport('NFL')).toContain('survivor')
+    for (const sport of ['NHL', 'NCAAF'] as const) {
       expect(getAllowedLeagueTypesForSport(sport)).not.toContain('survivor')
       expect(getAllowedSportsForType('survivor')).not.toContain(sport)
     }
@@ -100,11 +102,24 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
     // Even two per period cannot fit 17 votes into 8 periods.
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 10 })).toThrow('Not enough season remains')
   })
-  it('NFL is plan-ready but new NFL Survivor leagues stay behind the NBA-only pilot gate', () => {
-    // Opening NFL is a rollout decision (SURVIVOR_CREATION_SPORTS), not something the calendar decides.
-    const result = validateCreatePayload({ concept: 'survivor', sport: 'NFL', scoringPreset: 'fb_half_ppr', teamCount: 12, draftType: 'snake', leagueName: 'NFL island' })
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.errors?.[0]?.path).toBe('sport')
+  it('new NFL Survivor leagues pass validation before and during the season, and refuse a cast that cannot fit', () => {
+    vi.useFakeTimers()
+    try {
+      for (const at of ['2026-09-01T12:00:00Z', '2026-10-22T12:00:00Z']) {
+        vi.setSystemTime(new Date(at))
+        const result = validateCreatePayload({ concept: 'survivor', sport: 'NFL', scoringPreset: 'fb_half_ppr', teamCount: 12, draftType: 'snake', leagueName: 'NFL island' })
+        expect(result.ok, at).toBe(true)
+      }
+      // Late October leaves too few NFL weeks for a 24-player cast even at two votes per week, so
+      // the size is no longer offered, and the server refuses it the same way.
+      expect(getTeamCountOptions('NFL', 'survivor')).not.toContain(24)
+      expect(getTeamCountOptions('NFL', 'survivor')).toContain(20)
+      const late = validateCreatePayload({ concept: 'survivor', sport: 'NFL', scoringPreset: 'fb_half_ppr', teamCount: 24, draftType: 'snake', leagueName: 'Late island' })
+      expect(late.ok).toBe(false)
+      if (!late.ok) expect(late.errors?.[0]?.path).toBe('teamCount')
+      vi.setSystemTime(new Date('2026-09-01T12:00:00Z'))
+      expect(getTeamCountOptions('NFL', 'survivor')).toContain(24)
+    } finally { vi.useRealTimers() }
   })
   it('rejects a past scheduled draft so autostart cannot begin before managers join', () => {
     vi.useFakeTimers(); vi.setSystemTime(now)

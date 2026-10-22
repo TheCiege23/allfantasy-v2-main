@@ -1,6 +1,7 @@
 'use client'
 
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
+import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
@@ -250,7 +251,10 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
 export const SPORT_DEFAULT_FORMATS: readonly LeagueTypeId[] = ['survivor', 'guillotine', 'big_brother']
 
 export function defaultLeagueTypeForSport(sport: SupportedSport): LeagueTypeId {
-  return SPORT_DEFAULT_FORMATS.find((leagueType) => isSportAllowedForType(sport, leagueType)) ?? 'redraft'
+  return SPORT_DEFAULT_FORMATS.find((leagueType) =>
+    isSportAllowedForType(sport, leagueType) &&
+    // NFL Survivor is offered but not preselected: a fresh NFL create still starts on Guillotine.
+    (leagueType !== 'survivor' || isSurvivorDefaultFormatSport(sport))) ?? 'redraft'
 }
 
 /**

@@ -134,7 +134,9 @@ describe('payload normalization unchanged after form layer', () => {
    * and 24 was ACCEPTED there, only for the server to clamp it to 20 on save.
    */
   it('Survivor: every offered cast size passes the live gate on BOTH catalog paths', () => {
-    for (const withCatalog of [true, false]) {
+    // Preseason: late in the NFL season the largest casts stop fitting and are not offered.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-01T12:00:00Z') })
+    try { for (const withCatalog of [true, false]) {
       setClientLeagueCreateOptionsCatalog(withCatalog ? LEAGUE_CREATE_OPTIONS_CATALOG_V1 : null)
       const label = withCatalog ? 'catalog loaded' : 'pre-fetch fallback'
 
@@ -152,7 +154,7 @@ describe('payload normalization unchanged after form layer', () => {
           `${label}: ${teamCount} teams`,
         ).not.toContain('team_count_invalid')
       }
-    }
+    } } finally { vi.useRealTimers() }
     setClientLeagueCreateOptionsCatalog(null)
   })
 
