@@ -29,7 +29,12 @@ export type GuillotineRules = {
   statCorrectionHours: number
   dangerMarginPoints: number
   rosterReleaseTiming: 'immediate' | 'next_waiver_run'
+  /** Chimmy writes the weekly recap after each chop (paid leagues; ./weeklyRecap.ts). Stored in League.settings. */
+  aiRecapAuto: boolean
 }
+
+/** League.settings key for `aiRecapAuto`. Absent = on. */
+export const AI_RECAP_AUTO_KEY = 'guillotineAiRecapAuto'
 
 export type GuillotineRuleField = keyof GuillotineRules
 
@@ -154,6 +159,10 @@ export function normalizeGuillotineRulesPatch(
       return { ok: false, error: { field: 'rosterReleaseTiming', message: 'Pick when chopped players are released.' } }
     }
     out.rosterReleaseTiming = r.rosterReleaseTiming as GuillotineRules['rosterReleaseTiming']
+  }
+  if ('aiRecapAuto' in r) {
+    if (typeof r.aiRecapAuto !== 'boolean') return { ok: false, error: { field: 'aiRecapAuto', message: 'Turn the Chimmy recap on or off.' } }
+    out.aiRecapAuto = r.aiRecapAuto
   }
   if (Object.keys(out).length === 0) return { ok: false, error: { field: null, message: 'Nothing to save.' } }
   return { ok: true, value: out }

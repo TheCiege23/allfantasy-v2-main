@@ -7,6 +7,7 @@ const scoreFindMany = vi.fn()
 const stateFindMany = vi.fn()
 const stateFindFirst = vi.fn()
 const seasonFindFirst = vi.fn()
+const evaluateUserFeatureAccess = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -17,12 +18,17 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: (...a: unknown[]) => createLeagueChatMessage(...a) }))
+vi.mock('@/lib/subscription/FeatureGateService', () => ({
+  FeatureGateService: class {
+    evaluateUserFeatureAccess = (...a: unknown[]) => evaluateUserFeatureAccess(...a)
+  },
+}))
 vi.mock('@/lib/ai/providerRouter', () => ({ routeTextCall: (...a: unknown[]) => routeTextCall(...a) }))
 vi.mock('@/lib/guillotine/rosterDisplayNames', () => ({
   resolveRosterDisplayNames: async () => new Map([['r1', 'Hoop Dreams'], ['r2', 'Bench Mob'], ['r3', 'Ice Cold'], ['r4', 'Triple Threat']]),
 }))
 
-import { computeGuillotineWeekFacts, renderGuillotineRecap, postAutomaticGuillotineRecap, postAiGuillotineRecap } from '@/lib/guillotine/weeklyRecap'
+import { computeGuillotineWeekFacts, renderGuillotineRecap, postAutomaticGuillotineRecap, postAiGuillotineRecap, AUTO_AI_TIMEOUT_MS } from '@/lib/guillotine/weeklyRecap'
 
 const SCORES = [
   { rosterId: 'r1', periodPoints: 180.4 },
@@ -66,15 +72,20 @@ describe('computeGuillotineWeekFacts / renderGuillotineRecap', () => {
 })
 
 describe('postAutomaticGuillotineRecap', () => {
+  const run = () => postAutomaticGuillotineRecap({ leagueId: 'L1', week: 3, season: 2026, scores: SCORES, choppedRosterIds: ['r3'], authorUserId: 'owner' })
+
   beforeEach(() => {
     vi.clearAllMocks()
-    leagueFindUnique.mockResolvedValue({ sport: 'NBA' })
+    vi.useRealTimers()
+    leagueFindUnique.mockResolvedValue({ sport: 'NBA', settings: {} })
+    seasonFindFirst.mockResolvedValue({ season: 2026 })
     createLeagueChatMessage.mockResolvedValue({ id: 'm1' })
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: false })
   })
 
-  it('posts once per league/season/week as a host announcement from the owner', async () => {
-    const posted = await postAutomaticGuillotineRecap({ leagueId: 'L1', week: 3, season: 2026, scores: SCORES, choppedRosterIds: ['r3'], authorUserId: 'owner' })
-    expect(posted).toBe(true)
+  it('free league: posts the standard recap once per week, with no model call', async () => {
+    expect(await run()).toBe(true)
+    expect(routeTextCall).not.toHaveBeenCalled()
     const [leagueId, userId, text, opts] = createLeagueChatMessage.mock.calls[0]!
     expect([leagueId, userId]).toEqual(['L1', 'owner'])
     expect(text).toContain('Chopped: Ice Cold')
@@ -83,7 +94,49 @@ describe('postAutomaticGuillotineRecap', () => {
 
   it('reports a duplicate (the chat service returns null on a repeated id)', async () => {
     createLeagueChatMessage.mockResolvedValue(null)
-    expect(await postAutomaticGuillotineRecap({ leagueId: 'L1', week: 3, season: 2026, scores: SCORES, choppedRosterIds: ['r3'], authorUserId: 'owner' })).toBe(false)
+    expect(await run()).toBe(false)
+  })
+
+  it("paid league: Chimmy's recap is posted instead, under the key the button also uses", async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    routeTextCall.mockResolvedValue({ ok: true, text: 'Ice Cold melted at 98.8.' })
+    expect(await run()).toBe(true)
+    expect(evaluateUserFeatureAccess).toHaveBeenCalledWith('owner', 'guillotine_ai')
+    expect(createLeagueChatMessage).toHaveBeenCalledTimes(1)
+    const [, , text, opts] = createLeagueChatMessage.mock.calls[0]!
+    expect(text).toBe('🪓 Week 3 recap\nIce Cold melted at 98.8.')
+    expect(opts).toMatchObject({ idempotencyKey: 'guillotine-recap:L1:2026:w3:ai', metadata: expect.objectContaining({ automatic: true, aiWritten: true }) })
+  })
+
+  it('paid league with the switch off: standard recap, no model call', async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    leagueFindUnique.mockResolvedValue({ sport: 'NBA', settings: { guillotineAiRecapAuto: false } })
+    await run()
+    expect(routeTextCall).not.toHaveBeenCalled()
+    expect(createLeagueChatMessage.mock.calls[0]![3]).toMatchObject({ idempotencyKey: 'guillotine-recap:L1:2026:w3:auto' })
+  })
+
+  it('paid league, model down or off-topic: falls back to the standard recap', async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    routeTextCall.mockResolvedValue({ ok: false })
+    await run()
+    routeTextCall.mockResolvedValue({ ok: true, text: 'Sorry, I cannot help with that.' })
+    await run()
+    for (const call of createLeagueChatMessage.mock.calls) {
+      expect(call[2]).toContain('Chopped: Ice Cold (98.8)')
+      expect(call[3]).toMatchObject({ idempotencyKey: 'guillotine-recap:L1:2026:w3:auto' })
+    }
+  })
+
+  it('paid league, model too slow: posts the standard recap after the timeout rather than holding up the chop', async () => {
+    vi.useFakeTimers()
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    routeTextCall.mockReturnValue(new Promise(() => {}))
+    const pending = run()
+    await vi.advanceTimersByTimeAsync(AUTO_AI_TIMEOUT_MS + 10)
+    expect(await pending).toBe(true)
+    expect(createLeagueChatMessage.mock.calls[0]![3]).toMatchObject({ idempotencyKey: 'guillotine-recap:L1:2026:w3:auto' })
+    vi.useRealTimers()
   })
 })
 
@@ -119,6 +172,8 @@ describe('postAiGuillotineRecap', () => {
     const r1 = await postAiGuillotineRecap({ leagueId: 'L1', userId: 'u1' })
     expect(r1).toMatchObject({ ok: true, aiWritten: false })
     if (r1.ok) expect(r1.text).toContain('Chopped: Ice Cold (98.8)')
+    // The fallback is the standard recap, so it can never post a second copy of it.
+    expect(createLeagueChatMessage.mock.calls[0]![3]).toMatchObject({ idempotencyKey: 'guillotine-recap:L1:2026:w3:auto' })
 
     routeTextCall.mockResolvedValue({ ok: true, text: 'I cannot help with that.' })
     const r2 = await postAiGuillotineRecap({ leagueId: 'L1', userId: 'u1' })

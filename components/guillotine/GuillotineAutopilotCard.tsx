@@ -84,7 +84,9 @@ export function GuillotineAutopilotCard({
         busy: false,
         upgrade: null,
         message: !d.posted
-          ? `Chimmy's week ${d.week} recap is already in league chat.`
+          ? d.aiWritten
+            ? `Chimmy's week ${d.week} recap is already in league chat.`
+            : `Chimmy is unavailable right now, and the standard week ${d.week} recap is already in league chat.`
           : d.aiWritten
             ? `Posted Chimmy's week ${d.week} recap to league chat.`
             : `Chimmy was unavailable, so the standard week ${d.week} recap was posted instead.`,

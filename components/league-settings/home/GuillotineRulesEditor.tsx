@@ -20,6 +20,7 @@ type RulesView = {
   seasonWeeks: number
   endgameLocked: boolean
   canEditPaid: boolean
+  aiRecapAvailable: boolean
 }
 
 const inputClass = 'w-full min-w-0 rounded-lg border border-white/15 bg-[#0d1526] px-3 py-2 text-sm text-white disabled:opacity-50'
@@ -151,6 +152,27 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
           ))}
         </select>
       </Field>
+
+      <section className="space-y-1.5">
+        <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
+          <span>
+            <span className="block text-[13px] font-semibold text-white">Chimmy writes the weekly recap</span>
+            <span className="block text-[12px] text-white/50">
+              {view.aiRecapAvailable
+                ? 'After every chop, Chimmy posts a story-style recap to league chat. Off = the standard recap.'
+                : 'Included with a Chimmy plan. Without one, the standard recap posts after every chop.'}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-5 w-5"
+            checked={rules.aiRecapAuto && view.aiRecapAvailable}
+            disabled={!view.aiRecapAvailable}
+            onChange={(e) => update({ aiRecapAuto: e.target.checked })}
+            data-testid="guillotine-rules-ai-recap"
+          />
+        </label>
+      </section>
 
       <Field label="Teams chopped each week" paid={paidLocked('teamsPerChop')} help="The base number. Special weeks and steps live under Chop rules.">
         <select

@@ -6,13 +6,21 @@
  *    posted for every guillotine league: who was chopped and by how much, the top scorer, the
  *    narrowest escape, how many remain, and when the next chop and waiver run land. No model call,
  *    so it costs nothing and cannot invent anything.
- *  - AI-WRITTEN, ON REQUEST. The same facts turned into a short story by a model, posted only when
- *    a commissioner asks for it (POST /api/leagues/:id/guillotine/ai `{ type: 'recap', postToChat }`).
- *    scripts/cron-tier.mjs records the product rule this follows: AI generation is user-initiated,
- *    never cron-seeded, because a scheduled generation spends tokens on output nobody asked for.
+ *  - AI-WRITTEN by Chimmy from the same facts. Two ways in:
+ *      · AUTOMATICALLY after the chop, IN PLACE OF the deterministic one, for PAID leagues — the
+ *        commissioner holds `guillotine_ai` (the same check the button uses) and has not switched
+ *        it off (`settings.guillotineAiRecapAuto === false`, the League rules page). Owner's
+ *        decision, 2026-10-22: this deliberately relaxes the rule recorded in scripts/cron-tier.mjs
+ *        ("AI generation is user-initiated, never cron-seeded") for paying leagues only, where the
+ *        recap is part of what the commissioner pays for. It still never runs on a schedule of its
+ *        own: it fires once, on a real chop, and never for a free league.
+ *      · ON REQUEST, by the commissioner (POST /api/leagues/:id/guillotine/ai `{ type: 'recap', postToChat }`).
+ *    If the model is slow (AUTO_AI_TIMEOUT_MS), unavailable or off-topic, the deterministic recap is
+ *    posted instead, so a league is never left without one and a chop is never held up.
  *
- * Both are idempotent per league, season, week and kind through the chat row id, so a retried chop
- * or a double-tapped button posts once.
+ * Idempotent per league, season, week and KIND ('auto' deterministic, 'ai' Chimmy) through the chat
+ * row id: a retried chop or a double-tapped button posts once, and the button reports an automatic
+ * Chimmy recap as already posted.
  *
  * ⚠ The old (deleted) `guillotineChatPoster.postGuillotineWeeklyRecap`, never called, wrote `userId: 'system'`,
  * which is not an AppUser, so every post would have failed. This uses the same author as the chop
@@ -20,11 +28,13 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import { routeTextCall } from '@/lib/ai/providerRouter'
 import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { getGuillotineSportConfig } from './sportConfig'
+import { AI_RECAP_AUTO_KEY } from './guillotineRules'
 
 export type RecapTeam = { rosterId: string; name: string; points: number }
 
@@ -128,6 +138,24 @@ function recapMessageId(leagueId: string, season: number | null | undefined, wee
   return `guillotine-recap:${leagueId}:${season ?? 'na'}:w${week}:${kind}`
 }
 
+/** The season both recap paths key on, read the same way, so each sees the other's post. */
+async function recapSeason(leagueId: string): Promise<number | null> {
+  const row = await prisma.guillotineSeason
+    .findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { season: true } })
+    .catch(() => null)
+  return row?.season ?? null
+}
+
+
+/** Paid plan for Chimmy recaps — the same feature the on-request route gates on. */
+export async function hasGuillotineAiRecapPlan(userId: string): Promise<boolean> {
+  const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'guillotine_ai').catch(() => null)
+  return Boolean(access?.allowed)
+}
+
+/** Longest the chop path waits for Chimmy before posting the standard recap instead. */
+export const AUTO_AI_TIMEOUT_MS = 20_000
+
 /**
  * Post the automatic recap. Called by the elimination engine right after the chop announcement;
  * best-effort there (a failed recap must never fail a chop). Returns false when it was already posted.
@@ -135,14 +163,16 @@ function recapMessageId(leagueId: string, season: number | null | undefined, wee
 export async function postAutomaticGuillotineRecap(args: {
   leagueId: string
   week: number
+  /** Kept for callers; the key uses recapSeason() so it matches the on-request path. */
   season?: number | null
   scores: readonly ScoreRow[]
   choppedRosterIds: readonly string[]
   authorUserId: string
 }): Promise<boolean> {
-  const [league, names] = await Promise.all([
-    prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true } }),
+  const [league, names, season] = await Promise.all([
+    prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true } }),
     resolveRosterDisplayNames(args.leagueId, [...args.scores.map((s) => s.rosterId), ...args.choppedRosterIds]),
+    recapSeason(args.leagueId),
   ])
   const facts = computeGuillotineWeekFacts({
     week: args.week,
@@ -151,8 +181,23 @@ export async function postAutomaticGuillotineRecap(args: {
     names,
     sport: league?.sport ? String(league.sport) : null,
   })
+
+  // Paid league with the switch on: Chimmy writes it. The author is the league owner, whose plan it is.
+  const settings = (league?.settings as Record<string, unknown> | null) ?? {}
+  if (settings[AI_RECAP_AUTO_KEY] !== false && (await hasGuillotineAiRecapPlan(args.authorUserId))) {
+    const aiText = await writeChimmyRecap(facts, { userId: args.authorUserId, leagueId: args.leagueId, timeoutMs: AUTO_AI_TIMEOUT_MS })
+    if (aiText) {
+      const created = await createLeagueChatMessage(args.leagueId, args.authorUserId, aiText, {
+        idempotencyKey: recapMessageId(args.leagueId, season, args.week, 'ai'),
+        type: 'host_announcement',
+        metadata: { senderIsHost: true, contentType: 'guillotine_recap', guillotineRecap: true, weekOrPeriod: args.week, recapKind: 'ai', aiWritten: true, automatic: true },
+      })
+      return created != null
+    }
+  }
+
   const created = await createLeagueChatMessage(args.leagueId, args.authorUserId, renderGuillotineRecap(facts), {
-    idempotencyKey: recapMessageId(args.leagueId, args.season, args.week, 'auto'),
+    idempotencyKey: recapMessageId(args.leagueId, season, args.week, 'auto'),
     type: 'host_announcement',
     metadata: { senderIsHost: true, contentType: 'guillotine_recap', guillotineRecap: true, weekOrPeriod: args.week, recapKind: 'auto' },
   })
@@ -190,6 +235,38 @@ function mentionsAKnownTeam(text: string, f: GuillotineWeekFacts): boolean {
   return known.some((name) => text.includes(name))
 }
 
+/**
+ * Chimmy's recap text, or null when the model is unavailable, too slow, or off-topic — the caller
+ * then posts the deterministic recap. Never throws.
+ */
+async function writeChimmyRecap(
+  facts: GuillotineWeekFacts,
+  opts: { userId: string; leagueId: string; timeoutMs?: number },
+): Promise<string | null> {
+  const call = routeTextCall({
+    messages: [
+      { role: 'system', content: AI_SYSTEM },
+      { role: 'user', content: factsForPrompt(facts) },
+    ],
+    maxTokens: 320,
+    temperature: 0.7,
+    profile: 'cheap',
+    feature: 'guillotine_weekly_recap',
+    userId: opts.userId,
+    leagueId: opts.leagueId,
+  }).catch(() => ({ ok: false as const }))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = opts.timeoutMs
+    ? new Promise<{ ok: false }>((resolve) => {
+        timer = setTimeout(() => resolve({ ok: false }), opts.timeoutMs)
+      })
+    : null
+  const result = await (timeout ? Promise.race([call, timeout]) : call)
+  if (timer) clearTimeout(timer)
+  if (!result.ok || !mentionsAKnownTeam(result.text, facts)) return null
+  return `🪓 Week ${facts.week} recap\n${result.text.trim()}`
+}
+
 export type AiRecapResult =
   | { ok: true; posted: boolean; text: string; aiWritten: boolean; week: number }
   | { ok: false; status: 404 | 409; error: string }
@@ -209,29 +286,16 @@ export async function postAiGuillotineRecap(args: {
   const facts = await loadGuillotineWeekFacts(args.leagueId, week)
   if (!facts) return { ok: false, status: 404, error: `No scores were found for week ${week}.` }
 
-  const result = await routeTextCall({
-    messages: [
-      { role: 'system', content: AI_SYSTEM },
-      { role: 'user', content: factsForPrompt(facts) },
-    ],
-    maxTokens: 320,
-    temperature: 0.7,
-    profile: 'cheap',
-    feature: 'guillotine_weekly_recap',
-    userId: args.userId,
-    leagueId: args.leagueId,
-  }).catch(() => ({ ok: false as const }))
+  const aiText = await writeChimmyRecap(facts, { userId: args.userId, leagueId: args.leagueId })
+  const aiWritten = aiText != null
+  const text = aiText ?? renderGuillotineRecap(facts)
 
-  const aiWritten = result.ok && mentionsAKnownTeam(result.text, facts)
-  const text = aiWritten && result.ok ? `🪓 Week ${week} recap\n${result.text.trim()}` : renderGuillotineRecap(facts)
-
-  const season = await prisma.guillotineSeason
-    .findFirst({ where: { leagueId: args.leagueId }, orderBy: { createdAt: 'desc' }, select: { season: true } })
-    .catch(() => null)
+  const season = await recapSeason(args.leagueId)
   const created = await createLeagueChatMessage(args.leagueId, args.userId, text, {
-    idempotencyKey: recapMessageId(args.leagueId, season?.season ?? null, week, 'ai'),
+    // The fallback is the standard recap, so it shares that recap's key: never posted twice in a week.
+    idempotencyKey: recapMessageId(args.leagueId, season, week, aiWritten ? 'ai' : 'auto'),
     type: 'host_announcement',
-    metadata: { senderIsHost: true, contentType: 'guillotine_recap', guillotineRecap: true, weekOrPeriod: week, recapKind: 'ai', aiWritten },
+    metadata: { senderIsHost: true, contentType: 'guillotine_recap', guillotineRecap: true, weekOrPeriod: week, recapKind: aiWritten ? 'ai' : 'auto', aiWritten },
   })
   return { ok: true, posted: created != null, text, aiWritten, week }
 }
