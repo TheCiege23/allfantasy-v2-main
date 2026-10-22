@@ -1,6 +1,7 @@
 'use client'
 
 import '@/components/core-app/af-core.css'
+import '@/components/league/league-admin.css'
 import './league-settings-home.css'
 import './commissioner-center.css'
 
@@ -180,7 +181,7 @@ export function CommissionerCenter({
           <section className="cc-card" aria-labelledby="cc-pane-title" data-testid="cc-pane" data-subpage={open}>
             <p className="cc-label">{groups.find(g => g.items.some(i => i.id === open))?.title ?? 'Settings'}</p>
             <h2 id="cc-pane-title">{sub?.title ?? 'Settings'}</h2>
-            <div className="cc-pane-body">
+            <div className="cc-pane-body af-league-admin">
               {sub ? (
                 <SettingsSaveScope key={open} onReady={saveScope.onReady}>
                   {sub.content}
