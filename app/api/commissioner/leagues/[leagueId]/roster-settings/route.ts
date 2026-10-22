@@ -17,7 +17,7 @@ import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftC
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
   PROSPECT_STASH_UNAVAILABLE_MESSAGE,
@@ -170,10 +170,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   return NextResponse.json({ ok: true, config, unifiedConfig, draftRounds })
 }
 
-/** AF Commissioner entitlement — the same check the draft settings route uses for a manual round count. */
-async function hasAfCommissionerSub(userId: string): Promise<boolean> {
-  const r = await new EntitlementResolver()
-    .resolveForUser(userId, 'commissioner_ai_tools')
-    .catch(() => ({ hasAccess: false }))
-  return Boolean(r.hasAccess)
+/** AF Commissioner plan — the one shared check (lib/entitlements/afCommissionerPlan.ts). */
+function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  return hasAfCommissionerPlan({ id: userId })
 }
