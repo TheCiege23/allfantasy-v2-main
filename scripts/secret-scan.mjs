@@ -399,7 +399,10 @@ console.log('[secret-scan] Checking tracked .env* files for real credentials...'
 
 let trackedEnvFiles = []
 try {
-  trackedEnvFiles = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+  // maxBuffer: the default is 1 MiB, and this repo's NUL-separated file list crossed it on 2026-10-22
+  // (1,048,709 bytes) — every scan then died here with ENOBUFS and reported UNVERIFIED. Same cap as
+  // listGitFiles above.
+  trackedEnvFiles = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
     .split('\0')
     .filter((p) => /(^|\/)\.env($|\.)/.test(p))
 } catch {
