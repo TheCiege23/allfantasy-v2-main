@@ -445,7 +445,11 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       const votes = await prisma.survivorVote.findMany({ where: { councilId }, select: { voterUserId: true, voterRosterId: true, doesNotCount: true } })
       const voted = new Set(votes.filter(v => !v.doesNotCount).map(v => v.voterUserId ?? ctx.rosterToUser[v.voterRosterId]))
       // Reconstruct attendance after elimination, without deriving it from secret idol effects.
-      const attendees = await prisma.survivorPlayer.findMany({ where: { leagueId, ...(ctx.council.attendingTribeId ? { tribeId: ctx.council.attendingTribeId } : {}), OR: [{ playerState: 'active' }, { eliminatedWeek: { gte: ctx.council.week } }] }, select: { userId: true, displayName: true } })
+      // On a double-elimination week, whoever an earlier council that week voted out did not attend this one.
+      const earlierOut = await prisma.survivorTribalCouncil.findMany({ where: { leagueId, week: ctx.council.week, councilNumber: { lt: ctx.council.councilNumber }, eliminatedUserId: { not: null } }, select: { eliminatedUserId: true } })
+      const earlierOutIds = new Set(earlierOut.map(row => row.eliminatedUserId))
+      const attendees = (await prisma.survivorPlayer.findMany({ where: { leagueId, ...(ctx.council.attendingTribeId ? { tribeId: ctx.council.attendingTribeId } : {}), OR: [{ playerState: 'active' }, { eliminatedWeek: { gte: ctx.council.week } }] }, select: { userId: true, displayName: true } }))
+        .filter(player => !earlierOutIds.has(player.userId))
       const voterIds = attendees.map(player => player.userId).filter(id => ctx.council.phase !== 'revote' || !ctx.council.tiePlayerIds.includes(id))
       const names = new Map(attendees.map(player => [player.userId, player.displayName]))
       const nudges = await prisma.survivorCommissionerAction.findMany({ where: { leagueId, actionType: 'council_vote_nudge', week: ctx.council.week, description: councilId }, select: { targetUserId: true } })

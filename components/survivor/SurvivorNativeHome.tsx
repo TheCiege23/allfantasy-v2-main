@@ -206,6 +206,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
           <span className="svh-lbl svh-ember">{council ? 'Votes close in' : 'Draft starts in'}</span>
           <span className="svh-clock-num">{clock}</span>
           <span className="svh-faint">{council ? easternLabel(council.voteDeadlineAt) : draftLabel}</span>
+          {council?.weekLabel && <span className="svh-faint" data-testid="survivor-home-council-week-label">{council.weekLabel}</span>}
         </div>}
       </div>
     </section>

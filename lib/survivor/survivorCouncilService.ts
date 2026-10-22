@@ -47,6 +47,8 @@ export interface CouncilContext {
     id: string
     leagueId: string
     week: number
+    /** Order within the week: a double-elimination week and each revote add one. */
+    councilNumber: number
     phase: string
     status: string
     attendingTribeId: string | null
@@ -204,6 +206,7 @@ export async function loadCouncilContext(leagueId: string, councilId?: string, d
       id: council.id,
       leagueId,
       week: council.week,
+      councilNumber: council.councilNumber,
       phase: council.phase,
       status: council.status,
       attendingTribeId: council.attendingTribeId,
