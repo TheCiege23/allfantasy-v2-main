@@ -170,14 +170,15 @@ describe('payload normalization unchanged after form layer', () => {
     })
     const codes = (state: ReturnType<typeof nbaSurvivor>) => analyzeCreateLeagueCompletion(state).map((i) => i.code)
 
-    it('24 managers fit the NBA season from an opening-week draft and not from a November one', () => {
+    it('24 managers fit from an opening-week or November draft (some weeks vote twice), but not from a March one', () => {
       vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
       expect(codes(nbaSurvivor(24, '2026-10-19'))).not.toContain('survivor_season_too_short')
-      const late = analyzeCreateLeagueCompletion(nbaSurvivor(24, '2026-11-15'))
-      expect(late.map((i) => i.code)).toContain('survivor_season_too_short')
-      expect(late.find((i) => i.code === 'survivor_season_too_short')?.message).toMatch(/Not enough season remains for 24 managers/)
-      // The same November draft is fine for a cast the remaining weeks can eliminate.
-      expect(codes(nbaSurvivor(16, '2026-11-15'))).not.toContain('survivor_season_too_short')
+      // November leaves fewer periods than votes; two back-to-back councils in some weeks cover it.
+      expect(codes(nbaSurvivor(24, '2026-11-15'))).not.toContain('survivor_season_too_short')
+      expect(codes(nbaSurvivor(24, '2026-12-10'))).not.toContain('survivor_season_too_short')
+      // A March draft is still refused. (The wizard plans with Exile's default week-10 return, which a
+      // March start has already passed, so that is the message the commissioner sees first.)
+      expect(codes(nbaSurvivor(24, '2027-03-01'))).toContain('survivor_season_too_short')
     })
 
     it('does not run for sports without a verified full-season calendar, or when the draft is scheduled later', () => {

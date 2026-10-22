@@ -17,14 +17,15 @@ export async function generateAndPostWeeklyRecap(
     select: { title: true, winnerTribeId: true, winnerUserIds: true },
   })
 
-  // Get elimination council result
-  const found = await prisma.survivorTribalCouncil.findFirst({
+  // Every council that sent someone home this week, in order: a double-elimination week has two.
+  const found = await prisma.survivorTribalCouncil.findMany({
     where: { leagueId, week, isRevealed: true, eliminatedRosterId: { not: null } },
+    orderBy: { councilNumber: 'asc' },
     select: { eliminatedName: true, attendingTribeId: true, idolsPlayed: true, isTie: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true },
   })
   // A recap never names a voted-out manager before the council read has finished.
-  const league = found ? await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } }) : null
-  const council = found && isCouncilReadComplete(found, league?.survivorRevealMode) ? found : null
+  const league = found.length ? await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } }) : null
+  const councils = found.filter(row => isCouncilReadComplete(row, league?.survivorRevealMode))
 
   // Get top scorer
   const topScore = await prisma.survivorWeeklyScore.findFirst({
@@ -58,15 +59,12 @@ export async function generateAndPostWeeklyRecap(
     challengeWinner = tribe?.name
   }
 
-  // Get attending tribe name
-  let tribalLoser: string | undefined
-  if (council?.attendingTribeId) {
-    const tribe = await prisma.survivorTribe.findUnique({
-      where: { id: council.attendingTribeId },
-      select: { name: true },
-    })
-    tribalLoser = tribe?.name
-  }
+  // Attending tribe names, once each (both councils of a week can be the same tribe)
+  const attendingTribeIds = [...new Set(councils.map(c => c.attendingTribeId).filter((id): id is string => Boolean(id)))]
+  const attendingTribes = attendingTribeIds.length
+    ? await prisma.survivorTribe.findMany({ where: { id: { in: attendingTribeIds } }, select: { id: true, name: true } })
+    : []
+  const tribalLoser = joinNames(attendingTribeIds.map(id => attendingTribes.find(t => t.id === id)?.name).filter((n): n is string => Boolean(n)))
 
   // Get twist
   const twist = await prisma.survivorTwistEvent.findFirst({
@@ -75,14 +73,14 @@ export async function generateAndPostWeeklyRecap(
   })
 
   // Compile idol plays
-  const idolsPlayed = council?.idolsPlayed
-    ? (council.idolsPlayed as Array<{ powerLabel?: string }>).map((i) => i.powerLabel ?? 'Hidden Power')
-    : []
+  const idolsPlayed = councils.flatMap(c => Array.isArray(c.idolsPlayed)
+    ? (c.idolsPlayed as Array<{ powerLabel?: string }>).map((i) => i.powerLabel ?? 'Hidden Power')
+    : [])
 
   const recap = {
     challengeWinner,
     tribalLoser,
-    eliminatedPlayer: council?.eliminatedName ?? undefined,
+    eliminatedPlayer: joinNames(councils.map(c => c.eliminatedName).filter((n): n is string => Boolean(n))),
     immunityHolder: immunePlayer?.displayName,
     idolsPlayed: idolsPlayed.length > 0 ? idolsPlayed : undefined,
     twistSummary: twist?.description,
@@ -106,4 +104,10 @@ export async function generateAndPostWeeklyRecap(
     },
     update: {},
   })
+}
+
+/** "A", "A and B": a double-elimination week names both. */
+function joinNames(names: string[]): string | undefined {
+  if (names.length === 0) return undefined
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
