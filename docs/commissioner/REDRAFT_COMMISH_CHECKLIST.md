@@ -13,7 +13,7 @@ the code checks no entitlement and the tier is still to be decided (none left in
 worker, which follows `worker-release` and moves about once a day. Check
 `/api/af-debug/sha` before saying a feature is in production.
 
-_Last updated: 2026-10-20 — every PR in the three built sections has merged except #2507, which is waiting on `main`'s red unit-test shards (route budget at 2049 of 2048, plus two unrelated tests). Tiers set 2026-10-20: rule templates and the reputation badge are Free; the constitution builder stays Free with Plan extras._
+_Last updated: 2026-10-20 — every PR in the three built sections has merged (#2507 last, on 2026-10-22). Tiers set 2026-10-20: rule templates and the reputation badge are Free; the constitution builder stays Free with Plan extras._
 
 ## Running the week
 
@@ -22,7 +22,7 @@ _Last updated: 2026-10-20 — every PR in the three built sections has merged ex
 | ✅ | **Weekly commissioner checklist** — "This week · week N": scores final, waivers running, lineups set, trades waiting on you, dues, deadline heads-ups; each done or to do, linked to its fix | Free | #2575 |
 | ✅ | Commish inbox — keepers, AI alerts, integrity flags, join and adoption requests, dues, payouts in the action queue | Free | #2500 |
 | ✅ | Dispute desk — members file, commissioners rule | Free | #2501 |
-| 🟡 | Lineup-integrity monitor — finished-week lineups that could not score (latest week free, full season on the plan) | Free / Plan | #2507 |
+| ✅ | Lineup-integrity monitor — finished-week lineups that could not score (latest week free, full season on the plan) | Free / Plan | #2507 |
 | ✅ | Tanking scan fix — reads the week's saved lineup | Free | #2508 |
 | ✅ | Deadline autopilot — 72h / 24h / 1h reminders to managers who still have to act (ships off: set `DEADLINE_AUTOPILOT_ENABLED=1` — exactly `1` — on the `allfantasy-v2-worker` service; live once the code reaches `worker-release`) | Free / Plan | #2503 |
 | ✅ | Weekly recap review — edit Tuesday's recap before it posts | Free | #2506 |
