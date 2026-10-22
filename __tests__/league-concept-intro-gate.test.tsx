@@ -29,6 +29,14 @@ describe('LeagueConceptIntroGate', () => {
     })
   })
 
+  it('replays the NBA intro from home after automatic playback has settled', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ seen: true }) } as Response)
+    render(<LeagueConceptIntroGate leagueId="nba-replay" shouldPlayIntro={false} leagueType="redraft" sport="NBA" settings={{}} />)
+    fireEvent(window, new CustomEvent('af:replay-league-intro', { detail: { leagueId: 'nba-replay' } }))
+    expect(await screen.findByTestId('concept-intro-video')).toHaveAttribute('src', '/media/create-league/sports/videos/Basketball.mp4')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('renders overlay when handoff is true and intro is unseen', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,

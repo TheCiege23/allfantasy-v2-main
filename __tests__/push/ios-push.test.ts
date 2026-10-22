@@ -103,6 +103,11 @@ afterEach(() => {
 })
 
 describe("sendApns — what reaches Apple", () => {
+  it('does not retain game finals at Apple for offline delivery', async () => {
+    await sendApns([TOKEN_A], { title: 'Final', type: 'game_final' })
+    expect(apple.sent[0].headers['apns-expiration']).toBe('0')
+  })
+
   it("posts each token to Apple with the app's topic, a verifiable ES256 token and the payload", async () => {
     const res = await sendApns([TOKEN_A], { title: "Injury: Josh Allen", body: "Out for Sunday", href: "/core/players?id=1", tag: "injury-1", leagueId: "L1" })
     expect(res).toEqual([{ ok: true }])

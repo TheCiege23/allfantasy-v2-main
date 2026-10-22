@@ -98,7 +98,10 @@ in §7.
   `debut_year_confirmed` and `rookie_experience` as `'unknown'`, and
   `isTheSportsDbRookieExperienceSupported()` returns `false`.
 - `league_ids` lists MLB 4424 and NBA 4387, and **no NHL id** (`ENDPOINTS.yaml:146-147`). There
-  are no MiLB, AHL or CHL ids, and no fixture for any non-football sport.
+  are no MiLB, AHL or CHL ids **in `league_ids`**, and no fixture for any non-football sport.
+  ⚠ Correction 2026-10-20: the `v1.all_leagues.json` fixture DOES list AHL, ECHL, USHL, OHL, WHL,
+  QMJHL, NCAA D1 hockey and two Triple-A leagues. Nothing documents or captures their rosters or
+  players, and no player field carries NHL/MLB rights (`contracts/thesportsdb/GAPS.md` G-16).
 - **Use:** headshots and biographical enrichment only. Not a prospect source.
 
 ### 2.3 NCAAB devy (NBA prospects)

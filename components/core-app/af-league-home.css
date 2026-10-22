@@ -1545,3 +1545,14 @@
 .af-lh-week-summary-grid > a > span:last-child { color:var(--accent); font-size:12px; }
 .af-lh-week-summary-moves > span:last-child { display:flex; flex-wrap:wrap; gap:14px; }
 @media (max-width:800px) { .af-lh-week-summary-grid { grid-template-columns:1fr; } .af-lh-week-summary { padding:14px; } }
+
+
+/* Shared league overview density follows the core scoreboard and cards. */
+.af-core .af-lh { min-width: 0; }
+.af-core .af-lh :is(.af-card, .af-lh-card) { border-radius: 16px; box-shadow: none; }
+.af-core .af-lh :is(h1, h2, h3) { letter-spacing: -.025em; }
+@media (max-width: 720px) {
+  .af-core .af-lh :is(.af-card, .af-lh-card) { padding: 14px; border-radius: 14px; }
+  .af-core .af-lh :is(input, select, textarea) { font-size: 16px; }
+  .af-core .af-lh .af-btn { min-height: 44px; }
+}

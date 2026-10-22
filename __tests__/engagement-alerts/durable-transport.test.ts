@@ -3,7 +3,7 @@ const h = vi.hoisted(() => ({ upsert: vi.fn(), claim: vi.fn(), update: vi.fn() }
 vi.mock('@/lib/prisma', () => ({ prisma: { notificationOutbox: { upsert: h.upsert, updateMany: h.claim, update: h.update } } }))
 import { deliverDurably } from '@/lib/notifications/durableTransport'
 const message = { userId: 'u1', channel: 'push' as const, eventType: 'game_scoring_play', title: 'Goal', body: 'Goal', eventKey: 'NHL:game:play1', metadata: { notificationCategory: 'performance_alerts' } }
-beforeEach(() => { vi.resetAllMocks(); h.upsert.mockResolvedValue({}); h.claim.mockResolvedValue({ count: 1 }); h.update.mockResolvedValue({}) })
+beforeEach(() => { vi.resetAllMocks(); h.upsert.mockResolvedValue({createdAt:new Date(),metadata:{}}); h.claim.mockResolvedValue({ count: 1 }); h.update.mockResolvedValue({}) })
 describe('durable notification handoff', () => {
   it('persists and claims before handing off, then marks sent', async () => {
     const send = vi.fn().mockResolvedValue(undefined)
@@ -44,4 +44,16 @@ describe('durable notification handoff', () => {
     await expect(deliverDurably(message, send)).rejects.toThrow('database unavailable')
     expect(send).not.toHaveBeenCalled()
   })
+})
+
+it('does not resend yesterday’s pending game row through the producer callback', async () => {
+  h.upsert.mockResolvedValue({createdAt:new Date(Date.now()-86400_000),metadata:{}})
+  const send=vi.fn()
+  expect(await deliverDurably(message,send)).toBe('skipped')
+  expect(send).not.toHaveBeenCalled()
+})
+it('hands off fresh game email when selected', async () => {
+  const send=vi.fn()
+  expect(await deliverDurably({...message,channel:'email'},send)).toBe('sent')
+  expect(send).toHaveBeenCalled()
 })

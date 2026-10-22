@@ -44,6 +44,9 @@ vi.mock('@/lib/chat-core/chimmyPrivateReply', () => ({ generateChimmyPrivateRepl
 vi.mock('@/lib/chat-core/league-message-proxy', () => ({
   bracketMessagesToPlatform: vi.fn((rows: unknown[]) => rows),
 }))
+vi.mock('@/lib/league-access', () => ({
+  resolveLeagueAccess: vi.fn(async (leagueId: string) => ({ leagueId, isMember: true, via: 'redraft' })),
+}))
 vi.mock('@/lib/live-draft-engine/auth', () => ({
   canAccessLeagueDraft: vi.fn(async () => true),
   getCurrentUserRosterIdForLeague: vi.fn(async () => null),

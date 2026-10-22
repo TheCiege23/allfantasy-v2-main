@@ -11,6 +11,8 @@ import { prisma } from '@/lib/prisma'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
+import { syncDraftRoundsToRoster } from '@/lib/draft/syncDraftRoundsToRoster'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,11 +38,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   const locked = await settingsLockedResponse(leagueId, 'rosters')
 
   if (locked) return locked
+  const roundsBefore = await getComputedDraftRounds(leagueId).catch(() => null)
   await resetLeagueRosterToDefault(leagueId, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
+  // A reset to the sport default is a request for the default shape, rounds included.
+  const draftRounds = await syncDraftRoundsToRoster(leagueId, { before: roundsBefore, keepManualOverride: false }).catch((e) => {
+    console.warn('[roster-settings reset-default] draft rounds sync', e instanceof Error ? e.message : 'unknown error')
+    return null
+  })
   const config = await registry.getService(league.sport).getConfig(leagueId)
   const unifiedConfig = await getLeagueRosterConfig(leagueId)
 
   await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/reset-default' })
-  return NextResponse.json({ ok: true, config, unifiedConfig })
+  return NextResponse.json({ ok: true, config, unifiedConfig, draftRounds })
 }
