@@ -1,5 +1,6 @@
 import { setCouncilPaused } from '@/lib/survivor/survivorCouncilPause'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { noEliminationWeeksFor, spreadEliminationWeeks } from '@/lib/survivor/survivorEliminationSchedule'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -123,13 +124,14 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   let planPatch: JsonRecord = {}
   if (exileChanged && savedPlan) {
     if (settings.exileIslandEnabled && (settings.exileReturnWeek <= savedPlan.startWeek || settings.exileReturnWeek >= savedPlan.endWeek - 1)) return NextResponse.json({ error: 'Return week must follow the opening week and leave an elimination before the finale.' }, { status: 422 })
-    const count = savedPlan.castSize - 3 + (settings.exileIslandEnabled ? 1 : 0)
-    const available = savedPlan.endWeek - savedPlan.startWeek - 1
-    if (count > available) return NextResponse.json({ error: 'This season has no room for an Exile return. Choose a later finale or smaller cast before drafting.' }, { status: 422 })
-    const eliminationWeeks = Array.from({ length: count }, (_, i) => savedPlan.startWeek + Math.ceil((i + 1) * available / count))
+    // Same spacing the plan builder uses, so a saved plan always validates: one council per period,
+    // two in some periods when the season is short. The finalist count is the saved one, not 3.
+    const count = savedPlan.castSize - savedPlan.finalistCount + (settings.exileIslandEnabled ? 1 : 0)
+    const eliminationWeeks = spreadEliminationWeeks(savedPlan.startWeek, savedPlan.endWeek, count)
+    if (!eliminationWeeks) return NextResponse.json({ error: 'This season has no room for an Exile return. Choose a later finale or smaller cast before drafting.' }, { status: 422 })
     const { exileReturnWeek: _oldWeek, exileReturnSlots: _oldSlots, ...basePlan } = savedPlan
     planPatch = { survivor_full_season_plan: { ...basePlan, ...(settings.exileIslandEnabled ? { exileReturnWeek: settings.exileReturnWeek, exileReturnSlots: 1 } : {}), eliminationWeeks,
-      noEliminationWeeks: Array.from({ length: savedPlan.endWeek - savedPlan.startWeek }, (_, i) => savedPlan.startWeek + i).filter(week => !eliminationWeeks.includes(week)) } }
+      noEliminationWeeks: noEliminationWeeksFor(savedPlan.startWeek, savedPlan.endWeek, eliminationWeeks) } }
   }
 
   await prisma.league.update({

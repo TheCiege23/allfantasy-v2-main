@@ -384,8 +384,11 @@ async function publishVerdictInTx(tx: Prisma.TransactionClient, leagueId: string
   }
   if (opensRevote) {
     const deadline = new Date(now.getTime() + 2 * 60 * 60 * 1000)
+    // The week's next free number, not councilNumber + 1: in a double-elimination week the second
+    // council may already hold that number, and the unique (config, week, number) would reject it.
+    const revoteNumber = ((await tx.survivorTribalCouncil.aggregate({ where: { configId: council.configId, week: council.week }, _max: { councilNumber: true } }))._max.councilNumber ?? council.councilNumber) + 1
     const revote = await tx.survivorTribalCouncil.create({
-      data: { leagueId, configId: council.configId, week: council.week, councilNumber: council.councilNumber + 1, phase: 'revote', attendingTribeId: council.attendingTribeId,
+      data: { leagueId, configId: council.configId, week: council.week, councilNumber: revoteNumber, phase: 'revote', attendingTribeId: council.attendingTribeId,
         status: 'voting_open', votingOpensAt: now, votingDeadline: deadline, voteDeadlineAt: deadline, tiePlayerIds: council.tiePlayerIds, auditLog: { originalCouncilId: council.id } },
       select: { id: true },
     })

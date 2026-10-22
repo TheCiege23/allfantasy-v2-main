@@ -291,8 +291,10 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
     opts.voteDeadlineAt ?? new Date(opensAt.getTime() + Math.max(1, settings.voteCloseOffset) * 60 * 60 * 1000)
   const status: CouncilStatus = opensAt.getTime() <= now.getTime() ? 'voting_open' : 'scheduled'
 
+  // The next free number for the week. A count would collide once a revote (which takes a number
+  // of its own) sits between two councils of a double-elimination week.
   const councilNumber =
-    (await prisma.survivorTribalCouncil.count({ where: { leagueId, week } })) + 1
+    ((await prisma.survivorTribalCouncil.aggregate({ where: { leagueId, configId, week }, _max: { councilNumber: true } }))._max.councilNumber ?? 0) + 1
 
   const necklaces = await getCouncilImmuneUserIds(leagueId, week, phase === 'merge' ? null : opts.attendingTribeId ?? null)
   const { eligibility } = buildCouncilContextParts(scopePlayers, [], settings, [...(gameState?.immunePlayerId ? [gameState.immunePlayerId] : []), ...necklaces, ...challengeImmuneUserIds])

@@ -7,6 +7,7 @@ import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
 import { LeagueSeatTracker } from '@/components/league/native/LeagueSeatTracker'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { describeEliminationSchedule } from '@/lib/survivor/survivorEliminationSchedule'
 import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { SURVIVOR_MOOD_TAG, resolveSurvivorMood, survivorBackgroundSrc } from '@/lib/survivor/survivorMood'
@@ -226,7 +227,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
               <li><strong>Draft</strong><span>{league.teamCount}-team snake draft. Build your queue; autopick uses it when your clock runs out.</span></li>
               <li><strong>Tribes</strong><span>{summary?.config?.tribeCount ?? 4} tribes are drawn at random when the draft ends, each with a private chat.</span></li>
               <li><strong>Idols</strong><span>{summary?.config?.idolCount ?? 6} idols hide on drafted NBA players. Chimmy tells holders privately.</span></li>
-              <li><strong>Tribal Council</strong><span>{plan ? `${plan.eliminationWeeks.length} votes, the first in week ${plan.eliminationWeeks[0]}.` : 'The lowest-scoring tribe votes someone out.'} Vote privately on the ballot screen or with @Chimmy. The top score in each tribe going to Tribal Council wins immunity.</span></li>
+              <li><strong>Tribal Council</strong><span>{plan ? `${describeEliminationSchedule(plan.eliminationWeeks)}, the first in week ${plan.eliminationWeeks[0]}.` : 'The lowest-scoring tribe votes someone out.'} Vote privately on the ballot screen or with @Chimmy. The top score in each tribe going to Tribal Council wins immunity.</span></li>
               <li><strong>Exile, merge, jury</strong><span>{plan ? `One exile returns in week ${plan.exileReturnWeek}. The jury crowns a winner from the final ${plan.finalistCount} in week ${plan.finaleWeek}.` : 'Voted-out managers fight on from Exile Island; the jury picks the winner.'}</span></li>
             </ol>
           </div>

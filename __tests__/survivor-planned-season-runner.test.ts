@@ -9,10 +9,10 @@ import { generateAndPostWeeklyRecap } from '@/lib/survivor/weeklyRecapGenerator'
 const state = vi.hoisted(() => ({ game: {} as Record<string, unknown>, resolved: false, active: 20 }))
 const db = vi.hoisted(() => ({
   league: { findUnique: vi.fn(), findMany: vi.fn() },
-  survivorAuditEntry: { findFirst: vi.fn(), create: vi.fn() },
+  survivorAuditEntry: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
   survivorPlayer: { count: vi.fn() },
   survivorGameState: { update: vi.fn(), updateMany: vi.fn() },
-  survivorTribalCouncil: { findFirst: vi.fn() },
+  survivorTribalCouncil: { findFirst: vi.fn(), findMany: vi.fn() },
   exileWeeklyEntry: { findFirst: vi.fn() },
 }))
 const engine = vi.hoisted(() => ({
@@ -38,12 +38,15 @@ vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWee
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
 
-async function setup(sport: 'NBA' | 'NHL', week: number, options: { exile?: boolean; finalized?: boolean } = {}) {
-  const plan = buildSurvivorFullSeasonPlan({ sport, season: 2026, castSize: 20, now: start, exileEnabled: options.exile, exileReturnWeek: 10 })
+async function setup(sport: 'NBA' | 'NHL', week: number, options: { exile?: boolean; finalized?: boolean; castSize?: number; now?: Date; exileReturnWeek?: number } = {}) {
+  const plan = buildSurvivorFullSeasonPlan({ sport, season: 2026, castSize: options.castSize ?? 20, now: options.now ?? start, exileEnabled: options.exile, exileReturnWeek: options.exileReturnWeek ?? 10 })
   db.league.findUnique.mockResolvedValue({ sport, season: 2026, survivorMode: true, platform: 'allfantasy', settings: { survivor_full_season_plan: plan } })
   state.game = { phase: 'pre_merge', currentWeek: week, weekScoringFinalAt: options.finalized ? later : null, activeCouncilId: null }
   engine.getOrCreateSurvivorGameState.mockImplementation(async () => state.game)
   db.survivorAuditEntry.findFirst.mockImplementation(async () => state.resolved ? { id: 'audit-1' } : null)
+  // The week-progress loader: one resolved council (and its elimination) when state.resolved.
+  db.survivorAuditEntry.findMany.mockImplementation(async () => state.resolved ? [{ action: 'player_eliminated' }] : [])
+  db.survivorTribalCouncil.findMany.mockImplementation(async () => state.resolved ? [{ attendingTribeId: null }] : [])
   db.survivorPlayer.count.mockImplementation(async () => state.active)
   db.exileWeeklyEntry.findFirst.mockResolvedValue(null)
   db.survivorTribalCouncil.findFirst.mockResolvedValue(null)
@@ -77,27 +80,50 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     expect(engine.advanceWeek).not.toHaveBeenCalled()
     expect(engine.triggerTribalOpen).not.toHaveBeenCalled()
   })
-  it.each([true, false])('replays saved weekly state through a crowned Final 3 (Exile qualifies: %s)', async qualifies => {
+  it.each([
+    { qualifies: true, late: false }, { qualifies: false, late: false },
+    // A 24-player cast drafted in January: fewer periods than eliminations, so some weeks vote twice.
+    { qualifies: true, late: true }, { qualifies: false, late: true },
+  ])('replays saved weekly state through a crowned Final 3 (Exile qualifies: $qualifies, late draft: $late)', async ({ qualifies, late }) => {
     const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
-    const plan = await setup(sport, 1, { exile: true })
+    const plan = await setup(sport, 1, late ? { exile: true, castSize: 24, now: new Date('2027-01-10T12:00:00Z'), exileReturnWeek: 20 } : { exile: true })
+    if (late) expect(new Set(plan.eliminationWeeks).size).toBeLessThan(plan.eliminationWeeks.length)
     const resolvedWeeks = new Set<number>()
+    const eliminatedIn = new Map<number, number>()
+    const openedIn = new Map<number, number>()
     let returnResolved = false
     let skipped = 0
+    const skippedWeeks = new Set<number>()
+    state.active = plan.castSize
     state.game.currentWeek = plan.startWeek
     engine.allScoresFinalizedForWeek.mockResolvedValue(true)
     engine.finalizeWeeklyScores.mockImplementation(async () => { state.game.weekScoringFinalAt = new Date('2027-04-01T00:00:00Z') })
     engine.advanceWeek.mockImplementation(async () => { state.game.currentWeek = Number(state.game.currentWeek) + 1; state.game.weekScoringFinalAt = null })
-    engine.triggerTribalOpen.mockImplementation(async () => { state.game.activeCouncilId = `council-${state.game.currentWeek}`; state.game.tribalDeadline = new Date('2027-04-01T00:00:00Z') })
-    engine.processTribalDeadline.mockImplementation(async () => { resolvedWeeks.add(Number(state.game.currentWeek)); state.active--; state.game.activeCouncilId = null })
+    engine.triggerTribalOpen.mockImplementation(async () => {
+      const week = Number(state.game.currentWeek)
+      openedIn.set(week, (openedIn.get(week) ?? 0) + 1)
+      state.game.activeCouncilId = `council-${week}-${openedIn.get(week)}`; state.game.tribalDeadline = new Date('2027-04-01T00:00:00Z')
+    })
+    engine.processTribalDeadline.mockImplementation(async () => {
+      const week = Number(state.game.currentWeek)
+      resolvedWeeks.add(week); eliminatedIn.set(week, (eliminatedIn.get(week) ?? 0) + 1); state.active--; state.game.activeCouncilId = null
+    })
+    db.survivorAuditEntry.findMany.mockImplementation(async ({ where }) => [
+      ...Array.from({ length: eliminatedIn.get(where.week) ?? 0 }, () => ({ action: 'player_eliminated' })),
+      ...(skippedWeeks.has(where.week) ? [{ action: 'planned_elimination_skipped_final_three' }] : []),
+    ])
+    db.survivorTribalCouncil.findMany.mockImplementation(async ({ where }) => Array.from({ length: openedIn.get(where.week) ?? 0 }, () => ({ attendingTribeId: null })))
     db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'scheduled_exile_return_resolved'
       ? returnResolved ? { id: 'return' } : null
-      : resolvedWeeks.has(where.week) ? { id: `week-${where.week}` } : null)
-    db.survivorAuditEntry.create.mockImplementation(async ({ data }) => { if (data.action === 'planned_elimination_skipped_final_three') { resolvedWeeks.add(data.week); skipped++ }; return { id: 'audit' } })
+      : where.action === 'planned_elimination_skipped_final_three'
+        ? skippedWeeks.has(where.week) ? { id: `skip-${where.week}` } : null
+        : resolvedWeeks.has(where.week) ? { id: `week-${where.week}` } : null)
+    db.survivorAuditEntry.create.mockImplementation(async ({ data }) => { if (data.action === 'planned_elimination_skipped_final_three') { resolvedWeeks.add(data.week); skippedWeeks.add(data.week); skipped++ }; return { id: 'audit' } })
     vi.mocked(processReturnFromExile).mockImplementation(async () => { returnResolved = true; if (qualifies) state.active++; return true as never })
     vi.mocked(getFinaleState).mockResolvedValue({ closed: true, winnerRosterId: 'winner' } as never)
     const now = new Date('2027-04-15T12:00:00Z')
     let outcome = ''
-    for (let step = 0; step < (plan.endWeek - plan.startWeek + 1) * 6; step++) {
+    for (let step = 0; step < (plan.endWeek - plan.startWeek + 1) * 8; step++) {
       outcome = await runPlannedSurvivorLeague('league-1', now)
       if (outcome === 'season_complete') break
       expect(['awaiting_verified_scores', 'awaiting_calendar', 'awaiting_exile_results', 'cast_below_final_three']).not.toContain(outcome)
@@ -106,7 +132,10 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     expect(Number(state.game.currentWeek)).toBe(plan.finaleWeek)
     expect(state.active).toBe(3)
     expect(skipped).toBe(qualifies ? 0 : 1)
-    expect(resolvedWeeks.size).toBe(plan.eliminationWeeks.length)
+    expect(resolvedWeeks.size).toBe(new Set(plan.eliminationWeeks).size)
+    // Every scheduled vote ran (bar the final-three skip), and a double week ran exactly two.
+    expect([...eliminatedIn.values()].reduce((a, b) => a + b, 0)).toBe(plan.eliminationWeeks.length - skipped)
+    for (const [week, count] of openedIn) expect(count).toBeLessThanOrEqual(plan.eliminationWeeks.filter(w => w === week).length)
     // An unanswered tribe-imbalance recommendation gets its default before each council opens.
     expect(redraw.autoApply).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
     expect(redraw.autoApply).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0])
