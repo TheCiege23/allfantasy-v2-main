@@ -1,4 +1,5 @@
 import { readTribeSlots, type SurvivorTribeSlot } from './survivorTribeIdentity'
+import { SURVIVOR_CAST_SIZE_MAX, SURVIVOR_CAST_SIZE_MIN, SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
 export type SurvivorTribeAssignmentMode = 'random' | 'commissioner_manual' | 'draft_pattern'
 export type SurvivorCommissionerParticipationMode = 'non_participating_host' | 'participating_player'
 export type SurvivorCoCommissionerMode = 'disabled' | 'non_participating_host' | 'same_privacy_as_commissioner'
@@ -66,7 +67,7 @@ type SettingsRecord = Record<string, unknown>
 
 export const SURVIVOR_FOUNDATION_SETTINGS_VERSION = 1
 
-export const SURVIVOR_TEAM_COUNT_OPTIONS = [16, 17, 18, 19, 20] as const
+export const SURVIVOR_TEAM_COUNT_OPTIONS = SURVIVOR_CAST_SIZE_OPTIONS
 export const SURVIVOR_CANONICAL_DRAFT_TYPE_IDS = [
   'snake',
   'auction',
@@ -81,8 +82,8 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   tribeCount: 4,
   survivorTribeSlots: readTribeSlots({}, 20, 4),
   defaultTeamCount: 20,
-  minTeamCount: 16,
-  maxTeamCount: 20,
+  minTeamCount: SURVIVOR_CAST_SIZE_MIN,
+  maxTeamCount: SURVIVOR_CAST_SIZE_MAX,
   tribeAssignmentMode: 'random',
   commissionerParticipationMode: 'non_participating_host',
   hideIdolsFromCommissioner: false,
@@ -212,8 +213,8 @@ export function normalizeSurvivorFoundationSettings(
       : {}
   const s = { ...nested, ...raw }
   const base = SURVIVOR_DEFAULT_FOUNDATION_SETTINGS
-  const minTeamCount = clampInt(readNumber(s, ['minTeamCount', 'survivor_min_team_count'], base.minTeamCount), 16, 20)
-  const maxTeamCount = clampInt(readNumber(s, ['maxTeamCount', 'survivor_max_team_count'], base.maxTeamCount), minTeamCount, 20)
+  const minTeamCount = clampInt(readNumber(s, ['minTeamCount', 'survivor_min_team_count'], base.minTeamCount), SURVIVOR_CAST_SIZE_MIN, SURVIVOR_CAST_SIZE_MAX)
+  const maxTeamCount = clampInt(readNumber(s, ['maxTeamCount', 'survivor_max_team_count'], base.maxTeamCount), minTeamCount, SURVIVOR_CAST_SIZE_MAX)
   const defaultTeamCount = clampInt(
     readNumber(s, ['defaultTeamCount', 'default_team_count', 'teams', 'survivorPlayerCount', 'cast_size'], base.defaultTeamCount),
     minTeamCount,

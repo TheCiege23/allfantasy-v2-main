@@ -11,6 +11,7 @@ import type { Prisma } from '@prisma/client'
 import { normalizeTribePlan } from '@/lib/survivor/survivorTribePlan'
 import { loadTribePlanParticipants, lockSurvivorTribePlan, readStoredTribePlan } from '@/lib/survivor/survivorTribePlanServer'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
+import { survivorTribeCountOptions } from '@/lib/league-creation-wizard/sport-team-limits'
 
 export const dynamic = 'force-dynamic'
 type Context = { params: Promise<{ leagueId: string }> }
@@ -45,12 +46,16 @@ export async function PUT(req: NextRequest, ctx: Context) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!access?.isLeagueMember || !access.decisions.canUpdateSettings) return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
   const body = await req.json().catch(() => null)
-  if (!body || !Number.isInteger(body.tribeCount) || body.tribeCount < 2 || body.tribeCount > 5) return NextResponse.json({ error: 'Choose between 2 and 5 tribes.' }, { status: 400 })
+  if (!body || !Number.isInteger(body.tribeCount) || body.tribeCount < 2 || body.tribeCount > 4) return NextResponse.json({ error: 'Choose between 2 and 4 tribes.' }, { status: 400 })
   return withSurvivorSetupTransaction(leagueId, async db => {
     const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true, leagueVariant: true, survivorMode: true } })
     if (!league || (!league.survivorMode && league.leagueVariant !== 'survivor')) return NextResponse.json({ error: 'Survivor league required' }, { status: 404 })
     const snapshot = (league.settings ?? {}) as Record<string, unknown>
     const settings = normalizeSurvivorFoundationSettings(snapshot)
+    const splits = survivorTribeCountOptions(settings.defaultTeamCount)
+    if (!splits.includes(body.tribeCount)) {
+      return NextResponse.json({ error: `Choose ${splits.join(', ')} tribes: ${settings.defaultTeamCount} managers split equally.` }, { status: 400 })
+    }
     const invalid = validateTribeSlots(body.slots, settings.defaultTeamCount, body.tribeCount)
     if (invalid) return NextResponse.json({ error: invalid }, { status: 422 })
     await db.$queryRaw`SELECT id FROM draft_sessions WHERE "leagueId" = ${leagueId} AND "sessionKind" = 'live' FOR UPDATE`

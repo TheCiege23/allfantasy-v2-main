@@ -49,15 +49,19 @@ describe('tribe plan maths', () => {
     expect([0, 1, 2, 3].map(s => Object.values(m).filter(v => v === s).length)).toEqual([5, 4, 4, 4])
   })
 
-  it('every tribe must hold 4–6 managers and match its capacity; everyone must be placed', () => {
+  it('every tribe must hold an equal share (3–12 managers) and match its capacity; everyone must be placed', () => {
     const people = cast(12)
     const ok = planRandom(people, [4, 4, 4], 1)!
     expect(validateTribePlan(ok, people, [4, 4, 4])).toBeNull()
     expect(validateTribePlan({ ...ok, u00: undefined as never }, people, [4, 4, 4])).toMatch(/not in a tribe/)
-    const three = cast(9)
-    expect(validateTribePlan(planRandom(three, [3, 3, 3], 1)!, three, [3, 3, 3])).toMatch(/4–6/)
+    // 12 in four tribes of three and 24 in two of twelve are the smallest and largest equal shares.
+    expect(validateTribePlan(planRandom(people, [3, 3, 3, 3], 1)!, people, [3, 3, 3, 3])).toBeNull()
+    const big = cast(24)
+    expect(validateTribePlan(planRandom(big, [12, 12], 1)!, big, [12, 12])).toBeNull()
+    const tiny = cast(6)
+    expect(validateTribePlan(planRandom(tiny, [2, 2, 2], 1)!, tiny, [2, 2, 2])).toMatch(/3–12/)
     const moved = { ...ok, u00: (ok.u00 + 1) % 3 }
-    expect(validateTribePlan(moved, people, [4, 4, 4])).toMatch(/capacity|4–6/)
+    expect(validateTribePlan(moved, people, [4, 4, 4])).toMatch(/capacity|3–12/)
   })
 
   it('AF strength scales DB ADP so the best roster reads 100, and no data stays null', () => {
@@ -128,7 +132,7 @@ describe('POST /survivor-tribe-setup — Lock tribes & announce', () => {
     expect(String(mock.post.mock.calls[0][2])).toMatch(/Tribes are set/)
   })
 
-  it('refuses a plan that breaks the 4–6 rule, without writing', async () => {
+  it('refuses a plan that breaks the equal-share rule, without writing', async () => {
     const { POST } = await import('@/app/api/leagues/[leagueId]/survivor-tribe-setup/route')
     const lopsided = Object.fromEntries(users.map((u, i) => [u.id, i < 10 ? 0 : 1 + (i % 3)]))
     expect((await POST(lockReq({ mode: 'manual', seed: 1, mapping: lopsided }), ctx)).status).toBe(422)

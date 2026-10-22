@@ -259,8 +259,17 @@ export function defaultLeagueTypeForSport(sport: SupportedSport): LeagueTypeId {
  * size and scoring preset are ones the format accepts — not Redraft's left in place.
  */
 export function freshCreateLeagueState(base: CreateLeagueV2State): CreateLeagueV2State {
-  const start = { ...base, leagueType: base.leagueType ?? 'redraft', leagueTypeTouched: false }
-  return { ...start, ...nextStateForLeagueType(start, defaultLeagueTypeForSport(start.sport)) }
+  const leagueType = defaultLeagueTypeForSport(base.sport)
+  // Seed the format's own default cast: the transition below keeps any size the format accepts,
+  // and Redraft's 12 is a valid Survivor cast now, so a fresh NBA Survivor would otherwise start
+  // at 12 instead of 16.
+  const start = {
+    ...base,
+    leagueType: base.leagueType ?? 'redraft',
+    leagueTypeTouched: false,
+    teamCount: getDefaultTeamCount(base.sport, leagueType, base.soccerPipeline),
+  }
+  return { ...start, ...nextStateForLeagueType(start, leagueType) }
 }
 
 /** IDP is a redraft shell with defensive players; it carries its own draft and scoring lists. */
@@ -301,6 +310,7 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   team_count_required: 'basics',
   team_count_invalid: 'basics',
   survivor_tribes_invalid: 'basics',
+  survivor_season_too_short: 'basics',
   league_name_invalid: 'basics',
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
