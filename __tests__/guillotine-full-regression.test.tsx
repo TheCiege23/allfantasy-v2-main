@@ -116,7 +116,7 @@ vi.mock('@/components/guillotine/GuillotineAIPanel', () => ({
   GuillotineAIPanel: () => <div data-testid="guillotine-ai-panel" />,
 }))
 
-describe('Guillotine full regression matrix', () => {
+describe('Guilly full regression matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([])
@@ -139,7 +139,7 @@ describe('Guillotine full regression matrix', () => {
     prismaMock.redraftRoster.update.mockResolvedValue({ id: 'ok' })
   })
 
-  it('supports all 7 sports with valid guillotine config and waivers after chop', () => {
+  it('supports all 7 sports with valid Guilly config and waivers after chop', () => {
     expect(SUPPORTED_SPORTS).toEqual(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])
 
     for (const sport of SUPPORTED_SPORTS) {
@@ -159,7 +159,7 @@ describe('Guillotine full regression matrix', () => {
     }
   })
 
-  it('supports guillotine draft types for all sports (snake/linear/auction)', () => {
+  it('supports Guilly draft types for all sports (snake/linear/auction)', () => {
     expect(DRAFT_TYPES_BY_LEAGUE_FORMAT.guillotine).toEqual(['snake', 'linear', 'auction'])
 
     for (const sport of SUPPORTED_SPORTS) {

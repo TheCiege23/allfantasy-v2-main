@@ -183,7 +183,7 @@ export function stateFromRecipe(recipe: TemplateRecipe): CreateLeagueV2State {
   return state
 }
 
-const TYPE_LABEL: Record<string, string> = { redraft: 'Redraft', dynasty: 'Dynasty', keeper: 'Keeper', best_ball: 'Best ball', bestball: 'Best ball', guillotine: 'Guillotine', devy: 'Devy', c2c: 'C2C', survivor: 'Survivor', salary_cap: 'Salary cap' }
+const TYPE_LABEL: Record<string, string> = { redraft: 'Redraft', dynasty: 'Dynasty', keeper: 'Keeper', best_ball: 'Best ball', bestball: 'Best ball', guillotine: 'Guilly', devy: 'Devy', c2c: 'C2C', survivor: 'Survivor', salary_cap: 'Salary cap' }
 const ORDER_LABEL: Record<DynastyRookieOrderMethod, string> = { reverse_standings: 'reverse standings', max_pf: 'reverse max PF', lottery: 'lottery', commissioner: 'commissioner-set' }
 
 /** Short tags for a library card: what the league plays like, in a glance. */

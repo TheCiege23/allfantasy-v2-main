@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'RedraftSeason not found' }, { status: 404 })
     }
     if (result.reason === 'NOT_GUILLOTINE') {
-      return NextResponse.json({ error: 'Not a guillotine league' }, { status: 400 })
+      return NextResponse.json({ error: 'Not a Guilly league' }, { status: 400 })
     }
     return NextResponse.json(
       { error: 'League has no drafted rosters yet — finish the draft first' },

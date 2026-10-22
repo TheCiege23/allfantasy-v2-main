@@ -25,8 +25,8 @@ describe('specialty trade value models', () => {
     expect(fit.reason).toContain('40.0% before')
   })
 
-  it('supports Survivor Guillotine as its own combined rules contract', () => {
-    expect(formatModelFor('survivor_guillotine')?.label).toBe('Survivor Guillotine')
+  it('supports Survivor Guilly as its own combined rules contract', () => {
+    expect(formatModelFor('survivor_guillotine')?.label).toBe('Survivor Guilly')
   })
 
   it('prices King exposure from the roster and player’s modeled weekly risk', () => {

@@ -473,7 +473,7 @@ export async function getMatchupData(
   if (base.league.elimination) {
     const noOpponent = {
       available: false as const,
-      reason: 'a guillotine league is scored against the whole field each week, so there is no single opponent',
+      reason: 'a Guilly league is scored against the whole field each week, so there is no single opponent',
     }
     return { ...base, week: noOpponent, teams: noOpponent, sides: noOpponent }
   }

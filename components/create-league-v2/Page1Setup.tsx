@@ -53,7 +53,7 @@ const LEAGUE_TYPES: LeagueTypeCard[] = [
   { id: 'salary_cap', title: 'Salary Cap', subtitle: 'Budget-based rosters', icon: '$' },
   { id: 'devy', title: 'Devy', subtitle: 'Draft college prospects', icon: '✦' },
   { id: 'c2c', title: 'C2C', subtitle: 'College to pros', icon: '⇄' },
-  { id: 'guillotine', title: 'Guillotine', subtitle: 'Lowest score is eliminated', icon: '✕' },
+  { id: 'guillotine', title: 'Guilly', subtitle: 'Lowest score is eliminated', icon: '✕' },
   { id: 'zombie', title: 'Zombie', subtitle: 'Infection-style survival', icon: '☣' },
   { id: 'survivor', title: 'Survivor', subtitle: 'Vote players off', icon: '⚑' },
   { id: 'big_brother', title: 'Big Brother', subtitle: 'Weekly nominations', icon: '◎' },
@@ -276,7 +276,7 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
           })}
         </div>
         <a href="/survivor-guillotine/setup" className="mt-4 block rounded-xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-amber-100 hover:bg-amber-400/20">
-          <strong>Survivor Guillotine</strong> · Create an NFL or NBA league with tribe immunity, secret idols, and weekly chops →
+          <strong>Survivor Guilly</strong> · Create an NFL or NBA league with tribe immunity, secret idols, and weekly chops →
         </a>
 
         {/* League type hero video */}

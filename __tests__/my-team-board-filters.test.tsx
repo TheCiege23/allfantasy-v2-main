@@ -57,14 +57,14 @@ describe('filter chips', () => {
     const pulse = await getMyTeamPulse('user', new Date(NOW))
     expect(pulse.set).toHaveLength(10)
     expect(pulse.filters?.map((o) => `${o.dim}:${o.label}:${o.count}`)).toEqual([
-      'format:Redraft:8', 'format:Dynasty:4', 'format:Guillotine:2',
+      'format:Redraft:8', 'format:Dynasty:4', 'format:Guilly:2',
       'sport:NFL:12', 'sport:NBA:2',
     ])
     expect(chips(board(pulse))).toEqual([
       ['All 14', '/core/my-team', 'true'],
       ['Redraft 8', '/core/my-team?format=redraft', null],
       ['Dynasty 4', '/core/my-team?format=dynasty', null],
-      ['Guillotine 2', '/core/my-team?format=guillotine', null],
+      ['Guilly 2', '/core/my-team?format=guillotine', null],
       ['NFL 12', '/core/my-team?sport=NFL', null],
       ['NBA 2', '/core/my-team?sport=NBA', null],
     ])

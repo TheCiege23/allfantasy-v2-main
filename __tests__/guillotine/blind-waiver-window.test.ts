@@ -34,7 +34,7 @@ describe('guillotine blind waiver window', () => {
     expect(getWaiverBlindWindowStart('NBA', new Date('2026-10-27T23:00:00Z'))).toBeNull()
   })
 
-  it('inside the window a guillotine league holds claims submitted after it opened', async () => {
+  it('inside the window a Guilly league holds claims submitted after it opened', async () => {
     for (const sport of ['NFL', 'NBA']) {
       prismaMock.redraftWaiverClaim.findMany.mockClear()
       prismaMock.league.findUnique.mockResolvedValueOnce({ sport, guillotineMode: true, leagueVariant: null })

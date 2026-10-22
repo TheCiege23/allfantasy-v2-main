@@ -135,7 +135,7 @@ describe('scheduled redraft draft start', () => {
     expect(m.start).not.toHaveBeenCalled()
   })
 
-  it('leaves survivor and guillotine leagues to startScheduledSurvivorDrafts', async () => {
+  it('leaves survivor and Guilly leagues to startScheduledSurvivorDrafts', async () => {
     m.due.mockResolvedValue([
       row({ leagueId: 'surv' }, { survivorMode: true }),
       row({ leagueId: 'guil' }, { guillotineMode: true }),

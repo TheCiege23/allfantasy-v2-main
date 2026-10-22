@@ -22,7 +22,7 @@ describe('startsAtScheduledTimeRegardlessOfAutostart', () => {
     expect(starts({ ...REDRAFT, platform: null })).toBe(true)
   })
 
-  it('is false for survivor and guillotine leagues, which still honour the toggle', () => {
+  it('is false for survivor and Guilly leagues, which still honour the toggle', () => {
     expect(starts({ ...REDRAFT, survivorMode: true })).toBe(false)
     expect(starts({ ...REDRAFT, guillotineMode: true })).toBe(false)
     expect(starts({ ...REDRAFT, leagueVariant: 'guillotine' })).toBe(false)

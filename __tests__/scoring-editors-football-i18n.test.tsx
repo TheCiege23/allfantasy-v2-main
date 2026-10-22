@@ -150,7 +150,7 @@ describe('🛑 the football editors read Spanish in Spanish', () => {
     await r.findByText('Puntuación de NCAAF')
     const text = r.container.textContent ?? ''
     for (const s of ['a todos los jugadores y a todos los formatos', 'Esta configuración de puntuación se aplica a todos los jugadores y a todos los tipos de liga de NCAAF de esta liga',
-      'Guillotina', 'Torneo', 'Sleeper no admite hoy ligas fantasy de NCAAF.', 'Puntuación NCAAF compatible con Sleeper.']) {
+      'Guilly', 'Torneo', 'Sleeper no admite hoy ligas fantasy de NCAAF.', 'Puntuación NCAAF compatible con Sleeper.']) {
       expect(text, s).toContain(s)
     }
     expect(r.container.querySelector('input[aria-label="Yardas por pase"]')).not.toBeNull()
@@ -184,7 +184,7 @@ describe('🛑 the football editors read Spanish in Spanish', () => {
     const c = render(<NcaafScoringSettingsPanel leagueId="l1" isCommissioner />)
     await c.findByText('NCAAF Scoring Settings')
     expect(c.container.textContent).toContain(
-      'This scoring configuration applies to all players and all NCAAF league types in this league — including Redraft, Dynasty, Keeper, Best Ball, Guillotine, Survivor, Zombie, Tournament, Devy, C2C, IDP, Superflex, and TE Premium.')
+      'This scoring configuration applies to all players and all NCAAF league types in this league — including Redraft, Dynasty, Keeper, Best Ball, Guilly, Survivor, Zombie, Tournament, Devy, C2C, IDP, Superflex, and TE Premium.')
     expect(c.container.querySelector('input[aria-label="Passing Yards"]')).not.toBeNull()
     expect(c.container.textContent).not.toMatch(/\blsScore\./)
   })

@@ -42,9 +42,9 @@ describe('specialty shell components', () => {
           format="guillotine"
           bannerSrc="/b.svg"
           emblemSrc="/e.svg"
-          emblemAlt="Guillotine crest"
+          emblemAlt="Guilly crest"
           chips={['NFL', '2026']}
-          title="Guillotine League 26"
+          title="Guilly League 26"
           headline="Week 5"
           actions={[{ label: 'Set lineup', href: '/x', primary: true }, { label: 'Disabled' }]}
         />
@@ -52,11 +52,11 @@ describe('specialty shell components', () => {
     )
     const root = screen.getByTestId('shell')
     expect(root.style.getPropertyValue('--acc')).toBe('#e0402e')
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Guillotine League 26')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Guilly League 26')
     expect(screen.getByRole('link', { name: 'Set lineup' }).getAttribute('href')).toBe('/x')
     // An action with neither href nor onClick is a disabled button, never a dead link.
     expect((screen.getByRole('button', { name: 'Disabled' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(container.querySelector('img[alt="Guillotine crest"]')).not.toBeNull()
+    expect(container.querySelector('img[alt="Guilly crest"]')).not.toBeNull()
   })
 
   it('countdown shows the fallback for a missing or past target', () => {

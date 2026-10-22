@@ -161,7 +161,7 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
   const pickPlace = captainDraft ? captainDraft.pickIndex % (captainDraft.leaders.length * 2) : 0
   const pickLeader = captainDraft?.leaders[pickPlace < captainDraft.leaders.length
     ? pickPlace : captainDraft.leaders.length * 2 - pickPlace - 1]
-  if (!data) return <main className={styles.page}><p role="status">{notice || 'Loading Survivor Guillotine…'}</p></main>
+  if (!data) return <main className={styles.page}><p role="status">{notice || 'Loading Survivor Guilly…'}</p></main>
   return <main className={styles.page}>
     <SGVisualSet leagueId={leagueId} isCommissioner={isCommissioner} input={{ season: { config: data.season.config,
       tribes: data.season.tribes, periodState: data.season.periodState, currentPeriod: data.season.currentPeriod,

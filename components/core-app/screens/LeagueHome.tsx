@@ -525,8 +525,8 @@ export function LeagueHome({
       </header>
 
       {league.variant === 'survivor_guillotine' && (
-        <section className="af-card" aria-label="Survivor Guillotine league">
-          <span className="af-label">Survivor Guillotine</span>
+        <section className="af-card" aria-label="Survivor Guilly league">
+          <span className="af-label">Survivor Guilly</span>
           <h2>Enter the island</h2>
           <p>Your lineup, tribe race, private powers, and Chop Night are ready in the league hub.</p>
           <Link className="af-btn" href={`/survivor-guillotine/${encodeURIComponent(league.id)}`}>Open league island →</Link>

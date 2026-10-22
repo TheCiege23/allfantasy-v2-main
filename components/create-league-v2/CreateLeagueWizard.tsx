@@ -1,5 +1,6 @@
 'use client'
 
+import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Minus, Plus, X } from 'lucide-react'
@@ -119,7 +120,7 @@ function getLeagueTypeLabel(t: (key: string) => string, leagueType: LeagueTypeId
 
 /** The "?" explanations, English fallback beside each dictionary key. */
 const HELP = {
-  formats: ['createLeague.g30.help.formats', 'Specialty formats add a twist to the season: Survivor votes managers off, Guillotine cuts the lowest score every week, Big Brother has weekly nominations, and Zombie spreads like an infection. Classic formats play a normal season. Each tile says how it plays.'],
+  formats: ['createLeague.g30.help.formats', 'Specialty formats add a twist to the season: Survivor votes managers off, Guilly cuts the lowest score every week, Big Brother has weekly nominations, and Zombie spreads like an infection. Classic formats play a normal season. Each tile says how it plays.'],
   teams: ['createLeague.g30.help.teams', 'How many managers play in the league. Some formats only allow certain sizes, so − and + step through the sizes this format allows.'],
   privacy: ['createLeague.g30.help.privacy', "Private leagues are invite-only. Public leagues can also show up in AllFantasy's league finder, where other players can find them."],
   draftType: ['createLeague.g30.help.draftType', 'Snake: the pick order reverses every round. Linear: the same order every round. Auction: managers bid a budget on players. Auto: the computer drafts for every team. Offline: draft in person, then the commissioner enters the picks.'],
@@ -892,6 +893,11 @@ export function LeagueBasicsStep({
           <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
             {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
           </span>
+          {getEffectiveLeagueType(state) === 'guillotine' && guillotineNeedsDoubleElimination(state.teamCount) ? (
+            <span className="block text-xs text-amber-300" data-testid="g30-guilly-double-elimination-note">
+              {tx(t, 'createLeague.g30.teamCount.guillyDouble', `Over ${GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS} teams needs double-elimination weeks — add them in league settings after creating.`)}
+            </span>
+          ) : null}
         </div>
       </div>
 

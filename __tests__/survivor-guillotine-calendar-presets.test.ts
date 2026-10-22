@@ -8,7 +8,7 @@ const periods: SGPeriod[] = [
   { period: 3, mode: 'gauntlet', teamsEntering: 20, teamsLeaving: 2, chops: 2, tribeImmunity: false },
 ]
 
-describe('Survivor Guillotine calendar presets', () => {
+describe('Survivor Guilly calendar presets', () => {
   it('extends an NBA combined period and keeps commissioner overrides', () => {
     const existing = { 1: { scoringStartsAt: '2026-11-10T00:00:00.000Z',
       scoringEndsAt: '2026-11-17T00:00:00.000Z', ceremonyAt: '2026-11-17T02:00:00.000Z' } }

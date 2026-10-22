@@ -58,7 +58,8 @@ const createSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   platform: z.enum(['sleeper', 'espn', 'manual']),
   platformLeagueId: z.string().optional(),
-  leagueSize: z.number().min(4).max(32).optional(),
+  // 35 is the Guilly ceiling (lib/guillotine/teamCountLimits.ts); every other format stops at 32 below.
+  leagueSize: z.number().min(4).max(35).optional(),
   rosterSize: z.number().min(1).max(64).optional(),
   scoring: z.string().optional(),
   isDynasty: z.boolean().optional(),
@@ -415,6 +416,17 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  {
+    const isGuillotineRequest =
+      String(leagueVariantEffective ?? '').toLowerCase() === 'guillotine' ||
+      String(requestedLeagueType ?? '').toLowerCase() === 'guillotine';
+    if (!isGuillotineRequest && typeof leagueSizeInput === 'number' && leagueSizeInput > 32) {
+      return NextResponse.json(
+        { error: 'Leagues support up to 32 teams (Guilly leagues up to 35).' },
+        { status: 400 }
+      );
+    }
+  }
   let name = nameInput;
   let leagueSize = leagueSizeInput;
   let rosterSize = rosterSizeInput;
@@ -636,7 +648,7 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               success: false,
-              error: gResult.error ?? 'Invalid guillotine league',
+              error: gResult.error ?? 'Invalid Guilly league',
               errors: [{ path: 'guillotine', message: gResult.error ?? '' }],
             },
             { status: 400 }

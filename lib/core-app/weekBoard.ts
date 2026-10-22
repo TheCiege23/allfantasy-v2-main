@@ -79,7 +79,7 @@ import { COIN_FLIP_POINTS } from './weekBoardRules'
  */
 export function isEliminationFormat(leagueType: string | null | undefined): boolean {
   const t = String(leagueType ?? '').toLowerCase()
-  return t.includes('guillotine') || t.includes('survivor')
+  return t.includes('guillotine') || t.includes('guilly') || t.includes('survivor')
 }
 
 // ── Types ──────────────────────────────────────────────────────────────

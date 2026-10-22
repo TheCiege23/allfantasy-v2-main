@@ -85,7 +85,7 @@ export async function updateGuillotineFirstChopWeek(
   deps: FirstChopDeps = defaultDeps(),
 ): Promise<UpdateFirstChopResult> {
   const config = await deps.getConfig(leagueId)
-  if (!config) return { ok: false, status: 404, error: 'Not a guillotine league' }
+  if (!config) return { ok: false, status: 404, error: 'Not a Guilly league' }
 
   const endWeek = config.eliminationEndWeek ?? 18
   const validation = validateFirstChopWeek(rawWeek, endWeek)

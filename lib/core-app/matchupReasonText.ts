@@ -30,8 +30,8 @@ const EXACT_ES: Record<string, string> = {
     'El estado de los partidos de los titulares no está disponible hasta que se puedan leer ambas alineaciones.',
   'this league has no platform id, so its weekly results cannot be located':
     'esta liga no tiene identificador de plataforma, así que no se pueden localizar sus resultados semanales',
-  'a guillotine league is scored against the whole field each week, so there is no single opponent':
-    'una liga guillotina se puntúa contra toda la liga cada semana, así que no hay un único rival',
+  'a Guilly league is scored against the whole field each week, so there is no single opponent':
+    'una liga Guilly se puntúa contra toda la liga cada semana, así que no hay un único rival',
   'no weekly results stored for this league': 'no hay resultados semanales guardados para esta liga',
   'we cannot tell which team in this league is yours, so there is no matchup to show':
     'no podemos saber cuál es tu equipo en esta liga, así que no hay enfrentamiento que mostrar',

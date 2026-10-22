@@ -52,7 +52,7 @@ export const MLB_ROSTER_TEMPLATES: MlbRosterTemplate[] = [
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, CI: 1, MI: 1, OF: 3, UTIL: 1, SP: 2, RP: 2, P: 3, BN: 6, IL: 2 } },
   { key: 'category', label: 'Category / Roto', leagueTypes: ['redraft'], description: 'Category-based scoring roster.',
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, CI: 1, MI: 1, OF: 5, UTIL: 1, SP: 3, RP: 2, P: 3, BN: 7, IL: 2, NA: 2 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, UTIL: 1, SP: 2, RP: 1, P: 2, BN: 4 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Survivor roster.',
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 4, UTIL: 1, SP: 2, RP: 2, P: 2, BN: 6 } },

@@ -120,7 +120,7 @@ describe('ensureGuillotineSeason', () => {
 describe('ensureGuillotineSeason — year two starts every team alive', () => {
   const CREATED_AT = new Date('2027-09-01T00:00:00Z')
 
-  it('🛑 clears last season’s chops when a league starts its next guillotine season', async () => {
+  it('🛑 clears last season’s chops when a league starts its next Guilly season', async () => {
     guillotineSeasonCreate.mockResolvedValue({ id: 'gs2', createdAt: CREATED_AT })
     guillotineSeasonFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
       'redraftSeasonId' in where ? null : { id: 'gs1' }, // none for THIS redraft season; a prior one exists
