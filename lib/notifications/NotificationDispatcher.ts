@@ -11,6 +11,7 @@ import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
+import { gameAlertDeadline } from "./gameAlertFreshness"
 import { sendPushToUser } from "@/lib/push-notifications"
 import { decidePush } from "@/lib/notifications/pushGate"
 import { retryWithBackoff } from "@/lib/error-handling"
@@ -20,6 +21,7 @@ import { quietHoursSuppression } from "@/lib/notifications/quietHours"
 import { isCategoryAllowedForLeague } from "@/lib/notifications/leagueOverrides"
 import { pushTagFor } from "@/lib/notifications/pushTag"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
+import { prisma } from "@/lib/prisma"
 
 import type { NotificationDeliveryReceipt, DeliveryChannelOutcome } from './deliveryReceipt'
 export type DispatchNotificationParams = {
@@ -62,6 +64,19 @@ export type DispatchNotificationParams = {
    * is a message and where, and the words stay in-app, email and push.
    */
   smsBody?: string
+}
+
+/** One `sent` row per text in notification_outbox, for lib/admin-dashboard/NotificationVolumeService. Best effort. */
+async function recordSmsSent(input: { userId: string; leagueId: string | null; type: string; title: string; category: NotificationCategoryId }): Promise<void> {
+  try {
+    const now = new Date()
+    await prisma.notificationOutbox.create({ data: {
+      userId: input.userId, leagueId: input.leagueId, channel: "sms", eventType: input.type, title: input.title.slice(0, 200), body: "",
+      status: "sent", sentAt: now, attemptCount: 1, metadata: { notificationCategory: input.category, loggedOnly: true },
+    } })
+  } catch {
+    console.warn("[NotificationDispatcher] SMS log write failed", { type: input.type })
+  }
 }
 
 /**
@@ -141,7 +156,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       /*
        * Quiet hours (spec item 16), evaluated in the USER's timezone.
        *
-       * ⚠ THIS SUPPRESSES PUSH AND SMS ONLY. The in-app row below is a log; dropping it
+       * ⚠ THIS SUPPRESSES EXTERNAL ALERTS (PUSH, EMAIL AND SMS). The in-app row below is a log; dropping it
        * would mean the user wakes to no record that anything happened and the unread
        * badge — which counts stored rows — under-reports their night. Quiet hours defer
        * a buzz, they do not delete history.
@@ -177,11 +192,12 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         set('inApp',{status:stored?'stored':'failed',reason:stored?'in_app_saved':'storage_failed'})
       } else set('inApp',{status:'suppressed',reason:'channel_off'})
 
+      const deadline = gameAlertDeadline(type, new Date(), meta?.expiresAt)
       const transportMessage = {
         userId, leagueId: effectiveLeagueId, eventType: type, title, body: body ?? title,
         eventKey: dedupePrefix ?? (typeof meta?.eventKey === 'string' ? meta.eventKey : undefined),
         metadata: { ...(meta ?? {}), notificationCategory: category, severity, actionHref, actionLabel,
-          ...(/^(game_(scoring_play|big_play|close)|live_score)/.test(type) ? { expiresAt: new Date(Date.now() + 300_000).toISOString() } : {}),
+          ...(deadline !== undefined ? { expiresAt: new Date(deadline).toISOString() } : {}),
           ...(emailOverride ? { emailOverride } : {}) },
       }
       const pushDelivery = (async () => {
@@ -204,6 +220,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           // One tag per category unless the caller names one per event — see pushTagFor.
           tag: pushTagFor(category, meta),
           type,
+          expiresAt: transportMessage.metadata.expiresAt,
           // The service worker builds league-scoped action buttons from this; it was dropped here.
           leagueId: effectiveLeagueId,
           // A producer that has a picture (headshot, trade card) names it in meta.imageUrl.
@@ -238,6 +255,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       // notices (`system_account`) still send, as the unsubscribe page says; a failed read withholds.
       if (
         catPrefs.email &&
+        !quiet.push &&
         availability.email &&
         profile.email &&
         !skipChannels?.email &&
@@ -277,7 +295,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           set('email',{status:'failed',reason:'persistence_failed',attempts})
           console.warn("[NotificationDispatcher] email send failed after retry for user", userId, e)
         }
-      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
+      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
 
       if (allowsLeagueSms(category, effectiveLeagueId) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
         // A Twilio charge per text, previously uncapped. Over the daily cap the text is
@@ -290,6 +308,9 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           let smsSent=false,smsProviderId:string|undefined
           try { smsSent=params.onDeliveryReceipt?await sendSms(profile.phone,smsText.slice(0,320),id=>{smsProviderId=id}):await sendSms(profile.phone,smsText.slice(0,320)) } catch { /* Receipt records failure; other channels still run. */ }
           set('sms',{status:smsSent?'accepted':'failed',reason:smsSent?'provider_accepted':'provider_failed',attempts:1,...(smsProviderId?{providerId:smsProviderId}:{})})
+          // Texts had no delivery log, so the admin volume tracker could not count them. Record a
+          // `sent` row — inert to the relay, which only claims `pending` — and never fail the send on it.
+          if (smsSent) await recordSmsSent({ userId, leagueId: effectiveLeagueId, type, title, category })
           if (!smsSent) {
             console.error("[NotificationDispatcher] SMS send returned false", {
               userId,

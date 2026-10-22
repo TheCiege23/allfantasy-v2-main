@@ -1,5 +1,9 @@
 import type { SportConfigFull } from '../types'
 import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
+import { DAILY_REDRAFT_ROSTER_LAYOUTS, dailyRedraftReserveCount, dailyRedraftSlotCount } from '@/lib/sportConfig/dailySportRedraftRoster'
+
+/** Default counts are the one redraft layout (lib/sportConfig/dailySportRedraftRoster.ts). */
+const LAYOUT = DAILY_REDRAFT_ROSTER_LAYOUTS.MLB
 
 /** Keys aligned with `mlbAdapter` / legacy redraft stat lines. */
 export const MLB_CONFIG: SportConfigFull = {
@@ -59,29 +63,31 @@ export const MLB_CONFIG: SportConfigFull = {
   scoringPresets: [{ name: 'Standard', categories: [] }],
 
   defaultRosterSlots: [
-    { key: 'C', label: 'Catcher', eligiblePositions: ['C'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: false },
-    { key: '1B', label: 'First Base', eligiblePositions: ['1B'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: false },
-    { key: '2B', label: 'Second Base', eligiblePositions: ['2B'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: false },
-    { key: '3B', label: 'Third Base', eligiblePositions: ['3B'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: false },
-    { key: 'SS', label: 'Shortstop', eligiblePositions: ['SS'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: false },
-    { key: 'OF', label: 'Outfield', eligiblePositions: ['OF', 'LF', 'CF', 'RF'], defaultCount: 3, minCount: 2, maxCount: 5, isOptional: false },
-    { key: 'UTIL', label: 'Utility', eligiblePositions: ['1B', '2B', '3B', 'SS', 'OF', 'C'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: true },
-    { key: 'SP', label: 'Starting Pitcher', eligiblePositions: ['SP'], defaultCount: 4, minCount: 2, maxCount: 7, isOptional: false },
-    { key: 'RP', label: 'Relief Pitcher', eligiblePositions: ['RP'], defaultCount: 2, minCount: 0, maxCount: 5, isOptional: true },
-    { key: 'P', label: 'Pitcher (SP/RP)', eligiblePositions: ['SP', 'RP'], defaultCount: 0, minCount: 0, maxCount: 4, isOptional: true },
+    { key: 'C', label: 'Catcher', eligiblePositions: ['C'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'C'), minCount: 0, maxCount: 2, isOptional: false },
+    { key: '1B', label: 'First Base', eligiblePositions: ['1B'], defaultCount: dailyRedraftSlotCount(LAYOUT, '1B'), minCount: 0, maxCount: 2, isOptional: false },
+    { key: '2B', label: 'Second Base', eligiblePositions: ['2B'], defaultCount: dailyRedraftSlotCount(LAYOUT, '2B'), minCount: 0, maxCount: 2, isOptional: false },
+    { key: '3B', label: 'Third Base', eligiblePositions: ['3B'], defaultCount: dailyRedraftSlotCount(LAYOUT, '3B'), minCount: 0, maxCount: 2, isOptional: false },
+    { key: 'SS', label: 'Shortstop', eligiblePositions: ['SS'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'SS'), minCount: 0, maxCount: 2, isOptional: false },
+    { key: 'CI', label: 'Corner Infield (1B/3B)', eligiblePositions: ['1B', '3B'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'CI'), minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'MI', label: 'Middle Infield (2B/SS)', eligiblePositions: ['2B', 'SS'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'MI'), minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'OF', label: 'Outfield', eligiblePositions: ['OF', 'LF', 'CF', 'RF'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'OF'), minCount: 2, maxCount: 5, isOptional: false },
+    { key: 'UTIL', label: 'Utility', eligiblePositions: ['1B', '2B', '3B', 'SS', 'OF', 'C'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'UTIL'), minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'SP', label: 'Starting Pitcher', eligiblePositions: ['SP'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'SP'), minCount: 2, maxCount: 7, isOptional: false },
+    { key: 'RP', label: 'Relief Pitcher', eligiblePositions: ['RP'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'RP'), minCount: 0, maxCount: 5, isOptional: true },
+    { key: 'P', label: 'Pitcher (SP/RP)', eligiblePositions: ['SP', 'RP'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'P'), minCount: 0, maxCount: 4, isOptional: true },
   ],
 
-  defaultBenchSlots: 5,
-  defaultIRSlots: 2,
+  defaultBenchSlots: LAYOUT.benchSlots,
+  defaultIRSlots: dailyRedraftReserveCount(LAYOUT),
   defaultTaxiSlots: 0,
   defaultDevySlots: 0,
 
   positionEligibility: {
     C: ['C', 'UTIL'],
-    '1B': ['1B', 'UTIL'],
-    '2B': ['2B', 'UTIL'],
-    '3B': ['3B', 'UTIL'],
-    SS: ['SS', 'UTIL'],
+    '1B': ['1B', 'CI', 'UTIL'],
+    '2B': ['2B', 'MI', 'UTIL'],
+    '3B': ['3B', 'CI', 'UTIL'],
+    SS: ['SS', 'MI', 'UTIL'],
     OF: ['OF', 'UTIL'],
     LF: ['OF', 'UTIL'],
     CF: ['OF', 'UTIL'],
@@ -121,10 +127,10 @@ export const MLB_CONFIG: SportConfigFull = {
       section: 'scoring',
       locksAfterStart: true,
     },
-    { key: 'ilSlots', label: 'IL Slots', type: 'number', defaultValue: 2, min: 0, max: 5, section: 'roster' },
-    { key: 'benchSlots', label: 'Bench Slots', type: 'number', defaultValue: 5, min: 2, max: 10, section: 'roster' },
-    { key: 'spCount', label: 'SP Slots', type: 'number', defaultValue: 4, min: 2, max: 7, section: 'roster' },
-    { key: 'rpCount', label: 'RP Slots', type: 'number', defaultValue: 2, min: 0, max: 5, section: 'roster' },
+    { key: 'ilSlots', label: 'IL Slots', type: 'number', defaultValue: LAYOUT.reserveSlots.IL ?? 0, min: 0, max: 5, section: 'roster' },
+    { key: 'benchSlots', label: 'Bench Slots', type: 'number', defaultValue: LAYOUT.benchSlots, min: 2, max: 10, section: 'roster' },
+    { key: 'spCount', label: 'SP Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'SP'), min: 2, max: 7, section: 'roster' },
+    { key: 'rpCount', label: 'RP Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'RP'), min: 0, max: 5, section: 'roster' },
     {
       key: 'seasonWeeks',
       label: 'Regular Season Weeks',

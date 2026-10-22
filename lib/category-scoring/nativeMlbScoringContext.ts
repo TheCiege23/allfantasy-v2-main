@@ -1,4 +1,4 @@
-import { getCategoryPresetDefinitions } from './index'
+import { resolveLeagueCategories } from './leagueScoringType'
 
 /** Only stored, supported native settings become facts for OS and Chimmy consumers. */
 export function nativeMlbScoringContext(settings: unknown) {
@@ -8,7 +8,7 @@ export function nativeMlbScoringContext(settings: unknown) {
   const recordMode = s.category_record_mode
   if ((mode !== 'h2h_category' && mode !== 'roto') || (presetId !== 'mlb_5x5' && presetId !== 'mlb_6x6')) return null
   if (mode === 'roto' ? recordMode !== 'roto' : recordMode !== 'each' && recordMode !== 'most') return null
-  const categories = getCategoryPresetDefinitions(presetId)
+  const categories = resolveLeagueCategories(s, presetId)
   if (!categories) return null
   const sportConfig = s.sportConfig as Record<string, unknown> | undefined
   return { mode, presetId, recordMode, lineupLockType: sportConfig?.lineupLockType === 'first_game_of_week' ? 'first_game_of_week' : null,

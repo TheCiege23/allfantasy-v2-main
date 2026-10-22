@@ -139,6 +139,7 @@ export type PlayoffFormat = {
 }
 
 function finiteInt(v: unknown): number | null {
+  if ((typeof v !== 'number' && typeof v !== 'string') || (typeof v === 'string' && !v.trim())) return null
   const n = Number(v)
   return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null
 }
@@ -162,7 +163,9 @@ export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number |
   }
   const teams = finiteInt(read('playoff_team_count', 'playoffTeams', 'playoff_teams'))
   const byes = finiteInt(read('first_round_byes', 'playoffByes'))
-  const startWeek = finiteInt(playoffStartWeek) ?? finiteInt(read('playoff_start_week', 'playoffStartWeek', 'playoff_week_start'))
+  const columnStart = finiteInt(playoffStartWeek)
+  const settingsStart = finiteInt(read('playoff_start_week', 'playoffStartWeek', 'playoff_week_start'))
+  const startWeek = columnStart != null && columnStart > 0 ? columnStart : settingsStart != null && settingsStart > 0 ? settingsStart : null
   const explicitWeeks = finiteInt(read('playoff_weeks'))
   const weeks = explicitWeeks ?? (teams != null && byes != null ? playoffRoundsFor(teams) : null)
   const toilet = read('toilet_bowl_enabled')

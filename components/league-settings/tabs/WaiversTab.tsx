@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
@@ -17,11 +18,17 @@ import {
 } from '@/lib/waivers/dailyWaiverSchedule'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
-/** Option labels are dictionary keys, resolved at render. */
-const WAIVER_TYPES = [
+/**
+ * Every type the waiver engine runs (`WAIVER_TYPES` in lib/waiver-wire/types). The settings route
+ * always accepted all five; this list offered only the first three, so FCFS and standard leagues
+ * could not be chosen here. Option labels are dictionary keys, resolved at render.
+ */
+export const HUB_WAIVER_TYPE_OPTIONS = [
   { value: 'faab', labelKey: 'lsHub.wv.faab' },
   { value: 'rolling', labelKey: 'lsHub.wv.rolling' },
   { value: 'reverse_standings', labelKey: 'lsHub.wv.reverse' },
+  { value: 'standard', labelKey: 'lsHub.wv.standard' },
+  { value: 'fcfs', labelKey: 'lsHub.wv.fcfs' },
 ]
 
 const MODE_LABEL_KEYS: Record<DailyWaiverMode, string> = {
@@ -69,7 +76,7 @@ export function WaiversSection({
 }: Pick<LeagueSettingsTabProps, 'ctx' | 'canEdit'> & { timezone: string }) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
+  const { queuePatch, saving, savedAt, lastError, manual } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
 
   const seed = () => ({
     waiverType: String(savedOr(leagueId, 'waiverType', ctx.league.waiverType ?? 'rolling')),
@@ -123,8 +130,9 @@ export function WaiversSection({
         <h3 className="min-w-0 flex-1 text-[13px] font-bold uppercase tracking-wide text-cyan-200/90">
           {t('lsHub.wv.sectionTitle')}
         </h3>
-        {saving ? <span className="shrink-0 text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</span> : null}
+        {canEdit ? <AutosaveStatus saving={saving} savedAt={savedAt} error={lastError} /> : null}
       </div>
+      {canEdit && !manual ? <p className="-mt-2 mb-4 text-[11px] leading-snug text-white/40">{t('lsHub.wv.autosaveNote')}</p> : null}
 
       <div className="space-y-4">
         <label className="block">
@@ -140,7 +148,7 @@ export function WaiversSection({
             className={SETTINGS_INPUT_CLASS}
             data-testid="league-settings-waiver-type"
           >
-            {WAIVER_TYPES.map((o) => (
+            {HUB_WAIVER_TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value} className="bg-[#0d1117]">
                 {t(o.labelKey)}
               </option>

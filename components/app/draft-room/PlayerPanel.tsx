@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
 import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -44,9 +44,6 @@ import { formatAiAdpUnavailableBanner } from '@/lib/draft-room/adpReadinessCopy'
 import { getDraftRoomDisplayHeadshot, getDraftRoomDisplayInjury } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { NflRedraftPremiumPlayerCardShells } from '@/components/redraft-premium'
 
-const PLAYER_ROW_ESTIMATE_HEIGHT = 56
-/** Redraft rows use slightly taller estimate (chips + stats). */
-const PLAYER_ROW_ESTIMATE_HEIGHT_REDRAFT = 72
 const DRAFT_WATCHLIST_STORAGE_KEY = 'af:draft-room-watchlist-v1'
 const AI_ADP_NOT_READY_COPY = 'AI ADP data not ready'
 
@@ -197,7 +194,8 @@ export type PlayerPanelProps = {
   poolError?: boolean
   /**
    * From the pool API. `fallback_no_rookie_data` = the session is rookies-only but no pool entry
-   * carries a rookie flag, so the server kept the full pool; the panel explains that with a banner.
+   * carries a rookie flag, so the server kept the full pool; `partial_rookie_data` (MLB/NBA/NHL) =
+   * only proven non-rookies were removed. The panel explains either with a banner.
    */
   rookieFilterState?: RookieFilterState
 }
@@ -205,7 +203,7 @@ export type PlayerPanelProps = {
 /** D.3 — re-exposed from SleeperPoolSort. Kept as `SortKey` for legacy call sites. */
 type SortKey = PoolSortKey
 
-function PlayerListVirtualized({
+function PlayerListCards({
   filtered,
   draftedNames,
   draftedPlayerIds,
@@ -219,7 +217,6 @@ function PlayerListVirtualized({
   onAddToQueue,
   onNominateRequest,
   onPlayerSelect,
-  scrollRef,
   compareAnchor,
   onCompareTap,
   draftSport,
@@ -239,48 +236,23 @@ function PlayerListVirtualized({
   onAddToQueue: (player: PlayerEntry) => void
   onNominateRequest?: (player: PlayerEntry) => void
   onPlayerSelect: (player: PlayerEntry) => void
-  scrollRef: React.RefObject<HTMLDivElement | null>
   compareAnchor: PlayerEntry | null
   onCompareTap: (player: PlayerEntry) => void
   aiRowBadges?: Record<string, 'ai_pick' | 'value' | 'risky'>
 }) {
-  const rs = presentationVariant === 'redraft_snake'
   const rowKey = (p: PlayerEntry) =>
     `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
   const selectedKey = selectedPlayer ? rowKey(selectedPlayer) : null
 
-  const virtualizer = useVirtualizer({
-    count: filtered.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => (rs ? PLAYER_ROW_ESTIMATE_HEIGHT_REDRAFT : PLAYER_ROW_ESTIMATE_HEIGHT),
-    overscan: rs ? 8 : 5,
-  })
-
-  const items = virtualizer.getVirtualItems()
-
   return (
-    <div
-      style={{
-        height: `${virtualizer.getTotalSize()}px`,
-        width: '100%',
-        position: 'relative',
-      }}
-    >
-      {items.map((virtualRow) => {
-        const p = filtered[virtualRow.index]
+    <ProgressiveDraftPlayerList
+      items={filtered}
+      itemKey={p => p.id ?? rowKey(p)}
+      renderItem={(p, index) => {
         const sel = selectedKey != null && rowKey(p) === selectedKey
         return (
           <div
             key={p.id ?? rowKey(p)}
-            ref={virtualizer.measureElement}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              transform: `translateY(${virtualRow.start}px)`,
-            }}
-            data-index={virtualRow.index}
           >
             <DraftPlayerCard
               display={p.display ?? null}
@@ -307,13 +279,13 @@ function PlayerListVirtualized({
               poolType={p.poolType}
               isRookie={p.isRookie ?? false}
               nflDraftProjectionSplits={p.nflDraftProjectionSplits ?? null}
-              testId={`draft-player-card-${virtualRow.index}`}
+              testId={`draft-player-card-${index}`}
               onSelect={() => onPlayerSelect(p)}
               compareAction={
                 <button
                   type="button"
                   onClick={() => onCompareTap(p)}
-                  data-testid={`draft-compare-player-${virtualRow.index}`}
+                  data-testid={`draft-compare-player-${index}`}
                   className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border px-2 transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/45 active:scale-95 sm:min-w-0 sm:px-2 ${
                     compareAnchor?.name === p.name
                       ? 'border-amber-400/60 bg-gradient-to-br from-amber-500/20 to-amber-600/10 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.15)]'
@@ -334,7 +306,7 @@ function PlayerListVirtualized({
                   <button
                     type="button"
                     onClick={() => onNominateRequest(p)}
-                    data-testid={`draft-nominate-player-${virtualRow.index}`}
+                    data-testid={`draft-nominate-player-${index}`}
                     className="inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border border-amber-400/45 bg-gradient-to-br from-amber-500/18 to-amber-600/8 px-3 py-2 text-xs font-semibold text-amber-100 shadow-[0_4px_20px_rgba(245,158,11,0.15)] transition duration-150 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-95 sm:min-w-0 sm:px-2 sm:py-1"
                   >
                     Nominate
@@ -354,7 +326,7 @@ function PlayerListVirtualized({
                       if (!canDraft || isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds)) return
                       onDraftRequest(p)
                     }}
-                    data-testid={`draft-player-button-${virtualRow.index}`}
+                    data-testid={`draft-player-button-${index}`}
                     className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border px-3 py-2 text-xs font-semibold transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 active:scale-95 sm:min-w-0 sm:px-2 sm:py-1 ${
                       isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds)
                         ? 'cursor-not-allowed border-white/10 bg-white/[0.04] text-white/30'
@@ -371,7 +343,7 @@ function PlayerListVirtualized({
                 <button
                   type="button"
                   onClick={() => onAddToQueue(p)}
-                  data-testid={`draft-queue-add-${virtualRow.index}`}
+                  data-testid={`draft-queue-add-${index}`}
                   className="inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border border-white/16 bg-black/25 text-white/75 transition duration-150 hover:border-cyan-400/25 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
                   aria-label={`Add ${p.name} to queue`}
                 >
@@ -381,8 +353,8 @@ function PlayerListVirtualized({
             />
           </div>
         )
-      })}
-    </div>
+      }}
+    />
   )
 }
 
@@ -1268,7 +1240,7 @@ function PlayerPanelInner({
           />
         </div>
       ) : null}
-      {players.length > 0 ? <RookieFilterFallbackBanner rookieFilterState={rookieFilterState} t={t} /> : null}
+      {players.length > 0 ? <RookieFilterFallbackBanner rookieFilterState={rookieFilterState} t={t} sport={sport} /> : null}
       <div
         ref={scrollRef}
         data-testid="draft-player-list-scroll"
@@ -1420,7 +1392,7 @@ function PlayerPanelInner({
 
             if (!useTable) {
               return (
-                <PlayerListVirtualized
+                <PlayerListCards
                   filtered={filtered}
                   draftedNames={draftedNames}
                   draftedPlayerIds={draftedIdsForRows}
@@ -1435,7 +1407,6 @@ function PlayerPanelInner({
                   onAddToQueue={onAddToQueue}
                   onNominateRequest={(player) => setPendingNomination(player)}
                   onPlayerSelect={setSelectedPlayer}
-                  scrollRef={scrollRef}
                   compareAnchor={compareAnchor}
                   onCompareTap={onCompareTap}
                   aiRowBadges={aiRowBadges}

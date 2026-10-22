@@ -105,7 +105,7 @@ function buildStandardPoolApiCacheKey(leagueId: string): string {
 
 function resolveRosterFingerprint(effectiveLeagueTemplate: EffectiveLeagueTemplate): string {
   const starterEligible = starterEligiblePlayerPositionsFromTemplate(effectiveLeagueTemplate.template)
-  return `${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
+  return `${effectiveLeagueTemplate.sport === 'NBA' ? 'nba-current-roster-v2:' : ''}${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
     starterEligible.size > 0 ? starterEligible : new Set(effectiveLeagueTemplate.allowedPositions),
   )}`
 }
@@ -439,6 +439,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
             rookieFilterState: resolved.rookieFilterState,
+            provenNonRookies: resolved.provenNonRookies,
           } as unknown as object,
           expiresAt,
         },
@@ -457,6 +458,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
             rookieFilterState: resolved.rookieFilterState,
+            provenNonRookies: resolved.provenNonRookies,
           } as unknown as object,
           syncedAt: new Date(),
           expiresAt,

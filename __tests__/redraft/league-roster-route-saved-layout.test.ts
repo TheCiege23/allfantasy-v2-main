@@ -42,6 +42,7 @@ vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({
 }))
 
 import { GET } from '@/app/api/league/roster/route'
+import { resolveLineupStarterSlots, resolveLockedRedraftStarterLayout } from '@/lib/league/lineupStarterSlots'
 
 function league(sport: 'NFL' | 'NCAAF', settings: Record<string, unknown>) {
   return {
@@ -103,5 +104,29 @@ describe('GET /api/league/roster — football redraft starter layout', () => {
     expect(nfl.labels).toEqual(['QB', 'RB1', 'RB2', 'WR1', 'WR2', 'TE', 'FLEX', 'K', 'DEF'])
     const ncaaf = await starterLabels('NCAAF', {})
     expect(ncaaf.labels).toEqual(['QB', 'RB1', 'RB2', 'WR1', 'WR2', 'TE', 'FLEX', 'K'])
+  })
+})
+
+describe('lib/league/lineupStarterSlots — the one list the route and the lineup engine share', () => {
+  const cut = { starter_slots: { QB: 1, RB: 1, WR: 2, TE: 1, DEF: 1 }, bench_slots: 6, ir_slots: 1 }
+
+  it('resolves a saved layout as saved, and the default only when nothing is saved', () => {
+    expect(resolveLockedRedraftStarterLayout({ sport: 'NFL', leagueType: 'redraft', settings: cut })).toMatchObject({
+      source: 'saved',
+      starterOrder: ['QB', 'RB', 'WR', 'WR', 'TE', 'DEF'],
+      benchSlots: 6,
+      irSlots: 1,
+    })
+    expect(resolveLockedRedraftStarterLayout({ sport: 'NCAAF', leagueType: 'redraft', settings: {} })).toMatchObject({
+      source: 'default',
+      starterOrder: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLX', 'K'],
+    })
+    expect(resolveLockedRedraftStarterLayout({ sport: 'NFL', leagueType: 'dynasty', isDynasty: true, settings: cut })).toBeNull()
+  })
+
+  it('the route renders exactly the list the lineup engine validates against', async () => {
+    rosterFindFirst.mockResolvedValue({ id: 'roster-1', playerData: {}, faabRemaining: 100, waiverPriority: 1 })
+    const { labels } = await starterLabels('NFL', cut)
+    expect(labels).toEqual(resolveLineupStarterSlots({ sport: 'NFL', leagueType: 'redraft', settings: cut }, null).map((s) => s.label))
   })
 })

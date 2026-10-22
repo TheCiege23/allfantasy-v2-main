@@ -101,9 +101,12 @@ export function resolveLineupMove(ctx: LineupMoveContext, playerId: string, targ
 }
 
 /**
- * The save route stores starters as an ORDERED, COMPACTED list (an empty slot is simply absent),
- * and `buildLineupListsFromPlayerData` pads the end. So a lineup saved with a hole comes back with
- * every later starter shifted one slot up — a WR in the RB slot. This re-seats the starters into
+ * A lineup saved WITH slot positions (lib/league/lineupSlotPositions.ts) is read back slot-for-slot by
+ * `buildLineupListsFromPlayerData`, and this returns it unchanged — every starter is eligible at his
+ * own index. It is the fallback for a lineup saved WITHOUT them (before positions, or by another
+ * writer): those are stored as an ORDERED, COMPACTED list (an empty slot is simply absent) and padded
+ * at the end, so a hole comes back with every later starter shifted one slot up — a WR in the RB
+ * slot. This re-seats the starters into
  * slots they are eligible for: each keeps its own index when eligible there, otherwise takes the
  * first eligible open slot (with augmenting moves, so a maximal set is seated). A starter that
  * cannot be placed anywhere (no position data) keeps an open slot in order, so nobody is dropped.

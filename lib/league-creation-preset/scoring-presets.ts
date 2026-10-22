@@ -264,6 +264,17 @@ const RULES: PresetRule[] = [
       preset, source: 'af', scoringMode: recordMode === 'roto' ? 'roto' : 'h2h_category', categoryPresetId: preset, categoryRecordMode: recordMode,
     } }),
   }))),
+  // NHL standard categories (lib/category-scoring/NhlCategoryRegistry.ts), the same three record
+  // modes as MLB. Read from the NHL engine's own weekly stats, so no new ingestion.
+  ...(['each', 'most', 'roto'] as const).map(recordMode => ({
+    id: `nhl_cats_${recordMode}`,
+    label: recordMode === 'roto' ? 'Categories — Rotisserie' : `Categories H2H (${recordMode === 'each' ? 'each category' : 'most categories'})`,
+    hint: 'Weekly lineups. G, A, +/-, PIM, PPP, SOG, HIT, BLK; goalies W, GAA, SV%, SO. GAA and SV% use team totals.',
+    matches: (ctx: PresetCtx) => ctx.sport === 'NHL' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    build: () => ({ scoring: 'default', isSuperflex: false, scoringSettings: {
+      preset: `nhl_cats_${recordMode}`, source: 'af', scoringMode: recordMode === 'roto' ? 'roto' : 'h2h_category', categoryPresetId: 'nhl_standard', categoryRecordMode: recordMode,
+    } }),
+  })),
   // NBA H2H-category presets. Matchups are resolved per category (PTS, REB,
   // AST, STL, BLK, TO, FG%, FT%, optional 3PM) instead of by summed points.
   // Standings track category wins/losses. Category-mode leagues still share
@@ -383,6 +394,18 @@ export function buildScoringFromPresetId(presetId: string, ctx: PresetCtx): {
     }
   }
   return rule.build(ctx)
+}
+
+/**
+ * Creation presets whose scoring settings (mode, category preset, record mode) come from the preset
+ * row rather than from the sport's points defaults. NBA's category presets are applied inside
+ * `getLeagueDefaults`, so they are not listed here.
+ */
+export function isNativeCategoryScoringPreset(sport: string, presetId: string | null | undefined): boolean {
+  const id = presetId ?? ''
+  if (sport === 'MLB') return /^mlb_[56]x[56]_/.test(id)
+  if (sport === 'NHL') return /^nhl_cats_(?:each|most|roto)$/.test(id)
+  return false
 }
 
 export function isScoringPresetValidForContext(presetId: string, ctx: PresetCtx): boolean {

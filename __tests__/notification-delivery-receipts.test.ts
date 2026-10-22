@@ -19,7 +19,7 @@ afterEach(()=>{vi.restoreAllMocks();vi.useRealTimers()})
 describe('truthful notification receipts',()=>{
  it('awaits push and records storage and acceptance, not delivery',async()=>{await send();const r=m.receipt.mock.calls[0][0];expect(r.channels).toMatchObject({inApp:{status:'stored'},email:{status:'accepted',providerId:'email-id'},sms:{status:'accepted',providerId:'sms-id'},push:{status:'accepted',endpoints:1,acceptedEndpoints:1}});expect(JSON.stringify(r)).not.toContain('qa@allfantasy.ai');expect(m.store).toHaveBeenCalledWith(expect.objectContaining({sourceKey:'event:owner'}))})
  it.each([['no_profile',null],['global_off',profile({globalEnabled:false})],['category_off',profile({...prefs(),categories:{draft_alerts:{enabled:false}}})],['league_muted',profile({...prefs(),leagues:{L:{enabled:false}}})]])('records %s without sending',async(reason,value)=>{m.profile.mockResolvedValue(value);await send();expect(m.email).not.toHaveBeenCalled();expect(m.push).not.toHaveBeenCalled();expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'suppressed',reason})})
- it('preserves in-app and email during quiet hours and explains push/SMS suppression',async()=>{vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-06T03:00:00Z'));m.profile.mockResolvedValue(profile({...prefs(),quietHours:{enabled:true,startHour:22,endHour:7,timezone:'UTC'}}));await send();expect(m.receipt.mock.calls[0][0].channels).toMatchObject({inApp:{status:'stored'},email:{status:'accepted'},sms:{status:'suppressed',reason:'quiet_hours'},push:{status:'suppressed',reason:'quiet_hours'}})})
+ it('preserves in-app history while suppressing email, push and SMS during quiet hours',async()=>{vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-06T03:00:00Z'));m.profile.mockResolvedValue(profile({...prefs(),quietHours:{enabled:true,startHour:22,endHour:7,timezone:'UTC'}}));await send();expect(m.receipt.mock.calls[0][0].channels).toMatchObject({inApp:{status:'stored'},email:{status:'suppressed',reason:'quiet_hours'},sms:{status:'suppressed',reason:'quiet_hours'},push:{status:'suppressed',reason:'quiet_hours'}})})
  it('records exhausted email retries and storage failures while other transports continue',async()=>{m.store.mockResolvedValue(false);m.email.mockResolvedValue({ok:false,error:'rejected'});await send();expect(m.email).toHaveBeenCalledTimes(2);expect(m.receipt.mock.calls[0][0].channels).toMatchObject({inApp:{status:'failed'},email:{status:'delayed',attempts:2},push:{status:'accepted'}})})
  it('distinguishes no subscriptions from partial endpoint acceptance',async()=>{m.push.mockResolvedValue([]);await send();expect(m.receipt.mock.calls[0][0].channels.push).toMatchObject({status:'suppressed',reason:'no_subscriptions'});m.push.mockResolvedValue([{ok:true},{ok:false}]);await send();expect(m.receipt.mock.calls[1][0].channels.push).toMatchObject({status:'delayed',endpoints:2,acceptedEndpoints:1})})
  it('records the SMS cap and push failures without a false success',async()=>{m.cap.mockResolvedValue(false);m.push.mockRejectedValue(new Error('private endpoint'));await send();expect(m.sms).not.toHaveBeenCalled();expect(m.receipt.mock.calls[0][0].channels).toMatchObject({sms:{status:'suppressed',reason:'daily_cap'},push:{status:'delayed'}});expect(JSON.stringify(m.receipt.mock.calls[0][0])).not.toContain('private endpoint')})
@@ -27,3 +27,31 @@ describe('truthful notification receipts',()=>{
  it('preserves two-argument calls for untracked legacy transports',async()=>{await dispatchNotification({userIds:['owner'],leagueId:'L',category:'draft_alerts',type:'legacy_notice',title:'QA'});expect(m.push.mock.calls[0]).toHaveLength(3);expect(m.sms.mock.calls[0]).toHaveLength(2);expect(m.receipt).not.toHaveBeenCalled()})
  it('records interrupted reads and does not throw when receipt persistence fails',async()=>{m.profile.mockRejectedValue(new Error('DB down'));m.receipt.mockRejectedValue(new Error('audit down'));await expect(send()).resolves.toMatchObject({failed:1});expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'unknown',reason:'dispatch_interrupted'})})
 })
+
+it.each(['game_scoring_play','game_period_end','game_halftime','game_final','game_close','game_moment_end_period'])('delivers fresh %s through the selected email and push channels', async type => {
+  await dispatchNotification({userIds:['owner'],category:'draft_alerts',type,title:'Game update',onDeliveryReceipt:m.receipt})
+  expect(m.email).toHaveBeenCalled()
+  expect(m.store).toHaveBeenCalled()
+  expect(m.push).toHaveBeenCalled()
+  expect(m.push.mock.calls[0][1].expiresAt).toBeDefined()
+  expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'accepted',reason:'provider_accepted'})
+})
+describe('saved game channel preferences',()=>{
+ it('honors global off without category rows',async()=>{
+  m.profile.mockResolvedValue(profile({globalEnabled:false}));
+  await dispatchNotification({userIds:['owner'],category:'performance_alerts',type:'game_scoring_play',title:'Score'});
+  expect(m.email).not.toHaveBeenCalled();expect(m.push).not.toHaveBeenCalled();expect(m.store).not.toHaveBeenCalled();
+ });
+ it.each(['performance_alerts','matchup_results','injury_alerts'] as const)('uses saved independent email and push choices for %s',async category=>{
+  const {mergeNotificationPreferences}=await import('@/lib/notification-settings/mergeNotificationPreferences');
+  const {resolveNotificationPreferences}=await import('@/lib/notification-settings/NotificationPreferenceResolver');
+  let stored:Record<string,unknown>={};
+  for(const [email,push] of [[true,false],[false,true],[false,false],[true,true]]){
+   stored=mergeNotificationPreferences(stored,{categories:{[category]:{enabled:true,inApp:true,email,push,sms:false}}});
+   const reloaded=resolveNotificationPreferences(JSON.parse(JSON.stringify(stored)));
+   m.profile.mockResolvedValue(profile(reloaded));m.email.mockClear();m.push.mockClear();
+   await dispatchNotification({userIds:['owner'],category,type:category==='injury_alerts'?'injury_update':'game_scoring_play',title:'Update'});
+   expect(m.email).toHaveBeenCalledTimes(email?1:0);expect(m.push).toHaveBeenCalledTimes(push?1:0);
+  }
+ });
+});

@@ -1,5 +1,6 @@
 import type { LeagueSport } from '@prisma/client'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { GUILLOTINE_MAX_TEAMS, GUILLOTINE_MIN_TEAMS } from './teamCountLimits'
 
 export type GuillotineSportProfile = {
   /** All guillotine leagues use weekly scoring periods */
@@ -10,7 +11,7 @@ export type GuillotineSportProfile = {
   regularSeasonWeeks: number
   /** Default team count = regularSeasonWeeks - 1 (one chop per week, last team standing at playoffs) */
   defaultTeamCount: number
-  /** Min/max team limits */
+  /** Min/max team limits — the same for every sport (./teamCountLimits.ts). */
   minTeams: number
   maxTeams: number
 
@@ -68,8 +69,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 18,
     defaultTeamCount: 17,     // 18 weeks - 1 = 17 teams
-    minTeams: 4,
-    maxTeams: 17,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 4, // Thursday (TNF)
     scoringWindowEndDay: 1,   // Monday (MNF)
     dailyGames: false,
@@ -88,8 +89,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 24,   // ~82 games over 24 scoring weeks
     defaultTeamCount: 23,     // 24 - 1 = 23 teams (large league!)
-    minTeams: 8,
-    maxTeams: 23,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     // NBA periods are 7 Eastern days from the Tuesday opener (lib/season-week/dailySportSeasonStarts.ts),
     // so a week runs Tuesday–Monday. The native chop (lib/guillotine/nativeGuillotineWeek.ts) fires once
     // the week is sealed (12h after the last tip) AND the 24h correction window has passed: Tuesday
@@ -112,8 +113,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 26,   // ~162 games over 26 scoring weeks
     defaultTeamCount: 25,     // 26 - 1 = 25 teams
-    minTeams: 8,
-    maxTeams: 25,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 1, // Monday
     scoringWindowEndDay: 0,   // Sunday
     dailyGames: true,
@@ -132,8 +133,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 24,   // ~82 games over 24 weeks
     defaultTeamCount: 23,     // 24 - 1 = 23 teams
-    minTeams: 8,
-    maxTeams: 23,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 1, // Monday
     scoringWindowEndDay: 0,   // Sunday
     dailyGames: true,
@@ -152,8 +153,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 14,   // 14-week regular season
     defaultTeamCount: 13,     // 14 - 1 = 13 teams
-    minTeams: 8,
-    maxTeams: 13,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 4, // Thursday (some games)
     scoringWindowEndDay: 6,   // Saturday (main slate)
     dailyGames: false,
@@ -172,8 +173,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 20,   // ~20 scoring weeks through March
     defaultTeamCount: 19,     // 20 - 1 = 19 teams
-    minTeams: 6,
-    maxTeams: 19,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 1, // Monday
     scoringWindowEndDay: 0,   // Sunday
     dailyGames: true,
@@ -192,8 +193,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 38,   // Most leagues: 38 matchweeks
     defaultTeamCount: 20,     // Cap at 20 (38 would be too many)
-    minTeams: 6,
-    maxTeams: 20,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 5, // Friday (some matches)
     scoringWindowEndDay: 1,   // Monday (occasional)
     dailyGames: false,

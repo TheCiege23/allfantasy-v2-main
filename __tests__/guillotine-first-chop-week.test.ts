@@ -128,7 +128,7 @@ describe('updateGuillotineFirstChopWeek', () => {
     expect(deps.upsert).not.toHaveBeenCalled()
   })
 
-  it('404s a league with no guillotine config', async () => {
+  it('404s a league with no Guilly config', async () => {
     const deps = makeDeps({ config: null })
     expect(await updateGuillotineFirstChopWeek('lg1', 3, deps)).toMatchObject({ ok: false, status: 404 })
   })

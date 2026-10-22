@@ -95,7 +95,11 @@ const ES: Record<string, string> = {
 
   // ── Rules and access ──────────────────────────────────────────────────
   Disputes: 'Disputas',
+  'Lineup integrity': 'Integridad de alineaciones',
+  'Deadline autopilot': 'Piloto automático de fechas límite',
+  'Weekly recap': 'Resumen semanal',
   'Share the dispute desk with your league →': 'Comparte la mesa de disputas con tu liga →',
+  'League constitution and amendments →': 'Constitución de la liga y enmiendas →',
   'Open integrity monitor →': 'Abrir el monitor de integridad →',
   '1 person': '1 persona',
   you: 'tú',

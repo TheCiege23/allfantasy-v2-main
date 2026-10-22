@@ -98,7 +98,7 @@ function collectConceptSignals(normalized: NormalizedImportResult): string {
 }
 
 function heuristicConceptFromSignals(signals: string): string | null {
-  if (/\bguillotine\b/.test(signals)) return 'guillotine'
+  if (/\bguill(?:otine|y)\b/.test(signals)) return 'guillotine'
   if (/\bsurvivor\b/.test(signals)) return 'survivor'
   if (/\bzombie\b/.test(signals)) return 'zombie'
   if (/\btournament\b/.test(signals) || /\bbracket\b/.test(signals)) return 'tournament'

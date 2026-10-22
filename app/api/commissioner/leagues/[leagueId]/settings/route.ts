@@ -9,6 +9,7 @@ import type { LeagueSettingsPatch } from "@/lib/commissioner-settings/types"
 import { prisma } from "@/lib/prisma"
 import { STRUCTURAL_LEAGUE_KEYS, structuralPatchRefusal } from "@/lib/league/structuralSettingsLock"
 import { leagueChatThreadLinkRefusal } from "@/lib/league/leagueChatThreadLink"
+import { settingsPatchLockedResponse } from "@/lib/league/settingsLockGuard"
 
 type SessionUser = {
   id?: string
@@ -69,6 +70,9 @@ export async function PATCH(req: Request, props: { params: Promise<{ leagueId: s
     const structuralRefusal = await structuralPatchRefusal(params.leagueId, body as Record<string, unknown>, current)
     if (structuralRefusal) return NextResponse.json({ error: structuralRefusal }, { status: 409 })
   }
+  // An area the league locked for the season changes only after a league vote (lib/league/settingsLock.ts).
+  const locked = await settingsPatchLockedResponse(params.leagueId, body as Record<string, unknown>)
+  if (locked) return locked
   const { updateLeagueSettings } = await import("@/lib/commissioner-settings/CommissionerSettingsService")
   const updated = await updateLeagueSettings(params.leagueId, body)
   if (!updated) return NextResponse.json({ error: "League not found" }, { status: 404 })

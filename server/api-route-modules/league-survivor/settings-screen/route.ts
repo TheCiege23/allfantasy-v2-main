@@ -71,7 +71,7 @@ export interface SurvivorSettingsScreenState {
   commissionerPlays: boolean
 }
 
-async function loadState(leagueId: string): Promise<SurvivorSettingsScreenState | null> {
+async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Promise<SurvivorSettingsScreenState | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true },
@@ -84,7 +84,7 @@ async function loadState(leagueId: string): Promise<SurvivorSettingsScreenState 
   const [draftStarted, assigned, idolView] = await Promise.all([
     isSurvivorDraftStarted(leagueId),
     prisma.survivorTribeMember.count({ where: { tribe: { leagueId } } }),
-    getSurvivorIdolSetupView(leagueId, { isCommissioner: true }),
+    getSurvivorIdolSetupView(leagueId, { isCommissioner: true, canSeeDraw: viewer.canSeeDraw }),
   ])
   const firstWeek = plan?.startWeek ?? 1
   const lastWeek = plan?.endWeek ?? 13
@@ -123,7 +123,7 @@ async function loadState(leagueId: string): Promise<SurvivorSettingsScreenState 
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const auth = await authorize(ctx)
   if ('error' in auth) return auth.error
-  const state = await loadState(auth.leagueId)
+  const state = await loadState(auth.leagueId, { canSeeDraw: auth.access.decisions.canSeeHiddenIdolAssignments })
   if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   return NextResponse.json(state, { headers: { 'Cache-Control': 'no-store' } })
 }
@@ -131,12 +131,13 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 export async function POST(req: NextRequest, ctx: Ctx) {
   const auth = await authorize(ctx)
   if ('error' in auth) return auth.error
-  const { leagueId, userId } = auth
+  const { leagueId, userId, access } = auth
+  const viewer = { canSeeDraw: access.decisions.canSeeHiddenIdolAssignments }
   const body = rec(await req.json().catch(() => null))
   const next = parseSettingsForm(body.form)
   if (!next) return NextResponse.json({ error: 'Send the whole settings form.' }, { status: 400 })
 
-  const state = await loadState(leagueId)
+  const state = await loadState(leagueId, viewer)
   if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   const changed = changedSettingsKeys(state.form, next)
   if (!changed.length) return NextResponse.json({ ok: true, unchanged: true, state })
@@ -238,5 +239,5 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       tribalCouncilTimeUtc: f.tribalCouncilTime,
     })
   }
-  return NextResponse.json({ ok: true, changed, state: await loadState(leagueId) })
+  return NextResponse.json({ ok: true, changed, state: await loadState(leagueId, viewer) })
 }

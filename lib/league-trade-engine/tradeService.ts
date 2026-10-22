@@ -474,6 +474,14 @@ async function linkCounterToParent(
   })
 }
 
+/**
+ * The lifecycle refusal as a throwable that keeps its `code` and `status`, so a route can answer
+ * `roster_locked_post_draft` with 423 instead of a bare 400 message. The message is unchanged.
+ */
+function lifecycleGateThrowable(err: { error: string; code: string; status: number }): Error & { code: string; status: number } {
+  return Object.assign(new Error(err.error), { code: err.code, status: err.status })
+}
+
 /*
  * ⚠ NO `currentWeek` INPUT, ON PURPOSE. It used to be one, and the deadline was only as good as the
  * caller: the Trade Center passed none (deadline skipped), the counter route passed the client's
@@ -489,7 +497,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.proposedByUserId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.proposedByUserId),
   })
-  if (!life.ok) throw new Error(life.err.error)
+  if (!life.ok) throw lifecycleGateThrowable(life.err)
 
   const participantRosterIds = [...new Set([
     input.proposerRosterId,
@@ -880,7 +888,7 @@ export async function acceptAfLeagueTrade(input: {
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.userId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.userId),
   })
-  if (!life.ok) throw new Error(life.err.error)
+  if (!life.ok) throw lifecycleGateThrowable(life.err)
 
   const settings = resolveLeagueTradeSettings(league)
   const reviewType = trade.reviewType

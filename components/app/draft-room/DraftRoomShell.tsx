@@ -1,9 +1,10 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield, Radar } from 'lucide-react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield, Radar, MoreHorizontal } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
+import './draft-mobile.css'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
 
@@ -88,6 +89,18 @@ export function DraftRoomShell({
 }: DraftRoomShellProps) {
   const { t } = useLanguage()
   const [bottomDockExpanded, setBottomDockExpanded] = useState(true)
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
+  useEffect(() => { setMobileToolsOpen(false) }, [mobileTab])
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const closeOnDesktop = () => { if (desktop.matches) setMobileToolsOpen(false) }
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [])
+  const selectMobileTab = (tab: MobileDraftTab) => {
+    setMobileToolsOpen(false)
+    onMobileTabChange(tab)
+  }
   const allowPremiumDockCollapse = surfaceVariant !== 'redraft_snake'
 
   useEffect(() => {
@@ -114,37 +127,6 @@ export function DraftRoomShell({
     }
   }, [allowPremiumDockCollapse])
 
-  const touchStartX = useRef<number | null>(null)
-  const touchStartY = useRef<number | null>(null)
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0]?.clientX ?? null
-    touchStartY.current = e.touches[0]?.clientY ?? null
-  }, [])
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (touchStartX.current === null || touchStartY.current === null) return
-      const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current
-      const dy = (e.changedTouches[0]?.clientY ?? 0) - touchStartY.current
-      touchStartX.current = null
-      touchStartY.current = null
-      if (Math.abs(dx) < 50 || Math.abs(dx) <= Math.abs(dy) * 2) return
-      const tabs = MOBILE_TABS.filter(
-        (tab) =>
-          (tab.id !== 'helper' || helperPanel) &&
-          (tab.id !== 'intel' || intelPanel) &&
-          (tab.id !== 'roster' || rosterPanel) &&
-          (tab.id !== 'keepers' || keeperPanel)
-      )
-      const idx = tabs.findIndex((t) => t.id === mobileTab)
-      if (idx === -1) return
-      const nextIdx = dx < 0 ? Math.min(idx + 1, tabs.length - 1) : Math.max(idx - 1, 0)
-      if (nextIdx !== idx) onMobileTabChange(tabs[nextIdx]!.id)
-    },
-    [helperPanel, intelPanel, rosterPanel, keeperPanel, mobileTab, onMobileTabChange]
-  )
-
   const visibleTabs = MOBILE_TABS.filter(
     (tab) =>
       (tab.id !== 'helper' || helperPanel) &&
@@ -152,8 +134,8 @@ export function DraftRoomShell({
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
-  const primaryMobileTabs = visibleTabs.filter((tab) => tab.id === 'board' || tab.id === 'players')
-  const secondaryMobileTabs = visibleTabs.filter((tab) => tab.id !== 'board' && tab.id !== 'players')
+  const primaryMobileTabs = visibleTabs.filter((tab) => ['board', 'players', 'queue', 'chat'].includes(tab.id))
+  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'chat'].includes(tab.id))
 
   /**
    * D.6 — when `layout='premium'` is set, we render the premium grid even if
@@ -176,7 +158,7 @@ export function DraftRoomShell({
       : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
 
   return (
-    <div className={surfaceClass} data-testid="draft-room-shell">
+    <div className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell">
       {topBar}
       {managerStrip}
 
@@ -358,8 +340,6 @@ export function DraftRoomShell({
       <div
         className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden md:hidden"
         data-testid="draft-mobile-layout"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
       >
         {/*
           F.2 — mobile pane uses `overflow-y-auto` (NOT `overflow-auto`) so wide
@@ -378,7 +358,7 @@ export function DraftRoomShell({
           )}
           <div
             key={mobileTab}
-            className="min-h-[220px] min-w-0 p-2.5 pb-12 text-sm transition-opacity duration-150 sm:p-3 sm:pb-14"
+            className="min-h-[220px] min-w-0 p-2 pb-3 text-sm sm:p-3"
             data-testid="draft-mobile-content"
             data-active-tab={mobileTab}
           >
@@ -424,21 +404,23 @@ export function DraftRoomShell({
               {mobileDockAccessory}
             </div>
           ) : null}
-          {secondaryMobileTabs.length > 0 ? (
+          {secondaryMobileTabs.length > 0 && mobileToolsOpen ? (
             <div
-              className="safe-area-bottom border-t border-white/10 bg-[#060d1f]/95 px-2 pb-1 pt-1"
+              id="draft-mobile-tools"
+              onKeyDown={(event) => { if (event.key === 'Escape') { setMobileToolsOpen(false); event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('[data-testid="draft-mobile-more"]')?.focus() } }}
+              className="max-h-[35dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-[#060d1f] px-2 py-2"
               data-testid="draft-mobile-quick-dock"
             >
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              <div className="grid grid-cols-2 gap-2">
                 {secondaryMobileTabs.map(({ id, icon: Icon }) => {
                   const label = t(MOBILE_TAB_I18N[id])
                   return (
                     <button
                       key={id}
                       type="button"
-                      onClick={() => onMobileTabChange(id)}
+                      onClick={() => selectMobileTab(id)}
                       data-testid={`draft-mobile-tab-${id}`}
-                      className={`inline-flex min-h-[38px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition active:scale-[0.98] ${
+                      className={`inline-flex min-h-[44px] shrink-0 touch-manipulation items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition active:scale-[0.98] ${
                         mobileTab === id
                           ? 'border-cyan-400/45 bg-cyan-500/15 text-cyan-100'
                           : 'border-white/15 bg-black/20 text-white/70'
@@ -465,7 +447,7 @@ export function DraftRoomShell({
                 <button
                   key={id}
                   type="button"
-                  onClick={() => onMobileTabChange(id)}
+                  onClick={() => selectMobileTab(id)}
                   data-testid={`draft-mobile-tab-${id}`}
                   className={`flex min-h-[48px] flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 py-2 text-[11px] active:scale-[0.98] ${
                     mobileTab === id
@@ -480,6 +462,16 @@ export function DraftRoomShell({
                 </button>
               )
             })}
+            {secondaryMobileTabs.length > 0 && (
+              <button type="button" data-testid="draft-mobile-more"
+                onClick={() => setMobileToolsOpen(open => !open)}
+                aria-expanded={mobileToolsOpen} aria-controls="draft-mobile-tools"
+                aria-label={t('draftRoom.shell.mobile.more')}
+                className={`flex min-h-[48px] min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 py-2 text-[11px] ${mobileToolsOpen || secondaryMobileTabs.some(tab => tab.id === mobileTab) ? 'bg-cyan-500/12 text-cyan-100' : 'text-white/65'}`}>
+                <MoreHorizontal className="h-5 w-5" aria-hidden />
+                <span>{secondaryMobileTabs.some(tab => tab.id === mobileTab) ? t(MOBILE_TAB_I18N[mobileTab]) : t('draftRoom.shell.mobile.more')}</span>
+              </button>
+            )}
           </nav>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import type { League, LeagueLifecycleState, LeagueSport } from '@prisma/client'
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
+import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
@@ -34,6 +35,13 @@ export type LineupValidationContext = {
   template: RosterTemplateDto
   season: number
   week: number
+  /**
+   * The expanded starter slots a starter's `slotIndex` indexes (`resolveLineupStarterSlots`). When
+   * given, every positioned starter is checked against HIS slot. Absent: no per-slot check.
+   */
+  starterSlots?: ExpandedStarterSlot[]
+  /** The stored lineup this save replaces: an unchanged, carried-over slot position is not re-judged. */
+  previousPlayerData?: unknown
 }
 
 export type RosterValidationIssue = {

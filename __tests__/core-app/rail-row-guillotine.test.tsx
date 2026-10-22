@@ -25,7 +25,7 @@ const matchup = (g: RailGuillotineLine): RailMatchupSummary => ({
 })
 
 const draw = (g: RailGuillotineLine) =>
-  render(<RailRowBody name="9626 Guillotine" platform="native" m={matchup(g)} freshMinutes={2} showScoreStatus />).container
+  render(<RailRowBody name="9626 Guilly" platform="native" m={matchup(g)} freshMinutes={2} showScoreStatus />).container
 
 const text = (el: Element) => (el.textContent ?? '').replace(/\s+/g, ' ')
 

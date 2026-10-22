@@ -439,7 +439,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
       {leagueType === 'guillotine' && (
         <div className="space-y-3 rounded-2xl border border-red-500/30 bg-red-950/15 p-4">
           <p className="text-xs text-white/65">
-            Guillotine: lowest scorers are eliminated each period until one team remains. Chop timing and correction
+            Guilly: lowest scorers are eliminated each period until one team remains. Chop timing and correction
             windows are tuned after create.
           </p>
           <label

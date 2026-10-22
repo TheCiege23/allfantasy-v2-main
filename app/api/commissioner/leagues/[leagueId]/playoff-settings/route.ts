@@ -16,6 +16,7 @@ import {
   stageEditorPlayoffStartWeek,
 } from '@/lib/playoff-settings'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 const featureGate = new FeatureGateService()
 
@@ -69,6 +70,9 @@ export async function PUT(
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
+  const locked = await settingsLockedResponse(leagueId, 'playoffs')
+
+  if (locked) return locked
   const body = await req.json().catch(() => ({}))
   const includedStages = Array.isArray(body.includedStages) ? body.includedStages as string[] : []
   const startMode = typeof body.startMode === 'string' ? body.startMode : undefined

@@ -154,7 +154,7 @@ const FORMAT_REGISTRY: Record<LeagueFormatId, LeagueFormatDefinition> = {
   },
   guillotine: {
     id: 'guillotine',
-    label: 'Guillotine',
+    label: 'Guilly',
     description: 'Lowest score each period gets chopped and their roster is released.',
     supportedSports: ALL_SPORTS,
     defaultRosterMode: 'redraft',

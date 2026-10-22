@@ -1,7 +1,7 @@
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
-import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
+import { buildScoringFromPresetId, isNativeCategoryScoringPreset, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 /**
@@ -31,6 +31,7 @@ import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
+import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 
 type Tx = Prisma.TransactionClient
@@ -205,12 +206,16 @@ export async function createCanonicalLeagueInTransaction(
     managerCount: body.teamCount,
     scoringPreset: body.scoringPreset,
   })
-  if (sport === 'MLB' && /^mlb_[56]x[56]_/.test(body.scoringPreset ?? '')) {
-    const ctx = { sport: 'MLB' as const, leagueType: formatId as any, idpSelected: false }
-    if (!isScoringPresetValidForContext(body.scoringPreset!, ctx)) throw new Error('MLB category scoring requires redraft, dynasty or keeper.')
+  if ((sport === 'MLB' || sport === 'NHL') && isNativeCategoryScoringPreset(sport, body.scoringPreset)) {
+    const ctx = { sport, leagueType: formatId as any, idpSelected: false }
+    if (!isScoringPresetValidForContext(body.scoringPreset!, ctx)) throw new Error(`${sport} category scoring requires redraft, dynasty or keeper.`)
     Object.assign(foundationDefaults.scoringSettings, buildScoringFromPresetId(body.scoringPreset!, ctx).scoringSettings)
   }
-  if (sport === 'NBA' && foundationDefaults.scoringSettings.scoringMode === 'h2h_category') {
+  // Category leagues lock one lineup per week, as MLB and NBA do: a category week is one team total.
+  if (
+    (sport === 'NBA' && foundationDefaults.scoringSettings.scoringMode === 'h2h_category') ||
+    (sport === 'NHL' && ['h2h_category', 'roto'].includes(String(foundationDefaults.scoringSettings.scoringMode)))
+  ) {
     Object.assign(foundationDefaults.scoringSettings, { lineupLockType: 'first_game_of_week' })
     foundationDefaults.scheduleSettings.lineupLockType = 'first_game_of_week'
   }
@@ -325,7 +330,7 @@ export async function createCanonicalLeagueInTransaction(
     sport_type: sport,
     trade_review_mode: tradeReview,
     requested_draft_type: body.draftType,
-    ...(foundationDefaults.scoringSettings.scoringMode !== 'points' && (sport === 'MLB' || sport === 'NBA') ? {sportConfig:{...((engine.settingsSnapshot.sportConfig as Record<string,unknown>)??{}),lineupLockType:'first_game_of_week'}} : {}),
+    ...(foundationDefaults.scoringSettings.scoringMode !== 'points' && (sport === 'MLB' || sport === 'NBA' || sport === 'NHL') ? {sportConfig:{...((engine.settingsSnapshot.sportConfig as Record<string,unknown>)??{}),lineupLockType:'first_game_of_week'}} : {}),
     canonical_draft_mode: body.draftType,
     third_round_reversal: thirdRoundReversal,
     draft_third_round_reversal: thirdRoundReversal,
@@ -789,6 +794,8 @@ export async function createCanonicalLeagueInTransaction(
     const str = (v: unknown, fallback: string) => (v !== undefined && v !== null ? String(v) : fallback)
     const dynastyFallbackTaxiSlots =
       formatId === 'devy' ? readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6) : 4
+    // NHL / MLB: no prospect pool, so a new league's taxi squad is 0 whatever the request carried.
+    const taxiSlotsForCreate = sportSupportsProspectStash(sport) ? num(ds.taxiSlots, dynastyFallbackTaxiSlots) : 0
     const dynastyFallbackRookieRounds =
       formatId === 'devy' ? readNumber(foundationDefaults.devyConfig, 'rookieDraftRounds', 4) : 4
     // NCAAF's bracket window first, then the sport's own season length (dailySportSeasonShape.ts for
@@ -808,7 +815,7 @@ export async function createCanonicalLeagueInTransaction(
         divisionsEnabled: num(ds.divisionCount, 0) > 0,
         futurePicksYearsOut: num(ds.futurePicksYearsOut, 3),
         waiverTypeRecommended: str(ds.waiverTypeRecommended, 'faab'),
-        taxiSlots: num(ds.taxiSlots, dynastyFallbackTaxiSlots),
+        taxiSlots: taxiSlotsForCreate,
         taxiEligibilityYears: num(ds.taxiEligibilityYears, 1),
         taxiLockBehavior: 'once_promoted_no_return',
         taxiInSeasonMoves: true,
@@ -824,7 +831,7 @@ export async function createCanonicalLeagueInTransaction(
         divisionsEnabled: num(ds.divisionCount, 0) > 0,
         futurePicksYearsOut: num(ds.futurePicksYearsOut, 3),
         waiverTypeRecommended: str(ds.waiverTypeRecommended, 'faab'),
-        taxiSlots: num(ds.taxiSlots, dynastyFallbackTaxiSlots),
+        taxiSlots: taxiSlotsForCreate,
         taxiEligibilityYears: num(ds.taxiEligibilityYears, 1),
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },

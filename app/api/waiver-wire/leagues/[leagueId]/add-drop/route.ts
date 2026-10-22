@@ -16,6 +16,7 @@ import { assertRosterTransactionsAllowed } from "@/lib/roster-legality/rosterTra
 import { logAction } from "@/server/services/auditService"
 import { invalidateIntelligence } from "@/lib/dashboard/intelligence-events"
 import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
+import { POST_DRAFT_ROSTER_LOCK_CODE } from "@/lib/league/postDraftRosterLock"
 
 export const dynamic = "force-dynamic"
 
@@ -54,8 +55,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!addPlayerId) return errorResponse("VALIDATION_FAILED", "addPlayerId is required.")
 
   // League + roster gates (locks, season state, legality).
-  const gate = await assertLeagueActionGate(leagueId, userId, "waiver_claim_submit")
+  // An immediate add is a free-agent pickup, refused during the post-draft roster lock (claims are not).
+  const gate = await assertLeagueActionGate(leagueId, userId, "waiver_claim_submit", { rosterMove: "free_agent_pickup" })
   if (!gate.ok) {
+    if (gate.err.code === POST_DRAFT_ROSTER_LOCK_CODE) {
+      return NextResponse.json(
+        { ok: false, code: gate.err.code, error: gate.err.error, unlocksAt: "unlocksAt" in gate.err ? gate.err.unlocksAt ?? null : null },
+        { status: gate.err.status },
+      )
+    }
     const code = mapAddDropErrorCode(gate.err.error ?? "", { hasDrop: Boolean(dropPlayerId) })
     return errorResponse(code === "VALIDATION_FAILED" ? "LEAGUE_NOT_ACTIVE" : code, gate.err.error)
   }

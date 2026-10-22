@@ -788,7 +788,7 @@ export function LeagueCreationWizard({
     setError(null)
     try {
       if (state.leagueType === 'guillotine' && !state.formatOptions.guillotineRulesAcknowledged) {
-        setError('Confirm Guillotine elimination rules on the AI & privacy step.')
+        setError('Confirm Guilly elimination rules on the AI & privacy step.')
         setCreating(false)
         return
       }

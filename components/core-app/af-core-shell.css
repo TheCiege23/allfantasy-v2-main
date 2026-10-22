@@ -3623,3 +3623,49 @@ html[data-mode='light'] .af-core {
     font-size: 16px;
   }
 }
+
+
+/* Mobile-first polish: quiet chrome, clear league cards, touch-sized navigation. */
+.af-core.af-shell { background-image: none; }
+.af-core .af-main { min-width: 0; }
+.af-core .af-content { padding: 22px clamp(14px, 2.4vw, 32px) 32px; }
+.af-core .af-topbar { gap: 12px; padding-block: 10px; background: var(--bg); }
+.af-core .af-topbar-right { gap: 10px; }
+.af-core .af-data-menu { position: relative; flex: none; font-size: 13px; }
+.af-core .af-data-menu > summary { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; color: var(--muted); list-style: none; }
+.af-core .af-data-menu > summary::-webkit-details-marker { display: none; }
+.af-core .af-data-menu-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 45; width: min(280px, calc(100vw - 28px)); padding: 16px; border: 1px solid var(--line2); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.af-core .af-data-menu-panel p { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 8px 0; }
+.af-core .af-cardfresh-details { margin: 8px 0 0; color: var(--warn); font-size: 12px; }
+.af-core .af-cardfresh-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll { gap: 8px; padding: 8px; }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile { width: 100%; gap: 10px; padding: 12px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile:hover { border-color: var(--accent-line); background: var(--surface2); }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile[data-active='true'] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.af-core .af-rail-row-name { font-size: 13px; line-height: 1.35; font-weight: 750; letter-spacing: -.01em; }
+.af-core .af-rail-row-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; color: var(--muted); font: 500 11px/1.5 system-ui, sans-serif; }
+.af-core .af-rail-row-meta > span:first-child { text-transform: capitalize; }
+.af-core .af-rail-delayed { color: var(--warn); }
+.af-core .af-rail-row-team { font-size: 12px; }
+.af-core .af-rail-row-av { width: 20px; height: 20px; }
+.af-core .af-rail-row-line { margin-top: 6px; }
+.af-core .af-nav-item { min-height: 44px; border-radius: 10px; }
+.af-core :is(button, a, summary, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (min-width: 1081px) {
+  .af-core.af-shell[data-rail-open='true'] { grid-template-columns: 280px 188px minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .af-core.af-shell { width: 100%; max-width: 100%; overflow-x: clip; }
+  .af-core .af-content { padding: 14px 12px calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .af-core .af-topbar { padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; gap: 6px 10px; }
+  .af-core .af-topbar .af-topbar-right { overflow: visible; flex: 0 0 auto; margin-left: auto; }
+  .af-core .af-topbar .af-plan, .af-core .af-topbar .af-week, .af-core .af-admin-shortcut { display: none; }
+  .af-core .af-data-menu > summary span { display: none; }
+  .af-core .af-tabbar { display: flex; padding: 5px 4px calc(5px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line2); }
+  .af-core .af-tabbar-item { flex: 1 1 0; min-width: 0; min-height: 52px; gap: 4px; border-radius: 12px; }
+  .af-core .af-tabbar-label { font: 600 11px/1.2 system-ui, sans-serif; letter-spacing: 0; }
+  .af-core .af-tabbar-item[aria-current='page'] { background: var(--accent-soft); color: var(--accent); }
+  .af-core.af-shell[data-rail-open='true'] .af-rail-row-name { font-size: 15px; }
+  .af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile { padding: 12px; }
+  .af-core input, .af-core textarea, .af-core select { font-size: 16px; }
+}

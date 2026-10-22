@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Calendar, Clock, Shuffle, Sparkles, Info, ChevronDown, Trophy, TrendingDown, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
+import { DraftDayKit } from '@/components/draft-day/DraftDayKit'
 import { LiveRookieOrderPanel } from '@/components/league-settings/LiveRookieOrderPanel'
 import {
   LEGACY_TIMER_SECONDS,
@@ -30,6 +31,7 @@ import {
   type DraftPace,
 } from '@/lib/draft/draftSettingsPolicy'
 import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName, utcToWallClock, wallClockToUtc } from '@/lib/timezone'
+import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,6 +99,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   const [computedRounds, setComputedRounds] = useState<ComputedRounds | null>(null)
   const [timerSeconds, setTimerSeconds] = useState<number>(28800)
   const [autostartEnabled, setAutostartEnabled] = useState(false)
+  // Native redraft drafts start at their time whatever Autostart says, so the toggle is hidden for them.
+  // The saved value is still sent back unchanged on save.
+  const [startsAtScheduledTime, setStartsAtScheduledTime] = useState(false)
   const [cpuAutoPickEnabled, setCpuAutoPickEnabled] = useState(true)
   const [slowDraftPauseEnabled, setSlowDraftPauseEnabled] = useState(false)
   const [slowDraftPauseFrom, setSlowDraftPauseFrom] = useState('21:00')
@@ -152,6 +157,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
     setRounds(typeof cfg.rounds === 'number' ? cfg.rounds : 15)
     if (typeof cfg.timer_seconds === 'number' && cfg.timer_seconds > 0) setTimerSeconds(cfg.timer_seconds)
     setAutostartEnabled(Boolean(data.autostartEnabled ?? cfg.autostart))
+    setStartsAtScheduledTime(startsAtScheduledTimeRegardlessOfAutostart(data.scheduledStartLeague))
     setCpuAutoPickEnabled(data.cpuAutoPickEnabled ?? cfg.autopick_behavior !== 'skip')
     setSlowDraftPauseEnabled(Boolean(data.slowDraftPauseEnabled))
     if (data.slowDraftPauseFrom) setSlowDraftPauseFrom(data.slowDraftPauseFrom)
@@ -380,10 +386,16 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           {fill(t('lsEd.dr.v2.leagueTz'), { tz: scheduleTzLabel })}
         </p>
         <div className="border-t border-white/10 pt-1">
-          <ToggleRow
-            id={ids.autostart} label={t('draft.autostart')} description={t('draft.autostartDesc')}
-            enabled={autostartEnabled} onChange={setAutostartEnabled} disabled={ro}
-          />
+          {startsAtScheduledTime ? (
+            <p className="text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
+              {t('draft.autostartScheduledNote')}
+            </p>
+          ) : (
+            <ToggleRow
+              id={ids.autostart} label={t('draft.autostart')} description={t('draft.autostartDesc')}
+              enabled={autostartEnabled} onChange={setAutostartEnabled} disabled={ro}
+            />
+          )}
         </div>
       </section>
 
@@ -690,6 +702,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         </section>
       )}
 
+      <DraftDayKit leagueId={leagueId} isCommissioner={isCommissioner} />
       {/* ===== LIVE ROOKIE ORDER (Dynasty/C2C/Devy, commissioner only) ===== */}
       {isDynastyLike && isCommissioner && <LiveRookieOrderPanel leagueId={leagueId} />}
 

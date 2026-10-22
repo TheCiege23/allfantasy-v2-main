@@ -199,7 +199,8 @@ function valuationFor(
 ): Valuation | { refuse: string } {
   if (league) {
     const native = nativeCategoryScoringContext(league.settings, sport)
-    const categories = native ? getCategoryPresetDefinitions(native.presetId) : null
+    // The league's own (possibly commissioner-edited) list, not the preset's.
+    const categories = native ? native.categories : null
     if (categories?.length) return { kind: 'categories', categories }
     // A category league whose categories cannot be read must never fall back to a points grade.
     const unreadable = categoryLeagueReason(league.settings, sport)
@@ -347,6 +348,10 @@ async function loadSnapshotLines(
     // Derived from ONE game's line by the normalizer; on a season average they would fire every night.
     delete stats.dbl_dbl
     delete stats.trpl_dbl
+    // NHL rate bonuses are per game too: on an average line they would score the season's rate.
+    delete stats.g_sv_pct_bonus
+    delete stats.g_gaa_bonus
+    delete stats.sh_pct_bonus
     lines.push({
       id: r.playerId,
       name: r.playerName,

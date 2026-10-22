@@ -83,7 +83,7 @@ function triageRow(over: Partial<TriageBookRow> = {}): TriageBookRow {
     imageUrl: null,
     leagues: [
       { id: 'l1', name: 'Bla bla bla', platform: 'sleeper', imageUrl: null, slot: 'starter', bench: [{ name: 'Tyjae Spears', position: 'RB' }, { name: 'Zach Charbonnet', position: 'RB' }] },
-      { id: 'l2', name: 'Guillotine League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
+      { id: 'l2', name: 'Guilly League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
       { id: 'l3', name: 'Work League', platform: 'espn', imageUrl: null, slot: 'ir' },
       { id: 'l4', name: 'Taxi Squad', platform: 'sleeper', imageUrl: null, slot: 'taxi' },
       ...Array.from({ length: 4 }, (_, i) => ({ id: `x${i}`, name: `Extra ${i}`, platform: 'sleeper', imageUrl: null, slot: null })),
@@ -365,7 +365,7 @@ const D_NOW = new Date('2026-08-24T20:00:00Z')
 function draft(over: Partial<DraftHqAllRow> = {}): DraftHqAllRow {
   return {
     leagueId: 'l1',
-    leagueName: 'Guillotine League 26',
+    leagueName: 'Guilly League 26',
     platform: 'sleeper',
     imageUrl: null,
     phase: 'live',

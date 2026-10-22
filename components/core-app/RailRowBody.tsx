@@ -232,7 +232,7 @@ function RailGuillotine({ line }: { line: RailGuillotineLine }) {
       break
     case 'preseason':
       pos = line.draftAt ? `${es ? 'Draft' : 'Draft'} ${draftWhen(line.draftAt, es)}` : es ? 'Temporada sin empezar' : 'Season not started'
-      cut = chopWeek != null ? (es ? `primer corte sem ${chopWeek}` : `first chop wk ${chopWeek}`) : es ? 'guillotina' : 'guillotine'
+      cut = chopWeek != null ? (es ? `primer corte sem ${chopWeek}` : `first chop wk ${chopWeek}`) : 'Guilly'
       break
     case 'before_first_chop':
       pos = aliveRank ?? (es ? `${line.aliveCount} vivos` : `${line.aliveCount} alive`)
@@ -280,7 +280,7 @@ export type RailRowBodyProps = {
   syncPaused?: boolean
   delayed?: boolean
   /** Minutes since `m.freshAt` by the client clock; null before mount or with no stamp. */
-  freshMinutes: number | null
+  freshMinutes?: number | null
   /** Drawn only while the rail is expanded — a collapsed rail has nowhere to put it. */
   showScoreStatus: boolean
   swing?: number | null
@@ -297,7 +297,6 @@ export function RailRowBody({
   isCommissioner,
   syncPaused,
   delayed,
-  freshMinutes,
   showScoreStatus,
   swing,
   careerLine,
@@ -315,25 +314,15 @@ export function RailRowBody({
             {swing > 0 ? '+' : ''}{swing.toFixed(1)} swing
           </span>
         ) : null}
-        {m ? (
-          <span className="af-rail-row-fresh" data-stale={m.source === 'history_fallback' || (freshMinutes != null && freshMinutes > 10) ? 'true' : undefined}>
-            {m.source === 'history_fallback'
-              ? language === 'es' ? 'última importación' : 'last import'
-              : freshMinutes == null
-                ? language === 'es' ? 'antigüedad desconocida' : 'sync age unknown'
-                : freshMinutes < 1 ? (language === 'es' ? 'ahora' : 'now') : `${freshMinutes}m`}
-          </span>
-        ) : null}
       </span>
       {/* On the Career screen only: your finished-season record and titles in this league. */}
       {careerLine ? <span className="af-rail-row-career">{careerLine}</span> : null}
-      {platform.toLowerCase() === 'sleeper' && showScoreStatus ? (
-        <span className="af-rail-score-status" data-delayed={!syncPaused && delayed || undefined}>
-          {language === 'es'
-            ? syncPaused ? 'Sincronización de la cuenta en pausa' : delayed ? 'Actualización de marcadores con retraso' : live ? `Marcadores S${live.week} actualizados ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Actualizando marcadores...'
-            : syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
-        </span>
-      ) : null}
+      <span className="af-rail-row-meta">
+        {!badges ? <span>{['manual', 'allfantasy'].includes(platform.toLowerCase()) ? 'AllFantasy' : platform}</span> : null}
+        {m?.week ? <span>{language === 'es' ? 'Semana' : 'Week'} {m.week}</span> : null}
+        {showScoreStatus && (syncPaused || delayed) ? <span className="af-rail-delayed">{syncPaused ? (language === 'es' ? 'Sincronización en pausa' : 'Sync paused') : (language === 'es' ? 'Actualizaciones retrasadas' : 'Updates delayed')}</span> : null}
+        {!delayed && m?.source === 'history_fallback' ? <span>{language === 'es' ? 'Último resultado' : 'Last result'}</span> : null}
+      </span>
       {m ? (
         <span className="af-rail-row-line">
           <span className="af-rail-row-labels" aria-hidden>
@@ -386,10 +375,10 @@ export function RailRowBody({
             {String(platform).toLowerCase() === 'espn'
               ? language === 'es'
                 ? 'ESPN no devolvió un calendario de enfrentamientos para esta liga'
-                : 'ESPN did not return a matchup schedule for this league'
+                : 'Matchup unavailable from ESPN'
               : language === 'es'
                 ? 'sin enfrentamiento directo registrado esta semana'
-                : 'no head-to-head on file this week'}
+                : 'Matchup not available yet'}
           </span>
         </span>
       )}

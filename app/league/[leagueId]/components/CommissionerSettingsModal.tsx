@@ -9,9 +9,11 @@ import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
+import { GamesLimitsSettingsPanel } from './settings/GamesLimitsSettingsPanel'
 import { TradeSettingsPanel } from './settings/TradeSettingsPanel'
 import { WaiverLeagueSettingsPanel } from './settings/WaiverLeagueSettingsPanel'
 import { RosterComplianceSettingsPanel } from './settings/RosterComplianceSettingsPanel'
+import { LineupModeSetting } from './settings/LineupModeSetting'
 import { AiLeagueSettingsPanel } from './settings/AiLeagueSettingsPanel'
 import { DraftSettingsPanel } from './settings/DraftSettingsPanel'
 import { ScheduleSettingsPanel } from './settings/ScheduleSettingsPanel'
@@ -371,7 +373,15 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'team' ? (
             <TeamSettingsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'roster' ? (
-            <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <LineupModeSetting
+                leagueId={leagueId}
+                sport={initialData.sport ?? null}
+                initialMode={initialData.lineupMode ?? null}
+                canEdit={canEdit}
+              />
+              <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            </div>
           ) : activeTab === 'scoring' ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <CommissionerScoringSettingsPanel
@@ -380,6 +390,12 @@ export function CommissionerSettingsModal({
                 sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                 canEdit={canEdit}
                 scoringConfig={payload?.scoringConfig ?? null}
+              />
+              <GamesLimitsSettingsPanel
+                sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
+                initialData={initialData}
+                canEdit={canEdit}
+                debouncedSave={debouncedSave}
               />
               <details className="border-t border-white/[0.06] bg-[#0a0f18]/40">
                 <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-[#ffb8d1]/80">
@@ -397,6 +413,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'draft' ? (
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
+              league={payload?.league ?? null}
               canEdit={canEdit}
               save={save}
               debouncedSave={debouncedSave}

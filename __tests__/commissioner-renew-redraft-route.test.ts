@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   leagueTeamCount: vi.fn(),
   rosterUpdateMany: vi.fn(),
   renew: vi.fn(),
+  nativeRenew: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: m.getServerSession }))
@@ -37,6 +38,10 @@ vi.mock('@/lib/redraft/offseason/renewRedraftLeague', async (importOriginal) => 
   ...(await importOriginal<typeof import('@/lib/redraft/offseason/renewRedraftLeague')>()),
   renewRedraftLeague: m.renew,
 }))
+vi.mock('@/lib/redraft/offseason/renewNativeRedraft', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/redraft/offseason/renewNativeRedraft')>()),
+  renewNativeRedraft: m.nativeRenew,
+}))
 
 function redraftLeague(overrides: Record<string, unknown> = {}) {
   return {
@@ -46,8 +51,8 @@ function redraftLeague(overrides: Record<string, unknown> = {}) {
     leagueVariant: 'redraft',
     platform: 'manual',
     isDynasty: false,
-    sport: 'NBA',
-    name: 'Hoops',
+    sport: 'NFL',
+    name: 'Redraft',
     scoring: 'points',
     waiverBudget: 100,
     status: 'complete',
@@ -80,6 +85,8 @@ beforeEach(() => {
   m.rosterUpdateMany.mockResolvedValue({ count: 0 })
   m.leagueUpdate.mockResolvedValue({})
   m.leagueFindUnique.mockResolvedValue(redraftLeague())
+  m.nativeRenew.mockResolvedValue({ ok: true, completedSeason: 2026, nextSeason: 2027, seasonId: 'nba-season-2', draftSessionId: 'nba-draft-2',
+    draft: { sessionId: 'nba-draft-2', orderMode: 'manual', slotOrder: [{ slot: 1, rosterId: 'R-1', displayName: 'One' }] }, alreadyRenewed: false })
   m.renew.mockResolvedValue({
     ok: true,
     sessionId: 'draft-2',
@@ -90,6 +97,48 @@ beforeEach(() => {
     rostersReset: 1,
     waiverClaimsCancelled: 2,
     tradesCancelled: 1,
+  })
+})
+
+describe('POST renew — native NBA archive-first renewal', () => {
+  beforeEach(() => m.leagueFindUnique.mockResolvedValue(redraftLeague({ sport: 'NBA' })))
+
+  it('passes the completed season and commissioner draft order to the atomic NBA engine', async () => {
+    const res = await post({ expectedSeason: 2026, draftOrder: 'manual', manualOrder: ['R-1'] })
+    expect(res.status).toBe(200)
+    expect(m.nativeRenew).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', userId: 'commish', expectedSeason: 2026,
+      draftOrder: 'manual', manualOrder: ['R-1'] }))
+    expect(await res.json()).toMatchObject({ nextSeason: 2027, draft: { sessionId: 'nba-draft-2' } })
+    expect(m.renew).not.toHaveBeenCalled()
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
+    expect(m.leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('surfaces native validation failures without a legacy roster reset', async () => {
+    const { RedraftRenewalError } = await import('@/lib/redraft/offseason/renewNativeRedraft')
+    m.nativeRenew.mockRejectedValueOnce(new RedraftRenewalError('List each team once.', 400))
+    const res = await post({ expectedSeason: 2026, draftOrder: 'manual', manualOrder: [] })
+    expect(res.status).toBe(400)
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
+    expect(m.leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('returns the receipt for a retry that still names the completed season', async () => {
+    m.leagueFindUnique.mockResolvedValue(redraftLeague({ sport: 'NBA', season: 2027, status: 'pre_draft', lifecycleState: 'pre_draft' }))
+    m.nativeRenew.mockResolvedValueOnce({ ok: true, nextSeason: 2027, seasonId: 'nba-season-2', alreadyRenewed: true })
+    const res = await post({ expectedSeason: 2026 })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ nextSeason: 2027, alreadyRenewed: true })
+    expect(m.nativeRenew).toHaveBeenCalledWith(expect.objectContaining({ expectedSeason: 2026 }))
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('does not fall back to a roster-only reset when the native season archive is unavailable', async () => {
+    const { RedraftRenewalError } = await import('@/lib/redraft/offseason/renewNativeRedraft')
+    m.nativeRenew.mockRejectedValueOnce(new RedraftRenewalError('A completed native season is required before renewal.'))
+    expect((await post({ expectedSeason: 2026 })).status).toBe(409)
+    expect(m.renew).not.toHaveBeenCalled()
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
   })
 })
 

@@ -285,14 +285,21 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
 }
 
 /** Flatten the recognised numeric fields; everything else stays in `statPayload` verbatim. */
-function normalizedMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'>): Record<string, unknown> {
+export function normalizedStatMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'> & Partial<Pick<RiGameBox, 'gameDate'>>): Record<string, unknown> {
   const stats: Record<string, number> = {}
   for (const [key, value] of Object.entries(line.raw)) {
     const n = num(value)
     if (n != null) stats[key] = n
   }
+  // NHL sends time on ice as a "mm:ss" clock (fixtures/live.NHL.json: goalies "58:05", skaters
+  // "15:26"), which `num` cannot read, so it never reached `stats` and the goalie minutes-played
+  // row could not score. Stored as decimal minutes; an unreadable clock is left out, never guessed.
+  const toi = /^(\d{1,3}):([0-5]\d)$/.exec(String(line.raw.time_on_ice ?? '').trim())
+  if (toi) stats.time_on_ice_minutes = Number(toi[1]) + Number(toi[2]) / 60
   return {
     group: line.group,
+    gameStartTimeUtc: box.gameDate?.toISOString() ?? null,
+    timeOnIce: str(line.raw.time_on_ice) ?? null,
     position: str(line.raw.position ?? line.raw.POS) ?? null,
     positionCategory: str(line.raw.position_category) ?? null,
     status: str(line.raw.status) ?? null,
@@ -382,15 +389,9 @@ export async function ingestRollingInsightsGameLogs(opts: {
 
   // One identity lookup for the whole sweep. The map is small (thousands of rows per sport) and
   // re-querying per game would dominate the run.
-  const identityByRiId = new Map<string, string>()
+  let identityByRiId: Map<string, string>
   try {
-    const rows = await prisma.playerIdentityMap.findMany({
-      where: { sport, rollingInsightsId: { not: null } },
-      select: { id: true, rollingInsightsId: true },
-    })
-    for (const r of rows) {
-      if (r.rollingInsightsId) identityByRiId.set(r.rollingInsightsId, r.id)
-    }
+    identityByRiId = await loadRiIdentityMap(sport)
   } catch (e) {
     result.errors.push(`identity map load failed: ${e instanceof Error ? e.message : String(e)}`)
     return result
@@ -429,68 +430,125 @@ export async function ingestRollingInsightsGameLogs(opts: {
       }
       result.datesFetched += 1
 
-      for (const rawGame of rows) {
-        const box = normalizeRiGameBox(rawGame)
-        if (!box || box.lines.length === 0) continue
-        result.games += 1
-        result.lines += box.lines.length
-        if (
-          box.seasonType === null &&
-          result.unrecognizedSeasonTypes.length < 10 &&
-          !result.unrecognizedSeasonTypes.includes(box.seasonTypeLabel ?? '(missing)')
-        ) {
-          result.unrecognizedSeasonTypes.push(box.seasonTypeLabel ?? '(missing)')
-        }
-
-        for (const line of box.lines) {
-          const playerId = identityByRiId.get(line.providerPlayerId)
-          if (!playerId) {
-            result.unresolved += 1
-            continue
-          }
-
-          // The sub-box name is part of the game key: an MLB two-way player appears in BOTH
-          // `batting` and `pitching` for the same game, and a bare game id would make the second
-          // write overwrite the first.
-          const gameId = line.group === 'all' ? box.providerGameId : `${box.providerGameId}:${line.group}`
-
-          const data = {
-            providerPlayerId: line.providerPlayerId,
-            providerGameId: box.providerGameId,
-            season: box.season ?? fallbackSeason,
-            weekOrRound: box.weekOrRound,
-            statPayload: toPrismaJsonInput(line.raw),
-            normalizedStatMap: toPrismaJsonInput(normalizedMapFor(line, box)),
-            source: SOURCE,
-            confidence,
-            team: line.team,
-            opponent: line.opponent,
-            // The DAY, not the instant: `game_date` is a DATE, and the instant's UTC date is
-            // tomorrow for every US night game (easternGameDay.ts has the measured damage).
-            gameDate: box.gameDay,
-            fetchedAt: now,
-          }
-
-          try {
-            await prisma.playerGameStat.upsert({
-              where: { playerId_sportType_gameId: { playerId, sportType: sport, gameId } },
-              update: data,
-              create: { playerId, sportType: sport, gameId, ...data },
-            })
-            result.written += 1
-          } catch (e) {
-            if (result.errors.length < 10) {
-              result.errors.push(
-                `upsert ${playerId}/${gameId}: ${e instanceof Error ? e.message : String(e)}`,
-              )
-            }
-          }
-        }
-      }
+      await writeRiGameRows({ sport, rows, identityByRiId, now, confidence, fallbackSeason, result })
     }
   }
 
   return result
+}
+
+/**
+ * Write the player box lines of already-fetched `/live` game rows into `player_game_stats`.
+ *
+ * Extracted from {@link ingestRollingInsightsGameLogs} so the in-game tick
+ * (`lib/live/dailySportLiveTick.ts`) writes through the SAME parser and the SAME row shape as the
+ * daily sweep — one writer on two schedules, not a second implementation of the rule.
+ *
+ * `shouldWriteLine` lets a caller skip a line it already knows is unchanged (the live tick hashes
+ * every line). Omitted, every resolvable line is written, which is the sweep's behaviour.
+ */
+export async function writeRiGameRows(opts: {
+  sport: string
+  rows: unknown[]
+  identityByRiId: ReadonlyMap<string, string>
+  now: Date
+  confidence?: number
+  fallbackSeason?: number
+  result: Pick<GameLogIngestResult, 'games' | 'lines' | 'written' | 'unresolved' | 'unrecognizedSeasonTypes' | 'errors'>
+  persistSchedule?: boolean
+  shouldWriteLine?: (key: { playerId: string; gameId: string }, line: RiBoxLine) => boolean
+}): Promise<void> {
+  const { sport, rows, now, result, identityByRiId } = opts
+  const confidence = opts.confidence ?? FIELD_CONFIDENCE[getRollingInsightsSportCode(sport)] ?? 0.1
+  const fallbackSeason =
+    opts.fallbackSeason ?? (now.getUTCMonth() + 1 >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1)
+
+  for (const rawGame of rows) {
+    const box = normalizeRiGameBox(rawGame)
+    if (!box) continue
+    result.games += 1
+    result.lines += box.lines.length
+    if (
+      box.seasonType === null &&
+      result.unrecognizedSeasonTypes.length < 10 &&
+      !result.unrecognizedSeasonTypes.includes(box.seasonTypeLabel ?? '(missing)')
+    ) {
+      result.unrecognizedSeasonTypes.push(box.seasonTypeLabel ?? '(missing)')
+    }
+
+    if (opts.persistSchedule && box.gameDate && box.seasonType) {
+      const full = asRecord(asRecord(rawGame)?.full_box)
+      const home = asRecord(full?.home_team), away = asRecord(full?.away_team)
+      const homeTeam = str(home?.abbrv), awayTeam = str(away?.abbrv)
+      if (homeTeam && awayTeam) {
+        const data = { homeTeam, awayTeam, homeScore: num(home?.score), awayScore: num(away?.score),
+          status: box.status, startTime: box.gameDate, season: box.season ?? fallbackSeason,
+          seasonType: box.seasonType, fetchedAt: now, expiresAt: new Date(now.getTime() + 120_000) }
+        try {
+          await prisma.sportsGame.upsert({ where: { sport_externalId_source: { sport, externalId: box.providerGameId, source: 'rolling_insights' } },
+            create: { sport, externalId: box.providerGameId, source: 'rolling_insights', ...data }, update: data })
+        } catch { result.errors.push('LIVE_GAME_STATE_WRITE_FAILED') }
+      }
+    }
+    for (const line of box.lines) {
+      const playerId = identityByRiId.get(line.providerPlayerId)
+      if (!playerId) {
+        result.unresolved += 1
+        continue
+      }
+
+      // The sub-box name is part of the game key: an MLB two-way player appears in BOTH
+      // `batting` and `pitching` for the same game, and a bare game id would make the second
+      // write overwrite the first.
+      const gameId = line.group === 'all' ? box.providerGameId : `${box.providerGameId}:${line.group}`
+      if (opts.shouldWriteLine && !opts.shouldWriteLine({ playerId, gameId }, line)) continue
+
+      const data = {
+        providerPlayerId: line.providerPlayerId,
+        providerGameId: box.providerGameId,
+        season: box.season ?? fallbackSeason,
+        weekOrRound: box.weekOrRound,
+        statPayload: toPrismaJsonInput(line.raw),
+        normalizedStatMap: toPrismaJsonInput(normalizedStatMapFor(line, box)),
+        source: SOURCE,
+        confidence,
+        team: line.team,
+        opponent: line.opponent,
+        // The DAY, not the instant: `game_date` is a DATE, and the instant's UTC date is
+        // tomorrow for every US night game (easternGameDay.ts has the measured damage).
+        gameDate: box.gameDay,
+        fetchedAt: now,
+      }
+
+      try {
+        await prisma.playerGameStat.upsert({
+          where: { playerId_sportType_gameId: { playerId, sportType: sport, gameId } },
+          update: data,
+          create: { playerId, sportType: sport, gameId, ...data },
+        })
+        result.written += 1
+      } catch (e) {
+        if (result.errors.length < 10) {
+          result.errors.push(
+            `upsert ${playerId}/${gameId}: ${e instanceof Error ? e.message : String(e)}`,
+          )
+        }
+      }
+    }
+  }
+}
+
+/** `rollingInsightsId` -> `PlayerIdentityMap.id` for one sport. Throws on a read failure. */
+export async function loadRiIdentityMap(sport: string): Promise<Map<string, string>> {
+  const identityByRiId = new Map<string, string>()
+  const rows = await prisma.playerIdentityMap.findMany({
+    where: { sport, rollingInsightsId: { not: null } },
+    select: { id: true, rollingInsightsId: true },
+  })
+  for (const r of rows) {
+    if (r.rollingInsightsId) identityByRiId.set(r.rollingInsightsId, r.id)
+  }
+  return identityByRiId
 }
 
 /**

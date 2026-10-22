@@ -1,3 +1,4 @@
+import { gameAlertDeadline, pushRetentionSeconds } from "@/lib/notifications/gameAlertFreshness"
 /**
  * Push notification service — store subscriptions, send via web-push (VAPID).
  */
@@ -14,9 +15,17 @@ let vapidConfigured = false
 /** Conversation alerts: a new one on the same tag should buzz, not silently replace. */
 const CHAT_PUSH_TYPES: ReadonlySet<string> = new Set(["direct_message", "huddle_message", "mention", "league_chat_message"])
 
+/**
+ * Live game alerts share ONE tag per game so they replace rather than stack (gamePushTag,
+ * bigPlayNotifier). A replaced touchdown must still buzz, or grouping would silence every play
+ * after the first.
+ */
+const GROUPED_GAME_TAG = /^(game|live-play):/
+
 /** Whether a web push should alert again when it replaces a notification with the same tag. PURE. */
 export function shouldRenotify(type: string | null | undefined, tag: string | null | undefined): boolean {
-  return Boolean(tag) && CHAT_PUSH_TYPES.has(String(type))
+  if (!tag) return false
+  return CHAT_PUSH_TYPES.has(String(type)) || GROUPED_GAME_TAG.test(tag)
 }
 
 function ensureVapid() {
@@ -138,6 +147,7 @@ async function sendToSubscription(
      */
     ...(shouldRenotify(payload.type, payload.tag) ? { renotify: true } : {}),
     type: payload.type ?? "notification",
+    expiresAt: payload.expiresAt,
     leagueId: payload.leagueId ?? null,
     // public/sw.js already passes `payload.image` to showNotification; Android shows it large.
     image: payload.imageUrl ?? undefined,
@@ -154,7 +164,7 @@ async function sendToSubscription(
   }
 
   try {
-    await webpush.sendNotification(pushSubscription, payloadStr, { urgency: 'high', timeout: 8000, TTL: /^(game_(scoring_play|big_play|close)|live_score)/.test(payload.type ?? '') ? 300 : 86400 })
+    await webpush.sendNotification(pushSubscription, payloadStr, { urgency: 'high', timeout: 8000, TTL: pushRetentionSeconds(payload.type) })
     return { ok: true }
   } catch (e: unknown) {
     const err = e as { statusCode?: number; body?: string }
@@ -177,8 +187,11 @@ export async function sendPushToUser(
   const all = await getPushSubscriptions(userId, options?.strictSubscriptionRead)
   if (all.length === 0) return []
   // Resolved once here so the APNs and web-push halves see the same, already-vetted picture.
+  const deadline = gameAlertDeadline(input.type, new Date(), input.expiresAt)
+  if (deadline !== undefined && deadline <= Date.now()) return []
   const payload: PushPayload = {
     ...input,
+    expiresAt: deadline === undefined ? undefined : new Date(deadline).toISOString(),
     imageUrl: absolutePushImageUrl(input.imageUrl),
     iconUrl: absolutePushImageUrl(input.iconUrl),
   }

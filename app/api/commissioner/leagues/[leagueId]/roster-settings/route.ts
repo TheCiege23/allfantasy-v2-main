@@ -14,7 +14,18 @@ import {
 } from '@/lib/roster-engine'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  filterRosterTemplatesForProspectPolicy,
+  findAddedProspectStashSlots,
+  isProspectStashSlotKey,
+  sportSupportsProspectStash,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,11 +75,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
     getLeagueRosterConfig(leagueId),
   ])
 
+  // NHL / MLB: do not OFFER taxi / prospect slots. A slot this league already has stays listed, so an
+  // existing league's editor still renders and can reduce it.
+  const currentSlots = config.slots ?? {}
+  const slotDefs = sportSupportsProspectStash(league.sport)
+    ? service.getSlots()
+    : service.getSlots().filter((def) => !isProspectStashSlotKey(def.key) || Number(currentSlots[def.key] ?? 0) > 0)
+
   return NextResponse.json({
     config,
     unifiedConfig,
-    slotDefs: service.getSlots(),
-    templates: service.getTemplates(),
+    slotDefs,
+    templates: filterRosterTemplatesForProspectPolicy(league.sport, service.getTemplates()),
     defaultTemplateKey: defaultTemplate.key,
     isCommissioner: permission.isCommissioner,
     roleAwareReadOnlyMode: permission.readOnly,
@@ -91,6 +109,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   }
 
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const locked = await settingsLockedResponse(leagueId, 'rosters')
+  if (locked) return locked
 
   const body = await req.json().catch(() => ({}))
   const slots = body.slots as Record<string, number> | undefined
@@ -100,8 +120,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
 
   const oldConfig = await getLeagueRosterConfig(leagueId)
+  // NHL / MLB have no prospect pool: refuse adding or growing TAXI / PROSPECT / RIGHTS / MINORS.
+  // Keeping or lowering what the league already has is allowed.
+  const previousSlots = (await registry.getService(league.sport).getConfig(leagueId)).slots ?? {}
+  const addedStash = findAddedProspectStashSlots(league.sport, slots, previousSlots)
+  if (addedStash.length > 0) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE, slots: addedStash },
+      { status: 400 },
+    )
+  }
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
+  // Rounds = draftable roster spots, so the draft follows the roster it was just given.
+  const draftRounds = await applyRosterTemplateChange(leagueId, {
+    keepManualOverride: await hasAfCommissionerSub(session.user.id),
+    logTag: 'roster-settings PUT',
+  })
   const config = await registry.getService(league.sport).getConfig(leagueId)
   const unifiedConfig = await getLeagueRosterConfig(leagueId)
 
@@ -132,5 +167,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   } catch { /* non-fatal */ }
 
   await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
-  return NextResponse.json({ ok: true, config, unifiedConfig })
+  return NextResponse.json({ ok: true, config, unifiedConfig, draftRounds })
+}
+
+/** AF Commissioner entitlement — the same check the draft settings route uses for a manual round count. */
+async function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  const r = await new EntitlementResolver()
+    .resolveForUser(userId, 'commissioner_ai_tools')
+    .catch(() => ({ hasAccess: false }))
+  return Boolean(r.hasAccess)
 }

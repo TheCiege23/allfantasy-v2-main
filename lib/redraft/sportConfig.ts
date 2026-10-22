@@ -5,6 +5,16 @@
  */
 import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 import { getCanonicalRedraftRosterSlotOrder, redraftTeamDefenseEnabled } from '@/lib/league-concepts/redraftDefaults'
+import {
+  DAILY_REDRAFT_ROSTER_LAYOUTS,
+  DAILY_REDRAFT_WAIVER_PROCESSING_DAYS,
+  dailyRedraftDraftableRosterSize,
+  dailyRedraftFlexDefinitions,
+  dailyRedraftReserveCount,
+  dailyRedraftStarterSlotOrder,
+  dailyRedraftTotalRosterSize,
+  type DailyRedraftSport,
+} from '@/lib/sportConfig/dailySportRedraftRoster'
 
 export type RedraftSportConfig = {
   sport: string
@@ -72,6 +82,27 @@ function redraftStarterSlots(sport: 'NFL' | 'NCAAF'): string[] {
   })
 }
 
+/**
+ * NBA / MLB / NHL roster fields come from the one redraft layout (lib/sportConfig/dailySportRedraftRoster.ts):
+ * this config is what lineup validation falls back to when a league stores no layout, so it must be
+ * the roster a new league is created and bootstrapped with. `extraFlexPositions` are eligibility
+ * aliases for non-flex slots (e.g. MLB `OF` also takes LF/CF/RF).
+ */
+function dailyRosterFields(sport: DailyRedraftSport, extraFlexPositions: Record<string, string[]> = {}) {
+  const layout = DAILY_REDRAFT_ROSTER_LAYOUTS[sport]
+  const flexPositions: Record<string, string[]> = { ...extraFlexPositions }
+  for (const flex of dailyRedraftFlexDefinitions(layout)) flexPositions[flex.slotName] = flex.allowedPositions
+  return {
+    starterSlots: dailyRedraftStarterSlotOrder(layout),
+    benchSlots: layout.benchSlots,
+    irSlots: dailyRedraftReserveCount(layout),
+    totalRosterSize: dailyRedraftTotalRosterSize(layout),
+    defaultDraftRounds: dailyRedraftDraftableRosterSize(layout),
+    defaultWaiverProcessDays: [...DAILY_REDRAFT_WAIVER_PROCESSING_DAYS],
+    flexPositions,
+  }
+}
+
 export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
   nfl: {
     sport: 'nfl',
@@ -114,11 +145,8 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
   },
   nba: {
     sport: 'nba',
+    ...dailyRosterFields('NBA'),
     label: 'NBA',
-    starterSlots: ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL', 'UTIL'],
-    benchSlots: 4,
-    irSlots: 2,
-    totalRosterSize: 15,
     lineupFrequency: 'daily',
     defaultScoringFormat: 'points',
     supportedScoringFormats: ['points', 'categories_9cat', 'categories_8cat'],
@@ -127,11 +155,9 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.NBA.playoffTeams,
     supportedPlayoffSizes: [4, 6, 8],
     defaultTeamCount: 12,
-    defaultDraftRounds: 13,
     defaultDraftTimerSeconds: 60,
     defaultWaiverType: 'faab',
     defaultFaabBudget: 100,
-    defaultWaiverProcessDays: [1], // Monday
     defaultWaiverProcessTimeUtc: '10:00',
     defaultTradeDeadlineWeek: 16,
     tradeReviewPeriodHours: 24,
@@ -143,19 +169,11 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
       'All-Star break (mid-February) reduces slate for ~1 week',
       'Back-to-backs affect player availability — bench depth critical',
     ],
-    flexPositions: {
-      G: ['PG', 'SG'],
-      F: ['SF', 'PF'],
-      UTIL: ['PG', 'SG', 'SF', 'PF', 'C'],
-    },
   },
   mlb: {
     sport: 'mlb',
+    ...dailyRosterFields('MLB', { OF: ['OF', 'LF', 'CF', 'RF'] }),
     label: 'MLB',
-    starterSlots: ['C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'UTIL', 'SP', 'SP', 'RP', 'RP'],
-    benchSlots: 5,
-    irSlots: 3,
-    totalRosterSize: 21,
     lineupFrequency: 'daily',
     defaultScoringFormat: 'points',
     supportedScoringFormats: ['points', 'categories_5x5', 'categories_6x6'],
@@ -164,11 +182,9 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.MLB.playoffTeams,
     supportedPlayoffSizes: [4, 6, 8],
     defaultTeamCount: 12,
-    defaultDraftRounds: 20,
     defaultDraftTimerSeconds: 60,
     defaultWaiverType: 'faab',
     defaultFaabBudget: 100,
-    defaultWaiverProcessDays: [1], // Monday
     defaultWaiverProcessTimeUtc: '10:00',
     defaultTradeDeadlineWeek: 17,
     tradeReviewPeriodHours: 24,
@@ -181,21 +197,11 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
       'Doubleheaders can spike daily scoring significantly',
       'September callups expand available player pool',
     ],
-    flexPositions: {
-        UTIL: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'],
-      P: ['SP', 'RP', 'P'],
-      OF: ['OF', 'LF', 'CF', 'RF'],
-      CI: ['1B', '3B'],
-      MI: ['2B', 'SS'],
-    },
   },
   nhl: {
     sport: 'nhl',
+    ...dailyRosterFields('NHL'),
     label: 'NHL',
-    starterSlots: ['C', 'C', 'LW', 'RW', 'D', 'D', 'UTIL', 'G', 'G'],
-    benchSlots: 4,
-    irSlots: 2,
-    totalRosterSize: 15,
     lineupFrequency: 'daily',
     defaultScoringFormat: 'points',
     supportedScoringFormats: ['points', 'categories'],
@@ -204,11 +210,9 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.NHL.playoffTeams,
     supportedPlayoffSizes: [4, 6, 8],
     defaultTeamCount: 12,
-    defaultDraftRounds: 14,
     defaultDraftTimerSeconds: 60,
     defaultWaiverType: 'faab',
     defaultFaabBudget: 100,
-    defaultWaiverProcessDays: [1],
     defaultWaiverProcessTimeUtc: '10:00',
     defaultTradeDeadlineWeek: 17,
     tradeReviewPeriodHours: 24,
@@ -219,9 +223,6 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
       'Overtime and shootout scoring counts',
       'Trade deadline shifts roster values significantly',
     ],
-    flexPositions: {
-      UTIL: ['C', 'LW', 'RW', 'D'],
-    },
   },
   ncaaf: {
     sport: 'ncaaf',

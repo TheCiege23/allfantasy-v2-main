@@ -702,12 +702,14 @@ export function nudgeText(nudge: TrendNudge, language: string): string {
  * shellCopy's `leagueConceptText`.
  */
 export function leagueFormatText(format: string, language: string): string {
-  if (!es(language)) return format
-  const title = format
+  // The stored id stays `guillotine`; the format is called "Guilly" everywhere it is shown.
+  const shown = format.replace(/guillotine/gi, 'Guilly')
+  if (!es(language)) return shown
+  const title = shown
     .split(/[_\s]+/)
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
   const translated = leagueConceptText(title, 'es')
-  return translated === title ? format : translated.toLowerCase()
+  return translated === title ? shown : translated.toLowerCase()
 }

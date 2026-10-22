@@ -1,3 +1,4 @@
+import { gameAlertDeadline } from "./gameAlertFreshness"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
 /**
  * NOTIFICATION OUTBOX RELAY — the delivery half of `notification_outbox`.
@@ -42,6 +43,7 @@ import { sendTemplatedEmail } from "@/lib/resend-client"
 import { getSettingsProfile } from "@/lib/user-settings"
 import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
 import { decidePush } from "./pushGate"
+import { quietHoursSuppression } from "./quietHours"
 import { isCategoryAllowedForLeague } from "./leagueOverrides"
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { pushTagFor } from "./pushTag"
@@ -82,6 +84,7 @@ type OutboxRow = {
   attemptCount: number
   maxAttempts: number
   metadata: unknown
+  createdAt: Date
 }
 
 function emptyChannelTally() {
@@ -128,7 +131,8 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
   if (fatigue.suppress) return { outcome: "skipped", error: fatigue.reason }
 
   const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
-  if (typeof metadata.expiresAt === 'string' && Date.parse(metadata.expiresAt) <= Date.now()) {
+  const deadline = gameAlertDeadline(row.eventType, row.createdAt, metadata.expiresAt)
+  if (deadline !== undefined && deadline <= Date.now()) {
     return { outcome: 'skipped', error: 'notification expired before delivery' }
   }
   const category = metadata.notificationCategory as NotificationCategoryId | undefined
@@ -141,6 +145,8 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
     if (!prefs.globalEnabled || !cat?.enabled || !isCategoryAllowedForLeague(prefs, category, row.leagueId)) {
       return { outcome: 'skipped', error: 'notifications muted' }
     }
+    const quiet = quietHoursSuppression(prefs.quietHours, new Date(), metadata.severity === 'high' ? 'high' : 'medium', profile.timezone)
+    if (quiet.push) return { outcome: 'skipped', error: 'quiet hours; retained in app' }
     if (row.channel === 'email' && (!cat.email || !profile.email || isUndeliverableEmailDomain(profile.email) || emailWithheldByUnsubscribe(profile.emailSubscription, category))) {
       return { outcome: 'skipped', error: 'email unavailable or muted' }
     }
@@ -149,7 +155,7 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
         category, leagueId: row.leagueId, severity: metadata.severity === 'high' ? 'high' : 'medium', fallbackTimezone: profile.timezone,
       })
       if (!decision.allowed) return decision.reason === 'quiet_hours'
-        ? { outcome: 'retry', error: 'quiet hours' } : { outcome: 'skipped', error: decision.reason }
+        ? { outcome: 'skipped', error: 'quiet hours; retained in app' } : { outcome: 'skipped', error: decision.reason }
     }
   }
 
@@ -180,6 +186,7 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
         body: row.body,
         href: actionHrefFrom(row.metadata),
         type: row.eventType,
+        expiresAt: deadline === undefined ? undefined : new Date(deadline).toISOString(),
         leagueId: row.leagueId,
         tag: pushTagFor(category ?? row.eventType, metadata),
         imageUrl: typeof metadata.imageUrl === "string" ? metadata.imageUrl : null,
@@ -322,6 +329,7 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
       attemptCount: true,
       maxAttempts: true,
       metadata: true,
+      createdAt: true,
     },
   })) as OutboxRow[]
 

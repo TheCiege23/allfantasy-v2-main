@@ -85,10 +85,10 @@ export function WarRoomPopup({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('pointerdown', onDocClick)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('pointerdown', onDocClick)
       document.removeEventListener('keydown', onKey)
     }
   }, [open])
@@ -97,8 +97,8 @@ export function WarRoomPopup({
 
   const triggerCorner =
     triggerPosition === 'bottom-left'
-      ? 'bottom-4 left-4'
-      : 'bottom-4 right-4'
+      ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-4 md:bottom-4'
+      : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-4 md:bottom-4 md:left-auto md:right-4'
   const panelCorner =
     triggerPosition === 'bottom-left'
       ? 'sm:bottom-20 sm:left-4 sm:right-auto'
@@ -146,7 +146,7 @@ export function WarRoomPopup({
           role="dialog"
           aria-label={triggerLabel}
           data-testid={testIdBase}
-          className={`fixed inset-x-0 bottom-0 z-[55] flex h-[80vh] flex-col overflow-hidden border-t border-cyan-400/20 bg-[linear-gradient(180deg,#0a1228_0%,#060f20_100%)] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/60 sm:inset-x-auto sm:pb-0 sm:h-[min(560px,80vh)] sm:w-[min(380px,calc(100vw-2rem))] sm:rounded-xl sm:border ${panelCorner}`}
+          className={`fixed inset-x-0 bottom-0 z-[55] flex h-[80dvh] flex-col overflow-hidden border-t border-cyan-400/20 bg-[linear-gradient(180deg,#0a1228_0%,#060f20_100%)] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/60 sm:inset-x-auto sm:pb-0 sm:h-[min(560px,80dvh)] sm:w-[min(380px,calc(100vw-2rem))] sm:rounded-xl sm:border ${panelCorner}`}
         >
           <header className="flex shrink-0 items-center justify-between gap-2 border-b border-cyan-400/15 bg-[linear-gradient(90deg,rgba(8,18,40,0.95),rgba(6,14,30,0.92))] px-3 py-2">
             <div className="flex items-center gap-2">
@@ -165,7 +165,7 @@ export function WarRoomPopup({
               onClick={() => setOpen(false)}
               aria-label={`Close ${triggerLabel}`}
               data-testid={`${testIdBase}-close`}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-black/30 text-white/70 hover:border-white/25 hover:text-white"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/30 text-white/70 hover:border-white/25 hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>

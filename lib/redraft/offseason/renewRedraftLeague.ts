@@ -198,7 +198,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 /** Last season's final standings as draft-roster ids, worst first, champion last. */
-async function worstToFirstDraftRosterIds(
+export async function worstToFirstDraftRosterIds(
   leagueId: string,
   outgoingSeasonId: string,
   draftRosters: Array<{ id: string; platformUserId: string | null }>,

@@ -13,6 +13,7 @@ import {
   type ShareMomentRecord,
   type ShareMomentType,
 } from './types'
+import { createSurvivorChatMessage } from '../survivorChatBridge'
 
 /**
  * Persistence for Survivor share moments. Every read degrades to "no moments" when the table has
@@ -208,7 +209,7 @@ export async function postShareMomentToLeagueChat(moment: ShareMomentRecord, sha
   if (!channel) return { ok: false, error: 'League chat is not ready yet.' }
   const content = buildShareCardContent(moment.type, moment.week, moment.payload)
   const pageUrl = absoluteSiteUrl(shareMomentPagePath(moment))
-  await prisma.survivorChatMessage.create({
+  await createSurvivorChatMessage(prisma, {
     data: {
       leagueId: moment.leagueId,
       channelId: channel.id,

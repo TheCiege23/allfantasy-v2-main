@@ -9,13 +9,7 @@ import { expandStarterSlots } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupLockService'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
-import { getRedraftDefaultContract } from '@/lib/league-concepts/redraftDefaults'
-import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
-import {
-  allowedPositionsForCanonicalSlot,
-  isFlexibleCanonicalSlot,
-  readSavedRosterLayout,
-} from '@/lib/redraft-core-contract/savedRosterLayout'
+import { expandLockedRedraftStarterSlots, resolveLockedRedraftStarterLayout } from '@/lib/league/lineupStarterSlots'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
@@ -65,29 +59,6 @@ function teamNameFromMetadata(metadata: SleeperUser['metadata']): string | null 
   if (!metadata || typeof metadata !== 'object') return null
   const tn = (metadata as { team_name?: string }).team_name
   return typeof tn === 'string' ? tn : null
-}
-
-function expandLockedRedraftStarterSlots(order: string[]): ReturnType<typeof expandStarterSlots> {
-  const label = (token: string) => (token === 'FLX' ? 'FLEX' : token === 'SF' ? 'SUPERFLEX' : token)
-  const totals = order.reduce<Record<string, number>>((acc, raw) => {
-    const key = label(raw)
-    acc[key] = (acc[key] ?? 0) + 1
-    return acc
-  }, {})
-
-  const seen: Record<string, number> = {}
-
-  return order.map((raw, index) => {
-    const key = label(raw)
-    seen[key] = (seen[key] ?? 0) + 1
-
-    return {
-      index,
-      label: totals[key] > 1 ? `${key}${seen[key]}` : key,
-      allowedPositions: allowedPositionsForCanonicalSlot(raw),
-      isFlexible: isFlexibleCanonicalSlot(raw),
-    }
-  })
 }
 
 export async function GET(req: NextRequest) {
@@ -212,7 +183,8 @@ export async function GET(req: NextRequest) {
       // Template hydration failure should not block base roster rendering.
     }
 
-    const useLockedFootballRedraftSlots = isNflRedraftCoreDashboardLeague({
+    // The same resolver the lineup engine validates slot positions against (lib/league/lineupStarterSlots.ts).
+    const lockedRedraftLayout = resolveLockedRedraftStarterLayout({
       sport: leagueSport,
       leagueType: league.leagueType,
       isDynasty: league.isDynasty,
@@ -220,55 +192,23 @@ export async function GET(req: NextRequest) {
       bestBallMode: league.bestBallMode,
       guillotineMode: league.guillotineMode,
       keeperPhaseActive: league.keeperPhaseActive,
+      settings: league.settings,
     })
-
-    if (useLockedFootballRedraftSlots) {
-      const settingsRecord =
-        league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
-          ? (league.settings as Record<string, unknown>)
-          : {}
-
-      const contract = getRedraftDefaultContract({
-        sport: leagueSport,
-        draftType: settingsRecord.requested_draft_type ?? settingsRecord.draft_type ?? 'snake',
-        scoringPresetId:
-          typeof settingsRecord.scoring_preset_id === 'string'
-            ? settingsRecord.scoring_preset_id
-            : null,
-      })
-
-      /*
-       * 🛑 THE LEAGUE'S OWN SAVED LAYOUT WINS (owner, 2026-10-20). This used to render the default
-       * contract's lineup for every redraft-core league, so a league saved with QB, RB, WR, WR, TE, DEF
-       * showed empty FLEX / K slots once the defaults carried them. The defaults apply only to a league
-       * with no saved layout — the same test the draft-page repair uses (savedRosterLayout).
-       */
-      const layoutSport = String(leagueSport).toUpperCase() === 'NCAAF' ? 'NCAAF' : 'NFL'
-      const saved = readSavedRosterLayout(layoutSport, settingsRecord)
-
-      if (saved && saved.starterOrder.length > 0) {
-        starterSlots = expandLockedRedraftStarterSlots(saved.starterOrder)
-        slotLimits = {
-          starters: starterSlots.length,
-          bench: saved.benchSlots ?? contract?.rosterTemplate.benchSlots ?? 0,
-          ir: saved.irSlots ?? contract?.rosterTemplate.irSlots ?? 0,
-          taxi: 0,
-          devy: 0,
-        }
-        starterAllowedPositions = [...new Set(starterSlots.flatMap((slot) => slot.allowedPositions))]
-        rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-saved`
-      } else if (contract) {
-        starterSlots = expandLockedRedraftStarterSlots(contract.rosterTemplate.starterSlotOrder)
-        slotLimits = {
-          starters: starterSlots.length,
-          bench: contract.rosterTemplate.benchSlots,
-          ir: contract.rosterTemplate.irSlots,
-          taxi: 0,
-          devy: 0,
-        }
-        starterAllowedPositions = contract.rosterTemplate.draftablePlayerPositions
-        rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-default`
+    /*
+     * 🛑 THE LEAGUE'S OWN SAVED LAYOUT WINS (owner, 2026-10-20) — resolved in the shared module, so this
+     * screen and the lineup engine's per-slot validation (slotIndex) read the SAME list.
+     */
+    if (lockedRedraftLayout) {
+      starterSlots = expandLockedRedraftStarterSlots(lockedRedraftLayout.starterOrder)
+      slotLimits = {
+        starters: starterSlots.length,
+        bench: lockedRedraftLayout.benchSlots,
+        ir: lockedRedraftLayout.irSlots,
+        taxi: 0,
+        devy: 0,
       }
+      starterAllowedPositions = lockedRedraftLayout.starterAllowedPositions
+      rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-${lockedRedraftLayout.source}`
     }
 const leagueWeek = weekFromLeagueSettings(league.settings)
     const lockCtx = await resolveFullLineupLockContext({

@@ -152,7 +152,7 @@ function input(canEdit: boolean): BuildSettingsHomeInput {
     },
     teams,
     canEdit,
-    formatLabel: 'Guillotine',
+    formatLabel: 'Guilly',
     scoringLabel: null,
     rosterSlots: { UTIL: 4, BN: 4 },
     draft: null,
@@ -192,6 +192,7 @@ describe('League AI is one of the settings now (it was only in the old control c
     expect(commish?.rows.map((r) => [r.id, r.target])).toEqual([
       ['league-ai', 'ai'],
       ['commissioner-tools', 'commissioner-tools'],
+      ['settings-lock', 'settings-lock'],
       ['score-adjustments', 'score-adjustments'],
     ])
     expect(buildLeagueSettingsHome(input(false)).some((s) => s.id === 'commissioner')).toBe(false)

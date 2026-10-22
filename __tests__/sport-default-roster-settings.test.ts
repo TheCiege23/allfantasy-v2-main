@@ -38,7 +38,7 @@ describe('Default Roster Settings by Sport', () => {
       }
 
       if (sport === 'MLB') {
-        for (const slot of ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'UTIL']) {
+        for (const slot of ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'CI', 'MI', 'OF', 'UTIL']) {
           expect(slotNames.includes(slot)).toBe(true)
         }
       }

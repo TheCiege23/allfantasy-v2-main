@@ -12,6 +12,7 @@ import { ourIdOrSleeperIdWhere, playerRowKeys } from "@/lib/player-identity/exte
 import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
+import { loadNativeLineupCards, type LineupCard } from "./nativeLineupCards"
 import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS } from "./sensitivity"
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
@@ -221,6 +222,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
     include: {
       homeRoster: true,
       awayRoster: true,
+      season: { select: { season: true } },
     },
   })
 
@@ -233,6 +235,18 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
   const resolvableIds = !isForeignIdSpace(league?.platform)
   const playoffWeek = league?.playoffStartWeek ?? 15
   const weeksUntilPlayoffs = Math.max(0, playoffWeek - weekNumber)
+
+  /*
+   * The week's real lineup cards (lib/integrity/nativeLineupCards.ts). `lineupSnapshots` holds team
+   * totals, never a per-player card, so without these the scan found nothing to read and flagged
+   * nobody. An array-shaped snapshot is still honoured first, for any writer that adds one.
+   */
+  const seasonYear = matchups.map((m) => m.season?.season).find((y): y is number => typeof y === "number")
+  const rosterIds = [...new Set(matchups.flatMap((m) => [m.homeRosterId, m.awayRosterId]).filter((id): id is string => typeof id === "string" && id.length > 0))]
+  const cards =
+    seasonYear != null && rosterIds.length > 0
+      ? await loadNativeLineupCards(prisma, { redraftRosterIds: rosterIds, season: seasonYear, week: weekNumber })
+      : new Map<string, LineupCard>()
 
   const flags: TankingScanResult["flags"] = []
 
@@ -257,7 +271,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
        * worst output it can produce. A roster we have no lineup card for gets no
        * claim made about it.
        */
-      const block = parsed.find((p) => p.rosterId === roster.id)
+      const block = parsed.find((p) => p.rosterId === roster.id) ?? cards.get(roster.id)
       if (!block) continue
       const suspicious: TankingEvidence["illegalOrSuspiciousStarters"] = []
       let pointsLeft = 0
@@ -266,15 +280,17 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
         for (const st of block.starters) {
           const stProj = st.proj ?? 0
           const status = (st.status ?? "").toUpperCase()
+          // A starter whose club had no game that week cannot score — the plainest illegal lineup.
+          const onBye = "byeWeek" in st && typeof st.byeWeek === "number" && st.byeWeek === weekNumber
           const out =
-            status.includes("OUT") || status.includes("IR") || status === "DOUBTFUL" || status === "D"
+            onBye || status.includes("OUT") || status.includes("IR") || status === "DOUBTFUL" || status === "D"
           if (out) {
             if (!checkIllegalLineups) continue
             suspicious.push({
               slotPosition: "FLEX",
               startedPlayerId: st.playerId,
               startedPlayerName: st.playerId,
-              startedPlayerStatus: status || "OUT",
+              startedPlayerStatus: onBye ? "BYE" : status || "OUT",
               benchedBetterOption: benchBest > stProj ? "bench" : undefined,
               benchedBetterOptionProjection: benchBest > stProj ? benchBest : undefined,
               startedPlayerProjection: stProj,

@@ -34,7 +34,7 @@ export const LEAGUE_CONCEPT_CARDS: LeagueConceptCard[] = [
   { id: 'salary_cap', title: 'Salary Cap', subtitle: 'Budget-based rosters', icon: '$' },
   { id: 'devy', title: 'Devy', subtitle: 'Draft college prospects', icon: '✦' },
   { id: 'c2c', title: 'C2C', subtitle: 'College to pros', icon: '⇄' },
-  { id: 'guillotine', title: 'Guillotine', subtitle: 'Lowest score is eliminated', icon: '✕' },
+  { id: 'guillotine', title: 'Guilly', subtitle: 'Lowest score is eliminated', icon: '✕' },
   { id: 'zombie', title: 'Zombie', subtitle: 'Infection-style survival', icon: '☣' },
   { id: 'survivor', title: 'Survivor', subtitle: 'Vote players off', icon: '⚑' },
   { id: 'tournament', title: 'Tournament', subtitle: 'Multi-league elimination event', icon: '⚔' },

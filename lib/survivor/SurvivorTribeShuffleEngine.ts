@@ -10,6 +10,7 @@ import { getTribesWithMembers } from './SurvivorTribeService'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { provisionSurvivorChats } from './survivorTribeChatProvisioning'
 import type { SurvivorTribeWithMembers } from './types'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 /**
  * Check if shuffle should run: consecutive council losses or size imbalance.
@@ -132,7 +133,7 @@ export async function runShuffle(
     await db.survivorTribeChatMember.create({ data: { tribeId: tribe.id, rosterId: '', userId: 'survivor-ai-host', isAiHost: true } })
   }
   const chats = await provisionSurvivorChats(leagueId, { db, actorUserId: options.actorUserId })
-  await db.survivorChatMessage.create({ data: { leagueId, channelId: chats.leagueChannelId, channelType: 'league',
+  await createSurvivorChatMessage(db, { data: { leagueId, channelId: chats.leagueChannelId, channelType: 'league',
     senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
     contentType: 'host_announcement', content: 'Tribes have been randomly redrawn. Open the Tribe Board to meet your new huddle.' } })
   await db.survivorTribeSwap.create({ data: { leagueId, week: (await db.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } }))?.currentWeek ?? 0,

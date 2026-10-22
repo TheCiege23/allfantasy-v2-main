@@ -45,6 +45,7 @@ import {
 } from '@/components/app/draft-room/ResultsRosterPanel'
 import { DraftRosterStrip } from '@/components/app/draft-room/DraftRosterStrip'
 import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/DraftRoundOneAnnouncementOverlay'
+import { DraftDayShow } from '@/components/draft-day/DraftDayShow'
 import { DraftIntroGate } from '@/components/draft/DraftIntroGate'
 import type { DraftAiOverlaySignal, PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
@@ -3987,7 +3988,7 @@ export function DraftRoomPageClient({
           loading={draftIntelLoading}
           headline={draftIntel?.headline ?? null}
           picksUntilUser={ribbonPicksUntilUser}
-          onClock={draftIntel?.status === 'on_clock' || isCurrentUserOnClock}
+          onClock={session?.status === 'in_progress' && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock)}
           queue={draftIntelQueue}
           canDraft={Boolean(canDraft && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock))}
           onDraftTopChoice={
@@ -4029,6 +4030,7 @@ export function DraftRoomPageClient({
       leftAtPick,
       presentationVariant,
       draftIntelLoading,
+      session?.status,
       draftIntel?.headline,
       ribbonPicksUntilUser,
       draftIntel?.status,
@@ -4590,11 +4592,13 @@ export function DraftRoomPageClient({
         </div>
       </div>
     ) : null}
+    {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} /> : null}
     {presentationVariant === 'redraft_snake' && !isDynasty ? (
       <DraftRoundOneAnnouncementOverlay
         presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
         leagueName={leagueName}
         sportLabel={typeof sport === 'string' ? sport.toUpperCase() : ''}
+        formatType={formatType}
         queue={roundOneAnnouncementQueue}
         onDismissFront={dismissRoundOneAnnouncement}
       />

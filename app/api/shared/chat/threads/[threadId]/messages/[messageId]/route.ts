@@ -5,7 +5,7 @@ import {
   editPlatformThreadMessage,
 } from "@/lib/platform/chat-service"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
-import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { prisma } from "@/lib/prisma"
 import { isChimmyAuthored } from "@/lib/league-chat/chimmyIdentity"
 
@@ -15,7 +15,7 @@ async function canAccessVirtualLeague(leagueId: string, userId: string): Promise
     select: { id: true },
   })
   if (bracketMember) return true
-  return canAccessLeagueDraft(leagueId, userId)
+  return (await resolveLeagueAccess(leagueId, userId)) != null
 }
 
 function mergeMetadata(existing: unknown, additions: Record<string, unknown>): Record<string, unknown> {

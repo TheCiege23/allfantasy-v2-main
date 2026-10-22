@@ -1,4 +1,5 @@
 import { finalizeRotoSeason, type RotoFinalizeResult } from './finalizeRotoSeason'
+import { triggerCommissionerRatingPrompt } from '@/lib/commissioner/CommissionerRatingTrigger'
 /**
  * Crown the champion, archive the season, enter the offseason, open the keeper
  * window — as one call, because it is one thing.
@@ -21,10 +22,8 @@ import { finalizeRotoSeason, type RotoFinalizeResult } from './finalizeRotoSeaso
  *                                    roster into it, and a fire-and-forget promise is dropped
  *                                    whenever the serverless process ends first.
  *
- * ⚠ STEPS 2 AND 3 RUN ONLY ON A FIRST FINALIZE. Re-finalizing is safe and
- * common (the cron may retry), but re-archiving is not — and `enterRedraftOffseason`
- * short-circuits an already-offseason league before its transaction, so a second
- * pass would silently write nothing while reporting success.
+ * Archive retries run even after champion persistence; the archive is idempotent.
+ * Keeper setup retains its first-finalize gate and dynasty repair path.
  *
  * ⚠ AND A FAILURE IN 2 OR 3 MUST NOT FAIL THE CALL. The champion is already
  * crowned and persisted by then; throwing would leave a league with a champion,
@@ -85,8 +84,8 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   let keeperOffseasonTriggered = false
   let keeperOffseasonCompleted = false
 
-  // Roto retries repair a failed archive; the archive service is idempotent.
-  if (!alreadyFinalized || isRoto) {
+  // Every format retries a failed archive; the archive service is idempotent.
+  { // A completed champion may still need its archive repaired on a retry.
     try {
       const offseason = 'format' in result && result.format === 'roto'
         ? await enterRedraftOffseason(input.seasonId, input.actorUserId, {finishOrder:result.finalStandings.map(r=>r.rosterId)})
@@ -106,6 +105,28 @@ export async function finalizeSeasonAndEnterOffseason(input: {
         leagueId: input.leagueId,
         seasonId: input.seasonId,
         error,
+      })
+    }
+
+    /*
+     * Passed constitution amendments that take effect "next season" apply here, once, when the
+     * season closes (lib/constitution/constitutionService.ts). Commissioner plan only; the call
+     * never throws and a refused change is recorded on its amendment, so it cannot fail the close.
+     */
+    if (!alreadyFinalized) {
+      const { applyAmendmentsAtSeasonRollover } = await import('@/lib/constitution/constitutionService')
+      const amendments = await applyAmendmentsAtSeasonRollover(input.leagueId)
+      if (amendments.applied > 0 || amendments.failed > 0) {
+        console.info('[finalize-season] constitution amendments', { leagueId: input.leagueId, ...amendments })
+      }
+    }
+
+    if (offseasonEntered && !alreadyFinalized) {
+      // Commish reputation: ask the league to rate its commissioner. Keeper and dynasty leagues were
+      // already asked from the keeper offseason; plain redraft leagues never were. Idempotent per
+      // season, and not awaited — a chat post must not hold the finalize open.
+      promptCommissionerRating(input.leagueId).catch((error) => {
+        console.error('[finalize-season] commissioner rating prompt failed', { leagueId: input.leagueId, error })
       })
     }
 
@@ -172,4 +193,9 @@ function describe(code: string): string {
   if (code === 'NO_WINNER') return 'Final matchup has no winner - run advance first'
   if (code === 'NO_FINAL_ROUND') return 'No playoff rounds found'
   return 'Final playoff round is not yet complete'
+}
+
+async function promptCommissionerRating(leagueId: string): Promise<void> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true } })
+  if (league?.season != null) await triggerCommissionerRatingPrompt(leagueId, league.season)
 }

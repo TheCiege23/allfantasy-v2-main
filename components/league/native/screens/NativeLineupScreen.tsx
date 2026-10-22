@@ -49,6 +49,8 @@ import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreen
  * `resolveLineupMove`, so slot eligibility (`playerEligibleForSlot`), lock and IR rules are decided
  * once, and both end in the same `save`. Dropping on an occupied slot swaps; dropping a starter on
  * the bench leaves his slot empty; IR takes only an IR-eligible designation under the league's flags.
+ * Each saved starter carries his slot index (lib/league/lineupSlotPositions.ts), so the empty slot is
+ * still where he left it after a reload.
  */
 type DbRoster = {
   source?: string
@@ -186,7 +188,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       const slots = json.starterSlots ?? []
       if (slots.length) {
         const base = initOrSyncLineupLists(json.roster, slots)
-        // Starters are stored compacted, so a saved empty slot shifts later starters up; re-seat them.
+        // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
+        // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
         const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
         setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
       } else setLists(null)
@@ -256,6 +259,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   )
   const canIr = useCallback((id: string) => isIrEligibleStatus(data?.irRules ?? STRICT_IR_RULES, players[id]?.injuryStatus), [data, players])
   const irCapacity = data?.slotLimits?.ir ?? null
+  /** Bench spots the commissioner set (roster positions → BN); each unfilled one shows as an open slot. */
+  const benchCapacity = data?.slotLimits?.bench ?? null
   const hasIr = (irCapacity ?? 0) > 0 || Boolean(lists?.ir.some(Boolean))
 
   const nextLock = useMemo(() => {
@@ -276,7 +281,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       setSaving(true)
       try {
         const roster = {
-          starters: next.starters.map((id) => (id ? buildPlayerRow(id, players) : null)).filter((x): x is Record<string, unknown> => x != null),
+          // Each starter carries his slot, so an empty slot reloads where the manager left it.
+          starters: next.starters.flatMap((id, slotIndex) => (id ? [{ ...buildPlayerRow(id, players), slotIndex }] : [])),
           bench: next.bench.map((id) => buildPlayerRow(id, players)),
           // The save route admits an IR row by its status, so send the real designation, not 'healthy'.
           ir: next.ir.map((id) => ({ ...buildPlayerRow(id, players), status: String(players[id]?.injuryStatus ?? 'healthy').toLowerCase() })),
@@ -634,12 +640,18 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
                   </section>
                   <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dropState({ kind: 'bench' })}>
-                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : null}</h3>
+                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null}</h3>
                     <ul className="nls-rows">
                       {lists.bench.filter(Boolean).map((id) => renderRow(id, null, 'bench'))}
-                      {!lists.bench.some(Boolean) ? (
-                        <li><div className="nls-lrow nls-lrow-empty"><PosPill label="BN" /><span>No one on the bench.</span></div></li>
-                      ) : null}
+                      {benchCapacity != null
+                        ? Array.from({ length: Math.max(0, benchCapacity - lists.bench.filter(Boolean).length) }, (_, i) => (
+                            <li key={`bn-open-${i}`} data-testid="bench-open-slot">
+                              <div className="nls-lrow nls-lrow-empty"><PosPill label="BN" /><div className="nls-player"><strong>Empty</strong><small>Open slot</small></div></div>
+                            </li>
+                          ))
+                        : !lists.bench.some(Boolean) ? (
+                            <li><div className="nls-lrow nls-lrow-empty"><PosPill label="BN" /><span>No one on the bench.</span></div></li>
+                          ) : null}
                     </ul>
                   </DropZone>
                   {hasIr ? (

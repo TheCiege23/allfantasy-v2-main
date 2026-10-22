@@ -48,13 +48,13 @@ describe('LeagueTypeConfirm — shared options and the Pirate follow-up', () => 
     expect(await screen.findByRole('radio', { name: /Pirate/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /EFL/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /Devy/ })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /^Survivor Guillotine/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Survivor Guilly/ })).toBeInTheDocument()
   })
 
-  it('saves Survivor Guillotine as one type, with no base', async () => {
+  it('saves Survivor Guilly as one type, with no base', async () => {
     stubFetch(baseState)
     render(<LeagueTypeConfirm leagueId="L1" alwaysShow />)
-    fireEvent.click(await screen.findByRole('radio', { name: /^Survivor Guillotine/ }))
+    fireEvent.click(await screen.findByRole('radio', { name: /^Survivor Guilly/ }))
     expect(screen.queryByRole('radiogroup', { name: 'Do rosters carry over?' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Confirm format' }))
     await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(1))

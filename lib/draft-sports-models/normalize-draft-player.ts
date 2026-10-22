@@ -64,6 +64,8 @@ export type RawDraftPlayerLike = {
   yearsExp?: number | null
   /** D.7 — explicit rookie marker (e.g. devy promoted to NFL). Falsy when unknown. */
   isRookie?: boolean | null
+  /** MLB/NBA/NHL: stored-season-stats rookie verdict (see `NormalizedDraftEntry.rookieVerdict`). */
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
   /** NFL: pool resolver provenance for Sleeper/import-backed yearsExp (diagnostics). */
   rookieYearsExpSource?: NflRookieYearsExpProvenance | null
   /** Block B.2-C — rookie inference inputs surfaced from the resolver for
@@ -233,6 +235,10 @@ export function normalizeDraftPlayer(
       raw.isRookie === true ||
       (raw.yearsExp != null && Number.isFinite(Number(raw.yearsExp)) && Number(raw.yearsExp) === 0)
         ? true
+        : undefined,
+    rookieVerdict:
+      raw.rookieVerdict === 'rookie' || raw.rookieVerdict === 'not_rookie' || raw.rookieVerdict === 'unknown'
+        ? raw.rookieVerdict
         : undefined,
     // Block B.2-C — surface rookie inference inputs at the top level of the
     // normalized entry so isRookieEligibleForFilter can branch per-sport without

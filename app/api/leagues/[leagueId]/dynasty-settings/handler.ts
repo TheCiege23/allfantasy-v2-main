@@ -33,6 +33,14 @@ import {
 } from '@/lib/dynasty-core/constants'
 import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/lib/taxi/constants'
 import { ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY, normalizeCustomOpenDate } from '@/lib/dynasty-core/rookieDraftCalendar'
+import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
+import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  isTaxiIncreaseRefused,
+  sportSupportsProspectStash,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +60,7 @@ export async function GET(
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, isDynasty: true, leagueVariant: true },
+    select: { sport: true, isDynasty: true, leagueVariant: true, status: true, lifecycleState: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -85,6 +93,12 @@ export async function GET(
       roster: footballFormats ? getDynastyRosterPresets() : [],
       scoring: footballFormats ? getDynastyScoringPresets() : [],
       playoff: getDynastyPlayoffPresets(sport),
+      // NBA/NHL/MLB roster + points-scoring formats (lib/dynasty-core/DynastySportPresets). Empty otherwise.
+      sportFormats: getDynastySportPresets(sport),
+    },
+    sportFormatPreset: {
+      current: ((league.settings as Record<string, unknown> | null)?.dynasty_sport_preset_id as string | undefined) ?? null,
+      editable: isDynasty && isLeagueBeforeDraft(league),
     },
     constants: {
       supportedTeamSizes: [...DYNASTY_SUPPORTED_TEAM_SIZES],
@@ -92,6 +106,8 @@ export async function GET(
       vetoRecommendationCopy: VETO_RECOMMENDATION_COPY,
       taxiEligibilityYearsOptions: [...TAXI_ELIGIBILITY_YEARS_OPTIONS],
       taxiLockBehaviorOptions: [...TAXI_LOCK_BEHAVIOR_OPTIONS],
+      // NHL / MLB: taxi may be kept or lowered, never grown (PUT refuses an increase).
+      taxiSlotsMax: sportSupportsProspectStash(sport) ? 20 : (effective?.taxiSlots ?? 4),
     },
     draftOrderAuditLog: auditLog,
     isDynasty,
@@ -145,7 +161,23 @@ export async function PUT(
     }
   }
 
+  // A dynasty format preset (NBA/NHL/MLB) is applied on its own, before the draft only.
+  if (body.sportPresetId != null) {
+    const applied = await applyDynastySportPresetToLeague(leagueId, String(body.sportPresetId), userId)
+    if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: applied.status })
+    return NextResponse.json({ ok: true, sportPresetId: applied.presetId, slots: applied.slots })
+  }
+
   const priorDynasty = await prisma.dynastyLeagueConfig.findUnique({ where: { leagueId } })
+
+  // NHL / MLB have no prospect pool: a commissioner may keep or lower an existing taxi squad, never
+  // grow one. The baseline with no config row is 4, the value GET reports for such a league.
+  if (body.taxiSlots != null && isTaxiIncreaseRefused(String(leagueSport), Number(body.taxiSlots), priorDynasty?.taxiSlots ?? 4)) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE },
+      { status: 400 },
+    )
+  }
 
   const settingsPatch: Record<string, unknown> = {}
   if (body.roster_format_type != null) settingsPatch.roster_format_type = String(body.roster_format_type)

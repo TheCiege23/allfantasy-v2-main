@@ -10,6 +10,12 @@ import { prisma } from '@/lib/prisma'
 import { logAction } from '@/server/services/auditService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
+import {
+  postDraftRosterLockRefusal,
+  type PostDraftRosterLockStatus,
+  type RosterMoveKind,
+} from '@/lib/league/postDraftRosterLock'
+import { resolvePostDraftContext } from '@/server/services/postDraftRosterLockService'
 
 export type LeagueLifecycleAction =
   | 'draft_pick'
@@ -103,12 +109,17 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
     'league_lock_toggle',
   ]),
   /*
-   * 🛑 A LEAGUE LEAVES ITS DRAFT INTO THIS STATE, AND NOTHING MOVES IT ON TO `in_season`.
-   * `completeDraftSession` sets `post_draft`; no writer ever makes the `post_draft → in_season`
-   * transition, so a native league lives here for its whole first season. Without the player
-   * actions below every waiver claim (`/api/waiver-wire/.../claims`, `.../add-drop`) was refused
-   * the moment the draft ended, and the Trades / Playoffs / AI settings tabs returned 400.
-   * Free agency opening right after the draft is what every host does.
+   * A LEAGUE LEAVES ITS DRAFT INTO THIS STATE. `completeDraftSession` sets `post_draft`, and still
+   * no writer makes the `post_draft → in_season` transition — on purpose: the gate DERIVES it.
+   * `assertLifecycleActionAllowed` reads a stored `post_draft` as `in_season` once the league's
+   * week 1 has started (`server/services/postDraftRosterLockService.ts`), so there is no cron to
+   * forget. Other readers of `League.lifecycleState` still see the stored `post_draft`.
+   *
+   * The player actions below stay in this set; the post-draft ROSTER LOCK (adds/drops, FA pickups,
+   * trades refused until the first waiver run or week 1, `lib/league/postDraftRosterLock.ts`) is a
+   * time-bounded overlay applied in the gate, not a change to this table. Without these actions every
+   * waiver claim was refused the moment the draft ended, and the Trades / Playoffs / AI settings tabs
+   * returned 400.
    */
   post_draft: new Set([
     'waiver_claim_submit',
@@ -472,18 +483,40 @@ export async function loadLeagueForLifecycle(leagueId: string) {
       status: true,
       leagueType: true,
       isDynasty: true,
+      sport: true,
+      season: true,
+      timezone: true,
     },
   })
 }
 
-export type LifecycleGateError = { status: number; error: string; code: string }
+export type LifecycleGateError = { status: number; error: string; code: string; unlocksAt?: string | null }
+
+/**
+ * The roster-move kind an action implies when the caller does not say. `roster_edit` has no default:
+ * it covers lineup moves (allowed) as well as adds, so a caller must name the move to be locked.
+ */
+function defaultRosterMoveForAction(action: LeagueLifecycleAction): RosterMoveKind | null {
+  if (action === 'trade_act') return 'trade'
+  if (action === 'waiver_claim_submit') return 'waiver_claim'
+  return null
+}
 
 export async function assertLifecycleActionAllowed(
   leagueId: string,
   action: LeagueLifecycleAction,
   userId: string,
-  opts?: { commissionerOverride?: boolean; isElevatedCommissioner?: boolean },
-): Promise<{ ok: true } | { ok: false; err: LifecycleGateError }> {
+  opts?: {
+    commissionerOverride?: boolean
+    isElevatedCommissioner?: boolean
+    /**
+     * Which roster move this is, for the post-draft lock. Defaults from the action
+     * (`trade_act` → trade, `waiver_claim_submit` → claim); the add-drop route passes
+     * `free_agent_pickup` because it shares `waiver_claim_submit` with claims.
+     */
+    rosterMove?: RosterMoveKind
+  },
+): Promise<{ ok: true; postDraftLock?: PostDraftRosterLockStatus } | { ok: false; err: LifecycleGateError }> {
   const row = await loadLeagueForLifecycle(leagueId)
   if (!row) {
     return { ok: false, err: { status: 404, error: 'League not found', code: 'NOT_FOUND' } }
@@ -493,7 +526,10 @@ export async function assertLifecycleActionAllowed(
   const releasedDraftAction = seasonSetupBlocked(row.settings) && seasonDraftAction && await hasSeasonDraftRelease(leagueId, row.settings)
   if (seasonSetupBlocked(row.settings) && action !== 'standings_view' && !releasedDraftAction) return { ok: false, err: { status: 409, code: 'SEASON_TOURNAMENT_SETUP_BLOCKED', error: 'Tournament setup is locked while native rule enforcement and launch readiness are completed.' } }
 
-  const state = getLeagueLifecycleState(row as Pick<League, 'lifecycleState'>)
+  const storedState = getLeagueLifecycleState(row as Pick<League, 'lifecycleState'>)
+  // Derived phase: a stored `post_draft` acts as `in_season` from week 1. Reads only for post_draft.
+  const postDraft = await resolvePostDraftContext({ ...row, lifecycleState: storedState })
+  const state = postDraft.effectiveState
   const elevated = Boolean(opts?.isElevatedCommissioner)
 
   if (row.emergencyPaused && !elevated && action !== 'standings_view') {
@@ -544,7 +580,21 @@ export async function assertLifecycleActionAllowed(
     }
   }
 
-  return { ok: true }
+  // Post-draft roster lock. The commissioner override path (override + elevated role) is exempt,
+  // exactly as it is from the phase table above.
+  const overridden = Boolean(opts?.commissionerOverride && elevated)
+  const move = opts?.rosterMove ?? defaultRosterMoveForAction(action)
+  if (move && !overridden) {
+    const refusal = postDraftRosterLockRefusal(move, postDraft.lock, postDraft.timezone)
+    if (refusal) {
+      return {
+        ok: false,
+        err: { status: refusal.status, error: refusal.error, code: refusal.code, unlocksAt: refusal.unlocksAt },
+      }
+    }
+  }
+
+  return postDraft.lock.locked ? { ok: true, postDraftLock: postDraft.lock } : { ok: true }
 }
 
 // ── Draft completion ↔ lifecycle (dashboard Matchup tab) ─────────────────
