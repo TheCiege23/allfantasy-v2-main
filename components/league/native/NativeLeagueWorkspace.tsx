@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
-import { Award, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight } from 'lucide-react'
+import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight } from 'lucide-react'
 import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -31,7 +31,7 @@ type Props = AppShellProps & {
   /** Native guillotine leagues: the header becomes the guillotine banner (see useGuillotineAtmosphere). */
   guillotineBanner?: { line: string; mood: string } | null
 }
-const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, war: Swords, scores: Zap, insight: Bot, more: CircleHelp }
+const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, more: CircleHelp }
 const memoryKey = (id: string) => `af:league-section:${id}`
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase() || 'AF'
 

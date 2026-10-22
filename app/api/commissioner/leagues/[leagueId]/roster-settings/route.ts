@@ -16,8 +16,7 @@ import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeN
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
-import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
-import { syncDraftRoundsToRoster } from '@/lib/draft/syncDraftRoundsToRoster'
+import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
@@ -120,10 +119,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
   if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
 
-  const [oldConfig, roundsBefore] = await Promise.all([
-    getLeagueRosterConfig(leagueId),
-    getComputedDraftRounds(leagueId).catch(() => null),
-  ])
+  const oldConfig = await getLeagueRosterConfig(leagueId)
   // NHL / MLB have no prospect pool: refuse adding or growing TAXI / PROSPECT / RIGHTS / MINORS.
   // Keeping or lowering what the league already has is allowed.
   const previousSlots = (await registry.getService(league.sport).getConfig(leagueId)).slots ?? {}
@@ -137,12 +133,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
   // Rounds = draftable roster spots, so the draft follows the roster it was just given.
-  const draftRounds = await syncDraftRoundsToRoster(leagueId, {
-    before: roundsBefore,
+  const draftRounds = await applyRosterTemplateChange(leagueId, {
     keepManualOverride: await hasAfCommissionerSub(session.user.id),
-  }).catch((e) => {
-    console.warn('[roster-settings PUT] draft rounds sync', e instanceof Error ? e.message : 'unknown error')
-    return null
+    logTag: 'roster-settings PUT',
   })
   const config = await registry.getService(league.sport).getConfig(leagueId)
   const unifiedConfig = await getLeagueRosterConfig(leagueId)

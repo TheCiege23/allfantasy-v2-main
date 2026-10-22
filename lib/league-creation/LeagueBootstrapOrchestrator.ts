@@ -207,6 +207,18 @@ export async function runLeagueBootstrap(
     }
   }
 
+  // The draft config above was seeded from the SPORT default (NBA = 13 rounds) before the roster
+  // template existed, and variant templates differ (NBA guillotine has 11 spots). Start the league
+  // with rounds = draftable roster spots, unless the creator chose a round count themselves.
+  if (settings.draft_rounds == null && settings.draftRounds == null) {
+    try {
+      const { applyRosterTemplateChange } = await import('@/lib/draft/syncDraftRoundsToRoster')
+      await applyRosterTemplateChange(leagueId, { keepManualOverride: false, logTag: 'league bootstrap' })
+    } catch {
+      // non-fatal
+    }
+  }
+
   const waiverResult = await bootstrapLeagueWaiverSettings(leagueId).catch(() => ({
     leagueId,
     waiverSettingsApplied: false,

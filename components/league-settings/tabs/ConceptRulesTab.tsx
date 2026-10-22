@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSettingsHub'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/BestBallSettingsCommissionerPanel'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -12,7 +13,7 @@ import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'conceptRules', {
+  const { queuePatch, saving, savedAt, lastError } = useLeagueSettingsSectionAutosave(leagueId, 'conceptRules', {
     enabled: canEdit,
   })
 
@@ -97,7 +98,7 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
             className="w-full rounded-xl border border-white/[0.10] bg-black/30 px-3 py-2 font-mono text-[11px] text-white/90 outline-none focus:border-cyan-400/35 disabled:opacity-50"
           />
         </label>
-        {saving ? <p className="mt-1 text-[11px] text-cyan-300/80">{t('lsHub.saving')}</p> : null}
+        <p className="mt-1"><AutosaveStatus saving={saving} savedAt={savedAt} error={lastError} /></p>
       </div>
     </div>
   )
