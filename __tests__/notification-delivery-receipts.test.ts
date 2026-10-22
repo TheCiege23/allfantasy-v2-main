@@ -27,3 +27,31 @@ describe('truthful notification receipts',()=>{
  it('preserves two-argument calls for untracked legacy transports',async()=>{await dispatchNotification({userIds:['owner'],leagueId:'L',category:'draft_alerts',type:'legacy_notice',title:'QA'});expect(m.push.mock.calls[0]).toHaveLength(3);expect(m.sms.mock.calls[0]).toHaveLength(2);expect(m.receipt).not.toHaveBeenCalled()})
  it('records interrupted reads and does not throw when receipt persistence fails',async()=>{m.profile.mockRejectedValue(new Error('DB down'));m.receipt.mockRejectedValue(new Error('audit down'));await expect(send()).resolves.toMatchObject({failed:1});expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'unknown',reason:'dispatch_interrupted'})})
 })
+
+it.each(['game_scoring_play','game_period_end','game_halftime','game_final','game_close','game_moment_end_period'])('delivers fresh %s through the selected email and push channels', async type => {
+  await dispatchNotification({userIds:['owner'],category:'draft_alerts',type,title:'Game update',onDeliveryReceipt:m.receipt})
+  expect(m.email).toHaveBeenCalled()
+  expect(m.store).toHaveBeenCalled()
+  expect(m.push).toHaveBeenCalled()
+  expect(m.push.mock.calls[0][1].expiresAt).toBeDefined()
+  expect(m.receipt.mock.calls[0][0].channels.email).toMatchObject({status:'accepted',reason:'provider_accepted'})
+})
+describe('saved game channel preferences',()=>{
+ it('honors global off without category rows',async()=>{
+  m.profile.mockResolvedValue(profile({globalEnabled:false}));
+  await dispatchNotification({userIds:['owner'],category:'performance_alerts',type:'game_scoring_play',title:'Score'});
+  expect(m.email).not.toHaveBeenCalled();expect(m.push).not.toHaveBeenCalled();expect(m.store).not.toHaveBeenCalled();
+ });
+ it.each(['performance_alerts','matchup_results','injury_alerts'] as const)('uses saved independent email and push choices for %s',async category=>{
+  const {mergeNotificationPreferences}=await import('@/lib/notification-settings/mergeNotificationPreferences');
+  const {resolveNotificationPreferences}=await import('@/lib/notification-settings/NotificationPreferenceResolver');
+  let stored:Record<string,unknown>={};
+  for(const [email,push] of [[true,false],[false,true],[false,false],[true,true]]){
+   stored=mergeNotificationPreferences(stored,{categories:{[category]:{enabled:true,inApp:true,email,push,sms:false}}});
+   const reloaded=resolveNotificationPreferences(JSON.parse(JSON.stringify(stored)));
+   m.profile.mockResolvedValue(profile(reloaded));m.email.mockClear();m.push.mockClear();
+   await dispatchNotification({userIds:['owner'],category,type:category==='injury_alerts'?'injury_update':'game_scoring_play',title:'Update'});
+   expect(m.email).toHaveBeenCalledTimes(email?1:0);expect(m.push).toHaveBeenCalledTimes(push?1:0);
+  }
+ });
+});

@@ -3897,3 +3897,23 @@ html[data-mode='light'] .af-cm-typing-dots { background: var(--surface); box-sha
 .af-cm-recap-share[data-state='copied'],
 .af-cm-recap-share[data-state='shared'] { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-line); }
 .af-cm-recap-share[data-state='failed'] { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line2); }
+
+
+/* A contained conversation on desktop; a keyboard-aware sheet on phones. */
+.af-core .af-cm[data-mode='overlay'] { left: auto; right: 20px; top: auto; bottom: 20px; margin: 0; width: min(460px, calc(100vw - 40px)); height: min(720px, calc(100dvh - 40px)); border-radius: 20px; }
+.af-core .af-cm-close { width: 44px; height: 44px; border-radius: 12px; }
+.af-core .af-cm-head { background: var(--surface); }
+.af-core .af-cm-title { font-size: 18px; }
+.af-core .af-cm-thread { min-height: 0; overscroll-behavior: contain; }
+.af-core .af-cm-turn { font-size: 14px; line-height: 1.6; border-radius: 16px; }
+.af-core .af-cm-composer { border-top: 1px solid var(--line); background: var(--surface); }
+.af-core .af-cm .af-cm-input { font-size: 16px; border-radius: 14px; }
+.af-core .af-cm-launch { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 8px 28px #0004; }
+@media (max-width: 720px) {
+  .af-core .af-cm[data-mode='overlay'] { top: var(--af-comms-top, 0px); bottom: auto; left: 0; right: 0; width: 100%; height: var(--af-comms-vh, 100dvh); max-height: none; border-radius: 0; border: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box; }
+  .af-core .af-cm-launch { right: 16px; bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+  .af-core .af-cm-composer { flex: none; padding: 10px 12px; }
+  .af-core .af-cm-tab { font-size: 12px; min-height: 48px; }
+}
+
+.af-core .af-cm-loading { position: fixed; z-index: 90; right: 20px; bottom: calc(82px + env(safe-area-inset-bottom, 0px)); padding: 14px 18px; border: 1px solid var(--line2); border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); font-size: 14px; }

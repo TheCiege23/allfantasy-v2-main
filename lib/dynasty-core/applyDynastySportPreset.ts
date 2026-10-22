@@ -6,6 +6,9 @@
  *   - taxi slots + taxi eligibility years      → `upsertDynastyConfig` (DynastyLeagueConfig)
  *   - `bench_slots` / `ir_slots` / `taxi_slots` → League.settings, as `createCanonicalLeagueInTransaction`
  *
+ * NHL / MLB: taxi is written as 0 in all three places (`presetTaxiSlotCount`), whatever the preset row
+ * says — there is no prospect pool to stash from (`lib/league-creation/prospectStashPolicy.ts`).
+ *
  * Scoring is NOT rewritten: every preset is points scoring, and switching an existing league's scoring
  * belongs to the Scoring tab's own save path.
  */
@@ -14,7 +17,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { getRosterEngineRegistry, updateLeagueRosterConfig } from '@/lib/roster-engine'
 import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
 import { upsertDynastyConfig } from './DynastySettingsService'
-import { findDynastySportPreset, rosterSlotsWithDynastySportPreset } from './DynastySportPresets'
+import { findDynastySportPreset, presetTaxiSlotCount, rosterSlotsWithDynastySportPreset } from './DynastySportPresets'
 
 /** Stages before the first pick. `drafting` is deliberately absent: the roster is being filled. */
 const BEFORE_DRAFT_STAGES = new Set(['setup', 'pre_draft', 'predraft'])
@@ -56,8 +59,9 @@ export async function applyDynastySportPresetToLeague(
     .every((key) => (slots[key] ?? 0) === (dynastyTemplate.slots[key] ?? 0))
   await updateLeagueRosterConfig(leagueId, { templateKey: matchesTemplate ? dynastyTemplate.key : 'custom', slots }, userId)
 
+  const taxiSlots = presetTaxiSlotCount(preset)
   await upsertDynastyConfig(leagueId, {
-    taxiSlots: preset.taxiSlotCount,
+    taxiSlots,
     taxiEligibilityYears: preset.taxiEligibilityYears,
   })
 
@@ -72,7 +76,7 @@ export async function applyDynastySportPresetToLeague(
         ...settings,
         bench_slots: preset.benchCount,
         ir_slots: preset.irCount,
-        taxi_slots: preset.taxiSlotCount,
+        taxi_slots: taxiSlots,
         dynasty_sport_preset_id: preset.id,
       }),
     },

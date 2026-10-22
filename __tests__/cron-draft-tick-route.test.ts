@@ -22,6 +22,10 @@ const mocks = vi.hoisted(() => ({
   processExpiredDraftPicks: vi.fn(),
   startScheduledSurvivorDrafts: vi.fn(),
   startScheduledRedraftDrafts: vi.fn(),
+  fillAutoDraftBoards: vi.fn(),
+}))
+vi.mock('@/lib/live-draft-engine/autoDraftFill', () => ({
+  fillAutoDraftBoards: mocks.fillAutoDraftBoards,
 }))
 
 vi.mock('@/lib/survivor/startScheduledSurvivorDrafts', () => ({
@@ -61,6 +65,7 @@ describe('GET /api/cron/draft-tick', () => {
     mocks.processExpiredDraftPicks.mockResolvedValue(SUMMARY)
     mocks.startScheduledSurvivorDrafts.mockResolvedValue({ scanned: 0, started: 0, skipped: 0, errors: [] })
     mocks.startScheduledRedraftDrafts.mockResolvedValue({ scanned: 1, started: 1, skipped: 0, skips: [], errors: [] })
+    mocks.fillAutoDraftBoards.mockResolvedValue({ scanned: 2, filled: 1, picks: 7, completed: 0, outcomes: [], errors: [] })
     process.env.CRON_SECRET = CRON_SECRET
     delete process.env.LEAGUE_CRON_SECRET
     delete process.env.ADMIN_PASSWORD
@@ -144,6 +149,15 @@ describe('GET /api/cron/draft-tick', () => {
     const res = await GET(request(CRON_SECRET))
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toMatchObject({ ok: false, error: 'db exploded' })
+  })
+
+  it('fills auto drafts every tick, even while autopick is disabled: the commissioner asked for the computer to draft', async () => {
+    const { GET } = await import('@/app/api/cron/draft-tick/route')
+    const res = await GET(request(CRON_SECRET))
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({ disabled: true, autoDrafts: { scanned: 2, filled: 1, picks: 7, completed: 0, errors: [] } })
+    expect(mocks.fillAutoDraftBoards).toHaveBeenCalledWith({ maxLeagues: 10, budgetMs: 40_000 })
+    expect(mocks.processExpiredDraftPicks).not.toHaveBeenCalled()
   })
 
   it('starts scheduled redraft drafts every tick, even while autopick is disabled', async () => {

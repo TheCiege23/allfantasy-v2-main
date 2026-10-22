@@ -9,11 +9,12 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
 import { maybeTriggerSurvivorTribeShuffleRecommendation } from './SurvivorSitOutEngine'
 import { isCouncilReadComplete } from './survivorRevealGate'
+import { removeRosterFromTribeChat } from './SurvivorChatMembershipService'
 
 const JURY_PHASES = new Set(['merge', 'post_merge', 'jury', 'finale'])
 
 export type EliminationOutcome =
-  | { ok: true; alreadyResolved: boolean; outcome: 'removed_to_waivers' | 'exile_island'; eliminatedUserId: string; removedFromChats: number; pendingRelease: boolean; pendingExile: boolean; releasedPlayerCount?: number }
+  | { ok: true; alreadyResolved: boolean; outcome: 'removed_to_waivers' | 'exile_island'; eliminatedUserId: string; eliminatedRosterId?: string; removedFromChats: number; pendingRelease: boolean; pendingExile: boolean; releasedPlayerCount?: number }
   | { ok: false; status: 400 | 404 | 409; code: string; error: string }
 
 /** Resolve exactly once. Roster release, cast state, chat membership, and audit commit together. */
@@ -111,9 +112,16 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
     // Push and email stay spoiler-safe; the Torch Ceremony in league chat carries the name.
     if (!resumeRelease) await tx.survivorNotification.create({ data: { leagueId, type: 'elimination', recipientRole: 'all', title: 'The tribe has spoken',
       body: `Week ${council.week}: a manager was voted out at Tribal Council.`, deepLinkPath: `/survivor/${leagueId}/tribal`, urgency: 'high', isSpoilerSafe: false, scheduledFor: now, status: 'pending' } })
-    return { ok: true, alreadyResolved: false, outcome, eliminatedUserId: userId, removedFromChats, pendingRelease: false, pendingExile: false, releasedPlayerCount }
+    return { ok: true, alreadyResolved: false, outcome, eliminatedUserId: userId, eliminatedRosterId: roster.id, removedFromChats, pendingRelease: false, pendingExile: false, releasedPlayerCount }
   }, { timeout: 30_000, maxWait: 10_000 })
   if (result.ok && !result.alreadyResolved) {
+    // The legacy tribe-chat membership rows drop the roster too. The thread guard no longer reads
+    // them (survivorTribeChatAccess.ts), but SurvivorTribalCouncilService still does.
+    if (result.eliminatedRosterId) {
+      await removeRosterFromTribeChat(leagueId, result.eliminatedRosterId).catch(() => {
+        console.warn('[Survivor] Legacy tribe-chat membership could not be updated after elimination.')
+      })
+    }
     const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId }, select: { week: true, phase: true } })
     if (council?.phase === 'pre_merge') {
       await maybeTriggerSurvivorTribeShuffleRecommendation(leagueId, council.week).catch(() => {

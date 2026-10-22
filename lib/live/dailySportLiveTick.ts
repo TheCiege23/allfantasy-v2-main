@@ -51,8 +51,8 @@ import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
  * Every step checks `shouldStop` (the invocation's shared run budget) before starting the next
  * unit of work, so a slow night cannot run the tick past its cron interval.
  *
- * ⚠ DEFAULT OFF. `resolveDailyLiveSports` returns nothing unless `DAILY_SPORT_LIVE_SCORING` is set,
- * and with nothing enabled this module issues no query at all.
+ * NBA runs by default; NHL/MLB remain opt-in. `resolveDailyLiveSports` returns nothing unless `DAILY_SPORT_LIVE_SCORING` is set,
+ * and an explicit off value issues no query at all.
  */
 
 export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB'] as const
@@ -81,12 +81,13 @@ export const MAX_GAME_LENGTH_MS: Record<DailyLiveSport, number> = {
 export const DAILY_LIVE_MAX_SEASONS_PER_SPORT = 25
 
 /**
- * The flag. Unset / empty / `0` / `false` / `off` → nothing enabled (the default).
+ * The flag. Unset / empty → NBA. Explicit `0` / `false` / `off` → nothing enabled.
  * `1` / `true` / `on` / `all` → NBA, NHL and MLB. Otherwise a comma list of those three.
  */
 export function resolveDailyLiveSports(env: Record<string, string | undefined> = process.env): DailyLiveSport[] {
   const raw = env.DAILY_SPORT_LIVE_SCORING?.trim().toLowerCase() ?? ''
-  if (!raw || ['0', 'false', 'off', 'no'].includes(raw)) return []
+  if (!raw) return ['NBA']
+  if (['0', 'false', 'off', 'no'].includes(raw)) return []
   if (['1', 'true', 'on', 'yes', 'all'].includes(raw)) return [...DAILY_LIVE_SPORTS]
   const wanted = new Set(raw.split(',').map((s) => s.trim().toUpperCase()))
   return DAILY_LIVE_SPORTS.filter((s) => wanted.has(s))
@@ -345,6 +346,7 @@ export async function runDailySportLiveTick(opts: {
         identityByRiId,
         now,
         result: counts,
+        persistSchedule: true,
         shouldWriteLine: ({ playerId, gameId }, line) => {
           const lineKey = `${playerId}|${gameId}`
           // 16 hex chars is ample to detect a change and keeps the stored state small (~600 MLB lines).

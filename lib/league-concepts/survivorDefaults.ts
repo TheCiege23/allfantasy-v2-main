@@ -35,6 +35,7 @@
  *   NCAAF: 14 cast (2 tribes × 7), merge at 7, ~14 college weeks → mirrors season length
  */
 import { NEW_LEAGUE_EXILE_BOSS_MODE } from '@/lib/survivor/lateSeasonSettings'
+import { survivorCouncilDefaultsForSport } from '@/lib/survivor/survivorCouncilDefaults'
 import type { LeagueSport } from '@prisma/client'
 import { getScoringDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import {
@@ -50,7 +51,8 @@ export type SurvivorEligibleSport = 'NFL' | 'NCAAF' | 'NBA' | 'NHL'
 export const SURVIVOR_DRAFT_TYPE_IDS = SURVIVOR_CANONICAL_DRAFT_TYPE_IDS
 export type SurvivorDraftType = (typeof SURVIVOR_DRAFT_TYPE_IDS)[number]
 
-type EngineDraftType = SurvivorDraftType
+/** What the draft engine runs. An execution mode (offline, auto) runs as a snake draft underneath. */
+type EngineDraftType = 'snake' | 'linear' | 'auction'
 
 export type SurvivorPhase =
   | 'setup'
@@ -252,13 +254,14 @@ export function isSurvivorEligibleSport(sport: unknown): sport is SurvivorEligib
 }
 
 function normalizeEngineDraftType(draftType: unknown): EngineDraftType {
-  return normalizeSurvivorDraftType(draftType)
+  const requested = normalizeSurvivorDraftType(draftType)
+  return requested === 'offline' || requested === 'auto' ? 'snake' : requested
 }
 
 function normalizeSurvivorDraftType(value: unknown): SurvivorDraftType {
   const raw = String(value ?? '').trim().toLowerCase().replace(/-/g, '_')
-  if (raw === 'team') return 'by_team'
-  if (raw === 'realtime') return 'real_time'
+  // Retired Phase 1 ids. Neither ever reached the engine as anything but a snake draft.
+  if (raw === 'team' || raw === 'by_team' || raw === 'realtime' || raw === 'real_time') return 'snake'
   return (SURVIVOR_DRAFT_TYPE_IDS as readonly string[]).includes(raw)
     ? (raw as SurvivorDraftType)
     : 'snake'
@@ -762,6 +765,10 @@ export function buildSurvivorSettingsSnapshot(input: {
     draft_roster_fill_order: draftSettings.rosterFillOrder,
     draft_position_filter_behavior: draftSettings.positionFilterBehavior,
     draft_order: draftSettings.draftType === 'auction' ? 'auction' : 'snake',
+    // How the draft runs (DraftUISettingsResolver.executionMode): the room, the computer, or in person.
+    draft_execution_mode: draftSettings.requestedDraftType === 'offline' ? 'offline' : draftSettings.requestedDraftType === 'auto' ? 'auto' : 'live',
+    // Survivor drafts talk: the room shares the league chat stream while the draft runs.
+    draft_live_chat_sync_enabled: true,
     third_round_reversal: false,
     rounds: draftSettings.rounds,
     timer_seconds: draftSettings.timerSeconds,
@@ -859,6 +866,9 @@ export function buildSurvivorSettingsSnapshot(input: {
 
     ...contract.enabledFeatures,
     ...buildSurvivorSettingsSnapshotPatch({
+      // Council rules by sport: ceremony day/time after final scores, revote-then-rocks, ballots
+      // changeable until close, missing ballots auto-cast (owner's call, 2026-10-20).
+      ...survivorCouncilDefaultsForSport(contract.sport),
       defaultTeamCount: contract.teams,
       tribeCount: tribeSettings.tribeCount,
       mergeActivePlayerCount: tribeSettings.mergeAtCount,

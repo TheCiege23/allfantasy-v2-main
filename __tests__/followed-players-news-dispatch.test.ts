@@ -83,7 +83,7 @@ describe('followers of a player in the news', () => {
       type: 'player_injury_update',
       leagueId: null,
       severity: 'high',
-      dedupePrefix: 'player-news:news-1',
+      dedupePrefix: expect.stringMatching(/^team-injury-news:/),
       meta: expect.objectContaining({ followed: true }),
     })
     expect(out).toMatchObject({ notified: 1, recipients: 1, followerRecipients: 1, noRoster: 0 })
@@ -94,8 +94,8 @@ describe('followers of a player in the news', () => {
     h.followers.mockResolvedValue(['mgr-1', 'fan-1'])
     const out = await dispatchPendingPlayerNewsNotifications()
 
-    const roster1 = h.dispatch.mock.calls.map((c) => c[0]).find((p) => p.category === 'injury_alerts')
-    expect(roster1.userIds.sort()).toEqual(['mgr-1', 'mgr-2'])
+    const rosterUsers = h.dispatch.mock.calls.map((c) => c[0]).filter((p) => p.category === 'injury_alerts').flatMap(p => p.userIds)
+    expect(rosterUsers.sort()).toEqual(['mgr-1', 'mgr-2'])
     expect(followerCalls()).toHaveLength(1)
     expect(followerCalls()[0].userIds).toEqual(['fan-1'])
     expect(out).toMatchObject({ recipients: 3, followerRecipients: 1 })

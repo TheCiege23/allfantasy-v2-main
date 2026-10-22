@@ -15,16 +15,12 @@ import {
   parseCursor,
 } from '@/lib/chat-core'
 import { bracketMessagesToPlatform } from '@/lib/chat-core/league-message-proxy'
-import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
-import { parseTribeIdFromSource } from '@/lib/survivor/constants'
-import { getTribeChatMemberRosterIds } from '@/lib/survivor/SurvivorChatMembershipService'
+import { canAccessSurvivorTribeChatSource } from '@/lib/survivor/survivorTribeChatAccess'
 import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
 import { looksLikeOfficialCommand, parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
 import type { SurvivorCommandIntent } from '@/lib/survivor/types'
-import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
-import { isMergeTriggered } from '@/lib/survivor/SurvivorMergeEngine'
 import { prisma } from '@/lib/prisma'
 import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
 import { resolveLeagueAccess } from '@/lib/league-access'
@@ -72,21 +68,13 @@ function normalizeLeagueChatSource(value: unknown): string | null | undefined {
   return trimmed
 }
 
+/* A Survivor huddle (`source = tribe_<id>`): the canonical access context decides. */
 async function canAccessSurvivorTribeSource(
   leagueId: string,
   userId: string,
   source: string | null | undefined
 ): Promise<boolean> {
-  if (!source) return true
-  const tribeId = parseTribeIdFromSource(source)
-  if (!tribeId) return true
-  const currentWeek = await resolveSurvivorCurrentWeek(leagueId).catch(() => 1)
-  const merged = await isMergeTriggered(leagueId, currentWeek).catch(() => false)
-  if (merged) return false
-  const rosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  if (!rosterId) return false
-  const memberRosterIds = await getTribeChatMemberRosterIds(tribeId)
-  return memberRosterIds.includes(rosterId)
+  return canAccessSurvivorTribeChatSource(leagueId, userId, source)
 }
 
 function applyBlockedVisibility(
@@ -184,7 +172,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ threadId:
         hiddenBlockedCount: visible.hiddenBlockedCount,
       })
     }
-    const mainLeagueAccess = await canAccessLeagueDraft(leagueId, user.appUserId)
+    const mainLeagueAccess = await resolveLeagueAccess(leagueId, user.appUserId)
     if (mainLeagueAccess) {
       const sourceAllowed = await canAccessSurvivorTribeSource(leagueId, user.appUserId, source)
       if (!sourceAllowed) {
@@ -301,7 +289,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
       const mapped = bracketMessagesToPlatform([created], threadId)[0]
       return NextResponse.json({ status: 'ok', message: mapped })
     }
-    const mainLeagueAccess = await canAccessLeagueDraft(leagueId, user.appUserId)
+    const mainLeagueAccess = await resolveLeagueAccess(leagueId, user.appUserId)
     if (mainLeagueAccess) {
       const sourceAllowed = await canAccessSurvivorTribeSource(leagueId, user.appUserId, source)
       if (!sourceAllowed) {
@@ -435,6 +423,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
         commandResult.handled &&
         commandResult.ok &&
         (commandResult.intent === 'vote' || commandResult.intent === 'jury_vote')
+      /*
+       * Every `@chimmy` message is between that manager and Chimmy, whatever it asks. A sit-out
+       * nomination, an idol play or a challenge pick typed as `@chimmy …` used to be stored as a
+       * public row once the command succeeded, so the tribe (or the whole league) could read who
+       * was being sat out or which idol was in play. Reaching this point with `isChimmyPrompt` set
+       * means the official command was handled; the private branch above took every other prompt.
+       */
+      const privateChimmyExchange = isRecordedBallot || isChimmyPrompt
       const messageMetadata = leagueMetadata
       const created = await createLeagueChatMessage(leagueId, user.appUserId, message, {
         type: messageType,
@@ -442,20 +438,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
         metadata: messageMetadata,
         source,
         parentMessageId,
-        ...(isRecordedBallot
-          ? { isPrivate: true, visibleToUserId: user.appUserId, messageSubtype: 'survivor_private_ballot' }
+        ...(privateChimmyExchange
+          ? { isPrivate: true, visibleToUserId: user.appUserId, messageSubtype: isRecordedBallot ? 'survivor_private_ballot' : 'chimmy_prompt' }
           : {}),
       })
-      if (isRecordedBallot) {
+      if (privateChimmyExchange) {
         const reply = await createLeagueChatMessage(leagueId, user.appUserId,
-          commandResult.message ?? 'Your vote was recorded privately.', {
+          commandResult.message ?? (isRecordedBallot ? 'Your vote was recorded privately.' : 'Done. This stays between us.'), {
             type: 'text', source, isPrivate: true, visibleToUserId: user.appUserId,
             parentMessageId: created?.id ?? undefined,
             messageSubtype: 'chimmy_private_response',
             metadata: { chimmyResponse: true, discordAuthorName: 'Chimmy' },
           })
         return NextResponse.json({ status: 'ok', message: created, aiReply: reply, messages: [created, reply].filter(Boolean),
-          commandResult: { ok: true, intent: 'vote', message: commandResult.message } })
+          commandResult: { ok: true, intent: isRecordedBallot ? 'vote' : (commandResult.intent ?? 'chimmy_prompt'), message: commandResult.message } })
       }
       // The communications drawer writes league chat through this route. Keep the
       // Discord relay inside the request: an unawaited task can be stopped when a

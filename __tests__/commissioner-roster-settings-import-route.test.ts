@@ -20,6 +20,9 @@ vi.mock('@/lib/league/settingsLifecycleGate', () => ({
   recordMidSeasonSettingsChange: vi.fn(async () => undefined),
 }))
 
+const applyRosterTemplateChangeMock = vi.hoisted(() => vi.fn(async () => ({ synced: true, rounds: 9, previousRounds: 13 })))
+vi.mock('@/lib/draft/syncDraftRoundsToRoster', () => ({ applyRosterTemplateChange: applyRosterTemplateChangeMock }))
+
 vi.mock('@/lib/roster-engine', () => ({
   checkCommissionerPermission: checkCommissionerPermissionMock,
   mapImportedRosterToLeagueConfig: mapImportedRosterToLeagueConfigMock,
@@ -132,10 +135,13 @@ describe('/api/commissioner/leagues/[leagueId]/roster-settings/import route', ()
     )
 
     expect(mapImportedRosterToLeagueConfigMock).toHaveBeenCalledWith('l1', 'yahoo', { QB: 1 })
+    // An imported roster reshapes the draft and roster limits like any other roster change.
+    expect(applyRosterTemplateChangeMock).toHaveBeenCalledWith('l1', expect.objectContaining({ keepManualOverride: false }))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       ok: true,
       action: 'apply',
+      draftRounds: { synced: true, rounds: 9, previousRounds: 13 },
       unifiedConfig: {
         sport: 'NFL',
         leagueType: 'redraft',

@@ -10,6 +10,7 @@ import { getSeasonPointsFromRosterPerformance } from './SurvivorVoteEngine'
 import { readSurvivorLateSeasonSettings } from './lateSeasonSettings'
 import { isFinaleVoteComplete } from './finaleReveal'
 import { afterWinnerCrowned } from './shareCards/hooks'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 export interface SurvivorFinaleVote {
   jurorRosterId: string
@@ -364,7 +365,7 @@ export async function recordCrownedWinner(leagueId: string, state: SurvivorFinal
   await prisma.jurySession.upsert({ where: { leagueId }, create: { leagueId, ...session }, update: session })
   await prisma.survivorPlayer.updateMany({ where: { leagueId, userId: winnerUserId }, data: { playerState: 'survivor_winner' } })
   const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
-  if (channel) await prisma.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+  if (channel) await createSurvivorChatMessage(prisma, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
     contentType: 'host_announcement', content: `The jury has spoken. ${winnerName} is the last one standing.` } })
   await writeChampionToHistory(leagueId, { winnerUserId, winnerName, winnerRosterId: state.winnerRosterId, voteCount: state.voteCount, crownedAt: session.revealedAt }).catch(error => {
     console.error('[survivor-finale] champion history write failed', { leagueId, error: error instanceof Error ? error.message : String(error) })

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /*
- * The wiring of the NBA/NHL/MLB tick into `live-score-tick`: OFF by default, and when on it can
+ * The wiring of the NBA/NHL/MLB tick into `live-score-tick`: NBA on by default; an enabled sport can
  * never take NFL scoring down with it.
  */
 
@@ -52,12 +52,19 @@ afterEach(() => {
 })
 
 describe('live-score-tick — daily-sport flag', () => {
-  it('flag unset: the daily tick is never called, and telemetry says it is off', async () => {
+  it('explicit off: the daily tick is never called, and telemetry says it is off', async () => {
+    process.env.DAILY_SPORT_LIVE_SCORING = 'off'
     const res = await GET(req())
     expect(res.status).toBe(200)
     expect(h.daily).not.toHaveBeenCalled()
     expect(h.meta?.dailyLiveEnabled).toEqual([])
     expect(h.meta?.dailyLive).toBeNull()
+  })
+
+  it('NBA is enabled when no flag is configured', async () => {
+    await GET(req())
+    expect(h.daily.mock.calls[0][0].sports).toEqual(['NBA'])
+    expect(h.meta?.dailyLiveEnabled).toEqual(['NBA'])
   })
 
   it('flag on: runs for the enabled sports, with a budget stop, and reports the outcome', async () => {

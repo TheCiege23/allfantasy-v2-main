@@ -6,6 +6,10 @@ import { loadCouncilContext } from './survivorCouncilService'
 import { getCouncilShots } from './survivorShotInTheDark'
 import { afterCouncilRevealed } from './shareCards/hooks'
 import { isCouncilReadComplete } from './survivorRevealGate'
+import { createSurvivorChatMessage } from './survivorChatBridge'
+import { hasIndependentSurvivorHost } from './survivorHostIndependence'
+import { drawSurvivorStones } from './survivorStones'
+import { notifySurvivorCommissionerOnce } from './survivorCommissionerAlerts'
 
 /**
  * SURVIVOR VOTE TALLY (canonical Phase 3) — deterministic, no fabrication.
@@ -36,7 +40,7 @@ export interface CouncilTally {
   blockedByIdol: boolean
   isTie: boolean
   tieUserIds: string[]
-  tiePhase: 'revote_required' | 'season_points_decided' | 'commissioner_tiebreak_required' | null
+  tiePhase: 'revote_required' | 'season_points_decided' | 'commissioner_tiebreak_required' | 'stones_decided' | 'rocks_decided' | null
   eliminatedUserId: string | null
   eliminatedName: string | null
   eliminatedRosterId: string | null
@@ -69,11 +73,14 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
   })
   type VoteRow = { id: string; voterRosterId: string; targetRosterId: string; targetUserId: string | null; targetName: string | null; doesNotCount: boolean; isLateVote: boolean }
   const voteRows = votes as VoteRow[]
+  const councilShotsEarly = await getCouncilShots(leagueId, councilId)
+  const autoCast = await autoCastMissingBallots(leagueId, ctx, voteRows, new Set(councilShotsEarly.map(shot => shot.userId)))
+  voteRows.push(...autoCast)
 
   const protectedRosters = new Set(
     council.idolsPlayed.filter((p) => p.powerType === 'vote_shield').map((p) => p.protectedRosterId ?? p.playerRosterId),
   )
-  const councilShots = await getCouncilShots(leagueId, councilId)
+  const councilShots = councilShotsEarly
   const shotUsers = new Set(councilShots.map(shot => shot.userId))
   const shotVoterRosters = new Set([...shotUsers].map(userId => ctx.userToRoster[userId]).filter((id): id is string => Boolean(id)))
   const shotProtectedRosters = new Set(
@@ -179,7 +186,21 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
     isTie = true
     tieUserIds = council.tiePlayerIds
   }
-  if (isTie && (council.phase === 'revote' || settings.tieRule === 'season_points_only')) {
+  // Owner's rules (2026-10-20): "revote, then rocks" (default) or "rocks immediately". Rocks is a
+  // seeded draw among the still-tied managers, so a tie can never stall a week and the audit can
+  // replay the draw. The season-points rules below stay for leagues created before this.
+  const tieRule = settings.tieRule ?? 'revote_then_rocks'
+  const rocksNow = isTie && (tieRule === 'rocks_immediately' || (tieRule === 'revote_then_rocks' && council.phase === 'revote'))
+  if (rocksNow) {
+    const candidates = tieUserIds.length ? tieUserIds : council.tiePlayerIds
+    const drawn = drawSurvivorStones(candidates, `survivor-rocks:${leagueId}:${councilId}:${council.week}`)
+    eliminatedUserId = drawn.eliminatedUserId
+    eliminatedRosterId = ctx.userToRoster[drawn.eliminatedUserId] ?? null
+    eliminatedName = ctx.scopePlayers.find(player => player.userId === drawn.eliminatedUserId)?.displayName ?? null
+    tieBreakSeasonPoints = { rocks: drawn, rule: tieRule, round: council.phase === 'revote' ? 'revote' : 'first' } as Prisma.InputJsonValue
+    isTie = false
+    tiePhase = 'rocks_decided'
+  } else if (isTie && (council.phase === 'revote' || tieRule === 'season_points_only')) {
     const candidates = council.phase === 'revote' ? council.tiePlayerIds : tieUserIds
     const scoreRows = await prisma.survivorWeeklyScore.findMany({
       where: { leagueId, userId: { in: candidates }, week: { lte: council.week }, isFinalized: true },
@@ -200,9 +221,20 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
       eliminatedName = ctx.scopePlayers.find(player => player.userId === bottom[0])?.displayName ?? null
       isTie = false
       tiePhase = 'season_points_decided'
-    } else {
+    } else if (await hasIndependentSurvivorHost(leagueId, prisma)) {
       tieUserIds = bottom
       tiePhase = 'commissioner_tiebreak_required'
+    } else {
+      // No human host may decide a secret tie in a league whose commissioner plays, and a council
+      // left at commissioner_tiebreak_required blocks the week forever. The stones decide: a draw
+      // among the exact-tied managers, seeded from the council so the audit can replay it.
+      const drawn = drawSurvivorStones(bottom, `survivor-stones:${leagueId}:${councilId}:${council.week}`)
+      eliminatedUserId = drawn.eliminatedUserId
+      eliminatedRosterId = ctx.userToRoster[drawn.eliminatedUserId] ?? null
+      eliminatedName = ctx.scopePlayers.find(player => player.userId === drawn.eliminatedUserId)?.displayName ?? null
+      tieBreakSeasonPoints = { totals, lowest, candidates, stones: drawn } as Prisma.InputJsonValue
+      isTie = false
+      tiePhase = 'stones_decided'
     }
   }
 
@@ -237,6 +269,14 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
       tieBreakSeasonPoints,
     },
   })
+  if (tiePhase === 'commissioner_tiebreak_required') {
+    await notifySurvivorCommissionerOnce(leagueId, 'tie_unresolved', {
+      dedupeKey: councilId, week: council.week,
+      title: `Week ${council.week} council is tied and needs your call`,
+      body: 'The revote and finalized season points both ended level. Open the Tribal Council controls and pick between the tied managers.',
+      deepLinkPath: `/survivor/${leagueId}/tribal`, urgency: 'critical',
+    }).catch(() => {})
+  }
 
   await prisma.survivorAuditEntry.create({
     data: {
@@ -246,13 +286,68 @@ export async function tallyCouncil(leagueId: string, councilId: string): Promise
       action: 'votes_tallied',
       relatedEntityId: councilId,
       relatedEntityType: 'council',
-      data: { isTie, blockedByIdol, totalBallots: scrolls.length, eliminatedUserId },
+      data: { isTie, blockedByIdol, totalBallots: scrolls.length, eliminatedUserId, tiePhase, autoCastBallots: autoCast.length },
       isVisibleToCommissioner: true,
       isVisibleToPublic: false,
     },
   })
 
   return { ok: true, tally, status: isTie ? 'tie_pending' : 'closed' }
+}
+
+type MissingBallotContext = NonNullable<Awaited<ReturnType<typeof loadCouncilContext>>>
+type CastRow = { id: string; voterRosterId: string; targetRosterId: string; targetUserId: string | null; targetName: string | null; doesNotCount: boolean; isLateVote: boolean }
+
+/**
+ * Owner's rule (2026-10-20): a manager who does not vote has a ballot cast for them, for the
+ * lowest-scoring manager that week among the targets they could have voted for (their tribe before
+ * the merge; everyone after it). A manager who used Shot in the Dark forfeited the ballot and gets
+ * none. Written as a real ballot (idempotent on the council + voter key) and recorded in the audit,
+ * so the read shows it like any other and the commissioner can see it was automatic.
+ */
+async function autoCastMissingBallots(leagueId: string, ctx: MissingBallotContext, existing: CastRow[], shotUsers: ReadonlySet<string>): Promise<CastRow[]> {
+  const { council, settings, eligibility, userToRoster, scopePlayers } = ctx
+  if (settings.nonVoterAutoCast === false) return []
+  const voted = new Set(existing.map(row => row.voterRosterId))
+  const missing = eligibility.voterUserIds.filter(userId => !shotUsers.has(userId) && userToRoster[userId] && !voted.has(userToRoster[userId]))
+  if (missing.length === 0) return []
+  const targetIds = [...new Set(missing.flatMap(userId => eligibility.targetsByVoter[userId] ?? []))]
+  if (targetIds.length === 0) return []
+  const rows = (await prisma.survivorWeeklyScore.findMany({
+    where: { leagueId, week: council.week, userId: { in: targetIds } },
+    select: { userId: true, finalScore: true, isFinalized: true },
+  })) ?? []
+  const score = new Map<string, number>()
+  for (const row of rows) if (!score.has(row.userId) || row.isFinalized) score.set(row.userId, row.finalScore)
+  if (score.size === 0) return []
+  const nameOf = (userId: string) => scopePlayers.find(player => player.userId === userId)?.displayName ?? null
+  const cast: CastRow[] = []
+  const now = new Date()
+  for (const voterUserId of missing) {
+    const targets = (eligibility.targetsByVoter[voterUserId] ?? []).filter(userId => score.has(userId) && userToRoster[userId])
+    if (targets.length === 0) continue
+    const lowest = Math.min(...targets.map(userId => score.get(userId)!))
+    const target = targets.filter(userId => score.get(userId) === lowest).sort((a, b) => (nameOf(a) ?? a).localeCompare(nameOf(b) ?? b))[0]!
+    const voterRosterId = userToRoster[voterUserId]!
+    const targetRosterId = userToRoster[target]!
+    const targetName = nameOf(target)
+    const written = await prisma.survivorVote.upsert({
+      where: { councilId_voterRosterId: { councilId: council.id, voterRosterId } },
+      create: { councilId: council.id, leagueId, voterRosterId, voterUserId, voterName: nameOf(voterUserId), targetRosterId, targetUserId: target, targetName, isLateVote: false, doesNotCount: false, submittedAt: now },
+      update: {},
+      select: { id: true },
+    })
+    cast.push({ id: written?.id ?? `auto:${council.id}:${voterRosterId}`, voterRosterId, targetRosterId, targetUserId: target, targetName, doesNotCount: false, isLateVote: false })
+    await prisma.survivorAuditEntry.create({
+      data: {
+        leagueId, week: council.week, category: 'tribal', action: 'non_voter_auto_cast', actorUserId: null, targetUserId: voterUserId,
+        relatedEntityId: council.id, relatedEntityType: 'council',
+        data: { voterUserId, targetUserId: target, weeklyScore: lowest, reason: 'no ballot by the deadline' },
+        isVisibleToCommissioner: true, isVisibleToPublic: false,
+      },
+    })
+  }
+  return cast
 }
 
 export type RevealOutcome =
@@ -282,9 +377,9 @@ async function publishVerdictInTx(tx: Prisma.TransactionClient, leagueId: string
   }).join('\n')
   const ballots = seq.length ? seq.map((scroll, index) => `Ballot ${index + 1}: ${scroll.targetName ?? 'No eligible target'}${scroll.status === 'counts' ? '' : scroll.status === 'taken_by_vote_steal' ? ' (Taken — does not count)' : scroll.status === 'blocked_by_shot' ? ' (blocked by Shot in the Dark)' : scroll.status === 'forfeited_by_shot' ? ' (forfeited by Shot in the Dark)' : ' (does not count)'}.`).join('\n') : 'No ballots were cast.'
   const opensRevote = council.isTie && council.tiePhase === 'revote_required' && council.phase !== 'revote'
-  const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : ''}`
+  const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : council.tiePhase === 'stones_decided' ? ' The revote and finalized season points were tied, so the stones decided.' : council.tiePhase === 'rocks_decided' ? ' The vote was tied, so the tied managers drew rocks.' : ''}`
   if (channel) {
-    await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+    await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
       contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shotAnnouncement ? `${shotAnnouncement}\n` : ''}${ballots}\n${outcome}` } })
   }
   if (opensRevote) {
@@ -358,7 +453,7 @@ async function revealCouncilInTransaction(leagueId: string, councilId: string, a
     }
     const channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
     if (!channel) return { ok: false, status: 409, code: 'chat_missing', error: 'Restore league chat before publishing the Torch Ceremony.' }
-    await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+    await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
       contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\nThe votes are in and the scroll is open. Read along on the Tribal Council page.` } })
     const now = new Date()
     await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { isRevealed: true, revealStartsAt: now, status: council.isTie ? 'tie_pending' : 'revealed' } })

@@ -18,6 +18,7 @@ import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import { normalizeWaiverTypeForEngine, parseWaiverEngineConfig } from './waiver-engine-config'
 import { assertWeeklyDropLimit } from './waiver-validation'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
+import { assertCurrentNbaWaiverPlayer } from './current-nba-player-pool'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 
 export const WAIVER_TX_RESULT_CODES = [
@@ -76,6 +77,8 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
         id: true,
         rosterSize: true,
         sport: true,
+        isDynasty: true,
+        leagueVariant: true,
         lockAllMoves: true,
         lifecycleState: true,
       },
@@ -99,6 +102,8 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   if (league.lifecycleState === 'archived' || league.lifecycleState === 'completed') {
     throw new Error('This league season is complete; roster moves are locked.')
   }
+
+  await assertCurrentNbaWaiverPlayer(league, addId)
 
   const engineConfig = parseWaiverEngineConfig(settingsRow?.waiverEngineConfig ?? null)
   const waiverType = normalizeWaiverTypeForEngine(eff.waiverType)

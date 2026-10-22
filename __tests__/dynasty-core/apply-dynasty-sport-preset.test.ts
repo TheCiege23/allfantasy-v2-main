@@ -69,8 +69,32 @@ describe('applyDynastySportPresetToLeague', () => {
     m.getConfig.mockResolvedValue({ templateKey: 'dynasty', slots: { ...resolveNhlRosterTemplate('dynasty').slots }, isCustom: false })
     await applyDynastySportPresetToLeague('L1', 'nhl_dynasty_points_minors', 'commish')
     const slots = m.updateRoster.mock.calls[0]![1].slots
-    expect(slots).toMatchObject({ BN: 10, IR: 3, TAXI: 8 })
+    expect(slots).toMatchObject({ BN: 10, IR: 3 })
     expect(slots).not.toHaveProperty('IL')
+  })
+
+  // NHL / MLB have no prospect pool (lib/league-creation/prospectStashPolicy.ts): no preset adds taxi.
+  it.each([
+    ['NHL', 'nhl_dynasty_points_taxi'],
+    ['NHL', 'nhl_dynasty_points_minors'],
+    ['MLB', 'mlb_dynasty_points_minors'],
+    ['MLB', 'mlb_dynasty_points_deep'],
+  ])('%s %s writes no TAXI anywhere', async (sport, presetId) => {
+    m.leagueFindUnique.mockResolvedValue({ sport, status: null, lifecycleState: 'setup', settings: {} })
+    // A league created after the policy has no TAXI key in its stored roster.
+    m.getConfig.mockResolvedValue({ templateKey: 'custom', slots: { BN: 5, [sport === 'NHL' ? 'IR' : 'IL']: 2 }, isCustom: true })
+    const res = await applyDynastySportPresetToLeague('L1', presetId, 'commish')
+    expect(res.ok).toBe(true)
+    expect(m.updateRoster.mock.calls[0]![1].slots).not.toHaveProperty('TAXI')
+    expect(m.upsert.mock.calls[0]![1].taxiSlots).toBe(0)
+    expect(m.leagueUpdate.mock.calls[0]![0].data.settings.taxi_slots).toBe(0)
+  })
+
+  it('NHL / MLB: a TAXI slot the league already stores is lowered to 0, never raised', async () => {
+    m.leagueFindUnique.mockResolvedValue({ sport: 'MLB', status: null, lifecycleState: 'setup', settings: {} })
+    m.getConfig.mockResolvedValue({ templateKey: 'custom', slots: { BN: 5, IL: 2, TAXI: 3 }, isCustom: true })
+    await applyDynastySportPresetToLeague('L1', 'mlb_dynasty_points_deep', 'commish')
+    expect(m.updateRoster.mock.calls[0]![1].slots.TAXI).toBe(0)
   })
 
   it('refuses once the draft has started, writing nothing', async () => {
