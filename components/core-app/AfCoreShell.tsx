@@ -57,6 +57,7 @@ import {
 } from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import '@/components/core-app/af-phone.css'
 
 /**
  * The chrome every AF Core screen sits inside: league rail, primary nav, top bar.
