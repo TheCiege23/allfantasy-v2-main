@@ -12,8 +12,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
  * saving on its own and registers its pending edits here instead; outside one (the older settings
  * modal for imported leagues) it autosaves exactly as before.
  *
- * Pages that already have their own explicit Save button (roster, scoring, draft, guillotine
- * editors) do not register and are unaffected.
+ * Editors with their own save call join through `useSaveScopeParticipant` and hide their own
+ * button (the Playoffs bracket and stage editors). Pages whose editor still draws its own Save
+ * button (roster, scoring, draft, guillotine) do not register and are unaffected.
  */
 
 export type SaveScopeParticipant = {
@@ -76,6 +77,31 @@ const SaveScopeContext = createContext<Store | null>(null)
 /** For `useLeagueSettingsSectionAutosave`: the scope it is in, or null (then it autosaves). */
 export function useSettingsSaveScope(): Store | null {
   return useContext(SaveScopeContext)
+}
+
+/**
+ * For an editor with its own save call (the playoff bracket and stage editors): join the page's save
+ * bar instead of drawing a second Save button. Pass whether it has unsaved edits and how to save
+ * them; returns true when a bar is there to do the saving, so the editor can hide its own button.
+ * Outside a scope it does nothing and returns false.
+ */
+export function useSaveScopeParticipant(dirty: boolean, save: () => Promise<boolean>): boolean {
+  const scope = useSettingsSaveScope()
+  const latest = useRef({ dirty, save })
+  latest.current = { dirty, save }
+  useEffect(() => {
+    if (!scope) return
+    return scope.register(`editor:${Math.random().toString(36).slice(2)}`, {
+      isDirty: () => latest.current.dirty,
+      save: () => latest.current.save(),
+      // Discard remounts the page from saved values, which resets the editor's own state.
+      discard: () => {},
+    })
+  }, [scope])
+  useEffect(() => {
+    scope?.notify()
+  }, [scope, dirty])
+  return scope != null
 }
 
 export type SettingsSaveScopeHandle = {
