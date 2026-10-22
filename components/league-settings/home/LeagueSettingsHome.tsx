@@ -1,6 +1,7 @@
 'use client'
 
 import '@/components/core-app/af-core.css'
+import '@/components/league/league-admin.css'
 import './league-settings-home.css'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -144,7 +145,8 @@ export function LeagueSettingsHome({
       <div className="af-core lsh-root" data-testid="league-settings-subpage" data-subpage={open}>
         <SettingsHeader title={sub.title} onBack={closeSubPage} backLabel="Back to league settings" />
         <div className="lsh-column">
-          <div className="lsh-subpage-body">
+          {/* af-league-admin maps the older editors' fixed colours onto the theme (league-admin.css). */}
+          <div className="lsh-subpage-body af-league-admin">
             <SettingsSaveScope key={open} onReady={saveScope.onReady}>
               {sub.content}
             </SettingsSaveScope>
