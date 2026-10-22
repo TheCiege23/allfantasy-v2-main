@@ -60,6 +60,7 @@ interface LeagueMockPayload {
     rounds: number
     draftType: DraftType
     superflex: boolean
+    rosterSlots?: string[]
     managers: LeagueManager[]
     detectedUserSlot: number
     hasExplicitDraftOrder: boolean
@@ -67,6 +68,7 @@ interface LeagueMockPayload {
 }
 
 interface DraftSettings {
+  rosterSlots?: string[]
   teamCount: number
   rounds: number
   draftType: DraftType
@@ -86,7 +88,7 @@ interface DraftPick {
   playerName: string
   position: string
   team: string
-  adp: number
+  adp: number | null
   projectedPts: number
   aiReason?: string
   isUser: boolean
@@ -114,7 +116,7 @@ interface AvailablePlayer {
   name: string
   position: string
   team: string
-  adp: number
+  adp: number | null
   projectedPts: number
   ownership: number
   injuryStatus: string | null
@@ -260,6 +262,7 @@ function positionLabelColor(position: string): string {
 }
 
 function getRosterSlots(settings: DraftSettings): string[] {
+  if (settings.rosterSlots?.length) return settings.rosterSlots
   switch (settings.sport) {
     case 'NHL':
       return ['C', 'C', 'LW', 'RW', 'LW', 'RW', 'D', 'D', 'UTIL', 'G']
@@ -293,7 +296,7 @@ function slotSupportsPosition(slot: string, position: string): boolean {
   if (normalizedSlot === 'SUPER_FLEX') {
     return ['QB', 'RB', 'WR', 'TE'].includes(normalizedPosition)
   }
-  if (normalizedSlot === 'UTIL') {
+  if (['UTIL', 'SUPER_UTIL', 'BN'].includes(normalizedSlot)) {
     return true
   }
   if (normalizedSlot === 'G') {
@@ -345,6 +348,8 @@ function computeTeamNeeds(team: TeamSlot, settings: DraftSettings): string[] {
         case 'SUPER_FLEX':
           return ['QB', 'RB', 'WR', 'TE']
         case 'UTIL':
+        case 'SUPER_UTIL':
+        case 'BN':
           return []
         case 'G':
           return ['PG', 'SG']
@@ -368,7 +373,7 @@ function scorePlayerForTeam(
   picks: DraftPick[],
   availablePlayers: AvailablePlayer[],
 ): number {
-  let score = Math.max(0, 200 - player.adp)
+  let score = Math.max(0, 200 - (player.adp ?? 9999))
   const primaryNeed = needs[0] ?? null
   const roundNumber = Math.ceil((picks.length + 1) / settings.teamCount)
 
@@ -385,7 +390,7 @@ function scorePlayerForTeam(
   }
 
   if (roundNumber > settings.rounds * 0.7) {
-    if (player.ownership < 50 && player.adp > (roundNumber * settings.teamCount * 0.8)) {
+    if (player.ownership < 50 && player.adp != null && player.adp > (roundNumber * settings.teamCount * 0.8)) {
       score += 5
     }
     if (player.isRookie) score += 3
@@ -396,8 +401,8 @@ function scorePlayerForTeam(
 }
 
 function generatePickReason(player: AvailablePlayer, team: TeamSlot, needs: string[], round: number): string {
-  if (needs.includes(player.position)) {
-    return `Filled a ${player.position} need with value at ${player.adp.toFixed(1)} ADP.`
+  if (needs.includes(player.position) && player.adp != null) {
+    return `Filled a ${player.position} need with value at ${player.adp?.toFixed(1) ?? '\u2014'} ADP.`
   }
   if (round > 10 && player.isRookie) {
     return 'Late-round upside swing with rookie growth appeal.'
@@ -504,7 +509,7 @@ function buildPlayerContextMessage(state: DraftState, queue: string[]): string {
   const topAvailable = state.availablePlayers
     .filter((player) => !draftedNames.has(player.id))
     .slice(0, 8)
-    .map((player) => `${player.name} (${player.position}, ${player.team || 'FA'}, ADP ${player.adp.toFixed(1)})`)
+    .map((player) => `${player.name} (${player.position}, ${player.team || 'FA'}, ADP ${player.adp?.toFixed(1) ?? 'unavailable'})`)
     .join(', ')
 
   const rosterSummary = currentTeam
@@ -974,6 +979,7 @@ export default function MockDraftSleeperRoomClient({
       }
 
       setLeaguePayload(payload.league)
+      setSelectedLeague({ ...league, id: payload.league.leagueId ?? league.id, isDynasty: payload.league.isDynasty, sport: payload.league.sport })
       setSettings({
         teamCount: payload.league.teamCount,
         rounds: payload.league.rounds,
@@ -981,6 +987,7 @@ export default function MockDraftSleeperRoomClient({
         sport: payload.league.sport,
         scoring: payload.league.scoring,
         superflex: payload.league.superflex,
+        rosterSlots: payload.league.rosterSlots,
         myPickSlot: payload.league.detectedUserSlot,
         speed: 15,
       })
@@ -1030,7 +1037,7 @@ export default function MockDraftSleeperRoomClient({
     const params = new URLSearchParams({
       type,
       pool,
-      limit: '300',
+      limit: nextSettings.sport === 'NBA' ? '1000' : '300',
       sport: nextSettings.sport.toLowerCase(),
       leagueId: selectedLeague?.id ?? '',
       draftType: nextSettings.draftType,
@@ -1057,8 +1064,8 @@ export default function MockDraftSleeperRoomClient({
           name,
           position,
           team: stringFromUnknown(raw.team) ?? '',
-          adp: numberFromUnknown(raw.adp) ?? index + 1,
-          projectedPts: numberFromUnknown(raw.value) ?? Math.max(0, 250 - index),
+          adp: numberFromUnknown(raw.adp) ?? (nextSettings.sport === 'NBA' ? null : index + 1),
+          projectedPts: numberFromUnknown(raw.value) ?? (nextSettings.sport === 'NBA' ? 0 : Math.max(0, 250 - index)),
           ownership: numberFromUnknown(raw.timesDrafted) ?? Math.max(10, 95 - index / 4),
           injuryStatus: stringFromUnknown(raw.injuryStatus),
           tier: Math.max(1, Math.ceil((index + 1) / 12)),
@@ -1067,7 +1074,7 @@ export default function MockDraftSleeperRoomClient({
         } satisfies AvailablePlayer
       })
       .filter((player): player is AvailablePlayer => player != null)
-      .sort((left, right) => left.adp - right.adp)
+      .sort((left, right) => (left.adp ?? Infinity) - (right.adp ?? Infinity))
 
     return mapped
   }, [selectedLeague?.id, selectedLeague?.isDynasty])
@@ -1302,9 +1309,9 @@ export default function MockDraftSleeperRoomClient({
         <div className="border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
           <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
             <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-300">League Mock</div>
-            <h1 className="mt-3 text-3xl font-black">Select a Sleeper league</h1>
+            <h1 className="mt-3 text-3xl font-black">Select a league</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/50">
-              Import real managers, avatars, and draft slots when Sleeper has them. If order is not set yet, AllFantasy predicts it from team records.
+              Practice with league managers, roster layout, and draft settings. Imported Sleeper leagues use their draft order when available, or a predicted order from team records.
             </p>
           </div>
         </div>
@@ -1335,24 +1342,20 @@ export default function MockDraftSleeperRoomClient({
             </div>
           ) : null}
 
-          {!loadingLeagues && leagues.length === 0 ? (
+          {!selectedLeague && !loadingLeagues && leagues.length === 0 ? (
             <div className="rounded-3xl border border-white/8 bg-[#0c1224] p-8 text-center text-sm text-white/55">
               No Sleeper leagues are available on this account yet.
             </div>
           ) : null}
 
-          {!loadingLeagues && leagues.length > 0 ? (
+          {!selectedLeague && !loadingLeagues && leagues.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
               {leagues.map((league) => (
                 <button
                   key={league.id}
                   type="button"
                   onClick={() => void loadLeaguePayload(league)}
-                  className={`rounded-3xl border p-5 text-left transition-all ${
-                    selectedLeague?.id === league.id
-                      ? 'border-cyan-400/40 bg-cyan-500/10'
-                      : 'border-white/8 bg-[#0c1224] hover:border-white/15 hover:bg-white/[0.03]'
-                  }`}
+                  className="rounded-3xl border border-white/8 bg-[#0c1224] p-5 text-left transition-all hover:border-white/15 hover:bg-white/[0.03]"
                   data-testid={`mock-draft-league-card-${league.id}`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -1379,7 +1382,7 @@ export default function MockDraftSleeperRoomClient({
 
           {selectedLeague && loadingLeaguePayload ? (
             <div className="mt-6 rounded-3xl border border-white/8 bg-[#0c1224] p-6 text-sm text-white/60">
-              Loading managers and Sleeper draft settings...
+              Loading managers and league draft settings...
             </div>
           ) : null}
 
@@ -1857,7 +1860,7 @@ export default function MockDraftSleeperRoomClient({
                 {player.injuryStatus ? (
                   <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
                 ) : null}
-                <div className="text-[11px] font-mono text-white/40">{player.adp.toFixed(1)}</div>
+                <div className="text-[11px] font-mono text-white/40">{player.adp?.toFixed(1) ?? '\u2014'}</div>
               </button>
               <button
                 type="button"
@@ -2337,7 +2340,7 @@ export default function MockDraftSleeperRoomClient({
                       </span>
                       <span className="truncate text-sm font-semibold text-white">{pick.playerName}</span>
                     </div>
-                    <div className="mt-1 text-[11px] text-white/35">{pick.team || 'FA'} · ADP {pick.adp.toFixed(1)}</div>
+                    <div className="mt-1 text-[11px] text-white/35">{pick.team || 'FA'} · ADP {pick.adp?.toFixed(1) ?? '\u2014'}</div>
                   </div>
                 ))}
               </div>

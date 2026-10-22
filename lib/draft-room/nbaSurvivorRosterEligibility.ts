@@ -87,3 +87,12 @@ export function nbaSurvivorPlayerIdMatches(eligibility: NbaRosterEligibility, na
   const id = String(playerId ?? '').trim()
   return Boolean(id && nbaSurvivorPlayerIsEligible(eligibility, name) && eligibility.playerIdsByName.get(canonicalName(name))?.has(id))
 }
+
+/** Current-roster checks also protect ordinary NBA redraft, without removing college/dynasty pools. */
+export function shouldVerifyCurrentNbaRoster(input: {
+  sport: string; variant?: string | null; isDynasty: boolean; isDevy: boolean; isC2C: boolean; mergeCollegePool: boolean
+}): boolean {
+  return input.sport === 'NBA' && (input.variant === 'survivor' ||
+    (!input.isDynasty && !String(input.variant ?? '').toLowerCase().includes('dynasty') &&
+      !input.isDevy && !input.isC2C && !input.mergeCollegePool))
+}

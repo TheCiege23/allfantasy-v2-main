@@ -11,6 +11,7 @@ import { listScoringPresetOptions } from '@/lib/league-creation-preset/scoring-p
 import { GlassCard, SectionHeader } from '@/components/create-league-v2/primitives'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { localizeDraftTypeOption } from '@/lib/i18n/createLeagueWire'
+import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 
 const TRADE_REVIEW_LABEL: Record<TradeReviewMode, string> = {
   none: 'No review',
@@ -58,7 +59,8 @@ function rosterSummary(state: CreateLeagueV2State): string {
   const leagueType = getEffectiveLeagueType(state)
   if (leagueType && isDynastyConcept(leagueType)) {
     const d = state.dynasty
-    return `Startup depth ${d.startupRosterDepth} · Bench ${d.benchCount} · IR ${d.irCount} · Taxi ${d.taxiSlotCount}`
+    const taxi = sportSupportsProspectStash(state.sport) ? ` · Taxi ${d.taxiSlotCount}` : ''
+    return `Startup depth ${d.startupRosterDepth} · Bench ${d.benchCount} · IR ${d.irCount}${taxi}`
   }
   if (leagueType === 'keeper') {
     const k = state.keeper

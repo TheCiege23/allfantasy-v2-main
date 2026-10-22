@@ -490,7 +490,7 @@ describe('/core with an unknown segment', () => {
     vi.mocked(getDashboardLeagueListForUser).mockClear()
     const AfCorePage = await loadPage()
     await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
-    expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count' })
+    expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count', requireCoreLeagues: true })
   })
 })
 

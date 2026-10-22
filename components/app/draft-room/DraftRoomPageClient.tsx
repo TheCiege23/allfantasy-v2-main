@@ -3988,7 +3988,7 @@ export function DraftRoomPageClient({
           loading={draftIntelLoading}
           headline={draftIntel?.headline ?? null}
           picksUntilUser={ribbonPicksUntilUser}
-          onClock={draftIntel?.status === 'on_clock' || isCurrentUserOnClock}
+          onClock={session?.status === 'in_progress' && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock)}
           queue={draftIntelQueue}
           canDraft={Boolean(canDraft && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock))}
           onDraftTopChoice={
@@ -4030,6 +4030,7 @@ export function DraftRoomPageClient({
       leftAtPick,
       presentationVariant,
       draftIntelLoading,
+      session?.status,
       draftIntel?.headline,
       ribbonPicksUntilUser,
       draftIntel?.status,

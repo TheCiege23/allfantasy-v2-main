@@ -15,7 +15,7 @@ import {
   parseCursor,
 } from '@/lib/chat-core'
 import { bracketMessagesToPlatform } from '@/lib/chat-core/league-message-proxy'
-import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
 import { parseTribeIdFromSource } from '@/lib/survivor/constants'
@@ -184,7 +184,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ threadId:
         hiddenBlockedCount: visible.hiddenBlockedCount,
       })
     }
-    const mainLeagueAccess = await canAccessLeagueDraft(leagueId, user.appUserId)
+    const mainLeagueAccess = await resolveLeagueAccess(leagueId, user.appUserId)
     if (mainLeagueAccess) {
       const sourceAllowed = await canAccessSurvivorTribeSource(leagueId, user.appUserId, source)
       if (!sourceAllowed) {
@@ -301,7 +301,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
       const mapped = bracketMessagesToPlatform([created], threadId)[0]
       return NextResponse.json({ status: 'ok', message: mapped })
     }
-    const mainLeagueAccess = await canAccessLeagueDraft(leagueId, user.appUserId)
+    const mainLeagueAccess = await resolveLeagueAccess(leagueId, user.appUserId)
     if (mainLeagueAccess) {
       const sourceAllowed = await canAccessSurvivorTribeSource(leagueId, user.appUserId, source)
       if (!sourceAllowed) {

@@ -67,7 +67,7 @@ export interface NotificationPreferences {
   categories?: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>>
   /**
    * Quiet hours, evaluated in the user's timezone by `lib/notifications/quietHours.ts`.
-   * Suppresses push and SMS only — the in-app row is a log and still gets written.
+   * Suppresses email, push and SMS — the in-app row is a log and still gets written.
    */
   quietHours?: {
     startHour: number
@@ -134,7 +134,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   league_drama: "League drama / storylines",
   commissioner_alerts: "Commissioner alerts",
   system_account: "System & account alerts",
-  injury_alerts: "Player injury alerts",
+  injury_alerts: "Team injury updates",
   performance_alerts: "Scoring plays & big plays",
   lineup_alerts: "Starting lineup alerts",
   draft_alerts: "Draft alerts (on the clock, timer, trade offers)",
