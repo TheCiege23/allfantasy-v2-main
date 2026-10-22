@@ -97,6 +97,8 @@ export type LeagueSettingsHomeProps = {
   /** Fired when a sub-page closes, so the caller can refetch the values it shows. */
   onSubPageClosed?: (id: SettingsSubPageId) => void
   initialSubPage?: SettingsSubPageId | null
+  /** Drawn above the sections (the pre-draft setup card); given a way to open a sub-page. */
+  header?: (openSubPage: (id: SettingsSubPageId) => void) => ReactNode
 }
 
 /**
@@ -112,6 +114,7 @@ export function LeagueSettingsHome({
   onExit,
   onSubPageClosed,
   initialSubPage = null,
+  header,
 }: LeagueSettingsHomeProps) {
   const [open, setOpen] = useState<SettingsSubPageId | null>(initialSubPage)
   const listScroll = useRef(0)
@@ -161,6 +164,7 @@ export function LeagueSettingsHome({
             Only the commissioner can change these settings.
           </p>
         ) : null}
+        {header?.(openSubPage)}
         {sections.map((section) => (
           <section key={section.id} className="lsh-section" aria-labelledby={`lsh-section-${section.id}`} data-testid={`lsh-section-${section.id}`}>
             <h2 id={`lsh-section-${section.id}`}>{section.title}</h2>
