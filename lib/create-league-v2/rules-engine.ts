@@ -245,6 +245,18 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
         hint: mode === 'auto' ? 'CPU drafts for everyone' : 'Commissioner records picks manually',
       })
     }
+  } else if (leagueType === 'survivor') {
+    // Survivor runs one of five ways: a live snake, linear or auction room, the computer drafting
+    // every tribe's roster, or an in-person draft the commissioner enters afterwards.
+    const existing = new Set(result.map((option) => option.id))
+    for (const mode of ['offline', 'auto'] as const) {
+      if (existing.has(mode)) continue
+      result.push({
+        id: mode,
+        label: mode === 'auto' ? 'Auto' : 'Offline',
+        hint: mode === 'auto' ? 'The computer drafts every roster, start to finish' : 'Draft in person, then the commissioner enters the picks',
+      })
+    }
   } else if (leagueType !== 'big_brother' && leagueType !== 'zombie' && leagueType !== 'salary_cap') {
     result.push({
       id: 'auto',

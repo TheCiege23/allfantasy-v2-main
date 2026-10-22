@@ -47,6 +47,16 @@ export interface SurvivorFoundationSettings {
   tieRule: SurvivorTieRule
   /** A missing ballot is cast for the voter's lowest-scoring eligible target that week. */
   nonVoterAutoCast: boolean
+  /**
+   * The two highest-scoring tribes are safe from Tribal Council (three or more tribes). Off: only
+   * the highest tribe is safe. The lowest-scoring tribe that is not safe attends either way.
+   */
+  twoHighestTribesImmune: boolean
+  /**
+   * Post-merge weeks (0–3) where the cast splits into two surprise tribes for one council. The
+   * weeks are drawn and sealed at the merge; nobody learns them until each one arrives.
+   */
+  postMergeSurpriseTribeWeeks: number
   autoReveal: boolean
   eliminationOutcome: SurvivorEliminationOutcome
   sitOutsEnabled: boolean
@@ -89,12 +99,11 @@ type SettingsRecord = Record<string, unknown>
 export const SURVIVOR_FOUNDATION_SETTINGS_VERSION = 1
 
 export const SURVIVOR_TEAM_COUNT_OPTIONS = SURVIVOR_CAST_SIZE_OPTIONS
+/** Survivor drafts: a live snake, linear or auction room, the computer drafting every seat, or in person. */
 export const SURVIVOR_CANONICAL_DRAFT_TYPE_IDS = [
   'snake',
-  'auction',
   'linear',
-  'real_time',
-  'by_team',
+  'auction',
   'offline',
   'auto',
 ] as const
@@ -122,6 +131,8 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   voteChangePolicy: 'allow_until_close',
   tieRule: 'revote_then_rocks',
   nonVoterAutoCast: true,
+  twoHighestTribesImmune: false,
+  postMergeSurpriseTribeWeeks: 0,
   autoReveal: true,
   eliminationOutcome: 'removed_to_waivers',
   sitOutsEnabled: true,
@@ -307,6 +318,8 @@ export function normalizeSurvivorFoundationSettings(
     voteChangePolicy: normalizeVoteChangePolicy(readString(s, ['voteChangePolicy'], base.voteChangePolicy)),
     tieRule: normalizeTieRule(readString(s, ['tieRule'], base.tieRule)),
     nonVoterAutoCast: readBoolean(s, ['nonVoterAutoCast'], base.nonVoterAutoCast),
+    twoHighestTribesImmune: readBoolean(s, ['twoHighestTribesImmune'], base.twoHighestTribesImmune),
+    postMergeSurpriseTribeWeeks: clampInt(readNumber(s, ['postMergeSurpriseTribeWeeks'], base.postMergeSurpriseTribeWeeks), 0, 3),
     autoReveal: readBoolean(s, ['autoReveal'], base.autoReveal),
     eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),

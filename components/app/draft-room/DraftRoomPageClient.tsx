@@ -4598,6 +4598,7 @@ export function DraftRoomPageClient({
         presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
         leagueName={leagueName}
         sportLabel={typeof sport === 'string' ? sport.toUpperCase() : ''}
+        formatType={formatType}
         queue={roundOneAnnouncementQueue}
         onDismissFront={dismissRoundOneAnnouncement}
       />

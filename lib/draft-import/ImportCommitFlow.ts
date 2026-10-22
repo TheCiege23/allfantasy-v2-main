@@ -11,6 +11,8 @@ export interface ImportCommitResult {
   success: boolean
   error?: string
   backupId?: string
+  /** A full imported board finished the draft, so every post-draft hook ran. */
+  completed?: boolean
 }
 
 function normalizeText(value: string | null | undefined): string {
@@ -151,6 +153,7 @@ export async function commitImport(
     backupId = await createImportBackup(leagueId)
   }
 
+  let boardFull = false
   try {
     await prisma.$transaction(async (tx) => {
       const sess = await (tx as any).draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
@@ -183,11 +186,9 @@ export async function commitImport(
           },
         })
       }
-      const nextStatus = preview.picks.length < 1
-        ? 'pre_draft'
-        : preview.picks.length >= safeTeamCount * safeRounds
-          ? 'completed'
-          : 'in_progress'
+      boardFull = preview.picks.length > 0 && preview.picks.length >= safeTeamCount * safeRounds
+      // A full board is finished below through completeDraftSession, never by writing `completed` here.
+      const nextStatus = preview.picks.length < 1 ? 'pre_draft' : 'in_progress'
       await (tx as any).draftSession.update({
         where: { id: sessionId },
         data: {
@@ -205,7 +206,15 @@ export async function commitImport(
         },
       })
     })
-    return { success: true, backupId: backupId ?? undefined }
+    // A full imported board (an offline draft) finishes through the same path a live room uses, so
+    // rosters, the season and the Survivor setup (tribes, idols, huddles) follow. Writing `completed`
+    // straight onto the session used to skip every one of those hooks.
+    let completed = false
+    if (boardFull) {
+      const { completeDraftSession } = await import('@/lib/live-draft-engine/DraftSessionService')
+      completed = await completeDraftSession(leagueId)
+    }
+    return { success: true, backupId: backupId ?? undefined, completed }
   } catch (e) {
     return { success: false, error: (e as Error).message, backupId: backupId ?? undefined }
   }
