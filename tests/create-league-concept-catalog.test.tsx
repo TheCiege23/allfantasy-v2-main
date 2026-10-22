@@ -16,7 +16,7 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
 }))
 
 describe('league creation concept choices', () => {
-  it('shows eligible NFL concepts, Survivor included, and keeps new Survivor creation off NHL', () => {
+  it('shows eligible NFL concepts, Survivor included, and keeps new Survivor creation off MLB', () => {
     const { rerender } = render(<LeagueBasicsStep state={DEFAULT_V2_STATE} onChange={vi.fn()} fieldErrors={null} />)
 
     const catalog = getClientLeagueCreateOptionsCatalog()
@@ -31,6 +31,8 @@ describe('league creation concept choices', () => {
     rerender(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, sport: 'NBA' }} onChange={vi.fn()} fieldErrors={null} />)
     expect(screen.getByTestId('g30-league-type-survivor')).toBeTruthy()
     rerender(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, sport: 'NHL' }} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-league-type-survivor')).toBeTruthy()
+    rerender(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, sport: 'MLB' }} onChange={vi.fn()} fieldErrors={null} />)
     expect(screen.queryByTestId('g30-league-type-survivor')).toBeNull()
   })
 

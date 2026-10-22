@@ -12,25 +12,23 @@ import { getAllowedLeagueTypesForSport, getAllowedSportsForLeagueType } from '@/
 
 describe('NBA Survivor creation pilot and multi-sport season capabilities', () => {
   const now = new Date('2026-09-01T12:00:00Z')
-  it.each(['NBA', 'NHL'] as const)('%s keeps season capabilities while NHL stays behind the creation gate', sport => {
-    expect(getAllowedSportsForType('survivor').includes(sport)).toBe(sport === 'NBA')
+  it.each(['NBA', 'NHL'] as const)('%s offers new creation with its season capabilities', sport => {
+    expect(getAllowedSportsForType('survivor').includes(sport)).toBe(true)
     // Owner's call, 2026-10-20: 12–24 managers in 2, 3 or 4 equal tribes.
     expect(getTeamCountOptions(sport, 'survivor')).toEqual([12, 15, 16, 18, 20, 21, 22, 24])
     expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedScoringPresetsByConceptSport.survivor[sport]).toEqual([sport.toLowerCase() + '_points'])
     vi.useFakeTimers(); vi.setSystemTime(now)
     try {
       const result = validateCreatePayload({ concept: 'survivor', sport, scoringPreset: sport.toLowerCase() + '_points', teamCount: 16, draftType: 'snake', leagueName: 'Season test' })
-      expect(result.ok).toBe(sport === 'NBA')
-      if (sport !== 'NBA' && !result.ok) expect(result.error).toContain('NBA')
+      expect(result.ok, JSON.stringify(result)).toBe(true)
     } finally { vi.useRealTimers() }
   })
-  it('offers new Survivor creation for NBA and NFL only, across both wizard paths, and refuses paid pilot requests', () => {
-    // Owner's call, 2026-10-22: NFL opens alongside NBA.
-    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA', 'NFL'])
-    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA', 'NFL'])
-    expect(getAllowedLeagueTypesForSport('NBA')).toContain('survivor')
-    expect(getAllowedLeagueTypesForSport('NFL')).toContain('survivor')
-    for (const sport of ['NHL', 'NCAAF'] as const) {
+  it('offers new Survivor creation for NBA, NFL and NHL only, across both wizard paths, and refuses paid pilot requests', () => {
+    // Owner's calls, 2026-10-22: NFL, then NHL, open alongside NBA. MLB has no season calendar yet.
+    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA', 'NFL', 'NHL'])
+    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA', 'NFL', 'NHL'])
+    for (const sport of ['NBA', 'NFL', 'NHL'] as const) expect(getAllowedLeagueTypesForSport(sport)).toContain('survivor')
+    for (const sport of ['MLB', 'NCAAF'] as const) {
       expect(getAllowedLeagueTypesForSport(sport)).not.toContain('survivor')
       expect(getAllowedSportsForType('survivor')).not.toContain(sport)
     }

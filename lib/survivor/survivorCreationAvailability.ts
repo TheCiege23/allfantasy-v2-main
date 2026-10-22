@@ -1,5 +1,5 @@
 /** New Survivor league creation rollout. Existing leagues remain playable in every sport. */
-export const SURVIVOR_CREATION_SPORTS = ['NBA', 'NFL'] as const
+export const SURVIVOR_CREATION_SPORTS = ['NBA', 'NFL', 'NHL'] as const
 
 export function isSurvivorCreationSportAvailable(sport: string): boolean {
   return (SURVIVOR_CREATION_SPORTS as readonly string[]).includes(sport.trim().toUpperCase())
@@ -13,7 +13,7 @@ export function isSurvivorDefaultFormatSport(sport: string): boolean {
 }
 
 export const SURVIVOR_CREATION_UNAVAILABLE_MESSAGE =
-  'New Survivor leagues are available for NBA and NFL during the pilot. Other sports will be added after their season flows are ready.'
+  'New Survivor leagues are available for NBA, NFL and NHL during the pilot. Other sports will be added after their season flows are ready.'
 
 /** Do not accept buy-ins while Survivor is a preview and unattended hosting is disabled. */
 export const SURVIVOR_PAID_CREATION_ENABLED = false
