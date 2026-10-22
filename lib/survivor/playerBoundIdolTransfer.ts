@@ -3,8 +3,9 @@ import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from './survivorIdo
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { survivorIdolExpiryRule, survivorIdolExpiryText } from './survivorIdolExpiry'
 
+import { SURVIVOR_WAIVER_IDOL_ROSTER_ID as WAIVER_IDOL_ROSTER_ID } from './survivorIdolPoolPlacement'
+
 type MoveReason = 'trade' | 'trade_reversal' | 'waiver_drop' | 'waiver_claim' | 'stolen_player'
-const WAIVER_IDOL_ROSTER_ID = '__survivor_waivers__'
 
 /** Move a hidden idol with its NBA player inside the same transaction as the roster move. */
 export async function movePlayerBoundIdolsInTransaction(
