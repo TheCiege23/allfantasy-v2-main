@@ -165,7 +165,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   allowedScoringPresetsByConceptSport: {
     redraft: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
-      NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
+      NBA: ['nba_points', 'nba_8cat', 'nba_9cat', 'nba_9cat_roto'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points', 'nhl_cats_each', 'nhl_cats_most', 'nhl_cats_roto'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
@@ -174,7 +174,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     },
     dynasty: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
-      NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
+      NBA: ['nba_points', 'nba_8cat', 'nba_9cat', 'nba_9cat_roto'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points', 'nhl_cats_each', 'nhl_cats_most', 'nhl_cats_roto'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr'],
@@ -183,7 +183,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     },
     keeper: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
-      NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
+      NBA: ['nba_points', 'nba_8cat', 'nba_9cat', 'nba_9cat_roto'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points', 'nhl_cats_each', 'nhl_cats_most', 'nhl_cats_roto'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
