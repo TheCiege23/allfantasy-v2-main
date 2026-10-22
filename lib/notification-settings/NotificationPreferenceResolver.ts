@@ -10,6 +10,8 @@ import {
   SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS,
 } from "./types"
 import { readSmsConsent } from "@/lib/sms/smsConsent"
+import { readLiveAlertLevel } from "./liveAlertLevel"
+import { readPlayerNewsLevel } from "./playerNewsLevel"
 
 const DEFAULT_CHANNEL: NotificationChannelPrefs = {
   enabled: true,
@@ -97,6 +99,9 @@ export function resolveNotificationPreferences(
   const passthrough: Partial<NotificationPreferences> = {
     ...(saved?.quietHours !== undefined && { quietHours: saved.quietHours }),
     ...(saved?.leagues !== undefined && { leagues: saved.leagues }),
+    // The live game alert level (liveAlertLevel.ts). Dropping it here would show every saved level as the default.
+    ...(saved?.liveAlertLevel !== undefined && { liveAlertLevel: saved.liveAlertLevel }),
+    ...(saved?.playerNewsLevel !== undefined && { playerNewsLevel: saved.playerNewsLevel }),
   }
   if (!saved?.categories) return { ...defaults, ...passthrough, globalEnabled: saved?.globalEnabled ?? true }
   const categories = { ...defaults.categories }
@@ -160,5 +165,6 @@ export function getNotificationPreferencesFingerprint(
     })
     .filter((x): x is string => x !== null)
     .sort()
-  return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}|${quiet}|L:${leagues.join(";")}`
+  // Absent and the default are the same state, so print the resolved level.
+  return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}|${quiet}|L:${leagues.join(";")}|lv:${readLiveAlertLevel(resolved)}|pn:${readPlayerNewsLevel(resolved)}`
 }

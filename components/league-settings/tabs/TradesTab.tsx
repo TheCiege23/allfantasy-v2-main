@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { readSavedLeagueOverrides } from '@/lib/league-settings/savedLeagueOverrides'
@@ -12,7 +13,7 @@ import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'trades', { enabled: canEdit })
+  const { queuePatch, saving, savedAt, lastError } = useLeagueSettingsSectionAutosave(leagueId, 'trades', { enabled: canEdit })
 
   const [tradeReviewHours, setTradeReviewHours] = useState(ctx.league.tradeReviewHours ?? 48)
   const [tradeDeadlineWeek, setTradeDeadlineWeek] = useState(ctx.league.tradeDeadlineWeek?.toString() ?? '')
@@ -52,7 +53,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
   return (
     <div className="space-y-5">
-      {saving ? <p className="text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</p> : null}
+      <p><AutosaveStatus saving={saving} savedAt={savedAt} error={lastError} /></p>
 
       <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3">
         <span className="text-[13px] text-white/85">{t('lsHub.tr.pickTrading')}</span>

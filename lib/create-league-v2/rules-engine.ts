@@ -20,7 +20,7 @@ import {
   resolveEffectiveDraftTypeForConcept,
 } from '@/lib/draft-types/draftTypeRegistry'
 import { getAllowedDraftTypesForFormat } from '@/lib/league/format-engine'
-import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { BEST_BALL_DRAFT_MODES } from '@/lib/bestball/rules'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import {
@@ -112,7 +112,7 @@ const BIG_BROTHER_SIZES = [12, 14, 16, 18] as const
 /**
  * Team count options for the pill row.
  * - tournament → fixed tiers [32, 64, 96, 128, 160, 192, 224]
- * - guillotine → even counts 4 up to the sport's regular-season week max
+ * - guillotine → every count 4–35 (4–27 single elimination, 28–35 with double-elimination weeks)
  * - big_brother → fixed [12, 14, 16, 18]
  * - survivor → the fixed cast sizes in SURVIVOR_CREATE_CAST_SIZES (12–24, equal tribe splits)
  * - all others → even numbers 4 up to the sport's real-world club cap
@@ -159,14 +159,7 @@ export function getTeamCountOptions(
     return [...BIG_BROTHER_SIZES]
   }
   if (leagueType === 'guillotine') {
-    const profile = getGuillotineSportConfig(sport)
-    const minTeams = Math.max(4, profile?.minTeams ?? 8)
-    const maxTeams = Math.max(minTeams, profile?.maxTeams ?? 18)
-    const options: number[] = []
-    for (let teams = minTeams; teams <= maxTeams; teams += 1) {
-      options.push(teams)
-    }
-    return options
+    return guillotineTeamCountOptions()
   }
   if (leagueType === 'survivor') {
     // This branch is only reached before `/api/leagues/create-options` resolves, or when it

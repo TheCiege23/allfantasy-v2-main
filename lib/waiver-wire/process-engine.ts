@@ -248,7 +248,7 @@ export async function processWaiverClaimsForLeague(
     }
     if (league.leagueVariant === 'survivor_guillotine' &&
         await prisma.survivorGuillotineChop.count({ where: { leagueId, rosterId: claim.rosterId, reversedAt: null } })) {
-      await pushFail('Eliminated Survivor Guillotine rosters cannot win waiver claims.')
+      await pushFail('Eliminated Survivor Guilly rosters cannot win waiver claims.')
       continue
     }
     if (rosterGuard && !(await rosterGuard(leagueId, claim.rosterId))) {
@@ -328,11 +328,11 @@ export async function processWaiverClaimsForLeague(
       const player = await prisma.player.findUnique({ where: { id: addId }, select: {
         name: true, position: true, team: true, sport: true } })
       if (!player) {
-        await pushFail('Survivor Guillotine claim needs a known player.')
+        await pushFail('Survivor Guilly claim needs a known player.')
         continue
       }
       if (!linked?.redraftRosterId && await prisma.redraftSeason.count({ where: { leagueId } })) {
-        await pushFail('Survivor Guillotine roster needs its redraft link reconciled before waivers.')
+        await pushFail('Survivor Guilly roster needs its redraft link reconciled before waivers.')
         continue
       }
       if (linked?.redraftRosterId) {

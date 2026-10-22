@@ -5,6 +5,8 @@ import { SUPPORTED_SPORTS, LIVE_ONLY_SPORTS } from '@/lib/sport-scope'
 import { getLiveScoresForSport, resolveGameState } from '@/lib/sports-live-scores-service'
 import { engagementGameDetail } from './ingestGameDetail'
 import { observeGameAlerts, sportAlertAudience } from '@/lib/engagement-alerts/gameAlertService'
+import { gameFollowerIds, gameStarterIds, startersByUser } from '@/lib/engagement-alerts/gameStakeholders'
+import { topRankedGame } from '@/lib/engagement-alerts/gameEvents'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export async function runSportsEngagement() {
@@ -44,7 +46,22 @@ export async function runSportsEngagement() {
               const game = queue[index++]!
               try {
                 const summary = await engagementGameDetail(sport, game.gameId)
-                const count = await observeGameAlerts(sport, game, summary.failed || summary.stale ? null : summary.detail, users)
+                const detail = summary.failed || summary.stale ? null : summary.detail
+                // Plays, period scores and finals go to people with a stake in THIS game; only close
+                // games, overtime and postseason moments reach everyone who follows the sport.
+                const [followers, starters] = await Promise.all([gameFollowerIds(sport, game), gameStarterIds(sport, game.gameId, detail)])
+                // College: only Top 25 games, except for someone who follows one of the two teams.
+                const ranked = topRankedGame(sport, game)
+                const audience = {
+                  game: ranked ? [...new Set([...followers, ...starters.users])] : followers,
+                  broad: ranked ? users : [],
+                  // Starters get a personal alert for their own player's plays (NFL from bigPlayNotifier,
+                  // the other sports from starterAlerts), so the game alert for that play skips them.
+                  startersByAthlete: starters.byAthlete,
+                  // Every sport: the final becomes a personal recap of the user's starters.
+                  startersByUser: startersByUser(starters.byAthlete),
+                }
+                const count = await observeGameAlerts(sport, game, detail, audience)
                 delivered += count
                 metrics.delivered += count
                 metrics.games++

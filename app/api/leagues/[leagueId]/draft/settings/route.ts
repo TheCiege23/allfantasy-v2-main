@@ -28,6 +28,7 @@ import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftP
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
+import { markDraftRoundsManual } from '@/lib/draft/syncDraftRoundsToRoster'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
@@ -286,6 +287,7 @@ export async function PATCH(
   const currentVariant = async () => (currentVariantCache ??= await getDraftVariantSettings(leagueId))
 
   const configPatch: Record<string, unknown> = {}
+  let roundsManual: boolean | null = null
   if (typeof body.draft_type === 'string' && body.draft_type.trim().length > 0) {
     const normalizedDraftType = body.draft_type.trim().toLowerCase()
     if (isDraftTypeAllowedOnSettingsTab(leagueForFormat?.leagueType ?? null, normalizedDraftType)) {
@@ -296,13 +298,14 @@ export async function PATCH(
     let rounds = Math.round(body.rounds)
     // Rounds = draftable roster spots (IR excluded; taxi/devy counted for dynasty/devy/C2C/salary
     // cap). Only an AF Commissioner may override it; anyone else gets the computed count.
-    if (!(await viewerHasSub())) {
-      const computed = await getComputedDraftRounds(leagueId).catch(() => null)
-      if (computed) rounds = computed.rounds
-    }
+    const computed = await getComputedDraftRounds(leagueId).catch(() => null)
+    if (!(await viewerHasSub()) && computed) rounds = computed.rounds
     const roundsError = await validateDraftRoundsFitRoster(leagueId, rounds)
     if (roundsError) return NextResponse.json({ error: roundsError }, { status: 400 })
     configPatch.rounds = rounds
+    // Remember whether this is a deliberate override, so a later ROSTER change knows whether to
+    // carry the draft along with it (lib/draft/syncDraftRoundsToRoster.ts).
+    roundsManual = computed ? rounds !== computed.rounds : null
   }
   if (body.timer_seconds === null) configPatch.timer_seconds = null
   else if (body.timer_seconds !== undefined) {
@@ -618,6 +621,12 @@ export async function PATCH(
       ...(hasSessionVariant ? { sessionVariant: sessionVariantPatch as any } : {}),
       ...(hasSessionFlags ? { sessionFlags: sessionFlagsPatch as any } : {}),
     })
+    // After the settings write above, which rewrites League.settings wholesale.
+    if (roundsManual !== null) {
+      await markDraftRoundsManual(leagueId, roundsManual).catch((e) =>
+        console.warn('[draft/settings PATCH] rounds override flag', e instanceof Error ? e.message : 'unknown error'),
+      )
+    }
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
       const orphanEnabledChanged =

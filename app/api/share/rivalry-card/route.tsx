@@ -205,7 +205,7 @@ async function escapeCard(req: NextRequest, userId: string) {
               SURVIVED THE CHOP
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>{league.name ?? 'Guillotine League'}</div>
+              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>{league.name ?? 'Guilly League'}</div>
               <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf' }}>{`Week ${escape.weekOrPeriod} chop`}</div>
             </div>
           </div>

@@ -80,7 +80,7 @@ describe('🛑 readConceptAliasTags finds the tags where they actually live', ()
   })
 })
 
-describe('🛑 a real guillotine league now reaches its model', () => {
+describe('🛑 a real Guilly league now reaches its model', () => {
   /** Exactly what `captureSnapshot` now assembles for one of the 12. */
   const realLeagueFit = () =>
     applyFormatFit({

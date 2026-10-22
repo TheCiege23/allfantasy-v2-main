@@ -1,13 +1,15 @@
 'use client'
 
 import '@/components/core-app/af-core.css'
+import '@/components/league/league-admin.css'
 import './league-settings-home.css'
 import './commissioner-center.css'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronLeft, Copy } from 'lucide-react'
 import type { SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { SettingsSubPageRender } from './LeagueSettingsHome'
+import { SettingsSaveScope, confirmDiscardIfDirty, useSaveScopeHandleRef } from './SettingsSaveScope'
 
 /**
  * Commissioner center (native league handoff, Commissioner.png), the desktop layout of the League
@@ -48,6 +50,7 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
       { id: 'playoffs', label: 'Playoffs' },
       { id: 'guillotine-first-chop', label: 'First chop week' },
       { id: 'guillotine-chop-rules', label: 'Chop rules' },
+      { id: 'guillotine-rules', label: 'League rules' },
     ],
   },
   {
@@ -115,6 +118,7 @@ export function CommissionerCenter({
   inSeason,
   managers,
   onSubPageClosed,
+  header,
 }: {
   leagueName?: string | null
   sections: SettingsHomeSection[]
@@ -126,13 +130,17 @@ export function CommissionerCenter({
   managers: { joined: number; total: number; inviteUrl: string | null }
   /** Fired when the open section changes, so the caller can refetch the values it shows. */
   onSubPageClosed?: (id: SettingsSubPageId) => void
+  /** Drawn above the sections (the pre-draft setup card); given a way to open a section. */
+  header?: (openSection: (id: SettingsSubPageId) => void) => ReactNode
 }) {
   const allowed = editableSubPages(sections)
   const groups = NAV_GROUPS.map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) })).filter(group => group.items.length)
   const fallback: SettingsSubPageId = allowed.has(inSeason ? 'general' : 'draft') ? (inSeason ? 'general' : 'draft') : groups[0]?.items[0]?.id ?? 'general'
   const [open, setOpen] = useState<SettingsSubPageId>(initialSubPage && allowed.has(initialSubPage) ? initialSubPage : fallback)
   const pane = useRef<HTMLDivElement | null>(null)
+  const saveScope = useSaveScopeHandleRef()
   const select = (id: SettingsSubPageId) => {
+    if (id !== open && !confirmDiscardIfDirty(saveScope.ref.current)) return
     if (id !== open) onSubPageClosed?.(open)
     setOpen(id)
     pane.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
@@ -144,13 +152,15 @@ export function CommissionerCenter({
     <div className="af-core lsh-root cc-root" data-testid="commissioner-center">
       <header className="cc-head">
         {onExit ? (
-          <button type="button" className="cc-back" onClick={onExit} data-testid="cc-back">
+          <button type="button" className="cc-back" onClick={() => { if (confirmDiscardIfDirty(saveScope.ref.current)) onExit() }} data-testid="cc-back">
             <ChevronLeft size={16} aria-hidden /> Back to league home
           </button>
         ) : null}
         <h1>Commissioner center</h1>
-        <p>Every rule for {leagueName?.trim() || 'your league'} lives here. Each section saves on its own.</p>
+        <p>Every rule for {leagueName?.trim() || 'your league'} lives here. Make your changes, then press Save.</p>
       </header>
+
+      {header?.(select)}
 
       <div className="cc-grid">
         <nav className="cc-nav" aria-label="Commissioner sections">
@@ -176,7 +186,15 @@ export function CommissionerCenter({
           <section className="cc-card" aria-labelledby="cc-pane-title" data-testid="cc-pane" data-subpage={open}>
             <p className="cc-label">{groups.find(g => g.items.some(i => i.id === open))?.title ?? 'Settings'}</p>
             <h2 id="cc-pane-title">{sub?.title ?? 'Settings'}</h2>
-            <div className="cc-pane-body">{sub?.content ?? <p className="lsh-help">This section is not available for this league.</p>}</div>
+            <div className="cc-pane-body af-league-admin">
+              {sub ? (
+                <SettingsSaveScope key={open} onReady={saveScope.onReady}>
+                  {sub.content}
+                </SettingsSaveScope>
+              ) : (
+                <p className="lsh-help">This section is not available for this league.</p>
+              )}
+            </div>
           </section>
         </div>
       </div>

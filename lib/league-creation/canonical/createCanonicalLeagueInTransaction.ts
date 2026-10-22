@@ -31,6 +31,8 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
+import { applyPlayoffShapeToSettings, redraftPlayoffShapeFor } from '@/lib/league-defaults/redraftPlayoffFit'
+import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
@@ -487,7 +489,6 @@ export async function createCanonicalLeagueInTransaction(
     scoringSettings.scoringFormat ?? scoringSettings.preset ?? body.scoringPreset ?? 'standard',
   )
   const scoringMode = String(scoringSettings.scoringMode ?? 'points')
-  const playoffTeamsDefault = readNumber(playoffSettings, 'playoffTeams', isGuillotine ? 1 : 6)
 
   /**
    * 🛑 A bracket cannot seat more teams than the league has managers.
@@ -503,6 +504,39 @@ export async function createCanonicalLeagueInTransaction(
    * the first place.
    */
   const clampPlayoffTeams = (value: number | null | undefined): number | null => fitPlayoffTeamsToLeague(value, managerCount)
+
+  /*
+   * 🛑 A REDRAFT BRACKET IS SIZED TO THE LEAGUE AND ITS FINAL LANDS IN THE SEASON'S LAST WEEK
+   * (lib/league-defaults/redraftPlayoffFit.ts). NFL, NBA, NHL and MLB: the field comes from the league
+   * size (a 6-team daily-sport league no longer sends all six), the start week from the bracket's
+   * length (a 4-team NFL bracket plays weeks 16-17, not 15-16 with week 17 unplayed), and the one
+   * shape is written to the columns AND every JSON copy — they used to say 4 teams and 6 teams / 2
+   * byes about the same league.
+   */
+  const redraftShape =
+    formatId === 'redraft' && scoringMode !== 'roto'
+      ? redraftPlayoffShapeFor({
+          sport,
+          leagueSize: managerCount,
+          weeksPerRound: readNumber(playoffSettings, 'playoffWeeksPerRound', 1),
+          championshipLength: readChampionshipLength(mergedSettings),
+        })
+      : null
+  if (redraftShape) {
+    Object.assign(playoffSettings, {
+      playoffTeams: redraftShape.playoffTeams,
+      playoff_team_count: redraftShape.playoffTeams,
+      playoffStartWeek: redraftShape.playoffStartWeek,
+      playoff_start_week: redraftShape.playoffStartWeek,
+    })
+    Object.assign(mergedSettings, applyPlayoffShapeToSettings(mergedSettings, redraftShape))
+    // The schedule hands over to the playoffs in the week the bracket opens.
+    foundationDefaults.scheduleSettings.playoff_transition_point = redraftShape.playoffStartWeek
+    if (mergedSettings.schedule_playoff_transition_point != null) {
+      mergedSettings.schedule_playoff_transition_point = redraftShape.playoffStartWeek
+    }
+  }
+  const playoffTeamsDefault = readNumber(playoffSettings, 'playoffTeams', isGuillotine ? 1 : 6)
   const playoffStartWeekRaw = playoffSettings.playoffStartWeek
   const playoffStartWeekDefault =
     playoffStartWeekRaw == null ? null : Number.isFinite(Number(playoffStartWeekRaw)) ? Number(playoffStartWeekRaw) : null

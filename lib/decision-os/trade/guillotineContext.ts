@@ -101,13 +101,13 @@ export type GuillotineLeague = {
 export async function loadGuillotineContext(league: GuillotineLeague, now: Date = new Date()): Promise<GuillotineContextResult> {
   const sport = league.sport == null ? 'NFL' : guillotineTradeSport(league.sport)
   if (sport === 'NBA') return loadNbaGuillotineContext(league, now)
-  if (sport !== 'NFL') return { ok: false, reason: 'Guillotine trade grades cover NFL and NBA leagues so far.' }
+  if (sport !== 'NFL') return { ok: false, reason: 'Guilly trade grades cover NFL and NBA leagues so far.' }
   return loadNflGuillotineContext(league)
 }
 
 async function loadNflGuillotineContext(league: GuillotineLeague): Promise<GuillotineContextResult> {
   const seatsRaw = lineupSeatsFromSettings(league.settings)
-  if (!seatsRaw) return { ok: false, reason: 'This league’s starting lineup could not be read, so a guillotine grade cannot be priced.' }
+  if (!seatsRaw) return { ok: false, reason: 'This league’s starting lineup could not be read, so a Guilly grade cannot be priced.' }
   const seats: GuillotineSeat[] = seatsRaw.map((s) => ({ slot: s.slot, eligible: s.eligible }))
   const rules = scoringRulesFrom(league.settings)
   if (!rules || !hasScoringRules(rules)) return { ok: false, reason: NO_LEAGUE_SCORING_REASON }
@@ -116,7 +116,7 @@ async function loadNflGuillotineContext(league: GuillotineLeague): Promise<Guill
   const latest = await prisma.aFProjectionSnapshot
     .findFirst({ where: { sport: 'NFL', week: null }, orderBy: { computedAt: 'desc' }, select: { season: true } })
     .catch(() => null)
-  if (!latest) return { ok: false, reason: 'No NFL projections are on file, so this guillotine trade cannot be graded yet.' }
+  if (!latest) return { ok: false, reason: 'No NFL projections are on file, so this Guilly trade cannot be graded yet.' }
 
   const [rows, rosterRows] = await Promise.all([
     prisma.aFProjectionSnapshot
@@ -212,7 +212,7 @@ function nbaSeats(settings: unknown): GuillotineSeat[] | null {
  */
 async function loadNbaGuillotineContext(league: GuillotineLeague, now: Date): Promise<GuillotineContextResult> {
   const seats = nbaSeats(league.settings)
-  if (!seats) return { ok: false, reason: 'This league’s starting lineup could not be read, so a guillotine grade cannot be priced.' }
+  if (!seats) return { ok: false, reason: 'This league’s starting lineup could not be read, so a Guilly grade cannot be priced.' }
   const base = await loadSportPointsBase({
     sport: 'NBA',
     league: { id: league.id, settings: league.settings, leagueType: 'guillotine', leagueSize: league.leagueSize },
@@ -221,15 +221,15 @@ async function loadNbaGuillotineContext(league: GuillotineLeague, now: Date): Pr
   if (!base.ok) return base
   // A guillotine chops the lowest POINTS total; a category score answers a different question.
   if (base.ctx.valueKind === 'categories') {
-    return { ok: false, reason: 'This guillotine league scores NBA by categories, and the chop is decided on points, so this deal is not graded.' }
+    return { ok: false, reason: 'This Guilly league scores NBA by categories, and the chop is decided on points, so this deal is not graded.' }
   }
   const { season, gamesRemaining } = base.ctx.window
   const weeksLeft = nbaGuillotineWeeksLeft(season, now)
   if (weeksLeft == null) {
-    return { ok: false, reason: `The ${seasonLabelFor(season, 'NBA')} NBA season’s opening date is not on file, so the guillotine weeks left cannot be counted.` }
+    return { ok: false, reason: `The ${seasonLabelFor(season, 'NBA')} NBA season’s opening date is not on file, so the Guilly weeks left cannot be counted.` }
   }
   if (weeksLeft > 0 && !(gamesRemaining > 0)) {
-    return { ok: false, reason: `No ${seasonLabelFor(season, 'NBA')} NBA games are left on the schedule, so this guillotine trade cannot be graded.` }
+    return { ok: false, reason: `No ${seasonLabelFor(season, 'NBA')} NBA games are left on the schedule, so this Guilly trade cannot be graded.` }
   }
   const gamesPerWeek = weeksLeft > 0 ? gamesRemaining / weeksLeft : 0
   const weekly = base.ctx.board.map((p) => ({ ...p, perGame: p.perGame * gamesPerWeek }))
@@ -295,7 +295,7 @@ function assembleGuillotineContext(args: {
     }
     live.push({ players, faab: typeof r.faabRemaining === 'number' ? r.faabRemaining : null })
   }
-  if (live.length < 2) return { ok: false, reason: 'Fewer than two teams are alive in this guillotine league, so there is nothing left to trade for.' }
+  if (live.length < 2) return { ok: false, reason: 'Fewer than two teams are alive in this Guilly league, so there is nothing left to trade for.' }
   if (ids === 0 || mapped / ids < MIN_ROSTER_MAPPING) {
     return { ok: false, reason: 'This league’s rosters could not be matched to projected players, so the waiver wire cannot be priced.' }
   }

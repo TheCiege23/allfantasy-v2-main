@@ -15,6 +15,7 @@ import { evaluateWeek, getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
 import { appendEvent } from './GuillotineEventLog'
 import { postChopToLeagueChat } from './guillotineChat'
+import { postAutomaticGuillotineRecap } from './weeklyRecap'
 import { resolveRedraftRosterId, resolveRedraftRosterIds } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { recordChopAudit, findGuillotineSeasonId, isPeriodAlreadyRecorded } from './guillotineChopAudit'
 import { resolveRosterDisplayNames } from './rosterDisplayNames'
@@ -183,7 +184,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   }
 
   if (endgame.format !== 'last_team_standing' && evalResult.activeRosterIds.length <= endgame.threshold) {
-    if (!seasonId) throw new Error('Final stage requires a guillotine season')
+    if (!seasonId) throw new Error('Final stage requires a Guilly season')
     if (evalResult.scores.length !== evalResult.activeRosterIds.length) throw new Error('Final-stage scoring is incomplete')
     const finalSeason = await prisma.guillotineSeason.findUniqueOrThrow({ where: { id: seasonId } })
     if (finalSeason.status === 'complete') return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'season complete' }
@@ -473,6 +474,20 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       })
     } catch {
       /* the league goes unannounced this week; the chop stands */
+    }
+    // The weekly recap follows the announcement: deterministic, from this week's own scores, posted
+    // once per week (lib/guillotine/weeklyRecap.ts). Best-effort for the same reason as above.
+    try {
+      await postAutomaticGuillotineRecap({
+        leagueId: input.leagueId,
+        week: input.weekOrPeriod,
+        season: input.season,
+        scores: evalResult.scores,
+        choppedRosterIds,
+        authorUserId: input.systemUserId,
+      })
+    } catch (e) {
+      console.warn('[guillotine] weekly recap not posted', e instanceof Error ? e.message : 'unknown error')
     }
   }
 

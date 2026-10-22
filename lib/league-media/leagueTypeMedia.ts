@@ -48,7 +48,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
     thumbnailFallback: FALLBACK_THUMBNAIL,
   },
   guillotine: {
-    label: 'Guillotine',
+    label: 'Guilly',
     thumbnail: '/league-type-guillotine.png',
     defaultLeagueImageUrl: '/league-type-guillotine.png',
     selectionVideo: '/league-type-guillotine.mp4',

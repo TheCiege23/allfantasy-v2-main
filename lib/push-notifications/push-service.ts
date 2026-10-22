@@ -15,9 +15,17 @@ let vapidConfigured = false
 /** Conversation alerts: a new one on the same tag should buzz, not silently replace. */
 const CHAT_PUSH_TYPES: ReadonlySet<string> = new Set(["direct_message", "huddle_message", "mention", "league_chat_message"])
 
+/**
+ * Live game alerts share ONE tag per game so they replace rather than stack (gamePushTag,
+ * bigPlayNotifier). A replaced touchdown must still buzz, or grouping would silence every play
+ * after the first.
+ */
+const GROUPED_GAME_TAG = /^(game|live-play):/
+
 /** Whether a web push should alert again when it replaces a notification with the same tag. PURE. */
 export function shouldRenotify(type: string | null | undefined, tag: string | null | undefined): boolean {
-  return Boolean(tag) && CHAT_PUSH_TYPES.has(String(type))
+  if (!tag) return false
+  return CHAT_PUSH_TYPES.has(String(type)) || GROUPED_GAME_TAG.test(tag)
 }
 
 function ensureVapid() {

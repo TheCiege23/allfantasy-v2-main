@@ -112,7 +112,7 @@ export async function runLegacyWizardSpecialtyBootstrapsAfterLeagueCreate(
       const { upsertGuillotineConfig } = await import('@/lib/guillotine/GuillotineLeagueConfig')
       await upsertGuillotineConfig(league.id, {})
     } catch (err) {
-      console.warn('[league/create] Guillotine config bootstrap non-fatal:', err)
+      console.warn('[league/create] Guilly config bootstrap non-fatal:', err)
     }
   }
 

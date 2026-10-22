@@ -938,7 +938,7 @@ export function Matchup({ data }: MatchupProps) {
           </>
         ) : data.league.elimination ? (
           <span className="af-label af-mu-week-label">
-            {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guillotine' : 'Guillotine')}
+            {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guilly' : 'Guilly')}
           </span>
         ) : (
           <span className="af-mu-unavailable">{matchupReasonText(data.week.reason, language)}</span>
@@ -1002,8 +1002,8 @@ export function Matchup({ data }: MatchupProps) {
           </header>
           <p className="af-mu-basis">
             {language === 'es'
-              ? 'En una liga guillotina compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.'
-              : 'In a guillotine league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.'}
+              ? 'En una liga Guilly compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.'
+              : 'In a Guilly league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.'}
           </p>
           <p className="af-mu-basis">
             <Link href={`/core/standings?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>

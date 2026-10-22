@@ -58,7 +58,7 @@ describe('shell copy helpers', () => {
     expect(ageText('3y ago', 'es')).toBe('hace 3 años')
     expect(ageText('just now', 'es')).toBe('justo ahora')
     expect(platformsPhraseText('Sleeper, ESPN, Fantrax, MFL or Fleaflicker', 'es')).toBe('Sleeper, ESPN, Fantrax, MFL o Fleaflicker')
-    expect(leagueConceptText('Guillotine', 'es')).toBe('Guillotina')
+    expect(leagueConceptText('Guilly', 'es')).toBe('Guilly')
     expect(leagueConceptText('Dynasty', 'es')).toBe('Dynasty') // a format name kept as is
   })
 

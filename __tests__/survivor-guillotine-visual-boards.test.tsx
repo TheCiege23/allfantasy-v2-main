@@ -28,7 +28,7 @@ function threeTribes(points: Record<string, number>, over: Partial<SGVisualInput
   }
 }
 
-describe('Survivor Guillotine follow-up boards', () => {
+describe('Survivor Guilly follow-up boards', () => {
   it('offers only the engine\'s 2–4 tribe counts', () => {
     const opts = sgTribeCountOptions(12)
     expect(opts.filter((o) => o.allowed).map((o) => o.count)).toEqual([2, 3, 4])

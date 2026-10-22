@@ -1244,7 +1244,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     const { bootstrapSGAfterDraft } = await import('@/lib/survivor-guillotine/operations')
     await bootstrapSGAfterDraft(leagueId)
   } catch (err) {
-    console.error('[completeDraftSession] Survivor Guillotine bootstrap failed', {
+    console.error('[completeDraftSession] Survivor Guilly bootstrap failed', {
       leagueId, error: err instanceof Error ? err.message : String(err),
     })
   }

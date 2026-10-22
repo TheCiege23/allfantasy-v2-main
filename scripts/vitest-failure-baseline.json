@@ -1,12 +1,11 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 8,
+  "count": 7,
   "failingFiles": [
     "__tests__/commissioner-control-center-timer-ui.test.tsx",
     "__tests__/prompt12-roster-templates-soccer-idp.test.ts",
     "__tests__/prompt2-slot-flex-behavior.test.ts",
     "__tests__/roster-defaults-by-sport.test.ts",
-    "__tests__/simulation-lab-routes-contract.test.ts",
     "__tests__/sport-default-roster-settings.test.ts",
     "__tests__/sport-rules-engine.test.ts",
     "__tests__/world-cup-components.test.tsx"
@@ -16,7 +15,6 @@
     "__tests__/prompt12-roster-templates-soccer-idp.test.ts": "Roster-defaults cluster: ffb371161 cut NFL/NCAAF ROSTER_DEFAULTS to QB,RB,WR2,TE,DEF (no FLEX, K or RB2), which disagrees with lib/league-concepts/redraftDefaults.ts (QB,RB2,WR2,TE,FLX,K,DEF). Probable real bug; needs an owner to pick the authority.",
     "__tests__/prompt2-slot-flex-behavior.test.ts": "Roster-defaults cluster (ffb371161): NCAAF template has no FLEX/SUPERFLEX starter, so flex eligibility is empty. See prompt12 entry.",
     "__tests__/roster-defaults-by-sport.test.ts": "Roster-defaults cluster (ffb371161): NFL/NCAAF templates lack FLEX, K and DST/DEF naming the test expects. See prompt12 entry.",
-    "__tests__/simulation-lab-routes-contract.test.ts": "REAL BUG: /api/simulation-lab/{season,playoffs,dynasty} were moved out of app/ in 90542801c and later deleted, but app/app/simulation-lab/page.tsx (linked from the tool hub) still fetches all three. Restore the routes or retire the page.",
     "__tests__/sport-default-roster-settings.test.ts": "Roster-defaults cluster (ffb371161): NFL core slots and FLEX eligibility missing. See prompt12 entry.",
     "__tests__/sport-rules-engine.test.ts": "Roster-defaults cluster (ffb371161): only the NFL roster-slot test still fails; the mock_draft assertion was re-aimed at 595959f64's intent.",
     "__tests__/world-cup-components.test.tsx": "4 of 108 tests target a World Cup chat drawer that has since been restructured (mode tabs, formatting, image upload, private-Chimmy count). Tournament is over; needs an owner to decide whether to keep or retire WC chat coverage."

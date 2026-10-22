@@ -74,7 +74,7 @@ describe('form-completion', () => {
     expect(analyzeCreateLeagueCompletion(s).some((i) => i.code === 'tournament_pool_mismatch')).toBe(true)
   })
 
-  it('Guillotine defaults: team count option list non-empty', () => {
+  it('Guilly defaults: team count option list non-empty', () => {
     const opts = getTeamCountOptions('NFL', 'guillotine', null)
     expect(opts.length).toBeGreaterThan(0)
     expect(getDefaultTeamCount('NFL', 'guillotine', null)).toBeGreaterThanOrEqual(4)

@@ -25,7 +25,7 @@ import { advanceSGHostedCeremony, advanceSGPeriod, chooseSGStartingTribe, pickSG
 const row = (start: string, end: string, ceremony: string) => ({ scoringStartsAt: start,
   scoringEndsAt: end, ceremonyAt: ceremony, selectionDeadlineAt: start })
 
-describe('Survivor Guillotine calendar and concealed rewards', () => {
+describe('Survivor Guilly calendar and concealed rewards', () => {
   beforeEach(() => {
     db.findUniqueOrThrow.mockReset().mockResolvedValue({ config: defaultSGConfig(), currentPeriod: 0,
       periodCalendar: {}, rewardPeriods: [], revision: 1 })

@@ -112,3 +112,30 @@ it('sends one summary per team and does not repeat delivered members', async () 
  await notifySyncedInjuries('NFL')
  expect(h.dispatch).not.toHaveBeenCalled()
 })
+
+it('names the player and says they are still in the starting lineup', async () => {
+ const { lineupAlertTitle } = await import('@/lib/engagement-alerts/injuryAlerts')
+ expect(lineupAlertTitle([{ playerName: 'Bijan Robinson', status: 'out' }])).toBe('🚨 Bijan Robinson is OUT — still in your starting lineup')
+ expect(lineupAlertTitle([{ playerName: 'A', status: 'injured reserve' }])).toContain('is on IR')
+ expect(lineupAlertTitle([{ playerName: 'A', status: 'out' }, { playerName: 'B', status: 'out' }])).toBe('🚨 2 of your starters are out — fix your lineup')
+})
+
+describe('the player-news gate on the injury sync (owner, 2026-10-22)', () => {
+ it('a starter is pushed now and a bench player waits for the digest; neither is emailed', async () => {
+  h.injuries.mockResolvedValue([{ playerName: 'Player', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])
+  await notifySyncedInjuries('NFL')
+  expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ sms: true, email: true })
+  expect(h.dispatch.mock.calls[0][0].meta.playerNews).toMatchObject({ delivery: 'instant', starter: true })
+  h.dispatch.mockClear(); h.native.mockResolvedValue([])
+  h.injuries.mockResolvedValue([{ playerName: 'Bench Guy', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])
+  await notifySyncedInjuries('NFL')
+  expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ sms: true, email: true, push: true })
+  expect(h.dispatch.mock.calls[0][0].meta.playerNews).toMatchObject({ delivery: 'digest', starter: false })
+ })
+ it('a player already on IR listed Out again is recorded and not sent', async () => {
+  h.observation.mockImplementation(async ({ where }) => where.cacheKey.startsWith('injury-observation:') ? { data: { status: 'Injured Reserve' } } : null)
+  h.injuries.mockResolvedValue([{ playerName: 'Player', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])
+  await notifySyncedInjuries('NFL')
+  expect(h.dispatch).not.toHaveBeenCalled()
+ })
+})

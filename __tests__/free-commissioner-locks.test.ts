@@ -24,6 +24,8 @@ const {
     league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     userProfile: { findFirst: vi.fn() },
     leagueSettings: { upsert: vi.fn() },
+    redraftSeason: { findFirst: vi.fn() },
+    redraftPlayoffRound: { findFirst: vi.fn() },
   },
   requireCommissionerRoleMock: vi.fn(),
   resolveForUserMock: vi.fn(),
@@ -72,10 +74,16 @@ beforeEach(() => {
     id: 'league-1',
     platform: 'native',
     leagueSize: 12,
+    // A 9-team bracket is four rounds: from week 14 its final is week 17, the NFL season's last. From
+    // the default week 15 it would be week 18, which the bracket-fit check refuses (championshipLengthFit).
+    playoffStartWeek: 14,
     settings: {},
     teams: [],
     leagueSettings: null,
   })
+  prismaMock.league.findUnique.mockResolvedValue({ dynastyConfig: null, settings: {} })
+  prismaMock.redraftSeason.findFirst.mockResolvedValue(null)
+  prismaMock.redraftPlayoffRound.findFirst.mockResolvedValue(null)
   prismaMock.league.update.mockResolvedValue({})
   getServerSessionMock.mockResolvedValue({ user: { id: FREE_COMMISSIONER } })
 })

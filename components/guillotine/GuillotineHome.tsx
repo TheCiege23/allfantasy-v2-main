@@ -85,7 +85,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       const data = await res.json()
       setSummary(data)
     } catch {
-      setError('Failed to load guillotine summary')
+      setError('Failed to load Guilly summary')
       setSummary(null)
     } finally {
       setLoading(false)
@@ -101,7 +101,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
   if (loading && !summary) {
     return (
       <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-8">
-        <p className="text-sm text-white/60">Loading Guillotine League…</p>
+        <p className="text-sm text-white/60">Loading Guilly League…</p>
       </div>
     )
   }

@@ -12,7 +12,7 @@ import { gtagEvent } from '@/lib/gtag'
 import { trackLandingSignupComplete } from '@/lib/landing-analytics'
 
 const SPORTS = ['NFL', 'NHL', 'NBA', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER']
-const LEAGUE_TYPES = ['Redraft', 'Dynasty', 'Keeper', 'Best Ball', 'Guillotine', 'Survivor', 'Tournament']
+const LEAGUE_TYPES = ['Redraft', 'Dynasty', 'Keeper', 'Best Ball', 'Guilly', 'Survivor', 'Tournament']
 const COMPETITIVENESS = ['Casual', 'Competitive', 'Degenerate 😈']
 const DRAFT_PREFS = ['Snake', 'Auction', 'Either']
 const PAIN_POINTS = ['Drafting', 'Waivers', 'Trades', 'Start/Sit', 'League Management']
@@ -20,7 +20,7 @@ const EXPERIMENTAL_FORMATS = [
   'Survivor (TV Show Style)',
   'Big Brother',
   'Zombie',
-  'Guillotine++',
+  'Guilly++',
   'Vampire / Pirate',
   'King of the Hill',
   'Draft Lottery Chaos',

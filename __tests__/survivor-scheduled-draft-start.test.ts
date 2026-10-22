@@ -70,7 +70,7 @@ describe('scheduled Survivor draft start', () => {
     expect(m.start).toHaveBeenCalledOnce()
     expect(m.notifyStart).toHaveBeenCalledWith('league-1')
   })
-  it('scans guillotine leagues as well as survivor leagues', async () => {
+  it('scans Guilly leagues as well as survivor leagues', async () => {
     await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
     expect(m.due.mock.calls[0][0].where.league).toEqual({
       is: { OR: [{ survivorMode: true }, { guillotineMode: true }, { leagueVariant: 'guillotine' }] },

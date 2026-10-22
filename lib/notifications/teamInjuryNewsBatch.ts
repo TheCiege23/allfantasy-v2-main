@@ -18,8 +18,10 @@ export function createTeamInjuryNewsBatch(budget?: { exhausted(): boolean }) {
     const team=String(request.meta?.team ?? '').trim()
     if(!team){outcomes[index].failed=true;return}
     const headline=request.meta?.injuryHeadline
-    const storyKey=headline?JSON.stringify([user,request.meta?.sport,team.toUpperCase(),headline]):undefined
-    const key=(storyKey&&headlineGroups.get(storyKey))||JSON.stringify([user,request.category,request.leagueId??null,request.meta?.sport,team.toUpperCase()])
+    const storyKey=headline?JSON.stringify([user,request.meta?.sport,team.toUpperCase(),headline,(request.meta?.playerNews as {delivery?:string}|undefined)?.delivery??null]):undefined
+    // Push-now and digest-only halves of the player-news gate never share one message.
+    const delivery=JSON.stringify([(request.meta?.playerNews as {delivery?:string}|undefined)?.delivery??null,request.skipChannels??null])
+    const key=(storyKey&&headlineGroups.get(storyKey))||JSON.stringify([user,request.category,request.leagueId??null,request.meta?.sport,team.toUpperCase(),delivery])
     if(storyKey)headlineGroups.set(storyKey,key)
     const entries=groups.get(key)??[];entries.push({index,request,user});groups.set(key,entries)
    }))
@@ -33,8 +35,10 @@ export function createTeamInjuryNewsBatch(budget?: { exhausted(): boolean }) {
      const result=await dispatchNotification({...first.request,userIds:[first.user],
       title:String(first.request.meta?.teamName??first.request.meta?.team)+': injury update',
       body:members.map(m=>m.body??m.title).join('\n'),
-      dedupePrefix:'team-injury-news:'+digest,skipChannels:{sms:true},
-      meta:{...first.request.meta,playerName:undefined,playerCount:members.length,pushTag:'team-injury-news:'+digest},
+      dedupePrefix:'team-injury-news:'+digest,skipChannels:{...first.request.skipChannels,sms:true},
+      meta:{...first.request.meta,playerName:undefined,playerCount:members.length,pushTag:'team-injury-news:'+digest,
+       // The digest lists every player the batched message names.
+       ...(first.request.meta?.playerNews?{playerNews:{...(first.request.meta.playerNews as object),playerName:members.map(m=>(m.meta?.playerNews as {playerName?:string}|undefined)?.playerName??m.title).join(', ')}}:{})},
      })
      for(const entry of entries) { if(result.failed) outcomes[entry.index].failed=true; else outcomes[entry.index].users.add(entry.user) }
     } catch { for(const entry of entries)outcomes[entry.index].failed=true }

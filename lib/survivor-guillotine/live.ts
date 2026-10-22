@@ -80,7 +80,7 @@ export async function saveSGLiveLeague(leagueId: string, config: SGConfig) {
   if (league.sport !== config.sport) throw new Error('Rules sport must match the live league.')
   if (league.leagueSize && league.leagueSize !== config.teamCount) throw new Error('Starting manager count must match the live league size.')
   if (league.leagueVariant && league.leagueVariant !== 'survivor_guillotine') throw new Error('This league already runs another specialty format.')
-  if (league.guillotineMode || league.survivorMode) throw new Error('A league using the older Guillotine or Survivor engine cannot be converted in place.')
+  if (league.guillotineMode || league.survivorMode) throw new Error('A league using the older Guilly or Survivor engine cannot be converted in place.')
   const rosters = await prisma.roster.count({ where: { leagueId } })
   if (rosters && rosters !== config.teamCount) throw new Error(`Live league has ${rosters} rosters; rules specify ${config.teamCount}.`)
   const existing = await prisma.survivorGuillotineLeague.findUnique({ where: { leagueId } })
@@ -249,7 +249,7 @@ export async function awardSGLiveWeeklyPower(leagueId: string, period: number) {
     ownerUserId: reward.ownerId, awardPeriod: period, expiresAfterPeriod: reward.expiresAfterPeriod,
     source: 'weekly_reward' } })
   await createPlatformNotification({ userId: reward.ownerId, leagueId, type: 'survivor_guillotine_reward',
-    title: 'Chimmy has a private reward for you', body: `You earned a hidden ${reward.kind.replaceAll('_', ' ')}. Open your Survivor Guillotine powers to use it before the merge.`,
+    title: 'Chimmy has a private reward for you', body: `You earned a hidden ${reward.kind.replaceAll('_', ' ')}. Open your Survivor Guilly powers to use it before the merge.`,
     sourceKey: `survivor-guillotine:${leagueId}:reward:${period}:${reward.ownerId}` })
   return { awarded: true, period }
 }
@@ -455,7 +455,7 @@ export async function activateSGLivePower(leagueId: string, userId: string, mess
         slotIndex: Math.max(-1, ...benchRows.map(r => r.slotIndex)) + 1, playerId: command.targetId } })
     }
     await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
-      message: `A ${row.kind.replaceAll('_', ' ')} token was played in Survivor Guillotine.`,
+      message: `A ${row.kind.replaceAll('_', ' ')} token was played in Survivor Guilly.`,
       metadata: { survivorGuillotine: true, event: 'token_used', powerId: row.id, kind: row.kind,
         targetRosterId: targetRoster?.id ?? ownRoster.id, targetPlayerId: row.kind === 'steal_player' ? command.targetId : null } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
@@ -571,7 +571,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
           } } as Prisma.InputJsonValue } })
       if (restarted.count !== 1) throw new Error('Season changed during Chop Night; retry.')
       await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
-        message: `Survivor Guillotine period ${periodNumber} hosted ceremony restarted after the scores or rosters changed. Earlier reveals are superseded; no roster was chopped.`,
+        message: `Survivor Guilly period ${periodNumber} hosted ceremony restarted after the scores or rosters changed. Earlier reveals are superseded; no roster was chopped.`,
         metadata: { survivorGuillotine: true, event: 'hosted_ceremony_restarted', period: periodNumber } } })
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     return { ...result, hostedRestarted: true }
@@ -630,11 +630,11 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
         return team?.teamName || team?.ownerName || id
       })
       await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
-        message: `Survivor Guillotine period ${periodNumber} chop: ${names.join(', ')} eliminated. Their players enter league waivers.`,
+        message: `Survivor Guilly period ${periodNumber} chop: ${names.join(', ')} eliminated. Their players enter league waivers.`,
         metadata: { survivorGuillotine: true, event: 'chop', period: periodNumber, rosterIds: result.choppedTeamIds } } })
     }
     if (result.placements.length && !hosted) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId,
-      type: 'system', message: `Survivor Guillotine final placements are set for period ${periodNumber}.`,
+      type: 'system', message: `Survivor Guilly final placements are set for period ${periodNumber}.`,
       metadata: { survivorGuillotine: true, event: 'final_placements', period: periodNumber, rosterIds: result.placements } } })
     const finished = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
       data: { status: period.mode === 'final_three' ? 'completed' : 'active', revision: { increment: 1 },
@@ -655,8 +655,8 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
     if (finished.count !== 1) throw new Error('Season changed during the chop; retry with fresh scores and powers.')
     if (hosted) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
       message: result.placements.length
-        ? `Survivor Guillotine period ${periodNumber} final placements: ${result.placements.join(', ')}.`
-        : `Survivor Guillotine period ${periodNumber} chop: ${result.choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`,
+        ? `Survivor Guilly period ${periodNumber} final placements: ${result.placements.join(', ')}.`
+        : `Survivor Guilly period ${periodNumber} chop: ${result.choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`,
       metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period: periodNumber, stage: 3,
         rosterIds: result.choppedTeamIds, placements: result.placements } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
@@ -666,7 +666,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
 /** Re-evaluate the latest completed ceremony against corrected final scores. */
 export async function reconcileSGLiveStatCorrection(leagueId: string) {
   const season = await prisma.survivorGuillotineLeague.findUnique({ where: { leagueId } })
-  if (!season) throw new Error('Survivor Guillotine season not found.')
+  if (!season) throw new Error('Survivor Guilly season not found.')
   const state = readSGPeriodState(season.periodState)
   if (!state?.ceremonyStarted || !state.chopSnapshot) return { status: 'not_completed' as const }
   const config = season.config as unknown as SGConfig
@@ -716,7 +716,7 @@ export async function reconcileSGLiveStatCorrection(leagueId: string) {
           chopSnapshot: { ...original, teams, immuneTribeId: result.immuneTribeId } } as unknown as Prisma.InputJsonValue } })
       if (saved.count !== 1) throw new Error('Season changed during correction; retry.')
       await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
-        message: `Survivor Guillotine period ${state.period} scores were corrected. The chop was reviewed${samePlacement ? ' and remains in place' : '; final placements were updated'}.`,
+        message: `Survivor Guilly period ${state.period} scores were corrected. The chop was reviewed${samePlacement ? ' and remains in place' : '; final placements were updated'}.`,
         metadata: { survivorGuillotine: true, event: 'score_corrected', period: state.period,
           rosterIds: result.choppedTeamIds, placements: result.placements } } })
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
@@ -769,7 +769,7 @@ export async function reconcileSGLiveStatCorrection(leagueId: string) {
         periodState: { ...state, ceremonyStarted: false, placements: [], chopSnapshot: null } as unknown as Prisma.InputJsonValue } })
     if (saved.count !== 1) throw new Error('Season changed during correction; retry.')
     await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
-      message: `Survivor Guillotine period ${state.period} chop was reversed after a stat correction. The ceremony will run again with corrected scores.`,
+      message: `Survivor Guilly period ${state.period} chop was reversed after a stat correction. The ceremony will run again with corrected scores.`,
       metadata: { survivorGuillotine: true, event: 'chop_reversed', period: state.period,
         restoredPlayerIds: restored, claimedPlayerIdsRetained: contested } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })

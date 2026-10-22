@@ -28,7 +28,7 @@ function row(over: Partial<TriageBookRow> = {}): TriageBookRow {
         slot: 'starter',
         bench: [{ name: 'Tyjae Spears', position: 'RB' }],
       },
-      { id: 'l2', name: 'Guillotine League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
+      { id: 'l2', name: 'Guilly League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
       { id: 'l3', name: 'Work League', platform: 'espn', imageUrl: null, slot: 'ir' },
     ],
     note: 'RB · Out',

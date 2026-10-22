@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
@@ -75,7 +76,7 @@ export function WaiversSection({
 }: Pick<LeagueSettingsTabProps, 'ctx' | 'canEdit'> & { timezone: string }) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
+  const { queuePatch, saving, savedAt, lastError, manual } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
 
   const seed = () => ({
     waiverType: String(savedOr(leagueId, 'waiverType', ctx.league.waiverType ?? 'rolling')),
@@ -129,8 +130,9 @@ export function WaiversSection({
         <h3 className="min-w-0 flex-1 text-[13px] font-bold uppercase tracking-wide text-cyan-200/90">
           {t('lsHub.wv.sectionTitle')}
         </h3>
-        {saving ? <span className="shrink-0 text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</span> : null}
+        {canEdit ? <AutosaveStatus saving={saving} savedAt={savedAt} error={lastError} /> : null}
       </div>
+      {canEdit && !manual ? <p className="-mt-2 mb-4 text-[11px] leading-snug text-white/40">{t('lsHub.wv.autosaveNote')}</p> : null}
 
       <div className="space-y-4">
         <label className="block">

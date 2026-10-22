@@ -47,7 +47,7 @@ describe('leagueTypeBasis', () => {
       source: 'assumed',
     })
     expect(leagueTypeBasis({ settings: {}, leagueType: 'guillotine', platform: 'sleeper' })).toMatchObject({
-      label: 'Guillotine',
+      label: 'Guilly',
       source: 'assumed',
     })
     expect(leagueTypeBasis({ settings: null, leagueType: null })).toMatchObject({

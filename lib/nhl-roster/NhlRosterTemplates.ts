@@ -50,7 +50,7 @@ export const NHL_ROSTER_TEMPLATES: NhlRosterTemplate[] = [
     slots: { C: 2, LW: 2, RW: 2, D: 4, UTIL: 1, G: 2, BN: 4, IR: 2 } },
   { key: 'category', label: 'Category League', leagueTypes: ['redraft'], description: 'Category-based scoring.',
     slots: { C: 2, LW: 2, RW: 2, D: 4, UTIL: 1, G: 2, BN: 5, IR: 2 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
     slots: { C: 2, LW: 2, RW: 2, D: 3, UTIL: 1, G: 1, BN: 3 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Survivor roster.',
     slots: { C: 2, LW: 2, RW: 2, D: 4, UTIL: 1, G: 2, BN: 4 } },
