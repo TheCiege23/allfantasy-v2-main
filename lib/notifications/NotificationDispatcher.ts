@@ -11,6 +11,7 @@ import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
+import { gameAlertDeadline } from "./gameAlertFreshness"
 import { sendPushToUser } from "@/lib/push-notifications"
 import { decidePush } from "@/lib/notifications/pushGate"
 import { retryWithBackoff } from "@/lib/error-handling"
@@ -177,11 +178,12 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         set('inApp',{status:stored?'stored':'failed',reason:stored?'in_app_saved':'storage_failed'})
       } else set('inApp',{status:'suppressed',reason:'channel_off'})
 
+      const deadline = gameAlertDeadline(type, new Date(), meta?.expiresAt)
       const transportMessage = {
         userId, leagueId: effectiveLeagueId, eventType: type, title, body: body ?? title,
         eventKey: dedupePrefix ?? (typeof meta?.eventKey === 'string' ? meta.eventKey : undefined),
         metadata: { ...(meta ?? {}), notificationCategory: category, severity, actionHref, actionLabel,
-          ...(/^(game_(scoring_play|big_play|close)|live_score)/.test(type) ? { expiresAt: new Date(Date.now() + 300_000).toISOString() } : {}),
+          ...(deadline !== undefined ? { expiresAt: new Date(deadline).toISOString() } : {}),
           ...(emailOverride ? { emailOverride } : {}) },
       }
       const pushDelivery = (async () => {
@@ -204,6 +206,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           // One tag per category unless the caller names one per event — see pushTagFor.
           tag: pushTagFor(category, meta),
           type,
+          expiresAt: transportMessage.metadata.expiresAt,
           // The service worker builds league-scoped action buttons from this; it was dropped here.
           leagueId: effectiveLeagueId,
           // A producer that has a picture (headshot, trade card) names it in meta.imageUrl.

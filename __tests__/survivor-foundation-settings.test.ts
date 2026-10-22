@@ -15,8 +15,8 @@ describe('Survivor foundation settings', () => {
   it('normalizes the Phase 1 canonical defaults', () => {
     const settings = normalizeSurvivorFoundationSettings(null)
     expect(settings.defaultTeamCount).toBe(20)
-    expect(settings.minTeamCount).toBe(16)
-    expect(settings.maxTeamCount).toBe(20)
+    expect(settings.minTeamCount).toBe(12)
+    expect(settings.maxTeamCount).toBe(24)
     expect(settings.tribeCount).toBe(4)
     expect(settings.mergeTriggerType).toBe('active_player_count')
     expect(settings.mergeActivePlayerCount).toBe(10)
@@ -36,12 +36,12 @@ describe('Survivor foundation settings', () => {
   it('reads nested survivorFoundationSettings and clamps team counts', () => {
     const settings = normalizeSurvivorFoundationSettings({
       survivorFoundationSettings: {
-        defaultTeamCount: 24,
+        defaultTeamCount: 30,
         tribeCount: 9,
         commissionerParticipationMode: 'participating_player',
       },
     })
-    expect(settings.defaultTeamCount).toBe(20)
+    expect(settings.defaultTeamCount).toBe(24)
     expect(settings.tribeCount).toBe(5)
     expect(settings.commissionerParticipationMode).toBe('participating_player')
   })

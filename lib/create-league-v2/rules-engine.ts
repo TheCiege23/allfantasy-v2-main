@@ -30,6 +30,7 @@ import {
 } from '@/lib/league-creation-preset/scoring-presets'
 import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
 import { isSurvivorCreationSportAvailable } from '@/lib/survivor/survivorCreationAvailability'
+import { survivorTribeCountOptions } from '@/lib/league-creation-wizard/sport-team-limits'
 
 // ── Sport filtering ─────────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ const BIG_BROTHER_SIZES = [12, 14, 16, 18] as const
  * - tournament → fixed tiers [32, 64, 96, 128, 160, 192, 224]
  * - guillotine → even counts 4 up to the sport's regular-season week max
  * - big_brother → fixed [12, 14, 16, 18]
- * - survivor → 16 / 20 / 24 (fixed cast sizes)
+ * - survivor → the fixed cast sizes in SURVIVOR_CREATE_CAST_SIZES (12–24, equal tribe splits)
  * - all others → even numbers 4 up to the sport's real-world club cap
  */
 export function getTeamCountOptions(
@@ -141,10 +142,7 @@ export function getTeamCountOptions(
   if (leagueType === 'survivor') {
     // This branch is only reached before `/api/leagues/create-options` resolves, or when it
     // fails — so a list that diverges from the catalog means Survivor offers different sizes
-    // depending on whether one fetch succeeded. It held [16, 20, 24] for three months after
-    // 29566580a moved the cast to 16-20, and `POST /api/league/create` clamps to
-    // SURVIVOR_CAST_SIZE_OPTIONS, so a 24 picked from this list was silently saved as 20.
-    // New leagues are offered the catalog's 16 / 20 (SURVIVOR_CREATE_CAST_SIZES).
+    // depending on whether one fetch succeeded. Both read SURVIVOR_CREATE_CAST_SIZES.
     return [...SURVIVOR_CREATE_CAST_SIZES]
   }
   const max = getMaxTeamsForSport(sport, soccerPipeline)
@@ -159,8 +157,8 @@ export function getDefaultTeamCount(
 ): number {
   const opts = getTeamCountOptions(sport, leagueType, soccerPipeline)
   if (opts.length === 0) return 12
-  // Survivor starts at its smallest cast: 16 managers, four tribes of four (user's call, 2026-10-12).
-  if (leagueType === 'survivor') return opts[0]!
+  // Survivor starts at 16 managers (four tribes of four) when offered, else its smallest cast.
+  if (leagueType === 'survivor') return opts.includes(16) ? 16 : opts[0]!
   // Prefer 12 if available, otherwise middle of the list
   if (opts.includes(12)) return 12
   return opts[Math.floor(opts.length / 2)] ?? opts[0]!
@@ -314,11 +312,7 @@ export function resolveEffectiveDraftType(leagueType: LeagueTypeId, baseDraftTyp
  * byte-identical to the old rule, so only the previously-empty sizes change.
  */
 export function getSurvivorTribeOptions(teamCount: number): number[] {
-  const evenlyDivides = [2, 3, 4].filter((t) => teamCount % t === 0)
-  if (evenlyDivides.length > 0) return evenlyDivides
-
-  // Fall back to any split leaving at least two teams in the smallest tribe.
-  return [2, 3, 4].filter((t) => Math.floor(teamCount / t) >= 2)
+  return survivorTribeCountOptions(teamCount)
 }
 
 // ── 3RR availability ────────────────────────────────────────────────

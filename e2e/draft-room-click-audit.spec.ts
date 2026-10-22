@@ -1934,7 +1934,10 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
     const mobile = page.getByTestId('draft-mobile-layout')
+    await expect(page.getByTestId('draft-mobile-quick-dock')).toHaveCount(0)
+    await page.getByTestId('draft-mobile-more').click()
     await expect(page.getByTestId('draft-mobile-quick-dock')).toBeVisible()
+    await page.getByTestId('draft-mobile-more').click()
 
     // Dismiss the on-turn suggestion with its real button before scrolling the board underneath it.
     const turnAlert = page.getByTestId('draft-youre-up-alert')
@@ -1970,6 +1973,7 @@ test.describe('@draft-room click audit', () => {
     await expect(mobile.getByTestId('draft-player-panel')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
+    await page.getByTestId('draft-mobile-more').click()
     const helperTab = page.getByTestId('draft-mobile-tab-helper')
     const helperWarRoomToggle = mobile.getByTestId('draft-open-war-room-button').first()
     const helperUpgradeLink = mobile.getByTestId('locked-feature-upgrade-link').first()

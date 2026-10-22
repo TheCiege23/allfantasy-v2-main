@@ -98,7 +98,7 @@ export function resolveNotificationPreferences(
     ...(saved?.quietHours !== undefined && { quietHours: saved.quietHours }),
     ...(saved?.leagues !== undefined && { leagues: saved.leagues }),
   }
-  if (!saved?.categories) return { ...defaults, ...passthrough }
+  if (!saved?.categories) return { ...defaults, ...passthrough, globalEnabled: saved?.globalEnabled ?? true }
   const categories = { ...defaults.categories }
   for (const id of NOTIFICATION_CATEGORY_IDS) {
     const s = saved.categories[id]

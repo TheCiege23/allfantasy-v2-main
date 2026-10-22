@@ -1,3 +1,4 @@
+import { pushRetentionSeconds } from "@/lib/notifications/gameAlertFreshness"
 import { createHash } from "node:crypto"
 /**
  * Apple Push Notification service (APNs) — native push to the iOS app.
@@ -38,6 +39,7 @@ export type ApnsPayload = {
   href?: string
   tag?: string
   type?: string
+  expiresAt?: string
   leagueId?: string | null
   /** Absolute https picture; the app's notification service extension attaches it. */
   imageUrl?: string | null
@@ -114,6 +116,7 @@ export function apnsBody(payload: ApnsPayload): string {
     },
     href: payload.href ?? null,
     type: payload.type ?? "notification",
+    ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {}),
     leagueId: payload.leagueId ?? null,
     ...(imageUrl ? { imageUrl } : {}),
   })
@@ -151,7 +154,7 @@ export async function sendApns(deviceTokens: string[], payload: ApnsPayload): Pr
               "apns-topic": cfg.topic,
               "apns-push-type": "alert",
               "apns-priority": "10",
-                "apns-expiration": String(Math.floor(Date.now() / 1000) + (/^(game_(scoring_play|big_play|close)|live_score)/.test(payload.type ?? "") ? 300 : 86400)),
+                "apns-expiration": String(pushRetentionSeconds(payload.type) === 0 ? 0 : Math.floor(Date.now() / 1000) + pushRetentionSeconds(payload.type)),
               "content-type": "application/json",
             }
             // Same-tag notifications replace each other, as on the web. Apple caps the id at 64 bytes.

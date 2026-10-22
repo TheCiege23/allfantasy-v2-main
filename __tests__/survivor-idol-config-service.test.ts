@@ -99,13 +99,13 @@ describe('saving idol setup', () => {
     expect(db.league.update).toHaveBeenCalledWith({ where: { id: 'league-1' }, data: { survivorIdolCount: 8 } })
   })
 
-  it('refuses a pick that is not exactly count - 2 and an out-of-range count', async () => {
+  it('refuses an empty pick list, more than 12 picks, and an out-of-range random count', async () => {
     const { saveSurvivorIdolConfig } = await import('@/lib/survivor/survivorIdolConfigService')
     const db = fakeDb()
-    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 7, pickedTypeIds: [] }, db as never)).toMatchObject({ ok: false, status: 422 })
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', pickedTypeIds: [] }, db as never)).toMatchObject({ ok: false, status: 400 })
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', pickedTypeIds: Array(13).fill('immunity') }, db as never)).toMatchObject({ ok: false, status: 400 })
     expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 9 }, db as never)).toMatchObject({ ok: false, status: 400 })
     expect(await saveSurvivorIdolConfig('league-1', { mode: 'random', count: 7, tributePct: 80 }, db as never)).toMatchObject({ ok: false, status: 400 })
-    expect(db.survivorIdolConfig.upsert).not.toHaveBeenCalled()
   })
 })
 
@@ -119,7 +119,9 @@ describe('pick mode server-side', () => {
       expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 7, pickedTypeIds: [id] }, db as never)).toMatchObject({ ok: false, status: 422 })
     }
     expect(db.survivorIdolConfig.upsert).not.toHaveBeenCalled()
-    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 7, pickedTypeIds: ['vote-steal', 'steal-three'] }, db as never)).toMatchObject({ ok: true })
+    // The list is the count, one entry per copy, and the playable always-in idol stays in.
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', pickedTypeIds: ['vote-steal', 'steal-three'] }, db as never)).toMatchObject({ ok: false, status: 422 })
+    expect(await saveSurvivorIdolConfig('league-1', { mode: 'pick', count: 99, pickedTypeIds: ['immunity', 'vote-steal', 'vote-steal', 'steal-three'] }, db as never)).toMatchObject({ ok: true, config: { count: 4 } })
   })
 })
 
@@ -145,9 +147,17 @@ describe('the draw at draft lock', () => {
 
   it('uses the commissioner picks in pick mode', async () => {
     const { lockSurvivorIdolDraw } = await import('@/lib/survivor/survivorIdolConfigService')
+    const db = fakeDb({ row: { mode: 'pick', count: 4, pickedTypeIds: ['vote-steal', 'immunity', 'vote-steal', 'extra-vote'] } })
+    const locked = await lockSurvivorIdolDraw('league-1', db as never, () => 0)
+    expect(locked?.typeIds).toEqual(['immunity', 'vote-steal', 'vote-steal', 'extra-vote'])
+  })
+
+  it('a pick row saved before per-type quantities (extras only, count 6) falls back to a balanced draw of its count', async () => {
+    const { lockSurvivorIdolDraw } = await import('@/lib/survivor/survivorIdolConfigService')
     const db = fakeDb({ row: { mode: 'pick', count: 6, pickedTypeIds: ['vote-steal', 'extra-vote'] } })
     const locked = await lockSurvivorIdolDraw('league-1', db as never, () => 0)
-    expect(locked?.typeIds).toEqual(['immunity', 'vote-steal', 'vote-steal', 'vote-steal', 'extra-vote', 'extra-vote'])
+    expect(locked?.typeIds).toHaveLength(6)
+    expect(locked?.typeIds[0]).toBe('immunity')
   })
 
   it('never seals a coming-soon idol: saved picks that are no longer playable fall back to the balanced draw', async () => {

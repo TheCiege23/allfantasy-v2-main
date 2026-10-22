@@ -38,7 +38,7 @@ describe('Shot in the Dark', () => {
     expect(await playShotInTheDark('league-1', 'user-a', () => 1)).toEqual(expect.objectContaining({ ok: true, success: true }))
     expect(db.survivorAuditEntry.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       id: 'survivor-shot:league-1:user-a', action: 'shot_in_the_dark_played',
-      data: { draw: 1, success: true, forfeitedVote: true },
+      data: { draw: 1, odds: 6, success: true, forfeitedVote: true },
       isVisibleToCommissioner: false, isVisibleToPublic: false,
     }) })
   })
@@ -46,7 +46,7 @@ describe('Shot in the Dark', () => {
   it('does not reveal or re-roll a previous use', async () => {
     db.survivorAuditEntry.findUnique.mockResolvedValue({ id: 'survivor-shot:league-1:user-a', data: { success: false }, relatedEntityId: 'council-1' })
     const status = await getShotInTheDarkStatus('league-1', 'user-a')
-    expect(status).toEqual({ available: false, used: true, success: false, councilId: 'council-1' })
+    expect(status).toEqual({ available: false, used: true, success: false, councilId: 'council-1', odds: 6 })
     expect(await playShotInTheDark('league-1', 'user-a', () => { throw new Error('draw must not run') })).toEqual(expect.objectContaining({ ok: false, status: 409 }))
   })
 
@@ -71,5 +71,16 @@ describe('Shot in the Dark', () => {
     expect((await getShotInTheDarkStatus('league-1', 'user-a')).available).toBe(false)
     expect(await playShotInTheDark('league-1', 'user-a', () => { throw new Error('draw must not run') }))
       .toEqual(expect.objectContaining({ ok: false, status: 409 }))
+  })
+
+  it('draws against the league odds (1 in 4, 5 or 6; default 6) and records them', async () => {
+    context.mockResolvedValue({ ...council(), settings: { shotInTheDarkOdds: 4 } })
+    const roll = vi.fn((odds: number) => odds)
+    expect(await playShotInTheDark('league-1', 'user-a', roll)).toEqual(expect.objectContaining({ ok: true, success: false }))
+    expect(roll).toHaveBeenCalledWith(4)
+    expect(db.survivorAuditEntry.create.mock.calls[0][0].data.data).toEqual({ draw: 4, odds: 4, success: false, forfeitedVote: true })
+    expect(await getShotInTheDarkStatus('league-1', 'user-a')).toMatchObject({ odds: 4 })
+    // A draw outside 1..odds is a bug, never a result.
+    await expect(playShotInTheDark('league-1', 'user-a', () => 5)).rejects.toThrow(/Invalid Shot in the Dark draw/)
   })
 })

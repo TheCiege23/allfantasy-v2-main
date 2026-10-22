@@ -1,4 +1,5 @@
 import 'server-only'
+import { isSurvivorIdolExpired, survivorIdolExpiryRule } from './survivorIdolExpiry'
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { computeNextWaiverRunAtUtc } from '@/lib/waiver-wire/next-waiver-run'
@@ -29,7 +30,8 @@ async function loadPreview(leagueId: string, userId: string, idolId: string, db:
   const state = await db.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true, activePlayerCount: true, phase: true, pausedSnapshot: true } })
   const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   const settings = normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null)
-  if (!state || state.currentWeek < 1 || state.pausedSnapshot != null || !['pre_merge', 'post_swap', 'post_merge', 'merge'].includes(state.phase) || state.activePlayerCount <= settings.idolInvalidRemainingPlayers) return failure(409, 'idol_expired', 'Steal 3 cannot be played in this phase.')
+  if (!state || state.currentWeek < 1 || state.pausedSnapshot != null || !['pre_merge', 'post_swap', 'post_merge', 'merge'].includes(state.phase) ||
+    isSurvivorIdolExpired(survivorIdolExpiryRule(settings), { activePlayerCount: state.activePlayerCount, week: state.currentWeek, phase: state.phase })) return failure(409, 'idol_expired', 'Steal 3 cannot be played in this phase.')
   const owner = await db.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId } }, select: { playerState: true, redraftRosterId: true, displayName: true, idolIds: true } })
   const rosterLink = owner?.redraftRosterId ? await db.roster.findUnique({ where: { id: owner.redraftRosterId }, select: { redraftRosterId: true } }) : null
   if (owner?.playerState !== 'active' || !rosterLink?.redraftRosterId) return failure(403, 'not_active_manager', 'Only an active main-island manager can play Steal 3.')
