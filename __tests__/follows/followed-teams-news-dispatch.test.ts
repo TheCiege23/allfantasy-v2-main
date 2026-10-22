@@ -46,7 +46,7 @@ const ROW = {
   sport: 'NFL',
   playerName: 'Jordan Love',
   team: 'Packers',
-  headline: 'Love (knee) limited at practice',
+  headline: 'Love (knee) ruled out for Sunday',
   body: null,
   impact: 'medium',
 }

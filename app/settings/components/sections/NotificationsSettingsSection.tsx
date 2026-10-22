@@ -32,6 +32,11 @@ import {
   LIVE_ALERT_LEVEL_LABEL_KEYS,
   readLiveAlertLevel,
 } from "@/lib/notification-settings/liveAlertLevel"
+import {
+  PLAYER_NEWS_LEVELS,
+  PLAYER_NEWS_LEVEL_LABEL_KEYS,
+  readPlayerNewsLevel,
+} from "@/lib/notification-settings/playerNewsLevel"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
@@ -407,6 +412,56 @@ export function NotificationsSettingsSection({
                   </span>
                   <span className="mt-0.5 block text-xs text-[var(--muted)]">
                     {t(LIVE_ALERT_LEVEL_LABEL_KEYS[level].definition)}
+                  </span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+
+      {/*
+        PLAYER NEWS LEVEL (owner's call, 2026-10-22, after 59 player-news emails in one day). Same
+        pattern as the live level above: each choice's meaning is on screen, and every player-news
+        sender routes through lib/notification-settings/playerNewsLevel.ts.
+      */}
+      <div
+        className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4"
+        data-testid="notifications-player-news-card"
+      >
+        <div>
+          <p className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.playerNews.title")}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("settings.notifications.playerNews.hint")}</p>
+        </div>
+        <div role="radiogroup" aria-label={t("settings.notifications.playerNews.title")} className="space-y-2">
+          {PLAYER_NEWS_LEVELS.map((level) => {
+            const selected = readPlayerNewsLevel(prefs) === level
+            return (
+              <label
+                key={level}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                  selected ? "border-[var(--accent-cyan)] bg-[var(--panel)]" : "border-[var(--border)]"
+                }`}
+                data-testid={`notifications-player-news-${level}`}
+              >
+                <input
+                  type="radio"
+                  name="player-news-level"
+                  value={level}
+                  checked={selected}
+                  onChange={() => {
+                    setDirty(true)
+                    setSaveError(null)
+                    setPrefs((p) => ({ ...p, playerNewsLevel: level }))
+                  }}
+                  className="mt-1 h-4 w-4 accent-[var(--accent-cyan)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-[var(--text)]">
+                    {t(PLAYER_NEWS_LEVEL_LABEL_KEYS[level].name)}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                    {t(PLAYER_NEWS_LEVEL_LABEL_KEYS[level].definition)}
                   </span>
                 </span>
               </label>

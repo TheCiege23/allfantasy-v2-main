@@ -90,6 +90,11 @@ export interface NotificationPreferences {
    * Absent = 'everything', which is what everyone got before the setting existed.
    */
   liveAlertLevel?: 'everything' | 'my_teams' | 'close_games' | 'off'
+  /**
+   * How much a person hears about players on their rosters — see lib/notification-settings/playerNewsLevel.ts.
+   * Absent = 'starters'.
+   */
+  playerNewsLevel?: 'starters' | 'roster' | 'off'
 }
 
 export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [

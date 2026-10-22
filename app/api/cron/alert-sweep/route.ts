@@ -96,6 +96,7 @@
  */
 
 import type { NextRequest } from 'next/server'
+import { readPlayerNewsLevelFor, claimPlayerNewsEmailToday } from "@/lib/notifications/playerNewsGate"
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
@@ -722,6 +723,12 @@ async function handle(req: NextRequest) {
           continue
         }
 
+        // Settings › Notifications › Player news "Off" silences these too (playerNewsLevel.ts).
+        if ((await readPlayerNewsLevelFor(sub.userId)) === 'off') {
+          results.push(result)
+          continue
+        }
+
         /*
          * ONE message per player covering EVERY league he starts in (the injury fan-out,
          * injuryFanOutCopy.ts) — and, since 2026-10-08, ONE phone notification for EVERY player not
@@ -869,7 +876,9 @@ async function handle(req: NextRequest) {
         for (let i = 0; i < unsent.length; i++) {
           const u = unsent[i]!
           const top = u.group[0]!
-          const withEmail = i === 0 && injuryEmail != null
+          // At most ONE of these designed emails per person per Eastern day (owner's call, 2026-10-22):
+          // later sweeps that day push and write the bell; the daily roster digest carries the rest.
+          const withEmail = i === 0 && injuryEmail != null && (await claimPlayerNewsEmailToday(sub.userId, now))
           const texts = textBody != null && i === textNow[0]
           const covered = textNow.includes(i)
           await dispatchNotification({

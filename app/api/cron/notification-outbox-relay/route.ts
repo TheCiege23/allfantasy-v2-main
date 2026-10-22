@@ -56,6 +56,19 @@ async function handle(req: NextRequest) {
     const engagementPromise = dryRun ? Promise.resolve(null) : runSportsEngagement().catch(e => ({
       games: 0, delivered: 0, errors: [e instanceof Error ? e.message : String(e)],
     }))
+    /*
+     * The daily "Roster news" email (lib/notifications/playerNewsDigest.ts), checked every 15 minutes
+     * in this minute slot: each person gets one at the first check after 8am their time. Isolated, so
+     * a digest failure cannot stop the relay.
+     */
+    const digestPromise = dryRun || new Date().getUTCMinutes() % 15 !== 0 ? Promise.resolve(null) : (async () => {
+      try {
+        const { sendDuePlayerNewsDigests } = await import("@/lib/notifications/playerNewsDigest")
+        return await sendDuePlayerNewsDigests()
+      } catch (e) {
+        return { error: e instanceof Error ? e.message.slice(0, 200) : "failed" }
+      }
+    })()
     const run = () => relayNotificationOutbox({ limit, dryRun })
 
     /*
@@ -77,12 +90,13 @@ async function handle(req: NextRequest) {
           status: r.failed > 0 ? ("partial" as const) : ("success" as const),
         }))
 
-    const [result, engagement, discordInbound] = await Promise.all([relayPromise, engagementPromise, discordPromise])
+    const [result, engagement, discordInbound, playerNewsDigest] = await Promise.all([relayPromise, engagementPromise, discordPromise, digestPromise])
 
     return NextResponse.json({
       ok: true,
       dryRun,
       engagement,
+      playerNewsDigest,
       ...result,
       discordInbound,
       durationMs: Date.now() - startedAt,
