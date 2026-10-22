@@ -48,6 +48,7 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
       { id: 'playoffs', label: 'Playoffs' },
       { id: 'guillotine-first-chop', label: 'First chop week' },
       { id: 'guillotine-chop-rules', label: 'Chop rules' },
+      { id: 'guillotine-rules', label: 'League rules' },
     ],
   },
   {

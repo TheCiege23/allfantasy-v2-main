@@ -23,6 +23,8 @@ type SummaryConfig = {
   eliminationStartWeek?: number
   teamsPerChop?: number
   scheduleLines?: string[]
+  /** Commissioner viewers only: the server's AF Commissioner check for guillotine rules. */
+  canEditPaidRules?: boolean | null
 }
 
 export function GuillotineAutopilotCard({
@@ -40,7 +42,6 @@ export function GuillotineAutopilotCard({
 }) {
   const profile = getGuillotineSportConfig(sport)
   const [config, setConfig] = useState<SummaryConfig | null>(null)
-  const [hasAfCommissioner, setHasAfCommissioner] = useState<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -55,21 +56,7 @@ export function GuillotineAutopilotCard({
     }
   }, [leagueId])
 
-  useEffect(() => {
-    if (!isCommissioner) return
-    let cancelled = false
-    // The settings page reads the same flag from the same route (LeagueSettingsHomeContainer).
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/settings`, { credentials: 'include', cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled && d) setHasAfCommissioner(Boolean(d.hasAfCommissionerSub))
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [leagueId, isCommissioner])
-
+  const hasAfCommissioner = typeof config?.canEditPaidRules === 'boolean' ? config.canEditPaidRules : null
   const startWeek = config?.eliminationStartWeek ?? 1
   const perChop = Math.max(1, config?.teamsPerChop ?? 1)
   const chopWhen = profile ? profile.chopLabel.replace(/^By /, 'by ') : 'after each week'
@@ -140,6 +127,9 @@ export function GuillotineAutopilotCard({
             <button type="button" className="nl-button" onClick={() => onOpenSettings('guillotine-first-chop')}>
               First chop week
             </button>
+            <button type="button" className="nl-button" onClick={() => onOpenSettings('guillotine-rules')}>
+              League rules
+            </button>
             <button type="button" className="nl-button" onClick={() => onOpenSettings('waivers')}>
               Waivers
             </button>
@@ -150,8 +140,8 @@ export function GuillotineAutopilotCard({
           </div>
           <p className="mt-2 text-[12px] opacity-60">
             {hasAfCommissioner
-              ? 'AF Commissioner is on: double-chop weeks, immunity and a custom draft length are yours to set.'
-              : 'Roster changes reshape the draft automatically (rounds = roster spots, IR not drafted). AF Commissioner adds double-chop weeks, immunity and a custom draft length.'}
+              ? 'AF Commissioner is on: double-chop weeks, immunity, tiebreakers and the rest of the league rules are yours to set.'
+              : 'Roster changes reshape the draft automatically (rounds = roster spots, IR not drafted). AF Commissioner adds double-chop weeks, immunity, custom tiebreakers and stat-correction timing.'}
           </p>
         </div>
       ) : null}
