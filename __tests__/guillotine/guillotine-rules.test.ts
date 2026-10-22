@@ -62,6 +62,7 @@ const CURRENT: GuillotineRules = {
   statCorrectionHours: 24,
   dangerMarginPoints: 10,
   rosterReleaseTiming: 'next_waiver_run',
+  aiRecapAuto: true,
 }
 
 describe('normalizeGuillotineRulesPatch', () => {
@@ -143,6 +144,15 @@ describe('saveGuillotineRules', () => {
     expect(data.settings.conceptSetup).toBeDefined()
     expect(data.guillotineEndgame).toBe('final_three')
     expect(data.guillotineEndgameThreshold).toBe(3)
+  })
+
+  it('saves the Chimmy recap switch to League.settings, free to change, and leaves the endgame column alone', async () => {
+    const r = await saveGuillotineRules('L1', 'u1', { aiRecapAuto: false })
+    expect(r.ok).toBe(true)
+    const data = leagueUpdate.mock.calls[0]![0].data
+    expect(data.settings.guillotineAiRecapAuto).toBe(false)
+    expect(data).not.toHaveProperty('guillotineEndgame')
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
   })
 
   it('locks the endgame once the first chop has happened (409)', async () => {

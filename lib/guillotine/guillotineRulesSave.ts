@@ -11,6 +11,7 @@ import {
   normalizeGuillotineRulesPatch,
   paidFieldsChanged,
   RULE_DEFAULTS,
+  AI_RECAP_AUTO_KEY,
   type GuillotineRuleField,
   type GuillotineRules,
   type RulesPatchError,
@@ -39,6 +40,8 @@ export type GuillotineRulesView = {
   endgameLocked: boolean
   /** The viewer can change the AF Commissioner fields — the same check the save enforces. */
   canEditPaid: boolean
+  /** The viewer's plan includes Chimmy recaps (`guillotine_ai`), so `aiRecapAuto` takes effect. */
+  aiRecapAvailable: boolean
 }
 
 export async function viewerCanEditPaidGuillotineRules(userId: string): Promise<boolean> {
@@ -54,10 +57,12 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
   if (!config || !league) return null
   const sport = normalizeToSupportedSport(league.sport) as LeagueSport
   const seasonWeeks = DEFAULT_END_WEEK_BY_SPORT[sport] ?? 18
-  const [endgameLocked, canEditPaid] = await Promise.all([
+  const [endgameLocked, canEditPaid, aiRecapAvailable] = await Promise.all([
     hasFirstChopHappened(leagueId).catch(() => false),
     viewerCanEditPaidGuillotineRules(userId),
+    new FeatureGateService().evaluateUserFeatureAccess(userId, 'guillotine_ai').then((a) => Boolean(a?.allowed)).catch(() => false),
   ])
+  const settings = (league.settings as Record<string, unknown> | null) ?? {}
   return {
     rules: {
       teamsPerChop: config.teamsPerChop,
@@ -68,11 +73,13 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       dangerMarginPoints: config.dangerMarginPoints ?? RULE_DEFAULTS.dangerMarginPoints,
       // `custom_time` has no editor yet; show it as the default rather than an option nobody can pick.
       rosterReleaseTiming: config.rosterReleaseTiming === 'immediate' ? 'immediate' : 'next_waiver_run',
+      aiRecapAuto: settings[AI_RECAP_AUTO_KEY] !== false,
     },
     startWeek: config.eliminationStartWeek,
     seasonWeeks,
     endgameLocked,
     canEditPaid,
+    aiRecapAvailable,
   }
 }
 
@@ -101,7 +108,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  const { endgame, ...configPatch } = patch
+  const { endgame, aiRecapAuto, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -126,15 +133,22 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  if (endgame !== undefined && endgame !== current.rules.endgame) {
+  const endgameChanged = endgame !== undefined && endgame !== current.rules.endgame
+  const recapChanged = aiRecapAuto !== undefined && aiRecapAuto !== current.rules.aiRecapAuto
+  if (endgameChanged || recapChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-      const settings = { ...((row?.settings as Record<string, unknown> | null) ?? {}), guillotineEndgame: endgame }
+      const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
+      if (endgameChanged) settings.guillotineEndgame = endgame
+      if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
       await tx.league.update({
         where: { id: leagueId },
-        data: { settings: settings as object, guillotineEndgame: endgame, guillotineEndgameThreshold: ENDGAME_THRESHOLD[endgame] },
+        data: {
+          settings: settings as object,
+          ...(endgameChanged && endgame ? { guillotineEndgame: endgame, guillotineEndgameThreshold: ENDGAME_THRESHOLD[endgame] } : {}),
+        },
       })
     })
   }

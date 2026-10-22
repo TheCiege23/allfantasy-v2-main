@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowRight, Axe, Bot, CheckCircle2, Lock, Megaphone, Trophy, Users } from 'lucide-react'
+import { ArrowRight, Axe, Bot, CheckCircle2, Lock, Megaphone, Sparkles, Trophy, Users } from 'lucide-react'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 
 /**
@@ -57,6 +57,44 @@ export function GuillotineAutopilotCard({
   }, [leagueId])
 
   const hasAfCommissioner = typeof config?.canEditPaidRules === 'boolean' ? config.canEditPaidRules : null
+  const [recapState, setRecapState] = useState<{ busy: boolean; message: string | null; upgrade: string | null }>({ busy: false, message: null, upgrade: null })
+
+  // Commissioner-requested AI recap of the latest chop, posted to league chat (lib/guillotine/weeklyRecap.ts).
+  const postAiRecap = async () => {
+    setRecapState({ busy: true, message: null, upgrade: null })
+    try {
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/ai`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'recap', postToChat: true }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        // FeatureGateService refusal: 403, code `feature_not_entitled`, with its own upgrade link.
+        const locked = d?.code === 'feature_not_entitled'
+        setRecapState({
+          busy: false,
+          message: locked ? 'Chimmy recaps are part of a paid AllFantasy plan.' : (d?.error ?? 'Could not post the recap.'),
+          upgrade: locked ? (typeof d?.upgradePath === 'string' && d.upgradePath.startsWith('/') ? d.upgradePath : '/upgrade') : null,
+        })
+        return
+      }
+      setRecapState({
+        busy: false,
+        upgrade: null,
+        message: !d.posted
+          ? d.aiWritten
+            ? `Chimmy's week ${d.week} recap is already in league chat.`
+            : `Chimmy is unavailable right now, and the standard week ${d.week} recap is already in league chat.`
+          : d.aiWritten
+            ? `Posted Chimmy's week ${d.week} recap to league chat.`
+            : `Chimmy was unavailable, so the standard week ${d.week} recap was posted instead.`,
+      })
+    } catch {
+      setRecapState({ busy: false, message: 'Could not reach the server. Try again.', upgrade: null })
+    }
+  }
   const startWeek = config?.eliminationStartWeek ?? 1
   const perChop = Math.max(1, config?.teamsPerChop ?? 1)
   const chopWhen = profile ? profile.chopLabel.replace(/^By /, 'by ') : 'after each week'
@@ -84,7 +122,7 @@ export function GuillotineAutopilotCard({
     {
       icon: Megaphone,
       title: 'The league hears it first',
-      body: 'Each chop is announced in league chat, so nobody has to break the news.',
+      body: 'Each chop is announced in league chat with a weekly recap — who went, the closest call, the top scorer and when the next chop lands.',
     },
     {
       icon: Trophy,
@@ -143,6 +181,17 @@ export function GuillotineAutopilotCard({
               ? 'AF Commissioner is on: double-chop weeks, immunity, tiebreakers and the rest of the league rules are yours to set.'
               : 'Roster changes reshape the draft automatically (rounds = roster spots, IR not drafted). AF Commissioner adds double-chop weeks, immunity, custom tiebreakers and stat-correction timing.'}
           </p>
+          <div className="nl-actions mt-3">
+            <button type="button" className="nl-button" disabled={recapState.busy} onClick={() => void postAiRecap()} data-testid="guillotine-ai-recap">
+              <Sparkles size={14} aria-hidden /> {recapState.busy ? 'Chimmy is writing…' : 'Have Chimmy recap the last chop'}
+            </button>
+          </div>
+          {recapState.message ? (
+            <p role="status" className="mt-2 text-[12px] opacity-80">
+              {recapState.message}
+              {recapState.upgrade ? <> <a href={recapState.upgrade} className="font-semibold underline">Upgrade</a></> : null}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

@@ -56,6 +56,7 @@ const getDraftSlotByRosterMock = vi.hoisted(() => vi.fn())
 const releaseChoppedRostersMock = vi.hoisted(() => vi.fn())
 const appendEventMock = vi.hoisted(() => vi.fn())
 const postChopToLeagueChatMock = vi.hoisted(() => vi.fn())
+const postAutomaticGuillotineRecapMock = vi.hoisted(() => vi.fn())
 const standingsMock = vi.hoisted(() => vi.fn())
 const dangerMock = vi.hoisted(() => vi.fn())
 const eventsMock = vi.hoisted(() => vi.fn())
@@ -97,6 +98,7 @@ vi.mock('@/lib/guillotine/GuillotineEventLog', () => ({
   appendEvent: appendEventMock,
   getRecentEvents: eventsMock,
 }))
+vi.mock('@/lib/guillotine/weeklyRecap', () => ({ postAutomaticGuillotineRecap: postAutomaticGuillotineRecapMock }))
 vi.mock('@/lib/guillotine/guillotineChat', () => ({
   postChopToLeagueChat: postChopToLeagueChatMock,
 }))
@@ -436,11 +438,25 @@ describe('Guilly full regression matrix', () => {
     resolveRedraftRosterIdsMock.mockResolvedValue(new Map([['r-low', 'rr-low']]))
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'rr-low', teamName: 'Lowest Team', ownerName: 'u1', ownerId: 'u1' }])
     postChopToLeagueChatMock.mockRejectedValueOnce(new Error('chat down'))
+    postAutomaticGuillotineRecapMock.mockRejectedValueOnce(new Error('recap down'))
 
     const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, systemUserId: 'owner' })
 
     expect(out?.choppedRosterIds).toEqual(['r-low'])
     expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
+    // The weekly recap follows the announcement, from this week's scores, and a failure in either
+    // never undoes the chop (lib/guillotine/weeklyRecap.ts).
+    expect(postAutomaticGuillotineRecapMock).toHaveBeenCalledWith({
+      leagueId: 'league-1',
+      week: 3,
+      season: undefined,
+      scores: [
+        { rosterId: 'r-low', periodPoints: 77 },
+        { rosterId: 'r-mid', periodPoints: 100 },
+      ],
+      choppedRosterIds: ['r-low'],
+      authorUserId: 'owner',
+    })
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop_animation_trigger', expect.any(Object))
   })
 
