@@ -11,6 +11,7 @@ import {
   type SettingsHomeSection,
   type SettingsSubPageId,
 } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+import { SettingsSaveScope, confirmDiscardIfDirty, useSaveScopeHandleRef } from './SettingsSaveScope'
 
 export type SettingsSubPageRender = {
   title: string
@@ -114,6 +115,7 @@ export function LeagueSettingsHome({
 }: LeagueSettingsHomeProps) {
   const [open, setOpen] = useState<SettingsSubPageId | null>(initialSubPage)
   const listScroll = useRef(0)
+  const saveScope = useSaveScopeHandleRef()
 
   const openSubPage = useCallback((id: SettingsSubPageId) => {
     if (typeof window !== 'undefined') listScroll.current = window.scrollY
@@ -122,6 +124,7 @@ export function LeagueSettingsHome({
   }, [])
 
   const closeSubPage = useCallback(() => {
+    if (!confirmDiscardIfDirty(saveScope.ref.current)) return
     const closing = open
     setOpen(null)
     if (closing) onSubPageClosed?.(closing)
@@ -129,7 +132,7 @@ export function LeagueSettingsHome({
       const y = listScroll.current
       window.requestAnimationFrame(() => window.scrollTo?.({ top: y }))
     }
-  }, [open, onSubPageClosed])
+  }, [open, onSubPageClosed, saveScope.ref])
 
   const sub = open ? renderSubPage(open) : null
 
@@ -138,7 +141,11 @@ export function LeagueSettingsHome({
       <div className="af-core lsh-root" data-testid="league-settings-subpage" data-subpage={open}>
         <SettingsHeader title={sub.title} onBack={closeSubPage} backLabel="Back to league settings" />
         <div className="lsh-column">
-          <div className="lsh-subpage-body">{sub.content}</div>
+          <div className="lsh-subpage-body">
+            <SettingsSaveScope key={open} onReady={saveScope.onReady}>
+              {sub.content}
+            </SettingsSaveScope>
+          </div>
         </div>
       </div>
     )

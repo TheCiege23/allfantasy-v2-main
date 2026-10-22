@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronLeft, Copy } from 'lucide-react'
 import type { SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { SettingsSubPageRender } from './LeagueSettingsHome'
+import { SettingsSaveScope, confirmDiscardIfDirty, useSaveScopeHandleRef } from './SettingsSaveScope'
 
 /**
  * Commissioner center (native league handoff, Commissioner.png), the desktop layout of the League
@@ -133,7 +134,9 @@ export function CommissionerCenter({
   const fallback: SettingsSubPageId = allowed.has(inSeason ? 'general' : 'draft') ? (inSeason ? 'general' : 'draft') : groups[0]?.items[0]?.id ?? 'general'
   const [open, setOpen] = useState<SettingsSubPageId>(initialSubPage && allowed.has(initialSubPage) ? initialSubPage : fallback)
   const pane = useRef<HTMLDivElement | null>(null)
+  const saveScope = useSaveScopeHandleRef()
   const select = (id: SettingsSubPageId) => {
+    if (id !== open && !confirmDiscardIfDirty(saveScope.ref.current)) return
     if (id !== open) onSubPageClosed?.(open)
     setOpen(id)
     pane.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
@@ -145,12 +148,12 @@ export function CommissionerCenter({
     <div className="af-core lsh-root cc-root" data-testid="commissioner-center">
       <header className="cc-head">
         {onExit ? (
-          <button type="button" className="cc-back" onClick={onExit} data-testid="cc-back">
+          <button type="button" className="cc-back" onClick={() => { if (confirmDiscardIfDirty(saveScope.ref.current)) onExit() }} data-testid="cc-back">
             <ChevronLeft size={16} aria-hidden /> Back to league home
           </button>
         ) : null}
         <h1>Commissioner center</h1>
-        <p>Every rule for {leagueName?.trim() || 'your league'} lives here. Each section saves on its own.</p>
+        <p>Every rule for {leagueName?.trim() || 'your league'} lives here. Make your changes, then press Save.</p>
       </header>
 
       <div className="cc-grid">
@@ -177,7 +180,15 @@ export function CommissionerCenter({
           <section className="cc-card" aria-labelledby="cc-pane-title" data-testid="cc-pane" data-subpage={open}>
             <p className="cc-label">{groups.find(g => g.items.some(i => i.id === open))?.title ?? 'Settings'}</p>
             <h2 id="cc-pane-title">{sub?.title ?? 'Settings'}</h2>
-            <div className="cc-pane-body">{sub?.content ?? <p className="lsh-help">This section is not available for this league.</p>}</div>
+            <div className="cc-pane-body">
+              {sub ? (
+                <SettingsSaveScope key={open} onReady={saveScope.onReady}>
+                  {sub.content}
+                </SettingsSaveScope>
+              ) : (
+                <p className="lsh-help">This section is not available for this league.</p>
+              )}
+            </div>
           </section>
         </div>
       </div>

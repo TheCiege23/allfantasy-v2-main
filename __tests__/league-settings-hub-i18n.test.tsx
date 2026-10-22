@@ -135,8 +135,9 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
     ['scoring', []],
     ['roster', []],
     ['notifications', ['Las notificaciones básicas de la liga están en los ajustes de la cuenta.']],
-    ['commissioner', ['Registro de auditoría', 'El registro de auditoría está listo', 'Quitar de AllFantasy', 'es solo para el comisionado principal.']],
-    ['conceptRules', ['Resumen del formato', 'Guilly: Activado', 'Survivor: Desactivado', 'Best ball: Activado', 'Variante: —', 'Ajustes de Best Ball', 'Notas del comisionado sobre el formato (fusión JSON)']],
+    ['commissioner', ['Registro de auditoría', 'Aquí aparecerá el historial de cambios del comisionado.', 'Quitar de AllFantasy', 'es solo para el comisionado principal.']],
+    // The raw-JSON "concept notes" box is gone (nothing read it); the format reads as a name.
+    ['conceptRules', ['Formato de la liga', 'Guilly: Activado', 'Survivor: Desactivado', 'Best ball: Activado', 'Formato: —', 'Ajustes de Best Ball', 'tienen sus propias páginas en los Ajustes de la liga']],
     ['ai', ['Controla los ajustes del Asistente de la liga.', 'Asistente de la liga', 'Lista de seguimiento de agentes libres', 'Salud de trades', 'Participación de los managers', 'Preparación para el draft']],
   ])('%s', (tab, expected) => {
     lang.language = 'es'
