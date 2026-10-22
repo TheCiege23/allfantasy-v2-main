@@ -75,7 +75,7 @@ export function GuillotineAutopilotCard({
         const locked = d?.code === 'feature_not_entitled'
         setRecapState({
           busy: false,
-          message: locked ? 'AI recaps are part of a paid AllFantasy plan.' : (d?.error ?? 'Could not post the recap.'),
+          message: locked ? 'Chimmy recaps are part of a paid AllFantasy plan.' : (d?.error ?? 'Could not post the recap.'),
           upgrade: locked ? (typeof d?.upgradePath === 'string' && d.upgradePath.startsWith('/') ? d.upgradePath : '/upgrade') : null,
         })
         return
@@ -84,10 +84,10 @@ export function GuillotineAutopilotCard({
         busy: false,
         upgrade: null,
         message: !d.posted
-          ? `Week ${d.week}'s AI recap is already in league chat.`
+          ? `Chimmy's week ${d.week} recap is already in league chat.`
           : d.aiWritten
-            ? `Posted week ${d.week}'s AI recap to league chat.`
-            : `AI was unavailable, so week ${d.week}'s standard recap was posted instead.`,
+            ? `Posted Chimmy's week ${d.week} recap to league chat.`
+            : `Chimmy was unavailable, so the standard week ${d.week} recap was posted instead.`,
       })
     } catch {
       setRecapState({ busy: false, message: 'Could not reach the server. Try again.', upgrade: null })
@@ -181,7 +181,7 @@ export function GuillotineAutopilotCard({
           </p>
           <div className="nl-actions mt-3">
             <button type="button" className="nl-button" disabled={recapState.busy} onClick={() => void postAiRecap()} data-testid="guillotine-ai-recap">
-              <Sparkles size={14} aria-hidden /> {recapState.busy ? 'Writing recap…' : 'Post an AI recap of the last chop'}
+              <Sparkles size={14} aria-hidden /> {recapState.busy ? 'Chimmy is writing…' : 'Have Chimmy recap the last chop'}
             </button>
           </div>
           {recapState.message ? (
