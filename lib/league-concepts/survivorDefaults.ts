@@ -35,6 +35,7 @@
  *   NCAAF: 14 cast (2 tribes × 7), merge at 7, ~14 college weeks → mirrors season length
  */
 import { NEW_LEAGUE_EXILE_BOSS_MODE } from '@/lib/survivor/lateSeasonSettings'
+import { survivorCouncilDefaultsForSport } from '@/lib/survivor/survivorCouncilDefaults'
 import type { LeagueSport } from '@prisma/client'
 import { getScoringDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import {
@@ -859,6 +860,9 @@ export function buildSurvivorSettingsSnapshot(input: {
 
     ...contract.enabledFeatures,
     ...buildSurvivorSettingsSnapshotPatch({
+      // Council rules by sport: ceremony day/time after final scores, revote-then-rocks, ballots
+      // changeable until close, missing ballots auto-cast (owner's call, 2026-10-20).
+      ...survivorCouncilDefaultsForSport(contract.sport),
       defaultTeamCount: contract.teams,
       tribeCount: tribeSettings.tribeCount,
       mergeActivePlayerCount: tribeSettings.mergeAtCount,
