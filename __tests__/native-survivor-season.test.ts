@@ -100,6 +100,12 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
     // Even two per period cannot fit 17 votes into 8 periods.
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 10 })).toThrow('Not enough season remains')
   })
+  it('NFL is plan-ready but new NFL Survivor leagues stay behind the NBA-only pilot gate', () => {
+    // Opening NFL is a rollout decision (SURVIVOR_CREATION_SPORTS), not something the calendar decides.
+    const result = validateCreatePayload({ concept: 'survivor', sport: 'NFL', scoringPreset: 'fb_half_ppr', teamCount: 12, draftType: 'snake', leagueName: 'NFL island' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors?.[0]?.path).toBe('sport')
+  })
   it('rejects a past scheduled draft so autostart cannot begin before managers join', () => {
     vi.useFakeTimers(); vi.setSystemTime(now)
     try {

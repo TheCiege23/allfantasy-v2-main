@@ -20,7 +20,7 @@ import { SURVIVOR_SETTINGS_TRIBAL_VOTE_WINDOW_HOURS } from '@/lib/survivor/survi
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { applySurvivorSitOutToScoring } from '@/lib/survivor/SurvivorSitOutEngine'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
-import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { planWeekForInstant } from './survivorPlanCalendar'
 import { openTribalCouncil as openVerifiedCouncil, closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
@@ -204,7 +204,7 @@ export async function advanceWeek(leagueId: string): Promise<void> {
   const plan = readSurvivorFullSeasonPlan(league?.settings)
   const next = plan && gs.currentWeek < plan.startWeek ? plan.startWeek : gs.currentWeek + 1
   if (plan) {
-    const calendarWeek = dailySportWeekForInstant(plan.sport, plan.season, new Date()) ?? 0
+    const calendarWeek = planWeekForInstant(plan.sport, plan.season, new Date()) ?? 0
     if (next > plan.endWeek || next > calendarWeek) return
     if (gs.currentWeek >= plan.startWeek) {
       if (!gs.weekScoringFinalAt || gs.activeCouncilId) return

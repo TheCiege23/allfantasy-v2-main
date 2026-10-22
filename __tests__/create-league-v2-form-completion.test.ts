@@ -183,8 +183,15 @@ describe('payload normalization unchanged after form layer', () => {
 
     it('does not run for sports without a verified full-season calendar, or when the draft is scheduled later', () => {
       vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
-      expect(codes({ ...nbaSurvivor(24, '2026-11-15'), sport: 'NFL' as const, scoringPresetId: 'fb_half_ppr' })).not.toContain('survivor_season_too_short')
+      expect(codes({ ...nbaSurvivor(24, '2026-11-15'), sport: 'MLB' as const })).not.toContain('survivor_season_too_short')
       expect(codes({ ...nbaSurvivor(24, '2026-11-15'), draftScheduleLater: true })).not.toContain('survivor_season_too_short')
+    })
+
+    it('NFL has a verified calendar now: a mid-November 24-player cast is refused, a 12-player one fits', () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
+      const nfl = (teamCount: number) => ({ ...nbaSurvivor(teamCount, '2026-11-15'), sport: 'NFL' as const, scoringPresetId: 'fb_half_ppr' })
+      expect(codes(nfl(24))).toContain('survivor_season_too_short')
+      expect(codes(nfl(12))).not.toContain('survivor_season_too_short')
     })
   })
 
