@@ -14,6 +14,7 @@ import { resolveTiebreak } from './GuillotineTiebreakResolver'
 import { evaluateWeek, getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
 import { appendEvent } from './GuillotineEventLog'
+import { applyFaabAfterChop } from './faabAfterChop'
 import { postChopToLeagueChat } from './guillotineChat'
 import { resolveRedraftRosterId, resolveRedraftRosterIds } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { recordChopAudit, findGuillotineSeasonId, isPeriodAlreadyRecorded } from './guillotineChopAudit'
@@ -127,6 +128,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   const seasonId = await findGuillotineSeasonId(input.leagueId, input.season)
   if (seasonId && await isPeriodAlreadyRecorded(seasonId, input.weekOrPeriod)) {
     if (!input.skipRosterRelease) await resumeAuditedRosterRelease(input.leagueId, seasonId, input.weekOrPeriod)
+    // A chop whose FAAB step failed is finished here; the step is idempotent, so a done week no-ops.
+    await settleFaabAfterChop(input.leagueId, seasonId, input.season, input.weekOrPeriod)
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already processed' }
   }
   // A failure after state writes but before the audit must fail closed on retry too.
@@ -460,6 +463,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     })
   }
 
+  await settleFaabAfterChop(input.leagueId, seasonId, input.season, input.weekOrPeriod)
+
   if (!input.skipChat && input.systemUserId) {
     // Best-effort. The chop is already recorded; an announcement that fails must not turn a completed
     // elimination into a failed one — the caller would retry a week that has already been chopped.
@@ -489,6 +494,19 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     reason,
     eliminationFlagged: flagged,
     audit,
+  }
+}
+
+/**
+ * The commissioner's "FAAB after a chop" rule (./faabAfterChop). Best-effort, like the announcement:
+ * the chop is already recorded, and a retry of this week reaches the recovery branch, which runs it
+ * again — once, because the step keeps its own marker.
+ */
+async function settleFaabAfterChop(leagueId: string, seasonId: string | null, season: number | null | undefined, weekOrPeriod: number): Promise<void> {
+  try {
+    await applyFaabAfterChop({ leagueId, seasonKey: seasonId ?? `season:${season ?? 'unknown'}`, weekOrPeriod })
+  } catch (e) {
+    console.warn('[guillotine] FAAB after chop not applied yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
   }
 }
 

@@ -37,7 +37,7 @@ describe('saveGuillotineAdvanced', () => {
   it('saves under the league row lock and keeps every other setting', async () => {
     expect(await saveGuillotineAdvanced('L1', 'u1', rules)).toMatchObject({ ok: true })
     expect(db.state.locks.some((l) => l.includes('FOR UPDATE') && l.endsWith('|L1'))).toBe(true)
-    expect(db.state.settings).toEqual({ scoring: 'ppr', guillotine_advanced: { steps: [{ fromWeek: 10, chops: 2 }], overrides: { 8: 0 }, immunity: 'top_scorer' } })
+    expect(db.state.settings).toEqual({ scoring: 'ppr', guillotine_advanced: { steps: [{ fromWeek: 10, chops: 2 }], overrides: { 8: 0 }, immunity: 'top_scorer', faab: { mode: 'unchanged', amount: 0 } } })
   })
   it('AF Commissioner to change the rules — but resetting to one-a-week is always allowed', async () => {
     access.mockResolvedValue({ allowed: false })

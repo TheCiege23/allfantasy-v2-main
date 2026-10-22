@@ -118,3 +118,4 @@ export type GuillotineEventType =
   | 'chop_animation_trigger'
   | 'roster_released'
   | 'removal_request'
+  | 'faab_after_chop'

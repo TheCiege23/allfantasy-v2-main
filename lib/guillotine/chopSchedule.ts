@@ -4,6 +4,8 @@
  *   schedule    "teams chopped per week by schedule (e.g., 1/wk then 2/wk after week 10)" — steps
  *   overrides   "double-chop weeks, 'no-chop' holiday weeks" — a week set to 0, 2, 3…
  *   immunity    "weekly top scorer is chop-proof next week"
+ *   faab        "released-player rules: FAAB reset amount" — what every surviving team's FAAB becomes after
+ *               a chop: unchanged, topped up by an amount, or reset to an amount (see ./faabAfterChop)
  *
  * Until now the engine took one `teamsPerChop` for the whole season. `League.guillotineAcceleratedWeeks`
  * and `guillotineEliminationsPerPeriod` were written at creation and read by nothing, so a commissioner
@@ -22,6 +24,11 @@ export const MAX_CHOPS_PER_WEEK = 4
 export const MAX_WEEK = 30
 
 export type ImmunityRule = 'off' | 'top_scorer'
+export const MAX_FAAB_AMOUNT = 10_000
+
+/** After each chop: survivors keep their FAAB, get `amount` added, or are reset to `amount`. */
+export type FaabAfterChop = { mode: 'unchanged' | 'add' | 'set'; amount: number }
+export const DEFAULT_FAAB_AFTER_CHOP: FaabAfterChop = { mode: 'unchanged', amount: 0 }
 
 export type GuillotineAdvanced = {
   /** From `fromWeek` on, `chops` teams per week (until the next step). Sorted by week. */
@@ -29,15 +36,16 @@ export type GuillotineAdvanced = {
   /** Exact weeks: 0 = no chop (holiday), 2+ = double/triple chop. Wins over steps. */
   overrides: Record<number, number>
   immunity: ImmunityRule
+  faab: FaabAfterChop
 }
 
-export const DEFAULT_ADVANCED: GuillotineAdvanced = { steps: [], overrides: {}, immunity: 'off' }
+export const DEFAULT_ADVANCED: GuillotineAdvanced = { steps: [], overrides: {}, immunity: 'off', faab: DEFAULT_FAAB_AFTER_CHOP }
 
 const isWeek = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= MAX_WEEK
 const isChops = (n: unknown, allowZero: boolean): n is number =>
   typeof n === 'number' && Number.isInteger(n) && n >= (allowZero ? 0 : 1) && n <= MAX_CHOPS_PER_WEEK
 
-export type NormalizeError = 'bad_step' | 'duplicate_step' | 'bad_override' | 'bad_immunity'
+export type NormalizeError = 'bad_step' | 'duplicate_step' | 'bad_override' | 'bad_immunity' | 'bad_faab'
 
 /** Validate a commissioner's input. Strict: an invalid row is an error, never silently dropped. */
 export function normalizeAdvanced(raw: unknown): { ok: true; value: GuillotineAdvanced } | { ok: false; error: NormalizeError } {
@@ -60,7 +68,12 @@ export function normalizeAdvanced(raw: unknown): { ok: true; value: GuillotineAd
   }
   const immunity = r.immunity ?? 'off'
   if (immunity !== 'off' && immunity !== 'top_scorer') return { ok: false, error: 'bad_immunity' }
-  return { ok: true, value: { steps, overrides, immunity } }
+  // Saved before this rule existed: no `faab` means unchanged.
+  const f = r.faab == null ? DEFAULT_FAAB_AFTER_CHOP : (r.faab as Record<string, unknown>)
+  if (typeof f !== 'object' || (f.mode !== 'unchanged' && f.mode !== 'add' && f.mode !== 'set')) return { ok: false, error: 'bad_faab' }
+  const amount = f.mode === 'unchanged' ? 0 : f.amount
+  if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < (f.mode === 'add' ? 1 : 0) || amount > MAX_FAAB_AMOUNT) return { ok: false, error: 'bad_faab' }
+  return { ok: true, value: { steps, overrides, immunity, faab: { mode: f.mode, amount } } }
 }
 
 /** What is stored. Anything unreadable reads as the default rather than breaking a chop. */
@@ -71,7 +84,14 @@ export function readAdvanced(settings: unknown): GuillotineAdvanced {
 }
 
 export function isDefault(a: GuillotineAdvanced): boolean {
-  return a.steps.length === 0 && Object.keys(a.overrides).length === 0 && a.immunity === 'off'
+  return a.steps.length === 0 && Object.keys(a.overrides).length === 0 && a.immunity === 'off' && a.faab.mode === 'unchanged'
+}
+
+/** A survivor's FAAB after a chop under the rule. A team with no balance yet counts as $0. */
+export function faabAfterChop(rule: FaabAfterChop, current: number | null): number {
+  if (rule.mode === 'set') return rule.amount
+  const base = current ?? 0
+  return rule.mode === 'add' ? base + rule.amount : base
 }
 
 /** Teams this week calls for: an exact-week override, else the latest step at or before the week, else the base. */
@@ -113,5 +133,7 @@ export function describeSchedule(a: GuillotineAdvanced, base: number, startWeek:
     lines.push(n === 0 ? `Week ${w}: no chop.` : `Week ${w}: ${t(n)} chopped.`)
   }
   if (a.immunity === 'top_scorer') lines.push('Each week’s top scorer cannot be chopped the next week.')
+  if (a.faab.mode === 'add') lines.push(`After each chop, every surviving team gets $${a.faab.amount} more FAAB.`)
+  if (a.faab.mode === 'set') lines.push(`After each chop, every surviving team’s FAAB resets to $${a.faab.amount}.`)
   return lines
 }
