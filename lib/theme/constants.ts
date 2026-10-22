@@ -10,6 +10,15 @@ export const THEME_STORAGE_KEY = 'af_mode'
 export const THEME_COOKIE_KEY = 'af_mode'
 
 /**
+ * What "System" last resolved to on this device ('light' | 'dark'), written by the
+ * client whenever it paints System mode. The server cannot see the OS preference,
+ * so without this a light-OS user on System got a dark first paint on every load.
+ * No pre-hydration script is involved (the root layout bans those); the server
+ * simply reads this cookie and paints the right mode from the first byte.
+ */
+export const THEME_SYSTEM_RESOLVED_COOKIE_KEY = 'af_mode_sys'
+
+/**
  * Default theme when none is stored (must match layout script default).
  *
  * ⚠ DARK ON PURPOSE. The flagship signed-in surfaces are authored dark, and the
@@ -72,6 +81,21 @@ export function resolveEffectiveDataMode(value: string | null | undefined): 'lig
   if (d === 'legacy') return 'legacy'
   if (d === 'system') return systemPrefersLight() ? 'light' : 'dark'
   return d
+}
+
+/**
+ * Server-side `data-mode`: like `resolveEffectiveDataMode`, but when the stored
+ * theme is System it uses the last value the client resolved (see
+ * `THEME_SYSTEM_RESOLVED_COOKIE_KEY`) instead of always falling back to dark.
+ */
+export function resolveServerDataMode(
+  value: string | null | undefined,
+  systemResolved: string | null | undefined
+): 'light' | 'dark' | 'legacy' {
+  if (normalizeStoredTheme(value) === 'system' && (systemResolved === 'light' || systemResolved === 'dark')) {
+    return systemResolved
+  }
+  return resolveEffectiveDataMode(value)
 }
 
 /**
