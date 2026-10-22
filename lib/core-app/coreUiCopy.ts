@@ -18,6 +18,8 @@ const spanish: Record<string, string> = {
   Team: 'Equipo',
   Trades: 'Intercambios',
   Waivers: 'Agentes libres',
+  // The league tab strip's 'Moves' had no entry, so Spanish readers saw it in English.
+  Moves: 'Movimientos',
   'Player Finder': 'Buscar jugadores',
   Players: 'Jugadores',
   'Your week': 'Tu semana',
