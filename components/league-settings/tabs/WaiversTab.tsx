@@ -76,7 +76,7 @@ export function WaiversSection({
 }: Pick<LeagueSettingsTabProps, 'ctx' | 'canEdit'> & { timezone: string }) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving, savedAt, lastError } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
+  const { queuePatch, saving, savedAt, lastError, manual } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
 
   const seed = () => ({
     waiverType: String(savedOr(leagueId, 'waiverType', ctx.league.waiverType ?? 'rolling')),
@@ -132,7 +132,7 @@ export function WaiversSection({
         </h3>
         {canEdit ? <AutosaveStatus saving={saving} savedAt={savedAt} error={lastError} /> : null}
       </div>
-      {canEdit ? <p className="-mt-2 mb-4 text-[11px] leading-snug text-white/40">{t('lsHub.wv.autosaveNote')}</p> : null}
+      {canEdit && !manual ? <p className="-mt-2 mb-4 text-[11px] leading-snug text-white/40">{t('lsHub.wv.autosaveNote')}</p> : null}
 
       <div className="space-y-4">
         <label className="block">

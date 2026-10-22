@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useSettingsSaveScope } from '@/components/league-settings/home/SettingsSaveScope'
 
 const SAVED_VISIBLE_MS = 4000
 
@@ -23,6 +24,7 @@ export function AutosaveStatus({
   className?: string
 }) {
   const { t } = useLanguage()
+  const scope = useSettingsSaveScope()
   const [recent, setRecent] = useState(false)
 
   useEffect(() => {
@@ -31,6 +33,9 @@ export function AutosaveStatus({
     const timer = setTimeout(() => setRecent(false), SAVED_VISIBLE_MS)
     return () => clearTimeout(timer)
   }, [savedAt])
+
+  // On a League Settings page the sticky "Save changes" bar reports status instead.
+  if (scope) return null
 
   let tone = 'text-white/40'
   let label = t('lsHub.autosave.idle')
