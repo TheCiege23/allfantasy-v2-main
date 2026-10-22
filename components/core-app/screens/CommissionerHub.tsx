@@ -35,6 +35,7 @@ import {
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
+import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
@@ -512,6 +513,13 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
         </HubSection>
       </HubDepthGate>
+
+      {/* Lineup integrity — free for the latest week; the card names what the plan adds. */}
+      {league.native || league.platform === 'sleeper' ? (
+        <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
+          <LineupIntegrity leagueId={league.id} />
+        </HubSection>
+      ) : null}
 
       {/*
         Deadline autopilot — outside the depth gate on purpose: its list and "Remind now" are free,

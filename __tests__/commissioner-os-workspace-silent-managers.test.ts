@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/commissioner-workspace/operationalTasks',()=>({readOperationalTasks:vi.fn(async()=>[])}))
+vi.mock('@/lib/lineup-integrity/lineupIntegrityService',()=>({readLineupIntegrityTasks:vi.fn(async()=>[])}))
 
 /**
  * Commissioner Workspace — the inactive-managers detector must be able to see the managers who
