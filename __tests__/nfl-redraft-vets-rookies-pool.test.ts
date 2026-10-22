@@ -60,8 +60,8 @@ describe('Pool resolver derives isRookie from yearsExp via normalizeDraftPlayer'
 describe('Resolved draft pool feeds isRookie + yearsExp through to entries', () => {
   const src = read('lib/draft-room/getResolvedDraftPoolForLeague.ts')
 
-  it('runs enriched rows through normalizePlayerList (NormalizedDraftEntry shape)', () => {
-    expect(src).toMatch(/normalizePlayerList\(dedupedEnrichedList, sport\)/)
+  it('cooperatively normalizes enriched rows (NormalizedDraftEntry shape)', () => {
+    expect(src).toMatch(/cooperativeMap\(dedupedEnrichedList,[\s\S]*?normalizePlayer\(row, sport\)/)
   })
 
   it('explicitly stamps yearsExp on NFL rows (Sleeper years_exp lookup chain)', () => {

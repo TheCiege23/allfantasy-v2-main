@@ -48,7 +48,7 @@ export async function prepareSurvivorDraftParticipants(
   }
   const users = await db.appUser.findMany({
     where: { id: { in: rosters.map((r) => r.platformUserId) } },
-    select: { id: true, displayName: true, username: true },
+    select: { id: true, displayName: true, username: true, avatarUrl: true },
   })
   const usersById = new Map(users.map((u) => [u.id, u]))
   if (rosters.some((r) => !usersById.has(r.platformUserId))) {
@@ -105,8 +105,8 @@ export async function prepareSurvivorDraftParticipants(
     const tribeId = tribeByRoster.get(roster.id)
     await db.survivorPlayer.upsert({
       where: { leagueId_userId: { leagueId, userId: user.id } },
-      create: { leagueId, userId: user.id, displayName: user.displayName || user.username || 'Manager', redraftRosterId: roster.id, tribeId: tribeId ?? null },
-      update: { redraftRosterId: roster.id, ...(tribeId ? { tribeId } : {}) },
+      create: { leagueId, userId: user.id, displayName: user.displayName || user.username || 'Manager', avatarUrl: user.avatarUrl ?? null, redraftRosterId: roster.id, tribeId: tribeId ?? null },
+      update: { redraftRosterId: roster.id, ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}), ...(tribeId ? { tribeId } : {}) },
     })
   }
   const rosterToUser = new Map(rosters.map((r) => [r.id, r.platformUserId]))

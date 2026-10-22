@@ -22,6 +22,7 @@ const hm = vi.hoisted(() => ({
   adpDataFindMany: vi.fn(),
   listInjuryFacts: vi.fn(),
   playerSeasonStatsFindMany: vi.fn(),
+  sportsPlayerFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/injuries/injuryReadPort', async (orig) => ({
@@ -36,7 +37,7 @@ vi.mock('@/lib/prisma', () => ({
     playerAnalyticsSnapshot: { findMany: hm.playerAnalyticsFindMany },
     devyPlayer: { findMany: hm.devyPlayerFindMany },
     injuryReportRecord: { findMany: vi.fn().mockResolvedValue([]) },
-    sportsPlayer: { findMany: vi.fn().mockResolvedValue([]) },
+    sportsPlayer: { findMany: hm.sportsPlayerFindMany },
     sportsPlayerRecord: { findMany: vi.fn().mockResolvedValue([]) },
     adpDataRecord: {
       findFirst: (...args: unknown[]) => hm.adpDataFindFirst(...args),
@@ -154,6 +155,7 @@ describe('normalizeDraftPoolNameForDedupe', () => {
 describe('getResolvedDraftPoolForLeague', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hm.sportsPlayerFindMany.mockResolvedValue([])
     hm.listInjuryFacts.mockResolvedValue({ facts: [], newestFetchedAt: null, feedStale: false, coverage: { sourceAvailable: true, reason: null } })
     hm.leagueFindUnique.mockResolvedValue({
       sport: 'NFL',
@@ -454,7 +456,7 @@ describe('getResolvedDraftPoolForLeague', () => {
         full_name: 'Rookie Guard',
         position: 'PG',
         team_abbreviation: 'BOS',
-        external_source_id: 'nba-rookie-1',
+        external_source_id: '114',
         injury_status: null,
         secondary_positions: [],
         image_url: null,
@@ -469,7 +471,7 @@ describe('getResolvedDraftPoolForLeague', () => {
         full_name: 'Mlb Debut',
         position: 'PG',
         team_abbreviation: 'BOS',
-        external_source_id: 'mlb-1',
+        external_source_id: '115',
         injury_status: null,
         secondary_positions: [],
         image_url: null,
@@ -480,6 +482,11 @@ describe('getResolvedDraftPoolForLeague', () => {
       },
     ])
 
+    hm.draftSessionFindUnique.mockResolvedValue({ teamCount: 2, rounds: 1 })
+    hm.sportsPlayerFindMany.mockResolvedValue([
+      { name: 'Rookie Guard', source: 'rolling_insights', externalId: '114', status: 'ACT', team: 'BOS', fetchedAt: new Date(), expiresAt: new Date(Date.now() + 86400000) },
+      { name: 'Mlb Debut', source: 'rolling_insights', externalId: '115', status: 'ACT', team: 'BOS', fetchedAt: new Date(), expiresAt: new Date(Date.now() + 86400000) },
+    ])
     const res = await getResolvedDraftPoolForLeague('league-unit', {
       effectiveLeagueTemplate: {
         sport: 'NBA',
@@ -593,6 +600,9 @@ describe('getResolvedDraftPoolForLeague', () => {
     expect(res.rookieFilterState).toBe('partial_rookie_data')
     expect(res.entries.map((e) => e.name).sort()).toEqual(['New Guard', 'Tsdb Guard'])
     expect(res.entries.every((e) => e.rookieVerdict === 'unknown')).toBe(true)
+    expect(hm.sportsPlayerFindMany).not.toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ fetchedAt: expect.anything() }),
+    }))
     expect(res.provenNonRookies).toEqual([expect.objectContaining({ name: 'Proven Vet' })])
   })
 

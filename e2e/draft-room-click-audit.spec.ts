@@ -1926,7 +1926,7 @@ test.describe('@draft-room click audit', () => {
     await expect(page.getByTestId('post-draft-share-error')).toHaveCount(0)
   })
 
-  test('mobile navigation between board and player/queue/chat works', async ({ page }) => {
+  test('mobile navigation between board and player/queue/chat works', async ({ page, browserName }, testInfo) => {
     const leagueId = createLeagueId('e2e-draft-room-mobile')
     await mockDraftRoomApis(page, leagueId)
 
@@ -1934,27 +1934,53 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
     const mobile = page.getByTestId('draft-mobile-layout')
+    await expect(page.getByTestId('draft-mobile-quick-dock')).toHaveCount(0)
+    await page.getByTestId('draft-mobile-more').click()
     await expect(page.getByTestId('draft-mobile-quick-dock')).toBeVisible()
+    await page.getByTestId('draft-mobile-more').click()
 
-    // Helper: click a mobile tab by its testid via JS to bypass fixed-overlay intercepts
+    // Dismiss the on-turn suggestion with its real button before scrolling the board underneath it.
+    const turnAlert = page.getByTestId('draft-youre-up-alert')
+    if (await turnAlert.isVisible()) await page.getByTestId('draft-youre-up-dismiss').click()
+    if (browserName === 'chromium') {
+      // Real Chromium touch input: horizontal board scrolling must not change tabs.
+      const boardScroll = mobile.getByTestId('draft-board-grid').locator('..')
+      await boardScroll.scrollIntoViewIfNeeded()
+      const box = await boardScroll.boundingBox()
+      expect(box).not.toBeNull()
+      const touch = await page.context().newCDPSession(page)
+      await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+      const y = box!.y + Math.min(85, box!.height / 2)
+      const startX = box!.x + Math.min(270, box!.width - 20)
+      await expect.poll(() => boardScroll.evaluate((el, point) => el.contains(document.elementFromPoint(point.x, point.y)), { x: startX, y })).toBe(true)
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y }] })
+      for (let step = 1; step <= 8; step++) {
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: startX - step * 24, y }] })
+        await page.waitForTimeout(16) // Model a finger moving over successive animation frames.
+      }
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await expect.poll(() => boardScroll.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+      await expect(page.getByTestId('draft-mobile-content')).toHaveAttribute('data-active-tab', 'board')
+      await touch.detach()
+    }
+
+    // Use real hit testing so overlays cannot hide an unreachable mobile control.
     async function mobileTabClick(testId: string) {
-      await page.evaluate((tid) => {
-        const el = document.querySelector(`[data-testid="${tid}"]`) as HTMLElement | null
-        el?.click()
-      }, testId)
+      await page.getByTestId(testId).click()
     }
 
     await mobileTabClick('draft-mobile-tab-players')
     await expect(mobile.getByTestId('draft-player-panel')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
+    await page.getByTestId('draft-mobile-more').click()
     const helperTab = page.getByTestId('draft-mobile-tab-helper')
     const helperWarRoomToggle = mobile.getByTestId('draft-open-war-room-button').first()
     const helperUpgradeLink = mobile.getByTestId('locked-feature-upgrade-link').first()
     const helperLoadingState = mobile.getByText(/Checking premium access|Loading monetization details/i).first()
     const helperTabVisible = await helperTab.isVisible({ timeout: 2_000 }).catch(() => false)
     if (helperTabVisible) {
-      await helperTab.evaluate((el: HTMLElement) => el.click())
+      await helperTab.click()
       await expect
         .poll(
           async () =>
@@ -1985,17 +2011,24 @@ test.describe('@draft-room click audit', () => {
     const quickHelperBtn = page.getByTestId('draft-mobile-quick-helper')
     if (await quickHelperBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await mobileTabClick('draft-mobile-tab-board')
-      await quickHelperBtn.click({ force: true }).catch(() => null)
+      await quickHelperBtn.click()
     }
     await openCommissionerControls(page)
     const commissionerClose = page.getByTestId('draft-commissioner-close')
-    if (await commissionerClose.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await commissionerClose.click().catch(() => null)
-    } else {
-      await page.keyboard.press('Escape').catch(() => null)
-    }
+    // The control center is a lazy client chunk; await its real controls after the overlay opens.
+    await expect(commissionerClose).toBeVisible({ timeout: 30_000 })
+    const closeBounds = await commissionerClose.boundingBox()
+    expect(closeBounds).not.toBeNull()
+    expect(closeBounds!.width).toBeGreaterThanOrEqual(44)
+    expect(closeBounds!.height).toBeGreaterThanOrEqual(44)
+    expect(closeBounds!.x).toBeGreaterThanOrEqual(0)
+    expect(closeBounds!.x + closeBounds!.width).toBeLessThanOrEqual(390)
+    await page.screenshot({ path: testInfo.outputPath('mobile-commissioner-controls.png') })
+    await commissionerClose.click()
+    await expect(page.getByTestId('draft-commissioner-overlay')).toBeHidden()
     await mobileTabClick('draft-mobile-tab-board')
     await expect(mobile.getByTestId('draft-board')).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('mobile-live-board.png') })
   })
 })
 
@@ -2089,4 +2122,31 @@ test.describe('@draft-room single-board regression', () => {
     expect(draftRoomUrlPathKey(page.url())).toBe(pathKey)
     await assertSingleDraftBoard(page)
   })
+})
+
+
+test('@draft-room NBA player cards survive mobile resize, search and queue', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.setViewportSize({ width: 360, height: 844 })
+  await page.goto('/e2e/draft-player-measurement')
+  const search = page.getByTestId('draft-player-search-input')
+  await expect(search).toBeVisible()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
+  await page.getByTestId('draft-player-load-more').click()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/100 of 562/)
+  for (const width of [412, 360, 412]) {
+    await page.setViewportSize({ width, height: 844 })
+    await search.fill('Jokic')
+    const row = page.getByTestId('draft-player-card-0')
+    await expect(row).toContainText('Nikola Jokic')
+    await expect(page.getByRole('heading', { name: 'Something went wrong' })).toHaveCount(0)
+    await search.fill('')
+    await expect(row).toContainText('Nikola Jokic')
+    await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
+  }
+  await search.fill('Jokic')
+  await page.getByTestId('draft-player-card-0').getByRole('button', { name: /queue/i }).click()
+  await expect(page.getByTestId('measurement-queue')).toHaveText('Nikola Jokic')
+  expect(errors).toEqual([])
 })

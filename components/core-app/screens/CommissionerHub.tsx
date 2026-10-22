@@ -419,6 +419,11 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
               <Link href={`/league/${encodeURIComponent(league.id)}/disputes`}>{t('Share the dispute desk with your league →')}</Link>
             </p>
           </div>
+
+          {/* The constitution: written from these settings, changed by league vote. */}
+          <p className="af-ch-setting-why" style={{ marginTop: 12 }}>
+            <Link href={`/league/${encodeURIComponent(league.id)}/constitution`}>{t('League constitution and amendments →')}</Link>
+          </p>
         </HubSection>
 
         {/* ── Access ────────────────────────────────────────────────── */}

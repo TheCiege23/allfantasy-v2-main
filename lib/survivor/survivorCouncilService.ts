@@ -66,7 +66,7 @@ export interface CouncilContext {
   rosterToUser: Record<string, string>
   /** userId → rosterId for the scope. */
   userToRoster: Record<string, string>
-  /** Publicly immune managers at this council (weekly necklace / individual immunity). Never idol effects. */
+  /** Publicly immune managers at this council (weekly necklace / challenge-won immunity). Never idol effects. */
   immuneUserIds?: string[]
 }
 
@@ -101,23 +101,36 @@ async function loadSettings(leagueId: string, db: CouncilDatabase = prisma): Pro
   )
 }
 
-/** Active players in a council's scope: attending tribe (pre-merge) or all active (merge). */
-async function loadScopePlayers(leagueId: string, phase: string, attendingTribeId: string | null, db: CouncilDatabase = prisma): Promise<CouncilScopePlayer[]> {
+type ScopeLoad = { scopePlayers: CouncilScopePlayer[]; challengeImmuneUserIds: string[] }
+
+/**
+ * Active players in a council's scope: attending tribe (pre-merge) or all active (merge), plus the
+ * managers among them holding immunity from a challenge win. The weekly necklace is read from its
+ * own table for the council's week (getCouncilImmuneUserIds); every other immunity source is the
+ * flag on the player, set by SurvivorEffectEngine when a challenge pays out and cleared at the
+ * week flip.
+ */
+async function loadScopePlayers(leagueId: string, phase: string, attendingTribeId: string | null, db: CouncilDatabase = prisma): Promise<ScopeLoad> {
+  // A surprise two-tribe week after the merge scopes the council to its attending tribe too.
   const where: Prisma.SurvivorPlayerWhereInput =
-    (phase === 'pre_merge' || phase === 'revote') && attendingTribeId
+    (phase === 'pre_merge' || phase === 'revote' || phase === 'surprise') && attendingTribeId
       ? { leagueId, playerState: 'active', tribeId: attendingTribeId }
       : { leagueId, playerState: 'active' }
   const players = await db.survivorPlayer.findMany({
     where,
-    select: { userId: true, displayName: true, redraftRosterId: true, tribeId: true },
+    select: { userId: true, displayName: true, redraftRosterId: true, tribeId: true, hasImmunityThisWeek: true, immunitySource: true },
     orderBy: { displayName: 'asc' },
   })
-  return (players as Array<{ userId: string; displayName: string; redraftRosterId: string | null; tribeId: string | null }>).map((p) => ({
-    userId: p.userId,
-    tribeId: p.tribeId,
-    rosterId: p.redraftRosterId ?? p.userId,
-    displayName: p.displayName,
-  }))
+  const rows = players as Array<{ userId: string; displayName: string; redraftRosterId: string | null; tribeId: string | null; hasImmunityThisWeek?: boolean | null; immunitySource?: string | null }>
+  return {
+    scopePlayers: rows.map((p) => ({
+      userId: p.userId,
+      tribeId: p.tribeId,
+      rosterId: p.redraftRosterId ?? p.userId,
+      displayName: p.displayName,
+    })),
+    challengeImmuneUserIds: rows.filter((p) => p.hasImmunityThisWeek === true && p.immunitySource !== 'tribe_top_score').map((p) => p.userId),
+  }
 }
 
 /** Build the eligibility view for a council given its idol plays + settings. */
@@ -178,11 +191,11 @@ export async function loadCouncilContext(leagueId: string, councilId?: string, d
   if (!council) return null
   const settings = await loadSettings(leagueId, db)
   const idolsPlayed = parseIdolPlays(council.idolsPlayed)
-  const scopePlayers = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId, db)
+  const { scopePlayers, challengeImmuneUserIds } = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId, db)
   const game = await db.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true } })
   const scopeIds = new Set(scopePlayers.map((p) => p.userId))
   const necklaces = await getCouncilImmuneUserIds(leagueId, council.week, council.phase === 'merge' ? null : council.attendingTribeId)
-  const immuneUserIds = [...new Set([...(game?.immunePlayerId ? [game.immunePlayerId] : []), ...necklaces])].filter((id) => scopeIds.has(id))
+  const immuneUserIds = [...new Set([...(game?.immunePlayerId ? [game.immunePlayerId] : []), ...necklaces, ...challengeImmuneUserIds])].filter((id) => scopeIds.has(id))
   const parts = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, immuneUserIds)
   const { rosterToUser, userToRoster } = parts
   const eligibility = council.phase === 'revote' ? restrictCouncilToRevote(parts.eligibility, council.tiePlayerIds) : parts.eligibility
@@ -222,6 +235,11 @@ export interface OpenTribalOptions {
   votingOpensAt?: Date | null
   voteDeadlineAt?: Date | null
   actorUserId?: string
+  /**
+   * `surprise`: a post-merge two-tribe week (survivorSurpriseTribes.ts). The council keeps the
+   * attending-tribe scope of a pre-merge council while the season stays merged.
+   */
+  scope?: 'surprise'
 }
 
 /**
@@ -250,9 +268,9 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
     gameState?.activePlayerCount ?? (await prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }))
   const mergedPhase = gameState?.phase === 'merge' || gameState?.phase === 'post_merge' || Boolean(gameState?.mergeTriggeredAt)
   const atOrBelowMerge = activePlayerCount <= settings.mergeActivePlayerCount
-  const phase = mergedPhase || atOrBelowMerge ? 'merge' : 'pre_merge'
+  const phase = opts.scope === 'surprise' ? 'surprise' : mergedPhase || atOrBelowMerge ? 'merge' : 'pre_merge'
 
-  if (phase === 'pre_merge' && !opts.attendingTribeId) {
+  if ((phase === 'pre_merge' || phase === 'surprise') && !opts.attendingTribeId) {
     return { ok: false, status: 422, code: 'attending_tribe_required', error: 'Pre-merge Elimination Council requires the attending (losing) tribe.' }
   }
   if (opts.attendingTribeId) {
@@ -260,7 +278,7 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
     if (!tribe) return { ok: false, status: 400, code: 'unknown_tribe', error: 'Attending tribe not found in this league.' }
   }
 
-  const scopePlayers = await loadScopePlayers(leagueId, phase, opts.attendingTribeId ?? null)
+  const { scopePlayers, challengeImmuneUserIds } = await loadScopePlayers(leagueId, phase, opts.attendingTribeId ?? null)
   if (scopePlayers.length < 2) {
     return { ok: false, status: 422, code: 'insufficient_players', error: 'Need at least two active players to open a council.' }
   }
@@ -277,7 +295,7 @@ export async function openTribalCouncil(leagueId: string, opts: OpenTribalOption
     (await prisma.survivorTribalCouncil.count({ where: { leagueId, week } })) + 1
 
   const necklaces = await getCouncilImmuneUserIds(leagueId, week, phase === 'merge' ? null : opts.attendingTribeId ?? null)
-  const { eligibility } = buildCouncilContextParts(scopePlayers, [], settings, [...(gameState?.immunePlayerId ? [gameState.immunePlayerId] : []), ...necklaces])
+  const { eligibility } = buildCouncilContextParts(scopePlayers, [], settings, [...(gameState?.immunePlayerId ? [gameState.immunePlayerId] : []), ...necklaces, ...challengeImmuneUserIds])
 
   const council = await prisma.survivorTribalCouncil.create({
     data: {

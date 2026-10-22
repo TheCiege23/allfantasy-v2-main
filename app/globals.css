@@ -3161,6 +3161,19 @@ html[data-mode='light'] .af-atmo-guillotine-embers {
   }
 }
 
+/* Phones and tablets: a full-viewport `filter` animation plus a `mix-blend-mode` ember layer under a
+ * transparent workspace re-composites the whole page every frame, which on mid-range Android GPUs
+ * starves input and reads as a frozen screen. Keep the look, drop the per-frame cost. */
+@media (pointer: coarse) {
+  .af-atmo-guillotine {
+    animation: none;
+  }
+  .af-atmo-guillotine-embers {
+    mix-blend-mode: normal;
+    animation: none;
+  }
+}
+
 /* ── AI Tools — Tactical Decision Room (shared with start_sit_tactical_decision_room.html) ── */
 .ai-tools-tactical {
   --at-bg: #0f1117;

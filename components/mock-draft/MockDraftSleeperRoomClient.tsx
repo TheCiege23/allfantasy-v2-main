@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { mockTurnDurationMs, remainingMockSeconds } from '@/lib/mock-draft/turn-clock'
+import { postChimmyRequest } from '@/lib/chimmy/postRequest'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
@@ -58,6 +60,7 @@ interface LeagueMockPayload {
     rounds: number
     draftType: DraftType
     superflex: boolean
+    rosterSlots?: string[]
     managers: LeagueManager[]
     detectedUserSlot: number
     hasExplicitDraftOrder: boolean
@@ -65,6 +68,7 @@ interface LeagueMockPayload {
 }
 
 interface DraftSettings {
+  rosterSlots?: string[]
   teamCount: number
   rounds: number
   draftType: DraftType
@@ -84,7 +88,7 @@ interface DraftPick {
   playerName: string
   position: string
   team: string
-  adp: number
+  adp: number | null
   projectedPts: number
   aiReason?: string
   isUser: boolean
@@ -112,7 +116,7 @@ interface AvailablePlayer {
   name: string
   position: string
   team: string
-  adp: number
+  adp: number | null
   projectedPts: number
   ownership: number
   injuryStatus: string | null
@@ -136,6 +140,8 @@ interface DraftState {
   onTheClock: number
   status: DraftStatus
   timerSeconds: number
+  turnDeadlineMs: number | null
+  pausedRemainingMs?: number
   chatMessages: ChatMessage[]
 }
 
@@ -256,6 +262,7 @@ function positionLabelColor(position: string): string {
 }
 
 function getRosterSlots(settings: DraftSettings): string[] {
+  if (settings.rosterSlots?.length) return settings.rosterSlots
   switch (settings.sport) {
     case 'NHL':
       return ['C', 'C', 'LW', 'RW', 'LW', 'RW', 'D', 'D', 'UTIL', 'G']
@@ -289,7 +296,7 @@ function slotSupportsPosition(slot: string, position: string): boolean {
   if (normalizedSlot === 'SUPER_FLEX') {
     return ['QB', 'RB', 'WR', 'TE'].includes(normalizedPosition)
   }
-  if (normalizedSlot === 'UTIL') {
+  if (['UTIL', 'SUPER_UTIL', 'BN'].includes(normalizedSlot)) {
     return true
   }
   if (normalizedSlot === 'G') {
@@ -341,6 +348,8 @@ function computeTeamNeeds(team: TeamSlot, settings: DraftSettings): string[] {
         case 'SUPER_FLEX':
           return ['QB', 'RB', 'WR', 'TE']
         case 'UTIL':
+        case 'SUPER_UTIL':
+        case 'BN':
           return []
         case 'G':
           return ['PG', 'SG']
@@ -364,7 +373,7 @@ function scorePlayerForTeam(
   picks: DraftPick[],
   availablePlayers: AvailablePlayer[],
 ): number {
-  let score = Math.max(0, 200 - player.adp)
+  let score = Math.max(0, 200 - (player.adp ?? 9999))
   const primaryNeed = needs[0] ?? null
   const roundNumber = Math.ceil((picks.length + 1) / settings.teamCount)
 
@@ -381,7 +390,7 @@ function scorePlayerForTeam(
   }
 
   if (roundNumber > settings.rounds * 0.7) {
-    if (player.ownership < 50 && player.adp > (roundNumber * settings.teamCount * 0.8)) {
+    if (player.ownership < 50 && player.adp != null && player.adp > (roundNumber * settings.teamCount * 0.8)) {
       score += 5
     }
     if (player.isRookie) score += 3
@@ -392,8 +401,8 @@ function scorePlayerForTeam(
 }
 
 function generatePickReason(player: AvailablePlayer, team: TeamSlot, needs: string[], round: number): string {
-  if (needs.includes(player.position)) {
-    return `Filled a ${player.position} need with value at ${player.adp.toFixed(1)} ADP.`
+  if (needs.includes(player.position) && player.adp != null) {
+    return `Filled a ${player.position} need with value at ${player.adp?.toFixed(1) ?? '\u2014'} ADP.`
   }
   if (round > 10 && player.isRookie) {
     return 'Late-round upside swing with rookie growth appeal.'
@@ -500,7 +509,7 @@ function buildPlayerContextMessage(state: DraftState, queue: string[]): string {
   const topAvailable = state.availablePlayers
     .filter((player) => !draftedNames.has(player.id))
     .slice(0, 8)
-    .map((player) => `${player.name} (${player.position}, ${player.team || 'FA'}, ADP ${player.adp.toFixed(1)})`)
+    .map((player) => `${player.name} (${player.position}, ${player.team || 'FA'}, ADP ${player.adp?.toFixed(1) ?? 'unavailable'})`)
     .join(', ')
 
   const rosterSummary = currentTeam
@@ -523,9 +532,11 @@ function buildPlayerContextMessage(state: DraftState, queue: string[]): string {
 export default function MockDraftSleeperRoomClient({
   initialLeagueId = '',
   initialSport = DEFAULT_SPORT,
+  viewerId,
 }: {
   initialLeagueId?: string
   initialSport?: string
+  viewerId: string
 }) {
   const queryLeagueId = initialLeagueId.trim()
   const querySport = normalizeToSupportedSport(initialSport)
@@ -553,6 +564,79 @@ export default function MockDraftSleeperRoomClient({
   const [shareId, setShareId] = useState<string | null>(null)
   const [teamGrade, setTeamGrade] = useState<string | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
+  const [checkpointReady, setCheckpointReady] = useState(false)
+  const [checkpointError, setCheckpointError] = useState<string | null>(null)
+  const [recoveredDraft, setRecoveredDraft] = useState(false)
+  const checkpointKey = `af:mock-draft:v1:${encodeURIComponent(viewerId)}:${encodeURIComponent(queryLeagueId || 'open')}`
+  const lastCheckpointRef = useRef<string | null>(null)
+  const latestCheckpointRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(checkpointKey)
+      if (raw) {
+        const saved = JSON.parse(raw)
+        const state = saved?.state as DraftState | undefined
+        if (saved.version !== 1 || !state || !Array.isArray(state.picks) || !Array.isArray(state.teams) ||
+          !Array.isArray(state.availablePlayers) || !Array.isArray(state.chatMessages) || !state.settings ||
+          !['drafting', 'paused', 'complete'].includes(state.status) ||
+          !Number.isInteger(state.currentPick) || state.currentPick < 1 ||
+          !Array.isArray(saved.queue) || !saved.queue.every((id: unknown) => typeof id === 'string') ||
+          ![0, 5, 15, 30].includes(state.settings.speed) || !Number.isInteger(state.settings.teamCount) ||
+          state.settings.teamCount < 2 || !Number.isInteger(state.settings.rounds) || state.settings.rounds < 1) {
+          throw new Error('Invalid saved mock draft')
+        }
+        const remaining = state.status === 'paused'
+          ? state.pausedRemainingMs ?? state.timerSeconds * 1000
+          : Math.max(0, (state.turnDeadlineMs ?? Date.now()) - Date.now())
+        setDraftState(state.status === 'complete' ? state : {
+          ...state, status: 'paused', turnDeadlineMs: null,
+          pausedRemainingMs: remaining, timerSeconds: Math.ceil(remaining / 1000),
+        })
+        setSettings(state.settings)
+        setQueue(saved.queue)
+        setMode(saved.mode === 'league' ? 'league' : 'open')
+        setSelectedLeague(saved.selectedLeague ?? null)
+        setLeaguePayload(saved.leaguePayload ?? null)
+        setDraftId(saved.draftId ?? null)
+        setShareId(saved.shareId ?? null)
+        setStep(state.status === 'complete' ? 'complete' : 'draft')
+        autoLoadedLeagueRef.current = queryLeagueId
+        setRecoveredDraft(true)
+      }
+    } catch {
+      setCheckpointError('Your saved mock could not be restored. Start a new mock, or export this one before leaving if browser storage is unavailable.')
+    }
+    setCheckpointReady(true)
+  }, [checkpointKey, queryLeagueId])
+
+  // Ignore display-only timer ticks: the absolute deadline already preserves the clock.
+  useEffect(() => {
+    if (!checkpointReady) return
+    const payload = draftState ? JSON.stringify({
+      version: 1, state: { ...draftState, timerSeconds: draftState.settings.speed }, queue,
+      mode, selectedLeague, leaguePayload, draftId, shareId,
+    }) : null
+    latestCheckpointRef.current = payload
+    if (payload === lastCheckpointRef.current) return
+    try {
+      if (payload) window.localStorage.setItem(checkpointKey, payload)
+      else window.localStorage.removeItem(checkpointKey)
+      lastCheckpointRef.current = payload
+      setCheckpointError(null)
+    } catch {
+      setCheckpointError('This browser could not save your mock progress. Keep this tab open or use Export before leaving.')
+    }
+  }, [checkpointReady, checkpointKey, draftState, queue, mode, selectedLeague, leaguePayload, draftId, shareId])
+
+  useEffect(() => {
+    const flush = () => {
+      if (!latestCheckpointRef.current) return
+      try { window.localStorage.setItem(checkpointKey, latestCheckpointRef.current) } catch { /* visible save warning is handled above */ }
+    }
+    window.addEventListener('pagehide', flush)
+    return () => window.removeEventListener('pagehide', flush)
+  }, [checkpointKey])
 
   useEffect(() => {
     let cancelled = false
@@ -600,6 +684,13 @@ export default function MockDraftSleeperRoomClient({
   }, [settings.teamCount])
 
   const draftedIds = useMemo(() => new Set(draftState?.picks.map((pick) => pick.playerId) ?? []), [draftState?.picks])
+
+  useEffect(() => {
+    setQueue((current) => {
+      const remaining = current.filter((id) => !draftedIds.has(id))
+      return remaining.length === current.length ? current : remaining
+    })
+  }, [draftedIds])
 
   const filteredPlayers = useMemo(() => {
     if (!draftState) return []
@@ -658,7 +749,7 @@ export default function MockDraftSleeperRoomClient({
         ),
       )
 
-      const response = await (await import('@/lib/chimmy/postRequest')).postChimmyRequest(formData)
+      const response = await postChimmyRequest(formData)
 
       const payload = (await response.json().catch(() => ({}))) as { response?: string; error?: string }
       if (!response.ok) {
@@ -713,15 +804,16 @@ export default function MockDraftSleeperRoomClient({
   )
 
   const handlePick = useCallback(
-    (player: AvailablePlayer, isAiPick: boolean) => {
+    (player: AvailablePlayer, isAiPick: boolean, expectedOverall?: number) => {
       setDraftState((current) => {
         if (!current || current.status !== 'drafting') return current
-        if (draftedIds.has(player.id)) return current
+        if (expectedOverall != null && current.currentPick !== expectedOverall) return current
+        if (current.picks.some((pick) => pick.playerId === player.id)) return current
 
         const round = Math.ceil(current.currentPick / current.settings.teamCount)
         const pickInRound = ((current.currentPick - 1) % current.settings.teamCount) + 1
         const team = current.teams.find((entry) => entry.slot === current.onTheClock)
-        if (!team) return current
+        if (!team || team.isUser === isAiPick) return current
 
         const pick: DraftPick = {
           overall: current.currentPick,
@@ -761,6 +853,9 @@ export default function MockDraftSleeperRoomClient({
               : current.onTheClock,
           status: nextCurrentPick > totalPicks ? 'complete' : current.status,
           timerSeconds: current.settings.speed,
+          turnDeadlineMs: Date.now() + mockTurnDurationMs(current.settings.speed,
+            Boolean(updatedTeams.find((entry) => entry.slot === getOnTheClockSlot(updatedTeams, current.settings, nextCurrentPick))?.isUser)),
+          pausedRemainingMs: undefined,
           chatMessages:
             isAiPick && pick.aiReason
               ? [...current.chatMessages, { role: 'ai', content: pick.aiReason, pick: pick.overall }]
@@ -770,7 +865,7 @@ export default function MockDraftSleeperRoomClient({
         return nextState
       })
     },
-    [draftedIds],
+    [],
   )
 
   useEffect(() => {
@@ -779,20 +874,32 @@ export default function MockDraftSleeperRoomClient({
     const clockTeam = draftState.teams.find((team) => team.slot === draftState.onTheClock)
     if (!clockTeam) return
 
+    const deadline = draftState.turnDeadlineMs
     if (clockTeam.isUser) {
-      if (draftState.settings.speed === 0) return
-      const interval = window.setInterval(() => {
+      if (draftState.settings.speed === 0 || deadline == null) return
+      const refreshClock = () => {
         setDraftState((current) => {
-          if (!current || current.status !== 'drafting' || current.onTheClock !== clockTeam.slot) return current
-          return { ...current, timerSeconds: Math.max(0, current.timerSeconds - 1) }
+          if (!current || current.status !== 'drafting' || current.currentPick !== draftState.currentPick) return current
+          const remaining = remainingMockSeconds(deadline, Date.now())
+          return current.timerSeconds === remaining ? current : { ...current, timerSeconds: remaining }
         })
-      }, 1000)
-
-      return () => window.clearInterval(interval)
+      }
+      const onVisible = () => { if (!document.hidden) refreshClock() }
+      refreshClock()
+      const interval = window.setInterval(refreshClock, 250)
+      document.addEventListener('visibilitychange', onVisible)
+      window.addEventListener('pageshow', refreshClock)
+      return () => {
+        window.clearInterval(interval)
+        document.removeEventListener('visibilitychange', onVisible)
+        window.removeEventListener('pageshow', refreshClock)
+      }
     }
 
-    const delay = draftState.settings.speed === 0 ? 300 : draftState.settings.speed * 200
-    const timeout = window.setTimeout(() => {
+    let picked = false
+    const pickCpu = () => {
+      if (picked) return
+      picked = true
       const latestState = draftState
       const availablePlayers = latestState.availablePlayers.filter(
         (player) => !latestState.picks.some((pick) => pick.playerId === player.id),
@@ -816,11 +923,16 @@ export default function MockDraftSleeperRoomClient({
             ? topThree[1].player
             : topThree[0].player
 
-      handlePick(selected, true)
-    }, delay)
-
-    return () => window.clearTimeout(timeout)
-  }, [draftState, handlePick, queue])
+      handlePick(selected, true, latestState.currentPick)
+    }
+    const timeout = window.setTimeout(pickCpu, Math.max(0, (deadline ?? Date.now()) - Date.now()))
+    const onVisible = () => { if (!document.hidden && (deadline ?? 0) <= Date.now()) pickCpu() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearTimeout(timeout)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [draftState, handlePick])
 
   useEffect(() => {
     if (!draftState || draftState.status !== 'drafting' || !onTheClockTeam?.isUser) return
@@ -836,7 +948,7 @@ export default function MockDraftSleeperRoomClient({
       null
 
     if (fallbackPlayer) {
-      handlePick(fallbackPlayer, false)
+      handlePick(fallbackPlayer, false, draftState.currentPick)
     }
   }, [draftState, draftedIds, handlePick, onTheClockTeam?.isUser, queue])
 
@@ -867,6 +979,7 @@ export default function MockDraftSleeperRoomClient({
       }
 
       setLeaguePayload(payload.league)
+      setSelectedLeague({ ...league, id: payload.league.leagueId ?? league.id, isDynasty: payload.league.isDynasty, sport: payload.league.sport })
       setSettings({
         teamCount: payload.league.teamCount,
         rounds: payload.league.rounds,
@@ -874,6 +987,7 @@ export default function MockDraftSleeperRoomClient({
         sport: payload.league.sport,
         scoring: payload.league.scoring,
         superflex: payload.league.superflex,
+        rosterSlots: payload.league.rosterSlots,
         myPickSlot: payload.league.detectedUserSlot,
         speed: 15,
       })
@@ -885,7 +999,7 @@ export default function MockDraftSleeperRoomClient({
   }, [])
 
   useEffect(() => {
-    if (!queryLeagueId || autoLoadedLeagueRef.current === queryLeagueId || loadingLeagues) return
+    if (!checkpointReady || !queryLeagueId || autoLoadedLeagueRef.current === queryLeagueId || loadingLeagues) return
     const match = leagues.find((league) =>
       [league.id, league.navigationLeagueId, league.unifiedLeagueId, league.platformLeagueId]
         .filter(Boolean)
@@ -915,7 +1029,7 @@ export default function MockDraftSleeperRoomClient({
     setMode('league')
     setStep('league')
     void loadLeaguePayload(match)
-  }, [leagues, loadLeaguePayload, loadingLeagues, queryLeagueId, querySport])
+  }, [checkpointReady, leagues, loadLeaguePayload, loadingLeagues, queryLeagueId, querySport])
 
   const loadPlayers = useCallback(async (nextSettings: DraftSettings): Promise<AvailablePlayer[]> => {
     const type = selectedLeague?.isDynasty ? 'dynasty' : 'redraft'
@@ -923,7 +1037,7 @@ export default function MockDraftSleeperRoomClient({
     const params = new URLSearchParams({
       type,
       pool,
-      limit: '300',
+      limit: nextSettings.sport === 'NBA' ? '1000' : '300',
       sport: nextSettings.sport.toLowerCase(),
       leagueId: selectedLeague?.id ?? '',
       draftType: nextSettings.draftType,
@@ -950,8 +1064,8 @@ export default function MockDraftSleeperRoomClient({
           name,
           position,
           team: stringFromUnknown(raw.team) ?? '',
-          adp: numberFromUnknown(raw.adp) ?? index + 1,
-          projectedPts: numberFromUnknown(raw.value) ?? Math.max(0, 250 - index),
+          adp: numberFromUnknown(raw.adp) ?? (nextSettings.sport === 'NBA' ? null : index + 1),
+          projectedPts: numberFromUnknown(raw.value) ?? (nextSettings.sport === 'NBA' ? 0 : Math.max(0, 250 - index)),
           ownership: numberFromUnknown(raw.timesDrafted) ?? Math.max(10, 95 - index / 4),
           injuryStatus: stringFromUnknown(raw.injuryStatus),
           tier: Math.max(1, Math.ceil((index + 1) / 12)),
@@ -960,7 +1074,7 @@ export default function MockDraftSleeperRoomClient({
         } satisfies AvailablePlayer
       })
       .filter((player): player is AvailablePlayer => player != null)
-      .sort((left, right) => left.adp - right.adp)
+      .sort((left, right) => (left.adp ?? Infinity) - (right.adp ?? Infinity))
 
     return mapped
   }, [selectedLeague?.id, selectedLeague?.isDynasty])
@@ -982,6 +1096,8 @@ export default function MockDraftSleeperRoomClient({
         onTheClock: getOnTheClockSlot(teams, settings, 1),
         status: 'drafting',
         timerSeconds: settings.speed,
+        turnDeadlineMs: Date.now() + mockTurnDurationMs(settings.speed,
+          Boolean(teams.find((entry) => entry.slot === getOnTheClockSlot(teams, settings, 1))?.isUser)),
         chatMessages: [
           {
             role: 'ai',
@@ -993,6 +1109,7 @@ export default function MockDraftSleeperRoomClient({
         ],
       }
 
+      setRecoveredDraft(false)
       setDraftState(initialState)
       setQueue([])
       setSearch('')
@@ -1192,9 +1309,9 @@ export default function MockDraftSleeperRoomClient({
         <div className="border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
           <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
             <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-300">League Mock</div>
-            <h1 className="mt-3 text-3xl font-black">Select a Sleeper league</h1>
+            <h1 className="mt-3 text-3xl font-black">Select a league</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/50">
-              Import real managers, avatars, and draft slots when Sleeper has them. If order is not set yet, AllFantasy predicts it from team records.
+              Practice with league managers, roster layout, and draft settings. Imported Sleeper leagues use their draft order when available, or a predicted order from team records.
             </p>
           </div>
         </div>
@@ -1225,24 +1342,20 @@ export default function MockDraftSleeperRoomClient({
             </div>
           ) : null}
 
-          {!loadingLeagues && leagues.length === 0 ? (
+          {!selectedLeague && !loadingLeagues && leagues.length === 0 ? (
             <div className="rounded-3xl border border-white/8 bg-[#0c1224] p-8 text-center text-sm text-white/55">
               No Sleeper leagues are available on this account yet.
             </div>
           ) : null}
 
-          {!loadingLeagues && leagues.length > 0 ? (
+          {!selectedLeague && !loadingLeagues && leagues.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
               {leagues.map((league) => (
                 <button
                   key={league.id}
                   type="button"
                   onClick={() => void loadLeaguePayload(league)}
-                  className={`rounded-3xl border p-5 text-left transition-all ${
-                    selectedLeague?.id === league.id
-                      ? 'border-cyan-400/40 bg-cyan-500/10'
-                      : 'border-white/8 bg-[#0c1224] hover:border-white/15 hover:bg-white/[0.03]'
-                  }`}
+                  className="rounded-3xl border border-white/8 bg-[#0c1224] p-5 text-left transition-all hover:border-white/15 hover:bg-white/[0.03]"
                   data-testid={`mock-draft-league-card-${league.id}`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -1269,7 +1382,7 @@ export default function MockDraftSleeperRoomClient({
 
           {selectedLeague && loadingLeaguePayload ? (
             <div className="mt-6 rounded-3xl border border-white/8 bg-[#0c1224] p-6 text-sm text-white/60">
-              Loading managers and Sleeper draft settings...
+              Loading managers and league draft settings...
             </div>
           ) : null}
 
@@ -1613,11 +1726,11 @@ export default function MockDraftSleeperRoomClient({
           <div className="mt-3 space-y-2">
             {queuePlayers.length === 0 ? (
               <div className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-xs text-white/30">
-                Right-click a player to queue them.
+                Tap Queue beside a player to add them.
               </div>
             ) : (
               queuePlayers.map((player, index) => (
-                <div key={player.id} className="rounded-xl border border-orange-400/20 bg-orange-500/10 p-2 text-xs">
+                <div key={player.id} data-testid={`mock-draft-queue-entry-${player.id}`} className="rounded-xl border border-orange-400/20 bg-orange-500/10 p-2 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[11px] font-black text-orange-200">
                       #{index + 1}
@@ -1712,8 +1825,8 @@ export default function MockDraftSleeperRoomClient({
             const drafted = draftedIds.has(player.id)
             const queued = queue.includes(player.id) && !drafted
             return (
+              <div key={player.id} className="mb-1 flex items-center gap-1">
               <button
-                key={player.id}
                 type="button"
                 onContextMenu={(event) => {
                   event.preventDefault()
@@ -1722,9 +1835,9 @@ export default function MockDraftSleeperRoomClient({
                 }}
                 onClick={() => {
                   if (drafted || !isUserTurn) return
-                  handlePick(player, false)
+                  handlePick(player, false, draftState.currentPick)
                 }}
-                className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
+                className={`min-w-0 flex flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
                   isUserTurn && !drafted ? 'hover:bg-white/8' : 'cursor-default'
                 } ${drafted ? 'opacity-45' : ''} ${player.injuryStatus === 'OUT' ? 'opacity-50' : ''}`}
                 data-testid={`mock-draft-player-row-${player.id}`}
@@ -1747,8 +1860,17 @@ export default function MockDraftSleeperRoomClient({
                 {player.injuryStatus ? (
                   <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
                 ) : null}
-                <div className="text-[11px] font-mono text-white/40">{player.adp.toFixed(1)}</div>
+                <div className="text-[11px] font-mono text-white/40">{player.adp?.toFixed(1) ?? '\u2014'}</div>
               </button>
+              <button
+                type="button"
+                disabled={drafted || queued}
+                aria-label={`Queue ${player.name}`}
+                onClick={() => setQueue((current) => current.includes(player.id) ? current : [...current, player.id])}
+                className="min-h-[44px] shrink-0 touch-manipulation rounded-lg border border-white/15 px-3 text-xs text-cyan-200 disabled:opacity-40"
+                data-testid={`mock-draft-queue-add-${player.id}`}
+              >{queued ? 'Queued' : 'Queue'}</button>
+              </div>
             )
           })}
         </div>
@@ -1846,7 +1968,9 @@ export default function MockDraftSleeperRoomClient({
                 {draftState.status === 'drafting' ? (
                   <button
                     type="button"
-                    onClick={() => setDraftState((current) => (current ? { ...current, status: 'paused' } : current))}
+                    onClick={() => setDraftState((current) => current ? {
+                      ...current, status: 'paused', pausedRemainingMs: Math.max(0, (current.turnDeadlineMs ?? Date.now()) - Date.now()), turnDeadlineMs: null,
+                    } : current)}
                     className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
                     data-testid="mock-draft-pause"
                   >
@@ -1858,7 +1982,9 @@ export default function MockDraftSleeperRoomClient({
                     onClick={() =>
                       setDraftState((current) =>
                         current && current.status !== 'complete'
-                          ? { ...current, status: 'drafting', timerSeconds: current.settings.speed }
+                          ? { ...current, status: 'drafting',
+                              turnDeadlineMs: Date.now() + (current.pausedRemainingMs ?? mockTurnDurationMs(current.settings.speed, Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser))),
+                              timerSeconds: Math.ceil((current.pausedRemainingMs ?? current.settings.speed * 1000) / 1000), pausedRemainingMs: undefined }
                           : current,
                       )
                     }
@@ -1898,6 +2024,7 @@ export default function MockDraftSleeperRoomClient({
         </div>
 
         <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
+          {recoveredDraft && draftState.status === 'paused' ? <p role="status" className="mb-3 text-sm text-cyan-200">Recovered your mock draft. Review your picks and queue, then tap Resume.</p> : null}
           <div className="hidden gap-0 overflow-hidden rounded-3xl border border-white/8 bg-[#0c0c1e] lg:grid lg:grid-cols-[260px_minmax(0,1fr)_240px]">
             <div className="min-h-[78vh] border-r border-white/8">{playerPanel}</div>
             <div className="min-h-[78vh] overflow-auto">
@@ -1991,11 +2118,12 @@ export default function MockDraftSleeperRoomClient({
 
           <div className="lg:hidden">
             <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-4">
-              <div className="mb-4 flex items-center justify-between text-xs text-white/50">
-                <span>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
+                <span data-testid="mock-draft-current-pick">
                   Pick #{draftState.currentPick} · {onTheClockTeam?.managerName ?? 'Unknown'}
                 </span>
                 <span>{draftState.status}</span>
+                {draftState.settings.speed > 0 && isUserTurn ? <span data-testid="mock-draft-clock">{draftState.timerSeconds}s remaining</span> : null}
               </div>
               <div className="overflow-x-auto">
                 <div className="min-w-[960px]">
@@ -2077,7 +2205,10 @@ export default function MockDraftSleeperRoomClient({
         {mobilePanel ? (
           <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setMobilePanel(null)}>
             <div
-              className="absolute bottom-0 left-0 right-0 max-h-[82vh] overflow-hidden rounded-t-[28px] border border-white/8 bg-[#0c1224]"
+              role="dialog"
+              aria-modal="true"
+              aria-label={mobilePanel === 'players' ? 'Players' : mobilePanel === 'roster' ? 'Current Roster' : 'Draft Chat'}
+              className="absolute bottom-0 left-0 right-0 max-h-[82dvh] overflow-hidden rounded-t-[28px] border border-white/8 bg-[#0c1224]"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
@@ -2088,7 +2219,7 @@ export default function MockDraftSleeperRoomClient({
                   Close
                 </button>
               </div>
-              <div className="max-h-[72vh] overflow-y-auto">
+              <div className="max-h-[72dvh] overflow-y-auto">
                 {mobilePanel === 'players' ? playerPanel : mobilePanel === 'roster' || mobilePanel === 'chat' ? rosterAndChatPanel : null}
               </div>
             </div>
@@ -2120,6 +2251,8 @@ export default function MockDraftSleeperRoomClient({
                               ...current,
                               settings: { ...current.settings, speed: nextSpeed },
                               timerSeconds: nextSpeed,
+                              turnDeadlineMs: current.status === 'drafting' ? Date.now() + mockTurnDurationMs(nextSpeed, Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser)) : null,
+                              pausedRemainingMs: current.status === 'paused' ? mockTurnDurationMs(nextSpeed, Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser)) : undefined,
                             }
                           : current,
                       )
@@ -2207,7 +2340,7 @@ export default function MockDraftSleeperRoomClient({
                       </span>
                       <span className="truncate text-sm font-semibold text-white">{pick.playerName}</span>
                     </div>
-                    <div className="mt-1 text-[11px] text-white/35">{pick.team || 'FA'} · ADP {pick.adp.toFixed(1)}</div>
+                    <div className="mt-1 text-[11px] text-white/35">{pick.team || 'FA'} · ADP {pick.adp?.toFixed(1) ?? '\u2014'}</div>
                   </div>
                 ))}
               </div>
@@ -2276,9 +2409,13 @@ export default function MockDraftSleeperRoomClient({
     )
   }
 
-  if (step === 'entry') return renderEntry()
-  if (step === 'league') return renderLeagueGate()
-  if (step === 'open') return renderOpenSetup()
-  if (step === 'complete') return renderCompletion()
-  return renderDraftBoard()
+  if (!checkpointReady) return <p role="status">Restoring mock draft…</p>
+  const content = step === 'entry' ? renderEntry()
+    : step === 'league' ? renderLeagueGate()
+    : step === 'open' ? renderOpenSetup()
+    : step === 'complete' ? renderCompletion() : renderDraftBoard()
+  return <>
+    {checkpointError ? <p role="alert" className="p-3 text-sm text-amber-200">{checkpointError}</p> : null}
+    {content}
+  </>
 }

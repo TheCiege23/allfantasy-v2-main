@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { TAXI_LOCK_BEHAVIOR_COPY, TAXI_SECTION_COPY, dynastyFormatLang } from '@/lib/i18n/dynasty-format-copy'
+import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import type { DynastySettingsSnapshot } from './useDynastySettingsSnapshot'
 import { SettingsHelper, SettingsSectionLabel, SettingsToggleRow, controlClassSm } from './settings-ui'
 
@@ -18,6 +19,10 @@ import { SettingsHelper, SettingsSectionLabel, SettingsToggleRow, controlClassSm
  *     `taxiScoringOn`, `taxiPromotionDeadlineWeek`) — previously editable only in
  *     `components/app/settings/DynastySettingsPanel`, same PUT /api/leagues/[id]/dynasty-settings.
  *     Shown for dynasty leagues only, once that route has answered.
+ *
+ * NHL / MLB have no prospect pool (`lib/league-creation/prospectStashPolicy.ts`): the slot count can
+ * only stay or go down (PATCH refuses an increase), and a league with no taxi sees a note instead of
+ * the controls.
  */
 export function TaxiSquadSettingsSection({
   initialData,
@@ -68,15 +73,40 @@ export function TaxiSquadSettingsSection({
 
   const lockOptions = dynasty?.constants?.taxiLockBehaviorOptions ?? []
 
+  // NHL / MLB: the saved count is the ceiling, so the choice can only keep or lower it.
+  const taxiAllowed = sportSupportsProspectStash(initialData.sport)
+  const savedTaxiSlots = Math.max(0, initialData.taxiSlots ?? 0)
+  const maxTaxiSlots = taxiAllowed ? 6 : savedTaxiSlots
+  const unavailableNote = taxiAllowed ? null : (
+    <p className="text-[12px] text-white/60" data-testid="taxi-unavailable-for-sport">{copy.unavailableForSport}</p>
+  )
+
+  const header = (
+    <header>
+      <h4 className="text-[13px] font-bold uppercase tracking-[0.12em] text-white/80">{copy.title}</h4>
+      <p className="mt-1 text-[11px] text-white/45">{copy.subtitle}</p>
+    </header>
+  )
+
+  if (!taxiAllowed && savedTaxiSlots === 0) {
+    return (
+      <section
+        className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4"
+        data-testid="taxi-squad-settings-section"
+      >
+        {header}
+        {unavailableNote}
+      </section>
+    )
+  }
+
   return (
     <section
       className="space-y-6 rounded-2xl border border-white/10 bg-white/[0.025] p-4"
       data-testid="taxi-squad-settings-section"
     >
-      <header>
-        <h4 className="text-[13px] font-bold uppercase tracking-[0.12em] text-white/80">{copy.title}</h4>
-        <p className="mt-1 text-[11px] text-white/45">{copy.subtitle}</p>
-      </header>
+      {header}
+      {unavailableNote}
 
       <div>
         <SettingsSectionLabel>{copy.slots}</SettingsSectionLabel>
@@ -91,7 +121,7 @@ export function TaxiSquadSettingsSection({
             debouncedSave({ taxiSlots: n })
           }}
         >
-          {Array.from({ length: 7 }, (_, i) => i).map((n) => (
+          {Array.from({ length: maxTaxiSlots + 1 }, (_, i) => i).map((n) => (
             <option key={n} value={n}>
               {n}
             </option>

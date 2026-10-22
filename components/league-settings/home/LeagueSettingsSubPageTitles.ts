@@ -11,6 +11,7 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   trades: 'Trades',
   'guillotine-first-chop': 'First chop week',
   'guillotine-chop-rules': 'Chop rules',
+  'guillotine-rules': 'League rules',
   playoffs: 'Playoffs',
   members: 'Managers',
   'co-commissioners': 'Co-commissioners',

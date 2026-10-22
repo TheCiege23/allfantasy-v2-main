@@ -137,6 +137,8 @@ export interface SurvivorSummary {
   myTribeId?: string
   myTribeSource?: string | null
   myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
+  /** The league's idol expiry rule, as the holder reads it (survivorIdolExpiry). */
+  idolExpiryText?: string | null
   myActiveEffects?: {
     rewardType: string
     week: number

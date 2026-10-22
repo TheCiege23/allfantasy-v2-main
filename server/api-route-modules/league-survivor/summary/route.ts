@@ -35,6 +35,7 @@ import { seasonWeekBoundsForSport } from '@/lib/survivor/survivorSeasonCalendar'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/lib/survivor/SurvivorSitOutEngine'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { survivorIdolExpiryRule, survivorIdolExpiryText } from '@/lib/survivor/survivorIdolExpiry'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
@@ -143,6 +144,15 @@ export async function GET(
   const myTribeId =
     !merged && myRosterId
       ? tribes.find((tribe) => tribe.members.some((member) => member.rosterId === myRosterId))?.id ?? null
+      : null
+  // After the merge every active manager shares one huddle: the merged tribe's chat source.
+  const mergedTribe = merged
+    ? await prisma.survivorTribe.findFirst({ where: { leagueId, isMerged: true }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+    : null
+  const myTribeSource = myTribeId
+    ? getTribeChatSource(myTribeId)
+    : merged && mergedTribe && myRosterId && !eliminatedRosterIds.has(myRosterId)
+      ? getTribeChatSource(mergedTribe.id)
       : null
 
   const rosterIds = new Set<string>([
@@ -401,8 +411,9 @@ export async function GET(
     merged,
     myRosterId: myRosterId ?? undefined,
     myTribeId: myTribeId ?? undefined,
-    myTribeSource: myTribeId ? getTribeChatSource(myTribeId) : null,
+    myTribeSource,
     myIdols,
+    idolExpiryText: survivorIdolExpiryText(survivorIdolExpiryRule(normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>))),
     myActiveEffects,
     myExileStatus,
     nbaWeeklyScoringMode: normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>).nbaWeeklyScoringMode,

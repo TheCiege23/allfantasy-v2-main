@@ -1,5 +1,7 @@
 import {
   SURVIVOR_IDOL_COUNT_OPTIONS,
+  SURVIVOR_IDOL_PICK_COUNT_MAX,
+  SURVIVOR_IDOL_PICK_COUNT_MIN,
   isSurvivorIdolTypePlayable,
   type SurvivorIdolTypeDef,
 } from './survivorIdolTypes'
@@ -155,34 +157,43 @@ export function drawBalancedIdolTypes(types: readonly DrawType[], count: number,
 }
 
 /**
- * Pick mode. The commissioner chooses from the playable types that are not always in:
- *  - exactly `count - always` of them when that many are playable;
- *  - otherwise between 1 and all of them, and the empty slots repeat the picks in order.
+ * Pick mode (owner's call, 2026-10-20): the commissioner chooses a QUANTITY per playable type.
+ * `picked` is the full multiset — one entry per copy — of 1 to 12 ids, and it must carry every
+ * playable always-in type at least once. The count is the list's length.
  */
-export function pickRequirement(types: readonly DrawType[], count: number): { min: number; max: number; slots: number } {
-  const { always, extras } = playableIdolPool(types)
-  const slots = Math.max(0, count - always.length)
-  if (extras.length >= slots) return { min: slots, max: slots, slots }
-  return { min: Math.min(1, extras.length), max: extras.length, slots }
+export function pickBounds(types: readonly DrawType[]): { min: number; max: number; alwaysIds: string[] } {
+  const { always } = playableIdolPool(types)
+  return { min: Math.max(SURVIVOR_IDOL_PICK_COUNT_MIN, always.length), max: SURVIVOR_IDOL_PICK_COUNT_MAX, alwaysIds: always.map(type => type.id) }
+}
+
+/** How many copies of each id a pick list carries. */
+export function pickQuantities(picked: readonly string[]): Map<string, number> {
+  const quantities = new Map<string, number>()
+  for (const id of picked) quantities.set(id, (quantities.get(id) ?? 0) + 1)
+  return quantities
+}
+
+/** Rebuild a pick list with `quantity` copies of `id`, keeping every other id's copies. */
+export function withPickQuantity(picked: readonly string[], id: string, quantity: number): string[] {
+  const copies = Math.max(0, Math.min(SURVIVOR_IDOL_PICK_COUNT_MAX, Math.round(quantity)))
+  return [...picked.filter(entry => entry !== id), ...Array.from({ length: copies }, () => id)]
 }
 
 export function validatePickedIdolTypes(types: readonly DrawType[], count: number, picked: readonly string[]): SurvivorIdolDrawResult {
-  if (!isSurvivorIdolCount(count)) return { ok: false, code: 'invalid_count', error: 'Choose 6, 7 or 8 idols.' }
+  if (!Number.isInteger(count) || count < SURVIVOR_IDOL_PICK_COUNT_MIN || count > SURVIVOR_IDOL_PICK_COUNT_MAX) {
+    return { ok: false, code: 'invalid_count', error: `Pick ${SURVIVOR_IDOL_PICK_COUNT_MIN} to ${SURVIVOR_IDOL_PICK_COUNT_MAX} idols.` }
+  }
+  if (picked.length !== count) return { ok: false, code: 'invalid_pick', error: `Pick ${count} idols in total.` }
   const byId = new Map(types.map(type => [type.id, type]))
   const unique = [...new Set(picked)]
-  if (unique.length !== picked.length) return { ok: false, code: 'invalid_pick', error: 'Each idol type can be picked once.' }
   if (unique.some(id => !byId.has(id))) return { ok: false, code: 'invalid_pick', error: 'Pick from the listed idol types.' }
-  if (unique.some(id => byId.get(id)!.alwaysIn)) return { ok: false, code: 'invalid_pick', error: 'Always-in idols are already in every league.' }
   if (unique.some(id => !isSurvivorIdolTypePlayable(byId.get(id)!))) return { ok: false, code: 'invalid_pick', error: 'That idol is coming soon and cannot be hidden in a league yet.' }
-  const { always } = playableIdolPool(types)
-  const need = pickRequirement(types, count)
-  if (unique.length < need.min || unique.length > need.max) {
-    return { ok: false, code: 'invalid_pick', error: need.min === need.max ? `Pick exactly ${need.min} idol types.` : `Pick between ${need.min} and ${need.max} idol types.` }
-  }
-  const picks = unique.map(id => byId.get(id)!)
-  const filled = [...picks]
-  for (let index = 0; filled.length < need.slots && picks.length; index++) filled.push(picks[index % picks.length])
-  return { ok: true, typeIds: ordered([...always.slice(0, count), ...filled]) }
+  const { alwaysIds } = pickBounds(types)
+  const missing = alwaysIds.filter(id => !unique.includes(id))
+  if (missing.length) return { ok: false, code: 'invalid_pick', error: `${missing.map(id => byId.get(id)!.id).join(', ')} is in every league: keep at least one.` }
+  // Always-in copies first, then the rest by catalogue order; copies stay together.
+  const sorted = [...picked].map(id => byId.get(id)!).sort((a, b) => Number(b.alwaysIn) - Number(a.alwaysIn) || a.sortOrder - b.sortOrder)
+  return { ok: true, typeIds: sorted.map(type => type.id) }
 }
 
 /** The league's idol types for a saved config: a balanced draw, or the commissioner's picks. */

@@ -29,6 +29,14 @@ describe('LeagueConceptIntroGate', () => {
     })
   })
 
+  it('replays the NBA intro from home after automatic playback has settled', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ seen: true }) } as Response)
+    render(<LeagueConceptIntroGate leagueId="nba-replay" shouldPlayIntro={false} leagueType="redraft" sport="NBA" settings={{}} />)
+    fireEvent(window, new CustomEvent('af:replay-league-intro', { detail: { leagueId: 'nba-replay' } }))
+    expect(await screen.findByTestId('concept-intro-video')).toHaveAttribute('src', '/media/create-league/sports/videos/Basketball.mp4')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('renders overlay when handoff is true and intro is unseen', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
@@ -130,7 +138,7 @@ describe('LeagueConceptIntroGate', () => {
       expect(src).not.toContain('/sports/')
     })
 
-    it('a sport with no shipped clip falls through to the concept intro', async () => {
+    it('NBA plays the packaged basketball clip', async () => {
       mockUnseen()
       render(
         <LeagueConceptIntroGate
@@ -141,6 +149,12 @@ describe('LeagueConceptIntroGate', () => {
           settings={{}}
         />,
       )
+      expect(await videoSrc()).toBe('/media/create-league/sports/videos/Basketball.mp4')
+    })
+
+    it('a sport with no shipped clip falls through to the concept intro', async () => {
+      mockUnseen()
+      render(<LeagueConceptIntroGate leagueId="league-college" shouldPlayIntro leagueType="redraft" sport="NCAAB" settings={{}} />)
       expect(await videoSrc()).toBe('/media/create-league/concept/videos/Redraft.mp4')
     })
 

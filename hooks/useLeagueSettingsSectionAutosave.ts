@@ -36,6 +36,8 @@ export function useLeagueSettingsSectionAutosave(
 
   const [saving, setSaving] = useState(false)
   const [lastError, setLastError] = useState<string | null>(null)
+  // Autosave has no Save button, so the commissioner needs a visible "it took" signal.
+  const [savedAt, setSavedAt] = useState<number | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingRef = useRef<Record<string, unknown>>({})
   const seqRef = useRef(0)
@@ -67,6 +69,7 @@ export function useLeagueSettingsSectionAutosave(
       recordSavedLeagueOverrides(leagueId, updates)
       window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId } }))
       if (mySeq === seqRef.current) {
+        setSavedAt(Date.now())
         onSuccessRef.current?.(data)
       }
     } catch {
@@ -105,5 +108,5 @@ export function useLeagueSettingsSectionAutosave(
     }
   }, [])
 
-  return { queuePatch, flush: () => void flush(), saving, lastError }
+  return { queuePatch, flush: () => void flush(), saving, lastError, savedAt }
 }

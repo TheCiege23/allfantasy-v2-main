@@ -7,6 +7,7 @@ import {
   previewImportedRosterForLeague,
 } from '@/lib/roster-engine'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 
@@ -39,8 +40,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
       if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
       const config = await mapImportedRosterToLeagueConfig(leagueId, sourcePlatform, importedConfig)
       invalidateLeagueDraftCaches(leagueId)
+      // An imported roster is a roster change like any other: draft rounds and roster limits follow.
+      // Like reset-default, it asks for the imported shape, so no manual round count survives it.
+      const draftRounds = await applyRosterTemplateChange(leagueId, { keepManualOverride: false, logTag: 'roster-settings import' })
       await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/import', detail: { sourcePlatform } })
-      return NextResponse.json({ ok: true, action: 'apply', unifiedConfig: config })
+      return NextResponse.json({ ok: true, action: 'apply', unifiedConfig: config, draftRounds })
     }
 
     const preview = await previewImportedRosterForLeague(leagueId, sourcePlatform, importedConfig)

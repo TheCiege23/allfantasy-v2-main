@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { loadNativeSeasonHistory } from '@/lib/redraft/offseason/nativeSeasonHistory'
 import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 type JsonRecord = Record<string, unknown>
@@ -274,6 +277,13 @@ export async function GET(
       return NextResponse.json({ error: 'season (YYYY) required' }, { status: 400 })
     }
 
+    const access = await resolveLeagueAccess(id, userId)
+    if (!access?.isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const league = await prisma.league.findUnique({ where: { id }, select: { platform: true } })
+    if (league && isNativePlatform(league.platform)) {
+      const history = await loadNativeSeasonHistory(id, season)
+      return history ? NextResponse.json(history) : NextResponse.json({ error: 'Season archive not found' }, { status: 404 })
+    }
     const [leagueSeason, weeklyMatchups, draft, transactions, rosterSnapshots, dynastySeason] = await Promise.all([
       prisma.leagueSeason.findFirst({
         where: { leagueId: id, season },

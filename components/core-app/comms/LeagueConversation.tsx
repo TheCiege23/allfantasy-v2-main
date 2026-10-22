@@ -263,6 +263,7 @@ export function LeagueConversation({
         if (tribe) {
           const res = await fetch(
             `/api/shared/chat/threads/${encodeURIComponent(room)}/messages?limit=40&source=${encodeURIComponent(tribe)}`,
+            { cache: 'no-store', signal: AbortSignal.timeout(15000) },
           )
           if (!res.ok) throw new Error(`Chat returned ${res.status}`)
           const data = (await res.json()) as { messages?: unknown[] }
@@ -284,6 +285,7 @@ export function LeagueConversation({
         const channelParam = channel ? `&leagueChannel=${encodeURIComponent(channel)}` : ''
         const res = await fetch(
           `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${draftParam}${channelParam}${seen ? '&markRead=1' : ''}`,
+          { cache: 'no-store', signal: AbortSignal.timeout(15000) },
         )
         if (!res.ok) throw new Error(`Chat returned ${res.status}`)
         /*

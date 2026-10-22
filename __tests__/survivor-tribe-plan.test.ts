@@ -49,15 +49,19 @@ describe('tribe plan maths', () => {
     expect([0, 1, 2, 3].map(s => Object.values(m).filter(v => v === s).length)).toEqual([5, 4, 4, 4])
   })
 
-  it('every tribe must hold 4–6 managers and match its capacity; everyone must be placed', () => {
+  it('every tribe must hold an equal share (3–12 managers) and match its capacity; everyone must be placed', () => {
     const people = cast(12)
     const ok = planRandom(people, [4, 4, 4], 1)!
     expect(validateTribePlan(ok, people, [4, 4, 4])).toBeNull()
     expect(validateTribePlan({ ...ok, u00: undefined as never }, people, [4, 4, 4])).toMatch(/not in a tribe/)
-    const three = cast(9)
-    expect(validateTribePlan(planRandom(three, [3, 3, 3], 1)!, three, [3, 3, 3])).toMatch(/4–6/)
+    // 12 in four tribes of three and 24 in two of twelve are the smallest and largest equal shares.
+    expect(validateTribePlan(planRandom(people, [3, 3, 3, 3], 1)!, people, [3, 3, 3, 3])).toBeNull()
+    const big = cast(24)
+    expect(validateTribePlan(planRandom(big, [12, 12], 1)!, big, [12, 12])).toBeNull()
+    const tiny = cast(6)
+    expect(validateTribePlan(planRandom(tiny, [2, 2, 2], 1)!, tiny, [2, 2, 2])).toMatch(/3–12/)
     const moved = { ...ok, u00: (ok.u00 + 1) % 3 }
-    expect(validateTribePlan(moved, people, [4, 4, 4])).toMatch(/capacity|4–6/)
+    expect(validateTribePlan(moved, people, [4, 4, 4])).toMatch(/capacity|3–12/)
   })
 
   it('AF strength scales DB ADP so the best roster reads 100, and no data stays null', () => {
@@ -75,11 +79,12 @@ describe('tribe plan maths', () => {
 })
 
 const mock = vi.hoisted(() => ({
-  session: vi.fn(), access: vi.fn(), lock: vi.fn(), post: vi.fn(), adp: vi.fn(),
+  session: vi.fn(), access: vi.fn(), lock: vi.fn(), post: vi.fn(), adp: vi.fn(), assign: vi.fn(),
   db: {
     league: { findUnique: vi.fn(), update: vi.fn() },
     draftSession: { findFirst: vi.fn() },
     survivorTribeMember: { count: vi.fn() },
+    survivorTribe: { findMany: vi.fn() },
     survivorLeagueConfig: { upsert: vi.fn() },
     survivorAuditEntry: { create: vi.fn() },
     roster: { findMany: vi.fn() },
@@ -94,6 +99,7 @@ vi.mock('@/lib/survivor/survivorAccessControl', () => ({ resolveSurvivorAccessCo
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: mock.lock }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: mock.post }))
 vi.mock('@/lib/adp/resolveAdp', () => ({ loadAdpBySleeperId: mock.adp }))
+vi.mock('@/lib/survivor/survivorTribeProvisioning', () => ({ assignSurvivorTribes: mock.assign }))
 
 const ctx = { params: Promise.resolve({ leagueId: 'league' }) }
 const users = Array.from({ length: 16 }, (_, i) => ({ id: `u${String(i).padStart(2, '0')}`, displayName: `Manager ${i}`, username: null }))
@@ -114,9 +120,12 @@ describe('POST /survivor-tribe-setup — Lock tribes & announce', () => {
     mock.db.appUser.findMany.mockResolvedValue(users)
     mock.adp.mockResolvedValue(new Map())
     mock.post.mockResolvedValue({ id: 'm1' })
+    mock.db.survivorTribe.findMany.mockResolvedValue([])
+    mock.assign.mockResolvedValue({ ok: true, created: true, alreadyAssigned: false, seed: null,
+      tribes: [0, 1, 2, 3].map(slotIndex => ({ id: `t${slotIndex}`, slotIndex, name: `Tribe ${slotIndex}`, memberCount: 4 })) })
   })
 
-  it('locks a valid plan into settings and announces it in league chat', async () => {
+  it('locks a valid plan into settings, writes the tribes before the draft, and announces it in league chat', async () => {
     const { POST } = await import('@/app/api/leagues/[leagueId]/survivor-tribe-setup/route')
     const mapping = planRandom(people, slots.map(s => s.managerCount), 9)!
     const res = await POST(lockReq({ mode: 'random', seed: 9, mapping, showOnBoard: true, tribeChatDuringDraft: true, announceInChat: true }), ctx)
@@ -126,14 +135,35 @@ describe('POST /survivor-tribe-setup — Lock tribes & announce', () => {
     expect(typeof saved.lockedAt).toBe('string')
     expect(mock.post).toHaveBeenCalledOnce()
     expect(String(mock.post.mock.calls[0][2])).toMatch(/Tribes are set/)
+    // Tribes exist from this moment: written through the assignment path in pre-draft mode, keyed
+    // by the seats (Roster ids) the cast claimed, so the draft room can show them.
+    expect(mock.assign).toHaveBeenCalledOnce()
+    const call = mock.assign.mock.calls[0]
+    expect(call[0]).toBe('league')
+    expect(call[1]).toMatchObject({ mode: 'commissioner_manual', manualMapping: mapping, tribeCount: 4, preDraft: true, actorUserId: 'commish' })
+    expect(call[1].participants).toHaveLength(16)
+    expect(call[1].participants).toEqual(expect.arrayContaining([{ userId: 'u00', rosterId: 'r0', displayName: 'Manager 0' }]))
+    expect(mock.assign.mock.invocationCallOrder[0]).toBeLessThan(mock.db.league.update.mock.invocationCallOrder[0])
+    expect((await res.json()).tribes).toHaveLength(4)
   })
 
-  it('refuses a plan that breaks the 4–6 rule, without writing', async () => {
+  it('a tribe write the assignment path refuses leaves the plan unlocked and unannounced', async () => {
+    const { POST } = await import('@/app/api/leagues/[leagueId]/survivor-tribe-setup/route')
+    mock.assign.mockResolvedValue({ ok: false, status: 422, code: 'manual_invalid', error: 'Tribe capacities must be positive whole numbers totaling the active manager count.' })
+    const mapping = planRandom(people, slots.map(s => s.managerCount), 9)!
+    const res = await POST(lockReq({ mode: 'random', seed: 9, mapping }), ctx)
+    expect(res.status).toBe(422)
+    expect(mock.db.league.update).not.toHaveBeenCalled()
+    expect(mock.post).not.toHaveBeenCalled()
+  })
+
+  it('refuses a plan that breaks the equal-share rule, without writing', async () => {
     const { POST } = await import('@/app/api/leagues/[leagueId]/survivor-tribe-setup/route')
     const lopsided = Object.fromEntries(users.map((u, i) => [u.id, i < 10 ? 0 : 1 + (i % 3)]))
     expect((await POST(lockReq({ mode: 'manual', seed: 1, mapping: lopsided }), ctx)).status).toBe(422)
     expect(mock.db.league.update).not.toHaveBeenCalled()
     expect(mock.post).not.toHaveBeenCalled()
+    expect(mock.assign).not.toHaveBeenCalled()
   })
 
   it('refuses while seats are unclaimed', async () => {

@@ -23,12 +23,13 @@ import {
   tallyMergeNameVotes,
   type TribeSnapshot,
 } from './tribeSwapReveal'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 const HOST = { senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement' } as const
 
 async function postLeagueAnnouncement(db: Prisma.TransactionClient | typeof prisma, leagueId: string, content: string) {
   const channel = await db.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
-  if (channel) await db.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', ...HOST, content } })
+  if (channel) await createSurvivorChatMessage(db, { data: { leagueId, channelId: channel.id, channelType: 'league', ...HOST, content } })
 }
 
 /**
@@ -144,7 +145,7 @@ export async function nameMergedTribe(leagueId: string, name: string, actorUserI
   await prisma.survivorAuditEntry.create({ data: { leagueId, category: 'tribe', action: 'merge_tribe_named', actorUserId, relatedEntityId: ctx.merged.id, relatedEntityType: 'survivor_tribe',
     data: { name: clean, mode: ctx.mode }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
   const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'merge', isArchived: false }, select: { id: true } })
-  if (channel) await prisma.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'merge', ...HOST, content: `Welcome to ${clean}. The tribes are now one.` } }).catch(() => {})
+  if (channel) await createSurvivorChatMessage(prisma, { data: { leagueId, channelId: channel.id, channelType: 'merge', ...HOST, content: `Welcome to ${clean}. The tribes are now one.` } }).catch(() => {})
   return { ok: true, name: clean }
 }
 

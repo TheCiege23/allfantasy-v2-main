@@ -40,6 +40,11 @@ import {
 } from '@/lib/bestball/rules'
 import { isSupportedDevyCreateDraftType } from '@/lib/league-concepts/devyDefaults'
 import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  sportSupportsProspectStash,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 /** Maps execution modes (offline/auto/team) to a core draft id for format-engine checks. */
 export function normalizeDraftTypeForEngine(draftType: string): string {
@@ -206,6 +211,17 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
       (data.conceptSetup?.survivor_entry_fee_mode === 'paid' || data.conceptSetup?.survivorEntryFeeMode === 'paid')) {
     return { ok: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE, status: 400,
       errors: [{ path: 'conceptSetup.survivor_entry_fee_mode', message: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }] }
+  }
+  // NHL / MLB have no prospect pool: refuse a taxi squad or devy rounds on any concept that carries them.
+  if (!sportSupportsProspectStash(sport)) {
+    const setup = data.conceptSetup ?? {}
+    const taxi = Number(setup.taxiSlots ?? setup.taxiSize ?? 0)
+    const path = Number.isFinite(taxi) && taxi > 0 ? 'conceptSetup.taxiSlots'
+      : setup.devyRoundsEnabled === true ? 'conceptSetup.devyRoundsEnabled' : null
+    if (path) {
+      return { ok: false, status: 400, error: PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+        errors: [{ path, message: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE }] }
+    }
   }
   if (formatId === 'dynasty') {
     const choices = dynastyCreationChoicesSchema.safeParse(data.conceptSetup ?? {})

@@ -37,7 +37,7 @@ describe('ScopeResetLink', () => {
     expect(document.cookie).toContain(`${SCOPE_COOKIE}=`)
     render(<ScopeResetLink>Show all leagues</ScopeResetLink>)
     const link = screen.getByRole('link', { name: 'Show all leagues' })
-    expect(link.getAttribute('href')).toBe('/core?scope=all')
+    expect(link.getAttribute('href')).toBe('/core?view=all&scope=all')
     fireEvent.click(link)
     expect(document.cookie).not.toContain(`${SCOPE_COOKIE}=sport`)
   })

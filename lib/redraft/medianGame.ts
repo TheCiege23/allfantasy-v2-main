@@ -29,13 +29,9 @@ export type WeeklyMedianResult = {
 }
 
 export function isMatchupComplete(row: Pick<MedianMatchupRow, 'status' | 'lineupSnapshots'>): boolean {
-  if (row.status === 'final' || row.status === 'completed') return true
-  const snapshot = row.lineupSnapshots
-  const scoring =
-    snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
-      ? (snapshot as Record<string, unknown>).redraftScoring
-      : null
-  return Boolean(scoring && typeof scoring === 'object' && (scoring as Record<string, unknown>).isComplete === true)
+  // isComplete means every starter has a stat row, including live rows. Only
+  // the period finalizer can certify the slate and its correction window.
+  return row.status === 'final' || row.status === 'completed'
 }
 
 function median(values: number[]): number {
