@@ -4,7 +4,7 @@ import '@/components/core-app/af-core.css'
 import './league-settings-home.css'
 import './commissioner-center.css'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronLeft, Copy } from 'lucide-react'
 import type { SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { SettingsSubPageRender } from './LeagueSettingsHome'
@@ -117,6 +117,7 @@ export function CommissionerCenter({
   inSeason,
   managers,
   onSubPageClosed,
+  header,
 }: {
   leagueName?: string | null
   sections: SettingsHomeSection[]
@@ -128,6 +129,8 @@ export function CommissionerCenter({
   managers: { joined: number; total: number; inviteUrl: string | null }
   /** Fired when the open section changes, so the caller can refetch the values it shows. */
   onSubPageClosed?: (id: SettingsSubPageId) => void
+  /** Drawn above the sections (the pre-draft setup card); given a way to open a section. */
+  header?: (openSection: (id: SettingsSubPageId) => void) => ReactNode
 }) {
   const allowed = editableSubPages(sections)
   const groups = NAV_GROUPS.map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) })).filter(group => group.items.length)
@@ -155,6 +158,8 @@ export function CommissionerCenter({
         <h1>Commissioner center</h1>
         <p>Every rule for {leagueName?.trim() || 'your league'} lives here. Make your changes, then press Save.</p>
       </header>
+
+      {header?.(select)}
 
       <div className="cc-grid">
         <nav className="cc-nav" aria-label="Commissioner sections">
