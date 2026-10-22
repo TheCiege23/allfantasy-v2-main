@@ -196,7 +196,10 @@ describe('a TEAM row goes to that team\'s followers', () => {
       story('Dallas Cowboys', 'DAL', 'Cowboys rule out top cornerback for Sunday'),
     ]
     await dispatchPendingPlayerNewsNotifications()
-    expect(toldUnder('followed_teams')).toEqual(['cowboys-fan', 'cowboys-fan'])
+    expect(toldUnder('followed_teams')).toEqual(['cowboys-fan'])
+    const summary=h.dispatch.mock.calls[0][0].body
+    expect(summary).toContain('Cowboys rule out starting left tackle')
+    expect(summary).toContain('Cowboys rule out top cornerback for Sunday')
   })
 })
 

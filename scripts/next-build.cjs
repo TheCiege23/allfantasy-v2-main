@@ -155,7 +155,7 @@ function main() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { checkLayoutCss, report } = require('./lib/layout-css-gate.cjs')
+  const { runLayoutCssGate } = require('./lib/bounded-layout-css-gate.cjs')
   const cwd = process.cwd()
   const shared = path.join(cwd, SHARED_CACHE_SUBDIR)
   // Outside /app, so it can never be copied into the runtime image.
@@ -174,11 +174,7 @@ function main() {
       log(`[next-build] next build exited ${s} after ${Math.round((Date.now() - t) / 1000)}s`)
       return s
     },
-    gate: () => {
-      const r = checkLayoutCss(distDir)
-      report(r, log)
-      return r
-    },
+    gate: () => runLayoutCssGate(distDir, { log }),
     seed: () => {
       fs.rmSync(cacheDir, { recursive: true, force: true })
       if (!dirHasEntries(shared)) {
