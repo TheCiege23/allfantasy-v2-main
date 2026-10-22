@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ArrowRight, MessageSquare, PlayCircle, Shield } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
+import { GuillotineAutopilotCard } from '@/components/guillotine/GuillotineAutopilotCard'
 import { LeagueActivityFeedCard } from '@/components/league/native/LeagueActivityFeedCard'
 import { LeagueHealthPanel } from '@/components/league/native/LeagueHealthPanel'
 import { LeagueSeatTracker } from '@/components/league/native/LeagueSeatTracker'
@@ -68,6 +69,7 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
         {predraft && <div className="nl-quick-grid"><Link href={`/mock-draft?leagueId=${encodeURIComponent(league.id)}&sport=${encodeURIComponent(league.sport)}&teams=${league.teamCount}`}><h3>Mock draft</h3><p>Practice with this league’s exact settings.</p></Link><Link href={`/league/${encodeURIComponent(league.id)}/draft`}><h3>Queue & rankings</h3><p>Rank players and build your queue before the draft.</p></Link>{supplementalTile}</div>}
       </section>
       {stakesFormat && <LeagueStakesCard leagueId={league.id} format={stakesFormat} onSelectTab={onSelectTab} />}
+      {stakesFormat === 'guillotine' && <GuillotineAutopilotCard leagueId={league.id} sport={String(league.sport)} isCommissioner={isCommissioner} onOpenSettings={onOpenSettings} onSelectTab={onSelectTab} />}
       {showSeats && <LeagueSeatTracker teams={teams} teamCount={league.teamCount} userTeamId={userTeamId} leagueName={league.name} inviteCode={inviteCode} canInvite={isCommissioner} onOpenInviteSettings={() => onOpenSettings('invite')} />}
       {isCommissioner && predraft && <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />}
       {isCommissioner && !predraft && <LeagueHealthPanel leagueId={league.id} claimedSeats={teams.filter(row => row.claimedByUserId).length} teamCount={league.teamCount} onOpenSettings={onOpenSettings} onSelectTab={onSelectTab} />}

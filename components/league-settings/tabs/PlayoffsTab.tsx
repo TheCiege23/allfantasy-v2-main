@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
 import { PlayoffBracketFormatCard } from '@/components/league-settings/PlayoffBracketFormatCard'
@@ -15,7 +16,7 @@ import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
 export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
+  const { queuePatch, saving, savedAt, lastError } = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
 
   const [playoffTeams, setPlayoffTeams] = useState(ctx.league.playoffTeams ?? 6)
   // Native leagues: the quick field is the source of truth for the start week (column, then its JSON
@@ -41,7 +42,7 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
     <div className="space-y-8">
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4">
         <h4 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.quick')}</h4>
-        {saving ? <p className="mb-2 text-[11px] text-cyan-300/80">{t('lsHub.saving')}</p> : null}
+        <p className="mb-2"><AutosaveStatus saving={saving} savedAt={savedAt} error={lastError} /></p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
