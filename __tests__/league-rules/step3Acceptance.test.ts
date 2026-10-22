@@ -163,7 +163,7 @@ describe('specialty concepts resolve, including the three with no Chimmy groundi
     expect(royal?.formatRulesConcept).toBeNull()
   })
 
-  it('Survivor All-Stars Guillotine forbids trades and carries the week-9 superflex', () => {
+  it('Survivor All-Stars Guilly forbids trades and carries the week-9 superflex', () => {
     const sg = getConceptById('survivor_guillotine')
     expect(sg?.actions.find((a) => a.id === 'trade')?.legalInFormat).toBe(false)
     expect((sg?.phases ?? []).map((p) => p.label + p.summary).join(' ')).toMatch(/SUPERFLEX/)

@@ -3,7 +3,7 @@
  * surface that needs them.
  *
  * Before this the summary route defaulted to WEEK 1 whenever no `?week=` was passed, so the
- * Guillotine tab (`GuillotineHome`, whose week state was never advanced) and `GuillotineFormatTab`
+ * Guillotine tab (`GuillotineHome`, whose week state was never advanced) and the since-deleted `GuillotineFormatTab`
  * both showed week 1's danger tiers all season. The war room already resolved the week properly;
  * that rule now lives here and both use it.
  */

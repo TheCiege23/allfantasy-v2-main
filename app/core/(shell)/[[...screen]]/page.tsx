@@ -3,6 +3,7 @@ import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { canonicalCoreScreen } from '@/lib/core-app/leagueNavigation'
 import { cookies, headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
 
@@ -469,7 +470,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   sync: { title: 'Sync', description: 'What AllFantasy reads for this league, and when it last read it.' },
   hubs: {
     title: 'Format hubs',
-    description: 'Every Zombie, Tournament, Survivor, C2C, Guillotine and EFL league you play in, one hub per format.',
+    description: 'Every Zombie, Tournament, Survivor, C2C, Guilly and EFL league you play in, one hub per format.',
   },
 }
 
@@ -509,7 +510,7 @@ export async function generateMetadata({
 }) {
   const { screen } = await params
   const sp = await searchParams
-  const segment = (screen?.[0] ?? '').toLowerCase()
+  const segment = canonicalCoreScreen(screen?.[0] ?? '')
   const meta = TAB_META[segment]
 
   /*
@@ -572,7 +573,7 @@ export default async function AfCorePage({
   const selectedLeagueId = typeof sp.league === 'string' ? sp.league.trim() || null : null
   const playerQuery = typeof sp.q === 'string' ? sp.q : ''
   const selectedPlayerId = typeof sp.player === 'string' ? sp.player : null
-  const segment = (screen?.[0] ?? '').toLowerCase()
+  const segment = canonicalCoreScreen(screen?.[0] ?? '')
   const navKey = SCREEN_KEYS[segment]
 
   /*
@@ -749,7 +750,7 @@ export default async function AfCorePage({
    * follows available. Read in the same wave; it never throws (a failed read answers false).
    */
   const [leagueListPayload, pausedSyncKeys, leaguePrefs, teamFollowPromptEligible] = await Promise.all([
-    getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }).catch(() => null),
+    getDashboardLeagueListForUser(userId, { rosterDetail: 'count', requireCoreLeagues: true }).catch(() => null),
     getPausedSyncKeys(userId).catch(() => null),
     getLeaguePreferences(userId),
     shouldShowTeamFollowPrompt(userId),

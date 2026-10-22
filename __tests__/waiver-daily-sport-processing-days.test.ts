@@ -1,8 +1,7 @@
 /**
  * Daily sports (NBA/NHL/MLB) must run waivers on EVERY default processing day, not only the first.
  *
- * The sport defaults say NBA, NHL and MLB all run [Mon, Wed, Fri] (DAILY_REDRAFT_WAIVER_PROCESSING_DAYS;
- * e69537f9c moved MLB off [Mon, Thu]), but the
+ * The daily-sport defaults run [Mon, Wed, Fri], but the
  * league-creation writers persisted only `processingDayOfWeek: processing_days[0]` and never the
  * `processingDays` list — so `computeNextWaiverRunAtUtc` scheduled one run a week (Monday).
  *

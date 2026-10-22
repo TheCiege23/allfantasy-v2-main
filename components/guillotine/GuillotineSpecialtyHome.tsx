@@ -94,12 +94,12 @@ export function GuillotineSpecialtyHome({
   )
   const myChopped = home?.chopped.find((c) => c.rosterId === summary.myRosterId) ?? null
   const headline = guillotineHeadline({ week, me: line.me, alive: line.alive, myChoppedWeek: myChopped?.week ?? null })
-  const title = leagueName?.trim() || 'Guillotine League'
+  const title = leagueName?.trim() || 'Guilly League'
   const alive = home?.aliveCount ?? line.alive
   const chips = [
     sport.toUpperCase(),
     ...(home?.season ? [String(home.season)] : []),
-    'Guillotine',
+    'Guilly',
     home ? `${home.teamCount} teams · ${alive} alive` : `${alive} alive`,
   ]
   const lineupHref = leagueHref(leagueId, { view: 'team' })
@@ -141,7 +141,7 @@ export function GuillotineSpecialtyHome({
           format="guillotine"
           bannerSrc={asset('banner.svg')}
           emblemSrc={asset('emblem.svg')}
-          emblemAlt="Guillotine league crest"
+          emblemAlt="Guilly league crest"
           chips={chips}
           title={title}
           headline={headline}
@@ -287,7 +287,7 @@ export function GuillotineSpecialtyHome({
           <img className={gl.bg} src={asset('banner.svg')} alt="" aria-hidden />
           <div className={gl.veil} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className={gl.emblem} src={asset('emblem.svg')} alt="Guillotine league crest" />
+          <img className={gl.emblem} src={asset('emblem.svg')} alt="Guilly league crest" />
           <div className={gl.phoneHeadText}>
             <h2 className={`${gl.big} ${gl.phoneTitle}`}>{title}</h2>
             <span className={sp.t2}>

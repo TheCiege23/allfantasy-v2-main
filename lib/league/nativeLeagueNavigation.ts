@@ -23,6 +23,8 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   }
   const primary = [
     ...item('League home', 'home', 'native_home', 'home'),
+    // A guillotine league's defining screen (chop line, danger zone, history) sat under "More tools".
+    ...item('Guilly', 'guillotine', 'guillotine'),
     ...item('My team', 'team', 'roster', 'team', 'squad'),
     ...item('Matchup', 'matchup', 'matchups', 'matchup', 'fixtures'),
     ...item('Players & waivers', 'players', 'waivers', 'players'),

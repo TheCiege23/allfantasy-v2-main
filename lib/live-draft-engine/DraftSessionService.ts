@@ -1,4 +1,5 @@
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
+import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
@@ -413,7 +414,11 @@ export async function buildSessionSnapshot(
   const effectiveRoster = await getEffectiveLeagueRosterTemplate(leagueId).catch(() => null)
   const rosterConfigurationIncomplete = effectiveRoster ? !effectiveRoster.hasPersistedRosterSchema : false
 
-  const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []
+  // Survivor tribe badges ride on the slot entries so every room surface (strip, board, big
+  // screen) can show a seat's tribe without a second fetch. Never a reason for a snapshot to fail.
+  const slotOrder = await attachSurvivorTribeBadges(leagueId, (session.slotOrder as unknown as SlotOrderEntry[]) ?? []).catch(
+    () => (session.slotOrder as unknown as SlotOrderEntry[]) ?? [],
+  )
   const teamCount = session.teamCount
   const totalPicks = session.rounds * teamCount
   const picksCount = session.picks.length
@@ -1239,7 +1244,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     const { bootstrapSGAfterDraft } = await import('@/lib/survivor-guillotine/operations')
     await bootstrapSGAfterDraft(leagueId)
   } catch (err) {
-    console.error('[completeDraftSession] Survivor Guillotine bootstrap failed', {
+    console.error('[completeDraftSession] Survivor Guilly bootstrap failed', {
       leagueId, error: err instanceof Error ? err.message : String(err),
     })
   }

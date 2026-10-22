@@ -261,7 +261,7 @@ function WeeklyLeagueCareer({
         <p className="af-label af-lc-eyebrow">{league.name}</p>
         <h1 className="af-display af-lc-title">Your career here</h1>
         <p className="af-lc-sub">
-          {elimination ? 'A guillotine league' : 'A league scored against the whole field'}, so every week is your
+          {elimination ? 'A Guilly league' : 'A league scored against the whole field'}, so every week is your
           score against everyone still playing — since {firstSeason}.{' '}
           <Link href={allLeaguesHref}>Across every league →</Link>
         </p>

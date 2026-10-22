@@ -16,6 +16,7 @@ import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { getEnabledPremiumAdvancedSettings } from '@/lib/create-league-v2/simple-create'
+import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 
 /** Execution modes must stay verbatim on the wire so persistence keeps isOffline / isAuto flags. */
 const EXECUTION_DRAFT_IDS = new Set(['offline', 'auto', 'team'])
@@ -110,11 +111,16 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     conceptSetup.startupRosterDepth = d.startupRosterDepth
     conceptSetup.benchCount = d.benchCount
     conceptSetup.irCount = d.irCount
-    conceptSetup.taxiSlots = d.taxiSlotCount
-    conceptSetup.taxiEligibilityYears = d.taxiEligibilityYears
-    conceptSetup.taxiLockDeadlineWeek = d.taxiLockDeadlineWeek
-    conceptSetup.taxiAllowNonRookies = d.taxiAllowNonRookies
-    conceptSetup.taxiAllowMoveOutAfterDeadline = d.taxiAllowMoveOutAfterDeadline
+    if (sportSupportsProspectStash(state.sport)) {
+      conceptSetup.taxiSlots = d.taxiSlotCount
+      conceptSetup.taxiEligibilityYears = d.taxiEligibilityYears
+      conceptSetup.taxiLockDeadlineWeek = d.taxiLockDeadlineWeek
+      conceptSetup.taxiAllowNonRookies = d.taxiAllowNonRookies
+      conceptSetup.taxiAllowMoveOutAfterDeadline = d.taxiAllowMoveOutAfterDeadline
+    } else {
+      // NHL / MLB: no taxi squad (no prospect pool). A hydrated session may still hold a count.
+      conceptSetup.taxiSlots = 0
+    }
     conceptSetup.rookieDraftRounds = d.rookieDraftRounds
     conceptSetup.rookieDraftType = d.rookieDraftType
     conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod

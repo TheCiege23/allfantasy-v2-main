@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { finalizeExileRosterResults } from '@/lib/survivor/exileRosterService'
 import { processReturnFromExile } from '@/lib/survivor/exileEngine'
-import { getFinaleState } from '@/lib/survivor/SurvivorFinaleEngine'
+import { getFinaleState, settleFinaleIfDue } from '@/lib/survivor/SurvivorFinaleEngine'
+import { ensureJuryVotingOpen } from '@/lib/survivor/juryEngine'
 import { generateAndPostWeeklyRecap } from '@/lib/survivor/weeklyRecapGenerator'
 
 const state = vi.hoisted(() => ({ game: {} as Record<string, unknown>, resolved: false, active: 20 }))
@@ -24,10 +25,15 @@ vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/survivor/gameStateMachine', () => engine)
 vi.mock('@/lib/survivor/exileEngine', () => ({ processReturnFromExile: vi.fn(), scoreExileWeek: vi.fn() }))
 vi.mock('@/lib/survivor/exileRosterService', () => ({ closeExpiredExileRosters: vi.fn(), finalizeExileRosterResults: vi.fn() }))
-vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({ getFinaleState: vi.fn() }))
+vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({ getFinaleState: vi.fn(), settleFinaleIfDue: vi.fn() }))
+vi.mock('@/lib/survivor/juryEngine', () => ({ ensureJuryVotingOpen: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifiedSlateChallenges: vi.fn(), settleVerifiedSlateChallenges: vi.fn() }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
+const redraw = vi.hoisted(() => ({ autoApply: vi.fn() }))
+vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply }))
+const surprise = vi.hoisted(() => ({ ensure: vi.fn(), dissolve: vi.fn() }))
+vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWeek: surprise.ensure, dissolveSurpriseTribes: surprise.dissolve }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
@@ -52,6 +58,16 @@ beforeEach(() => {
 })
 
 describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport => {
+  it('draws the surprise two-tribe week at the top of an elimination-week tick once the rule is on', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup(sport, 1, { finalized: true })
+    db.league.findUnique.mockResolvedValue({ sport, season: 2026, survivorMode: true, platform: 'allfantasy', settings: { survivor_full_season_plan: plan, postMergeSurpriseTribeWeeks: 2 } })
+    state.game.currentWeek = plan.eliminationWeeks[0]
+    await runPlannedSurvivorLeague('league-1', later)
+    expect(surprise.ensure).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0], plan)
+    expect(surprise.ensure.mock.invocationCallOrder[0]).toBeLessThan(engine.triggerTribalOpen.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER)
+  })
+
   it('stops every planned season step while the pause snapshot exists', async () => {
     const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
     await setup(sport, 3, { finalized: true })
@@ -91,6 +107,12 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     expect(state.active).toBe(3)
     expect(skipped).toBe(qualifies ? 0 : 1)
     expect(resolvedWeeks.size).toBe(plan.eliminationWeeks.length)
+    // An unanswered tribe-imbalance recommendation gets its default before each council opens.
+    expect(redraw.autoApply).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
+    expect(redraw.autoApply).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0])
+    // Surprise tribes dissolve before every week flip, and are never drawn while the rule is off.
+    expect(surprise.dissolve).toHaveBeenCalledTimes(engine.advanceWeek.mock.calls.length)
+    expect(surprise.ensure).not.toHaveBeenCalled()
   })
 
   it.each([true, false])('replays every regular-season period to three finalists (Exile return: %s)', async qualifiesToReturn => {
@@ -163,6 +185,35 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     state.game.currentWeek = plan.finaleWeek
     vi.mocked(getFinaleState).mockResolvedValue({ closed: true, winnerRosterId: 'winner' } as never)
     expect(await runPlannedSurvivorLeague('league-1', new Date('2027-04-15T12:00:00Z'))).toBe('season_complete')
+    expect(engine.advancePhase).toHaveBeenCalledWith('league-1', 'automatic', undefined, expect.objectContaining({ toPhase: 'complete' }))
+    expect(ensureJuryVotingOpen).not.toHaveBeenCalled()
+  })
+
+  it('opens jury voting itself, with the ceremony as the deadline, and keeps waiting while jurors vote', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup(sport, 1, { finalized: true })
+    state.game.currentWeek = plan.finaleWeek
+    const finaleNow = new Date('2027-04-15T12:00:00Z')
+    vi.mocked(getFinaleState).mockResolvedValue({ open: true, closed: false, winnerRosterId: null, votingDeadline: null } as never)
+    vi.mocked(settleFinaleIfDue).mockResolvedValue({ open: true, closed: false, winnerRosterId: null, votingDeadline: new Date('2027-04-20T00:00:00Z') } as never)
+    expect(await runPlannedSurvivorLeague('league-1', finaleNow)).toBe('awaiting_jury')
+    expect(ensureJuryVotingOpen).toHaveBeenCalledOnce()
+    const [leagueId, deadline] = vi.mocked(ensureJuryVotingOpen).mock.calls[0]
+    expect(leagueId).toBe('league-1')
+    expect(deadline).toBeInstanceOf(Date)
+    expect((deadline as Date).getTime()).toBeGreaterThan(finaleNow.getTime())
+    expect(settleFinaleIfDue).toHaveBeenCalledWith('league-1', plan.finaleWeek)
+    expect(engine.advancePhase).not.toHaveBeenCalled()
+  })
+
+  it('crowns the winner in the same tick the jury finishes, with no commissioner click', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup(sport, 1, { finalized: true })
+    state.game.currentWeek = plan.finaleWeek
+    vi.mocked(getFinaleState).mockResolvedValue({ open: true, closed: false, winnerRosterId: null, votingDeadline: new Date('2027-04-20T00:00:00Z') } as never)
+    vi.mocked(settleFinaleIfDue).mockResolvedValue({ open: true, closed: true, winnerRosterId: 'winner' } as never)
+    expect(await runPlannedSurvivorLeague('league-1', new Date('2027-04-21T12:00:00Z'))).toBe('season_complete')
+    expect(ensureJuryVotingOpen).not.toHaveBeenCalled()
     expect(engine.advancePhase).toHaveBeenCalledWith('league-1', 'automatic', undefined, expect.objectContaining({ toPhase: 'complete' }))
   })
 

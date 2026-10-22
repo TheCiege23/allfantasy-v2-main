@@ -496,6 +496,7 @@ test.describe('@keeper-draft-room click audit', () => {
     await openDraftRoomHarness(page)
     const mobile = page.getByTestId('draft-mobile-layout')
 
+    await page.getByTestId('draft-mobile-more').click()
     await page.getByTestId('draft-mobile-tab-keepers').click()
     /*
      * ⚠ KeeperPanel IS A `dynamic()` IMPORT, SO THIS IS A CHUNK COMPILE, NOT A RENDER.
@@ -533,6 +534,7 @@ test.describe('@keeper-draft-room click audit', () => {
     await expect(mobile.getByTestId('draft-board-cell-8')).toContainText('Legacy Runner')
     await expect(mobile.getByTestId('draft-board-cell-8')).toContainText('K')
 
+    await page.getByTestId('draft-mobile-more').click()
     await page.getByTestId('draft-mobile-tab-keepers').click()
 
     // Validate eligibility rules (carryover + max keepers).
@@ -553,6 +555,7 @@ test.describe('@keeper-draft-room click audit', () => {
     await expect(mobile.getByTestId('draft-board-cell-9')).toContainText('Random Outsider')
 
     // No dead keeper actions: remove updates list and board lock.
+    await page.getByTestId('draft-mobile-more').click()
     await page.getByTestId('draft-mobile-tab-keepers').click()
     await mobile.getByTestId('draft-keeper-remove-0').click()
     await expect.poll(() => requests.keeperRemove.length).toBeGreaterThan(0)

@@ -207,7 +207,7 @@ describe('getLeagueStandings — weekly snapshots', () => {
     expect(result.board.teams.map((t) => t.rosterId)).toEqual(['4', '3', '2', '1'])
   })
 
-  it('does not call a guillotine league finished in week 4 — no head-to-head is no schedule, not no season', async () => {
+  it('does not call a Guilly league finished in week 4 — no head-to-head is no schedule, not no season', async () => {
     // One matchupId per roster (the guillotine shape), weeks 1–3 scored, week 4 not yet.
     db.rows = [1, 2, 3, 4].flatMap((w) =>
       [1, 2, 3, 4].map((i) => ({

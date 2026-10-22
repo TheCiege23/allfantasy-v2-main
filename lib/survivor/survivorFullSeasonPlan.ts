@@ -1,5 +1,6 @@
 import { dailySportWeekForInstant, resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
+import { SURVIVOR_CAST_SIZE_MAX, SURVIVOR_CAST_SIZE_MIN } from '@/lib/league-creation-wizard/sport-team-limits'
 
 /** Published regular-season last days. Year is the year the season BEGINS. */
 const LAST_DAY: Record<string, Record<number, string>> = {
@@ -35,7 +36,7 @@ export function buildSurvivorFullSeasonPlan(input: {
   const opener = resolveDailySportSeasonStart(sport, input.season)
   const lastDay = LAST_DAY[sport]?.[input.season]
   if (!opener || !lastDay) throw new Error(`The ${sport} ${input.season} season calendar has not been verified yet.`)
-  if (!Number.isInteger(input.castSize) || input.castSize < 16 || input.castSize > 20) throw new Error('Survivor requires 16–20 managers.')
+  if (!Number.isInteger(input.castSize) || input.castSize < SURVIVOR_CAST_SIZE_MIN || input.castSize > SURVIVOR_CAST_SIZE_MAX) throw new Error(`Survivor requires ${SURVIVOR_CAST_SIZE_MIN}–${SURVIVOR_CAST_SIZE_MAX} managers.`)
   const lastWeek = dailySportWeekForInstant(sport, input.season, new Date(`${lastDay}T12:00:00Z`))!
   const endWeek = input.endWeek ?? lastWeek
   if (!Number.isInteger(endWeek) || endWeek < 1 || endWeek > lastWeek) throw new Error(`Choose an end week between 1 and ${lastWeek}.`)
@@ -63,7 +64,7 @@ export function readSurvivorFullSeasonPlan(settings: unknown): SurvivorFullSeaso
   const raw = (settings as Record<string, unknown>).survivor_full_season_plan
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const p = raw as SurvivorFullSeasonPlan
-  if (p.version !== 1 || !['NBA', 'NHL'].includes(p.sport) || !Number.isInteger(p.season) || !Number.isInteger(p.castSize) || p.castSize < 16 || p.castSize > 20 || (p.finalistCount !== 2 && p.finalistCount !== 3) ||
+  if (p.version !== 1 || !['NBA', 'NHL'].includes(p.sport) || !Number.isInteger(p.season) || !Number.isInteger(p.castSize) || p.castSize < SURVIVOR_CAST_SIZE_MIN || p.castSize > SURVIVOR_CAST_SIZE_MAX || (p.finalistCount !== 2 && p.finalistCount !== 3) ||
     !Number.isInteger(p.startWeek) || !Number.isInteger(p.endWeek) || p.startWeek < 1 || p.endWeek <= p.startWeek || p.endWeek > 52 || p.openingWeek !== p.startWeek || p.finaleWeek !== p.endWeek ||
     !Array.isArray(p.eliminationWeeks) || p.eliminationWeeks.length !== p.castSize - p.finalistCount + (p.exileReturnSlots ?? 0) || new Set(p.eliminationWeeks).size !== p.eliminationWeeks.length ||
     p.eliminationWeeks.some(week => !Number.isInteger(week) || week <= p.startWeek || week >= p.endWeek) ||

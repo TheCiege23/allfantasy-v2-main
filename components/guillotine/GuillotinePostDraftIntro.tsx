@@ -43,9 +43,9 @@ export function GuillotinePostDraftIntro({ leagueId, onContinue }: GuillotinePos
 
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-      <h2 className="mb-3 text-lg font-semibold text-white">Guillotine League — Intro</h2>
+      <h2 className="mb-3 text-lg font-semibold text-white">Guilly League — Intro</h2>
       <p className="mb-4 text-sm text-white/70">
-        Your draft is complete. Watch a quick intro to how your Guillotine League works.
+        Your draft is complete. Watch a quick intro to how your Guilly League works.
       </p>
       <div className="rounded-xl overflow-hidden bg-black">
         <video

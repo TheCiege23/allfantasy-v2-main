@@ -152,6 +152,7 @@ import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
 import { SurvivorLeagueDeepLinkPanel } from '@/components/survivor/SurvivorLeagueDeepLinkPanel'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
+import { SurvivorIdolRevealModal } from '@/components/survivor/SurvivorIdolRevealModal'
 import { BigBrotherFirstEntryModal } from '@/components/big-brother/BigBrotherFirstEntryModal'
 import { IDPFirstEntryModal } from '@/components/idp/IDPFirstEntryModal'
 import { BigBrotherHome } from '@/components/big-brother/BigBrotherHome'
@@ -494,9 +495,9 @@ export function LeagueShell({
       const bb = { id: 'bestball', label: 'Best Ball' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), bb, ...base.slice(idx + 1)] : [bb, ...base]
     }
-    if (league.guillotineMode) {
+    if (league.guillotineMode || league.leagueVariant === 'guillotine') {
       const idx = base.findIndex((t) => t.id === 'redraft')
-      const g = { id: 'guillotine', label: 'Guillotine' }
+      const g = { id: 'guillotine', label: 'Guilly' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
     }
     if (league.leagueVariant === 'survivor') {
@@ -1924,6 +1925,10 @@ export function LeagueShell({
             <SurvivorFirstEntryModal leagueId={league.id} userId={userId} enabled={firstEntryIntroEnabled('survivor')} onClose={advanceWelcomeFromIntro} />,
             document.body,
           )
+        : null}
+
+      {portalMounted && league.leagueVariant === 'survivor' && userId
+        ? createPortal(<SurvivorIdolRevealModal leagueId={league.id} />, document.body)
         : null}
 
       {portalMounted && league.leagueVariant === 'big_brother'

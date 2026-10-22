@@ -209,7 +209,7 @@ describe('🛑 a follow is keyed on the Sleeper id, not the name', () => {
 
   it("…and IS told the QB's news", async () => {
     h.follows = [{ user_id: 'qb-fan', sleeper_id: '4984', name: 'Josh Allen', position: 'QB', team: 'Buffalo Bills' }]
-    h.news = [story('n-qb', 'Josh Allen', 'BUF', 'Bills QB Josh Allen (hand) limited at practice')]
+    h.news = [story('n-qb', 'Josh Allen', 'BUF', 'Bills QB Josh Allen (hand) ruled out for Sunday')]
     await dispatchPendingPlayerNewsNotifications()
     expect(toldUnder('followed_players')).toEqual(['qb-fan'])
   })

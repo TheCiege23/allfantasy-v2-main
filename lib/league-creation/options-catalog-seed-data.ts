@@ -1,6 +1,6 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
-import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 
 export type CreateMode = 'quick' | 'advanced'
@@ -30,13 +30,6 @@ const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAA
 const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
-
-function guillotineTeamCounts(sport: SupportedSport): number[] {
-  const profile = getGuillotineSportConfig(sport)
-  const min = Math.max(4, profile?.minTeams ?? 8)
-  const max = Math.max(min, profile?.maxTeams ?? 18)
-  return Array.from({ length: max - min + 1 }, (_, index) => min + index)
-}
 
 export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   version: 1,
@@ -101,7 +94,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     },
     {
       id: 'guillotine',
-      title: 'Guillotine',
+      title: 'Guilly',
       subtitle: 'Lowest score is eliminated',
       introVideoUrl: '/league-type-guillotine-intro.mp4',
       introPosterUrl: '/league-type-guillotine.png',
@@ -164,7 +157,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     c2c: ['snake', 'linear', 'auction', 'offline', 'auto'],
     guillotine: ['snake', 'linear', 'auction', 'offline', 'auto'],
     zombie: ['snake', 'offline', 'auto'],
-    survivor: ['snake', 'auction', 'offline', 'auto'],
+    survivor: ['snake', 'linear', 'auction', 'offline', 'auto'],
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
     big_brother: ['snake', 'offline', 'auto'],
   },
@@ -325,15 +318,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: [8, 10, 12, 14, 16],
       NCAAB: [8, 10, 12, 14, 16],
     },
-    // One chop per scoring period, so the sport's schedule decides how many teams fit. The
-    // hand-written even list here allowed an 18-team NFL guillotine that 17 chops cannot finish.
-    guillotine: {
-      NFL: guillotineTeamCounts('NFL'),
-      NCAAF: guillotineTeamCounts('NCAAF'),
-      NBA: guillotineTeamCounts('NBA'),
-      NHL: guillotineTeamCounts('NHL'),
-      MLB: guillotineTeamCounts('MLB'),
-    },
+    // Guilly: 4–27 teams single elimination, up to 35 with double-elimination weeks — the
+    // same for every sport (lib/guillotine/teamCountLimits.ts). A commissioner on a short
+    // schedule adds double-chop weeks in league settings to finish a large league in time.
+    guillotine: Object.fromEntries(ALL_SPORTS.map((sport) => [sport, guillotineTeamCountOptions()])),
     zombie: {
       NFL: [8, 10, 12, 14],
       NBA: [8, 10, 12, 14],

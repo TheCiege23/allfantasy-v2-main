@@ -34,7 +34,9 @@ export const HUB_FORMATS = ['zombie', 'tournament', 'survivor', 'c2c', 'guilloti
 export type HubFormat = (typeof HUB_FORMATS)[number]
 
 export function parseHubFormat(raw: unknown): HubFormat | null {
-  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  const lowered = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  // "Guilly" is the display name for the guillotine format; the id stays `guillotine`.
+  const v = lowered === 'guilly' ? 'guillotine' : lowered
   return (HUB_FORMATS as readonly string[]).includes(v) ? (v as HubFormat) : null
 }
 

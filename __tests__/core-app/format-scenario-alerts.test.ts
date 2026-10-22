@@ -45,7 +45,7 @@ const league = (id: string, name: string, status = 'in_season') =>
   ({ id, name, platform: 'sleeper', platformLeagueId: `sl-${id}`, sport: 'NFL', status })
 const LEAGUES = [
   league('rd', 'Plain Redraft'),
-  league('gl', 'Chopped Guillotine'),
+  league('gl', 'Chopped Guilly'),
   league('bb1', 'Best Ball Covered'),
   league('bb2', 'Best Ball Short'),
   league('pd', 'Not Drafted Yet', 'pre_draft'),
@@ -102,7 +102,7 @@ describe('league-format scenarios reach Top decisions with the right text and de
     expect(row?.meta).toContain('Listed Out in your starting lineup')
   })
 
-  it('an eliminated Guillotine team raises nothing — no starter-out, no empty slot', async () => {
+  it('an eliminated Guilly team raises nothing — no starter-out, no empty slot', async () => {
     expect((await queue()).filter((i) => i.leagueId === 'gl')).toEqual([])
   })
 

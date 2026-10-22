@@ -46,7 +46,7 @@ const ROW = {
   sport: 'NFL',
   playerName: 'Jordan Love',
   team: 'Packers',
-  headline: 'Love (knee) limited at practice',
+  headline: 'Love (knee) ruled out for Sunday',
   body: null,
   impact: 'medium',
 }
@@ -80,7 +80,7 @@ describe('team followers', () => {
       category: 'followed_teams',
       leagueId: null,
       severity: 'high',
-      dedupePrefix: 'player-news:news-1',
+      dedupePrefix: expect.stringMatching(/^team-injury-news:/),
       meta: expect.objectContaining({ followedTeam: 'GB' }),
     })
     expect(out).toMatchObject({ notified: 1, teamFollowerRecipients: 1, noRoster: 0 })

@@ -118,7 +118,7 @@ export type GuillotineSeatSummary = {
 
 export function formatGuillotineSeatLine(s: GuillotineSeatSummary): string {
   if (s.belowFloor) {
-    return `${s.claimed} of ${s.seats} spots filled. Too late in the season to start: a guillotine league needs at least ${GUILLOTINE_MIN_TEAMS} teams that can still be chopped.`
+    return `${s.claimed} of ${s.seats} spots filled. Too late in the season to start: a Guilly league needs at least ${GUILLOTINE_MIN_TEAMS} teams that can still be chopped.`
   }
   const head = `${s.claimed} of ${s.seats} spots filled.`
   if (!s.draftAt) return head

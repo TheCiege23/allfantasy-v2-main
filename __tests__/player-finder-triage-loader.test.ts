@@ -118,7 +118,7 @@ describe('loadGameDayTriage — leagues with no lineup to fix (559c56580, kept t
     expect(out.data.rows[0]!.player).toMatchObject({ externalId: 'x-1003', source: 'rolling_insights' })
   })
 
-  it('skips a guillotine team already chopped', async () => {
+  it('skips a Guilly team already chopped', async () => {
     wire([one({ id: 'G', guillotine: true }), one({ id: 'S', starters: ['1002'] })])
     mockChoppedFindMany.mockResolvedValue([{ leagueId: 'G', rosterId: 'r-G' }])
     const out = await loadGameDayTriage(USER, ['G', 'S'], NOW)

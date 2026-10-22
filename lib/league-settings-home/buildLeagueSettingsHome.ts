@@ -23,6 +23,8 @@ export type SettingsSubPageId =
   | 'guillotine-first-chop'
   /** Guillotine: chop schedule, double/no-chop weeks and immunity (lib/guillotine/chopSchedule.ts). */
   | 'guillotine-chop-rules'
+  /** Guillotine: endgame, release timing, tiebreakers, correction wait… (lib/guillotine/guillotineRules.ts). */
+  | 'guillotine-rules'
   | 'playoffs'
   | 'members'
   | 'co-commissioners'
@@ -93,6 +95,8 @@ export type SettingsHomeGuillotine = {
   teamsPerChop?: number
   /** The first chop has happened — the start week can no longer move. */
   locked: boolean
+  /** The server's AF Commissioner check for guillotine rules; null when not reported. */
+  canEditPaidRules?: boolean | null
 }
 
 export type BuildSettingsHomeInput = {
@@ -322,7 +326,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     const g = input.guillotine
     sections.push({
       id: 'guillotine',
-      title: 'Guillotine',
+      title: 'Guilly',
       rows: [
         {
           id: 'first-chop',
@@ -339,6 +343,12 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           ...edit('guillotine-chop-rules'),
         },
         {
+          id: 'league-rules',
+          label: 'League rules',
+          value: 'Endgame · tiebreakers · release timing',
+          ...edit('guillotine-rules'),
+        },
+        {
           id: 'chop-schedule',
           label: 'Chop & waiver schedule',
           value: profile ? `Chop ${profile.chopLabel.replace(/^By /, 'by ')} · Waivers ${profile.waiverLabel}` : 'Weekly',
@@ -347,6 +357,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           id: 'endgame',
           label: 'Endgame',
           value: ENDGAME_LABELS[String(league.guillotineEndgame ?? 'last_team_standing')] ?? titleCase(String(league.guillotineEndgame)),
+          ...edit('guillotine-rules'),
         },
       ],
     })

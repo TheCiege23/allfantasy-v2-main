@@ -187,7 +187,12 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
           </SvkField>
           <SvkField title="Tied vote" hint="What happens when two or more managers get the most votes.">
             {lockNote('tieRule')}
-            <SvkSegmented label="Tied vote" value={draft.tieRule} onChange={v => set('tieRule', v)} disabled={disabled('tieRule')} options={[{ value: 'revote_then_season_points', label: 'Revote, then season points' }, { value: 'season_points_only', label: 'Season points' }]} />
+            <SvkSegmented label="Tied vote" value={draft.tieRule} onChange={v => set('tieRule', v as SurvivorSettingsForm['tieRule'])} disabled={disabled('tieRule')} options={[
+              { value: 'revote_then_rocks', label: 'Revote, then rocks' },
+              { value: 'rocks_immediately', label: 'Rocks immediately' },
+              ...(draft.tieRule === 'revote_then_season_points' ? [{ value: 'revote_then_season_points', label: 'Revote, then season points (legacy)' }] : []),
+              ...(draft.tieRule === 'season_points_only' ? [{ value: 'season_points_only', label: 'Season points (legacy)' }] : []),
+            ]} />
           </SvkField>
           <SvkField title="Immunity" hint="Top score in each tribe going to Tribal Council. After the merge, top score overall.">
             <span className="svk-pill svk-pill-warn">Always on</span>

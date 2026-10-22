@@ -24,7 +24,7 @@ beforeEach(() => {
 })
 
 describe('native league format conversion', () => {
-  it('clears Guillotine flags and variant while preserving unrelated league settings', () => {
+  it('clears Guilly flags and variant while preserving unrelated league settings', () => {
     const patch = nativeFormatPatch('redraft', { inviteCode: 'KEEP', guillotineMode: true, guillotine_mode: true, conceptRules: { concept: 'guillotine', extensions: { note: 'keep' } } })
     expect(patch).toMatchObject({ leagueVariant: 'redraft', guillotineMode: false, survivorMode: false, bestBallMode: false, isDynasty: false,
       settings: { inviteCode: 'KEEP', league_type: 'redraft', guillotine_mode: false, conceptRules: { concept: 'redraft', extensions: { note: 'keep' } } } })
@@ -55,7 +55,7 @@ describe('pre-draft team capacity', () => {
   })
 })
 
-describe('Guillotine intro on mobile', () => {
+describe('Guilly intro on mobile', () => {
   it('uses a shipped video and allows the manager to enter even if media fails', () => {
     const onClose = vi.fn()
     const { container } = render(<GuillotineFirstEntryModal leagueId="L" show onClose={onClose} />)

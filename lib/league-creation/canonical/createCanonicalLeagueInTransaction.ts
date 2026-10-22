@@ -31,6 +31,7 @@ import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
+import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 
 type Tx = Prisma.TransactionClient
@@ -793,6 +794,8 @@ export async function createCanonicalLeagueInTransaction(
     const str = (v: unknown, fallback: string) => (v !== undefined && v !== null ? String(v) : fallback)
     const dynastyFallbackTaxiSlots =
       formatId === 'devy' ? readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6) : 4
+    // NHL / MLB: no prospect pool, so a new league's taxi squad is 0 whatever the request carried.
+    const taxiSlotsForCreate = sportSupportsProspectStash(sport) ? num(ds.taxiSlots, dynastyFallbackTaxiSlots) : 0
     const dynastyFallbackRookieRounds =
       formatId === 'devy' ? readNumber(foundationDefaults.devyConfig, 'rookieDraftRounds', 4) : 4
     // NCAAF's bracket window first, then the sport's own season length (dailySportSeasonShape.ts for
@@ -812,7 +815,7 @@ export async function createCanonicalLeagueInTransaction(
         divisionsEnabled: num(ds.divisionCount, 0) > 0,
         futurePicksYearsOut: num(ds.futurePicksYearsOut, 3),
         waiverTypeRecommended: str(ds.waiverTypeRecommended, 'faab'),
-        taxiSlots: num(ds.taxiSlots, dynastyFallbackTaxiSlots),
+        taxiSlots: taxiSlotsForCreate,
         taxiEligibilityYears: num(ds.taxiEligibilityYears, 1),
         taxiLockBehavior: 'once_promoted_no_return',
         taxiInSeasonMoves: true,
@@ -828,7 +831,7 @@ export async function createCanonicalLeagueInTransaction(
         divisionsEnabled: num(ds.divisionCount, 0) > 0,
         futurePicksYearsOut: num(ds.futurePicksYearsOut, 3),
         waiverTypeRecommended: str(ds.waiverTypeRecommended, 'faab'),
-        taxiSlots: num(ds.taxiSlots, dynastyFallbackTaxiSlots),
+        taxiSlots: taxiSlotsForCreate,
         taxiEligibilityYears: num(ds.taxiEligibilityYears, 1),
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },

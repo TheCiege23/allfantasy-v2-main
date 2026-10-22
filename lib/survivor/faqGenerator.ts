@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { EXILE_KEY_POSITION_BY_SPORT, IDOL_POWER_DESCRIPTIONS } from './constants'
 import { getSportSchedule } from './sportScheduleEngine'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 /**
  * Generate and pin the Main Island FAQ in the league chat channel.
@@ -136,7 +137,7 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
       data: { content: faq, pinnedAt: new Date() },
     })
   } else {
-    await (prisma as any).survivorChatMessage.create({
+    await createSurvivorChatMessage(prisma, {
       data: {
         leagueId,
         channelId: channel.id,
@@ -249,7 +250,7 @@ Welcome to Exile Island. Your main island journey is over — but the game isn't
       data: { content: faq, pinnedAt: new Date() },
     })
   } else {
-    await (prisma as any).survivorChatMessage.create({
+    await createSurvivorChatMessage(prisma, {
       data: {
         leagueId,
         channelId: channel.id,

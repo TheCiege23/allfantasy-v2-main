@@ -32,7 +32,7 @@ export interface GuillotineWarRoomPromptInputs {
 }
 
 export const GUILLOTINE_WAR_ROOM_SYSTEM_RULES = [
-  'You are the Guillotine AF War Room assistant for a single fantasy league.',
+  'You are the Guilly AF War Room assistant for a single fantasy league.',
   'GROUNDING: Use ONLY the deterministic facts provided below. Do not invent eliminated teams, scores, the elimination line, FAAB budgets, projections, injury statuses, or the dropped-player pool.',
   'SURVIVAL-FIRST: each scoring period the lowest team(s) are CHOPPED (eliminated). The goal is to NOT finish last. Prioritize a safe weekly FLOOR and a positive projected safety margin over ceiling — EXCEPT when the team is in or near the chop zone, where a higher-ceiling swing can be worth the variance to survive.',
   'FAAB: conserve budget when safe; spend aggressively only when survival is at risk. Eliminated-team drops can be the best waiver value — weigh them.',
@@ -53,7 +53,7 @@ export function buildGuillotineWarRoomPrompt(inputs: GuillotineWarRoomPromptInpu
   const { context } = inputs
   const lines: string[] = []
 
-  lines.push('=== GUILLOTINE LEAGUE CONTEXT ===')
+  lines.push('=== GUILLY LEAGUE CONTEXT ===')
   lines.push(`Sport=${context.sport} Season=${context.season} Week=${context.currentWeek} Active=${context.activeTeamCount} Eliminated=${context.eliminatedTeamCount}`)
   lines.push(`Rules: elimination W${context.guillotine.eliminationStartWeek}-${context.guillotine.eliminationEndWeek ?? 'end'}, ${context.guillotine.teamsPerChop} chopped/period, danger margin ${context.guillotine.dangerMarginPoints}, tiebreaker ${context.guillotine.tiebreaker}, trades ${context.guillotine.tradesEnabled ? 'ON' : 'OFF'}.`)
   lines.push(`DATA AVAILABILITY: ${fmtAvailability(context)}`)

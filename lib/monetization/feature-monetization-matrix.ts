@@ -394,11 +394,11 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
   },
   {
     key: "guillotine_ai",
-    title: "Guillotine AI",
+    title: "Guilly AI",
     accessType: "subscription_only",
     requiredPlanId: "pro",
     tokenRuleCode: null,
-    lockedReason: "Guillotine AI is part of AF Pro.",
+    lockedReason: "Guilly AI is part of AF Pro.",
     backendEnforcement: "FeatureGate entitlement pattern for premium surface.",
     frontendGateBehavior: "FeatureGate with upgrade CTA.",
     unavailableBehavior: "disable_with_fallback",

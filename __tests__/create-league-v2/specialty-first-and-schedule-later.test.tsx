@@ -110,7 +110,7 @@ describe('a fresh NBA create starts on Survivor', () => {
     }
   })
 
-  it('a sport without Survivor starts on Guillotine, and one without either on Big Brother', () => {
+  it('a sport without Survivor starts on Guilly, and one without either on Big Brother', () => {
     expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NFL' }).leagueType).toBe('guillotine')
     expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NHL' }).leagueType).toBe('guillotine')
     expect(freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'MLB' }).leagueType).toBe('guillotine')

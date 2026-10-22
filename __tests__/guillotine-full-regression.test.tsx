@@ -56,6 +56,7 @@ const getDraftSlotByRosterMock = vi.hoisted(() => vi.fn())
 const releaseChoppedRostersMock = vi.hoisted(() => vi.fn())
 const appendEventMock = vi.hoisted(() => vi.fn())
 const postChopToLeagueChatMock = vi.hoisted(() => vi.fn())
+const postAutomaticGuillotineRecapMock = vi.hoisted(() => vi.fn())
 const standingsMock = vi.hoisted(() => vi.fn())
 const dangerMock = vi.hoisted(() => vi.fn())
 const eventsMock = vi.hoisted(() => vi.fn())
@@ -97,6 +98,7 @@ vi.mock('@/lib/guillotine/GuillotineEventLog', () => ({
   appendEvent: appendEventMock,
   getRecentEvents: eventsMock,
 }))
+vi.mock('@/lib/guillotine/weeklyRecap', () => ({ postAutomaticGuillotineRecap: postAutomaticGuillotineRecapMock }))
 vi.mock('@/lib/guillotine/guillotineChat', () => ({
   postChopToLeagueChat: postChopToLeagueChatMock,
 }))
@@ -116,7 +118,7 @@ vi.mock('@/components/guillotine/GuillotineAIPanel', () => ({
   GuillotineAIPanel: () => <div data-testid="guillotine-ai-panel" />,
 }))
 
-describe('Guillotine full regression matrix', () => {
+describe('Guilly full regression matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([])
@@ -139,7 +141,7 @@ describe('Guillotine full regression matrix', () => {
     prismaMock.redraftRoster.update.mockResolvedValue({ id: 'ok' })
   })
 
-  it('supports all 7 sports with valid guillotine config and waivers after chop', () => {
+  it('supports all 7 sports with valid Guilly config and waivers after chop', () => {
     expect(SUPPORTED_SPORTS).toEqual(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])
 
     for (const sport of SUPPORTED_SPORTS) {
@@ -159,7 +161,7 @@ describe('Guillotine full regression matrix', () => {
     }
   })
 
-  it('supports guillotine draft types for all sports (snake/linear/auction)', () => {
+  it('supports Guilly draft types for all sports (snake/linear/auction)', () => {
     expect(DRAFT_TYPES_BY_LEAGUE_FORMAT.guillotine).toEqual(['snake', 'linear', 'auction'])
 
     for (const sport of SUPPORTED_SPORTS) {
@@ -436,11 +438,25 @@ describe('Guillotine full regression matrix', () => {
     resolveRedraftRosterIdsMock.mockResolvedValue(new Map([['r-low', 'rr-low']]))
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'rr-low', teamName: 'Lowest Team', ownerName: 'u1', ownerId: 'u1' }])
     postChopToLeagueChatMock.mockRejectedValueOnce(new Error('chat down'))
+    postAutomaticGuillotineRecapMock.mockRejectedValueOnce(new Error('recap down'))
 
     const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, systemUserId: 'owner' })
 
     expect(out?.choppedRosterIds).toEqual(['r-low'])
     expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
+    // The weekly recap follows the announcement, from this week's scores, and a failure in either
+    // never undoes the chop (lib/guillotine/weeklyRecap.ts).
+    expect(postAutomaticGuillotineRecapMock).toHaveBeenCalledWith({
+      leagueId: 'league-1',
+      week: 3,
+      season: undefined,
+      scores: [
+        { rosterId: 'r-low', periodPoints: 77 },
+        { rosterId: 'r-mid', periodPoints: 100 },
+      ],
+      choppedRosterIds: ['r-low'],
+      authorUserId: 'owner',
+    })
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop_animation_trigger', expect.any(Object))
   })
 

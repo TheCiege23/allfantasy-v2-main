@@ -89,7 +89,7 @@ describe('NFL redraft launch blockers', () => {
     )
   })
 
-  it('recalculates standings only from complete scored matchups', async () => {
+  it('recalculates standings only from finalized scored matchups', async () => {
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'home' }, { id: 'away' }])
     prismaMock.redraftMatchup.findMany.mockResolvedValue([
       {
@@ -98,7 +98,7 @@ describe('NFL redraft launch blockers', () => {
         awayRosterId: 'away',
         homeScore: 101.25,
         awayScore: 99.1,
-        status: 'active',
+        status: 'final',
         lineupSnapshots: { redraftScoring: { isComplete: true } },
         week: 1,
       },
@@ -110,6 +110,16 @@ describe('NFL redraft launch blockers', () => {
         awayScore: 0,
         status: 'active',
         lineupSnapshots: { redraftScoring: { isComplete: false } },
+        week: 2,
+      },
+      {
+        id: 'matchup-live',
+        homeRosterId: 'home',
+        awayRosterId: 'away',
+        homeScore: 999,
+        awayScore: 1,
+        status: 'active',
+        lineupSnapshots: { redraftScoring: { isComplete: true } },
         week: 2,
       },
     ])

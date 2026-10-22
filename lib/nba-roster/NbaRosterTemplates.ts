@@ -56,7 +56,7 @@ export const NBA_ROSTER_TEMPLATES: NbaRosterTemplate[] = [
     slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 2, UTIL: 2, BN: 5, IL: 2 } },
   { key: 'category', label: 'Category League', leagueTypes: ['redraft'], description: 'Category-based scoring roster.',
     slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 2, UTIL: 2, BN: 4, IL: 2 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine roster.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean Guilly roster.',
     slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 1, UTIL: 2, BN: 2 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Standard survivor roster.',
     slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 1, UTIL: 1, BN: 4 } },

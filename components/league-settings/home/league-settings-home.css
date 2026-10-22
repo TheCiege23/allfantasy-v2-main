@@ -208,6 +208,22 @@
 }
 .af-core .lsh-primary:disabled { opacity: 0.45; cursor: default; }
 
+/* One save bar for every settings page (SettingsSaveScope.tsx): status on the left, actions right;
+ * stacks on a narrow phone so neither button shrinks below a comfortable tap target. */
+.af-core .lsh-savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+/* On the phone sub-page it runs edge to edge, like the other sticky footers. */
+.af-core .lsh-subpage-body .lsh-savebar { margin: 16px -16px -16px; }
+.af-core .lsh-savebar-status { flex: 1 1 140px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.af-core .lsh-savebar-actions { display: flex; gap: 8px; flex: 1 1 220px; }
+.af-core .lsh-savebar-actions .lsh-primary,
+.af-core .lsh-savebar-actions .lsh-secondary { flex: 1; width: auto; height: 44px; }
+
 /* First chop week editor */
 .af-core .lsh-field-card {
   padding: 16px;

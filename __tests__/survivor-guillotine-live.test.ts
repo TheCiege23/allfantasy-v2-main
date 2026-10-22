@@ -4,7 +4,7 @@ import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSetti
 import { parseSGActionCommand } from '@/lib/survivor-guillotine/powers'
 import { getRosterPlayerIds, removePlayerFromRosterData } from '@/lib/waiver-wire/roster-utils'
 
-describe('Survivor Guillotine live safeguards', () => {
+describe('Survivor Guilly live safeguards', () => {
   it('defaults trades off and only enables them by saved commissioner choice', () => {
     const league = { leagueVariant: 'survivor_guillotine', settings: { survivorGuillotine: { tradesEnabled: false } },
       lockAllMoves: false, bestBallMode: false, guillotineMode: false } as unknown as League

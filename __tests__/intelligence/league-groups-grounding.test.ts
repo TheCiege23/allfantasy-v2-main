@@ -15,7 +15,7 @@ const h = vi.hoisted(() => ({ league: vi.fn(), teams: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findFirst: h.league }, leagueTeam: { findMany: h.teams } } }))
 vi.mock('@/lib/league-context/leagueContextService', () => ({
   getLeagueContext: vi.fn(async () => ({
-    name: 'Survivor All-Stars Guillotine',
+    name: 'Survivor All-Stars Guilly',
     teams: 22,
     scoring: { format: 'ppr', idp: { emphasis: null } },
     variant: { idp: false, superflex: false, dynasty: false, keeper: false, bestBall: false },
@@ -45,7 +45,7 @@ const TEAMS: Array<[string, string, string]> = [
 ]
 
 function league(settings: Record<string, unknown>) {
-  h.league.mockResolvedValue({ name: 'Survivor All-Stars Guillotine', platform: 'sleeper', platformLeagueId: '100000000000000001', leagueType: 'guillotine', settings })
+  h.league.mockResolvedValue({ name: 'Survivor All-Stars Guilly', platform: 'sleeper', platformLeagueId: '100000000000000001', leagueType: 'guillotine', settings })
 }
 
 beforeEach(() => {

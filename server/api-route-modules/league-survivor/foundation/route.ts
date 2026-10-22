@@ -32,6 +32,7 @@ import { finishCouncilReadIfComplete } from '@/lib/survivor/survivorCouncilReadF
 import { sendPushToUser } from '@/lib/push-notifications'
 import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
 import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick } from '@/lib/survivor/survivorNbaWeeklyScoring'
+import { createSurvivorChatMessage } from '@/lib/survivor/survivorChatBridge'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -536,7 +537,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       const current = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId, phase: 'revote', isRevealed: true, isTie: true, tiePhase: 'commissioner_tiebreak_required' }, select: { id: true } })
       if (!current) return false
       await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { eliminatedUserId, eliminatedRosterId: player.redraftRosterId, eliminatedName: player.displayName, isTie: false, tiePhase: 'commissioner_resolved', status: 'revealed' } })
-      await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\nThe revote and finalized season points were tied. The independent commissioner selected ${player.displayName}. The choice is in the public audit.` } })
+      await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\nThe revote and finalized season points were tied. The independent commissioner selected ${player.displayName}. The choice is in the public audit.` } })
       await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'tribal', action: 'exact_tie_commissioner_decision', actorUserId: userId, targetUserId: eliminatedUserId, relatedEntityId: councilId, relatedEntityType: 'council', data: { candidates: council.tiePlayerIds }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
       return true
     })

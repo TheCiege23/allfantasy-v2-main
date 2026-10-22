@@ -603,8 +603,8 @@ describe('foreign roster ids never reach a Sleeper-id read', () => {
  */
 describe('trade legality follows the concept catalog', () => {
   it.each([
-    ['a plain guillotine league', { leagueType: 'guillotine', settings: { ...LEAGUE.settings, faab_budget: 1000 } }],
-    ['a confirmed guillotine league', { leagueType: 'guillotine', settings: { ...LEAGUE.settings, leagueTypeConfirmation: { type: 'guillotine' } } }],
+    ['a plain Guilly league', { leagueType: 'guillotine', settings: { ...LEAGUE.settings, faab_budget: 1000 } }],
+    ['a confirmed Guilly league', { leagueType: 'guillotine', settings: { ...LEAGUE.settings, leagueTypeConfirmation: { type: 'guillotine' } } }],
     ['a survivor league', { leagueType: 'survivor', settings: { ...LEAGUE.settings } }],
   ])('%s trades: packages, and no bid card', async (_name, over) => {
     mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, ...over })

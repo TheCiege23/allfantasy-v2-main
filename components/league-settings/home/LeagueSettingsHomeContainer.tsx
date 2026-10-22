@@ -17,6 +17,7 @@ import { leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invit
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettingsHome'
 import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
+import { GuillotineRulesEditor } from './GuillotineRulesEditor'
 import { GuillotineChopRulesEditor, patchChopRules } from './GuillotineChopRulesEditor'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
@@ -116,6 +117,7 @@ export function LeagueSettingsHomeContainer({
           scheduleLines: Array.isArray(cfg.scheduleLines) ? (cfg.scheduleLines as unknown[]).filter((l): l is string => typeof l === 'string') : [],
           advanced: cfg.advanced && typeof cfg.advanced === 'object' ? (cfg.advanced as GuillotineAdvanced) : null,
           teamsPerChop: num(cfg.teamsPerChop) ?? 1,
+          canEditPaidRules: typeof cfg.canEditPaidRules === 'boolean' ? cfg.canEditPaidRules : null,
         })
       })
     }
@@ -197,9 +199,20 @@ export function LeagueSettingsHomeContainer({
               baseChops={guillotineState.teamsPerChop ?? 1}
               startWeek={guillotineState.firstChopWeek}
               endWeek={guillotineState.endWeek ?? profile?.regularSeasonWeeks ?? 18}
-              hasAfCommissionerSub={hasAfCommissionerSub}
+              hasAfCommissionerSub={guillotineState.canEditPaidRules ?? hasAfCommissionerSub}
               save={patchChopRules(leagueId)}
               onSaved={(advanced, lines) => setGuillotineState((s) => (s ? { ...s, advanced, scheduleLines: lines } : s))}
+            />
+          ),
+        }
+      }
+      if (id === 'guillotine-rules') {
+        return {
+          title: SUB_PAGE_TITLES[id],
+          content: (
+            <GuillotineRulesEditor
+              leagueId={leagueId}
+              onSaved={(rules) => setGuillotineState((s) => (s ? { ...s, teamsPerChop: rules.teamsPerChop, endWeek: rules.eliminationEndWeek } : s))}
             />
           ),
         }

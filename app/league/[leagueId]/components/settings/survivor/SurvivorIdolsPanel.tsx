@@ -1,6 +1,7 @@
 'use client'
 
 import { SurvivorIdolSetup } from '@/components/survivor/SurvivorIdolSetup'
+import { SurvivorIdolExpirySection } from './SurvivorIdolExpirySection'
 import type { SurvivorSettingsPanelProps } from './types'
 
 /**
@@ -10,6 +11,7 @@ import type { SurvivorSettingsPanelProps } from './types'
 export function SurvivorIdolsPanel({ leagueId, canEdit }: SurvivorSettingsPanelProps) {
   return (
     <div className="px-4 py-6 sm:px-6">
+      <SurvivorIdolExpirySection leagueId={leagueId} canEdit={canEdit} />
       <SurvivorIdolSetup leagueId={leagueId} canEdit={canEdit} />
     </div>
   )

@@ -4,7 +4,7 @@ The working checklist for the **redraft** commissioner experience. We finish red
 to dynasty, keeper and the specialty formats. Product source: `docs/AF_COMMISSIONER_SETTINGS_SPEC.md`
 (PR #2494). **Free** = every commissioner; **Plan** = the Commissioner subscription; **Free / Plan** = a
 manual or partial version is free and the automation or full version is on the plan; **no gate** =
-the code checks no entitlement and the tier is still to be decided.
+the code checks no entitlement and the tier is still to be decided (none left in this list).
 
 **Status key:** ✅ merged to `main` · 🟡 open PR (not merged) · ⬜ planned, not started.
 
@@ -13,43 +13,43 @@ the code checks no entitlement and the tier is still to be decided.
 worker, which follows `worker-release` and moves about once a day. Check
 `/api/af-debug/sha` before saying a feature is in production.
 
-_Last updated: 2026-10-20._
+_Last updated: 2026-10-20 — every PR in the three built sections has merged (#2507 last, on 2026-10-22). Tiers set 2026-10-20: rule templates and the reputation badge are Free; the constitution builder stays Free with Plan extras._
 
 ## Running the week
 
 | | Feature | Tier | PR |
 |---|---|---|---|
-| 🟡 | **Weekly commissioner checklist** — "This week · week N": scores final, waivers running, lineups set, trades waiting on you, dues, deadline heads-ups; each done or to do, linked to its fix | Free | #2575 |
+| ✅ | **Weekly commissioner checklist** — "This week · week N": scores final, waivers running, lineups set, trades waiting on you, dues, deadline heads-ups; each done or to do, linked to its fix | Free | #2575 |
 | ✅ | Commish inbox — keepers, AI alerts, integrity flags, join and adoption requests, dues, payouts in the action queue | Free | #2500 |
 | ✅ | Dispute desk — members file, commissioners rule | Free | #2501 |
-| 🟡 | Lineup-integrity monitor — finished-week lineups that could not score (latest week free, full season on the plan) | Free / Plan | #2507 |
-| 🟡 | Tanking scan fix — reads the week's saved lineup | Free | #2508 |
-| 🟡 | Deadline autopilot — 72h / 24h / 1h reminders to managers who still have to act (ships off; turning on `DEADLINE_AUTOPILOT_ENABLED` on the worker is the owner's call) | Free / Plan | #2503 |
-| 🟡 | Weekly recap review — edit Tuesday's recap before it posts | Free | #2506 |
-| 🟡 | Scheduled announcements — write it now, posted at the time you pick | Free | #2565 |
+| ✅ | Lineup-integrity monitor — finished-week lineups that could not score (latest week free, full season on the plan) | Free / Plan | #2507 |
+| ✅ | Tanking scan fix — reads the week's saved lineup | Free | #2508 |
+| ✅ | Deadline autopilot — 72h / 24h / 1h reminders to managers who still have to act (ships off: set `DEADLINE_AUTOPILOT_ENABLED=1` — exactly `1` — on the `allfantasy-v2-worker` service; live once the code reaches `worker-release`) | Free / Plan | #2503 |
+| ✅ | Weekly recap review — edit Tuesday's recap before it posts | Free | #2506 |
+| ✅ | Scheduled announcements — write it now, posted at the time you pick | Free | #2565 |
 
 ## Rulings and control
 
 | | Feature | Tier | PR |
 |---|---|---|---|
-| 🟡 | Score adjustments — add or take away points per matchup, with a reason in the audit log | Free | #2540 |
-| 🟡 | Co-commissioner permissions — up to 2, each limited to scoring / rosters / trades / money / chat / league setup | Free | #2564 |
-| 🟡 | Settings lock — lock areas for the season; mid-season changes need a league vote | Free | #2568 |
+| ✅ | Score adjustments — add or take away points per matchup, with a reason in the audit log | Free | #2540 |
+| ✅ | Co-commissioner permissions — up to 2, each limited to scoring / rosters / trades / money / chat / league setup | Free | #2564 |
+| ✅ | Settings lock — lock areas for the season; mid-season changes need a league vote | Free | #2568 |
 | ✅ | Trade deadline enforced server-side (other session) | Free | #2554 |
-| 🟡 | Trade deadline day + time — trades close at the moment the commissioner picks (league timezone) or after the deadline week, whichever comes first | Free | #2582 |
+| ✅ | Trade deadline day + time — trades close at the moment the commissioner picks (league timezone) or after the deadline week, whichever comes first | Free | #2582 |
 
 ## Rules, playoffs and the league's identity
 
 | | Feature | Tier | PR |
 |---|---|---|---|
-| 🟡 | Commissioner-granted byes + bracket format picker (odd playoff counts stay free) | Free / Plan | #2498 |
-| ✅ | Playoff seeding by record with a head-to-head tiebreak (other session) | Free | #2557 |
-| 🟡 | Custom tiebreaker order — head-to-head, points for, fewest points against, all-play, coin flip, in the commissioner's order; standings and playoff seeds both follow it | Plan | #2590 |
-| 🟡 | Constitution builder — generated from settings, versioned, amended by league vote | Free / Plan | #2505 |
-| 🟡 | Rule templates library — save, share, start leagues from them | no gate | #2525 |
-| 🟡 | Draft-day kit — order reveal / lottery show, printable board, absent-manager clock | Free | #2518 |
-| 🟡 | Scenario explainer — #1 pick and elimination odds | Free | #2510 |
-| 🟡 | Commish reputation — opt-in "Well-run league" badge | no gate | #2521 |
+| ✅ | Commissioner-granted byes + bracket format picker (odd playoff counts stay free) | Free / Plan | #2498 |
+| ✅ | Playoff seeding by record (other session). Its head-to-head-first tiebreak was reversed by #2590: points for now breaks record ties first, everywhere (owner decision 2026-10-20) | Free | #2557 |
+| ✅ | Custom tiebreaker order — head-to-head, points for, fewest points against, all-play, coin flip, in the commissioner's order; standings and playoff seeds both follow it | Plan | #2590 |
+| ✅ | Constitution builder — generated from settings, versioned, amended by league vote | Free / Plan | #2505 |
+| ✅ | Rule templates library — save, share, start leagues from them | Free | #2525 |
+| ✅ | Draft-day kit — order reveal / lottery show, printable board, absent-manager clock | Free | #2518 |
+| ✅ | Scenario explainer — #1 pick and elimination odds | Free | #2510 |
+| ✅ | Commish reputation — opt-in "Well-run league" badge | Free | #2521 |
 
 ## Next for redraft (the plan, in order)
 

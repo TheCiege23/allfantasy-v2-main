@@ -35,7 +35,7 @@ export function sgTribeCountOptions(teamCount: number): SGTribeCountOption[] {
     const big = Math.ceil(teamCount / count)
     const sizes = small === big ? `${small} each` : `${small}–${big} each`
     const reason = count > SG_ENGINE_MAX_TRIBES
-      ? `The Survivor Guillotine engine runs ${SG_ENGINE_MIN_TRIBES}–${SG_ENGINE_MAX_TRIBES} tribes.`
+      ? `The Survivor Guilly engine runs ${SG_ENGINE_MIN_TRIBES}–${SG_ENGINE_MAX_TRIBES} tribes.`
       : count > teamCount ? 'More tribes than managers.' : null
     return { count, sizes, allowed: reason === null, reason }
   })

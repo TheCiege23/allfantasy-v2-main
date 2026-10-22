@@ -68,7 +68,7 @@ export const NCAAF_ROSTER_TEMPLATES: NcaafRosterTemplate[] = [
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, SUPERFLEX: 1, BN: 8 } },
   { key: 'idp', label: 'IDP', leagueTypes: ['redraft', 'dynasty'], description: 'College IDP roster.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, DL: 2, LB: 2, DB: 2, IDP_FLEX: 1, BN: 8 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, BN: 5 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Survivor roster.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, BN: 7 } },
