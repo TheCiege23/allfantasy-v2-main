@@ -9,7 +9,8 @@ export function nativeCategoryScoringContext(settings: unknown, sport: string) {
   const upper = sport.toUpperCase()
   const supported = upper === 'NBA' ? ['nba_8cat', 'nba_8cat_standard', 'nba_9cat'] : upper === 'MLB' ? ['mlb_5x5', 'mlb_6x6'] : upper === 'NHL' ? ['nhl_standard'] : []
   if (typeof presetId !== 'string' || !supported.includes(presetId) || !['h2h_category', 'roto'].includes(String(mode))) return null
-  if (upper === 'NBA' && mode !== 'h2h_category') return null
+  // NBA rotisserie is offered on the 9-cat set only.
+  if (upper === 'NBA' && mode === 'roto' && presetId !== 'nba_9cat') return null
   if (mode === 'roto' ? recordMode !== 'roto' : recordMode !== 'each' && recordMode !== 'most') return null
   const categories = resolveLeagueCategories(s, presetId)
   if (!categories) return null
@@ -18,3 +19,11 @@ export function nativeCategoryScoringContext(settings: unknown, sport: string) {
     categories: categories.map(({id, label, direction, computation}) => ({id, label, direction, computation})) }
 }
 export type NativeCategoryScoringContext = ReturnType<typeof nativeCategoryScoringContext>
+
+/**
+ * A rotisserie league, from its stored rules alone. Roto has no weekly opponent: its matchup rows are
+ * only scoring containers (scores pinned to 0), and standings are season-long category ranks.
+ */
+export function isRotisserieLeagueSettings(settings: unknown): boolean {
+  return Boolean(settings && typeof settings === 'object' && !Array.isArray(settings) && (settings as Record<string, unknown>).scoring_mode === 'roto')
+}

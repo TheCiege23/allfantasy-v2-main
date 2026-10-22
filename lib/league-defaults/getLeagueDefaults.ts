@@ -256,7 +256,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const format = normalizeFormat(input.format)
   const engineDraftType = mapCanonicalDraftTypeToEngineCore(input.draftType)
   const scoringPreset = String(input.scoringPreset ?? '').trim()
-  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat'].includes(scoringPreset)
+  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat', 'nba_9cat_roto'].includes(scoringPreset)
   const categoryContext = { sport, leagueType: format, idpSelected: false }
   if (nbaCategory && !isScoringPresetValidForContext(scoringPreset, categoryContext)) throw new Error('NBA category scoring requires redraft, dynasty or keeper.')
   const categorySettings = nbaCategory ? buildScoringFromPresetId(scoringPreset, categoryContext).scoringSettings : {}
