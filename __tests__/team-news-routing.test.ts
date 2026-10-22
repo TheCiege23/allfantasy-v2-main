@@ -247,7 +247,7 @@ describe("a player story goes to the followers of the team he is on NOW (his Sle
 
   it('Kaleb Johnson — registry PIT, Sleeper Green Bay Packers — goes to Packers fans, not Steelers fans', async () => {
     h.sleeper = [sleeperRow('12507', 'Kaleb Johnson', 'RB', 'Green Bay Packers')]
-    h.news = [story('Kaleb Johnson', 'PIT', 'Kaleb Johnson (ankle) limited at practice')]
+    h.news = [story('Kaleb Johnson', 'PIT', 'Kaleb Johnson (ankle) ruled out for Sunday')]
     await dispatchPendingPlayerNewsNotifications()
     expect(toldUnder('followed_teams')).toEqual(['packers-fan'])
     expect(calls()[0].meta.team).toBe('GB')
@@ -255,7 +255,7 @@ describe("a player story goes to the followers of the team he is on NOW (his Sle
 
   it('no readable Sleeper row keeps the registry team (what routed before)', async () => {
     h.sleeperThrows = true
-    h.news = [story('Kaleb Johnson', null, 'Kaleb Johnson (ankle) limited at practice')]
+    h.news = [story('Kaleb Johnson', null, 'Kaleb Johnson (ankle) ruled out for Sunday')]
     await dispatchPendingPlayerNewsNotifications()
     expect(toldUnder('followed_teams')).toEqual(['steelers-fan'])
   })

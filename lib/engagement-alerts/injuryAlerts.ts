@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { resolvePlayerNewsIdentity, resolvePlayerNewsRecipients, FINISHED_SEASON_STATUSES, type ResolvedPlayerIdentity } from '@/lib/notifications/playerNewsRecipients'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { planPlayerNews, markPlayerNewsTold, type PlayerNewsSubject } from '@/lib/notifications/playerNewsGate'
+import { statusBucket, isMeaningfulStatusChange } from '@/lib/notifications/playerNewsStatus'
 
 export const isUnavailableStatus = (status: string) => /^(out|ir|injured reserve|inactive|suspended|out for season|ruled out)$/i.test(status.trim())
 export function importedPlayerIsStarting(data: unknown, playerId: string): boolean {
@@ -38,6 +40,13 @@ async function startingLeagues(identity: ResolvedPlayerIdentity, userId: string,
   return [...leagues]
 }
 
+/** "🚨 Bijan Robinson is OUT — still in your starting lineup", or a count when several starters are out. */
+export function lineupAlertTitle(changes: Array<{ playerName: string; status: string }>): string {
+  const label = (status: string) => /ir|injured reserve/i.test(status) ? 'on IR' : /suspend/i.test(status) ? 'SUSPENDED' : /inactive/i.test(status) ? 'INACTIVE' : 'OUT'
+  if (changes.length === 1) return `🚨 ${changes[0]!.playerName} is ${label(changes[0]!.status)} — still in your starting lineup`
+  return `🚨 ${changes.length} of your starters are out — fix your lineup`
+}
+
 /** Run after a successful injury sync, including unchanged rows so failed sends can retry. */
 export async function notifySyncedInjuries(sport: string, now = new Date()): Promise<{ delivered: number; errors: number }> {
   const rows = await prisma.sportsInjury.findMany({ where: { sport, expiresAt: { gt: now }, fetchedAt: { gte: new Date(now.getTime() - 10 * 60_000) } }, orderBy: { fetchedAt: 'desc' } })
@@ -47,8 +56,8 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
   const seen = new Set<string>()
   const seenPlayers = new Set<string>()
   const batches = new Map<string, {
-    userId: string; team: string; leagueIds: string[]; lineup: boolean;
-    changes: Array<{ playerName: string; status: string; key: string; receiptKey: string }>;
+    userId: string; team: string; leagueIds: string[]; lineup: boolean; starter: boolean; route: 'instant' | 'digest';
+    changes: Array<{ playerName: string; status: string; key: string; receiptKey: string; subject: PlayerNewsSubject }>;
   }>()
   const observations: Array<{ stateKey: string; status: string }> = []
   let delivered = 0
@@ -66,9 +75,20 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       // Undated feeds need an observed status transition, not first-snapshot fanout.
       const stateKey = `injury-observation:v1:${sport}:${identity.identityId}:${row.source}`
       const healthyStatus = /^(active|healthy|available)$/i.test(status)
+      const previous = await prisma.sportsDataCache.findUnique({ where: { cacheKey: stateKey } })
+      const previousStatus = (previous?.data as { status?: string } | null)?.status
+      /*
+       * Owner's rule (2026-10-22): only a change that matters. The same status again, a practice
+       * report, or anything about a player already on IR other than his return is recorded and not sent.
+       */
+      if (!isMeaningfulStatusChange(previousStatus ? statusBucket(previousStatus) : null, statusBucket(status))) {
+        if (previousStatus !== status) {
+          await prisma.sportsDataCache.upsert({ where: { cacheKey: stateKey }, update: { data: { status } },
+            create: { cacheKey: stateKey, data: { status }, expiresAt: new Date(now.getTime() + 30 * 86400_000) } })
+        }
+        continue
+      }
       if (!occurredAt || healthyStatus) {
-        const previous = await prisma.sportsDataCache.findUnique({ where: { cacheKey: stateKey } })
-        const previousStatus = (previous?.data as { status?: string } | null)?.status
         const priorInjury = /^(out|ir|injured reserve|inactive|suspended|out for season|ruled out|questionable|doubtful|probable|day.to.day|injured)$/i.test(previousStatus ?? '')
         // A dated healthy snapshot can contain an ordinary game recap. Only a
         // previously observed injury-to-healthy transition is a recovery alert.
@@ -87,17 +107,24 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       if (audience.degraded) errors++
       const team = identity.currentTeam?.trim() || row.team?.trim()
       if (!team) continue
+      const subject: PlayerNewsSubject = { playerKey: identity.identityId, bucket: statusBucket(status) }
       for (const [userId, leagueIds] of audience.byUser) {
-        const starters = isUnavailableStatus(status) ? await startingLeagues(identity, userId, leagueIds) : []
-        const lineup = starters.length > 0
-        const scopedLeagues = [...(lineup ? starters : leagueIds)].sort()
+        // Starter for ANY status now, not only OUT: it decides push-now versus the daily digest.
+        const starters = await startingLeagues(identity, userId, leagueIds)
+        const starter = starters.length > 0
+        const lineup = starter && isUnavailableStatus(status)
+        const scopedLeagues = [...(starter ? starters : leagueIds)].sort()
         const receiptKey = 'injury-team-member:v1:' + key + ':' + (lineup ? 'lineup' : 'update') + ':' + userId
         const receipt = await prisma.sportsDataCache.findUnique({ where: { cacheKey: receiptKey } })
         if ((receipt?.data as { delivered?: boolean } | null)?.delivered) continue
+        // The player-news gate: the person's level, and one alert per player and status a day across senders.
+        const plan = await planPlayerNews([userId], subject, () => (starter ? 'starter' : 'rostered'))
+        const route = plan.instant.length ? 'instant' : plan.digest.length ? 'digest' : null
+        if (!route) continue
         // Keep league override scopes separate so muted leagues cannot leak player updates.
-        const batchKey = JSON.stringify([userId, sport, team.toUpperCase(), lineup, scopedLeagues])
-        const batch = batches.get(batchKey) ?? { userId, team, leagueIds: scopedLeagues, lineup, changes: [] }
-        batch.changes.push({ playerName: row.playerName, status, key, receiptKey })
+        const batchKey = JSON.stringify([userId, sport, team.toUpperCase(), lineup, starter, route, scopedLeagues])
+        const batch = batches.get(batchKey) ?? { userId, team, leagueIds: scopedLeagues, lineup, starter, route, changes: [] }
+        batch.changes.push({ playerName: row.playerName, status, key, receiptKey, subject })
         batches.set(batchKey, batch)
       }
       if (!audience.degraded) observations.push({ stateKey, status })
@@ -112,18 +139,23 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
         userIds: [batch.userId], leagueIds: batch.leagueIds,
         category: batch.lineup ? 'lineup_alerts' : 'injury_alerts',
         type: batch.lineup ? 'injured_starter' : 'injury_update',
-        title: batch.team + ': ' + (batch.lineup ? 'starting lineup injury' : 'injury') + ' update',
+        title: batch.lineup ? lineupAlertTitle(changes) : batch.team + ': injury update',
         body: changes.map(c => c.playerName + ': ' + c.status).join('\n') +
-          (batch.lineup ? '\nReview your lineup and available replacements. Locked players may not be moved.' : ''),
+          (batch.lineup ? '\nStill in your starting lineup' + (batch.leagueIds.length > 1 ? ` in ${batch.leagueIds.length} leagues` : '') +
+            '. Swap in a replacement before the game locks.' : ''),
         actionHref: '/league/' + encodeURIComponent(batch.leagueIds[0]) + '?tab=team',
         actionLabel: batch.lineup ? 'Review lineup' : 'View team',
         severity: changes.some(c => isUnavailableStatus(c.status)) ? 'high' : 'medium',
-        dedupePrefix: sourceKey, skipChannels: { sms: true },
-        meta: { sport, team: batch.team, playerCount: changes.length, eventKey: digest, pushTag: sourceKey },
+        dedupePrefix: sourceKey,
+        // Instant is push + bell; digest is the bell only. Never an email — the daily digest carries it.
+        skipChannels: batch.route === 'instant' ? { sms: true, email: true } : { sms: true, email: true, push: true },
+        meta: { sport, team: batch.team, playerCount: changes.length, eventKey: digest, pushTag: sourceKey,
+          playerNews: { playerName: changes.map(c => c.playerName).join(', '), team: batch.team, status: changes.map(c => c.status).join(', '), starter: batch.starter, delivery: batch.route } },
       })
       delivered += result.delivered
       errors += result.failed
       if (!result.failed) {
+        for (const change of changes) await markPlayerNewsTold([batch.userId], change.subject, now)
         for (const change of changes) {
           await prisma.sportsDataCache.upsert({
             where: { cacheKey: change.receiptKey }, update: { data: { delivered: true } },
