@@ -431,19 +431,21 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
     where: { leagueId, isActive: true },
     select: { id: true },
   })
-  const tribeId =
+  const fallbackTribeId =
     immune && tribes.some((t) => t.id !== immune)
       ? tribes.find((t) => t.id !== immune)?.id ?? null
       : tribes[0]?.id ?? null
+  // The lowest scoring non-immune tribe attends, planned season or not. The unplanned path used
+  // to send the FIRST non-immune tribe, which with three or more tribes was simply the wrong one.
+  const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: gs.currentWeek, isFinalized: true, countedTowardTribeTotal: true, tribeId: { not: null } }, select: { tribeId: true, finalScore: true } })
+  const totals = new Map<string, number>()
+  for (const score of scores) if (score.tribeId) totals.set(score.tribeId, (totals.get(score.tribeId) ?? 0) + score.finalScore)
+  const losingTribe = [...totals.entries()].filter(([id]) => id !== immune).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? fallbackTribeId
+  const tribeId = losingTribe
 
   if (plan) {
     const prior = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week: gs.currentWeek }, select: { id: true } })
     if (prior) return
-    // With more than two tribes, the lowest scoring nonimmune tribe attends.
-    const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: gs.currentWeek, isFinalized: true, countedTowardTribeTotal: true, tribeId: { not: null } }, select: { tribeId: true, finalScore: true } })
-    const totals = new Map<string, number>()
-    for (const score of scores) if (score.tribeId) totals.set(score.tribeId, (totals.get(score.tribeId) ?? 0) + score.finalScore)
-    const losingTribe = [...totals.entries()].filter(([id]) => id !== immune).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? tribeId
     const merged = Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase)
     const opened = await openVerifiedCouncil(leagueId, { week: gs.currentWeek, attendingTribeId: merged ? null : losingTribe, voteDeadlineAt: deadline })
     if (!opened.ok) throw new Error(opened.error)

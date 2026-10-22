@@ -78,12 +78,14 @@ const { prisma, loadCouncilContext } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma }))
+vi.mock('@/lib/survivor/survivorHostIndependence', () => ({ hasIndependentSurvivorHost: vi.fn(async () => true) }))
 vi.mock('@/lib/survivor/survivorCouncilService', async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)()
   return { ...actual, loadCouncilContext }
 })
 
 import { tallyCouncil } from '@/lib/survivor/survivorVoteTallyService'
+import { hasIndependentSurvivorHost } from '@/lib/survivor/survivorHostIndependence'
 import { submitVote } from '@/lib/survivor/survivorVoteService'
 
 type IdolPlay = {
@@ -317,6 +319,44 @@ describe('tallyCouncil', () => {
     expect(res.tally.tiePhase).toBe('revote_required')
     expect(res.tally.eliminatedUserId).toBeNull()
     expect(res.status).toBe('tie_pending')
+  })
+
+  function revoteStillTied() {
+    const ctx = makeCtx()
+    loadCouncilContext.mockResolvedValue({ ...ctx, council: { ...ctx.council, phase: 'revote', tiePlayerIds: ['c', 'd'] } })
+    ;(prisma as unknown as Record<string, { findMany: ReturnType<typeof vi.fn> }>).survivorWeeklyScore = {
+      findMany: vi.fn(async () => [{ userId: 'c', finalScore: 120.5 }, { userId: 'd', finalScore: 120.5 }]),
+    }
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+    ])
+  }
+
+  it('a revote tie on equal season points waits for a commissioner who does not play', async () => {
+    revoteStillTied()
+    vi.mocked(hasIndependentSurvivorHost).mockResolvedValue(true)
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.tally.isTie).toBe(true)
+    expect(res.tally.tiePhase).toBe('commissioner_tiebreak_required')
+    expect(res.tally.eliminatedUserId).toBeNull()
+  })
+
+  it('the same tie goes to the stones when the commissioner plays, so the week never stalls', async () => {
+    revoteStillTied()
+    vi.mocked(hasIndependentSurvivorHost).mockResolvedValue(false)
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.tally.isTie).toBe(false)
+    expect(res.tally.tiePhase).toBe('stones_decided')
+    expect(['c', 'd']).toContain(res.tally.eliminatedUserId)
+    expect(res.tally.eliminatedUserId && res.tally.eliminatedRosterId).toBeTruthy()
+    // Reproducible: the same council draws the same stone.
+    const again = await tallyCouncil('league-1', 'council-1')
+    expect(again.ok && again.tally.eliminatedUserId).toBe(res.tally.eliminatedUserId)
   })
 
   it('refuses to tally while the window is open', async () => {

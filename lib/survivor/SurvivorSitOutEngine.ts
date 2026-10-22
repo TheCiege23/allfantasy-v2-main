@@ -9,6 +9,7 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { readWeekGames } from '@/lib/redraft/weekGames'
 import { randomInt } from 'node:crypto'
 import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 const CHIMMY_HOST_USER_ID = 'survivor-ai-host'
 const CHIMMY_HOST_NAME = '@Chimmy'
@@ -217,7 +218,7 @@ async function postToTribeChat(leagueId: string, tribeId: string, content: strin
   })
   if (!channel) return
 
-  await prisma.survivorChatMessage.create({
+  await createSurvivorChatMessage(prisma, {
     data: {
       leagueId,
       channelId: channel.id,

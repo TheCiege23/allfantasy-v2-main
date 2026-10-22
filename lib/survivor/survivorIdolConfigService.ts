@@ -156,14 +156,21 @@ export function projectSurvivorIdolSetup(input: {
   row: ConfigRow | null
   fallbackCount: number | null
   isCommissioner: boolean
+  /**
+   * Whether the viewer may see the sealed draw (`resolvedTypeIds`). A commissioner who PLAYS is a
+   * manager for hidden information, so this is false for them even though `isCommissioner` is true
+   * and they still edit the setup. Defaults to `isCommissioner` for internal callers.
+   */
+  canSeeDraw?: boolean
   locked: boolean
 }): SurvivorIdolSetupView {
   const { row, isCommissioner } = input
+  const canSeeDraw = input.canSeeDraw ?? isCommissioner
   const values: SurvivorIdolConfigValues = row
     ? { mode: row.mode, count: row.count, hideFromCommish: row.hideFromCommish, pickedTypeIds: row.pickedTypeIds, pointSurgePct: row.pointSurgePct, tributePct: row.tributePct }
     : { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count: clampCount(input.fallbackCount) }
   const resolved = Boolean(row?.resolvedTypeIds.length)
-  const canSeeTypes = isCommissioner && !values.hideFromCommish
+  const canSeeTypes = canSeeDraw && !values.hideFromCommish
   return {
     // Catalogue-only types (no play engine yet) stay out of sight until they can be played.
     types: input.types.filter(isSurvivorIdolTypePlayable),
@@ -176,7 +183,7 @@ export function projectSurvivorIdolSetup(input: {
   }
 }
 
-export async function getSurvivorIdolSetupView(leagueId: string, viewer: { isCommissioner: boolean }, db: Db = prisma): Promise<SurvivorIdolSetupView> {
+export async function getSurvivorIdolSetupView(leagueId: string, viewer: { isCommissioner: boolean; canSeeDraw?: boolean }, db: Db = prisma): Promise<SurvivorIdolSetupView> {
   const [types, locked, league] = await Promise.all([
     loadSurvivorIdolTypes(db),
     isSurvivorDraftStarted(leagueId, db),
@@ -186,7 +193,7 @@ export async function getSurvivorIdolSetupView(leagueId: string, viewer: { isCom
   if (await survivorIdolTablesReady(db)) {
     try { row = await readConfigRow(leagueId, db) } catch { row = null }
   }
-  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, isCommissioner: viewer.isCommissioner, locked })
+  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, isCommissioner: viewer.isCommissioner, canSeeDraw: viewer.canSeeDraw, locked })
 }
 
 export type SaveSurvivorIdolConfigResult =

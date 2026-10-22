@@ -20,6 +20,7 @@ import { updateScheduleConfigForLeague } from '@/lib/fantasy-schedule/ScheduleCo
 import { createDefaultLeagueRosterConfig, getRosterEngineRegistry, type SupportedRosterSport } from '@/lib/roster-engine'
 import { warmLeagueSportsDataAfterCreate } from '@/lib/league-creation/warmLeagueSportsData'
 import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+import { notifySurvivorCommissionerOnce } from '@/lib/survivor/survivorCommissionerAlerts'
 
 /**
  * Tell the live scorer the league's reception value. `calculateScoreFromSportConfig` falls back
@@ -267,7 +268,19 @@ export async function runLeagueBootstrap(
         challengesSystemRun: sw.survivor_challenges_system_run !== false,
         regularSeasonEndWeek: readSurvivorFullSeasonPlan(sw)?.endWeek ?? null,
       })
-      if (foundation.exileIslandEnabled) await getOrCreateExileLeague(leagueId).catch(() => {})
+      if (foundation.exileIslandEnabled) {
+        await getOrCreateExileLeague(leagueId).catch(async (error: unknown) => {
+          // Exile is where voted-out managers go. A league without it looks fine until the first
+          // Torch Ceremony, so the commissioner hears about it now, and the dashboard lists it.
+          const message = error instanceof Error ? error.message : String(error)
+          await notifySurvivorCommissionerOnce(leagueId, 'exile_setup_failed', {
+            dedupeKey: 'creation',
+            title: 'Exile Island could not be created',
+            body: `Your Survivor league was created, but its Exile Island side league failed to set up (${message.slice(0, 160)}). Open Settings → Exile to retry before the first elimination.`,
+            deepLinkPath: `/league/${leagueId}?guide=settings`, urgency: 'critical',
+          }).catch(() => {})
+        })
+      }
       await runSurvivorLeagueBootstrap(leagueId).catch(() => {})
     } catch {
       // non-fatal; legacy wizard path will fill in if used
