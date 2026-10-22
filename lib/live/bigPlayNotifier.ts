@@ -567,8 +567,10 @@ function notificationFor(
     source: 'live-plays',
     actionHref: `/core/live?sport=${encodeURIComponent('NFL')}`,
     actionLabel: 'Live scores',
-    // Email follows the user's category preference; texts are league operations only.
-    skipChannels: { sms: true },
+    // Push and the bell only. Owner's call 2026-10-22: a play-by-play email is stale by the time it is
+    // read, and one per touchdown / 19-yard play per starter was the bulk of the email complaints.
+    // Texts are league operations only.
+    skipChannels: { sms: true, email: true },
     meta: {
       gameId: event.gameId,
       playerId: event.playerId,

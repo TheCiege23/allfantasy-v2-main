@@ -38,6 +38,13 @@ async function startingLeagues(identity: ResolvedPlayerIdentity, userId: string,
   return [...leagues]
 }
 
+/** "🚨 Bijan Robinson is OUT — still in your starting lineup", or a count when several starters are out. */
+export function lineupAlertTitle(changes: Array<{ playerName: string; status: string }>): string {
+  const label = (status: string) => /ir|injured reserve/i.test(status) ? 'on IR' : /suspend/i.test(status) ? 'SUSPENDED' : /inactive/i.test(status) ? 'INACTIVE' : 'OUT'
+  if (changes.length === 1) return `🚨 ${changes[0]!.playerName} is ${label(changes[0]!.status)} — still in your starting lineup`
+  return `🚨 ${changes.length} of your starters are out — fix your lineup`
+}
+
 /** Run after a successful injury sync, including unchanged rows so failed sends can retry. */
 export async function notifySyncedInjuries(sport: string, now = new Date()): Promise<{ delivered: number; errors: number }> {
   const rows = await prisma.sportsInjury.findMany({ where: { sport, expiresAt: { gt: now }, fetchedAt: { gte: new Date(now.getTime() - 10 * 60_000) } }, orderBy: { fetchedAt: 'desc' } })
@@ -112,9 +119,10 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
         userIds: [batch.userId], leagueIds: batch.leagueIds,
         category: batch.lineup ? 'lineup_alerts' : 'injury_alerts',
         type: batch.lineup ? 'injured_starter' : 'injury_update',
-        title: batch.team + ': ' + (batch.lineup ? 'starting lineup injury' : 'injury') + ' update',
+        title: batch.lineup ? lineupAlertTitle(changes) : batch.team + ': injury update',
         body: changes.map(c => c.playerName + ': ' + c.status).join('\n') +
-          (batch.lineup ? '\nReview your lineup and available replacements. Locked players may not be moved.' : ''),
+          (batch.lineup ? '\nStill in your starting lineup' + (batch.leagueIds.length > 1 ? ` in ${batch.leagueIds.length} leagues` : '') +
+            '. Swap in a replacement before the game locks.' : ''),
         actionHref: '/league/' + encodeURIComponent(batch.leagueIds[0]) + '?tab=team',
         actionLabel: batch.lineup ? 'Review lineup' : 'View team',
         severity: changes.some(c => isUnavailableStatus(c.status)) ? 'high' : 'medium',

@@ -112,3 +112,10 @@ it('sends one summary per team and does not repeat delivered members', async () 
  await notifySyncedInjuries('NFL')
  expect(h.dispatch).not.toHaveBeenCalled()
 })
+
+it('names the player and says they are still in the starting lineup', async () => {
+ const { lineupAlertTitle } = await import('@/lib/engagement-alerts/injuryAlerts')
+ expect(lineupAlertTitle([{ playerName: 'Bijan Robinson', status: 'out' }])).toBe('🚨 Bijan Robinson is OUT — still in your starting lineup')
+ expect(lineupAlertTitle([{ playerName: 'A', status: 'injured reserve' }])).toContain('is on IR')
+ expect(lineupAlertTitle([{ playerName: 'A', status: 'out' }, { playerName: 'B', status: 'out' }])).toBe('🚨 2 of your starters are out — fix your lineup')
+})
