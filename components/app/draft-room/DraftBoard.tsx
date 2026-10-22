@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { SurvivorTribeBadge, SurvivorTribeMark } from '@/components/league/survivor/SurvivorTribeBadge'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel } from 'lucide-react'
 import { DraftBoardCell, type DraftBoardCellPick, type PickHighlightTone } from './DraftBoardCell'
 import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
@@ -76,6 +77,7 @@ type AuctionBoardColumn = {
   displayName: string
   tintHex: string
   picks: DraftBoardCellPick[]
+  tribe: SlotOrderEntry['tribe']
 }
 
 function isSnakeRoundReversed(round: number, draftType: 'snake' | 'linear' | 'auction', thirdRoundReversal: boolean): boolean {
@@ -370,6 +372,7 @@ function DraftBoardInner({
           displayName: entry.displayName,
           tintHex,
           picks: ownedPicks,
+          tribe: entry.tribe ?? null,
         }
       })
   }, [draftType, picks, slotOrder, sport, poolPlayerById])
@@ -589,6 +592,7 @@ function DraftBoardInner({
                     />
                   </div>
                   <p className="mt-1 truncate text-sm font-semibold text-white">{column.displayName}</p>
+                  {column.tribe ? <SurvivorTribeBadge tribe={column.tribe} className="mt-1 max-w-full" /> : null}
                 </div>
 
                 <div className="space-y-1.5 p-1.5">
@@ -677,7 +681,7 @@ function DraftBoardInner({
                 <div
                   key={entry.rosterId}
                   data-testid={`draft-board-team-header-slot-${entry.slot}`}
-                  title={meta?.aiArchetypeLabel ? `${headerName} · ${meta.aiArchetypeLabel}` : headerName}
+                  title={[headerName, entry.tribe ? `${entry.tribe.name} tribe` : null, meta?.aiArchetypeLabel ?? null].filter(Boolean).join(' · ')}
                   className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
                   } ${isUser ? 'bg-cyan-400/[0.08]' : ''}`}
@@ -710,6 +714,9 @@ function DraftBoardInner({
                         title="Orphan roster"
                         data-testid={`draft-board-team-header-orphan-${entry.slot}`}
                       />
+                    ) : null}
+                    {entry.tribe ? (
+                      <SurvivorTribeMark tribe={entry.tribe} className="absolute -bottom-0.5 -right-0.5" />
                     ) : null}
                   </span>
                   <span

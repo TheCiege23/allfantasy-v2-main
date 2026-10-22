@@ -63,7 +63,7 @@ function everyReachableChoice(): Choice[] {
     ...DEFAULT_V2_STATE,
     name: 'Every Option League',
     nameTouched: true,
-    draftDate: '2026-11-01',
+    draftDate: '2026-10-19',
     draftTime: '20:00',
     timezone: 'America/New_York',
   }
@@ -105,12 +105,18 @@ describe('every option the create wizard offers is creatable', () => {
 
   beforeEach(() => {
     bodies = []
+    // Survivor's season-fit check reads the clock: a 24-manager NBA cast needs 24 of the 25
+    // scoring weeks, so it fits only when the draft lands in the opening week (NBA 2026 opens
+    // 2026-10-20). Pin "now" ahead of that draft so the matrix is the same on every day it runs,
+    // instead of losing sizes as the real season advances.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
       return { ok: true, json: async () => ({ success: true, league: { id: 'l1' }, homepageUrl: '/league/l1' }) } as Response
     }))
   })
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })

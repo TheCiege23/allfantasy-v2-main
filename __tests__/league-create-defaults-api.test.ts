@@ -1804,7 +1804,7 @@ describe('POST /api/league/create sport defaults integration', () => {
 
   /*
    * ⚠ THE CAST OPTIONS CHANGED, WHICH SILENTLY EMPTIED THIS TEST OF ITS POINT.
-   * `SURVIVOR_CAST_SIZE_OPTIONS` is [16, 17, 18, 19, 20] now, not [16, 20, 24].
+   * `SURVIVOR_CAST_SIZE_OPTIONS` was widened to [16, 17, 18, 19, 20] from [16, 20, 24].
    * The case fed 17 and demanded 16 — but 17 is a VALID cast size today, so the
    * clamp correctly returned it unchanged and the assertion failed on behaviour
    * that is right.
@@ -1813,9 +1813,10 @@ describe('POST /api/league/create sport defaults integration', () => {
    * this test green while asserting NO CLAMPING AT ALL — every value in range
    * passes through, so it would never fail again for the reason it exists. The
    * input is therefore moved OUT of range (30) so the clamp is still what is
-   * under test, and the expectations follow it to 20, the nearest option.
+   * under test, and the expectations follow it to the nearest option — 24 since the
+   * 2026-10-20 widening to 12–24.
    */
-  it('persists survivor wizard fields on League row and clamps an out-of-range cast down to 20', async () => {
+  it('persists survivor wizard fields on League row and clamps an out-of-range cast down to 24', async () => {
     const { POST } = await import('@/app/api/league/create/route')
     const req = new Request('http://localhost/api/league/create', {
       method: 'POST',
@@ -1841,34 +1842,26 @@ describe('POST /api/league/create sport defaults integration', () => {
     expect(res.status).toBe(200)
     const data = leagueCreateMock.mock.calls.at(-1)?.[0]?.data as Record<string, unknown>
     expect(data.leagueType).toBe('survivor')
-    expect(data.leagueSize).toBe(20)
+    expect(data.leagueSize).toBe(24)
     expect(data.survivorMode).toBe(true)
     /*
-     * 🛑 THESE TWO FIELDS DESCRIBE THE SAME THING AND DO NOT AGREE. Recorded as
-     * the value the code actually produces, NOT as 20, because pinning it to 20
-     * would fail on behaviour I have not fixed and cannot fix from here.
-     *
      * `leagueSize` is clamped by the route, which writes `league_size`,
-     * `survivor_creation_team_count` and `teamCount`.
-     * `survivorPlayerCount` comes from a SECOND, independent normalizer —
-     * normalizeSurvivorFoundationSettings -> buildSurvivorLeagueColumnPatch —
-     * whose `defaultTeamCount` reads `defaultTeamCount`, `default_team_count`,
-     * `teams`, `survivorPlayerCount`, `cast_size`. That key set and the route's
-     * DO NOT INTERSECT, so the two numbers are independent by construction and a
-     * single league can carry `leagueSize: 20` with `survivorPlayerCount: 16`.
-     *
-     * Downstream survivor code trusts `survivorPlayerCount` — idolEngine sizes
-     * idols from it, faqGenerator prints it — so the disagreement is not
-     * cosmetic. Which key should win is a product decision in the survivor
-     * domain, so it is FLAGGED here rather than guessed at.
+     * `survivor_creation_team_count` and `teamCount`. `survivorPlayerCount` comes
+     * from a SECOND normalizer — normalizeSurvivorFoundationSettings ->
+     * buildSurvivorLeagueColumnPatch — which reads `default_team_count` / `cast_size`
+     * and never `league_size`. Until 2026-10-20 the route left `default_team_count`
+     * at the sport's REDRAFT default (10), so this column was the clamp floor (16)
+     * on every league regardless of the cast picked. idolEngine sizes idols from it,
+     * so the disagreement was not cosmetic. The route now writes the clamped cast to
+     * both keys, and this assertion pins the two columns to the SAME number.
      */
-    expect(data.survivorPlayerCount).toBe(16)
+    expect(data.survivorPlayerCount).toBe(24)
     expect(data.survivorTribeCount).toBe(3)
     expect(data.survivorTribeNaming).toBe('custom')
     const st = data.settings as Record<string, unknown>
-    expect(st.league_size).toBe(20)
-    expect(st.survivor_creation_team_count).toBe(20)
-    // The settings JSON agrees with leagueSize; only the column above diverges.
-    expect(st.teamCount).toBe(20)
+    expect(st.league_size).toBe(24)
+    expect(st.survivor_creation_team_count).toBe(24)
+    // The settings JSON agrees with leagueSize too.
+    expect(st.teamCount).toBe(24)
   }, 60000)
 })

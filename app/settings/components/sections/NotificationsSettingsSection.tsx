@@ -216,7 +216,7 @@ export function NotificationsSettingsSection({
     setSaving(true)
     setSaveError(null)
     setSavedFlash(false)
-    const result = await updateNotificationPreferences(prefs)
+    const result = await updateNotificationPreferences(prefs).catch(() => ({ ok: false, error: t("settings.notifications.saveFailed") }))
     setSaving(false)
     if (result.ok) {
       setSavedFlash(true)
@@ -318,7 +318,7 @@ export function NotificationsSettingsSection({
   }
 
   return (
-    <div className="space-y-6">
+    <fieldset disabled={saving} className="min-w-0 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-[var(--text)]">
           {t("settings.notifications.title")}
@@ -764,6 +764,6 @@ export function NotificationsSettingsSection({
           {t("settings.notifications.backToProfile")}
         </a>
       </div>
-    </div>
+    </fieldset>
   )
 }
