@@ -256,7 +256,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const format = normalizeFormat(input.format)
   const engineDraftType = mapCanonicalDraftTypeToEngineCore(input.draftType)
   const scoringPreset = String(input.scoringPreset ?? '').trim()
-  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat'].includes(scoringPreset)
+  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat', 'nba_9cat_roto'].includes(scoringPreset)
   const categoryContext = { sport, leagueType: format, idpSelected: false }
   if (nbaCategory && !isScoringPresetValidForContext(scoringPreset, categoryContext)) throw new Error('NBA category scoring requires redraft, dynasty or keeper.')
   const categorySettings = nbaCategory ? buildScoringFromPresetId(scoringPreset, categoryContext).scoringSettings : {}
@@ -385,6 +385,25 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
     playoffWeeks: firstPresent(canonicalPlayoffSettings?.playoffWeeks, playoff.playoff_weeks),
   })
 
+  const resolvedPlayoffSettings: Record<string, unknown> = {
+    ...projectMirroredSettings({
+      mirrors: PLAYOFF_KEY_MIRRORS,
+      registryDefaults: playoff,
+      contractSettings: canonicalPlayoffSettings,
+      overrides: playoffOverrides,
+      fallbacks: { ...playoffWeekBounds, playoffWeeksPerRound: 1 },
+    }),
+    seedingRule: canonicalPlayoffSettings?.standingsRule ?? playoff.seedingRule ?? playoff.seeding ?? 'record_then_points',
+    lowerBracket: canonicalPlayoffSettings?.lowerBracket ?? playoff.lowerBracket ?? 'consolation',
+  }
+  // The schedule hands over to the playoffs in the week the bracket opens. A contract that sizes the
+  // start week to its bracket (a 4-team NFL redraft bracket opens in week 16, not 15) moves both.
+  const resolvedPlayoffStart = Number(resolvedPlayoffSettings.playoff_start_week)
+  const scheduleSettingsAgreeingOnPlayoffStart: Record<string, unknown> =
+    Number.isInteger(resolvedPlayoffStart) && resolvedPlayoffStart > 0 && scheduleDefaults.playoff_transition_point != null
+      ? { ...scheduleDefaults, playoff_transition_point: resolvedPlayoffStart }
+      : scheduleDefaults
+
   // Resolved once so the object literal below and the totalRosterSlots sum can never drift apart
   // — computing the fallback twice is exactly how the roster-size gap this replaces went unnoticed.
   const resolvedRosterSlots = canonicalRosterSettings.rosterSlots ?? preset?.rosterSlots
@@ -466,18 +485,8 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
       registryDefaults: waiverDefaults,
       contractSettings: canonicalWaiverSettings,
     }),
-    playoffSettings: {
-      ...projectMirroredSettings({
-        mirrors: PLAYOFF_KEY_MIRRORS,
-        registryDefaults: playoff,
-        contractSettings: canonicalPlayoffSettings,
-        overrides: playoffOverrides,
-        fallbacks: { ...playoffWeekBounds, playoffWeeksPerRound: 1 },
-      }),
-      seedingRule: canonicalPlayoffSettings?.standingsRule ?? playoff.seedingRule ?? playoff.seeding ?? 'record_then_points',
-      lowerBracket: canonicalPlayoffSettings?.lowerBracket ?? playoff.lowerBracket ?? 'consolation',
-    },
-    scheduleSettings: scheduleDefaults,
+    playoffSettings: resolvedPlayoffSettings,
+    scheduleSettings: scheduleSettingsAgreeingOnPlayoffStart,
     redraftContract,
     dailyRedraftContract,
     keeperContract,

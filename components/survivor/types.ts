@@ -75,6 +75,10 @@ export interface SurvivorSummaryTribe {
 export interface SurvivorSummaryCouncil {
   id: string
   week: number
+  /** Which of the week's votes this is, on a double-elimination week (see councilWeekLabel). */
+  weekPosition?: { ordinal: number; planned: number } | null
+  /** "Vote 2 of 2 this week" on a double-elimination week; null otherwise. */
+  weekLabel?: string | null
   phase: string
   attendingTribeId: string | null
   voteDeadlineAt: string

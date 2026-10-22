@@ -127,6 +127,13 @@ describe('sealed projection', () => {
     expect(data.eligibleVoterCount).toBe(2); expect(data.voters).toHaveLength(2)
     assertNoChoices(data)
   })
+  it('leaves out whoever the first council of a double-elimination week voted out', async () => {
+    ctx.council.councilNumber = 2
+    m.db.survivorTribalCouncil.findMany.mockImplementation(async ({ where }) => where?.councilNumber ? [{ eliminatedUserId: 'b' }] : [ctx.council])
+    const data = await (await request('council-control')).json()
+    expect(m.db.survivorTribalCouncil.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ week: 6, councilNumber: { lt: 2 } }) }))
+    expect(data.voters.map((v: { userId: string }) => v.userId)).toEqual(['a'])
+  })
   it('reports missed votes after the deadline and keeps them after the read', async () => {
     ctx.council.status = 'revealed'
     m.db.survivorTribalCouncil.findUnique.mockResolvedValue({ isRevealed: true, revealSequence: [{ targetUserId: 'SECRET-CHOICE' }] })

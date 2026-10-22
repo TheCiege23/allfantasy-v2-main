@@ -31,7 +31,8 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSur
 import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 import { applySurvivorMergeCast } from './survivorMergeCast'
 import { awardTribeImmunity, clearExpiredTribeImmunity } from './survivorTribeImmunity'
-import { resolveWeekImmuneTribeIds } from './survivorCouncilImmunity'
+import { pickAttendingTribeId, resolveWeekImmuneTribeIds } from './survivorCouncilImmunity'
+import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
 import { getActiveSurpriseTribeWeek } from './survivorSurpriseTribes'
 import { postImmunityWinLine } from './leagueChatPoster'
 
@@ -207,9 +208,10 @@ export async function advanceWeek(leagueId: string): Promise<void> {
     if (next > plan.endWeek || next > calendarWeek) return
     if (gs.currentWeek >= plan.startWeek) {
       if (!gs.weekScoringFinalAt || gs.activeCouncilId) return
+      // Every council the week owes must have sent someone home (a double week owes two).
       if (plan.eliminationWeeks.includes(gs.currentWeek)) {
-        const eliminated = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, week: gs.currentWeek, action: { in: ['player_eliminated', 'planned_elimination_skipped_final_three'] } }, select: { id: true } })
-        if (!eliminated) return
+        const progress = await loadWeekCouncilProgress(leagueId, gs.currentWeek, plan.eliminationWeeks)
+        if (!progress.done) return
       }
       if (plan.exileReturnWeek === gs.currentWeek) {
         const settled = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'scheduled_exile_return_resolved' }, select: { id: true } })
@@ -444,12 +446,23 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
     tribeIds: surprise ? surprise.tribeIds : tribes.map((t) => t.id),
     scoreImmuneTribeId: surprise ? null : gs.immuneTribeId,
   })
-  const losingTribe = immunity.attendingTribeId
+  let losingTribe = immunity.attendingTribeId
   const tribeId = losingTribe
 
   if (plan) {
-    const prior = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week: gs.currentWeek }, select: { id: true } })
-    if (prior) return
+    // A planned week opens its councils one at a time: the next only once the last has sent
+    // someone home, and never more than the plan schedules (two in a double-elimination week).
+    const progress = await loadWeekCouncilProgress(leagueId, gs.currentWeek, plan.eliminationWeeks)
+    if (!progress.canOpenNext) return
+    // The second council of a pre-merge double week goes to the next-lowest tribe that is not
+    // immune and has not attended this week. With nobody else left, the same tribe goes back.
+    if (progress.attendedTribeIds.length) {
+      losingTribe = pickAttendingTribeId({
+        totals: immunity.totals,
+        tribeIds: surprise ? surprise.tribeIds : tribes.map((t) => t.id),
+        immuneTribeIds: [...immunity.immuneTribeIds, ...progress.attendedTribeIds],
+      }) ?? losingTribe
+    }
     const merged = !surprise && (Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase))
     const opened = await openVerifiedCouncil(leagueId, { week: gs.currentWeek, attendingTribeId: merged ? null : losingTribe, voteDeadlineAt: deadline, ...(surprise ? { scope: 'surprise' as const } : {}) })
     if (!opened.ok) throw new Error(opened.error)

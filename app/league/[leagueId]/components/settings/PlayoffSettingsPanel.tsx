@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
+import { tryGetSportConfig } from '@/lib/sportConfig'
+import { MAX_PLAYOFF_TEAMS, playoffFinalWeek } from '@/lib/playoff-runtime/playoffFit'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
@@ -37,6 +39,31 @@ export function PlayoffSettingsPanel({
     setLower(initialData.playoffLowerBracket ?? 'toilet')
   }, [initialData])
 
+  /*
+   * A field larger than the league, than the engine's 16, or whose final would land after the season's
+   * last week is not offered — the server refuses all three (lib/playoff-runtime/championshipLengthFit.ts).
+   * A dynasty season is sized to its bracket, so only the first two bound it.
+   */
+  const seasonWeeks = tryGetSportConfig(String(initialData.sport ?? 'NFL'))?.defaultSeasonWeeks ?? null
+  const leagueCap = Math.min(initialData.leagueSize ?? MAX_PLAYOFF_TEAMS, MAX_PLAYOFF_TEAMS)
+  const teamOptionFits = (n: number) => {
+    if (n > leagueCap) return false
+    if (initialData.isDynasty || seasonWeeks == null) return true
+    const final = playoffFinalWeek({ playoffStartWeek: startWeek, teams: n, weeksPerRound: weeksPer, championshipLength: champLength })
+    return final == null || final <= seasonWeeks
+  }
+  const teamOptions = [4, 6, 8, 10, 12, 14, 16].filter((n) => n <= leagueCap || n === teams)
+  // The last eight weeks of the sport's season (weeks 11-18 when the sport is unknown), and the current one.
+  const firstStartOption = seasonWeeks == null ? 11 : Math.max(2, seasonWeeks - 7)
+  const startWeekOptions = Array.from(
+    new Set([...Array.from({ length: 8 }, (_, i) => firstStartOption + i), startWeek]),
+  ).sort((a, b) => a - b)
+  const startWeekFits = (w: number) => {
+    if (initialData.isDynasty || seasonWeeks == null) return true
+    const final = playoffFinalWeek({ playoffStartWeek: w, teams, weeksPerRound: weeksPer, championshipLength: champLength })
+    return final == null || final <= seasonWeeks
+  }
+
   return (
     <div className="min-h-0 flex-1 space-y-8 px-6 py-6 text-[13px] text-white/85" data-testid="settings-playoff-panel">
       <SettingsPanelHeading
@@ -56,8 +83,8 @@ export function PlayoffSettingsPanel({
             debouncedSave({ playoffStartWeek: n })
           }}
         >
-          {Array.from({ length: 8 }, (_, i) => 11 + i).map((w) => (
-            <option key={w} value={w}>
+          {startWeekOptions.map((w) => (
+            <option key={w} value={w} disabled={!startWeekFits(w)}>
               Week {w}
             </option>
           ))}
@@ -77,12 +104,18 @@ export function PlayoffSettingsPanel({
             debouncedSave({ playoffTeams: n })
           }}
         >
-          {[4, 6, 8, 10, 12].map((n) => (
-            <option key={n} value={n}>
+          {teamOptions.map((n) => (
+            <option key={n} value={n} disabled={!teamOptionFits(n)}>
               {n}
             </option>
           ))}
         </select>
+        {teamOptions.some((n) => n <= leagueCap && !teamOptionFits(n)) ? (
+          <SettingsHelper>
+            Larger brackets would end after the season&apos;s last week (week {seasonWeeks}). Start the playoffs
+            earlier or shorten the rounds to allow them.
+          </SettingsHelper>
+        ) : null}
       </div>
 
       <div>

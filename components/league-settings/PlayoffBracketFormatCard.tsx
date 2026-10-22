@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useSaveScopeParticipant } from '@/components/league-settings/home/SettingsSaveScope'
 
 type PlanRound = { round: number; entering: number[]; teams: number; games: number }
 type Option = { plan: number[]; natural: boolean; rounds: PlanRound[]; roundCount: number; finalWeek: number; fitsSeason: boolean }
@@ -60,18 +61,20 @@ export function PlayoffBracketFormatCard({ leagueId, playoffTeams, canEdit }: { 
 
   useEffect(() => { load(playoffTeams) }, [load, playoffTeams])
 
-  if (!view || !choice) return null
+  const chosenOption = view && choice ? view.options.find((o) => same(o.plan, choice)) : undefined
+  const unsaved = Boolean(view && choice && canEdit && !view.locked && (!same(choice, view.plan) || view.playoffTeams !== view.savedPlayoffTeams))
 
-  const describe = (plan: number[]) => {
-    const waits = plan.flatMap((off, i) => (off > 0 ? [fill(t(off === 1 ? 'lsHub.po.br.waitOne' : 'lsHub.po.br.waitMany'), { seed: i + 1, n: off })] : []))
-    return waits.length ? waits.join(' · ') : t('lsHub.po.br.noByes')
-  }
-  const premiumNeeded = (o: Option) => !o.natural
-  const chosen = view.options.find((o) => same(o.plan, choice))
-  const dirty = !same(choice, view.plan) || view.playoffTeams !== view.savedPlayoffTeams
-  const blockedBySub = chosen ? premiumNeeded(chosen) && !view.isPremium : false
-
-  const save = async () => {
+  /** Resolves true when the bracket saved (or there was nothing to save). */
+  const save = async (): Promise<boolean> => {
+    if (!view || !choice) return true
+    if (chosenOption && !chosenOption.natural && !view.isPremium) {
+      setMessage({ tone: 'error', text: t('lsHub.po.br.needsSub') })
+      return false
+    }
+    if (chosenOption && !chosenOption.fitsSeason) {
+      setMessage({ tone: 'error', text: fill(t('lsHub.po.br.tooLong'), { week: chosenOption.finalWeek, last: view.lastWeek ?? '' }) })
+      return false
+    }
     setSaving(true); setMessage(null)
     try {
       const res = await fetch(base, {
@@ -82,16 +85,32 @@ export function PlayoffBracketFormatCard({ leagueId, playoffTeams, canEdit }: { 
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setMessage({ tone: 'error', text: data.errorCode === 'AF_COMMISSIONER_REQUIRED' ? t('lsHub.po.br.needsSub') : (data.error ?? t('lsHub.po.br.saveFailed')) })
-        return
+        return false
       }
       setMessage({ tone: 'ok', text: t('lsHub.po.br.saved') })
       await load(view.playoffTeams)
+      return true
     } catch {
       setMessage({ tone: 'error', text: t('lsHub.po.br.saveFailed') })
+      return false
     } finally {
       setSaving(false)
     }
   }
+
+  // On a League Settings page the page's "Save changes" bar saves the bracket with everything else.
+  const inSaveBar = useSaveScopeParticipant(unsaved, save)
+
+  if (!view || !choice) return null
+
+  const describe = (plan: number[]) => {
+    const waits = plan.flatMap((off, i) => (off > 0 ? [fill(t(off === 1 ? 'lsHub.po.br.waitOne' : 'lsHub.po.br.waitMany'), { seed: i + 1, n: off })] : []))
+    return waits.length ? waits.join(' · ') : t('lsHub.po.br.noByes')
+  }
+  const premiumNeeded = (o: Option) => !o.natural
+  const chosen = chosenOption
+  const dirty = unsaved
+  const blockedBySub = chosen ? premiumNeeded(chosen) && !view.isPremium : false
 
   return (
     <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4" data-testid="playoff-bracket-format">
@@ -141,7 +160,7 @@ export function PlayoffBracketFormatCard({ leagueId, playoffTeams, canEdit }: { 
       </div>
 
       <div aria-live="polite">
-        {message && (
+        {message && !(inSaveBar && message.tone === 'ok') && (
           <p role={message.tone === 'error' ? 'alert' : undefined}
             className={`rounded-lg px-3 py-2 text-xs ${message.tone === 'error' ? 'border border-red-500/20 bg-red-950/20 text-red-300' : 'border border-emerald-500/20 bg-emerald-950/20 text-emerald-300'}`}>
             {message.text}
@@ -155,8 +174,8 @@ export function PlayoffBracketFormatCard({ leagueId, playoffTeams, canEdit }: { 
             className="block w-full rounded-lg bg-violet-600/80 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-violet-600">
             {t('lsHub.po.br.upgrade')}
           </a>
-        ) : (
-          <button type="button" disabled={saving || !dirty || !chosen?.fitsSeason} onClick={save}
+        ) : inSaveBar ? null : (
+          <button type="button" disabled={saving || !dirty || !chosen?.fitsSeason} onClick={() => void save()}
             className="w-full rounded-lg border border-white/15 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08] disabled:opacity-50">
             {saving ? t('lsHub.saving') : t('lsHub.po.br.save')}
           </button>

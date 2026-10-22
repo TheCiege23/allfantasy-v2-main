@@ -2,8 +2,8 @@
  * Canonical scoring-mode identifier persisted on league settings as
  * `settings.scoring_mode`. Default `'points'` keeps existing behavior for every
  * pre-existing league. `'h2h_category'` activates the weekly category matchup
- * path (weeklyProcessor + matchupEngine branches, added in a later turn).
- * `'roto'` is scaffolded but not yet implemented.
+ * path (weeklyProcessor + matchupEngine branches). `'roto'` ranks season-long
+ * category totals (`rankRotisserieTeams`); its matchup rows carry no score.
  */
 export type ScoringMode = 'points' | 'h2h_category' | 'roto'
 
