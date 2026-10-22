@@ -1125,7 +1125,7 @@ export function CommissionerControlCenterModal({
             </div>
 
             <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Guillotine elimination auto-video</span>
+              <span className="text-white/90">Guilly elimination auto-video</span>
               <button
                 type="button"
                 role="switch"

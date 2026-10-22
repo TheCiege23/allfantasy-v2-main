@@ -183,7 +183,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   }
 
   if (endgame.format !== 'last_team_standing' && evalResult.activeRosterIds.length <= endgame.threshold) {
-    if (!seasonId) throw new Error('Final stage requires a guillotine season')
+    if (!seasonId) throw new Error('Final stage requires a Guilly season')
     if (evalResult.scores.length !== evalResult.activeRosterIds.length) throw new Error('Final-stage scoring is incomplete')
     const finalSeason = await prisma.guillotineSeason.findUniqueOrThrow({ where: { id: seasonId } })
     if (finalSeason.status === 'complete') return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'season complete' }

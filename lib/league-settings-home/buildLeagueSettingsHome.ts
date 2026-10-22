@@ -326,7 +326,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     const g = input.guillotine
     sections.push({
       id: 'guillotine',
-      title: 'Guillotine',
+      title: 'Guilly',
       rows: [
         {
           id: 'first-chop',

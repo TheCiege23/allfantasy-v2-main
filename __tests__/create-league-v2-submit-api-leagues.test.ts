@@ -155,7 +155,7 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     })
   })
 
-  it('a guillotine league never carries a median game, even one ticked before switching concept', async () => {
+  it('a Guilly league never carries a median game, even one ticked before switching concept', async () => {
     await submitCreateLeagueV2(state({ leagueType: 'guillotine', medianGame: true }))
     const body = lastFetchBody()
     expect(body.concept).toBe('guillotine')

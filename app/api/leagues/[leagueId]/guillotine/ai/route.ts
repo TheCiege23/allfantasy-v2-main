@@ -53,7 +53,7 @@ export async function POST(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const isGuillotine = await isGuillotineLeague(leagueId)
-  if (!isGuillotine) return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+  if (!isGuillotine) return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
   const type = (body.type ?? 'survival') as GuillotineAIType

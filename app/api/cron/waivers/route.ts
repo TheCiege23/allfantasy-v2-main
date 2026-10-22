@@ -190,19 +190,19 @@ export async function GET(request: Request) {
       error: error instanceof Error ? error.message : 'Auction sweep failed' }],
   }))
   const auctionFailures = auctions.results.filter(result => result.status === 'failed')
-  if (auctionFailures.length) console.error('[cron/waivers] Survivor Guillotine auction failed:', auctionFailures)
+  if (auctionFailures.length) console.error('[cron/waivers] Survivor Guilly auction failed:', auctionFailures)
   const selections = await runSGSelectionDeadlines(new Date(), 10).catch(error => ({
     scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
       error: error instanceof Error ? error.message : 'Selection fallback failed' }],
   }))
   const selectionFailures = selections.results.filter(result => result.status === 'failed')
-  if (selectionFailures.length) console.error('[cron/waivers] Survivor Guillotine selection failed:', selectionFailures)
+  if (selectionFailures.length) console.error('[cron/waivers] Survivor Guilly selection failed:', selectionFailures)
   const chopNight = await runSGAutomaticChopNight(new Date(), 10).catch(error => ({
     scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
       error: error instanceof Error ? error.message : 'Chop Night sweep failed' }],
   }))
   const chopFailures = chopNight.results.filter(result => result.status === 'failed')
-  if (chopFailures.length) console.error('[cron/waivers] Survivor Guillotine Chop Night failed:', chopFailures)
+  if (chopFailures.length) console.error('[cron/waivers] Survivor Guilly Chop Night failed:', chopFailures)
   const outcome = await withSyncJobRun(
     { jobName: JOB, trigger: "cron" },
     () => sweepDueWaiverLeagues({ limit, leagueId }),

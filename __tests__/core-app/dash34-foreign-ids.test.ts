@@ -74,14 +74,14 @@ describe('getDash34Data — foreign roster ids', () => {
    * The stripped roster is empty because we cannot read it, not because the team was chopped.
    * A guillotine league must not be told to "check elimination" on that account.
    */
-  it('a Fleaflicker guillotine roster read as empty is NOT reported as eliminated', { timeout: 60_000 }, async () => {
+  it('a Fleaflicker Guilly roster read as empty is NOT reported as eliminated', { timeout: 60_000 }, async () => {
     db.platform = 'fleaflicker'
     db.guillotine = true
     const result = await getDash34Data('u1', [LEAGUE], new Date())
     expect(JSON.stringify(result)).not.toContain('CHECK ELIMINATION')
   })
 
-  it('CONTROL: a Sleeper guillotine roster that IS empty still is', { timeout: 60_000 }, async () => {
+  it('CONTROL: a Sleeper Guilly roster that IS empty still is', { timeout: 60_000 }, async () => {
     db.platform = 'sleeper'
     db.guillotine = true
     vi.mocked(prisma.roster.findMany).mockResolvedValueOnce([{ id: 'R1', leagueId: 'L1', playerData: { players: [], starters: [] } }] as never)

@@ -152,7 +152,7 @@ function input(canEdit: boolean): BuildSettingsHomeInput {
     },
     teams,
     canEdit,
-    formatLabel: 'Guillotine',
+    formatLabel: 'Guilly',
     scoringLabel: null,
     rosterSlots: { UTIL: 4, BN: 4 },
     draft: null,

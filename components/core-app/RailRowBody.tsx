@@ -232,7 +232,7 @@ function RailGuillotine({ line }: { line: RailGuillotineLine }) {
       break
     case 'preseason':
       pos = line.draftAt ? `${es ? 'Draft' : 'Draft'} ${draftWhen(line.draftAt, es)}` : es ? 'Temporada sin empezar' : 'Season not started'
-      cut = chopWeek != null ? (es ? `primer corte sem ${chopWeek}` : `first chop wk ${chopWeek}`) : es ? 'guillotina' : 'guillotine'
+      cut = chopWeek != null ? (es ? `primer corte sem ${chopWeek}` : `first chop wk ${chopWeek}`) : 'Guilly'
       break
     case 'before_first_chop':
       pos = aliveRank ?? (es ? `${line.aliveCount} vivos` : `${line.aliveCount} alive`)

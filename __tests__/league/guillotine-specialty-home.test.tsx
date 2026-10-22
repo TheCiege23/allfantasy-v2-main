@@ -106,7 +106,7 @@ describe('GuillotineSpecialtyHome', () => {
       <GuillotineSpecialtyHome
         leagueId="L1"
         sport="NFL"
-        leagueName="Guillotine League 26"
+        leagueName="Guilly League 26"
         summary={{
           weekOrPeriod: 5,
           dangerTiers: tiers,
@@ -128,7 +128,7 @@ describe('GuillotineSpecialtyHome', () => {
         }}
       />,
     )
-    expect(screen.getAllByText('Guillotine League 26').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Guilly League 26').length).toBeGreaterThan(0)
     expect(screen.getByText('14 teams · 3 alive')).toBeTruthy()
     expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5 · You’re 35.9 points over the cut')
     expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('92.7')

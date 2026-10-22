@@ -41,7 +41,7 @@ beforeEach(() => {
 })
 
 describe('rail-scores with native leagues', () => {
-  it('answers a native guillotine league from the database, with no provider call', async () => {
+  it('answers a native Guilly league from the database, with no provider call', async () => {
     h.teams.mockResolvedValueOnce([]) // the user owns no Sleeper team in this batch
     const data = await (await GET(request('native-g'))).json()
     expect(h.native).toHaveBeenCalledWith('me', ['native-g'])

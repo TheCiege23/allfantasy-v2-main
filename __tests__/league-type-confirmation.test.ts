@@ -183,7 +183,7 @@ describe('confirming an EFL league (user decision 2026-09-16)', () => {
   })
 })
 
-describe('confirming a Survivor Guillotine league (user decision 2026-09-16)', () => {
+describe('confirming a Survivor Guilly league (user decision 2026-09-16)', () => {
   it('records it as one format and writes its guillotine chassis to the column', async () => {
     const r = await confirmLeagueType({ leagueId: 'L1', type: 'survivor_guillotine', userId: 'u1' })
     expect(r.ok).toBe(true)
@@ -232,7 +232,7 @@ describe('what to actually ask about', () => {
   })
 })
 
-it('converts a native Guillotine league to redraft in the format confirmation path', async () => {
+it('converts a native Guilly league to redraft in the format confirmation path', async () => {
   h.findUnique.mockResolvedValue(league({ platform: 'manual', guillotineMode: true, leagueVariant: 'guillotine', settings: { inviteCode: 'KEEP', guillotine_mode: true } }))
   await confirmLeagueType({ leagueId: 'L1', type: 'redraft', userId: 'u1' })
   expect(h.update.mock.calls[0][0].data).toMatchObject({ leagueType: 'redraft', leagueVariant: 'redraft', guillotineMode: false, isDynasty: false,

@@ -42,7 +42,7 @@ export async function GET(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const isGuillotine = await isGuillotineLeague(leagueId)
-  if (!isGuillotine) return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+  if (!isGuillotine) return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
 
   // `?view=rules`: the commissioner's "League rules" page (lib/guillotine/guillotineRules.ts).
   if (req.nextUrl.searchParams?.get('view') === 'rules') {
@@ -123,7 +123,7 @@ export async function PATCH(
   }
 
   if (!(await isGuillotineLeague(leagueId))) {
-    return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+    return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
   }
 
   const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown } | null

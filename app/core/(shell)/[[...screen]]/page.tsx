@@ -470,7 +470,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   sync: { title: 'Sync', description: 'What AllFantasy reads for this league, and when it last read it.' },
   hubs: {
     title: 'Format hubs',
-    description: 'Every Zombie, Tournament, Survivor, C2C, Guillotine and EFL league you play in, one hub per format.',
+    description: 'Every Zombie, Tournament, Survivor, C2C, Guilly and EFL league you play in, one hub per format.',
   },
 }
 

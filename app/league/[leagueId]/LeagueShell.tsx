@@ -497,7 +497,7 @@ export function LeagueShell({
     }
     if (league.guillotineMode || league.leagueVariant === 'guillotine') {
       const idx = base.findIndex((t) => t.id === 'redraft')
-      const g = { id: 'guillotine', label: 'Guillotine' }
+      const g = { id: 'guillotine', label: 'Guilly' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
     }
     if (league.leagueVariant === 'survivor') {

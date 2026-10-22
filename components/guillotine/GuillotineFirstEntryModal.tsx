@@ -111,7 +111,7 @@ export function GuillotineFirstEntryModal({
       className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/90"
       role="dialog"
       aria-modal="true"
-      aria-label="Guillotine League intro"
+      aria-label="Guilly League intro"
       onClick={(e) => {
         // A tap on the dark backdrop (not the card) is a way out too.
         if (e.target === e.currentTarget) dismiss()

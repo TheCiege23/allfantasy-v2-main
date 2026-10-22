@@ -242,7 +242,7 @@ describe('imported leagues', () => {
       playerData: { starters: ['fx-101'], players: ['fx-101'] },
       redraftRoster: null,
       league: {
-        id: 'league-cut', name: 'Sunday Guillotine', platform: 'fantrax', guillotineMode: true,
+        id: 'league-cut', name: 'Sunday Guilly', platform: 'fantrax', guillotineMode: true,
         teams: [{ platformUserId: 'af-user-9', claimedByUserId: 'af-user-9', currentRank: 11 }],
       },
     }])
@@ -252,7 +252,7 @@ describe('imported leagues', () => {
     const notification = h.ingestBatch.mock.calls[0][0][0]
     expect(notification.userIds).toEqual(['af-user-9'])
     expect(notification.title).toBe('20-yard touchdown')
-    expect(notification.body).toContain('Starting in Sunday Guillotine (#11, guillotine)')
+    expect(notification.body).toContain('Starting in Sunday Guilly (#11, guillotine)')
     expect(notification.meta.starterLeagueIds).toEqual(['league-cut'])
   })
 
