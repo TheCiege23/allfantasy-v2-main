@@ -17,6 +17,9 @@ const m = vi.hoisted(() => ({
     league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     leagueWaiverSettings: { findUnique: vi.fn() },
     leagueSettings: { upsert: vi.fn() },
+    // A playoff save is checked against the season (lib/playoff-runtime/championshipLengthFit.ts); none yet.
+    redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
+    redraftPlayoffRound: { findFirst: vi.fn().mockResolvedValue(null) },
   },
   session: { user: { id: 'u' } } as { user: { id: string } } | null,
 }))

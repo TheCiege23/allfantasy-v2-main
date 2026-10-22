@@ -15,7 +15,13 @@ import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonCo
 type CatalogEntry = { id: string; label: string; description: string | null; direction: 'higher' | 'lower' }
 type ScoringTypeResponse = {
   current: { mode: string; presetId: string | null; recordMode: string | null; categoryIds: string[] }
-  options: { modes: string[]; presets: Array<{ id: string; categoryIds: string[] }>; catalog: CatalogEntry[] }
+  options: {
+    modes: string[]
+    presets: Array<{ id: string; categoryIds: string[] }>
+    /** When set, the only presets rotisserie may use (NBA roto is 9-cat only). */
+    rotoPresets?: string[] | null
+    catalog: CatalogEntry[]
+  }
   isCommissioner?: boolean
   effectiveFromWeek?: number | null
   error?: string
@@ -75,12 +81,21 @@ export function ScoringTypeEditor({
   const recordModes = mode === 'roto' ? ['roto'] : ['each', 'most']
   const addable = (data?.options.catalog ?? []).filter((c) => !categoryIds.includes(c.id))
 
+  const presetsFor = (m: string | null) => {
+    const all = data?.options.presets ?? []
+    const roto = data?.options.rotoPresets
+    return m === 'roto' && roto ? all.filter((p) => roto.includes(p.id)) : all
+  }
+  const visiblePresets = presetsFor(mode)
+
   const changeMode = (next: string) => {
     setMode(next)
     if (next === 'points') return
-    const preset = presetId && data?.options.presets.some((p) => p.id === presetId) ? presetId : data?.options.presets[0]?.id ?? null
+    const allowed = presetsFor(next)
+    const keep = Boolean(presetId && allowed.some((p) => p.id === presetId))
+    const preset = keep ? presetId : allowed[0]?.id ?? null
     setPresetId(preset)
-    if (categoryIds.length === 0) setCategoryIds(data?.options.presets.find((p) => p.id === preset)?.categoryIds ?? [])
+    if (categoryIds.length === 0 || !keep) setCategoryIds(allowed.find((p) => p.id === preset)?.categoryIds ?? [])
     const modes = next === 'roto' ? ['roto'] : ['each', 'most']
     if (!recordMode || !modes.includes(recordMode)) setRecordMode(modes[modes.length - 1])
   }
@@ -151,7 +166,7 @@ export function ScoringTypeEditor({
                 onChange={(e) => changePreset(e.target.value)}
                 data-testid="scoring-type-preset"
               >
-                {data.options.presets.map((p) => <option key={p.id} value={p.id}>{PRESET_LABELS[p.id] ?? p.id}</option>)}
+                {visiblePresets.map((p) => <option key={p.id} value={p.id}>{PRESET_LABELS[p.id] ?? p.id}</option>)}
               </select>
             </label>
             <label className="block text-xs text-white/60">

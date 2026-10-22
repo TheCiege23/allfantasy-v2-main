@@ -235,7 +235,7 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
   if (!category) return null
   const covered =
     sport === 'NBA'
-      ? 'category grades cover the standard 8- and 9-category head-to-head setups so far'
+      ? 'category grades cover the standard 8- and 9-category head-to-head setups and 9-category rotisserie so far'
       : sport === 'MLB'
         ? 'category grades cover the standard 5x5 and 6x6 setups so far'
         : `there are no ${SPORT_LABEL[sport]} category grades yet`

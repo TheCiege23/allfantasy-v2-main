@@ -64,7 +64,9 @@ import {
   isTaxiIncreaseRefused,
 } from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
-import { championshipLengthOverflow, championshipLengthOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
+import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
+import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
+import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import {
@@ -449,6 +451,11 @@ export async function executeLeagueSettingsPatch(
     if (Number.isFinite(pt) && pt > Math.max(1, teamCount)) {
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
+    // The bracket engine runs at most four rounds (canonicalNflRedraftPlayoffRuntime warns past 16 and
+    // nothing reads the warning), and no sport's season has room for a fifth.
+    if (Number.isFinite(pt) && pt > MAX_PLAYOFF_TEAMS) {
+      return jsonError(`playoffTeams can be at most ${MAX_PLAYOFF_TEAMS}`, 400)
+    }
   }
   const bracketRefusal = await customPlayoffBracketRefusal(userId, body, {
     playoffTeams: league.playoffTeams,
@@ -474,19 +481,6 @@ export async function executeLeagueSettingsPatch(
         select: { id: true },
       })
       if (inPlayoffs) return jsonError('Championship length cannot change while the playoffs are being played.', 409)
-      // A final that ends after the season's last week never seals, so the season never completes.
-      // Playoff fields saved in the same request are what the bracket will be built from.
-      const overflow = await championshipLengthOverflow({
-        league: {
-          ...league,
-          playoffTeams: body.playoffTeams != null ? Number(body.playoffTeams) : league.playoffTeams,
-          playoffWeeksPerRound:
-            body.playoffWeeksPerRound != null ? Number(body.playoffWeeksPerRound) : league.playoffWeeksPerRound,
-          playoffStartWeek: body.playoffStartWeek != null ? Number(body.playoffStartWeek) : league.playoffStartWeek,
-        },
-        championshipLength: n,
-      })
-      if (overflow) return jsonError(championshipLengthOverflowMessage(overflow), 400)
     }
     championshipLengthToStore = n
   }
@@ -561,6 +555,41 @@ export async function executeLeagueSettingsPatch(
         400,
       )
     }
+  }
+
+  /*
+   * 🛑 A FINAL THAT ENDS AFTER THE SEASON'S LAST WEEK NEVER SEALS, SO THE SEASON NEVER COMPLETES
+   * (lib/playoff-runtime/championshipLengthFit.ts). The team count, start week, weeks per round and
+   * championship length all move the final, so a save that changes any of them is checked as one
+   * bracket — the playoff fields saved in the same request are what it will be built from. Only a
+   * change that moves the final later is refused. Imported leagues are checked on championship length
+   * alone, as before: their stored season length is a regular-season length (leagueSeasonWeek.ts).
+   */
+  const fitChange: PlayoffFitChange = {}
+  const changedNumber = (raw: unknown, current: number | null | undefined) =>
+    raw != null && Number.isFinite(Number(raw)) && Number(raw) !== current ? Number(raw) : undefined
+  if (championshipLengthToStore != null && championshipLengthToStore !== (readChampionshipLength(league.settings) ?? 1)) {
+    fitChange.championshipLength = championshipLengthToStore
+  }
+  if (isNativePlatform(league.platform)) {
+    const teams = changedNumber(body.playoffTeams, league.playoffTeams)
+    const start = changedNumber(body.playoffStartWeek, league.playoffStartWeek)
+    const perRound = changedNumber(body.playoffWeeksPerRound, league.playoffWeeksPerRound)
+    if (teams !== undefined) fitChange.playoffTeams = teams
+    if (start !== undefined) fitChange.playoffStartWeek = start
+    if (perRound !== undefined) fitChange.playoffWeeksPerRound = perRound
+  } else if (fitChange.championshipLength !== undefined) {
+    // As before: the other playoff fields saved alongside the length describe the bracket it joins.
+    if (body.playoffTeams != null) fitChange.playoffTeams = Number(body.playoffTeams)
+    if (body.playoffStartWeek != null) fitChange.playoffStartWeek = Number(body.playoffStartWeek)
+    if (body.playoffWeeksPerRound != null) fitChange.playoffWeeksPerRound = Number(body.playoffWeeksPerRound)
+  }
+  if (Object.keys(fitChange).length > 0) {
+    const overflow = await playoffFitOverflow({
+      league: { ...league, leagueSize: teamCount },
+      change: fitChange,
+    })
+    if (overflow) return jsonError(playoffFitOverflowMessage(overflow), 400)
   }
 
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
@@ -681,6 +710,25 @@ export async function executeLeagueSettingsPatch(
     Object.assign(leaguePatch, nativeFormatPatch(body.leagueType, league.settings))
   }
   if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize && isNativePlatform(league.platform)) {
+    // An untouched default bracket follows the new size; a commissioner's own is kept, clamped to it
+    // (lib/league-defaults/redraftPlayoffFit.ts). Playoff fields saved in the same request win.
+    if (body.playoffTeams == null && body.playoffStartWeek == null) {
+      const playoffColumns = resizedPlayoffColumns({
+        sport: String(league.sport ?? ''),
+        leagueType: league.leagueType,
+        settings: league.settings,
+        oldSize: league.leagueSize ?? league.teams.length,
+        newSize: Number(body.leagueSize),
+        playoffTeams: league.playoffTeams,
+        playoffStartWeek: league.playoffStartWeek,
+        weeksPerRound: league.playoffWeeksPerRound,
+        championshipLength: readChampionshipLength(league.settings),
+      })
+      if (playoffColumns) {
+        Object.assign(leaguePatch, playoffColumns)
+        for (const key of Object.keys(playoffColumns)) if (!leagueKeys.includes(key)) leagueKeys.push(key)
+      }
+    }
     try {
       await resizeNativeLeague(leagueId, Number(body.leagueSize), leaguePatch)
     } catch (error) {

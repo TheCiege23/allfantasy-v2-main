@@ -154,3 +154,20 @@ describe('storing a switch', () => {
     expect(at(7)).toMatchObject({ presetId: 'mlb_6x6', recordMode: 'each' })
   })
 })
+
+describe('NBA rotisserie can be chosen after creation', () => {
+  const none = { mode: 'points', presetId: null, recordMode: null, categoryIds: null }
+  it('NHL rotisserie is unaffected by the NBA 9-cat restriction', () => {
+    expect(validateScoringTypeChange('NHL', { mode: 'roto' }, none)).toMatchObject({ ok: true, next: { presetId: 'nhl_standard' } })
+  })
+  it('NBA: rotisserie defaults to 9-cat and refuses an 8-cat set', () => {
+    expect(validateScoringTypeChange('NBA', { mode: 'roto' }, none)).toMatchObject({
+      ok: true,
+      next: { mode: 'roto', presetId: 'nba_9cat', recordMode: 'roto' },
+    })
+    expect(validateScoringTypeChange('NBA', { mode: 'roto', presetId: 'nba_8cat_standard' }, none)).toMatchObject({ ok: false })
+    // An 8-cat head-to-head league switching to roto moves to 9-cat rather than failing.
+    const h2h8 = { mode: 'h2h_category', presetId: 'nba_8cat_standard', recordMode: 'most', categoryIds: null }
+    expect(validateScoringTypeChange('NBA', { mode: 'roto' }, h2h8)).toMatchObject({ ok: true, next: { presetId: 'nba_9cat' } })
+  })
+})

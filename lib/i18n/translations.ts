@@ -803,6 +803,7 @@ export const translations: Record<string, Record<string, string>> = {
     "scorePanel.lowerWins": "lower wins",
     "scorePanel.higherWins": "higher wins",
     "scorePanel.pctNote": "Percentage categories use total makes divided by total attempts. Point weights do not apply.",
+    "scorePanel.pctNote.nhl": "SV% uses total saves divided by total shots against, and GAA uses goals allowed per 60 goalie minutes, where fewer wins. Point weights do not apply.",
     "scorePanel.template": "Template",
     "scorePanel.enabledCategories": "Enabled categories",
     "scorePanel.overrides": "Overrides",
@@ -2122,9 +2123,9 @@ export const translations: Record<string, Record<string, string>> = {
     "toolsHub.tool.ai-draft-assistant.headline": "AI Draft Assistant",
     "toolsHub.tool.ai-draft-assistant.description":
       "Draft smarter with live rankings, strategy tips, and Chimmy's guidance during your draft.",
-    "toolsHub.tool.matchup-simulator.headline": "Matchup Simulator",
-    "toolsHub.tool.matchup-simulator.description":
-      "Simulate matchups before kickoff and understand win probabilities with lineup-level context.",
+    "toolsHub.tool.simulation-lab.headline": "Simulation Lab",
+    "toolsHub.tool.simulation-lab.description":
+      "Simulate seasons, playoffs, and dynasty runs to see expected wins, playoff odds, and title chances.",
     "toolsHub.tool.bracket-challenge.headline": "Bracket Challenge",
     "toolsHub.tool.bracket-challenge.description":
       "Create pools, invite friends, and track live standings with AI support for smarter bracket picks.",
@@ -4266,6 +4267,7 @@ export const translations: Record<string, Record<string, string>> = {
     "createLeague.g30.draft.body": "Choose how you will draft and when. You can set pick timers and draft order later.",
     "createLeague.g30.draftType.label": "Draft type",
     "createLeague.g30.scoring.label": "Scoring preset",
+    "createLeague.scoringPreset.nba_9cat_roto": "9-cat Rotisserie",
     "createLeague.g30.draftDate.label": "Draft date",
     "createLeague.g30.draftTime.label": "Draft time",
     "createLeague.g30.devyRounds.enable": "Add devy rounds (college prospects)",
@@ -6087,9 +6089,9 @@ export const translations: Record<string, Record<string, string>> = {
     "toolsHub.tool.ai-draft-assistant.headline": "AI Draft Assistant",
     "toolsHub.tool.ai-draft-assistant.description":
       "Draftea mejor con rankings en vivo, tips de estrategia y guía de Chimmy durante el draft.",
-    "toolsHub.tool.matchup-simulator.headline": "Matchup Simulator",
-    "toolsHub.tool.matchup-simulator.description":
-      "Simula enfrentamientos antes del kickoff y entiende probabilidades de victoria con contexto de alineación.",
+    "toolsHub.tool.simulation-lab.headline": "Laboratorio de simulación",
+    "toolsHub.tool.simulation-lab.description":
+      "Simula temporadas, playoffs y dinastías para ver victorias esperadas, probabilidades de playoffs y opciones de título.",
     "toolsHub.tool.bracket-challenge.headline": "Bracket Challenge",
     "toolsHub.tool.bracket-challenge.description":
       "Crea pools, invita amigos y sigue posiciones en vivo con apoyo de IA para mejores picks.",
@@ -6529,6 +6531,8 @@ export const translations: Record<string, Record<string, string>> = {
     "createLeague.g30.draft.body": "Elige como y cuando sera el draft. Puedes ajustar los temporizadores y el orden despues.",
     "createLeague.g30.draftType.label": "Tipo de draft",
     "createLeague.g30.scoring.label": "Plantilla de puntuacion",
+    "createLeague.scoringPreset.nba_9cat_roto": "Rotisserie de 9 categorías",
+    "scorePanel.pctNote.nhl": "SV% usa el total de paradas dividido entre el total de tiros recibidos, y GAA usa los goles permitidos por cada 60 minutos de portero: gana el menor. No se aplican pesos por punto.",
     "createLeague.g30.draftDate.label": "Fecha del draft",
     "createLeague.g30.draftTime.label": "Hora del draft",
     "createLeague.g30.devyRounds.enable": "Agregar rondas devy (prospectos universitarios)",
