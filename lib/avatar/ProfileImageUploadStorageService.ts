@@ -54,6 +54,8 @@ export async function persistProfileImageBytes(params: {
   bytes: Uint8Array
   mimeType: string
   originalFilename?: string | null
+  /** Blob key folder; defaults to the avatar folder. Survivor tribe logos use their own. */
+  keyPrefix?: string
 }): Promise<{ url: string }> {
   if (params.bytes.byteLength > MAX_PROFILE_IMAGE_BYTES) {
     throw new Error(PROFILE_IMAGE_TOO_LARGE_MESSAGE)
@@ -72,7 +74,7 @@ export async function persistProfileImageBytes(params: {
     ? fileFromName
     : canonical
   const filename = `${randomUUID()}.${ext}`
-  const key = `avatars/${filename}`
+  const key = `${(params.keyPrefix ?? "avatars").replace(/^\/+|\/+$/g, "") || "avatars"}/${filename}`
 
   const body = Buffer.from(params.bytes)
 

@@ -4,8 +4,9 @@
  * (move a manager), plus three announce toggles. Pure — no database, no provider, no React.
  *
  * Locking the plan writes it through the EXISTING assignment path (`assignSurvivorTribes` in
- * commissioner_manual mode with this mapping), so the post-draft bootstrap finds tribes already
- * assigned and keeps them (its `alreadyAssigned` branch). Nothing here changes how tribes are stored.
+ * commissioner_manual mode with this mapping, pre-draft), so tribes exist before the draft: the
+ * room shows them, and the post-draft bootstrap finds them already assigned and keeps them (its
+ * `alreadyAssigned` branch). Nothing here changes how tribes are stored.
  */
 
 import { computeTribeAssignment } from './survivorTribeAssignmentEngine'
@@ -23,7 +24,14 @@ export type SurvivorTribePlan = {
   announceInChat: boolean
 }
 
-export type PlanParticipant = { userId: string; displayName: string; /** 0–100, null = no AF data. */ strength: number | null }
+export type PlanParticipant = {
+  userId: string
+  displayName: string
+  /** 0–100, null = no AF data. */
+  strength: number | null
+  /** The seat (Roster id) this manager claimed; tribe membership is keyed by it. Server-side only. */
+  rosterId?: string
+}
 
 /**
  * Tribes are equal shares of the cast (owner's call, 2026-10-20: 12–24 managers in 2, 3 or 4
