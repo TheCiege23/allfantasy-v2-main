@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   SURVIVOR_MAX_ELIMINATIONS_PER_WEEK,
+  councilWeekLabel,
   describeEliminationSchedule,
   distinctEliminationWeeks,
   doubleEliminationWeeks,
@@ -102,5 +103,17 @@ describe('planned season with double weeks', () => {
     tripled.splice(tripled.indexOf(single), 1, doubled)
     tripled.sort((a, b) => a - b)
     expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: { ...plan, eliminationWeeks: tripled, noEliminationWeeks: noEliminationWeeksFor(plan.startWeek, plan.endWeek, tripled) } })).toBeNull()
+  })
+})
+
+describe('councilWeekLabel', () => {
+  it('labels only double-elimination weeks', () => {
+    expect(councilWeekLabel({ ordinal: 1, planned: 1 })).toBeNull()
+    expect(councilWeekLabel({ ordinal: 1, planned: 0 })).toBeNull()
+    expect(councilWeekLabel(null)).toBeNull()
+    expect(councilWeekLabel({ ordinal: 1, planned: 2 })).toBe('Vote 1 of 2 this week')
+    expect(councilWeekLabel({ ordinal: 2, planned: 2 })).toBe('Vote 2 of 2 this week')
+    // A league without a saved plan that still ran two councils says so.
+    expect(councilWeekLabel({ ordinal: 2, planned: 0 })).toBe('Vote 2 of 2 this week')
   })
 })

@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { eliminationsInWeek, weekCouncilState, type WeekCouncilCounts, type WeekCouncilState } from './survivorEliminationSchedule'
+import { eliminationsInWeek, weekCouncilState, type CouncilWeekPosition, type WeekCouncilCounts, type WeekCouncilState } from './survivorEliminationSchedule'
+import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 
 /** Audit actions that close out a planned elimination: a vote-out, or the final-three skip. */
 export const PLANNED_ELIMINATION_ACTIONS = ['player_eliminated', 'planned_elimination_skipped_final_three'] as const
@@ -35,4 +36,21 @@ export async function loadWeekCouncilProgress(
     ...weekCouncilState(counts),
     attendedTribeIds: [...new Set(councils.map(c => c.attendingTribeId).filter((id): id is string => Boolean(id)))],
   }
+}
+
+/**
+ * Which of its week's votes `council` is, for the "Vote 2 of 2 this week" label. Revotes are not
+ * counted: a revote re-runs the vote before it and shares its number.
+ */
+export async function loadCouncilWeekPosition(
+  leagueId: string,
+  council: { week: number; councilNumber: number },
+  leagueSettings: unknown,
+  db: Pick<typeof prisma, 'survivorTribalCouncil'> = prisma,
+): Promise<CouncilWeekPosition> {
+  const plan = readSurvivorFullSeasonPlan(leagueSettings)
+  const ordinal = await db.survivorTribalCouncil.count({
+    where: { leagueId, week: council.week, councilNumber: { lte: council.councilNumber }, NOT: { phase: 'revote' } },
+  })
+  return { ordinal: Math.max(1, ordinal), planned: plan ? eliminationsInWeek(plan.eliminationWeeks, council.week) : 0 }
 }

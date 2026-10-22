@@ -111,3 +111,19 @@ export function describeEliminationSchedule(weeks: readonly number[]): string {
   if (!doubles.length) return base
   return `${base}; ${doubles.length === 1 ? 'week' : 'weeks'} ${listWeeks(doubles)} ${doubles.length === 1 ? 'has' : 'have'} two back-to-back votes`
 }
+
+/** Which of the week's scheduled votes a council is. */
+export interface CouncilWeekPosition {
+  /** 1-based; a revote shares the number of the vote it re-runs. */
+  ordinal: number
+  /** Votes the plan schedules this week (0 when there is no saved plan). */
+  planned: number
+}
+
+/** "Vote 2 of 2 this week", or null for an ordinary one-vote week. */
+export function councilWeekLabel(position: CouncilWeekPosition | null | undefined): string | null {
+  if (!position) return null
+  const total = Math.max(position.planned, position.ordinal)
+  if (total <= 1) return null
+  return `Vote ${position.ordinal} of ${total} this week`
+}
