@@ -1244,7 +1244,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.liveLevel.closeGames": "Solo partidos ajustados",
   "settings.notifications.liveLevel.closeGamesHint": "Solo finales ajustados y prórrogas, con el marcador y dónde verlo. Sin jugadas, sin marcadores por periodo, sin resúmenes.",
   "settings.notifications.liveLevel.off": "Desactivado",
-  "settings.notifications.liveLevel.offHint": "Ninguna alerta de partidos en vivo. Las alertas de traspasos, drafts, waivers, alineación y lesiones no cambian.",
+  "settings.notifications.liveLevel.offHint": "Ninguna alerta de partidos en vivo. Las alertas de traspasos, drafts, reclamos, alineación y lesiones no cambian.",
   "settings.notifications.quietHoursFrom": "Desde",
   "settings.notifications.quietHoursHint":
     "Silencia las alertas push, de correo y de texto durante estas horas. Las novedades quedan en Notificaciones; no se reenvían todas por la mañana.",
