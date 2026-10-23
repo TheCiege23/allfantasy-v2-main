@@ -7,6 +7,8 @@ import { snapshotImportedPlayerMetadata } from '@/lib/league-import/importedPlay
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '../types'
 import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRosterIdentity'
+import { importedRosterUnchanged } from '../rosterWriteEquivalence'
+import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
 
 export interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
@@ -152,7 +154,7 @@ export async function bootstrapLeagueFromNormalizedImport(
   const [storedRosters, storedTeams] = await Promise.all([
     prisma.roster.findMany({
       where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true },
+      select: { id: true, platformUserId: true, playerData: true, faabRemaining: true, waiverPriority: true },
     }),
     prisma.leagueTeam.findMany({
       where: { leagueId },
@@ -197,6 +199,12 @@ export async function bootstrapLeagueFromNormalizedImport(
     }),
   })
   const planByTeam = new Map(rosterPlan.plans.map((p) => [p.teamId, p]))
+  const storedRosterById = new Map(storedRosters.map((r) => [r.id, r]))
+  /*
+   * Rosters this import found exactly as stored. Their row is not rewritten; only `updatedAt` is
+   * advanced, in one statement after the loop — see the comment there.
+   */
+  const unchangedRosterIds: string[] = []
   const rekeys = rosterPlan.plans.filter(
     (p): p is typeof p & { rosterId: string } => p.rekey && p.rosterId != null,
   )
@@ -373,6 +381,29 @@ export async function bootstrapLeagueFromNormalizedImport(
     }
 
     if (existingRoster) {
+      const stored = storedRosterById.get(existingRoster.id)
+      if (
+        stored &&
+        importedRosterUnchanged(
+          {
+            // A rekey above already moved this row's key to `ownerKey`; the in-memory read predates it.
+            platformUserId: plan?.rekey ? ownerKey : stored.platformUserId,
+            playerData: stored.playerData,
+            faabRemaining: stored.faabRemaining,
+            waiverPriority: stored.waiverPriority,
+          },
+          {
+            platformUserId: ownerKey,
+            playerData,
+            faabRemaining: r.faab_remaining ?? null,
+            waiverPriority: r.waiver_priority ?? null,
+          },
+        )
+      ) {
+        unchangedRosterIds.push(existingRoster.id)
+        rostersCreated++
+        continue
+      }
       // The key was already moved above when it changed; the row's current key is written back as-is.
       await prisma.roster.update({
         where: { id: existingRoster.id },
@@ -397,6 +428,23 @@ export async function bootstrapLeagueFromNormalizedImport(
     rostersCreated++
   }
 
+  /*
+   * ⚠ AN UNCHANGED ROSTER STILL GETS ITS `updatedAt` ADVANCED, AND THAT IS DELIBERATE.
+   *
+   * Several readers treat `Roster.updatedAt` as "when this roster was last read from the provider":
+   * the admin pipeline-freshness board (warn after 6h), the game-day triage "rosters as of" line,
+   * the season-outlook data stamp and the league sync panel. The old unconditional rewrite kept it
+   * current as a side effect. Leaving it behind would show a verified roster as hours stale, so it
+   * is advanced in ONE statement that touches no other column — the large `playerData` value and
+   * its TOAST are not rewritten, which is where the cost was.
+   */
+  if (unchangedRosterIds.length > 0) {
+    await prisma.roster.updateMany({
+      where: { id: { in: unchangedRosterIds } },
+      data: { updatedAt: new Date() },
+    })
+  }
+
   let teamPerformancesCreated = 0
   const teamIdByExternalId = new Map<string, string>()
   const teams = await prisma.leagueTeam.findMany({
@@ -405,70 +453,40 @@ export async function bootstrapLeagueFromNormalizedImport(
   })
   teams.forEach((t) => teamIdByExternalId.set(t.externalId, t.id))
 
+  const performanceRows: TeamPerformanceWrite[] = []
+  const resultFor = (own: number, other: number | null | undefined): string | null =>
+    other != null ? (own > other ? 'W' : own < other ? 'L' : 'T') : null
   for (const weekData of normalized.schedule) {
     for (const mu of weekData.matchups) {
       const tid1 = teamIdByExternalId.get(mu.roster_id_1)
       const tid2 = teamIdByExternalId.get(mu.roster_id_2)
       if (tid1 && mu.points_1 != null) {
-        try {
-          await prisma.teamPerformance.upsert({
-            where: {
-              teamId_season_week: {
-                teamId: tid1,
-                season,
-                week: weekData.week,
-              },
-            },
-            create: {
-              teamId: tid1,
-              week: weekData.week,
-              season,
-              points: mu.points_1,
-              opponent: tid2 ?? undefined,
-              result: mu.points_2 != null ? (mu.points_1 > mu.points_2 ? 'W' : mu.points_1 < mu.points_2 ? 'L' : 'T') : null,
-            },
-            update: {
-              points: mu.points_1,
-              opponent: tid2 ?? undefined,
-              result: mu.points_2 != null ? (mu.points_1 > mu.points_2 ? 'W' : mu.points_1 < mu.points_2 ? 'L' : 'T') : undefined,
-            },
-          })
-          teamPerformancesCreated++
-        } catch {
-          // ignore duplicate or constraint errors
-        }
+        performanceRows.push({
+          teamId: tid1,
+          week: weekData.week,
+          points: mu.points_1,
+          opponent: tid2 ?? null,
+          result: resultFor(mu.points_1, mu.points_2),
+        })
       }
       if (tid2 && mu.points_2 != null) {
-        try {
-          await prisma.teamPerformance.upsert({
-            where: {
-              teamId_season_week: {
-                teamId: tid2,
-                season,
-                week: weekData.week,
-              },
-            },
-            create: {
-              teamId: tid2,
-              week: weekData.week,
-              season,
-              points: mu.points_2,
-              opponent: tid1 ?? undefined,
-              result: mu.points_1 != null ? (mu.points_2 > mu.points_1 ? 'W' : mu.points_2 < mu.points_1 ? 'L' : 'T') : null,
-            },
-            update: {
-              points: mu.points_2,
-              opponent: tid1 ?? undefined,
-              result: mu.points_1 != null ? (mu.points_2 > mu.points_1 ? 'W' : mu.points_2 < mu.points_1 ? 'L' : 'T') : undefined,
-            },
-          })
-          teamPerformancesCreated++
-        } catch {
-          // ignore
-        }
+        performanceRows.push({
+          teamId: tid2,
+          week: weekData.week,
+          points: mu.points_2,
+          opponent: tid1 ?? null,
+          result: resultFor(mu.points_2, mu.points_1),
+        })
       }
     }
   }
+  /*
+   * One read of the season, then only new or changed rows, in one statement. The old path was two
+   * unconditional upserts per matchup per week on every sync. See `teamPerformanceWrites.ts` for
+   * how its keep-the-stored-value rules for `opponent` and `result` are preserved.
+   */
+  const performances = await writeTeamPerformances({ season, rows: performanceRows })
+  teamPerformancesCreated = performances.processed
 
   return {
     leagueTeamsCreated,

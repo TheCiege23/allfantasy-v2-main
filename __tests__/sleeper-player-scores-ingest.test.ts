@@ -14,33 +14,51 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const getLeagueMatchups = vi.fn()
-const upsert = vi.fn()
-const findFirst = vi.fn()
+const findMany = vi.fn()
+const executeRaw = vi.fn()
 
 vi.mock('@/lib/sleeper-client', () => ({
   getLeagueMatchups: (...a: unknown[]) => getLeagueMatchups(...a),
 }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { leaguePlayerWeeklyScore: { upsert: (...a: unknown[]) => upsert(...a), findFirst: (...a: unknown[]) => findFirst(...a) } },
+  prisma: {
+    leaguePlayerWeeklyScore: { findMany: (...a: unknown[]) => findMany(...a) },
+    $executeRaw: (...a: unknown[]) => executeRaw(...a),
+  },
 }))
 
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 
-/** Ids written, in call order. */
-const written = () =>
-  upsert.mock.calls.map((c) => (c[0] as { create: { playerId: string } }).create.playerId)
+type SentRow = { id: string; playerId: string; rosterId: number | null; points: number; isStarter: boolean }
 
-const created = (playerId: string) =>
-  upsert.mock.calls
-    .map((c) => c[0] as { create: Record<string, unknown> })
-    .find((a) => a.create.playerId === playerId)?.create
+/** The rows handed to the single batched write, across every call. */
+const sent = (): SentRow[] =>
+  executeRaw.mock.calls.flatMap((call) => {
+    const payload = (call.slice(1) as unknown[]).find((v) => typeof v === 'string' && v.startsWith('['))
+    return payload ? (JSON.parse(payload as string) as SentRow[]) : []
+  })
+
+/** The SQL text of the batched write (tagged-template strings joined). */
+const sqlText = () => (executeRaw.mock.calls[0]?.[0] as string[] | undefined)?.join('$') ?? ''
+
+/** Ids written, in call order. */
+const written = () => sent().map((r) => r.playerId)
+
+const created = (playerId: string) => sent().find((r) => r.playerId === playerId)
+
+/** A stored row as `findMany` returns it. */
+const stored = (playerId: string, over: Partial<{ rosterId: number | null; points: number; isStarter: boolean; source: string }> = {}) => ({
+  playerId, rosterId: 7, points: 0, isStarter: false, source: 'sleeper', ...over,
+})
 
 describe('ingestSleeperPlayerScoresForWeek', () => {
   beforeEach(() => {
     getLeagueMatchups.mockReset()
-    upsert.mockReset()
-    upsert.mockResolvedValue({})
-    findFirst.mockReset().mockResolvedValue(null)
+    findMany.mockReset().mockResolvedValue([])
+    executeRaw.mockReset().mockImplementation(async (_strings: unknown, ...values: unknown[]) => {
+      const payload = values.find((v) => typeof v === 'string' && v.startsWith('['))
+      return payload ? (JSON.parse(payload as string) as unknown[]).length : 0
+    })
   })
 
   it('writes each scored player once, with the platform points verbatim', async () => {
@@ -74,11 +92,21 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
   })
 
   it('applies an all-zero correction when this roster-week has recorded scoring', async () => {
-    findFirst.mockResolvedValue({ playerId: 'p1' })
+    findMany.mockResolvedValue([stored('p1', { points: 6.5, isStarter: true })])
     getLeagueMatchups.mockResolvedValue([{ roster_id: 7, points: 0, starters: ['p1'], starters_points: [0], players_points: { p1: 0 } }])
     await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
     expect(created('p1')?.points).toBe(0)
-    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'L1', seasonYear: 2026, week: 12, rosterId: 7, source: 'sleeper' } }))
+    // One read of the stored week answers "was this roster-week scored" — no per-roster query.
+    expect(findMany).toHaveBeenCalledOnce()
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'L1', seasonYear: 2026, week: 12 } }))
+  })
+
+  it('does not treat another source\'s row as evidence the roster-week was scored', async () => {
+    findMany.mockResolvedValue([stored('p1', { points: 6.5, source: 'espn' })])
+    getLeagueMatchups.mockResolvedValue([{ roster_id: 7, points: 0, starters: ['p1'], starters_points: [0], players_points: { p1: 0 } }])
+    const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+    expect(r.rostersSkippedUnscored).toBe(1)
+    expect(executeRaw).not.toHaveBeenCalled()
   })
 
   it('rejects arrays as score maps and never coerces booleans or blank values to points', async () => {
@@ -118,7 +146,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       },
     ])
     const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 14)
-    expect(upsert).not.toHaveBeenCalled()
+    expect(executeRaw).not.toHaveBeenCalled()
     expect(r.rostersSkippedUnscored).toBe(1)
     expect(r.scoresUpserted).toBe(0)
   })
@@ -174,7 +202,10 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       },
     ])
     await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
-    expect(created('p1')?.isFinalized).toBe(false)
+    // A new or changed row is provisional: inserted false, and set false only on the change path.
+    expect(sqlText()).toMatch(/"isStarter", false, 'sleeper'/)
+    expect(sqlText()).toMatch(/"isFinalized" = false/)
+    expect(sqlText()).not.toMatch(/"isFinalized"\s*=\s*true/)
   })
 
   it('reports a provider failure instead of throwing past the caller', async () => {
@@ -182,7 +213,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
     const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
     expect(r.error).toContain('sleeper 503')
     expect(r.scoresUpserted).toBe(0)
-    expect(upsert).not.toHaveBeenCalled()
+    expect(executeRaw).not.toHaveBeenCalled()
   })
 
   /** A shape change should be visible in the result, not produce a silent empty week. */
@@ -196,6 +227,97 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
     ])
     const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
     expect(r.rostersMalformed).toBe(1)
-    expect(upsert).not.toHaveBeenCalled()
+    expect(executeRaw).not.toHaveBeenCalled()
+  })
+  describe('change-aware writes', () => {
+    const week = [
+      {
+        matchup_id: 1, roster_id: 7, points: 32.9,
+        starters: ['p1', 'p2'], starters_points: [20.5, 12.4],
+        players: ['p1', 'p2', 'p3'], players_points: { p1: 20.5, p2: 12.4, p3: 3.1 },
+      },
+    ]
+    const storedWeek = [
+      stored('p1', { points: 20.5, isStarter: true }),
+      stored('p2', { points: 12.4, isStarter: true }),
+      stored('p3', { points: 3.1, isStarter: false }),
+    ]
+
+    it('writes nothing when an identical week is synced again', async () => {
+      getLeagueMatchups.mockResolvedValue(week)
+      findMany.mockResolvedValue(storedWeek)
+      const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(executeRaw).not.toHaveBeenCalled()
+      expect(r).toMatchObject({ scoresUpserted: 0, scoresUnchanged: 3, error: null })
+    })
+
+    it('two consecutive identical syncs write once, then never again', async () => {
+      getLeagueMatchups.mockResolvedValue(week)
+      findMany.mockResolvedValueOnce([]).mockResolvedValueOnce(storedWeek)
+      const first = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      const second = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(first.scoresUpserted).toBe(3)
+      expect(second).toMatchObject({ scoresUpserted: 0, scoresUnchanged: 3 })
+      expect(executeRaw).toHaveBeenCalledOnce()
+    })
+
+    it('sends only the player whose score actually changed, in one statement', async () => {
+      getLeagueMatchups.mockResolvedValue([{ ...week[0], players_points: { p1: 22.5, p2: 12.4, p3: 3.1 }, starters_points: [22.5, 12.4] }])
+      findMany.mockResolvedValue(storedWeek)
+      const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(executeRaw).toHaveBeenCalledOnce()
+      expect(written()).toEqual(['p1'])
+      expect(created('p1')?.points).toBe(22.5)
+      expect(r).toMatchObject({ scoresUpserted: 1, scoresUnchanged: 2 })
+    })
+
+    it('treats a starter/bench move or a roster move as a change', async () => {
+      getLeagueMatchups.mockResolvedValue([
+        { ...week[0], starters: ['p1', 'p3'], starters_points: [20.5, 3.1] },
+      ])
+      findMany.mockResolvedValue(storedWeek)
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(written().sort()).toEqual(['p2', 'p3'])
+
+      executeRaw.mockClear()
+      getLeagueMatchups.mockResolvedValue([{ ...week[0], roster_id: 8 }])
+      findMany.mockResolvedValue(storedWeek)
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(written().sort()).toEqual(['p1', 'p2', 'p3'])
+      expect(created('p1')?.rosterId).toBe(8)
+    })
+
+    it('leaves a finalized score sealed when the provider still reports it identically', async () => {
+      getLeagueMatchups.mockResolvedValue(week)
+      // `isFinalized` is not even read: an identical row is simply not written, so nothing can unseal it.
+      findMany.mockResolvedValue(storedWeek.map((row) => ({ ...row, isFinalized: true })))
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(executeRaw).not.toHaveBeenCalled()
+    })
+
+    it('guards the write itself, so a row brought up to date concurrently is not unsealed', async () => {
+      getLeagueMatchups.mockResolvedValue(week)
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(sqlText()).toMatch(/ON CONFLICT \("leagueId", "seasonYear", week, "playerId"\) DO UPDATE/)
+      expect(sqlText()).toMatch(/IS DISTINCT FROM/)
+    })
+
+    it('sends a player listed under two rosters once, last roster wins', async () => {
+      getLeagueMatchups.mockResolvedValue([
+        { roster_id: 7, points: 10, starters: ['p1'], starters_points: [10], players_points: { p1: 10 } },
+        { roster_id: 8, points: 11, starters: ['p1'], starters_points: [11], players_points: { p1: 11 } },
+      ])
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(written()).toEqual(['p1'])
+      expect(created('p1')).toMatchObject({ rosterId: 8, points: 11 })
+    })
+
+    it('reports a database failure instead of throwing past the caller', async () => {
+      getLeagueMatchups.mockResolvedValue(week)
+      executeRaw.mockRejectedValue(new Error('connection reset'))
+      const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(r.error).toContain('connection reset')
+      expect(r.scoresUpserted).toBe(0)
+    })
   })
 })
