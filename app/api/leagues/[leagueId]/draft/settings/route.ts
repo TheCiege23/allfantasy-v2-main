@@ -26,7 +26,7 @@ import { notifyOrphanAiManagerAssigned } from '@/lib/draft-notifications'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 import { markDraftRoundsManual } from '@/lib/draft/syncDraftRoundsToRoster'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
@@ -56,12 +56,9 @@ function parseSlotOrder(value: unknown): SlotOrderEntry[] {
   })
 }
 
-/** AF Commissioner entitlement — the same check `/api/league/settings` reports as `hasAfCommissionerSub`. */
-async function hasAfCommissionerSub(userId: string): Promise<boolean> {
-  const r = await new EntitlementResolver()
-    .resolveForUser(userId, 'commissioner_ai_tools')
-    .catch(() => ({ hasAccess: false }))
-  return Boolean(r.hasAccess)
+/** AF Commissioner plan — the one shared check (lib/entitlements/afCommissionerPlan.ts). */
+function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  return hasAfCommissionerPlan({ id: userId })
 }
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/

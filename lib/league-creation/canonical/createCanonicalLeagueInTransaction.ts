@@ -1,6 +1,7 @@
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { buildScoringFromPresetId, isNativeCategoryScoringPreset, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
@@ -455,15 +456,16 @@ export async function createCanonicalLeagueInTransaction(
     Object.assign(mergedSettings, withNewLeagueLateSeasonDefaults(mergedSettings))
   }
 
-  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+  if (formatId === 'survivor' && isSurvivorPlanSport(sport)) {
     const setup = body.conceptSetup ?? {}
     const draftAt = typeof setup.draftDate === 'string' && typeof setup.draftTime === 'string'
       ? toUtc(setup.draftDate, setup.draftTime, String(setup.draftTimezone ?? body.timezone ?? 'America/New_York')) : undefined
     const exileSettings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup })
-    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, finalistCount: readSurvivorLateSeasonSettings({ ...mergedSettings, ...setup }).finalistCount, sport, season: seasonYear, castSize: managerCount, draftAt,
+    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: typeof setup.exileReturnWeek === 'number' || typeof setup.survivorExileReturnWeek === 'number' ? exileSettings.exileReturnWeek : undefined, finalistCount: readSurvivorLateSeasonSettings({ ...mergedSettings, ...setup }).finalistCount, sport, season: seasonYear, castSize: managerCount, draftAt,
       endWeek: typeof setup.survivorSeasonEndWeek === 'number' ? setup.survivorSeasonEndWeek : undefined })
-    // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver.
-    mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
+    // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver. NFL
+    // keeps its existing roster path; only the daily sports carry this per-sport slot record.
+    if (sport === 'NBA' || sport === 'NHL') mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
       ...(foundationDefaults.rosterSettings.starter_slots as Record<string, number>),
       BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
       [sport === 'NBA' ? 'IL' : 'IR']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),

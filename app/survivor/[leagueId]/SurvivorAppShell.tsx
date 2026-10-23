@@ -64,9 +64,9 @@ function SurvivorAppShellInner({
     ctx.leaguePhase === 'finale' ||
     ctx.playerState === 'jury' ||
     ctx.playerState === 'finalist'
-  const hasAfCommissionerSub = Boolean(
-    (ctx.season as { hasAfCommissionerSub?: unknown } | null)?.hasAfCommissionerSub,
-  )
+  // From /api/league/settings (the shared AF Commissioner check). This used to read a field the
+  // season payload never carries, so the paid commissioner tools stayed locked for every subscriber.
+  const hasAfCommissionerSub = ctx.hasAfCommissionerSub
 
   type NavItem = {
     href: string

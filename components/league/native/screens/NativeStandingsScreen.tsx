@@ -96,6 +96,60 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
 
   const scored = data?.scoredWeeks ?? null
 
+  /*
+   * Rotisserie: the server's `pointsFor` is the team's summed category-rank points
+   * (`rankRotisserieTeams`) and W–L, PA, streaks, all-play and playoff odds do not exist — there is
+   * no opponent and no bracket. Show the one number roto has rather than a table of zeros.
+   */
+  if (data?.scoringMode === 'roto') {
+    return (
+      <div className="nls" data-testid="native-standings-screen">
+        <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Rotisserie standings" />
+        <div className="nls-cols">
+          <section className="nls-card nls-card-flush" aria-label="Standings">
+            {!rows.length ? (
+              <p className="nls-empty">Standings appear once the first week is scored.</p>
+            ) : (
+              <>
+                <table className="nls-table">
+                  <caption className="nls-sr">{season} rotisserie standings</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-align="left">#</th>
+                      <th scope="col" data-align="left">Team</th>
+                      <th scope="col">Roto pts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={r.rosterId} data-viewer={r.rosterId === data.viewerRosterId || undefined}>
+                        <td data-align="left" className="nls-mono nls-muted">{r.rank ?? i + 1}</td>
+                        <td data-align="left">{teamCell(r, Number.POSITIVE_INFINITY)}</td>
+                        <td>{fmt1(r.pointsFor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="nls-table-note">
+                  Each category ranks every team on season totals: first place earns as many points as there are teams, last earns 1, and tied teams share the average. Rate stats such as FG% come from season totals, not averages, and lower-is-better stats such as turnovers rank fewest first.
+                </p>
+              </>
+            )}
+          </section>
+          <aside className="nls-aside" aria-label="Your standing">
+            <Card label="Your standing" tone="accent">
+              {viewer ? (
+                <p>You are {ordinal(viewer.rank) ?? 'in the race'} with {fmt1(viewer.pointsFor)} rotisserie points. There are no playoffs: the season-long leader wins the league.</p>
+              ) : (
+                <p>Your standing appears here once you have a team in this league.</p>
+              )}
+            </Card>
+          </aside>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="nls" data-testid="native-standings-screen">
       <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Standings & playoffs">

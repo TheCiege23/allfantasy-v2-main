@@ -14,7 +14,8 @@ const m = vi.hoisted(() => ({
     survivorTribe: { findMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn() },
     survivorWeeklyScore: { findMany: vi.fn() },
-    survivorTribalCouncil: { findFirst: vi.fn() },
+    survivorTribalCouncil: { findFirst: vi.fn(), findMany: vi.fn() },
+    survivorAuditEntry: { findMany: vi.fn() },
   },
   legacyOpen: vi.fn(),
   verifiedOpen: vi.fn(),
@@ -57,6 +58,8 @@ function arrange(settings: Record<string, unknown>, game: Record<string, unknown
     { tribeId: 'nami', finalScore: 100, countedTowardTribeTotal: true },
   ])
   m.db.survivorTribalCouncil.findFirst.mockResolvedValue(null)
+  m.db.survivorTribalCouncil.findMany.mockResolvedValue([])
+  m.db.survivorAuditEntry.findMany.mockResolvedValue([])
   m.db.survivorGameState.update.mockResolvedValue({})
   m.effects.mockResolvedValue(noEffects())
   m.surprise.mockResolvedValue(null)
@@ -121,7 +124,45 @@ describe('triggerTribalOpen', () => {
   it('does not open a second council in a planned elimination week', async () => {
     const { plan, week } = plannedSettings()
     arrange({ survivor_full_season_plan: plan }, { currentWeek: week })
-    m.db.survivorTribalCouncil.findFirst.mockResolvedValue({ id: 'existing' })
+    m.db.survivorTribalCouncil.findMany.mockResolvedValue([{ attendingTribeId: 'lumo' }])
+    await triggerTribalOpen('L1')
+    expect(m.verifiedOpen).not.toHaveBeenCalled()
+    expect(m.legacyOpen).not.toHaveBeenCalled()
+  })
+
+  // A double-elimination week: the plan lists the week twice.
+  const doubleWeekSettings = () => {
+    // A 24-player NBA cast drafted in January has fewer periods than votes, so some weeks hold two.
+    const plan = buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 24, draftAt: new Date('2027-01-10T00:00:00Z'), now: new Date('2027-01-10T00:00:00Z') })
+    const week = plan.eliminationWeeks.find((w, i) => plan.eliminationWeeks[i + 1] === w)!
+    expect(week).toBeDefined()
+    return { plan, week }
+  }
+
+  it('waits for the first council of a double week to send someone home before opening the second', async () => {
+    const { plan, week } = doubleWeekSettings()
+    arrange({ survivor_full_season_plan: plan }, { currentWeek: week, immuneTribeId: 'vela' })
+    m.db.survivorTribalCouncil.findMany.mockResolvedValue([{ attendingTribeId: 'lumo' }])
+    await triggerTribalOpen('L1')
+    expect(m.verifiedOpen).not.toHaveBeenCalled()
+    expect(m.legacyOpen).not.toHaveBeenCalled()
+  })
+
+  it('sends the second council of a double week to the next-lowest tribe that has not attended', async () => {
+    const { plan, week } = doubleWeekSettings()
+    arrange({ survivor_full_season_plan: plan }, { currentWeek: week, immuneTribeId: 'vela' })
+    m.db.survivorTribalCouncil.findMany.mockResolvedValue([{ attendingTribeId: 'lumo' }])
+    m.db.survivorAuditEntry.findMany.mockResolvedValue([{ action: 'player_eliminated' }])
+    await triggerTribalOpen('L1')
+    // lumo (50) went first; vela is immune; nami (100) is next-lowest.
+    expect(m.verifiedOpen).toHaveBeenCalledWith('L1', expect.objectContaining({ week, attendingTribeId: 'nami' }))
+  })
+
+  it('never opens a third council in a double week', async () => {
+    const { plan, week } = doubleWeekSettings()
+    arrange({ survivor_full_season_plan: plan }, { currentWeek: week })
+    m.db.survivorTribalCouncil.findMany.mockResolvedValue([{ attendingTribeId: 'lumo' }, { attendingTribeId: 'nami' }])
+    m.db.survivorAuditEntry.findMany.mockResolvedValue([{ action: 'player_eliminated' }, { action: 'player_eliminated' }])
     await triggerTribalOpen('L1')
     expect(m.verifiedOpen).not.toHaveBeenCalled()
     expect(m.legacyOpen).not.toHaveBeenCalled()
