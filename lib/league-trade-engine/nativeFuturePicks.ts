@@ -86,6 +86,30 @@ export function nativePickHorizonStart(args: {
   return args.leagueSeason != null ? args.leagueSeason + 1 : null
 }
 
+/**
+ * `nativePickHorizonStart` read from the league's own rows: its newest season and whether a draft is
+ * open. The one place that question is asked, so the inventory and an imported league's carryover
+ * agree on which seasons are still ahead.
+ */
+export async function loadNativePickHorizonStart(db: Db, leagueId: string, leagueSeason: number | null): Promise<number | null> {
+  const [newestSeason, openDraft] = await Promise.all([
+    db.redraftSeason.findFirst({
+      where: { leagueId },
+      orderBy: { createdAt: 'desc' },
+      select: { season: true, status: true },
+    }),
+    db.draftSession.findFirst({
+      where: { leagueId, status: { in: [...OPEN_DRAFT_SESSION_STATUSES] } },
+      select: { id: true },
+    }),
+  ])
+  return nativePickHorizonStart({
+    newestSeason: newestSeason ? { season: newestSeason.season, status: String(newestSeason.status) } : null,
+    hasOpenDraft: Boolean(openDraft),
+    leagueSeason,
+  })
+}
+
 /** `fdp:<season>:<round>:<originalRosterId>` → its parts, or null for any other reference. */
 export function parseInventoryPickId(ref: string): { season: number; round: number; originalRosterId: string } | null {
   const m = /^fdp:(\d{4}):(\d{1,2}):(.+)$/.exec(ref)
@@ -111,24 +135,11 @@ export async function loadNativeFuturePicks(leagueId: string, db: Db = prisma): 
   })
   if (!league || !isNativeFuturePickLeague(league)) return null
 
-  const [rosters, newestSeason, openDraft, dynasty] = await Promise.all([
+  const [rosters, start, dynasty] = await Promise.all([
     db.roster.findMany({ where: { leagueId }, select: { id: true } }),
-    db.redraftSeason.findFirst({
-      where: { leagueId },
-      orderBy: { createdAt: 'desc' },
-      select: { season: true, status: true },
-    }),
-    db.draftSession.findFirst({
-      where: { leagueId, status: { in: [...OPEN_DRAFT_SESSION_STATUSES] } },
-      select: { id: true },
-    }),
+    loadNativePickHorizonStart(db, leagueId, league.season ?? null),
     db.dynastyLeagueConfig.findUnique({ where: { leagueId }, select: { rookieDraftRounds: true, futurePicksYearsOut: true } }),
   ])
-  const start = nativePickHorizonStart({
-    newestSeason: newestSeason ? { season: newestSeason.season, status: String(newestSeason.status) } : null,
-    hasOpenDraft: Boolean(openDraft),
-    leagueSeason: league.season ?? null,
-  })
   if (start == null || rosters.length === 0) return null
 
   const seasons = Array.from({ length: resolveNativePickYears(dynasty?.futurePicksYearsOut) }, (_, i) => start + i)

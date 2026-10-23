@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { carryOverImportedLeague } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 import fixture from './fixtures/fantrax/mlb-points-public.json'
+import { consumeNativeFuturePicksForDraft } from '@/lib/league-trade-engine/nativeFuturePicks'
 
 export function transaction() {
   const teams = [
@@ -169,4 +170,97 @@ it('requires explicit weekly-lineup acceptance before any native MLB roster writ
   tx.league.findUnique.mockImplementation(({where}) => where.id === 'source' ? {platform:'espn',sport:'MLB',settings:{}} : {settings:{}})
   await expect(carryOverImportedLeague(tx as never,{sourceLeagueId:'source',targetLeagueId:'native',creatorUserId:'creator',sport:'MLB',teamCount:2})).rejects.toThrow('Confirm weekly lineups')
   expect(tx.roster.update).not.toHaveBeenCalled()
+})
+
+/**
+ * A dynasty carryover used to drop every traded future pick: imported picks are keyed by provider
+ * team ids, the native league reads the same table keyed by Roster.id, and nothing moved them across.
+ */
+describe('standalone carryover of traded future picks', () => {
+  type PickRow = { leagueId: string; pickSeason: number; round: number; originalRosterId: string; currentOwnerId: string; status: string; traded: boolean; tradedAt: Date | null; id?: string }
+  const sourceRows: PickRow[] = [
+    { leagueId: 'source', pickSeason: 2027, round: 1, originalRosterId: 'seat-1', currentOwnerId: 'seat-2', status: 'active', traded: true, tradedAt: null },
+    { leagueId: 'source', pickSeason: 2028, round: 2, originalRosterId: 'seat-2', currentOwnerId: 'seat-1', status: 'active', traded: true, tradedAt: null },
+    // Unmappable: a team that is not in the carried league.
+    { leagueId: 'source', pickSeason: 2027, round: 3, originalRosterId: 'seat-9', currentOwnerId: 'seat-1', status: 'active', traded: true, tradedAt: null },
+    // Holder is the original team: not a trade.
+    { leagueId: 'source', pickSeason: 2027, round: 2, originalRosterId: 'seat-1', currentOwnerId: 'seat-1', status: 'active', traded: true, tradedAt: null },
+    // The carried season's own draft is the imported roster snapshot: no native draft will consume it.
+    { leagueId: 'source', pickSeason: 2026, round: 1, originalRosterId: 'seat-2', currentOwnerId: 'seat-1', status: 'active', traded: true, tradedAt: null },
+    // Already used by the source league's own draft.
+    { leagueId: 'source', pickSeason: 2028, round: 1, originalRosterId: 'seat-2', currentOwnerId: 'seat-1', status: 'used', traded: true, tradedAt: null },
+  ]
+
+  function withPicks(target: { platform: string; leagueType: string; isDynasty: boolean }) {
+    const tx = transaction() as ReturnType<typeof transaction> & Record<string, any>
+    const store: PickRow[] = sourceRows.map((row) => ({ ...row }))
+    tx.league.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+      where.id === 'source' ? { platform: 'sleeper', sport: 'NFL', season: 2026 } : { ...target, season: 2026, settings: { existing: true } })
+    // The carried draft is completed by the time the horizon is read, so no draft is open.
+    tx.draftSession.findFirst.mockImplementation((args: { where?: { status?: unknown } }) => args?.where?.status ? null : { id: 'native-draft' })
+    tx.redraftSeason = { findFirst: vi.fn().mockResolvedValue(null) }
+    const matches = (where: Record<string, unknown>, row: PickRow) =>
+      Object.entries(where).every(([key, value]) => (row as Record<string, unknown>)[key] === value)
+    tx.futureDraftPick = {
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+        store.filter((row) => matches(where, row)).map((row, i) => ({ id: row.id ?? `row-${i}`, ...row }))),
+      createMany: vi.fn(async ({ data }: { data: PickRow[] }) => {
+        for (const row of data) store.push({ ...row, id: `native-${store.length}` })
+        return { count: data.length }
+      }),
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    }
+    return { tx, store }
+  }
+  const carry = (tx: unknown) => carryOverImportedLeague(tx as never, { sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'NFL', teamCount: 2 })
+
+  it('copies traded picks into the native league with roster ids remapped', async () => {
+    const { tx } = withPicks({ platform: 'manual', leagueType: 'dynasty', isDynasty: true })
+    await carry(tx)
+    expect(tx.futureDraftPick.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'source', status: 'active' } }))
+    expect(tx.futureDraftPick.createMany).toHaveBeenCalledTimes(1)
+    const [{ data, skipDuplicates }] = tx.futureDraftPick.createMany.mock.calls[0]
+    expect(skipDuplicates).toBe(true)
+    expect(data).toEqual([
+      { leagueId: 'native', pickSeason: 2027, round: 1, originalRosterId: 'native-roster-1', currentOwnerId: 'native-roster-2', traded: true, status: 'active', sourceTradeId: null, tradedAt: null },
+      { leagueId: 'native', pickSeason: 2028, round: 2, originalRosterId: 'native-roster-2', currentOwnerId: 'native-roster-1', traded: true, status: 'active', sourceTradeId: null, tradedAt: null },
+    ])
+    expect(tx.league.update).toHaveBeenCalledWith(expect.objectContaining({ data: { settings: expect.objectContaining({
+      importCarryover: expect.objectContaining({ futurePickCount: 2, futurePicksSkipped: 3 }),
+    }) } }))
+  })
+
+  it('skips unmappable, untraded and already-drafted-season rows rather than inventing picks', async () => {
+    const { tx } = withPicks({ platform: 'manual', leagueType: 'dynasty', isDynasty: true })
+    await carry(tx)
+    const data = tx.futureDraftPick.createMany.mock.calls[0][0].data as PickRow[]
+    expect(data).toHaveLength(2)
+    expect(data.some((row) => row.round === 3)).toBe(false)
+    expect(data.some((row) => row.originalRosterId === row.currentOwnerId)).toBe(false)
+    expect(data.some((row) => row.pickSeason === 2026)).toBe(false)
+    expect(data.every((row) => row.originalRosterId.startsWith('native-roster-') && row.currentOwnerId.startsWith('native-roster-'))).toBe(true)
+  })
+
+  it('copies no picks into a redraft carryover', async () => {
+    const { tx } = withPicks({ platform: 'manual', leagueType: 'redraft', isDynasty: false })
+    await carry(tx)
+    expect(tx.futureDraftPick.findMany).not.toHaveBeenCalled()
+    expect(tx.futureDraftPick.createMany).not.toHaveBeenCalled()
+    // Guard against the vacuous pass: the carryover itself ran to completion.
+    expect(tx.league.update).toHaveBeenCalledTimes(1)
+    expect(tx.league.update.mock.calls[0][0].data.settings.importCarryover).not.toHaveProperty('futurePickCount')
+  })
+
+  it('writes rows the native rookie draft consumes for their new holders', async () => {
+    const { tx } = withPicks({ platform: 'manual', leagueType: 'dynasty', isDynasty: true })
+    await carry(tx)
+    const slotOrder = [
+      { slot: 1, rosterId: 'native-roster-1', userId: null, displayName: 'Aces' },
+      { slot: 2, rosterId: 'native-roster-2', userId: null, displayName: 'Bears' },
+    ]
+    const traded = await consumeNativeFuturePicksForDraft(tx as never, { leagueId: 'native', season: 2027, draftSessionId: 'rookie-2027', rounds: 4, slotOrder: slotOrder as never })
+    expect(traded).toEqual([
+      { round: 1, originalRosterId: 'native-roster-1', previousOwnerName: 'Aces', newRosterId: 'native-roster-2', newOwnerName: 'Bears', season: '2027' },
+    ])
+  })
 })
