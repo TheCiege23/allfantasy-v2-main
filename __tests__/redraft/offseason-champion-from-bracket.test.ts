@@ -24,6 +24,9 @@ vi.mock('@/lib/prisma', () => {
     leagueSeason: { findUnique: vi.fn(async () => m.lockedSnapshot), create: (args: any) => { m.seasonCreate(args); return { id: 'snap-1', ...args.data } } },
     franchiseSeason: { upsert: (args: any) => m.franchiseUpsert(args) },
     leagueAuditLog: { create: vi.fn() },
+    // The archive also upserts SeasonResult rows keyed by generic Roster.id; none exist here.
+    roster: { findMany: vi.fn(async () => []) },
+    seasonResult: { upsert: vi.fn() },
   }
   return {
     prisma: {
