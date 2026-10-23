@@ -63,16 +63,16 @@ describe('NBA / NHL / MLB dynasty format presets', () => {
     expect(matchDynastySportPreset(sport, state.scoringPresetId, state.dynasty)?.id).toBe(first.id)
   })
 
-  it('the wizard defaults themselves are unchanged (NFL included)', () => {
+  it('the wizard defaults (NFL / NBA unchanged; NHL / MLB bench carries the old taxi)', () => {
     const pick = (s: SupportedSport) => {
       const d = getDefaultDynastySetup(s, 'snake')
       return [d.benchCount, d.irCount, d.taxiSlotCount, d.taxiEligibilityYears, d.startupRosterDepth]
     }
     expect(pick('NFL')).toEqual([14, 3, 5, 2, 28])
     expect(pick('NBA')).toEqual([8, 3, 4, 2, 24])
-    // NHL / MLB: no taxi (lib/league-creation/prospectStashPolicy.ts).
-    expect(pick('NHL')).toEqual([9, 3, 0, 2, 26])
-    expect(pick('MLB')).toEqual([12, 4, 0, 2, 34])
+    // NHL / MLB: no taxi (lib/league-creation/prospectStashPolicy.ts); the old taxi depth is on the bench.
+    expect(pick('NHL')).toEqual([13, 3, 0, 2, 26])
+    expect(pick('MLB')).toEqual([18, 4, 0, 2, 34])
     expect(resolveValidScoringPresetIdForSelection('', { leagueType: 'dynasty', sport: 'NFL', idpSelected: false })).toBe('fb_half_ppr')
     expect(resolveValidScoringPresetIdForSelection('', { leagueType: 'redraft', sport: 'NBA', idpSelected: false })).toBe('nba_points')
   })
@@ -140,6 +140,51 @@ describe('NBA / NHL / MLB dynasty format presets', () => {
     expect(slots.PROSPECT).toBe(templates.MLB.slots.PROSPECT)
     expect(rosterSlotsWithDynastySportPreset({ BN: 3 }, deep)).not.toHaveProperty('TAXI')
     expect(applyDynastySportPresetToSetup(getDefaultDynastySetup('NHL', 'snake'), { ...getDynastySportPresets('NHL')[1]!, taxiSlotCount: 8 }).taxiSlotCount).toBe(0)
+  })
+
+  it('NHL / MLB presets moved their old taxi depth onto the bench; NBA is unchanged', () => {
+    const rows = Object.fromEntries(DYNASTY_SPORT_PRESETS.map((p) => [p.id, [p.benchCount, p.irCount, p.taxiSlotCount, p.startupRosterDepth]]))
+    expect(rows).toEqual({
+      nba_dynasty_points_taxi: [8, 3, 4, 24],
+      nba_dynasty_points_compact: [5, 3, 3, 18],
+      nba_dynasty_points_deep: [12, 4, 6, 28],
+      nhl_dynasty_points_taxi: [9 + 4, 3, 0, 26],
+      nhl_dynasty_points_minors: [10 + 8, 3, 0, 30],
+      mlb_dynasty_points_minors: [12 + 6, 4, 0, 34],
+      mlb_dynasty_points_deep: [16 + 10, 6, 0, 40],
+    })
+    // Total roster depth is what it was with taxi: 30 / 35 NHL, 50 / 60 MLB (incl. the template NA×5).
+    const total = (id: string) => {
+      const p = DYNASTY_SPORT_PRESETS.find((x) => x.id === id)!
+      return resolveDynastyCreationRoster(p.sport, { benchCount: p.benchCount, irCount: p.irCount, taxiSlots: presetTaxiSlotCount(p) }).totalRosterSlots
+    }
+    expect(['nhl_dynasty_points_taxi', 'nhl_dynasty_points_minors', 'mlb_dynasty_points_minors', 'mlb_dynasty_points_deep'].map(total))
+      .toEqual([30, 35, 50, 60])
+    // Each sport's presets are still distinct roster shapes.
+    for (const sport of SPORTS) {
+      const shapes = getDynastySportPresets(sport).map((p) => `${p.benchCount}/${p.irCount}/${p.taxiSlotCount}/${p.startupRosterDepth}`)
+      expect(new Set(shapes).size).toBe(shapes.length)
+    }
+  })
+
+  it.each(DYNASTY_SPORT_PRESETS.map((p) => [p.id, p] as const))('%s: startup depth fits the roster it builds, at create and as a pre-draft edit', async (_id, preset) => {
+    const created = resolveDynastyCreationRoster(preset.sport, { benchCount: preset.benchCount, irCount: preset.irCount, taxiSlots: presetTaxiSlotCount(preset) })
+    expect(created.benchSlots).toBe(preset.benchCount)
+    expect(created.taxiSlots).toBe(presetTaxiSlotCount(preset))
+    expect(preset.startupRosterDepth).toBeLessThanOrEqual(created.totalRosterSlots)
+    // Pre-draft edit of a league created under the no-stash policy: the slots the create path wrote.
+    const edited = rosterSlotsWithDynastySportPreset(created.slots, preset)
+    expect(edited.BN).toBe(preset.benchCount)
+    expect(edited.TAXI ?? 0).toBe(presetTaxiSlotCount(preset))
+    expect(preset.startupRosterDepth).toBeLessThanOrEqual(Object.values(edited).reduce((a, b) => a + b, 0))
+    // The server-side capacity rule agrees: the preset's own depth passes, one round past the roster is refused.
+    const base = dynastyState(preset.sport)
+    const body = await submittedBody({ ...base, scoringPresetId: preset.scoringPresetId, dynasty: applyDynastySportPresetToSetup(base.dynasty, preset) })
+    expect(validateCreatePayload(body).ok).toBe(true)
+    const setup = body.conceptSetup as Record<string, unknown>
+    const res = validateCreatePayload({ ...body, conceptSetup: { ...setup, startupRosterDepth: created.totalRosterSlots + 1 } })
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.error).toBe('Startup draft rounds exceed roster capacity')
   })
 
   it('NHL / MLB preset copy does not promise taxi or minor-league slots', () => {

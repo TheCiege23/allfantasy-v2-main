@@ -201,10 +201,11 @@ function defaultDynastyBySport(sport: SupportedSport): Pick<DynastySetupState, '
     case 'NBA':
       return { benchCount: 8, irCount: 3, taxiSlotCount: 4, regularSeasonLength: 20, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 24 }
     // MLB / NHL: no taxi squad. There is no prospect pool to stash from (lib/league-creation/prospectStashPolicy.ts).
+    // The former taxi depth is on the bench (MLB 12+6, NHL 9+4), matching each sport's first dynasty preset.
     case 'MLB':
-      return { benchCount: 12, irCount: 4, taxiSlotCount: 0, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 34 }
+      return { benchCount: 18, irCount: 4, taxiSlotCount: 0, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 34 }
     case 'NHL':
-      return { benchCount: 9, irCount: 3, taxiSlotCount: 0, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 26 }
+      return { benchCount: 13, irCount: 3, taxiSlotCount: 0, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 26 }
     case 'NCAAF':
       return { benchCount: 10, irCount: 2, taxiSlotCount: 4, regularSeasonLength: 12, playoffTeamCount: 4, playoffByeCount: 0, startupRosterDepth: 24 }
     case 'NCAAB':
