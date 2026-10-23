@@ -91,13 +91,14 @@ const REFERENCE: Record<string, (r: Raw, group: string) => number> = {
   shots_against: (r) => n(r.shots_against),
   shutouts: (r) => n(r.shutouts),
   goalie_minutes_played: (r, g) => goalie(r, g, (x) => toiMinutes(x.time_on_ice)),
-  // Rate bonuses, from the one game's own line (see nhl-rate-bonus-per-game.test.ts).
+  // Rate bonuses, from the one game's own line (see nhl-rate-bonus-per-game.test.ts), each with its
+  // minimum sample: 20 shots faced, 40 goalie minutes, 4 shots on goal.
   save_pct_bonus: (r, g) =>
-    goalie(r, g, (x) => (n(x.shots_against) > 0 ? Math.max(0, (n(x.saves) / n(x.shots_against) - 0.9) / 0.01) : 0)),
+    goalie(r, g, (x) => (n(x.shots_against) >= 20 ? Math.max(0, (n(x.saves) / n(x.shots_against) - 0.9) / 0.01) : 0)),
   gaa_bonus: (r, g) =>
-    goalie(r, g, (x) => (toiMinutes(x.time_on_ice) > 0 && (n(x.goals_allowed) * 60) / toiMinutes(x.time_on_ice) < 2.5 ? 1 : 0)),
+    goalie(r, g, (x) => (toiMinutes(x.time_on_ice) >= 40 && (n(x.goals_allowed) * 60) / toiMinutes(x.time_on_ice) < 2.5 ? 1 : 0)),
   shooting_pct_bonus: (r) =>
-    n(r.shots_on_goal) > 0 ? Math.max(0, (n(r.goals) / n(r.shots_on_goal)) * 100 - 10) : 0,
+    n(r.shots_on_goal) >= 4 ? Math.max(0, (n(r.goals) / n(r.shots_on_goal)) * 100 - 10) : 0,
 }
 
 const scorableRows = [...new Set(NHL_ALL_SCORING_CATEGORIES.flatMap((c) => c.rows.map((r) => r.key)))].filter(
