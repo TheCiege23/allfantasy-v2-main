@@ -29,6 +29,7 @@ import {
   isSportAllowedForType,
   resolveValidScoringPresetIdForSelection,
 } from '@/lib/create-league-v2/rules-engine'
+import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
 import {
   IMPORT_LEAGUE_PROVIDERS,
   PREMIUM_ADVANCED_CREATE_KEYS,
@@ -709,16 +710,21 @@ export function LeagueBasicsStep({
 }: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors' | 'importCarryover'>) {
   const { t } = useLanguage()
   // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
-  const teamCountOptions = getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline)
+  // A carryover keeps the imported league's team count, which the import-flexible types accept
+  // even when their native list lacks it (lib/league-creation/importedTeamCount.ts).
+  const importedTeamCount = importCarryover ? state.teamCount : null
+  const teamCountOptionsFor = (leagueType: LeagueTypeId) =>
+    teamCountOptionsWithImported(getTeamCountOptions(state.sport, leagueType, state.soccerPipeline), leagueType, importedTeamCount)
+  const teamCountOptions = teamCountOptionsFor(getEffectiveLeagueType(state) ?? 'redraft')
   const teamCountStep = teamCountOptions.length > 1 ? teamCountOptions[1] - teamCountOptions[0] : 1
   const catalog = getClientLeagueCreateOptionsCatalog()
   const typeOptions = catalog.concepts.filter((concept) =>
     concept.id !== 'idp' && isSportAllowedForType(state.sport, concept.id as LeagueTypeId) &&
-      (!importCarryover || getTeamCountOptions(state.sport, concept.id as LeagueTypeId, state.soccerPipeline).includes(state.teamCount)),
+      (!importCarryover || teamCountOptionsFor(concept.id as LeagueTypeId).includes(state.teamCount)),
   )
   const showIdp = catalog.concepts.some((concept) => concept.id === 'idp') &&
     (state.sport === 'NFL' || state.sport === 'NCAAF') &&
-    (!importCarryover || getTeamCountOptions(state.sport, 'redraft', state.soccerPipeline).includes(state.teamCount))
+    (!importCarryover || teamCountOptionsFor('redraft').includes(state.teamCount))
   const setTeamCount = (teamCount: number) => {
     const tribeOptions = getSurvivorTribeOptions(teamCount)
     onChange({ teamCount, ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)

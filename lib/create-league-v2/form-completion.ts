@@ -19,6 +19,7 @@ import {
   getSurvivorTribeOptions,
 } from './rules-engine'
 import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
+import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
@@ -40,7 +41,11 @@ function isKeeperSetupValid(k: ReturnType<typeof getDefaultKeeperSetup>): boolea
 /**
  * Returns blocking issues that prevent POST /api/leagues (or tournament create).
  */
-export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): CreateLeagueCompletionIssue[] {
+export function analyzeCreateLeagueCompletion(
+  state: CreateLeagueV2State,
+  /** An import carryover's team count, which the import-flexible types accept off their list. */
+  options: { importedTeamCount?: number | null } = {},
+): CreateLeagueCompletionIssue[] {
   const issues: CreateLeagueCompletionIssue[] = []
   const lt = getEffectiveLeagueType(state)
 
@@ -81,7 +86,11 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
       message: 'Team count must be from 2 through 32.',
     })
   } else {
-    const allowedTeams = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
+    const allowedTeams = teamCountOptionsWithImported(
+      getTeamCountOptions(state.sport, lt, state.soccerPipeline),
+      state.idpSelected ? 'idp' : lt,
+      options.importedTeamCount,
+    )
     if (!allowedTeams.includes(state.teamCount)) {
       issues.push({
         code: 'team_count_invalid',

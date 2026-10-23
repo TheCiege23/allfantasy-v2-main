@@ -14,6 +14,7 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import {
   isDraftTypeAllowedForFormat,
@@ -124,7 +125,17 @@ function issuesFromZod(err: z.ZodError): ValidationIssue[] {
 /**
  * Structural + business validation (format-engine allowlists, team counts).
  */
-export function validateCreatePayload(input: unknown): ValidateCreateLeagueResult {
+export function validateCreatePayload(
+  input: unknown,
+  options: {
+    /**
+     * Set only when the request carries over an imported league: that league's real team count.
+     * A request for exactly this count is accepted for the import-flexible league types even when
+     * the native list lacks it (see lib/league-creation/importedTeamCount.ts).
+     */
+    importedTeamCount?: number | null
+  } = {},
+): ValidateCreateLeagueResult {
   const stripped = stripForbiddenCreateLeagueFields(input)
   const parsed = createLeagueBodySchema.safeParse(stripped.body)
   if (!parsed.success) {
@@ -330,7 +341,12 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
 
   const teamOpts = getTeamCountOptions(sport as SupportedSport, formatId as LeagueTypeId, data.soccerPipeline ?? null)
 
-  if (!teamOpts.includes(data.teamCount)) {
+  const importedCountAccepted =
+    options.importedTeamCount != null &&
+    options.importedTeamCount === data.teamCount &&
+    isImportedTeamCountAllowed(idpRequested ? 'idp' : formatId, data.teamCount, teamOpts)
+
+  if (!teamOpts.includes(data.teamCount) && !importedCountAccepted) {
     return {
       ok: false,
       error: 'Invalid team count for this concept and sport',
