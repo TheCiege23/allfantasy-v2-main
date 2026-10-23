@@ -28,7 +28,9 @@ vi.mock('@/lib/dynasty-core/DynastySettingsService', () => ({ upsertDynastyConfi
 
 import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
 import { resolveNbaRosterTemplate } from '@/lib/nba-roster/NbaRosterTemplates'
-import { resolveNhlRosterTemplate } from '@/lib/nhl-roster/NhlRosterTemplates'
+import { resolveNhlRosterTemplate, NHL_ROSTER_SLOTS, NHL_SLOT_MAP } from '@/lib/nhl-roster/NhlRosterTemplates'
+import { resolveMlbRosterTemplate, MLB_ROSTER_SLOTS, MLB_SLOT_MAP } from '@/lib/mlb-roster/MlbRosterTemplates'
+import { validateRosterConfig } from '@/lib/roster-engine/RosterValidationEngine'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -69,7 +71,7 @@ describe('applyDynastySportPresetToLeague', () => {
     m.getConfig.mockResolvedValue({ templateKey: 'dynasty', slots: { ...resolveNhlRosterTemplate('dynasty').slots }, isCustom: false })
     await applyDynastySportPresetToLeague('L1', 'nhl_dynasty_points_minors', 'commish')
     const slots = m.updateRoster.mock.calls[0]![1].slots
-    expect(slots).toMatchObject({ BN: 10, IR: 3 })
+    expect(slots).toMatchObject({ BN: 18, IR: 3 })
     expect(slots).not.toHaveProperty('IL')
   })
 
@@ -88,6 +90,27 @@ describe('applyDynastySportPresetToLeague', () => {
     expect(m.updateRoster.mock.calls[0]![1].slots).not.toHaveProperty('TAXI')
     expect(m.upsert.mock.calls[0]![1].taxiSlots).toBe(0)
     expect(m.leagueUpdate.mock.calls[0]![0].data.settings.taxi_slots).toBe(0)
+  })
+
+  // The old taxi depth is on the bench, in the roster save and in League.settings.
+  it.each([
+    ['NHL', 'nhl_dynasty_points_taxi', 13],
+    ['NHL', 'nhl_dynasty_points_minors', 18],
+    ['MLB', 'mlb_dynasty_points_minors', 18],
+    ['MLB', 'mlb_dynasty_points_deep', 26],
+  ])('%s %s writes BN %i, and the roster engine accepts it', async (sport, presetId, bench) => {
+    m.leagueFindUnique.mockResolvedValue({ sport, status: null, lifecycleState: 'setup', settings: {} })
+    m.getConfig.mockResolvedValue({ templateKey: 'custom', slots: { BN: 5, [sport === 'NHL' ? 'IR' : 'IL']: 2 }, isCustom: true })
+    await applyDynastySportPresetToLeague('L1', presetId, 'commish')
+    const slots = m.updateRoster.mock.calls[0]![1].slots
+    expect(slots.BN).toBe(bench)
+    expect(m.leagueUpdate.mock.calls[0]![0].data.settings.bench_slots).toBe(bench)
+    // updateLeagueRosterConfig refuses a slot over its catalog maximum, so the bench must fit it.
+    const slotMap = sport === 'NHL' ? NHL_SLOT_MAP : MLB_SLOT_MAP
+    expect(bench).toBeLessThanOrEqual(slotMap.get('BN')!.maxCount)
+    const full = { ...(sport === 'NHL' ? resolveNhlRosterTemplate('dynasty').slots : resolveMlbRosterTemplate('dynasty').slots), ...slots }
+    delete (full as Record<string, number>).TAXI
+    expect(validateRosterConfig(sport as 'NHL' | 'MLB', 'dynasty', full, sport === 'NHL' ? NHL_ROSTER_SLOTS : MLB_ROSTER_SLOTS).errors).toEqual([])
   })
 
   it('NHL / MLB: a TAXI slot the league already stores is lowered to 0, never raised', async () => {

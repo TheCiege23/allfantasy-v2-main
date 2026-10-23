@@ -28,20 +28,20 @@ export const DYNASTY_SPORT_PRESET_COPY: Record<string, Record<DynastyFormatLang,
     es: { label: 'Dinastía por puntos profunda', hint: '10 titulares · 12 banca · 4 IL · 6 taxi (hasta 3.er año).' },
   },
   nhl_dynasty_points_taxi: {
-    en: { label: 'Skater/goalie points dynasty', hint: '14 starters (2 G) · 9 bench · 3 IR.' },
-    es: { label: 'Dinastía por puntos (patinadores/porteros)', hint: '14 titulares (2 G) · 9 banca · 3 IR.' },
+    en: { label: 'Skater/goalie points dynasty', hint: '14 starters (2 G) · 13 bench · 3 IR.' },
+    es: { label: 'Dinastía por puntos (patinadores/porteros)', hint: '14 titulares (2 G) · 13 banca · 3 IR.' },
   },
   nhl_dynasty_points_minors: {
-    en: { label: 'Deeper-bench points dynasty', hint: '14 starters (2 G) · 10 bench · 3 IR.' },
-    es: { label: 'Dinastía por puntos con más banca', hint: '14 titulares (2 G) · 10 banca · 3 IR.' },
+    en: { label: 'Deep-bench points dynasty', hint: '14 starters (2 G) · 18 bench · 3 IR.' },
+    es: { label: 'Dinastía por puntos con banca profunda', hint: '14 titulares (2 G) · 18 banca · 3 IR.' },
   },
   mlb_dynasty_points_minors: {
-    en: { label: 'Points dynasty (standard)', hint: '23 starters · 12 bench · 4 IL.' },
-    es: { label: 'Dinastía por puntos (estándar)', hint: '23 titulares · 12 banca · 4 IL.' },
+    en: { label: 'Points dynasty (standard)', hint: '23 starters · 18 bench · 4 IL.' },
+    es: { label: 'Dinastía por puntos (estándar)', hint: '23 titulares · 18 banca · 4 IL.' },
   },
   mlb_dynasty_points_deep: {
-    en: { label: 'Deep-bench points dynasty', hint: '23 starters · 16 bench · 6 IL.' },
-    es: { label: 'Dinastía por puntos con banca profunda', hint: '23 titulares · 16 banca · 6 IL.' },
+    en: { label: 'Deep-bench points dynasty', hint: '23 starters · 26 bench · 6 IL.' },
+    es: { label: 'Dinastía por puntos con banca profunda', hint: '23 titulares · 26 banca · 6 IL.' },
   },
 }
 
