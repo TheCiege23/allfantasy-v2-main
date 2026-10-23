@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   recordUpsert: vi.fn(),
   recordDeleteMany: vi.fn(),
   sessionUpdateMany: vi.fn(),
+  auditCreate: vi.fn(async () => ({})),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     draftSession: { findFirst: m.draftFindFirst },
     keeperRecord: { upsert: m.recordUpsert, deleteMany: m.recordDeleteMany },
     keeperSelectionSession: { updateMany: m.sessionUpdateMany },
+    leagueAuditLog: { create: m.auditCreate },
   },
 }))
 
@@ -65,5 +67,18 @@ describe('submitKeeperSelections — two keepers costing the same round', () => 
     setup('reject_both')
     await submitKeeperSelections('R', 'L', 'S', ['a', 'b', 'c'])
     expect(m.recordDeleteMany).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('submitKeeperSelections — choosing to keep nobody', () => {
+  it('leaves a marker so the missed-deadline rule never treats the choice as silence', async () => {
+    setup('player_chooses')
+    await submitKeeperSelections('R', 'L', 'S', [])
+    expect(m.auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ leagueId: 'L', actionType: 'keeper_submitted_none', entityId: 'S', metadata: { rosterId: 'R' } }) })
+  })
+  it('a normal submission leaves no marker', async () => {
+    setup('player_chooses')
+    await submitKeeperSelections('R', 'L', 'S', ['c'])
+    expect(m.auditCreate).not.toHaveBeenCalled()
   })
 })
