@@ -93,7 +93,12 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
   it('future draft timing can refuse a cast that no longer fits, instead of silently truncating', () => {
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, draftAt: new Date('2027-03-01T23:00:00Z') })).toThrow('Not enough season remains')
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2027, castSize: 16, now })).toThrow('has not been verified')
-    expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 18 })).toThrow('Not enough season remains')
+    // 17 votes in 16 periods no longer refuses: one period holds two back-to-back councils.
+    const tight = buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 18 })
+    expect(tight.eliminationWeeks).toHaveLength(17)
+    expect(new Set(tight.eliminationWeeks).size).toBe(16)
+    // Even two per period cannot fit 17 votes into 8 periods.
+    expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 10 })).toThrow('Not enough season remains')
   })
   it('rejects a past scheduled draft so autostart cannot begin before managers join', () => {
     vi.useFakeTimers(); vi.setSystemTime(now)

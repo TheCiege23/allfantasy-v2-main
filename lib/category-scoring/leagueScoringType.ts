@@ -36,19 +36,22 @@ export type SportScoringTypes = {
   presets: Readonly<Record<string, readonly CategoryDefinition[]>>
   /** Every category a custom list may use, in display order. */
   catalog: readonly CategoryDefinition[]
+  /** When set, the only presets rotisserie may use (NBA roto is the 9-cat set only). */
+  rotoPresets?: readonly string[]
 }
 
 const POINTS_ONLY: SportScoringTypes = { modes: ['points'], presets: {}, catalog: [] }
 
 /**
- * Mirrors what the engines and `nativeCategoryScoringContext` accept today: NBA H2H categories
- * (no roto), MLB and NHL H2H categories and roto. Every other sport is points only on this base.
+ * Mirrors what the engines and `nativeCategoryScoringContext` accept today: NBA H2H categories and
+ * 9-cat roto, MLB and NHL H2H categories and roto. Every other sport is points only on this base.
  */
 export const SPORT_SCORING_TYPES: Readonly<Record<string, SportScoringTypes>> = {
   NBA: {
-    modes: ['points', 'h2h_category'],
+    modes: ['points', 'h2h_category', 'roto'],
     presets: { nba_8cat: NBA_LEGACY_EIGHT_CAT, nba_8cat_standard: NBA_EIGHT_CAT, nba_9cat: NBA_NINE_CAT },
     catalog: NBA_NINE_CAT,
+    rotoPresets: ['nba_9cat'],
   },
   MLB: {
     modes: ['points', 'h2h_category', 'roto'],
@@ -198,11 +201,16 @@ export function validateScoringTypeChange(
   }
   if (mode === 'points') return { ok: true, next: { mode, presetId: null, recordMode: null, categoryIds: null } }
 
-  const presetIds = Object.keys(types.presets)
+  const presetIds = mode === 'roto' && types.rotoPresets ? [...types.rotoPresets] : Object.keys(types.presets)
   const presetRaw =
     input.presetId !== undefined ? input.presetId : current.presetId && presetIds.includes(current.presetId) ? current.presetId : presetIds[0]
   if (typeof presetRaw !== 'string' || !presetIds.includes(presetRaw)) {
-    return fail('unsupported_category_preset', `Unknown category preset "${String(presetRaw)}" for this sport.`)
+    return fail(
+      'unsupported_category_preset',
+      mode === 'roto' && typeof presetRaw === 'string' && presetRaw in types.presets
+        ? `Rotisserie uses the ${presetIds.join(' / ')} categories in this sport, not "${presetRaw}".`
+        : `Unknown category preset "${String(presetRaw)}" for this sport.`,
+    )
   }
 
   let categoryIds: string[] | null = null

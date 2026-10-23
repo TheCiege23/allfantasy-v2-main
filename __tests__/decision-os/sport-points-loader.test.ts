@@ -369,7 +369,8 @@ describe('loadSportPointsBase', () => {
 
     it('refuses a category league it cannot read rather than grading it on points', async () => {
       categoryBoard()
-      const out = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: { scoring_mode: 'roto', category_preset_id: 'nba_9cat', category_record_mode: 'roto' }, leagueType: 'redraft', leagueSize: 12 }, now: NOW })
+      // 9-cat roto is a supported native format now; an 8-cat roto league is not one we offer or read.
+      const out = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: { scoring_mode: 'roto', category_preset_id: 'nba_8cat_standard', category_record_mode: 'roto' }, leagueType: 'redraft', leagueSize: 12 }, now: NOW })
       expect(out).toMatchObject({ ok: false, reason: expect.stringMatching(/category grades cover the standard 8- and 9-category head-to-head setups/) })
     })
   })

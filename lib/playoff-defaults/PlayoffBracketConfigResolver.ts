@@ -6,6 +6,7 @@ import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoffConfigResolver'
 import type { SportType } from '@/lib/sport-defaults/types'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
+import { firstRoundByesForTeams, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 
 export interface PlayoffBracketConfig {
   playoff_team_count: number
@@ -97,15 +98,28 @@ export async function getBracketConfigForLeague(leagueId: string): Promise<Playo
   const toiletBowlEnabled = lb ? lb === 'toilet' : toiletFromJson
   const consolationEnabled = lb ? lb === 'consolation' || lb === 'consolation_bracket' : consolationFromJson
 
+  /*
+   * ⚠ BYES AND ROUNDS FOLLOW FROM THE FIELD, NOT FROM THE JSON BESIDE IT. Creation used to store the
+   * registry's 2 byes / 3 rounds next to a 4-team column, so this screen showed a bracket the runtime
+   * would never play. The runtime's rule (canonicalNflRedraftPlayoffRuntime.resolveSettings): byes are
+   * the gap to the next power of two, a stated `first_round_byes` can only lower it, and the rounds
+   * are ceil(log2(teams)). A league with no field (0 or 1 teams) keeps what it stores.
+   */
+  const rounds = playoffRoundsForTeams(teamCount)
+  const storedByes = Number(fromSettings<number>('first_round_byes', defaults.first_round_byes))
+  const gap = firstRoundByesForTeams(teamCount)
+  const firstRoundByes = rounds === 0 ? storedByes : Number.isFinite(storedByes) && storedByes >= 0 ? Math.min(Math.floor(storedByes), gap) : gap
+  const totalRounds = rounds === 0 ? fromSettings<number | null>('total_rounds', defaults.total_rounds ?? null) : rounds
+
   return {
     playoff_team_count: teamCount as number,
     playoff_weeks: fromSettings<number>('playoff_weeks', defaults.playoff_weeks),
     playoff_start_week: playoffStart,
     playoff_start_point: playoffStartPoint,
-    first_round_byes: fromSettings<number>('first_round_byes', defaults.first_round_byes),
+    first_round_byes: firstRoundByes,
     bracket_type: fromSettings<string>('bracket_type', defaults.bracket_type),
     matchup_length: matchupLength,
-    total_rounds: fromSettings<number | null>('total_rounds', defaults.total_rounds ?? null),
+    total_rounds: totalRounds,
     consolation_bracket_enabled: consolationEnabled,
     third_place_game_enabled: fromSettings<boolean>(
       'third_place_game_enabled',

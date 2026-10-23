@@ -107,3 +107,19 @@ describe('ScoringTypeEditor', () => {
     expect(screen.queryByTestId('scoring-type-editor')).toBeNull()
   })
 })
+
+describe('ScoringTypeEditor — NBA rotisserie is the 9-cat set only', () => {
+  it('picking roto narrows the presets to 9-cat and swaps to its categories', async () => {
+    fetchMock.mockImplementation(() =>
+      json({ ...NBA, options: { ...NBA.options, modes: ['points', 'h2h_category', 'roto'], rotoPresets: ['nba_9cat'] } }),
+    )
+    render(<ScoringTypeEditor leagueId="L1" isCommissioner />)
+    await screen.findByTestId('scoring-type-editor')
+    const presetOptions = () => [...(screen.getByTestId('scoring-type-preset') as HTMLSelectElement).options].map((o) => o.value)
+    expect(presetOptions()).toEqual(['nba_8cat_standard', 'nba_9cat'])
+    fireEvent.change(screen.getByTestId('scoring-type-mode'), { target: { value: 'roto' } })
+    expect(presetOptions()).toEqual(['nba_9cat'])
+    expect((screen.getByTestId('scoring-type-preset') as HTMLSelectElement).value).toBe('nba_9cat')
+    expect(screen.getByTestId('scoring-type-category-nba_to')).toBeTruthy()
+  })
+})

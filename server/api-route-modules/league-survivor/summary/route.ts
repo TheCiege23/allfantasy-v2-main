@@ -38,6 +38,8 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSur
 import { survivorIdolExpiryRule, survivorIdolExpiryText } from '@/lib/survivor/survivorIdolExpiry'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
+import { loadCouncilWeekPosition } from '@/lib/survivor/survivorWeekCouncilProgress'
+import { councilWeekLabel } from '@/lib/survivor/survivorEliminationSchedule'
 import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
@@ -292,6 +294,8 @@ export async function GET(
   const privacy = await resolveSurvivorAccessContext(leagueId, userId)
   if (!privacy?.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes, { revealMode: leagueMeta?.survivorRevealMode })
+  // Double-elimination weeks run two councils back to back; say which one this is.
+  const councilWeekPosition = council ? await loadCouncilWeekPosition(leagueId, council, leagueSettingsRow?.settings) : null
 
   const body = {
     leagueName: leagueMeta?.name ?? 'Survivor League',
@@ -376,6 +380,8 @@ export async function GET(
           isTie: publicCouncil?.isTie ?? false,
           isRevealed: publicCouncil.isRevealed,
           revealStartsAt: (publicCouncil as { revealStartsAt?: Date | null }).revealStartsAt ?? null,
+          weekPosition: councilWeekPosition,
+          weekLabel: councilWeekLabel(councilWeekPosition),
         }
       : null,
     challenges: challenges.map((c) => ({

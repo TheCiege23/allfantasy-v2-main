@@ -21,7 +21,6 @@ import { fileURLToPath } from 'url'
 import { execFileSync } from 'child_process'
 
 import { classifyBundling } from './secret-scan-client-bundling.mjs'
-import { listTrackedEnvFiles } from './secret-scan-env-files.mjs'
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..')
 const WARN_ONLY = process.argv.includes('--warn-only')
@@ -400,9 +399,15 @@ console.log('[secret-scan] Checking tracked .env* files for real credentials...'
 
 let trackedEnvFiles = []
 try {
-  // The listing outgrew Node's default 1 MiB maxBuffer (~1,048,800 bytes on 2026-10-22), which threw and
-  // made every scan UNVERIFIED; listTrackedEnvFiles passes maxBuffer 256 MiB, matching the call above.
-  trackedEnvFiles = listTrackedEnvFiles(ROOT)
+  trackedEnvFiles = execFileSync('git', ['ls-files', '-z'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    // Same ceiling as the candidate list above: the default 1 MiB overflows (ENOBUFS)
+    // once the tracked path list passes ~1 MiB, and this catch then fails the scan.
+    maxBuffer: 256 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter((p) => /(^|\/)\.env($|\.)/.test(p))
 } catch {
   // ⚠ Fail LOUD, not open. Every other guard in this repo fails open because the
   // cost of a false stop is a blocked deploy. Here the cost of a false pass is a

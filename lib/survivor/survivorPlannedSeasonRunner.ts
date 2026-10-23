@@ -23,6 +23,7 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
 import { autoApplyPendingTribeRedraw } from './survivorTribeRedrawDecision'
 import { dissolveSurpriseTribes, ensureSurpriseTribeWeek } from './survivorSurpriseTribes'
+import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
@@ -94,15 +95,21 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
       await processTribalDeadline(leagueId)
       return 'ceremony_processed'
     }
-    const resolved = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, week, action: { in: ['player_eliminated', 'planned_elimination_skipped_final_three'] } }, select: { id: true } })
-    if (!resolved) {
+    // A double-elimination week runs its councils back to back: the second opens only after the
+    // first has been revealed and its manager sent home.
+    const progress = await loadWeekCouncilProgress(leagueId, week, plan.eliminationWeeks)
+    if (!progress.done) {
+      if (!progress.canOpenNext) {
+        const latest = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week }, orderBy: { councilNumber: 'desc' }, select: { isRevealed: true } })
+        return latest && !latest.isRevealed ? 'awaiting_reveal' : 'awaiting_elimination'
+      }
       // The plan reserves one extra elimination for an Exile return. When
       // nobody qualifies, three finalists arrive a period early; never vote
       // out a fourth manager just to satisfy the static schedule.
       const active = await prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } })
       if (active === 3) {
         await withSurvivorSetupTransaction(leagueId, async tx => {
-          const existing = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: { in: ['player_eliminated', 'planned_elimination_skipped_final_three'] } }, select: { id: true } })
+          const existing = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'planned_elimination_skipped_final_three' }, select: { id: true } })
           if (existing || await tx.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }) !== 3) return
           await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'automation', action: 'planned_elimination_skipped_final_three', data: { reason: 'final_three_reached' }, isVisibleToPublic: true, isVisibleToCommissioner: true } })
           await tx.survivorGameState.update({ where: { leagueId }, data: { needsTribalLock: false } })
@@ -115,7 +122,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
       await autoApplyPendingTribeRedraw(leagueId, week)
       await tryAutomaticPhaseAdvance(leagueId)
       await triggerTribalOpen(leagueId)
-      return 'council_opened'
+      return progress.nextOrdinal > 1 ? 'second_council_opened' : 'council_opened'
     }
   }
 

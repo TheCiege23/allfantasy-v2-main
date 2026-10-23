@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { firstRoundByesForTeams, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 
 /** The playoff stage editor's config key (lib/playoff-settings/PlayoffConfigService). */
 const PLAYOFF_STAGE_CONFIG_KEY = 'playoff_config_data'
@@ -85,6 +86,13 @@ export async function syncCommissionerDerivedLeagueState(
     if (league.playoffTeams != null && mirror(existingStructure, 'playoffTeams', 'playoff_team_count')) {
       existingStructure.playoff_team_count = league.playoffTeams
     }
+    // A new field size changes the bracket's byes and rounds; leaving the old ones beside it is how a
+    // 4-team league came to show 2 byes and 3 rounds (PlayoffBracketConfigResolver now derives them too).
+    const fieldChanged = touched('playoffTeams') && league.playoffTeams != null && league.playoffTeams >= 2
+    if (fieldChanged) {
+      existingStructure.first_round_byes = firstRoundByesForTeams(league.playoffTeams)
+      existingStructure.total_rounds = playoffRoundsForTeams(league.playoffTeams)
+    }
     if (league.playoffStartWeek != null && mirror(existingStructure, 'playoffStartWeek', 'playoff_start_week')) {
       existingStructure.playoff_start_week = league.playoffStartWeek
     }
@@ -113,6 +121,20 @@ export async function syncCommissionerDerivedLeagueState(
     for (const column of PLAYOFF_COLUMNS) {
       if (mirror(playoffSettings, column, column)) playoffSettings[column] = league[column]
     }
+    if (fieldChanged) {
+      // The snake-case copies creation writes into the same block, and the flat key readers fall back to.
+      Object.assign(playoffSettings, {
+        playoff_team_count: league.playoffTeams,
+        firstRoundByes: existingStructure.first_round_byes,
+        first_round_byes: existingStructure.first_round_byes,
+        totalRounds: existingStructure.total_rounds,
+        total_rounds: existingStructure.total_rounds,
+      })
+    }
+    if (touched('playoffStartWeek') && league.playoffStartWeek != null && 'playoff_start_week' in playoffSettings) {
+      playoffSettings.playoff_start_week = league.playoffStartWeek
+    }
+    const flatTeamCount = fieldChanged && prev.playoff_team_count !== undefined ? { playoff_team_count: league.playoffTeams } : {}
 
     // Native leagues: the stage/bracket editor's copies follow the chosen week. Its stage config
     // keeps its playoff length, so the whole bracket shifts with the start week.
@@ -135,6 +157,7 @@ export async function syncCommissionerDerivedLeagueState(
         settings: {
           ...prev,
           ...startWeekCopies,
+          ...flatTeamCount,
           playoff_structure: existingStructure,
           playoffSettings,
         } as Prisma.InputJsonValue,
