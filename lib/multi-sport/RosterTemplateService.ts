@@ -7,6 +7,12 @@ import { getPositionsForSport } from './SportRegistry'
 import { toSportType, type SportType } from './sport-types'
 import { getRosterDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
+import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import {
+  allowedPositionsForCanonicalSlot,
+  isFlexibleCanonicalSlot,
+  readSavedRosterLayout,
+} from '@/lib/redraft-core-contract/savedRosterLayout'
 
 export interface RosterTemplateSlotDto {
   slotName: string
@@ -417,6 +423,111 @@ function defaultSoccerSlots(): RosterTemplateSlotDto[] {
 }
 
 /**
+ * 🛑 AN NFL / NCAAF REDRAFT LEAGUE'S OWN SAVED LAYOUT BEATS THE SPORT DEFAULT (owner, 2026-10-20).
+ *
+ * Without this, a redraft-core league with no `<sport>_roster_config` resolved to the global DB template
+ * or the in-memory sport default, never to its own saved `starter_slots` — so the lineup editor, league
+ * home, roster legality and lineup scans showed the DEFAULT lineup. Once the defaults carry FLEX and K
+ * again, a league saved with QB, RB, WR, WR, TE, DEF would show empty FLEX / K slots. A league with no
+ * saved layout still falls through to the defaults. Scoped to the redraft-core shell
+ * (`isNflRedraftCoreDashboardLeague`), so dynasty / keeper / devy / IDP / best ball resolve as before.
+ */
+function savedFootballRedraftTemplate(
+  league: {
+    settings: unknown
+    sport: string | null
+    leagueType?: string | null
+    isDynasty?: boolean | null
+    leagueVariant?: string | null
+    bestBallMode?: boolean | null
+    guillotineMode?: boolean | null
+    keeperPhaseActive?: boolean | null
+  },
+  leagueId: string,
+  normalizedFormat: string,
+): RosterTemplateDto | null {
+  const sportRaw = String(league.sport ?? '').toUpperCase()
+  if (sportRaw !== 'NFL' && sportRaw !== 'NCAAF') return null
+  if (
+    !isNflRedraftCoreDashboardLeague({
+      sport: sportRaw,
+      leagueType: league.leagueType,
+      isDynasty: league.isDynasty,
+      leagueVariant: league.leagueVariant,
+      bestBallMode: league.bestBallMode,
+      guillotineMode: league.guillotineMode,
+      keeperPhaseActive: league.keeperPhaseActive,
+    })
+  ) {
+    return null
+  }
+  const saved = readSavedRosterLayout(sportRaw, league.settings)
+  if (!saved || saved.starterOrder.length === 0) return null
+
+  const fallback = getRosterDefaults(sportRaw)
+  // This template's vocabulary (defaultNflSlots, the registry): FLEX / SUPERFLEX / DST.
+  const templateName = (token: string) =>
+    token === 'FLX' ? 'FLEX' : token === 'SF' ? 'SUPERFLEX' : token === 'DEF' ? 'DST' : token
+  const counts = new Map<string, number>()
+  for (const token of saved.starterOrder) counts.set(token, (counts.get(token) ?? 0) + 1)
+
+  const slots: RosterTemplateSlotDto[] = []
+  const playerPositions = new Set<string>()
+  let order = 0
+  for (const [token, count] of counts) {
+    const allowedPositions = allowedPositionsForCanonicalSlot(token)
+    allowedPositions.forEach((position) => playerPositions.add(position))
+    slots.push({
+      slotName: templateName(token),
+      allowedPositions,
+      starterCount: count,
+      benchCount: 0,
+      reserveCount: 0,
+      taxiCount: 0,
+      devyCount: 0,
+      isFlexibleSlot: isFlexibleCanonicalSlot(token),
+      slotOrder: order++,
+    })
+  }
+  const allPositions = [...playerPositions]
+  const bench = saved.benchSlots ?? fallback.bench_slots
+  const ir = saved.irSlots ?? fallback.IR_slots
+  if (bench > 0) {
+    slots.push({
+      slotName: 'BENCH',
+      allowedPositions: allPositions,
+      starterCount: 0,
+      benchCount: bench,
+      reserveCount: 0,
+      taxiCount: 0,
+      devyCount: 0,
+      isFlexibleSlot: false,
+      slotOrder: order++,
+    })
+  }
+  if (ir > 0) {
+    slots.push({
+      slotName: 'IR',
+      allowedPositions: allPositions,
+      starterCount: 0,
+      benchCount: 0,
+      reserveCount: ir,
+      taxiCount: 0,
+      devyCount: 0,
+      isFlexibleSlot: false,
+      slotOrder: order++,
+    })
+  }
+  return {
+    templateId: `saved-${sportRaw}-${leagueId}`,
+    sportType: sportRaw,
+    name: 'Saved League Roster',
+    formatType: normalizedFormat,
+    slots,
+  }
+}
+
+/**
  * Get roster template for sport (and optional format). Prefer DB; else in-memory default.
  * When leagueId is provided and league is IDP with config, uses commissioner IDP preset (roster slots from IdpLeagueConfig).
  */
@@ -431,7 +542,19 @@ export async function getRosterTemplate(
   // Check for commissioner-customized roster config in League.settings (any sport)
   if (leagueId) {
     try {
-      const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, sport: true } })
+      const league = await prisma.league.findUnique({
+        where: { id: leagueId },
+        select: {
+          settings: true,
+          sport: true,
+          leagueType: true,
+          isDynasty: true,
+          leagueVariant: true,
+          bestBallMode: true,
+          guillotineMode: true,
+          keeperPhaseActive: true,
+        },
+      })
       const settings = (league?.settings as Record<string, unknown>) ?? {}
       const sportPrefix = `${(league?.sport ?? sport).toLowerCase()}_roster_`
       const customConfig = settings[`${sportPrefix}config`] as Record<string, unknown> | undefined
@@ -518,6 +641,9 @@ export async function getRosterTemplate(
           slots,
         }
       }
+
+      const savedTemplate = league ? savedFootballRedraftTemplate(league, leagueId, normalizedFormat) : null
+      if (savedTemplate) return savedTemplate
     } catch {
       // Fall through to standard resolution
     }
