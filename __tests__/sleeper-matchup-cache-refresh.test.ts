@@ -123,3 +123,17 @@ it('does not read stored rows for a week that is not cached yet', async () => {
   expect(db.delete).not.toHaveBeenCalled()
   expect(db.create).toHaveBeenCalledOnce()
 })
+
+it('kill switch "matchups" restores the always-replace behaviour', async () => {
+  process.env.AF_CHANGE_AWARE_WRITES_OFF = 'matchups'
+  try {
+    db.fetch.mockResolvedValueOnce(providerWeek1)
+    db.findMany.mockResolvedValueOnce(storedWeek1)
+    await ensureMatchupsCached('P', 1, 2026)
+    expect(db.findMany).not.toHaveBeenCalled()
+    expect(db.updateMany).not.toHaveBeenCalled()
+    expect(db.transaction).toHaveBeenCalledOnce()
+  } finally {
+    delete process.env.AF_CHANGE_AWARE_WRITES_OFF
+  }
+})

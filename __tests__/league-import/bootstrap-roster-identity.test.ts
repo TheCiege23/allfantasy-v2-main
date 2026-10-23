@@ -183,6 +183,20 @@ describe('🛑 every orphan team keeps its own roster', () => {
     expect(db.rosters.map((r) => JSON.stringify(r.playerData)).sort()).toEqual(before)
   })
 
+  it('kill switch "rosters" restores the always-rewrite behaviour', async () => {
+    await run(league)
+    db.rosterUpdates = 0
+    db.rosterTouches = []
+    process.env.AF_CHANGE_AWARE_WRITES_OFF = 'rosters'
+    try {
+      await run(league)
+    } finally {
+      delete process.env.AF_CHANGE_AWARE_WRITES_OFF
+    }
+    expect(db.rosterUpdates).toBe(4)
+    expect(db.rosterTouches).toHaveLength(0)
+  })
+
   it('rewrites only the roster whose players changed', async () => {
     await run(league)
     db.rosterUpdates = 0

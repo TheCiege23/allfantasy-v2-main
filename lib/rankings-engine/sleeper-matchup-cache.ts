@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueMatchups } from '@/lib/sleeper-client'
 import { readLeagueWeekMetadata } from '@/lib/core-app/leagueWeekMetadata'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
+import { changeAwareWritesEnabled } from '@/lib/league-import/changeAwareWrites'
 
 /*
  * ⚠ NO DEFAULT SEASON, ON PURPOSE. This module shipped with
@@ -99,7 +100,8 @@ export async function ensureMatchupsCached(
    * The stored rows of every refetched week that is already cached, read once, so an unchanged week
    * can be recognised as unchanged. A week that is not cached yet has nothing to compare against.
    */
-  const refetchedCachedWeeks = missingWeeks.filter(w => cachedWeeks.has(w))
+  /* Kill switch: `AF_CHANGE_AWARE_WRITES_OFF=matchups` restores the always-replace behaviour. */
+  const refetchedCachedWeeks = changeAwareWritesEnabled('matchups') ? missingWeeks.filter(w => cachedWeeks.has(w)) : []
   const storedRows = refetchedCachedWeeks.length > 0
     ? await prisma.weeklyMatchup.findMany({
         where: { leagueId, seasonYear, week: { in: refetchedCachedWeeks } },
@@ -159,7 +161,7 @@ export async function ensureMatchupsCached(
        * league sync panel's "matchups updated N ago", and the admin pipeline-freshness board.
        * All of them read it as "last confirmed", which is still true.
        */
-      if (storedRows && cachedWeeks.has(week) && sameWeekRows(storedByWeek.get(week) ?? [], rows)) {
+      if (storedRows && refetchedCachedWeeks.includes(week) && sameWeekRows(storedByWeek.get(week) ?? [], rows)) {
         await prisma.weeklyMatchup.updateMany({
           where: { leagueId, seasonYear, week },
           data: { updatedAt: new Date() },
