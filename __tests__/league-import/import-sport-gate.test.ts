@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /*
- * The import sport gate: `supportedSports` in provider-ui-config.ts is enforced, for every provider.
+ * The import sport gate: `supportedSports` in provider-ui-config.ts is enforced for Yahoo.
  *
  * 🛑 IT WAS DISPLAY-ONLY. The import page printed each provider's sports and the pipeline imported
- * any sport the provider returned. This file pins two things for EVERY provider:
- *   - each sport it is listed for still passes the gate in the real pipeline;
- *   - a sport it is not listed for, or no sport at all, is refused with UNSUPPORTED_SPORT.
+ * any sport the provider returned. This file pins, in the real pipeline:
+ *   - every provider's listed sports still pass;
+ *   - for Yahoo, a sport it is not listed for, or no sport at all, is refused with UNSUPPORTED_SPORT;
+ *   - for the live providers, behaviour is unchanged: an unlisted sport is NOT refused (refusing it,
+ *     e.g. a non-NFL Sleeper league, is an owner decision not yet taken).
  *
  * The provider fetch services and the adapter normalization are stubbed so the test isolates the
  * gate itself; each stub returns `league.sport` exactly as that provider's adapter spells it
@@ -102,23 +104,32 @@ describe('import sport gate — every provider', () => {
       }
 
       const unlisted = ALL.filter((s) => !listed.includes(s))
-      for (const sport of unlisted) {
-        it(`refuses an unlisted sport: ${sport}`, async () => {
-          const out = await runFor(provider, sport)
+      if (provider === 'yahoo') {
+        for (const sport of unlisted) {
+          it(`refuses an unlisted sport: ${sport}`, async () => {
+            const out = await runFor(provider, sport)
+            expect(out.success).toBe(false)
+            if (out.success) return
+            expect(out.code).toBe('UNSUPPORTED_SPORT')
+            expect(out.error).toContain(`this league is ${sport}`)
+          })
+        }
+
+        it('refuses a league with no sport rather than defaulting it', async () => {
+          const out = await runFor(provider, null)
           expect(out.success).toBe(false)
           if (out.success) return
           expect(out.code).toBe('UNSUPPORTED_SPORT')
-          expect(out.error).toContain(`this league is ${sport}`)
+          expect(out.error).toMatch(/did not say which sport/)
         })
+      } else {
+        for (const sport of unlisted) {
+          it(`live importer unchanged: an unlisted sport (${sport}) is not refused`, async () => {
+            const out = await runFor(provider, sport)
+            expect(out.success).toBe(true)
+          })
+        }
       }
-
-      it('refuses a league with no sport rather than defaulting it', async () => {
-        const out = await runFor(provider, null)
-        expect(out.success).toBe(false)
-        if (out.success) return
-        expect(out.code).toBe('UNSUPPORTED_SPORT')
-        expect(out.error).toMatch(/did not say which sport/)
-      })
     })
   }
 

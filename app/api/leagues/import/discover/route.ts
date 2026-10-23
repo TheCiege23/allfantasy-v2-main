@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
    * The sport asked for must be one this provider imports (`supportedSports`), or the list
    * would offer leagues the import then refuses. Every caller today asks for `nfl`.
    */
-  const requestedSportCheck = checkImportSportSupported(provider, sport)
+  const requestedSportCheck = provider === 'yahoo' ? checkImportSportSupported(provider, sport) : { ok: true as const }
   if (!requestedSportCheck.ok) {
     return NextResponse.json({ error: requestedSportCheck.message }, { status: 400 })
   }

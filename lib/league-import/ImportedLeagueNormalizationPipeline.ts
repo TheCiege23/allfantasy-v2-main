@@ -243,7 +243,12 @@ export async function runImportedLeagueNormalizationPipeline(
       provider,
       raw: payload,
     })
-    if (!refreshOfImportedLeague) {
+    /*
+     * Enforced for Yahoo only for now. Sleeper and Fleaflicker list NFL but their single-league
+     * imports have accepted other sports until today; refusing those is an owner decision, so
+     * live importers keep their current behaviour. Yahoo is not live yet.
+     */
+    if (provider === 'yahoo' && !refreshOfImportedLeague) {
       const sportCheck = checkImportSportSupported(provider, normalized.league?.sport)
       if (!sportCheck.ok) {
         return { success: false, error: sportCheck.message, code: 'UNSUPPORTED_SPORT' }
