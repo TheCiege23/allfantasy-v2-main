@@ -38,7 +38,7 @@ vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWee
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
 
-async function setup(sport: 'NBA' | 'NHL', week: number, options: { exile?: boolean; finalized?: boolean; castSize?: number; now?: Date; exileReturnWeek?: number } = {}) {
+async function setup(sport: 'NBA' | 'NHL' | 'NFL', week: number, options: { exile?: boolean; finalized?: boolean; castSize?: number; now?: Date; exileReturnWeek?: number } = {}) {
   const plan = buildSurvivorFullSeasonPlan({ sport, season: 2026, castSize: options.castSize ?? 20, now: options.now ?? start, exileEnabled: options.exile, exileReturnWeek: options.exileReturnWeek ?? 10 })
   db.league.findUnique.mockResolvedValue({ sport, season: 2026, survivorMode: true, platform: 'allfantasy', settings: { survivor_full_season_plan: plan } })
   state.game = { phase: 'pre_merge', currentWeek: week, weekScoringFinalAt: options.finalized ? later : null, activeCouncilId: null }
@@ -60,7 +60,7 @@ beforeEach(() => {
   state.active = 20
 })
 
-describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport => {
+describe.each(['NBA', 'NHL', 'NFL'] as const)('%s Survivor planned season tick', sport => {
   it('draws the surprise two-tribe week at the top of an elimination-week tick once the rule is on', async () => {
     const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
     const plan = await setup(sport, 1, { finalized: true })
@@ -86,7 +86,11 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     { qualifies: true, late: true }, { qualifies: false, late: true },
   ])('replays saved weekly state through a crowned Final 3 (Exile qualifies: $qualifies, late draft: $late)', async ({ qualifies, late }) => {
     const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
-    const plan = await setup(sport, 1, late ? { exile: true, castSize: 24, now: new Date('2027-01-10T12:00:00Z'), exileReturnWeek: 20 } : { exile: true })
+    // NFL's late case is a 16-player cast created in week 7; the daily sports' is 24 in January.
+    const lateOptions = sport === 'NFL'
+      ? { exile: true, castSize: 16, now: new Date('2026-10-22T12:00:00Z'), exileReturnWeek: 12 }
+      : { exile: true, castSize: 24, now: new Date('2027-01-10T12:00:00Z'), exileReturnWeek: 20 }
+    const plan = await setup(sport, 1, late ? lateOptions : { exile: true })
     if (late) expect(new Set(plan.eliminationWeeks).size).toBeLessThan(plan.eliminationWeeks.length)
     const resolvedWeeks = new Set<number>()
     const eliminatedIn = new Map<number, number>()
@@ -155,7 +159,8 @@ describe.each(['NBA', 'NHL'] as const)('%s Survivor planned season tick', sport 
     for (let week = plan.startWeek; week <= plan.endWeek; week++) {
       const kind = plannedWeekKind(plan, week)
       if (kind === 'opening') openings++
-      if (kind === 'elimination') {
+      // A double week votes twice; count every scheduled vote, not just the week.
+      if (kind === 'elimination') for (let vote = 0; vote < plan.eliminationWeeks.filter(w => w === week).length; vote++) {
         if (active === 3) skipped++
         else active--
       }

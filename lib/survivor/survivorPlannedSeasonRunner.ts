@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
-import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { planWeekForInstant, planWeekWindow, SURVIVOR_PLAN_SPORTS } from './survivorPlanCalendar'
 import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
 import { readSurvivorFullSeasonPlan, type SurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import {
@@ -19,7 +19,6 @@ import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRos
 import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
-import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
 import { autoApplyPendingTribeRedraw } from './survivorTribeRedrawDecision'
 import { dissolveSurpriseTribes, ensureSurpriseTribeWeek } from './survivorSurpriseTribes'
@@ -45,7 +44,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (['pre_draft', 'drafting', 'complete', 'paused'].includes(game.phase)) return game.phase
   // The commissioner's pause writes pausedSnapshot and leaves phase alone.
   if (game.pausedSnapshot != null) return 'paused'
-  const calendarWeek = dailySportWeekForInstant(plan.sport, plan.season, now)
+  const calendarWeek = planWeekForInstant(plan.sport, plan.season, now)
   if (!calendarWeek || calendarWeek < plan.startWeek) return 'awaiting_opening'
 
   if (game.currentWeek < plan.startWeek) {
@@ -72,7 +71,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     if (!await allScoresFinalizedForWeek(leagueId, week)) {
       // The week has rolled over on the calendar and the feed is still not final: a person has to
       // look at the provider. Once per week, after a six-hour grace.
-      const window = resolveDailySportWeekWindow(plan.sport, plan.season, week)
+      const window = planWeekWindow(plan.sport, plan.season, week)
       if (window && calendarWeek > week && now.getTime() - window.end.getTime() > SURVIVOR_SCORES_OVERDUE_MS) {
         await notifySurvivorCommissionerOnce(leagueId, 'scores_overdue', {
           dedupeKey: String(week), week,
@@ -191,7 +190,7 @@ export async function runPlannedSurvivorSeasonBatch(now = new Date()) {
   if (process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED !== 'true') {
     return { considered: 0, failed: 0, outcomes: { disabled: 1 } }
   }
-  const leagues = await prisma.league.findMany({ where: { survivorMode: true, sport: { in: ['NBA', 'NHL'] } }, select: { id: true, settings: true }, orderBy: { id: 'asc' } })
+  const leagues = await prisma.league.findMany({ where: { survivorMode: true, sport: { in: [...SURVIVOR_PLAN_SPORTS] } }, select: { id: true, settings: true }, orderBy: { id: 'asc' } })
   const planned = leagues.filter(league => readSurvivorFullSeasonPlan(league.settings))
   const outcomes: Record<string, number> = {}
   let failed = 0
