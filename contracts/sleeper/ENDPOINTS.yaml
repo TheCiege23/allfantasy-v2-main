@@ -1,0 +1,73 @@
+--- # ============================================================================
+# Sleeper public read API — Contract (partial)
+# Only the players feed is described here. The projections board and league settings
+# are recorded in GAPS.md (S-01..S-08) and are not yet written up as endpoints.
+#
+# Source: the code that already consumes the feed — lib/sleeper-client.ts
+#   (`SleeperPlayer`, getAllPlayers, getPlayersBySport) and
+#   lib/sleeper/refreshSleeperPlayerRows.ts (`FeedPlayer`). NO FIXTURE YET for either
+#   sport: see `fixtures:` under each endpoint, and GAPS.md S-09.
+# Do not probe to fill in an UNKNOWN below except through scripts/probe.sh, with the
+# fixture committed in the same change (root CLAUDE.md, "Sports data providers").
+# ============================================================================
+
+meta:
+  vendor: Sleeper
+  base_url: https://api.sleeper.app/v1
+  base_url_env: none            # hard-coded as SLEEPER_API_BASE in lib/sleeper-client.ts
+  contract_version: 0.1.0
+  written_at: 2026-10-23
+  data_classification: fantasy_platform
+  sla: none
+
+auth:
+  mechanism: none
+  note: >
+    No token, key or cookie. lib/sleeper-client.ts sends a plain GET. There is no
+    credential to redact, so the RSC_token rules in the root CLAUDE.md do not apply here.
+
+# ============================================================================
+endpoints:
+  players:
+    method: GET
+    path: /players/{sport}
+    params:
+      sport:
+        in: path
+        values_used_by_code: [nfl, nba]
+        note: >
+          `SleeperSport` is 'nfl' | 'nba' (lib/autocoach/status-sources/SleeperStatusAdapter.ts)
+          and SLEEPER_ENDPOINT_SPORTS (lib/sleeper/SleeperPlayerSeedService.ts) maps only NFL
+          and NBA. Whether Sleeper serves any other sport is NOT established — GAPS.md S-09.
+    response:
+      envelope: object keyed by Sleeper player id (string) -> player object
+      size_note: >
+        Several MB (NFL ~5 MB, ~11.4k players per the refreshSleeperPlayerRows sizing note).
+        Never fetch it on a request path; probe.sh streams it to a temp file and trims it.
+      fields:
+        # Typed from the NFL feed by code that consumes it. For NBA every row below is
+        # UNVERIFIED until fixtures/players.nba.json exists.
+        player_id:   { type: string, note: "also the envelope key (assumed equal; the trimmer counts it)" }
+        full_name:   { type: "string | null" }
+        first_name:  { type: "string | null" }
+        last_name:   { type: "string | null" }
+        team:        { type: "string | null", note: "club code (e.g. DET); null = free agent — see sleeperTeamForUpdate" }
+        position:    { type: "string | null" }
+        status:      { type: "string | null" }
+        age:         { type: "number | string | null" }
+        years_exp:   { type: "number | string | null", note: "NFL: 0 = first-year player (code reads it so). NBA: UNKNOWN — S-09" }
+        height:      { type: "string | null" }
+        weight:      { type: "string | null" }
+        college:     { type: "string | null" }
+        birth_date:  { type: "string | null", format: "YYYY-MM-DD" }
+    consumers:
+      - lib/sleeper-client.ts getAllPlayers (nfl, 24h in-process cache) / getPlayersBySport
+      - lib/sleeper/refreshSleeperPlayerRows.ts (scheduled, /api/cron/import-players, NFL only)
+      - lib/player-match/sleeperIdentitySync.ts (NFL only)
+    per_sport:
+      nfl:
+        confidence: medium      # shape inferred from working consumers, no fixture
+        fixtures: []
+      nba:
+        confidence: none        # never captured; see GAPS.md S-09
+        fixtures: []            # scripts/probe.sh players nba -> fixtures/players.nba.json

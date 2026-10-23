@@ -3,8 +3,9 @@
 **Purpose:** record what we don't know about Sleeper's public feeds so nobody re-probes to
 rediscover it.
 
-**This is a partial contract.** There is no `ENDPOINTS.yaml`, no `fixtures/` and no
-`scripts/probe.sh` for Sleeper yet — the same state `contracts/api-sports/` started in. It was
+**This is a partial contract.** Since 2026-10-23 there is an `ENDPOINTS.yaml` (the players feed
+only) and a `scripts/probe.sh`, but still no fixture. Before that there was no `ENDPOINTS.yaml`, no
+`fixtures/` and no `scripts/probe.sh` for Sleeper — the same state `contracts/api-sports/` started in. It was
 created 2026-09-29 because the future-week projections build needed somewhere to record what the
 committed code does NOT establish, and the root CLAUDE.md rule is to record an unknown rather than
 probe for it. The only shape authority today is the code that already consumes the feed:
@@ -84,3 +85,14 @@ Two things the later writer must respect, read from code on `main`:
   writes `yearsExp` on the RI rows today, so there is nothing to disagree with — keep it that way,
   or copy Sleeper's value onto the linked RI row (`PlayerIdentityMap.rollingInsightsId` +
   `sleeperId`) rather than writing a second opinion.
+
+**S-09 update, 2026-10-23 — probe tooling added, the ONE approved capture could not reach Sleeper.**
+The owner approved one probe of `players/nba`. `ENDPOINTS.yaml` and `scripts/probe.sh` (plus
+`scripts/trim-players-fixture.mjs`, which writes ~20 verbatim players and a whole-feed summary:
+total entries, how many carry a numeric `years_exp`, the `years_exp` distribution, and named
+cross-checks such as LeBron James) now exist. The single run was made from a sandbox whose egress
+proxy refuses `api.sleeper.app` (HTTP CONNECT 403, a policy denial), so **no response was received
+and nothing was learned about the feed** — this is not evidence about Sleeper. S-09 stays
+**UNVERIFIED** and NBA is **not** wired into `refreshSleeperPlayerRows`. Next step: run
+`contracts/sleeper/scripts/probe.sh players nba` once from a machine that can reach Sleeper, and
+commit `fixtures/players.nba.json` in the same change as the NBA wiring.
