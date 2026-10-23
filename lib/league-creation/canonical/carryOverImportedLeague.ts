@@ -6,6 +6,7 @@ import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
 import { importedMlbScoring } from './importedMlbScoring'
 import { copyImportedHistory } from './copyImportedHistory'
 import { importedMlbRoster } from './importedMlbRoster'
+import { isNativeFuturePickLeague, loadNativePickHorizonStart } from '@/lib/league-trade-engine/nativeFuturePicks'
 
 type Tx = Prisma.TransactionClient
 
@@ -103,6 +104,67 @@ export function translateImportedRosterData(data: unknown, idMap: Map<string, st
     draftPicks: [],
     foundation: { ...asRecord(raw.foundation), openTeam: false, carriedOverFromLeagueId: sourceLeagueId },
   }
+}
+
+export type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skippedNotTraded: number; skippedPastSeason: number }
+
+/**
+ * Copy the source league's traded future picks into the new native league, inside the creation
+ * transaction.
+ *
+ * 🛑 A DYNASTY CARRYOVER USED TO DROP EVERY TRADED PICK. Imported picks live in `future_draft_picks`
+ * keyed by the PROVIDER's team ids (`LeagueTeam.externalId`); a native dynasty league reads the same
+ * table keyed by `Roster.id` (`nativeFuturePicks.ts`). Nothing moved them across, so a team that had
+ * bought a 2027 1st arrived holding nothing and the seller was on the clock for it.
+ *
+ * Only rows that say something are copied: every team implicitly owns its own picks, so a row whose
+ * holder is its original team is not a trade. A row naming a team that cannot be mapped is skipped
+ * rather than guessed, and a season at or before the native horizon start is skipped because no
+ * native rookie draft will ever consume it. `skipDuplicates` on the
+ * (leagueId, pickSeason, round, originalRosterId) key keeps a retried carryover from duplicating rows.
+ */
+export async function carryOverImportedFuturePicks(tx: Tx, args: {
+  sourceLeagueId: string
+  targetLeagueId: string
+  /** Provider team id (`LeagueTeam.externalId`) → the new native `Roster.id`. */
+  rosterIdByExternalId: Map<string, string>
+}): Promise<CarriedFuturePicks | null> {
+  const target = await tx.league.findUnique({
+    where: { id: args.targetLeagueId },
+    select: { platform: true, leagueType: true, isDynasty: true, season: true },
+  })
+  if (!target || !isNativeFuturePickLeague(target)) return null
+  const rows = await tx.futureDraftPick.findMany({
+    where: { leagueId: args.sourceLeagueId, status: 'active' },
+    select: { pickSeason: true, round: true, originalRosterId: true, currentOwnerId: true, tradedAt: true },
+  })
+  const result: CarriedFuturePicks = { copied: 0, skippedUnmapped: 0, skippedNotTraded: 0, skippedPastSeason: 0 }
+  if (!rows.length) return result
+  const horizonStart = await loadNativePickHorizonStart(tx, args.targetLeagueId, target.season ?? null)
+  const data: Prisma.FutureDraftPickCreateManyInput[] = []
+  for (const row of rows) {
+    const originalRosterId = args.rosterIdByExternalId.get(row.originalRosterId)
+    const currentOwnerId = args.rosterIdByExternalId.get(row.currentOwnerId)
+    if (!originalRosterId || !currentOwnerId) { result.skippedUnmapped++; continue }
+    if (originalRosterId === currentOwnerId) { result.skippedNotTraded++; continue }
+    if (horizonStart == null || row.pickSeason < horizonStart) { result.skippedPastSeason++; continue }
+    data.push({
+      leagueId: args.targetLeagueId,
+      pickSeason: row.pickSeason,
+      round: row.round,
+      originalRosterId,
+      currentOwnerId,
+      traded: true,
+      status: 'active',
+      sourceTradeId: null,
+      tradedAt: row.tradedAt ?? null,
+    })
+  }
+  if (data.length) {
+    const written = await tx.futureDraftPick.createMany({ data, skipDuplicates: true })
+    result.copied = written?.count ?? data.length
+  }
+  return result
 }
 
 /** Called inside the native creation transaction so a missing team or player rolls back the new league. */
@@ -266,6 +328,11 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   } })
   if (picks.length) await tx.draftPick.createMany({ data: picks })
   const history = await copyImportedHistory(tx, args.sourceLeagueId, args.targetLeagueId, teamIds, rosterIds)
+  const futurePicks = await carryOverImportedFuturePicks(tx, {
+    sourceLeagueId: args.sourceLeagueId,
+    targetLeagueId: args.targetLeagueId,
+    rosterIdByExternalId: new Map(orderedTeams.map((team, i) => [team.externalId, slots[i]!.rosterId!])),
+  })
   if (mlbScoring) {
     const slots = mlbRoster!.config.sections[0]!.slots
     await tx.leagueRosterConfig.upsert({ where: { leagueId: args.targetLeagueId }, create: { leagueId: args.targetLeagueId, templateId: `custom-MLB-${args.targetLeagueId}`, overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } }, update: { overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } } })
@@ -290,7 +357,9 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: mlbScoring.scoringMode, categoryPoints: mlbScoring.categoryPoints, lineupLockType:'first_game_of_week' },
         mlb_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: mlbScoring.uiRules, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
       } : {}),
-      importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length, copiedAt: new Date().toISOString() },
+      importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length,
+        ...(futurePicks ? { futurePickCount: futurePicks.copied, futurePicksSkipped: futurePicks.skippedUnmapped + futurePicks.skippedNotTraded + futurePicks.skippedPastSeason } : {}),
+        copiedAt: new Date().toISOString() },
     } as Prisma.InputJsonValue,
   } })
   return picks.length
