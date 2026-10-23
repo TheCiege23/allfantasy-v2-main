@@ -146,3 +146,43 @@ export function supportsImportProviderDiscovery(provider: ImportProvider): boole
 export function getImportProviderSupportedSports(provider: ImportProvider): readonly ImportSupportedSport[] {
   return IMPORT_PROVIDER_UI_OPTIONS.find((option) => option.provider === provider)?.supportedSports ?? [];
 }
+
+export type ImportSportCheck =
+  | { ok: true; sport: ImportSupportedSport }
+  | { ok: false; reason: 'missing' | 'unsupported'; message: string };
+
+/**
+ * May a league of `sport` be imported from `provider`? Read from `supportedSports` above.
+ *
+ * 🛑 `supportedSports` WAS DISPLAY-ONLY. The import page printed "Yahoo · NFL" while the Yahoo
+ * fetch read NBA, MLB and NHL leagues too and the pipeline imported whatever came back. This is
+ * the enforcement, called by `runImportedLeagueNormalizationPipeline` for every provider, so the
+ * list a manager is shown and the list the importer accepts are the same list.
+ *
+ * A missing sport is refused, never defaulted: a league of unknown sport imported as NFL is a
+ * basketball league with football rules.
+ */
+export function checkImportSportSupported(
+  provider: ImportProvider,
+  sport: string | null | undefined,
+): ImportSportCheck {
+  const label = getImportProviderLabel(provider);
+  const normalized = typeof sport === 'string' ? sport.trim().toUpperCase() : '';
+  if (!normalized) {
+    return {
+      ok: false,
+      reason: 'missing',
+      message: `${label} did not say which sport this league is, so it was not imported. Nothing was saved.`,
+    };
+  }
+  const supported = getImportProviderSupportedSports(provider);
+  if (!(supported as readonly string[]).includes(normalized)) {
+    const list = supported.length > 0 ? supported.join(', ') : 'no sports';
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: `${label} imports support ${list} leagues right now — this league is ${normalized}, so it was not imported. Nothing was saved.`,
+    };
+  }
+  return { ok: true, sport: normalized as ImportSupportedSport };
+}
