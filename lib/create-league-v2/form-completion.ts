@@ -21,6 +21,7 @@ import {
 import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
 import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
@@ -146,7 +147,7 @@ export function analyzeCreateLeagueCompletion(
    */
   if (
     lt === 'survivor' &&
-    (state.sport === 'NBA' || state.sport === 'NHL') &&
+    isSurvivorPlanSport(state.sport) &&
     state.draftScheduleLater !== true &&
     state.draftDate.trim() &&
     state.draftTime.trim() &&
@@ -160,7 +161,7 @@ export function analyzeCreateLeagueCompletion(
         castSize: state.teamCount,
         draftAt: toUtc(state.draftDate, state.draftTime, state.timezone),
         exileEnabled: exile.exileIslandEnabled,
-        exileReturnWeek: exile.exileReturnWeek,
+        // The wizard has no return-week field, so the plan picks one that fits the remaining season.
         finalistCount: readSurvivorLateSeasonSettings({}).finalistCount,
       })
     } catch (error) {

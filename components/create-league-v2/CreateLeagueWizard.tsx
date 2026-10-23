@@ -2,6 +2,7 @@
 
 import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
+import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
@@ -157,6 +158,11 @@ function tx(t: (key: string) => string, key: string, fallback: string): string {
   return translated === key ? fallback : translated
 }
 
+/** A scoring preset's name. Presets with a `createLeague.scoringPreset.<id>` key are translated; the rest keep their English label. */
+function scoringPresetLabel(t: (key: string) => string, preset: { id: string; label: string }): string {
+  return tx(t, `createLeague.scoringPreset.${preset.id}`, preset.label)
+}
+
 function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateKey): string {
   const translated = t(`createLeague.g30.advanced.${key}`)
   return translated === `createLeague.g30.advanced.${key}`
@@ -252,7 +258,10 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
 export const SPORT_DEFAULT_FORMATS: readonly LeagueTypeId[] = ['survivor', 'guillotine', 'big_brother']
 
 export function defaultLeagueTypeForSport(sport: SupportedSport): LeagueTypeId {
-  return SPORT_DEFAULT_FORMATS.find((leagueType) => isSportAllowedForType(sport, leagueType)) ?? 'redraft'
+  return SPORT_DEFAULT_FORMATS.find((leagueType) =>
+    isSportAllowedForType(sport, leagueType) &&
+    // NFL Survivor is offered but not preselected: a fresh NFL create still starts on Guillotine.
+    (leagueType !== 'survivor' || isSurvivorDefaultFormatSport(sport))) ?? 'redraft'
 }
 
 /**
@@ -1113,7 +1122,7 @@ export function DraftStep({
           >
             {scoringPresets.map((preset) => (
               <option key={preset.id} value={preset.id}>
-                {preset.label}
+                {scoringPresetLabel(t, preset)}
               </option>
             ))}
           </select>
@@ -1541,7 +1550,7 @@ export function LeaguePreviewCard({
           <PreviewRow label={t('createLeague.g30.privacy.label')} value={t(`createLeague.g30.privacy.${state.privacy}`)} />
           <PreviewRow label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} />
           <PreviewRow label={t('createLeague.g30.timezone.label')} value={timezoneLabel(state.timezone)} />
-          <PreviewRow label={t('createLeague.summary.scoring')} value={scoring?.label ?? t('createLeague.g30.empty')} />
+          <PreviewRow label={t('createLeague.summary.scoring')} value={scoring ? scoringPresetLabel(t, scoring) : t('createLeague.g30.empty')} />
           <PreviewRow label={t('createLeague.g30.preview.language')} value={language.toUpperCase()} />
           <PreviewRow label={t('createLeague.g30.preview.advanced')} value={enabledPremiumCount > 0 ? String(enabledPremiumCount) : t('createLeague.g30.preview.advancedNone')} />
         </div>

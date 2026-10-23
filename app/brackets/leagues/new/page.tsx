@@ -9,6 +9,7 @@ import { getRoundPointsSummary } from "@/lib/bracket-challenge"
 import { CommissionerFanCredSetupNotice } from "@/components/legal/CommissionerFanCredSetupNotice"
 import { BracketChallengeHeroMedia } from "@/components/brackets/BracketChallengeHeroMedia"
 import { createPlayoffBracketChallengeClient } from "@/lib/playoffs/playoffClientApi"
+import { useEntitlement } from "@/hooks/useEntitlement"
 import { indefiniteArticleFor } from "@/lib/text/indefiniteArticle"
 import { defaultPlayoffChallengeConfig, isAfCommissionerSubscriber, sanitizePlayoffChallengeConfig } from "@/lib/playoffs/playoffChallengeConfig"
 
@@ -81,7 +82,10 @@ export default function NewBracketLeaguePage() {
    */
   const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB"]
   const isPlayoffPool = challengeType === "playoff_challenge" && PLAYOFF_POOL_SPORTS.includes(sport)
-  const isAfCommissioner = isAfCommissionerSubscriber(session?.user)
+  // The real AF Commissioner plan (the same feature the server checks at create), plus AllFantasy's
+  // own test accounts. The allowlist alone locked these options for every paying commissioner.
+  const commissionerPlan = useEntitlement("commissioner_ai_tools")
+  const isAfCommissioner = isAfCommissionerSubscriber(session?.user) || commissionerPlan.featureAccess
 
   useEffect(() => {
     const requestedSport = searchParams?.get("sport")

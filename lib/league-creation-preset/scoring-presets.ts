@@ -314,6 +314,26 @@ const RULES: PresetRule[] = [
       },
     }),
   },
+  // NBA rotisserie on the 9-cat set: season-long totals ranked per category, TO lower-is-better,
+  // FG%/FT% from summed makes / attempts. No weekly opponent and no playoffs — the same runtime
+  // MLB roto already uses (scoringEngine roto branch, rankRotisserieTeams, finalizeRotoSeason).
+  {
+    id: 'nba_9cat_roto',
+    label: '9-cat Rotisserie',
+    hint: 'Season-long category ranks: PTS, REB, AST, STL, BLK, 3PM, FG%, FT%, TO (fewer is better). No weekly matchups or playoffs.',
+    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    build: () => ({
+      scoring: 'default',
+      isSuperflex: false,
+      scoringSettings: {
+        preset: 'nba_9cat_roto',
+        source: 'af',
+        scoringMode: 'roto',
+        categoryPresetId: 'nba_9cat',
+        categoryRecordMode: 'roto',
+      },
+    }),
+  },
 ]
 
 export function listScoringPresetOptions(ctx: PresetCtx): ScoringPresetOption[] {

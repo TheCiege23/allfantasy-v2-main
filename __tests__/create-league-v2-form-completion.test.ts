@@ -134,7 +134,9 @@ describe('payload normalization unchanged after form layer', () => {
    * and 24 was ACCEPTED there, only for the server to clamp it to 20 on save.
    */
   it('Survivor: every offered cast size passes the live gate on BOTH catalog paths', () => {
-    for (const withCatalog of [true, false]) {
+    // Preseason: late in the NFL season the largest casts stop fitting and are not offered.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-01T12:00:00Z') })
+    try { for (const withCatalog of [true, false]) {
       setClientLeagueCreateOptionsCatalog(withCatalog ? LEAGUE_CREATE_OPTIONS_CATALOG_V1 : null)
       const label = withCatalog ? 'catalog loaded' : 'pre-fetch fallback'
 
@@ -152,7 +154,7 @@ describe('payload normalization unchanged after form layer', () => {
           `${label}: ${teamCount} teams`,
         ).not.toContain('team_count_invalid')
       }
-    }
+    } } finally { vi.useRealTimers() }
     setClientLeagueCreateOptionsCatalog(null)
   })
 
@@ -170,20 +172,28 @@ describe('payload normalization unchanged after form layer', () => {
     })
     const codes = (state: ReturnType<typeof nbaSurvivor>) => analyzeCreateLeagueCompletion(state).map((i) => i.code)
 
-    it('24 managers fit the NBA season from an opening-week draft and not from a November one', () => {
+    it('24 managers fit from an opening-week or November draft (some weeks vote twice), but not from a March one', () => {
       vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
       expect(codes(nbaSurvivor(24, '2026-10-19'))).not.toContain('survivor_season_too_short')
-      const late = analyzeCreateLeagueCompletion(nbaSurvivor(24, '2026-11-15'))
-      expect(late.map((i) => i.code)).toContain('survivor_season_too_short')
-      expect(late.find((i) => i.code === 'survivor_season_too_short')?.message).toMatch(/Not enough season remains for 24 managers/)
-      // The same November draft is fine for a cast the remaining weeks can eliminate.
-      expect(codes(nbaSurvivor(16, '2026-11-15'))).not.toContain('survivor_season_too_short')
+      // November leaves fewer periods than votes; two back-to-back councils in some weeks cover it.
+      expect(codes(nbaSurvivor(24, '2026-11-15'))).not.toContain('survivor_season_too_short')
+      expect(codes(nbaSurvivor(24, '2026-12-10'))).not.toContain('survivor_season_too_short')
+      // A March draft is still refused. (The wizard plans with Exile's default week-10 return, which a
+      // March start has already passed, so that is the message the commissioner sees first.)
+      expect(codes(nbaSurvivor(24, '2027-03-01'))).toContain('survivor_season_too_short')
     })
 
     it('does not run for sports without a verified full-season calendar, or when the draft is scheduled later', () => {
       vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
-      expect(codes({ ...nbaSurvivor(24, '2026-11-15'), sport: 'NFL' as const, scoringPresetId: 'fb_half_ppr' })).not.toContain('survivor_season_too_short')
+      expect(codes({ ...nbaSurvivor(24, '2026-11-15'), sport: 'MLB' as const })).not.toContain('survivor_season_too_short')
       expect(codes({ ...nbaSurvivor(24, '2026-11-15'), draftScheduleLater: true })).not.toContain('survivor_season_too_short')
+    })
+
+    it('NFL has a verified calendar now: a mid-November 24-player cast is refused, a 12-player one fits', () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
+      const nfl = (teamCount: number) => ({ ...nbaSurvivor(teamCount, '2026-11-15'), sport: 'NFL' as const, scoringPresetId: 'fb_half_ppr' })
+      expect(codes(nfl(24))).toContain('survivor_season_too_short')
+      expect(codes(nfl(12))).not.toContain('survivor_season_too_short')
     })
   })
 
