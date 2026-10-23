@@ -8,13 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
   findMany: vi.fn(),
+  createMany: vi.fn(),
   executeRaw: vi.fn(),
   upsert: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    teamPerformance: { findMany: db.findMany, upsert: db.upsert },
+    teamPerformance: { findMany: db.findMany, createMany: db.createMany, upsert: db.upsert },
     $executeRaw: (...a: unknown[]) => db.executeRaw(...a),
   },
 }))
@@ -26,13 +27,15 @@ import {
   type TeamPerformanceWrite,
 } from '@/lib/league-import/teamPerformanceWrites'
 import { importedPlayerDataEquivalent, importedRosterUnchanged, stableJson } from '@/lib/league-import/rosterWriteEquivalence'
+import { changeAwareWritesEnabled } from '@/lib/league-import/changeAwareWrites'
 
-type Sent = TeamPerformanceWrite & { id: string }
-const sent = (): Sent[] =>
+const inserted = (): TeamPerformanceWrite[] => db.createMany.mock.calls.flatMap((c) => (c[0] as { data: TeamPerformanceWrite[] }).data)
+const updated = (): TeamPerformanceWrite[] =>
   db.executeRaw.mock.calls.flatMap((call) => {
     const payload = (call.slice(1) as unknown[]).find((v) => typeof v === 'string' && v.startsWith('['))
-    return payload ? (JSON.parse(payload as string) as Sent[]) : []
+    return payload ? (JSON.parse(payload as string) as TeamPerformanceWrite[]) : []
   })
+const sent = () => [...inserted(), ...updated()]
 const sqlText = () => (db.executeRaw.mock.calls[0]?.[0] as string[] | undefined)?.join('$') ?? ''
 
 const row = (teamId: string, week: number, points: number, over: Partial<TeamPerformanceWrite> = {}): TeamPerformanceWrite => ({
@@ -44,6 +47,7 @@ describe('team_performances', () => {
   beforeEach(() => {
     db.findMany.mockReset().mockResolvedValue([])
     db.upsert.mockReset().mockResolvedValue({})
+    db.createMany.mockReset().mockImplementation(async ({ data }: { data: unknown[] }) => ({ count: data.length }))
     db.executeRaw.mockReset().mockImplementation(async (_s: unknown, ...values: unknown[]) => {
       const payload = values.find((v) => typeof v === 'string' && v.startsWith('['))
       return payload ? (JSON.parse(payload as string) as unknown[]).length : 0
@@ -56,6 +60,7 @@ describe('team_performances', () => {
     db.findMany.mockResolvedValue(storedOf(schedule))
     const out = await writeTeamPerformances({ season: 2026, rows: schedule })
     expect(db.executeRaw).not.toHaveBeenCalled()
+    expect(db.createMany).not.toHaveBeenCalled()
     expect(db.upsert).not.toHaveBeenCalled()
     expect(out).toMatchObject({ processed: 4, changed: 0, written: 0 })
   })
@@ -69,10 +74,21 @@ describe('team_performances', () => {
     expect(out).toMatchObject({ changed: 1, written: 1, fellBack: false })
   })
 
-  it('inserts weeks that are not stored yet', async () => {
+  it('inserts weeks that are not stored yet through Prisma, without supplying ids', async () => {
     db.findMany.mockResolvedValue(storedOf(schedule.slice(0, 2)))
     await writeTeamPerformances({ season: 2026, rows: schedule })
-    expect(sent().map((r) => `${r.teamId}:${r.week}`).sort()).toEqual(['t1:2', 't2:2'])
+    expect(inserted().map((r) => `${r.teamId}:${r.week}`).sort()).toEqual(['t1:2', 't2:2'])
+    expect(inserted().every((r) => !('id' in r))).toBe(true)
+    expect(db.createMany.mock.calls[0][0].skipDuplicates).toBe(true)
+    expect(db.executeRaw).not.toHaveBeenCalled()
+  })
+
+  it('a row another writer inserted after the read is settled by the guarded update', async () => {
+    db.findMany.mockResolvedValue([])
+    db.createMany.mockResolvedValue({ count: 3 })
+    db.executeRaw.mockResolvedValue(0)
+    await writeTeamPerformances({ season: 2026, rows: schedule })
+    expect(updated()).toHaveLength(4)
   })
 
   it('reads the season once, scoped to this league\'s teams', async () => {
@@ -93,9 +109,10 @@ describe('team_performances', () => {
   })
 
   it('keeps stored opponent/result in the SQL too, and re-checks distinctness at write time', async () => {
+    db.findMany.mockResolvedValue(storedOf(schedule).map((r) => ({ ...r, points: r.points + 1 })))
     await writeTeamPerformances({ season: 2026, rows: schedule })
-    expect(sqlText()).toMatch(/opponent = COALESCE\(EXCLUDED\.opponent, team_performances\.opponent\)/)
-    expect(sqlText()).toMatch(/result = COALESCE\(EXCLUDED\.result, team_performances\.result\)/)
+    expect(sqlText()).toMatch(/opponent = COALESCE\(r\.opponent, t\.opponent\)/)
+    expect(sqlText()).toMatch(/result = COALESCE\(r\.result, t\.result\)/)
     expect(sqlText()).toMatch(/IS DISTINCT FROM/)
   })
 
@@ -108,7 +125,7 @@ describe('team_performances', () => {
   })
 
   it('falls back to per-row upserts, ignoring failures, when the batch fails', async () => {
-    db.executeRaw.mockRejectedValue(new Error('batch failed'))
+    db.createMany.mockRejectedValue(new Error('batch failed'))
     db.upsert.mockRejectedValueOnce(new Error('fk')).mockResolvedValue({})
     const out = await writeTeamPerformances({ season: 2026, rows: schedule })
     expect(out.fellBack).toBe(true)
@@ -126,6 +143,20 @@ describe('team_performances', () => {
     expect(db.executeRaw).not.toHaveBeenCalled()
     expect(db.upsert).toHaveBeenCalledTimes(4)
     expect(out).toMatchObject({ changed: 4, written: 4, fellBack: true })
+  })
+
+  it('kill switch "team-performances" restores the per-row upsert of every row', async () => {
+    process.env.AF_CHANGE_AWARE_WRITES_OFF = 'team-performances'
+    try {
+      db.findMany.mockResolvedValue(storedOf(schedule))
+      const out = await writeTeamPerformances({ season: 2026, rows: schedule })
+      expect(db.findMany).not.toHaveBeenCalled()
+      expect(db.createMany).not.toHaveBeenCalled()
+      expect(db.upsert).toHaveBeenCalledTimes(4)
+      expect(out).toMatchObject({ written: 4, fellBack: true })
+    } finally {
+      delete process.env.AF_CHANGE_AWARE_WRITES_OFF
+    }
   })
 
   it('does nothing at all for an empty schedule', async () => {
@@ -177,5 +208,23 @@ describe('imported roster equivalence', () => {
 
   it('treats a key another writer added as a change, as the unconditional write did', () => {
     expect(importedPlayerDataEquivalent({ ...base, co_owners: ['x'] }, base)).toBe(false)
+  })
+})
+
+describe('AF_CHANGE_AWARE_WRITES_OFF parsing', () => {
+  it('is ON for every writer when unset or blank', () => {
+    for (const w of ['weekly-scores', 'team-performances', 'rosters', 'matchups'] as const) {
+      expect(changeAwareWritesEnabled(w, {})).toBe(true)
+      expect(changeAwareWritesEnabled(w, { AF_CHANGE_AWARE_WRITES_OFF: '  ' })).toBe(true)
+    }
+  })
+  it('turns off only the named writers, case- and spacing-insensitively', () => {
+    const env = { AF_CHANGE_AWARE_WRITES_OFF: ' Rosters , MATCHUPS ' }
+    expect(changeAwareWritesEnabled('rosters', env)).toBe(false)
+    expect(changeAwareWritesEnabled('matchups', env)).toBe(false)
+    expect(changeAwareWritesEnabled('weekly-scores', env)).toBe(true)
+  })
+  it('"all" turns every writer off', () => {
+    expect(changeAwareWritesEnabled('team-performances', { AF_CHANGE_AWARE_WRITES_OFF: 'all' })).toBe(false)
   })
 })

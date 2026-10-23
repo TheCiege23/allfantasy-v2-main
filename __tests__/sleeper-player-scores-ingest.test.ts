@@ -11,34 +11,48 @@
  * Each is claimed by a comment in the writer; each is asserted here so the claim
  * cannot quietly stop being true.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 
 const getLeagueMatchups = vi.fn()
 const findMany = vi.fn()
+const createMany = vi.fn()
 const executeRaw = vi.fn()
+const legacyUpsert = vi.fn()
+const legacyFindFirst = vi.fn()
 
 vi.mock('@/lib/sleeper-client', () => ({
   getLeagueMatchups: (...a: unknown[]) => getLeagueMatchups(...a),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    leaguePlayerWeeklyScore: { findMany: (...a: unknown[]) => findMany(...a) },
+    leaguePlayerWeeklyScore: {
+      findMany: (...a: unknown[]) => findMany(...a),
+      createMany: (...a: unknown[]) => createMany(...a),
+      upsert: (...a: unknown[]) => legacyUpsert(...a),
+      findFirst: (...a: unknown[]) => legacyFindFirst(...a),
+    },
     $executeRaw: (...a: unknown[]) => executeRaw(...a),
   },
 }))
 
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 
-type SentRow = { id: string; playerId: string; rosterId: number | null; points: number; isStarter: boolean }
+type SentRow = { playerId: string; rosterId: number | null; points: number; isStarter: boolean; isFinalized?: boolean; source?: string }
 
-/** The rows handed to the single batched write, across every call. */
-const sent = (): SentRow[] =>
+/** Rows inserted through `createMany` (new rows). */
+const inserted = (): SentRow[] => createMany.mock.calls.flatMap((call) => (call[0] as { data: SentRow[] }).data)
+/** Rows sent to the guarded UPDATE (changed rows). */
+const updated = (): SentRow[] =>
   executeRaw.mock.calls.flatMap((call) => {
     const payload = (call.slice(1) as unknown[]).find((v) => typeof v === 'string' && v.startsWith('['))
     return payload ? (JSON.parse(payload as string) as SentRow[]) : []
   })
+/** Every row written, inserted or updated. */
+const sent = (): SentRow[] => [...inserted(), ...updated()]
+/** Any write at all. */
+const anyWrite = () => createMany.mock.calls.length + executeRaw.mock.calls.length
 
-/** The SQL text of the batched write (tagged-template strings joined). */
+/** The SQL text of the guarded UPDATE (tagged-template strings joined). */
 const sqlText = () => (executeRaw.mock.calls[0]?.[0] as string[] | undefined)?.join('$') ?? ''
 
 /** Ids written, in call order. */
@@ -55,6 +69,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
   beforeEach(() => {
     getLeagueMatchups.mockReset()
     findMany.mockReset().mockResolvedValue([])
+    createMany.mockReset().mockImplementation(async ({ data }: { data: unknown[] }) => ({ count: data.length }))
     executeRaw.mockReset().mockImplementation(async (_strings: unknown, ...values: unknown[]) => {
       const payload = values.find((v) => typeof v === 'string' && v.startsWith('['))
       return payload ? (JSON.parse(payload as string) as unknown[]).length : 0
@@ -106,7 +121,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
     getLeagueMatchups.mockResolvedValue([{ roster_id: 7, points: 0, starters: ['p1'], starters_points: [0], players_points: { p1: 0 } }])
     const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
     expect(r.rostersSkippedUnscored).toBe(1)
-    expect(executeRaw).not.toHaveBeenCalled()
+    expect(anyWrite()).toBe(0)
   })
 
   it('rejects arrays as score maps and never coerces booleans or blank values to points', async () => {
@@ -146,7 +161,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       },
     ])
     const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 14)
-    expect(executeRaw).not.toHaveBeenCalled()
+    expect(anyWrite()).toBe(0)
     expect(r.rostersSkippedUnscored).toBe(1)
     expect(r.scoresUpserted).toBe(0)
   })
@@ -202,8 +217,12 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       },
     ])
     await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
-    // A new or changed row is provisional: inserted false, and set false only on the change path.
-    expect(sqlText()).toMatch(/"isStarter", false, 'sleeper'/)
+    // A new row is provisional.
+    expect(inserted()[0]).toMatchObject({ playerId: 'p1', isFinalized: false, source: 'sleeper' })
+
+    // A changed row is made provisional by the UPDATE, and nothing ever writes true.
+    findMany.mockResolvedValue([stored('p1', { points: 1, isStarter: true })])
+    await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
     expect(sqlText()).toMatch(/"isFinalized" = false/)
     expect(sqlText()).not.toMatch(/"isFinalized"\s*=\s*true/)
   })
@@ -213,7 +232,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
     const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
     expect(r.error).toContain('sleeper 503')
     expect(r.scoresUpserted).toBe(0)
-    expect(executeRaw).not.toHaveBeenCalled()
+    expect(anyWrite()).toBe(0)
   })
 
   /** A shape change should be visible in the result, not produce a silent empty week. */
@@ -227,7 +246,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
     ])
     const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
     expect(r.rostersMalformed).toBe(1)
-    expect(executeRaw).not.toHaveBeenCalled()
+    expect(anyWrite()).toBe(0)
   })
   describe('change-aware writes', () => {
     const week = [
@@ -247,7 +266,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       getLeagueMatchups.mockResolvedValue(week)
       findMany.mockResolvedValue(storedWeek)
       const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
-      expect(executeRaw).not.toHaveBeenCalled()
+      expect(anyWrite()).toBe(0)
       expect(r).toMatchObject({ scoresUpserted: 0, scoresUnchanged: 3, error: null })
     })
 
@@ -258,7 +277,8 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       const second = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
       expect(first.scoresUpserted).toBe(3)
       expect(second).toMatchObject({ scoresUpserted: 0, scoresUnchanged: 3 })
-      expect(executeRaw).toHaveBeenCalledOnce()
+      expect(createMany).toHaveBeenCalledOnce()
+      expect(executeRaw).not.toHaveBeenCalled()
     })
 
     it('sends only the player whose score actually changed, in one statement', async () => {
@@ -266,6 +286,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       findMany.mockResolvedValue(storedWeek)
       const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
       expect(executeRaw).toHaveBeenCalledOnce()
+      expect(createMany).not.toHaveBeenCalled()
       expect(written()).toEqual(['p1'])
       expect(created('p1')?.points).toBe(22.5)
       expect(r).toMatchObject({ scoresUpserted: 1, scoresUnchanged: 2 })
@@ -280,6 +301,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       expect(written().sort()).toEqual(['p2', 'p3'])
 
       executeRaw.mockClear()
+      createMany.mockClear()
       getLeagueMatchups.mockResolvedValue([{ ...week[0], roster_id: 8 }])
       findMany.mockResolvedValue(storedWeek)
       await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
@@ -292,14 +314,34 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       // `isFinalized` is not even read: an identical row is simply not written, so nothing can unseal it.
       findMany.mockResolvedValue(storedWeek.map((row) => ({ ...row, isFinalized: true })))
       await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
-      expect(executeRaw).not.toHaveBeenCalled()
+      expect(anyWrite()).toBe(0)
     })
 
     it('guards the write itself, so a row brought up to date concurrently is not unsealed', async () => {
+      getLeagueMatchups.mockResolvedValue([{ ...week[0], players_points: { p1: 22.5, p2: 12.4, p3: 3.1 } }])
+      findMany.mockResolvedValue(storedWeek)
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(sqlText()).toMatch(/IS DISTINCT FROM/)
+      expect(sqlText()).toMatch(/timezone\('UTC', now\(\)\)/)
+    })
+
+    it('inserts new rows through Prisma, so they keep the model\'s own id default', async () => {
       getLeagueMatchups.mockResolvedValue(week)
       await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
-      expect(sqlText()).toMatch(/ON CONFLICT \("leagueId", "seasonYear", week, "playerId"\) DO UPDATE/)
-      expect(sqlText()).toMatch(/IS DISTINCT FROM/)
+      expect(createMany).toHaveBeenCalledOnce()
+      const args = createMany.mock.calls[0][0] as { data: Array<Record<string, unknown>>; skipDuplicates: boolean }
+      expect(args.skipDuplicates).toBe(true)
+      expect(args.data.every((row) => !('id' in row))).toBe(true)
+      expect(args.data[0]).toMatchObject({ leagueId: 'L1', seasonYear: 2026, week: 12 })
+    })
+
+    it('a row another writer inserted after the read is settled by the guarded update, not lost', async () => {
+      getLeagueMatchups.mockResolvedValue(week)
+      createMany.mockResolvedValue({ count: 2 })
+      executeRaw.mockResolvedValue(1)
+      const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(updated().map((x) => x.playerId).sort()).toEqual(['p1', 'p2', 'p3'])
+      expect(r.scoresUpserted).toBe(3)
     })
 
     it('sends a player listed under two rosters once, last roster wins', async () => {
@@ -314,10 +356,45 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
 
     it('reports a database failure instead of throwing past the caller', async () => {
       getLeagueMatchups.mockResolvedValue(week)
-      executeRaw.mockRejectedValue(new Error('connection reset'))
+      createMany.mockRejectedValue(new Error('connection reset'))
       const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
       expect(r.error).toContain('connection reset')
       expect(r.scoresUpserted).toBe(0)
+    })
+  })
+  describe('kill switch: AF_CHANGE_AWARE_WRITES_OFF', () => {
+    const week = [{
+      matchup_id: 1, roster_id: 7, points: 32.9,
+      starters: ['p1'], starters_points: [20.5],
+      players: ['p1', 'p2'], players_points: { p1: 20.5, p2: 12.4 },
+    }]
+    beforeEach(() => {
+      legacyUpsert.mockReset().mockResolvedValue({})
+      legacyFindFirst.mockReset().mockResolvedValue(null)
+    })
+    afterEach(() => { delete process.env.AF_CHANGE_AWARE_WRITES_OFF })
+
+    for (const value of ['weekly-scores', 'all', 'rosters, weekly-scores']) {
+      it(`"${value}" restores the old one-upsert-per-row writer`, async () => {
+        process.env.AF_CHANGE_AWARE_WRITES_OFF = value
+        getLeagueMatchups.mockResolvedValue(week)
+        findMany.mockResolvedValue([stored('p1', { points: 20.5, isStarter: true }), stored('p2', { points: 12.4 })])
+        const r = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+        // Every row written again, unchanged or not, exactly as before.
+        expect(legacyUpsert).toHaveBeenCalledTimes(2)
+        expect(legacyUpsert.mock.calls[0][0]).toMatchObject({ update: { isFinalized: false, points: 20.5 } })
+        expect(findMany).not.toHaveBeenCalled()
+        expect(anyWrite()).toBe(0)
+        expect(r.scoresUpserted).toBe(2)
+      })
+    }
+
+    it('another writer\'s name leaves this one on', async () => {
+      process.env.AF_CHANGE_AWARE_WRITES_OFF = 'matchups'
+      getLeagueMatchups.mockResolvedValue(week)
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(legacyUpsert).not.toHaveBeenCalled()
+      expect(createMany).toHaveBeenCalledOnce()
     })
   })
 })

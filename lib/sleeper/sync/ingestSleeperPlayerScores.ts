@@ -11,9 +11,9 @@
  * all nine tests passed with the import present. `npx tsx` is the honest control
  * for whether a lib module is script-importable.
  */
-import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { getLeagueMatchups } from '@/lib/sleeper-client'
+import { changeAwareWritesEnabled } from '@/lib/league-import/changeAwareWrites'
 
 /**
  * Sleeper → `league_player_weekly_scores`: per-player weekly scoring for an
@@ -99,7 +99,6 @@ type StoredScore = {
 }
 
 type IncomingScore = {
-  id: string
   playerId: string
   rosterId: number | null
   points: number
@@ -134,17 +133,23 @@ function sameScore(stored: StoredScore, incoming: IncomingScore): boolean {
  * pass then had to seal them all again. A score the provider still reports identically has
  * not been corrected, so there is nothing to make provisional.
  *
- * ⚠ ONE READ AND AT MOST ONE WRITE PER LEAGUE-WEEK. The stored week is read once (it also
+ * ⚠ ONE READ AND AT MOST TWO WRITES PER LEAGUE-WEEK. The stored week is read once (it also
  * answers the "has this roster-week been scored before" question that used to be one query per
- * roster), and only new or changed rows are sent, in one statement. The statement re-checks
- * `IS DISTINCT FROM` itself, so a row another writer brought up to date between the read and
- * the write is left alone rather than un-sealed.
+ * roster). New rows go in one `createMany`; changed rows in one guarded `UPDATE`, which
+ * re-checks `IS DISTINCT FROM` itself, so a row another writer brought up to date between the
+ * read and the write is left alone rather than un-sealed. An unchanged week issues no write.
+ *
+ * Kill switch: `AF_CHANGE_AWARE_WRITES_OFF` containing `weekly-scores` (or `all`) restores the
+ * previous one-upsert-per-row writer below, unchanged. See `lib/league-import/changeAwareWrites.ts`.
  */
 export async function ingestSleeperPlayerScoresForWeek(
   platformLeagueId: string,
   season: number,
   week: number,
 ): Promise<IngestSleeperPlayerScoresResult> {
+  if (!changeAwareWritesEnabled('weekly-scores')) {
+    return ingestSleeperPlayerScoresForWeekLegacy(platformLeagueId, season, week)
+  }
   const result: IngestSleeperPlayerScoresResult = {
     leagueId: platformLeagueId,
     season,
@@ -250,7 +255,6 @@ export async function ingestSleeperPlayerScoresForWeek(
 
       incoming.delete(playerId)
       incoming.set(playerId, {
-        id: randomUUID(),
         playerId,
         rosterId,
         points,
@@ -259,36 +263,207 @@ export async function ingestSleeperPlayerScoresForWeek(
     }
   }
 
-  const changed: IncomingScore[] = []
+  const inserts: IncomingScore[] = []
+  const updates: IncomingScore[] = []
   for (const row of incoming.values()) {
     const prior = storedByPlayer.get(row.playerId)
-    if (prior && sameScore(prior, row)) result.scoresUnchanged += 1
-    else changed.push(row)
+    if (!prior) inserts.push(row)
+    else if (sameScore(prior, row)) result.scoresUnchanged += 1
+    else updates.push(row)
   }
-  if (changed.length === 0) return result
+  if (inserts.length === 0 && updates.length === 0) return result
 
   try {
-    result.scoresUpserted = await prisma.$executeRaw`
-      INSERT INTO league_player_weekly_scores
-        (id, "leagueId", "seasonYear", week, "playerId", "rosterId", points, "isStarter",
-         "isFinalized", source, "createdAt", "updatedAt")
-      SELECT r.id, ${platformLeagueId}, ${season}, ${week}, r."playerId", r."rosterId", r.points,
-             r."isStarter", false, 'sleeper', now(), now()
-        FROM jsonb_to_recordset(${JSON.stringify(changed)}::jsonb)
-          AS r(id text, "playerId" text, "rosterId" integer, points double precision, "isStarter" boolean)
-      ON CONFLICT ("leagueId", "seasonYear", week, "playerId") DO UPDATE
-        SET points = EXCLUDED.points,
-            "rosterId" = EXCLUDED."rosterId",
-            "isStarter" = EXCLUDED."isStarter",
-            source = EXCLUDED.source,
-            "isFinalized" = false,
-            "updatedAt" = now()
-      WHERE (league_player_weekly_scores.points, league_player_weekly_scores."rosterId",
-             league_player_weekly_scores."isStarter", league_player_weekly_scores.source)
-            IS DISTINCT FROM
-            (EXCLUDED.points, EXCLUDED."rosterId", EXCLUDED."isStarter", EXCLUDED.source)`
+    /*
+     * NEW rows go through Prisma, so they get the model's own `@default(cuid())` id and its
+     * `createdAt`/`updatedAt` handling, exactly as the old per-row upsert gave them.
+     *
+     * ⚠ `skipDuplicates` MEANS A ROW ANOTHER WRITER INSERTED SINCE THE READ IS SKIPPED, NOT
+     * OVERWRITTEN. When that happens (`count` short of what was sent), those rows join the
+     * update pass below, whose own distinctness check decides whether they still need writing.
+     */
+    if (inserts.length > 0) {
+      const created = await prisma.leaguePlayerWeeklyScore.createMany({
+        data: inserts.map(row => ({
+          leagueId: platformLeagueId,
+          seasonYear: season,
+          week,
+          playerId: row.playerId,
+          rosterId: row.rosterId,
+          points: row.points,
+          isStarter: row.isStarter,
+          isFinalized: false,
+          source: 'sleeper',
+        })),
+        skipDuplicates: true,
+      })
+      result.scoresUpserted += created.count
+      if (created.count < inserts.length) updates.push(...inserts)
+    }
+
+    /*
+     * CHANGED rows in one statement. The `IS DISTINCT FROM` guard is re-evaluated against the row
+     * as it is at write time, so a row another writer has already brought to these values — or a
+     * row the reconcile pass sealed with these values — is not touched, and stays sealed.
+     *
+     * ⚠ `timezone('UTC', now())`, NOT `now()`: the column is `timestamp(3)` without a zone and
+     * Prisma stores UTC in it. Bare `now()` would be converted through the SESSION time zone.
+     */
+    if (updates.length > 0) {
+      result.scoresUpserted += await prisma.$executeRaw`
+        UPDATE league_player_weekly_scores AS s
+           SET points = r.points,
+               "rosterId" = r."rosterId",
+               "isStarter" = r."isStarter",
+               source = 'sleeper',
+               "isFinalized" = false,
+               "updatedAt" = timezone('UTC', now())
+          FROM jsonb_to_recordset(${JSON.stringify(updates)}::jsonb)
+            AS r("playerId" text, "rosterId" integer, points double precision, "isStarter" boolean)
+         WHERE s."leagueId" = ${platformLeagueId}
+           AND s."seasonYear" = ${season}
+           AND s.week = ${week}
+           AND s."playerId" = r."playerId"
+           AND (s.points, s."rosterId", s."isStarter", s.source)
+               IS DISTINCT FROM
+               (r.points, r."rosterId", r."isStarter", 'sleeper'::varchar)`
+    }
   } catch (e) {
     result.error = e instanceof Error ? e.message : String(e)
+  }
+
+  return result
+}
+
+/*
+ * ── LEGACY WRITER — kill-switch fallback only ──────────────────────────────────────────────────
+ *
+ * The writer as it was before change-aware writes (commit 82fc5b2b), kept byte-for-byte apart from
+ * its name and the new `scoresUnchanged: 0` field, so `AF_CHANGE_AWARE_WRITES_OFF=weekly-scores`
+ * restores exactly the old behaviour: one upsert per player per call, every row written, and
+ * `scoresUpserted` counting every row sent. Delete once the change-aware path has run cleanly
+ * through a full NFL week.
+ */
+async function ingestSleeperPlayerScoresForWeekLegacy(
+  platformLeagueId: string,
+  season: number,
+  week: number,
+): Promise<IngestSleeperPlayerScoresResult> {
+  const result: IngestSleeperPlayerScoresResult = {
+    leagueId: platformLeagueId,
+    season,
+    week,
+    scoresUpserted: 0,
+    scoresUnchanged: 0,
+    rostersSkippedUnscored: 0,
+    rostersMalformed: 0,
+    error: null,
+  }
+
+  let matchups
+  try {
+    matchups = await getLeagueMatchups(platformLeagueId, week)
+  } catch (e) {
+    result.error = e instanceof Error ? e.message : String(e)
+    return result
+  }
+
+  if (!Array.isArray(matchups) || matchups.length === 0) {
+    return result
+  }
+
+  for (const m of matchups) {
+    const startersPoints = Array.isArray(m.starters_points) ? m.starters_points : []
+    const pointsByPlayer = m.players_points
+    if (!pointsByPlayer || typeof pointsByPlayer !== 'object' || Array.isArray(pointsByPlayer)) {
+      result.rostersMalformed += 1
+      continue
+    }
+
+    if (!hasRealScoring(m.points, startersPoints)) {
+      // A previously scored roster can legitimately be corrected back to zero.
+      // Unknown/future roster-weeks still have no evidence of actual scoring.
+      const rosterId = scoreNumber(m.roster_id)
+      const recorded = rosterId !== null && Number.isSafeInteger(rosterId) && rosterId > 0
+        ? await prisma.leaguePlayerWeeklyScore.findFirst({
+            where: { leagueId: platformLeagueId, seasonYear: season, week, rosterId, source: 'sleeper' },
+            select: { playerId: true },
+          })
+        : null
+      if (!recorded) {
+        result.rostersSkippedUnscored += 1
+        continue
+      }
+    }
+
+    // Starters are identified by position in `starters`, which is how Sleeper
+    // pairs them with `starters_points`. Membership is all we need here.
+    const starterIds = new Set(Array.isArray(m.starters) ? m.starters : [])
+
+    /*
+     * ⚠ READ AS `unknown`, NOT AS THE DECLARED `number`. `SleeperMatchup` types
+     * `players_points` as Record<string, number>, but that is a claim about the
+     * provider rather than a guarantee about the bytes on the wire — nothing
+     * validates the payload at the boundary. Trusting the declared type made
+     * `raw === ''` unreachable-by-type and tsc rejected it, which is the compiler
+     * correctly pointing out that the guard and the type disagree. The runtime is
+     * the one that decides, so the value is widened here and narrowed below.
+     */
+    const rawEntries = Object.entries(pointsByPlayer) as Array<[string, unknown]>
+
+    for (const [playerId, raw] of rawEntries) {
+      /*
+       * ⚠ THE ABSENCE CHECK HAS TO COME BEFORE THE COERCION, AND MY FIRST VERSION
+       * DID NOT. `Number(null)` is 0 and `Number.isFinite(0)` is true, so guarding
+       * only on the coerced value lets a missing score through as a real zero —
+       * writing a row that asserts "he scored nothing" from a value that said
+       * nothing at all. Caught by the test below, not by review.
+       *
+       * Null is not zero: the same rule `LineupPlayer.projectedPoints` states, and
+       * the same direction of harm — a fabricated zero drags a lineup total down
+       * and makes someone bench a player they should start.
+       */
+      const points = scoreNumber(raw)
+      if (points === null) continue
+
+      /*
+       * ⚠ SLEEPER USES "0" AS THE EMPTY-SLOT MARKER in `starters`. It is not a
+       * player id and must never become a row, or every league with an unfilled
+       * starter slot grows a phantom player who scores.
+       */
+      if (!playerId || playerId === '0') continue
+
+      await prisma.leaguePlayerWeeklyScore.upsert({
+        where: {
+          leagueId_seasonYear_week_playerId: {
+            leagueId: platformLeagueId,
+            seasonYear: season,
+            week,
+            playerId,
+          },
+        },
+        update: {
+          // A fresh provider ingest is provisional until a reconciliation pass seals it again.
+          isFinalized: false,
+          points,
+          isStarter: starterIds.has(playerId),
+          rosterId: Number.isFinite(Number(m.roster_id)) ? Number(m.roster_id) : null,
+          source: 'sleeper',
+        },
+        create: {
+          leagueId: platformLeagueId,
+          seasonYear: season,
+          week,
+          playerId,
+          points,
+          isStarter: starterIds.has(playerId),
+          rosterId: Number.isFinite(Number(m.roster_id)) ? Number(m.roster_id) : null,
+          isFinalized: false,
+          source: 'sleeper',
+        },
+      })
+      result.scoresUpserted += 1
+    }
   }
 
   return result

@@ -16,8 +16,8 @@
  * The comparison below applies the same rules, so "unchanged" means "the old upsert would have
  * written exactly what is already there".
  */
-import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
+import { changeAwareWritesEnabled } from './changeAwareWrites'
 
 export type TeamPerformanceWrite = {
   teamId: string
@@ -93,6 +93,13 @@ export async function writeTeamPerformances(input: {
   const out: TeamPerformanceWriteResult = { processed: rows.length, changed: 0, written: 0, fellBack: false }
   if (rows.length === 0) return out
 
+  if (!changeAwareWritesEnabled('team-performances')) {
+    out.changed = rows.length
+    out.fellBack = true
+    out.written = await upsertEachIgnoringFailures(input.season, rows)
+    return out
+  }
+
   const teamIds = [...new Set(rows.map((r) => r.teamId))]
   let stored: StoredPerformance[] | null = null
   try {
@@ -103,45 +110,78 @@ export async function writeTeamPerformances(input: {
   } catch {
     // Could not tell what is stored: treat every row as changed and take the per-row path below.
   }
-  const changed = stored ? changedTeamPerformances(rows, stored) : rows
+  if (!stored) {
+    out.changed = rows.length
+    out.fellBack = true
+    out.written = await upsertEachIgnoringFailures(input.season, rows)
+    return out
+  }
+
+  const changed = changedTeamPerformances(rows, stored)
   out.changed = changed.length
   if (changed.length === 0) return out
 
-  const payload = changed.map((r) => ({ id: randomUUID(), ...r }))
+  const storedKeys = new Set(stored.map((s) => keyOf(s.teamId, s.week)))
+  const inserts = changed.filter((r) => !storedKeys.has(keyOf(r.teamId, r.week)))
+  const updates = changed.filter((r) => storedKeys.has(keyOf(r.teamId, r.week)))
+
   try {
-    if (!stored) throw new Error('stored performances unavailable')
-    out.written = await prisma.$executeRaw`
-      INSERT INTO team_performances (id, "teamId", week, season, points, opponent, result, "createdAt")
-      SELECT r.id, r."teamId", r.week, ${input.season}, r.points, r.opponent, r.result, now()
-        FROM jsonb_to_recordset(${JSON.stringify(payload)}::jsonb)
-          AS r(id text, "teamId" text, week integer, points double precision, opponent text, result text)
-      ON CONFLICT ("teamId", season, week) DO UPDATE
-        SET points = EXCLUDED.points,
-            opponent = COALESCE(EXCLUDED.opponent, team_performances.opponent),
-            result = COALESCE(EXCLUDED.result, team_performances.result)
-      WHERE (team_performances.points, team_performances.opponent, team_performances.result)
-            IS DISTINCT FROM
-            (EXCLUDED.points,
-             COALESCE(EXCLUDED.opponent, team_performances.opponent),
-             COALESCE(EXCLUDED.result, team_performances.result))`
+    if (inserts.length > 0) {
+      const created = await prisma.teamPerformance.createMany({
+        data: inserts.map((r) => ({
+          teamId: r.teamId,
+          week: r.week,
+          season: input.season,
+          points: r.points,
+          opponent: r.opponent,
+          result: r.result,
+        })),
+        // A row another writer inserted since the read is skipped here and settled by the update.
+        skipDuplicates: true,
+      })
+      out.written += created.count
+      if (created.count < inserts.length) updates.push(...inserts)
+    }
+    if (updates.length > 0) {
+      out.written += await prisma.$executeRaw`
+        UPDATE team_performances AS t
+           SET points = r.points,
+               opponent = COALESCE(r.opponent, t.opponent),
+               result = COALESCE(r.result, t.result)
+          FROM jsonb_to_recordset(${JSON.stringify(updates)}::jsonb)
+            AS r("teamId" text, week integer, points double precision, opponent text, result text)
+         WHERE t."teamId" = r."teamId"
+           AND t.season = ${input.season}
+           AND t.week = r.week
+           AND (t.points, t.opponent, t.result)
+               IS DISTINCT FROM
+               (r.points, COALESCE(r.opponent, t.opponent), COALESCE(r.result, t.result))`
+    }
     return out
   } catch {
     /*
      * The old path wrapped each upsert in its own try/catch and ignored failures, so one bad row
-     * (a team removed mid-sync, say) never cost the rest of the schedule. A single statement fails
-     * as a whole, so on failure fall back to that exact per-row behaviour for the changed rows.
+     * (a team removed mid-sync, say) never cost the rest of the schedule. A batch fails as a whole,
+     * so on failure fall back to that exact per-row behaviour for the changed rows. Re-applying a
+     * row the batch already wrote is harmless: the upsert writes the same values.
      */
     out.fellBack = true
+    out.written = await upsertEachIgnoringFailures(input.season, changed)
+    return out
   }
+}
 
-  for (const r of changed) {
+/** The previous writer, row by row, every failure ignored. Returns how many succeeded. */
+async function upsertEachIgnoringFailures(season: number, rows: TeamPerformanceWrite[]): Promise<number> {
+  let written = 0
+  for (const r of rows) {
     try {
       await prisma.teamPerformance.upsert({
-        where: { teamId_season_week: { teamId: r.teamId, season: input.season, week: r.week } },
+        where: { teamId_season_week: { teamId: r.teamId, season, week: r.week } },
         create: {
           teamId: r.teamId,
           week: r.week,
-          season: input.season,
+          season,
           points: r.points,
           opponent: r.opponent ?? undefined,
           result: r.result,
@@ -152,10 +192,10 @@ export async function writeTeamPerformances(input: {
           result: r.result ?? undefined,
         },
       })
-      out.written += 1
+      written += 1
     } catch {
       // ignore duplicate or constraint errors, as the per-row path always has
     }
   }
-  return out
+  return written
 }

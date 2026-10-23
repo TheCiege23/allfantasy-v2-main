@@ -7,6 +7,7 @@ import { snapshotImportedPlayerMetadata } from '@/lib/league-import/importedPlay
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '../types'
 import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRosterIdentity'
+import { changeAwareWritesEnabled } from '../changeAwareWrites'
 import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
 
@@ -205,6 +206,8 @@ export async function bootstrapLeagueFromNormalizedImport(
    * advanced, in one statement after the loop — see the comment there.
    */
   const unchangedRosterIds: string[] = []
+  /* Kill switch: `AF_CHANGE_AWARE_WRITES_OFF=rosters` restores the always-rewrite behaviour. */
+  const skipUnchangedRosters = changeAwareWritesEnabled('rosters')
   const rekeys = rosterPlan.plans.filter(
     (p): p is typeof p & { rosterId: string } => p.rekey && p.rosterId != null,
   )
@@ -383,6 +386,7 @@ export async function bootstrapLeagueFromNormalizedImport(
     if (existingRoster) {
       const stored = storedRosterById.get(existingRoster.id)
       if (
+        skipUnchangedRosters &&
         stored &&
         importedRosterUnchanged(
           {
