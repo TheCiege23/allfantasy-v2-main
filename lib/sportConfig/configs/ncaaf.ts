@@ -54,15 +54,15 @@ export const NCAAF_CONFIG: SportConfigFull = {
 
   defaultRosterSlots: [
     { key: 'QB', label: 'Quarterback', eligiblePositions: ['QB'], defaultCount: 1, minCount: 1, maxCount: 2, isOptional: false },
-    { key: 'RB', label: 'Running Back', eligiblePositions: ['RB'], defaultCount: 1, minCount: 1, maxCount: 4, isOptional: false },
+    { key: 'RB', label: 'Running Back', eligiblePositions: ['RB'], defaultCount: 2, minCount: 1, maxCount: 4, isOptional: false },
     { key: 'WR', label: 'Wide Receiver', eligiblePositions: ['WR'], defaultCount: 2, minCount: 1, maxCount: 4, isOptional: false },
     { key: 'TE', label: 'Tight End', eligiblePositions: ['TE'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: false },
-    { key: 'FLX', label: 'Flex', eligiblePositions: ['RB', 'WR', 'TE'], defaultCount: 0, minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'FLX', label: 'Flex', eligiblePositions: ['RB', 'WR', 'TE'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'K', label: 'Kicker', eligiblePositions: ['K'], defaultCount: 1, minCount: 0, maxCount: 1, isOptional: true },
     { key: 'SF', label: 'Superflex', eligiblePositions: ['QB', 'RB', 'WR', 'TE'], defaultCount: 0, minCount: 0, maxCount: 1, isOptional: true },
     // Optional and off by default: no college team defense exists to draft, and an unfilled starter
     // slot fails lineup validation. A commissioner may still add one.
     { key: 'DEF', label: 'Team Defense', eligiblePositions: ['DEF', 'DST'], defaultCount: 0, minCount: 0, maxCount: 2, isOptional: true },
-    { key: 'K', label: 'Kicker', eligiblePositions: ['K'], defaultCount: 0, minCount: 0, maxCount: 1, isOptional: true },
   ],
 
   defaultBenchSlots: 8,

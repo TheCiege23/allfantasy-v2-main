@@ -31,6 +31,11 @@ import {
 import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
 import { isSurvivorCreationSportAvailable } from '@/lib/survivor/survivorCreationAvailability'
 import { survivorTribeCountOptions } from '@/lib/league-creation-wizard/sport-team-limits'
+import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 
 // ── Sport filtering ─────────────────────────────────────────────────
 
@@ -112,6 +117,30 @@ const BIG_BROTHER_SIZES = [12, 14, 16, 18] as const
  * - survivor → the fixed cast sizes in SURVIVOR_CREATE_CAST_SIZES (12–24, equal tribe splits)
  * - all others → even numbers 4 up to the sport's real-world club cap
  */
+/**
+ * Survivor cast sizes a league drafted today could still finish: a cast needs one vote per
+ * manager beyond the finalists, at most two per scoring period. Late in a season the largest casts
+ * stop fitting, so they are not offered rather than offered and refused. A later draft date can
+ * still refuse a size listed here; the wizard and the server check that against the chosen date.
+ * When nothing fits (an unverified season, say), the full list stays so the refusal is explained.
+ */
+function survivorCastSizesThatFitNow(sport: SupportedSport, sizes: readonly number[]): number[] {
+  if (!isSurvivorPlanSport(sport)) return [...sizes]
+  const exile = normalizeSurvivorFoundationSettings({})
+  const finalistCount = readSurvivorLateSeasonSettings({}).finalistCount
+  const season = resolveLeagueCreationSeason(sport)
+  const now = new Date()
+  const fits = sizes.filter((castSize) => {
+    try {
+      buildSurvivorFullSeasonPlan({ sport, season, castSize, now, exileEnabled: exile.exileIslandEnabled, finalistCount })
+      return true
+    } catch {
+      return false
+    }
+  })
+  return fits.length > 0 ? fits : [...sizes]
+}
+
 export function getTeamCountOptions(
   sport: SupportedSport,
   leagueType: LeagueTypeId,
@@ -120,7 +149,7 @@ export function getTeamCountOptions(
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.teamCountOptionsByConceptSport?.[leagueType]?.[sport]
   if (Array.isArray(seeded) && seeded.length > 0) {
-    return [...seeded]
+    return leagueType === 'survivor' ? survivorCastSizesThatFitNow(sport, seeded) : [...seeded]
   }
 
   if (leagueType === 'tournament') {
@@ -136,7 +165,7 @@ export function getTeamCountOptions(
     // This branch is only reached before `/api/leagues/create-options` resolves, or when it
     // fails — so a list that diverges from the catalog means Survivor offers different sizes
     // depending on whether one fetch succeeded. Both read SURVIVOR_CREATE_CAST_SIZES.
-    return [...SURVIVOR_CREATE_CAST_SIZES]
+    return survivorCastSizesThatFitNow(sport, SURVIVOR_CREATE_CAST_SIZES)
   }
   const max = getMaxTeamsForSport(sport, soccerPipeline)
   return evenTeamCountsUpTo(max)

@@ -10,7 +10,7 @@ const m = vi.hoisted(() => ({
     $transaction: vi.fn(), $queryRaw: vi.fn(),
     league: { findUnique: vi.fn() },
     survivorGameState: { findUnique: vi.fn(), updateMany: vi.fn() },
-    survivorTribalCouncil: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+    survivorTribalCouncil: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), create: vi.fn(), aggregate: vi.fn() },
     survivorAuditEntry: { create: vi.fn(), findMany: vi.fn(async () => []), findFirst: vi.fn() },
     survivorNotification: { create: vi.fn() },
     survivorChatChannel: { findFirst: vi.fn() }, survivorChatMessage: { create: vi.fn() },
@@ -48,6 +48,7 @@ beforeEach(() => {
   m.db.survivorTribalCouncil.findFirst.mockImplementation(async () => council)
   m.db.survivorTribalCouncil.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => Object.assign(council, data))
   m.db.survivorTribalCouncil.create.mockResolvedValue({ id: 'revote' })
+  m.db.survivorTribalCouncil.aggregate.mockResolvedValue({ _max: { councilNumber: 1 } })
   m.db.survivorGameState.findUnique.mockResolvedValue({ pausedSnapshot: null })
   m.db.survivorChatChannel.findFirst.mockResolvedValue({ id: 'chat' })
   m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'dramatic_sequential' })
@@ -67,6 +68,16 @@ describe('league chat follows the scroll', () => {
     await revealCouncil('l1', 'c1', 'host')
     expect(m.db.survivorTribalCouncil.create).not.toHaveBeenCalled()
     expect(everythingPublished()).not.toMatch(/tied|revote/i)
+  })
+
+  it('a tied council in a double-elimination week opens its revote with the week\'s next free number', async () => {
+    // Council 1 of the week tied; council 2 already holds number 2. councilNumber + 1 would collide.
+    Object.assign(council, { isTie: true, tiePhase: 'revote_required', tiePlayerIds: ['u-out', 'u-other'], eliminatedName: null, eliminatedUserId: null })
+    m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'simultaneous' })
+    m.db.survivorTribalCouncil.aggregate.mockResolvedValue({ _max: { councilNumber: 2 } })
+    await revealCouncil('l1', 'c1', 'host')
+    expect(m.db.survivorTribalCouncil.aggregate).toHaveBeenCalledWith({ where: { configId: 'cfg', week: 6 }, _max: { councilNumber: true } })
+    expect(m.db.survivorTribalCouncil.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ phase: 'revote', week: 6, councilNumber: 3 }) }))
   })
 
   it('the verdict goes out once the last ballot is released, exactly once', async () => {

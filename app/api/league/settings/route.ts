@@ -8,7 +8,7 @@ import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,9 +41,8 @@ export async function GET(req: NextRequest) {
       },
     }),
     getLeagueRole(leagueId, userId),
-    new EntitlementResolver()
-      .resolveForUser(userId, 'commissioner_ai_tools')
-      .catch(() => ({ hasAccess: false })),
+    // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts).
+    hasAfCommissionerPlan(session?.user ?? { id: userId }).then((hasAccess) => ({ hasAccess })),
     getLeagueScoringConfig(leagueId),
   ])
 

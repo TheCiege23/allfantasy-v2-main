@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import type { SurvivorPlanSport } from './survivorPlanCalendar'
 
 type Score = { userId: string; tribeId: string | null; finalScore: number; isFinalized: boolean; countedTowardTribeTotal: boolean }
 
@@ -15,7 +16,7 @@ export function verifiedSlateWinners(scores: Score[]) {
 }
 
 /** NBA/NHL weekly slate contests use verified native scoring, never an AI-generated answer key. */
-export async function ensureVerifiedSlateChallenges(leagueId: string, week: number, sport: 'NBA' | 'NHL', includeTribe: boolean) {
+export async function ensureVerifiedSlateChallenges(leagueId: string, week: number, sport: SurvivorPlanSport, includeTribe: boolean) {
   const config = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
   if (!config) throw new Error('Survivor configuration missing')
   for (const [number, scope] of [[1, 'tribe'], [2, 'individual']] as const) {

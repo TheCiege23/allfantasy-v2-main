@@ -86,6 +86,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
           <p className="text-sm text-white/50">No council scheduled for this week.</p>
         ) : (
           <div className="space-y-3">
+            {council.weekLabel && <p className="text-xs font-semibold uppercase tracking-wide text-amber-300" data-testid="survivor-council-week-label">{council.weekLabel}</p>}
             <p className="text-sm text-white/70">
               Phase: <span className="font-medium text-amber-300">{council.phase}</span>
               {council.attendingTribeId && ' · One tribe attending'}

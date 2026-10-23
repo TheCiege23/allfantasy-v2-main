@@ -26,6 +26,8 @@ import { SettingsLockPanel } from './SettingsLockPanel'
 import { ScoreAdjustmentsEditor } from './ScoreAdjustmentsEditor'
 import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { buildSetupDecisions } from '@/lib/league-settings-home/setupDecisions'
+import { SetupDecisionsCard } from './SetupDecisionsCard'
 
 /** The Commissioner center needs room for its two columns; phones keep the list → sub-page flow. */
 function useWideLayout(): boolean {
@@ -226,10 +228,17 @@ export function LeagueSettingsHomeContainer({
   )
 
   const wide = useWideLayout()
+  const phase = nativeLeaguePhase(ctx.displayLeague)
+  // Before the draft, the commissioner is walked through the five settings that matter most.
+  const setupDecisions = useMemo(() => buildSetupDecisions(sections), [sections])
+  const header =
+    ctx.isCommissioner && phase === 'Setup'
+      ? (open: (id: SettingsSubPageId) => void) => <SetupDecisionsCard leagueId={leagueId} decisions={setupDecisions} onOpen={open} />
+      : undefined
+
   if (wide && ctx.isCommissioner) {
     const teams = effectiveLeague.teams ?? []
     const inviteRow = sections.flatMap((section) => section.rows).find((row) => row.id === 'invite')
-    const phase = nativeLeaguePhase(ctx.displayLeague)
     return (
       <CommissionerCenter
         leagueName={effectiveLeague.name}
@@ -244,6 +253,7 @@ export function LeagueSettingsHomeContainer({
           inviteUrl: inviteRow?.copyText ?? null,
         }}
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
+        header={header}
       />
     )
   }
@@ -257,6 +267,7 @@ export function LeagueSettingsHomeContainer({
       onExit={onExit}
       onSubPageClosed={() => setReloadKey((k) => k + 1)}
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
+      header={header}
     />
   )
 }

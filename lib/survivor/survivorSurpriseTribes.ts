@@ -41,7 +41,8 @@ const SURPRISE_TRIBE_COLORS = ['#f97316', '#0ea5e9'] as const
 
 /** Post-merge elimination weeks the surprise can land on: after `afterWeek`, never the last two. */
 export function surpriseWeekCandidates(plan: Pick<SurvivorFullSeasonPlan, 'eliminationWeeks'>, afterWeek: number): number[] {
-  const sorted = [...plan.eliminationWeeks].sort((a, b) => a - b)
+  // Distinct weeks: a double-elimination week is listed twice in the plan but is one candidate.
+  const sorted = [...new Set(plan.eliminationWeeks)].sort((a, b) => a - b)
   const protectedTail = new Set(sorted.slice(-2))
   return sorted.filter((week) => week > afterWeek && !protectedTail.has(week))
 }

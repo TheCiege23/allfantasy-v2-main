@@ -12,23 +12,23 @@ import { getAllowedLeagueTypesForSport, getAllowedSportsForLeagueType } from '@/
 
 describe('NBA Survivor creation pilot and multi-sport season capabilities', () => {
   const now = new Date('2026-09-01T12:00:00Z')
-  it.each(['NBA', 'NHL'] as const)('%s keeps season capabilities while only NBA accepts new creation', sport => {
-    expect(getAllowedSportsForType('survivor').includes(sport)).toBe(sport === 'NBA')
+  it.each(['NBA', 'NHL'] as const)('%s offers new creation with its season capabilities', sport => {
+    expect(getAllowedSportsForType('survivor').includes(sport)).toBe(true)
     // Owner's call, 2026-10-20: 12–24 managers in 2, 3 or 4 equal tribes.
     expect(getTeamCountOptions(sport, 'survivor')).toEqual([12, 15, 16, 18, 20, 21, 22, 24])
     expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedScoringPresetsByConceptSport.survivor[sport]).toEqual([sport.toLowerCase() + '_points'])
     vi.useFakeTimers(); vi.setSystemTime(now)
     try {
       const result = validateCreatePayload({ concept: 'survivor', sport, scoringPreset: sport.toLowerCase() + '_points', teamCount: 16, draftType: 'snake', leagueName: 'Season test' })
-      expect(result.ok).toBe(sport === 'NBA')
-      if (sport !== 'NBA' && !result.ok) expect(result.error).toContain('NBA')
+      expect(result.ok, JSON.stringify(result)).toBe(true)
     } finally { vi.useRealTimers() }
   })
-  it('hides new Survivor creation outside NBA across both wizard paths and refuses paid NBA pilot requests', () => {
-    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA'])
-    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA'])
-    expect(getAllowedLeagueTypesForSport('NBA')).toContain('survivor')
-    for (const sport of ['NFL', 'NHL', 'NCAAF'] as const) {
+  it('offers new Survivor creation for NBA, NFL and NHL only, across both wizard paths, and refuses paid pilot requests', () => {
+    // Owner's calls, 2026-10-22: NFL, then NHL, open alongside NBA. MLB has no season calendar yet.
+    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA', 'NFL', 'NHL'])
+    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA', 'NFL', 'NHL'])
+    for (const sport of ['NBA', 'NFL', 'NHL'] as const) expect(getAllowedLeagueTypesForSport(sport)).toContain('survivor')
+    for (const sport of ['MLB', 'NCAAF'] as const) {
       expect(getAllowedLeagueTypesForSport(sport)).not.toContain('survivor')
       expect(getAllowedSportsForType('survivor')).not.toContain(sport)
     }
@@ -93,7 +93,31 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
   it('future draft timing can refuse a cast that no longer fits, instead of silently truncating', () => {
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, draftAt: new Date('2027-03-01T23:00:00Z') })).toThrow('Not enough season remains')
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2027, castSize: 16, now })).toThrow('has not been verified')
-    expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 18 })).toThrow('Not enough season remains')
+    // 17 votes in 16 periods no longer refuses: one period holds two back-to-back councils.
+    const tight = buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 18 })
+    expect(tight.eliminationWeeks).toHaveLength(17)
+    expect(new Set(tight.eliminationWeeks).size).toBe(16)
+    // Even two per period cannot fit 17 votes into 8 periods.
+    expect(() => buildSurvivorFullSeasonPlan({ sport: 'NBA', season: 2026, castSize: 20, now, endWeek: 10 })).toThrow('Not enough season remains')
+  })
+  it('new NFL Survivor leagues pass validation before and during the season, and refuse a cast that cannot fit', () => {
+    vi.useFakeTimers()
+    try {
+      for (const at of ['2026-09-01T12:00:00Z', '2026-10-22T12:00:00Z']) {
+        vi.setSystemTime(new Date(at))
+        const result = validateCreatePayload({ concept: 'survivor', sport: 'NFL', scoringPreset: 'fb_half_ppr', teamCount: 12, draftType: 'snake', leagueName: 'NFL island' })
+        expect(result.ok, at).toBe(true)
+      }
+      // Late October leaves too few NFL weeks for a 24-player cast even at two votes per week, so
+      // the size is no longer offered, and the server refuses it the same way.
+      expect(getTeamCountOptions('NFL', 'survivor')).not.toContain(24)
+      expect(getTeamCountOptions('NFL', 'survivor')).toContain(20)
+      const late = validateCreatePayload({ concept: 'survivor', sport: 'NFL', scoringPreset: 'fb_half_ppr', teamCount: 24, draftType: 'snake', leagueName: 'Late island' })
+      expect(late.ok).toBe(false)
+      if (!late.ok) expect(late.errors?.[0]?.path).toBe('teamCount')
+      vi.setSystemTime(new Date('2026-09-01T12:00:00Z'))
+      expect(getTeamCountOptions('NFL', 'survivor')).toContain(24)
+    } finally { vi.useRealTimers() }
   })
   it('rejects a past scheduled draft so autostart cannot begin before managers join', () => {
     vi.useFakeTimers(); vi.setSystemTime(now)

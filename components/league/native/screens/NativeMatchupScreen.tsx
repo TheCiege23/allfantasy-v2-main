@@ -7,6 +7,7 @@ import type { MatchupCenterPayload, MatchupPlayerSlot } from '@/lib/matchup-cent
 import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
+import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { Card, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
 
@@ -46,7 +47,36 @@ function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'ri
   )
 }
 
-export function NativeMatchupScreen({ league, onSelectTab }: { league: UserLeague; onSelectTab: (id: string) => void }) {
+type ScreenProps = { league: UserLeague; onSelectTab: (id: string) => void }
+
+export function NativeMatchupScreen(props: ScreenProps) {
+  return isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />
+}
+
+/**
+ * Rotisserie has no weekly opponent. Its matchup rows exist only as scoring containers — the engine
+ * pins both scores to 0 (`lib/redraft/scoringEngine.ts`) — so the head-to-head screen would show a
+ * 0.0 vs 0.0 "matchup" and a win probability for a game nobody plays. Point at the standings instead.
+ */
+function RotisserieMatchupScreen({ league, onSelectTab }: ScreenProps) {
+  return (
+    <div className="nls" data-testid="native-matchup-screen">
+      <ScreenHead eyebrow={`${league.name} · Rotisserie`} title="No weekly matchup" />
+      <Card label="How this league is decided" tone="accent">
+        <p>
+          This is a rotisserie league. Every week&apos;s stats add to your season totals, and teams are ranked in each
+          category. Your standing is the sum of those category ranks, so there is no opponent to beat this week.
+        </p>
+        <div className="nls-card-foot">
+          <button type="button" className="nls-btn" data-variant="primary" onClick={() => onSelectTab('standings')}>View category standings</button>
+          <button type="button" className="nls-btn" onClick={() => onSelectTab('roster')}>Edit my lineup</button>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
   const season = useMemo(() => {
     const n = Number(league.season)
     return Number.isFinite(n) && n > 0 ? n : new Date().getFullYear()

@@ -9,7 +9,7 @@ import { expandStarterSlots } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupLockService'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
-import { expandLockedRedraftStarterSlots, resolveLockedRedraftLineupContract } from '@/lib/league/lineupStarterSlots'
+import { expandLockedRedraftStarterSlots, resolveLockedRedraftStarterLayout } from '@/lib/league/lineupStarterSlots'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
@@ -184,7 +184,7 @@ export async function GET(req: NextRequest) {
     }
 
     // The same resolver the lineup engine validates slot positions against (lib/league/lineupStarterSlots.ts).
-    const lockedRedraftContract = resolveLockedRedraftLineupContract({
+    const lockedRedraftLayout = resolveLockedRedraftStarterLayout({
       sport: leagueSport,
       leagueType: league.leagueType,
       isDynasty: league.isDynasty,
@@ -194,17 +194,21 @@ export async function GET(req: NextRequest) {
       keeperPhaseActive: league.keeperPhaseActive,
       settings: league.settings,
     })
-    if (lockedRedraftContract) {
-      starterSlots = expandLockedRedraftStarterSlots(lockedRedraftContract.rosterTemplate.starterSlotOrder)
+    /*
+     * 🛑 THE LEAGUE'S OWN SAVED LAYOUT WINS (owner, 2026-10-20) — resolved in the shared module, so this
+     * screen and the lineup engine's per-slot validation (slotIndex) read the SAME list.
+     */
+    if (lockedRedraftLayout) {
+      starterSlots = expandLockedRedraftStarterSlots(lockedRedraftLayout.starterOrder)
       slotLimits = {
         starters: starterSlots.length,
-        bench: lockedRedraftContract.rosterTemplate.benchSlots,
-        ir: lockedRedraftContract.rosterTemplate.irSlots,
+        bench: lockedRedraftLayout.benchSlots,
+        ir: lockedRedraftLayout.irSlots,
         taxi: 0,
         devy: 0,
       }
-      starterAllowedPositions = lockedRedraftContract.rosterTemplate.draftablePlayerPositions
-      rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-default`
+      starterAllowedPositions = lockedRedraftLayout.starterAllowedPositions
+      rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-${lockedRedraftLayout.source}`
     }
 const leagueWeek = weekFromLeagueSettings(league.settings)
     const lockCtx = await resolveFullLineupLockContext({
