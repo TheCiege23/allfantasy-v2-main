@@ -6,7 +6,8 @@ import type { PlayoffChallengeConfig, PlayoffChallengeListItem, PlayoffChallenge
 import { getDependentPlayoffSeriesIds, isOfficialTeamName } from "./playoffBracketProjection"
 import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
 import { scorePlayoffEntryPicks } from "./playoffScoring"
-import { defaultPlayoffChallengeConfig, isAfCommissionerSubscriber, sanitizePlayoffChallengeConfig } from "./playoffChallengeConfig"
+import { defaultPlayoffChallengeConfig, sanitizePlayoffChallengeConfig } from "./playoffChallengeConfig"
+import { hasAfCommissionerPlan } from "@/lib/entitlements/afCommissionerPlan"
 import { getPlayoffCompletionSummary } from "./playoffCompletion"
 
 type SessionUser = {
@@ -85,8 +86,10 @@ export async function createPlayoffBracketChallenge(input: {
   }
 
   const challengeName = sanitizeChallengeName(input.name, input.sport)
+  // The creator's real plan decides which AF Commissioner options the pool keeps. This used to
+  // be the test-account allowlist, so a paying commissioner's options were silently dropped.
   const config = sanitizePlayoffChallengeConfig(input.config, {
-    afCommissionerEnabled: isAfCommissionerSubscriber(input.user),
+    afCommissionerEnabled: await hasAfCommissionerPlan(input.user),
   })
 
   const template = buildPlayoffTemplate({
@@ -240,8 +243,12 @@ export async function getPlayoffBracketView(input: {
   if (!challenge) return null
 
   const userId = input.user?.id ?? null
+  // The pool's options belong to its OWNER's plan, not the viewer's: a member without AF
+  // Commissioner still sees (and is scored by) the spread or series-length picks the owner set up.
   const config = sanitizePlayoffChallengeConfig(challenge.config ?? null, {
-    afCommissionerEnabled: isAfCommissionerSubscriber(input.user),
+    afCommissionerEnabled: await hasAfCommissionerPlan(
+      input.user?.id && input.user.id === challenge.ownerUserId ? input.user : { id: challenge.ownerUserId },
+    ),
   })
   const lockRule = config.lockRule
   const isPoolOwner = Boolean(userId && challenge.ownerUserId === userId)
@@ -490,7 +497,7 @@ export async function createPlayoffBracketEntry(input: {
    * entirely and allowed a hard-coded 5 entries per user. The displayed number was the honest
    * one; the server was the liar. These now read the same config the view renders.
    *
-   * `isAfCommissionerSubscriber` is intentionally NOT passed: the caps are plain numbers on the
+   * `afCommissionerEnabled` is intentionally NOT passed: the caps are plain numbers on the
    * base config, not gated features, so a lapsed subscription must not silently uncap a pool.
    */
   const config = sanitizePlayoffChallengeConfig(challenge.config ?? null)
@@ -597,9 +604,8 @@ export async function submitPlayoffBracketEntry(input: {
     throw new Error("Bracket is not ready yet")
   }
 
-  const lockRule = sanitizePlayoffChallengeConfig(entry.challenge?.config ?? null, {
-    afCommissionerEnabled: isAfCommissionerSubscriber(input.user),
-  }).lockRule
+  // lockRule is on the base config, not an AF Commissioner option, so no plan check is needed.
+  const lockRule = sanitizePlayoffChallengeConfig(entry.challenge?.config ?? null).lockRule
   const completion = getPlayoffCompletionSummary(series, picks, {
     lockRule,
     isPoolOwner: entry.challenge?.ownerUserId === input.userId,
@@ -662,9 +668,8 @@ export async function savePlayoffBracketPick(input: {
     throw new Error("Series not found")
   }
 
-  const lockRule = sanitizePlayoffChallengeConfig(series.challenge?.config ?? null, {
-    afCommissionerEnabled: isAfCommissionerSubscriber(input.user),
-  }).lockRule
+  // lockRule is on the base config, not an AF Commissioner option, so no plan check is needed.
+  const lockRule = sanitizePlayoffChallengeConfig(series.challenge?.config ?? null).lockRule
   const lockedReason = getPlayoffSeriesLockedReason({
     status: series.status,
     startsAt: toIso(series.startsAt),
