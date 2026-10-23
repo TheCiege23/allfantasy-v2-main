@@ -399,7 +399,9 @@ console.log('[secret-scan] Checking tracked .env* files for real credentials...'
 
 let trackedEnvFiles = []
 try {
-  trackedEnvFiles = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+  // The tracked-path list passed execFileSync's 1 MiB default buffer (1,048,989 bytes measured
+  // 2026-10-22), which threw and reported every scan UNVERIFIED. Same ceiling as listGitFiles().
+  trackedEnvFiles = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
     .split('\0')
     .filter((p) => /(^|\/)\.env($|\.)/.test(p))
 } catch {
