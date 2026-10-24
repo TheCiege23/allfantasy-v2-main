@@ -3,6 +3,7 @@ import { buildLeagueGraph } from '@/lib/league-intelligence-graph'
 import { runRivalryEngine } from '@/lib/rivalry-engine/RivalryEngine'
 import { runLeagueDramaEngine } from '@/lib/drama-engine/LeagueDramaEngine'
 import { runPsychologicalProfileEngine } from '@/lib/psychological-profiles/PsychologicalProfileEngine'
+import { createLeagueDraftFactsCache } from '@/lib/psychological-profiles/leagueDraftFactsCache'
 import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 import { normalizeSportForRelationship } from './SportRelationshipResolver'
 import { syncRivalryEdgesIntoGraph } from './GraphRivalryBridge'
@@ -86,6 +87,7 @@ export async function runRelationshipInsightOrchestrator(
   if (input.runProfiles) {
     let success = 0
     let failed = 0
+    const draftFactsCache = createLeagueDraftFactsCache()
     for (const team of league.teams) {
       try {
         await runPsychologicalProfileEngine({
@@ -95,6 +97,7 @@ export async function runRelationshipInsightOrchestrator(
           season,
           format: deriveLeagueFormat(league),
           sleeperUsername: team.ownerName,
+          draftFactsCache,
         })
         success += 1
       } catch {
