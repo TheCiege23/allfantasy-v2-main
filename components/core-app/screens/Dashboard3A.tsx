@@ -604,7 +604,8 @@ export function Dashboard3A(props: Dashboard3AProps) {
 
         <div className="af3a-home-leagues">{slots.leagues}</div>
 
-        <div className="af3a-body">
+        {/* No side cards (all switched off in Settings → Home page): the main column takes the width. */}
+        <div className="af3a-body" data-no-side={sideOrder.length === 0 ? '' : undefined}>
           <div className="af3a-col-main">
             {/*
               Your week (the weekly routine), outstanding issues and this week's matchups — in the
