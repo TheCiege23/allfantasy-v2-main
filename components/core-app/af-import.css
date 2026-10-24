@@ -1065,21 +1065,65 @@
 
 /* ── League selection (handoff 4d) ────────────────────────────────────── */
 
+/*
+ * ⚠ DRAWN BY HAND, NOT `accent-color`. The native box with `accent-color: #22d3ee`
+ * rendered on Android Chrome as a near-white fill with a faint tick, so ticked and
+ * unticked rows were indistinguishable — reported by a user who could not tell which
+ * leagues they were about to import (2026-10-24). An empty outlined box vs a solid
+ * accent box with an ink tick reads the same on every platform and in every theme,
+ * because the tick is `--accent-ink`, which each theme already pairs with `--accent`.
+ * The tick is a clip-path on ::before, so no SVG has to know the theme colour.
+ */
 .af-im-league-check {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
+  display: grid;
+  place-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  border: 2px solid var(--muted);
+  border-radius: 6px;
+  background: transparent;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.af-im-league-check::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: var(--accent-ink);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  transform: scale(0);
+  transition: transform 120ms ease;
+}
+.af-im-league-check:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.af-im-league-check:checked::before {
+  transform: scale(1);
+}
+.af-im-league-check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .af-im-league-check:disabled {
   cursor: default;
+  opacity: 0.6;
 }
 
-/* A ticked row is going to be imported — worth showing at a glance when the
-   list is long, without shouting. */
+/*
+ * A ticked row is going to be imported, and that has to be unmistakable — people
+ * use this list to leave leagues OUT, so "which ones are in" is the whole decision.
+ * The old 28%-alpha border was invisible on a phone. Solid accent ring (border +
+ * 1px shadow, so ticking does not shift the layout) and the soft accent wash.
+ */
 .af-im-league[data-picked='true'] {
-  border-color: var(--accent-line);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
 }
 
 /* ── 6a: the read / never-do trust contract ─────────────────────────────────
