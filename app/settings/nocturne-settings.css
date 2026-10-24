@@ -1089,7 +1089,7 @@
   padding: 2px 7px;
   border: 1px solid var(--ns-border);
   border-radius: 999px;
-  font: 800 10px/1.4 var(--ns-sans);
+  font: 800 11px/1.4 var(--ns-sans);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ns-muted);

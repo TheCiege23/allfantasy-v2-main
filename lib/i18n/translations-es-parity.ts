@@ -1120,7 +1120,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.home.section.schedule.title": "Rivales de esta semana",
   "settings.home.section.schedule.desc": "Contra quién juegas esta semana en cada liga.",
   "settings.home.section.routine.title": "Rutina semanal",
-  "settings.home.section.routine.desc": "Tu lista de la semana, con las revisiones de alineación y waivers de Chimmy.",
+  "settings.home.section.routine.desc": "Tu lista de la semana, con las revisiones de alineación y agentes libres de Chimmy.",
   "settings.home.section.matchups.title": "Enfrentamientos",
   "settings.home.section.matchups.desc": "Marcadores de esta semana y probabilidades de ganar.",
   "settings.home.section.chimmy.title": "Chimmy",
