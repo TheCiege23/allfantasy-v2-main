@@ -23,10 +23,18 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 const OPTED_IN = process.env.AF_CHANGE_AWARE_DB_IT === '1'
 
-const provider = vi.hoisted(() => ({ matchups: new Map<string, unknown[]>() }))
+const provider = vi.hoisted(() => ({
+  matchups: new Map<string, unknown[]>(),
+  /** One-shot provider responses, consumed in order before falling back to `matchups`. */
+  queue: [] as Array<() => Promise<unknown[]>>,
+}))
 vi.mock('@/lib/sleeper-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getLeagueMatchups: async (leagueId: string, week: number) => provider.matchups.get(`${leagueId}:${week}`) ?? [],
+  getLeagueMatchups: async (leagueId: string, week: number) => {
+    const next = provider.queue.shift()
+    if (next) return next()
+    return provider.matchups.get(`${leagueId}:${week}`) ?? []
+  },
 }))
 
 import { prisma } from '@/lib/prisma'
@@ -67,6 +75,7 @@ describe.skipIf(!OPTED_IN)('change-aware sync writes — real Prisma, real Postg
 
   afterEach(() => {
     provider.matchups.clear()
+    provider.queue.length = 0
     delete process.env.AF_CHANGE_AWARE_WRITES_OFF
   })
 
@@ -174,6 +183,146 @@ describe.skipIf(!OPTED_IN)('change-aware sync writes — real Prisma, real Postg
       expect((await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)).scoresUpserted).toBe(3)
       const x2 = await rowXmins(L)
       for (const p of ['p1', 'p2', 'p3']) expect(x2.get(p)).not.toBe(x1.get(p)) // rewritten, as before
+    })
+  })
+
+  // ── concurrency: older sync vs newer live tick, and createMany conflicts ────────────────────
+  describe('concurrency', () => {
+    const pl = () => `${STAMP}-cc-${Math.random().toString(36).slice(2, 8)}`
+    const week = (p1: number, players: Record<string, number> = { p2: 12.4, p3: 3.1 }) => [{
+      matchup_id: 1, roster_id: 7, points: p1 + 12.4,
+      starters: ['p1', 'p2'], starters_points: [p1, 12.4],
+      players: ['p1', ...Object.keys(players)], players_points: { p1, ...players },
+    }]
+    const byPlayer = async (leagueId: string) =>
+      new Map((await prisma.leaguePlayerWeeklyScore.findMany({ where: { leagueId } })).map((r) => [r.playerId, r]))
+
+    it('an OLDER sync finishing after a NEWER live tick does not overwrite the live points (update path)', async () => {
+      const L = pl(); created.platformLeagueIds.push(L)
+      provider.matchups.set(`${L}:12`, week(20.5))
+      await ingestSleeperPlayerScoresForWeek(L, SEASON, 12) // baseline rows
+
+      // The sync (A) starts its provider call; while it is in flight a live tick (B) fetches newer
+      // points and writes them. A's response — fetched first — then arrives carrying older points.
+      provider.queue.push(async () => {
+        provider.matchups.set(`${L}:12`, week(25))
+        await new Promise((r) => setTimeout(r, 5))
+        const live = await ingestSleeperPlayerScoresForWeek(L, SEASON, 12) // B, observed after A
+        expect(live.scoresUpserted).toBe(1)
+        return week(22) // A's older observation
+      })
+      const sync = await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)
+      expect(sync).toMatchObject({ scoresUpserted: 0, error: null })
+      expect((await byPlayer(L)).get('p1')?.points).toBe(25)
+    })
+
+    it('a NEWER sync still overwrites an OLDER stored observation (the fence is not a freeze)', async () => {
+      const L = pl(); created.platformLeagueIds.push(L)
+      provider.matchups.set(`${L}:12`, week(20.5))
+      await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)
+      await new Promise((r) => setTimeout(r, 5))
+      provider.matchups.set(`${L}:12`, week(22))
+      expect((await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)).scoresUpserted).toBe(1)
+      expect((await byPlayer(L)).get('p1')?.points).toBe(22)
+    })
+
+    it('createMany conflict, ALL rows taken by a newer concurrent writer: none overwritten, no duplicates', async () => {
+      const L = pl(); created.platformLeagueIds.push(L)
+      provider.matchups.set(`${L}:12`, week(25))
+      provider.queue.push(async () => week(22)) // A's (older) observation
+      // A reads an empty week; before A inserts, the live tick (B) observes and inserts everything.
+      const spy = vi.spyOn(prisma.leaguePlayerWeeklyScore, 'findMany')
+      spy.mockImplementationOnce(async (...args: unknown[]) => {
+        spy.mockRestore()
+        const rows = await (prisma.leaguePlayerWeeklyScore.findMany as any)(...args)
+        await new Promise((r) => setTimeout(r, 5))
+        await ingestSleeperPlayerScoresForWeek(L, SEASON, 12) // B
+        return rows as never
+      })
+      const a = await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)
+      expect(a).toMatchObject({ scoresUpserted: 0, error: null })
+      const rows = await byPlayer(L)
+      expect(rows.size).toBe(3)
+      expect(rows.get('p1')?.points).toBe(25)
+    })
+
+    it('createMany PARTIAL conflict: the inserted rows stay, the conflicting newer row is kept', async () => {
+      const L = pl(); created.platformLeagueIds.push(L)
+      provider.queue.push(async () => week(22)) // A
+      const spy = vi.spyOn(prisma.leaguePlayerWeeklyScore, 'findMany')
+      spy.mockImplementationOnce(async (...args: unknown[]) => {
+        spy.mockRestore()
+        const rows = await (prisma.leaguePlayerWeeklyScore.findMany as any)(...args)
+        await new Promise((r) => setTimeout(r, 5))
+        // B observes later and inserts ONLY p1, with a different value.
+        provider.queue.push(async () => [{ matchup_id: 1, roster_id: 7, points: 25, starters: ['p1'], starters_points: [25], players: ['p1'], players_points: { p1: 25 } }])
+        await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)
+        return rows as never
+      })
+      const a = await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)
+      expect(a.error).toBeNull()
+      expect(a.scoresUpserted).toBe(2) // p2, p3 inserted; p1 declined by the fence
+      const rows = await byPlayer(L)
+      expect(rows.size).toBe(3)
+      expect(rows.get('p1')?.points).toBe(25)
+      expect(rows.get('p2')?.points).toBe(12.4)
+      expect(rows.get('p3')?.points).toBe(3.1)
+    })
+
+    it('createMany PARTIAL conflict with an OLDER concurrent row: that row is corrected to our newer value', async () => {
+      const L = pl(); created.platformLeagueIds.push(L)
+      provider.queue.push(async () => week(22)) // A
+      const spy = vi.spyOn(prisma.leaguePlayerWeeklyScore, 'findMany')
+      spy.mockImplementationOnce(async (...args: unknown[]) => {
+        spy.mockRestore()
+        const rows = await (prisma.leaguePlayerWeeklyScore.findMany as any)(...args)
+        // A row observed an hour ago lands between A's read and A's insert, sealed, with another value.
+        await prisma.leaguePlayerWeeklyScore.create({ data: {
+          leagueId: L, seasonYear: SEASON, week: 12, playerId: 'p1', rosterId: 7, points: 19, isStarter: true,
+          isFinalized: true, source: 'sleeper', updatedAt: new Date(Date.now() - 3_600_000),
+        } })
+        return rows as never
+      })
+      const a = await ingestSleeperPlayerScoresForWeek(L, SEASON, 12)
+      expect(a).toMatchObject({ scoresUpserted: 3, error: null })
+      const rows = await byPlayer(L)
+      expect(rows.size).toBe(3)
+      expect(rows.get('p1')).toMatchObject({ points: 22, isFinalized: false })
+    })
+
+    it('two writers inserting the same empty week at once: one set of rows, no error', async () => {
+      const L = pl(); created.platformLeagueIds.push(L)
+      provider.matchups.set(`${L}:12`, week(20.5))
+      const [x, y] = await Promise.all([
+        ingestSleeperPlayerScoresForWeek(L, SEASON, 12),
+        ingestSleeperPlayerScoresForWeek(L, SEASON, 12),
+      ])
+      expect(x.error).toBeNull()
+      expect(y.error).toBeNull()
+      expect(await prisma.leaguePlayerWeeklyScore.count({ where: { leagueId: L } })).toBe(3)
+    })
+
+    it('team_performances PARTIAL createMany conflict: every row ends correct', async () => {
+      const L = `${STAMP}-tpcc-${Math.random().toString(36).slice(2, 8)}`
+      const league = await prisma.league.create({ data: { userId, platform: 'sleeper', platformLeagueId: L, season: SEASON, sport: 'NFL', name: 'cc', leagueSize: 2 } })
+      created.leagues.push(league.id)
+      const [t1, t2] = await Promise.all(['1', '2'].map((x) => prisma.leagueTeam.create({ data: { leagueId: league.id, externalId: x, ownerName: x, teamName: x } })))
+      const spy = vi.spyOn(prisma.teamPerformance, 'findMany')
+      spy.mockImplementationOnce(async (...args: unknown[]) => {
+        spy.mockRestore()
+        const rows = await (prisma.teamPerformance.findMany as any)(...args)
+        await prisma.teamPerformance.create({ data: { teamId: t1.id, season: SEASON, week: 1, points: 50, opponent: t2.id, result: 'L' } })
+        return rows as never
+      })
+      const out = await writeTeamPerformances({ season: SEASON, rows: [
+        { teamId: t1.id, week: 1, points: 100, opponent: t2.id, result: 'W' },
+        { teamId: t2.id, week: 1, points: 90, opponent: t1.id, result: 'L' },
+      ] })
+      expect(out.fellBack).toBe(false)
+      const perf = await prisma.teamPerformance.findMany({ where: { teamId: { in: [t1.id, t2.id] } } })
+      expect(perf).toHaveLength(2)
+      expect(perf.find((p) => p.teamId === t1.id)).toMatchObject({ points: 100, result: 'W' })
+      expect(perf.find((p) => p.teamId === t2.id)).toMatchObject({ points: 90, result: 'L' })
     })
   })
 

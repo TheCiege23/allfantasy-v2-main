@@ -136,7 +136,9 @@ export async function writeTeamPerformances(input: {
           opponent: r.opponent,
           result: r.result,
         })),
-        // A row another writer inserted since the read is skipped here and settled by the update.
+        // A row another writer inserted since the read is skipped here. `count` says how many,
+        // never which, so a short count sends EVERY attempted insert through the guarded update;
+        // the rows this call did insert are already equal and the update leaves them alone.
         skipDuplicates: true,
       })
       out.written += created.count
