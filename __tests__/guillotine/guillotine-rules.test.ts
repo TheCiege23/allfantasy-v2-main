@@ -63,6 +63,7 @@ const CURRENT: GuillotineRules = {
   dangerMarginPoints: 10,
   rosterReleaseTiming: 'next_waiver_run',
   aiRecapAuto: true,
+  faabOnChop: 'keep',
 }
 
 describe('normalizeGuillotineRulesPatch', () => {
@@ -153,6 +154,17 @@ describe('saveGuillotineRules', () => {
     expect(data.settings.guillotineAiRecapAuto).toBe(false)
     expect(data).not.toHaveProperty('guillotineEndgame')
     expect(upsertGuillotineConfig).not.toHaveBeenCalled()
+  })
+
+  it('saves the chopped-team FAAB choice to League.settings for a free commissioner', async () => {
+    const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'split' })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotineFaabOnChop).toBe('split')
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
+    expect(normalizeGuillotineRulesPatch({ faabOnChop: 'give_to_commish' }, { startWeek: 2, seasonWeeks: 24 })).toMatchObject({
+      ok: false,
+      error: { field: 'faabOnChop' },
+    })
   })
 
   it('locks the endgame once the first chop has happened (409)', async () => {

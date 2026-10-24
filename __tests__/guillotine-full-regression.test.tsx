@@ -99,6 +99,10 @@ vi.mock('@/lib/guillotine/GuillotineEventLog', () => ({
   getRecentEvents: eventsMock,
 }))
 vi.mock('@/lib/guillotine/weeklyRecap', () => ({ postAutomaticGuillotineRecap: postAutomaticGuillotineRecapMock }))
+const redistributeChoppedFaabMock = vi.hoisted(() => vi.fn())
+const createLeagueChatMessageMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/guillotine/faabOnChopApply', () => ({ redistributeChoppedFaab: redistributeChoppedFaabMock }))
+vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: createLeagueChatMessageMock }))
 vi.mock('@/lib/guillotine/guillotineChat', () => ({
   postChopToLeagueChat: postChopToLeagueChatMock,
 }))
@@ -412,6 +416,54 @@ describe('Guilly full regression matrix', () => {
     // The announcement is read by the whole league: a name, never the fixture's email.
     expect(postChopToLeagueChatMock.mock.calls[0][0].displayNames).toEqual({ 'r-low': 'Lowest Team' })
     expect(JSON.stringify(postChopToLeagueChatMock.mock.calls[0][0])).not.toContain('@test.com')
+  })
+
+  describe("a chopped team's unspent FAAB (lib/guillotine/faabOnChop.ts)", () => {
+    function chopLowOfTwo() {
+      getGuillotineConfigMock.mockResolvedValue({
+        eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 1, tiebreakerOrder: ['bench_points'], rosterReleaseTiming: 'next_waiver_run',
+      })
+      evaluateWeekMock.mockResolvedValue({
+        pastCutoff: true,
+        activeRosterIds: ['r-low', 'r-mid', 'r-top'],
+        scores: [
+          { rosterId: 'r-low', periodPoints: 77 },
+          { rosterId: 'r-mid', periodPoints: 100 },
+          { rosterId: 'r-top', periodPoints: 120 },
+        ],
+      })
+      getDraftSlotByRosterMock.mockResolvedValue(new Map())
+      resolveTiebreakMock.mockReturnValue({ choppedRosterIds: ['r-low'], stepUsed: null, reason: 'lowest score' })
+      prismaMock.roster.findMany.mockResolvedValue([])
+      prismaMock.appUser.findMany.mockResolvedValue([])
+    }
+
+    it('with "split", hands it to the teams still alive and says so in chat', async () => {
+      chopLowOfTwo()
+      prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'split' } })
+      redistributeChoppedFaabMock.mockResolvedValue({ pool: 60, perTeam: 30, survivors: 2, shares: new Map([['r-mid', 30], ['r-top', 30]]) })
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026, systemUserId: 'system' })
+      expect(redistributeChoppedFaabMock).toHaveBeenCalledWith({ choppedRosterIds: ['r-low'], survivorRosterIds: ['r-mid', 'r-top'] })
+      expect(appendEventMock).toHaveBeenCalledWith('league-1', 'faab_split', expect.objectContaining({ pool: 60 }))
+      expect(createLeagueChatMessageMock).toHaveBeenCalledWith('league-1', 'system', expect.stringContaining('$60'), expect.objectContaining({
+        idempotencyKey: 'guillotine-faab-split:league-1:2026:w3',
+      }))
+    })
+
+    it('by default (keep), moves nothing', async () => {
+      chopLowOfTwo()
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, systemUserId: 'system' })
+      expect(redistributeChoppedFaabMock).not.toHaveBeenCalled()
+    })
+
+    it('a failed split does not fail the chop', async () => {
+      chopLowOfTwo()
+      prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'split' } })
+      redistributeChoppedFaabMock.mockRejectedValue(new Error('db down'))
+      const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, skipChat: true })
+      expect(out?.choppedRosterIds).toEqual(['r-low'])
+      expect(releaseChoppedRostersMock).toHaveBeenCalled()
+    })
   })
 
   it('🛑 a chat post that fails does not fail the chop (the week is already chopped)', async () => {
