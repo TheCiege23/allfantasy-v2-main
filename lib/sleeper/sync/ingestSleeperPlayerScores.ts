@@ -161,6 +161,23 @@ export async function ingestSleeperPlayerScoresForWeek(
     error: null,
   }
 
+  /*
+   * 🛑 WHEN THIS OBSERVATION WAS TAKEN, AND THE ONLY ORDERING TWO WRITERS SHARE.
+   *
+   * The league sync (both lanes) and the live-score tick call this same function for the same
+   * league-weeks, and no lock spans them: the sync's lock is per run key, the live tick takes
+   * none. So a sync that began fetching before a live tick can finish writing AFTER it, and
+   * without a guard it would replace the newer live points with its older ones.
+   *
+   * Captured BEFORE the provider call and stored as the row's `updatedAt`, it makes every row
+   * carry the time its values were observed. The UPDATE below then refuses to touch a row whose
+   * stored observation is newer than this one — so the newest observation wins regardless of
+   * which write commits last. Nothing else reads this table's `updatedAt` (checked), so giving
+   * it observation-time meaning changes no consumer.
+   */
+  const observedAt = new Date()
+  const observedAtIso = observedAt.toISOString()
+
   let matchups
   try {
     matchups = await getLeagueMatchups(platformLeagueId, week)
@@ -279,8 +296,10 @@ export async function ingestSleeperPlayerScoresForWeek(
      * `createdAt`/`updatedAt` handling, exactly as the old per-row upsert gave them.
      *
      * ⚠ `skipDuplicates` MEANS A ROW ANOTHER WRITER INSERTED SINCE THE READ IS SKIPPED, NOT
-     * OVERWRITTEN. When that happens (`count` short of what was sent), those rows join the
-     * update pass below, whose own distinctness check decides whether they still need writing.
+     * OVERWRITTEN — and `count` says only HOW MANY were skipped, never WHICH. So when it falls
+     * short, EVERY attempted insert joins the update pass. That is safe for the rows this call did
+     * insert: they already hold exactly these values, so `IS DISTINCT FROM` leaves them alone.
+     * The conflicting rows are then settled by the same two guards as any other update.
      */
     if (inserts.length > 0) {
       const created = await prisma.leaguePlayerWeeklyScore.createMany({
@@ -294,6 +313,7 @@ export async function ingestSleeperPlayerScoresForWeek(
           isStarter: row.isStarter,
           isFinalized: false,
           source: 'sleeper',
+          updatedAt: observedAt,
         })),
         skipDuplicates: true,
       })
@@ -302,12 +322,16 @@ export async function ingestSleeperPlayerScoresForWeek(
     }
 
     /*
-     * CHANGED rows in one statement. The `IS DISTINCT FROM` guard is re-evaluated against the row
-     * as it is at write time, so a row another writer has already brought to these values — or a
-     * row the reconcile pass sealed with these values — is not touched, and stays sealed.
+     * CHANGED rows in one statement, with two guards evaluated against each row AS IT IS AT WRITE
+     * TIME, not as it was read:
+     *   - `IS DISTINCT FROM`: a row another writer already brought to these values — or one the
+     *     reconcile pass sealed with these values — is not touched, and stays sealed.
+     *   - `"updatedAt" <= observedAt`: a row holding a NEWER observation than ours (a live tick
+     *     that fetched after we did) is not overwritten with our older one. See `observedAt`.
      *
-     * ⚠ `timezone('UTC', now())`, NOT `now()`: the column is `timestamp(3)` without a zone and
-     * Prisma stores UTC in it. Bare `now()` would be converted through the SESSION time zone.
+     * ⚠ THE TIMESTAMP IS CONVERTED EXPLICITLY. The column is `timestamp(3)` without a zone and
+     * Prisma stores UTC in it; `::timestamptz AT TIME ZONE 'UTC'` yields that same UTC wall time
+     * whatever the session time zone is. A bare timestamp parameter would not.
      */
     if (updates.length > 0) {
       result.scoresUpserted += await prisma.$executeRaw`
@@ -317,13 +341,14 @@ export async function ingestSleeperPlayerScoresForWeek(
                "isStarter" = r."isStarter",
                source = 'sleeper',
                "isFinalized" = false,
-               "updatedAt" = timezone('UTC', now())
+               "updatedAt" = (${observedAtIso}::timestamptz AT TIME ZONE 'UTC')
           FROM jsonb_to_recordset(${JSON.stringify(updates)}::jsonb)
             AS r("playerId" text, "rosterId" integer, points double precision, "isStarter" boolean)
          WHERE s."leagueId" = ${platformLeagueId}
            AND s."seasonYear" = ${season}
            AND s.week = ${week}
            AND s."playerId" = r."playerId"
+           AND s."updatedAt" <= (${observedAtIso}::timestamptz AT TIME ZONE 'UTC')
            AND (s.points, s."rosterId", s."isStarter", s.source)
                IS DISTINCT FROM
                (r.points, r."rosterId", r."isStarter", 'sleeper'::varchar)`

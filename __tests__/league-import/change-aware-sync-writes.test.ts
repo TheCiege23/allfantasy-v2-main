@@ -228,3 +228,24 @@ describe('AF_CHANGE_AWARE_WRITES_OFF parsing', () => {
     expect(changeAwareWritesEnabled('team-performances', { AF_CHANGE_AWARE_WRITES_OFF: 'all' })).toBe(false)
   })
 })
+
+describe('AF_CHANGE_AWARE_WRITES_OFF: every value against every writer', () => {
+  const writers = ['weekly-scores', 'team-performances', 'rosters', 'matchups'] as const
+  const cases: Array<[string, readonly string[]]> = [
+    ['weekly-scores', ['weekly-scores']],
+    ['team-performances', ['team-performances']],
+    ['rosters', ['rosters']],
+    ['matchups', ['matchups']],
+    ['all', writers],
+    ['weekly-scores,team-performances,rosters,matchups', writers],
+    ['', []],
+    ['not-a-writer', []],
+  ]
+  for (const [value, off] of cases) {
+    it(`"${value}" turns off exactly [${off.join(', ')}]`, () => {
+      for (const w of writers) {
+        expect(changeAwareWritesEnabled(w, { AF_CHANGE_AWARE_WRITES_OFF: value })).toBe(!off.includes(w))
+      }
+    })
+  }
+})

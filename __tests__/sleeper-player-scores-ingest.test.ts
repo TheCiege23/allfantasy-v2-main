@@ -322,7 +322,28 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
       findMany.mockResolvedValue(storedWeek)
       await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
       expect(sqlText()).toMatch(/IS DISTINCT FROM/)
-      expect(sqlText()).toMatch(/timezone\('UTC', now\(\)\)/)
+      // The observation-time fence: never overwrite a row holding a newer observation.
+      expect(sqlText()).toMatch(/s\."updatedAt" <= \(\$::timestamptz AT TIME ZONE 'UTC'\)/)
+      expect(sqlText()).toMatch(/"updatedAt" = \(\$::timestamptz AT TIME ZONE 'UTC'\)/)
+    })
+
+    it('stamps new rows with the time the observation was taken, before the provider call', async () => {
+      let fetchedAt = 0
+      getLeagueMatchups.mockImplementation(async () => { fetchedAt = Date.now(); return week })
+      const before = Date.now()
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      const stamp = (createMany.mock.calls[0][0] as { data: Array<{ updatedAt: Date }> }).data[0].updatedAt
+      expect(stamp).toBeInstanceOf(Date)
+      expect(stamp.getTime()).toBeGreaterThanOrEqual(before)
+      expect(stamp.getTime()).toBeLessThanOrEqual(fetchedAt)
+    })
+
+    it('a short createMany count re-sends EVERY attempted insert, without guessing which conflicted', async () => {
+      getLeagueMatchups.mockResolvedValue(week)
+      createMany.mockResolvedValue({ count: 1 })
+      executeRaw.mockResolvedValue(2)
+      await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+      expect(updated().map((x) => x.playerId).sort()).toEqual(['p1', 'p2', 'p3'])
     })
 
     it('inserts new rows through Prisma, so they keep the model\'s own id default', async () => {
