@@ -6,6 +6,7 @@ import { resolvePlayerNewsIdentity, resolvePlayerNewsRecipients, FINISHED_SEASON
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { planPlayerNews, markPlayerNewsTold, type PlayerNewsSubject } from '@/lib/notifications/playerNewsGate'
 import { statusBucket, isMeaningfulStatusChange } from '@/lib/notifications/playerNewsStatus'
+import { readOptimizationEnabled } from '@/lib/perf/readOptimizations'
 
 export const isUnavailableStatus = (status: string) => /^(out|ir|injured reserve|inactive|suspended|out for season|ruled out)$/i.test(status.trim())
 export function importedPlayerIsStarting(data: unknown, playerId: string): boolean {
@@ -49,7 +50,19 @@ export function lineupAlertTitle(changes: Array<{ playerName: string; status: st
 
 /** Run after a successful injury sync, including unchanged rows so failed sends can retry. */
 export async function notifySyncedInjuries(sport: string, now = new Date()): Promise<{ delivered: number; errors: number }> {
-  const rows = await prisma.sportsInjury.findMany({ where: { sport, expiresAt: { gt: now }, fetchedAt: { gte: new Date(now.getTime() - 10 * 60_000) } }, orderBy: { fetchedAt: 'desc' } })
+  const optimized = readOptimizationEnabled('injury-alerts')
+  const where = { sport, expiresAt: { gt: now }, fetchedAt: { gte: new Date(now.getTime() - 10 * 60_000) } }
+  /*
+   * ⚠ THIS RUNS FOR EVERY SPORT EVERY 2 MINUTES, AND THE WINDOW MATCHES NEARLY EVERY ROW, because
+   * the importers stamp `fetchedAt` on every row they rewrite. So the read is selected down to the
+   * columns used below (no `raw` provider JSON), and the per-row "previous observation" reads are
+   * one batched read (see `previousObservations`). `AF_READ_OPTIMIZATIONS_OFF=injury-alerts`
+   * restores the full-row read and the per-row lookups.
+   */
+  const rows = optimized
+    ? await prisma.sportsInjury.findMany({ where, orderBy: { fetchedAt: 'desc' },
+        select: { externalId: true, playerName: true, team: true, status: true, date: true, source: true } })
+    : await prisma.sportsInjury.findMany({ where, orderBy: { fetchedAt: 'desc' } })
   // A refreshed snapshot is not a new injury. Prefer the newest provider event
   // per player and never bootstrap old reports into a notification flood.
   rows.sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
@@ -62,10 +75,44 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
   const observations: Array<{ stateKey: string; status: string }> = []
   let delivered = 0
   let errors = 0
+  /*
+   * Identities are resolved in the same order and with the same calls as before; doing it first
+   * lets every first-seen player's previous observation come back in ONE read instead of one per
+   * row. Each state key occurs at most once per run (it embeds the identity, and a repeated
+   * identity is skipped), so nothing written later in this run could have changed what that read
+   * returns. If the batched read fails, every row falls back to its own lookup, as before.
+   */
+  const identities = new Map<(typeof rows)[number], Awaited<ReturnType<typeof resolvePlayerNewsIdentity>> | { thrown: unknown }>()
+  let previousObservations: Map<string, unknown> | null = null
+  if (optimized) {
+    const stateKeys: string[] = []
+    const firstSeen = new Set<string>()
+    for (const row of rows) {
+      if (!row.status) continue
+      try {
+        const resolved = await resolvePlayerNewsIdentity({ sport, playerName: row.playerName, team: row.team })
+        identities.set(row, resolved)
+        if (resolved.status === 'resolved' && !firstSeen.has(resolved.identity.identityId)) {
+          firstSeen.add(resolved.identity.identityId)
+          stateKeys.push(`injury-observation:v1:${sport}:${resolved.identity.identityId}:${row.source}`)
+        }
+      } catch (e) {
+        identities.set(row, { thrown: e })
+      }
+    }
+    if (stateKeys.length) {
+      previousObservations = await prisma.sportsDataCache
+        .findMany({ where: { cacheKey: { in: stateKeys } }, select: { cacheKey: true, data: true } })
+        .then((found) => new Map(found.map((r) => [r.cacheKey, r.data] as const)))
+        .catch(() => null)
+    }
+  }
   for (const row of rows) {
     if (!row.status) continue
     try {
-      const resolved = await resolvePlayerNewsIdentity({ sport, playerName: row.playerName, team: row.team })
+      const pre = identities.get(row)
+      if (pre && 'thrown' in pre) throw pre.thrown
+      const resolved = pre ?? await resolvePlayerNewsIdentity({ sport, playerName: row.playerName, team: row.team })
       if (resolved.status !== 'resolved') continue
       const identity = resolved.identity
       if (seenPlayers.has(identity.identityId)) continue
@@ -75,8 +122,10 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       // Undated feeds need an observed status transition, not first-snapshot fanout.
       const stateKey = `injury-observation:v1:${sport}:${identity.identityId}:${row.source}`
       const healthyStatus = /^(active|healthy|available)$/i.test(status)
-      const previous = await prisma.sportsDataCache.findUnique({ where: { cacheKey: stateKey } })
-      const previousStatus = (previous?.data as { status?: string } | null)?.status
+      const previousData = previousObservations
+        ? previousObservations.get(stateKey) ?? null
+        : (await prisma.sportsDataCache.findUnique({ where: { cacheKey: stateKey } }))?.data
+      const previousStatus = (previousData as { status?: string } | null)?.status
       /*
        * Owner's rule (2026-10-22): only a change that matters. The same status again, a practice
        * report, or anything about a player already on IR other than his return is recorded and not sent.
@@ -103,9 +152,13 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       const key = createHash('sha256').update(`${sport}:${identity.identityId}:${status}:${date}`).digest('hex')
       if (seen.has(key)) continue
       seen.add(key)
+      const team = identity.currentTeam?.trim() || row.team?.trim()
+      // Without a team nothing below can send (and no observation is recorded), so resolving the
+      // audience first only spent the most expensive query in this file for nothing. Its one other
+      // effect was that a degraded lookup for such a row counted as a run error.
+      if (optimized && !team) continue
       const audience = await resolvePlayerNewsRecipients(identity)
       if (audience.degraded) errors++
-      const team = identity.currentTeam?.trim() || row.team?.trim()
       if (!team) continue
       const subject: PlayerNewsSubject = { playerKey: identity.identityId, bucket: statusBucket(status) }
       for (const [userId, leagueIds] of audience.byUser) {

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { runPsychologicalProfileEngine } from './PsychologicalProfileEngine'
+import { createLeagueDraftFactsCache } from './leagueDraftFactsCache'
 import { backfillTransactionFactsFromTradeHistory } from './TransactionFactBackfill'
 import { ingestSleeperTradeFacts } from './SleeperTradeFactIngest'
 import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
@@ -83,6 +84,7 @@ export async function refreshLeagueProfiles(input: {
 
   const teams = typeof input.limit === 'number' ? league.teams.slice(0, input.limit) : league.teams
   result.managersConsidered = teams.length
+  const draftFactsCache = createLeagueDraftFactsCache()
 
   for (const team of teams) {
     const managerId = team.externalId || team.id
@@ -99,6 +101,7 @@ export async function refreshLeagueProfiles(input: {
         seasonInferred,
         sleeperUsername: team.ownerName ?? undefined,
         rosterId: undefined,
+        draftFactsCache,
       })
       result.profiled += 1
     } catch (e) {
