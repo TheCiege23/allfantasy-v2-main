@@ -31,9 +31,10 @@ describe('Settings → Home page', () => {
     expect(switchOf('league-trades').checked).toBe(true)
     expect(row('league-trades').dataset.shown).toBe('true')
     expect(row('league-trades').textContent).toMatch(/Turning this off also stops/)
-    // The two alerts that never go quiet say so on their rows.
-    expect(row('drafts').textContent).toMatch(/never miss a pick/)
-    expect(row('league-trades').textContent).toMatch(/Trade offers sent to you always come through/)
+    // The two rows whose "off" also silences an alert you must act on warn about it.
+    expect(screen.getByTestId('home-section-warn-drafts').textContent).toMatch(/on-the-clock alerts/)
+    expect(screen.getByTestId('home-section-warn-league-trades').textContent).toMatch(/trade offers sent to you/)
+    expect(screen.queryByTestId('home-section-warn-rivals')).toBeNull()
     expect(screen.getByTestId('home-sections-count').textContent).toBe('17 of 17 sections showing')
   })
 
