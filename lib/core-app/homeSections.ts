@@ -17,10 +17,11 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
  * — turning the section back on would no longer bring its alerts back. The mute is applied at send
  * time instead, and the stored category switches are never touched.
  *
- * ⚠ ALERTS THAT NEED YOU TO ACT ARE NOT MAPPED, even where they share a topic with a card:
- *   - `draft_alerts` (you are on the clock) — hiding the drafts card must never cost someone a pick.
- *   - `trade_proposals` (an offer sent TO you) — the trades card is league trade news, not your inbox.
- * The Settings copy says so on those two rows.
+ * ⚠ OFF MEANS ALL OF IT, INCLUDING ALERTS THAT NEED YOU TO ACT (owner's call, 2026-10-24). The first
+ * version kept `draft_alerts` (you are on the clock) and `trade_proposals` (an offer sent TO you) on
+ * when their section was hidden; the owner asked for those to go quiet too. Because missing them has
+ * a real cost — a missed pick, an offer that expires — the Drafts and League trades rows WARN that
+ * they include them (`HomeSectionsSettingsSection`), rather than leaving it to the category list.
  */
 
 export type HomeSectionId =
@@ -59,10 +60,16 @@ export const HOME_SECTIONS: readonly HomeSectionDef[] = [
   { id: 'decisions', group: 'top', cards: ['issues'], categories: [] },
   { id: 'since-last-visit', group: 'top', cards: ['since-last-visit'], categories: [] },
   { id: 'live-games', group: 'top', cards: ['game-day'], categories: ['live_game_alerts', 'performance_alerts'] },
-  { id: 'drafts', group: 'top', cards: ['drafts'], categories: ['draft_intel_alerts'] },
+  { id: 'drafts', group: 'top', cards: ['drafts'], categories: ['draft_alerts', 'draft_intel_alerts'] },
   { id: 'injuries', group: 'top', cards: ['triage'], categories: ['injury_alerts', 'lineup_alerts'] },
-  // League trade news is sent under trade_accept_reject (lib/provider-trades/notifyProviderLeagueTrades.ts).
-  { id: 'league-trades', group: 'top', cards: ['trade-band'], categories: ['trade_accept_reject'] },
+  // League trade news is sent under trade_accept_reject (lib/provider-trades/notifyProviderLeagueTrades.ts);
+  // trade_proposals is an offer sent to YOU — included at the owner's request, and the row warns about it.
+  {
+    id: 'league-trades',
+    group: 'top',
+    cards: ['trade-band'],
+    categories: ['trade_proposals', 'trade_accept_reject'],
+  },
   { id: 'lock-brief', group: 'top', cards: ['carryover'], categories: [] },
   { id: 'league-focus', group: 'top', cards: ['user-os'], categories: [] },
   { id: 'schedule', group: 'top', cards: ['schedule'], categories: [] },

@@ -30,10 +30,13 @@ import type { SettingsProfile } from "./settings-types"
  * switches back to what the server last confirmed and says so.
  */
 
-/** Sections whose alerts deliberately stay on — the row says which ones, so "off" is never a surprise. */
-const KEEPS_ON_KEY: Partial<Record<HomeSectionId, string>> = {
-  drafts: "settings.home.keeps.drafts",
-  "league-trades": "settings.home.keeps.leagueTrades",
+/**
+ * Sections whose "off" also silences an alert that needs you to act — on the clock in a draft, an offer
+ * sent to you. Said on the row in plain words, so nobody discovers it by missing a pick.
+ */
+const WARN_KEY: Partial<Record<HomeSectionId, string>> = {
+  drafts: "settings.home.warn.drafts",
+  "league-trades": "settings.home.warn.leagueTrades",
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error"
@@ -180,7 +183,7 @@ export function HomeSectionsSettingsSection({
             {HOME_SECTIONS.filter((s) => s.group === group).map((section) => {
               const visible = !hidden.has(section.id)
               const title = t(`settings.home.section.${section.id}.title`)
-              const keepsKey = KEEPS_ON_KEY[section.id]
+              const warnKey = WARN_KEY[section.id]
               return (
                 <li key={section.id}>
                   {/*
@@ -215,9 +218,13 @@ export function HomeSectionsSettingsSection({
                           {t("settings.home.visualOnly")}
                         </span>
                       )}
-                      {keepsKey ? (
-                        <span className="mt-1 block text-xs" style={{ color: "var(--muted2)" }}>
-                          {t(keepsKey)}
+                      {warnKey ? (
+                        <span
+                          className="mt-1 block text-xs font-semibold"
+                          style={{ color: "var(--ns-warn, #fbbf24)" }}
+                          data-testid={`home-section-warn-${section.id}`}
+                        >
+                          ⚠ {t(warnKey)}
                         </span>
                       ) : null}
                     </span>

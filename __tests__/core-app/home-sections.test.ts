@@ -79,13 +79,18 @@ describe('the section map', () => {
     }
   })
 
-  it('🛑 never silences an alert that needs the person to act', () => {
+  it('off means all of it: hiding Drafts / League trades also stops on-the-clock and offer alerts (owner, 2026-10-24)', () => {
+    expect(homeSectionMutingCategory({ hiddenHomeSections: ['drafts'] }, 'draft_alerts')).toBe('drafts')
+    expect(homeSectionMutingCategory({ hiddenHomeSections: ['league-trades'] }, 'trade_proposals')).toBe('league-trades')
+    // Shown again, they come back.
+    expect(isCategoryHiddenByHomeSection({ hiddenHomeSections: [] }, 'draft_alerts')).toBe(false)
+  })
+
+  it('never silences messages or commissioner alerts — no home section owns them', () => {
     const everything = { hiddenHomeSections: HOME_SECTIONS.map((s) => s.id) }
-    // On the clock in a draft, and a trade offer sent TO you.
-    expect(isCategoryHiddenByHomeSection(everything, 'draft_alerts')).toBe(false)
-    expect(isCategoryHiddenByHomeSection(everything, 'trade_proposals')).toBe(false)
     expect(isCategoryHiddenByHomeSection(everything, 'direct_messages')).toBe(false)
     expect(isCategoryHiddenByHomeSection(everything, 'commissioner_alerts')).toBe(false)
+    expect(isCategoryHiddenByHomeSection(everything, 'system_account')).toBe(false)
   })
 
   it('reads only known ids from a stored list, and nothing from a malformed one', () => {
@@ -166,8 +171,15 @@ describe('a hidden section stops its notifications at send time', () => {
     expect(m.receipt.mock.calls[0][0].channels.inApp).toMatchObject({ status: 'suppressed', reason: 'home_section_hidden' })
   })
 
-  it('leaves a trade OFFER sent to you alone while league trades are hidden', async () => {
+  it('a trade OFFER sent to you is silenced too while League trades is hidden (owner, 2026-10-24)', async () => {
     m.profile.mockResolvedValue(profile(prefs(['league-trades'])))
+    await send('trade_proposals')
+    expect(m.store).not.toHaveBeenCalled()
+    expect(m.receipt.mock.calls[0][0].channels.inApp).toMatchObject({ status: 'suppressed', reason: 'home_section_hidden' })
+  })
+
+  it('…and not while some other section is hidden', async () => {
+    m.profile.mockResolvedValue(profile(prefs(['rivals'])))
     await send('trade_proposals')
     expect(m.store).toHaveBeenCalledTimes(1)
   })
