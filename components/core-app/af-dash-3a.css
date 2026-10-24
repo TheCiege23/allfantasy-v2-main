@@ -266,6 +266,7 @@
 .af3a-mono { font-family: 'JetBrains Mono', monospace; }
 
 .af3a-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.af3a-body[data-no-side] { grid-template-columns: minmax(0, 1fr); }
 .af3a-col-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
 .af3a-col-side { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 

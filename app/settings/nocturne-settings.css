@@ -1058,3 +1058,39 @@
     color: var(--ns-muted);
   }
 }
+
+/* ── Home page tab (2026-10-24) ───────────────────────────────────────────
+ * One row per /core home section. Built to read like the league import picker after its fix: a row
+ * that is ON gets a solid accent ring and wash, a row that is OFF is plain and dimmed, so the state of
+ * the whole list reads at a glance. The ring is a border plus a 1px shadow, so flipping a row does not
+ * shift the layout.
+ */
+.nocturne-settings .af-home-section-row {
+  border: 1px solid var(--ns-border);
+  background: var(--ns-panel-2);
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.nocturne-settings .af-home-section-row[data-shown='true'] {
+  border-color: var(--ns-accent);
+  box-shadow: 0 0 0 1px var(--ns-accent);
+  background: color-mix(in srgb, var(--ns-accent) 10%, var(--ns-panel-2));
+}
+.nocturne-settings .af-home-section-row[data-shown='false'] > span:first-child {
+  opacity: 0.72;
+}
+/* Keyboard focus only. A ring after a TAP made a row just switched off look selected — the exact
+   ambiguity this list exists to remove. The switch itself is the shared `role=switch` control above. */
+.nocturne-settings .af-home-section-row:has(input[role='switch']:focus-visible) {
+  outline: 2px solid var(--ns-accent-bright);
+  outline-offset: 3px;
+}
+.nocturne-settings .af-home-section-hidden-tag {
+  padding: 2px 7px;
+  border: 1px solid var(--ns-border);
+  border-radius: 999px;
+  font: 800 10px/1.4 var(--ns-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ns-muted);
+}

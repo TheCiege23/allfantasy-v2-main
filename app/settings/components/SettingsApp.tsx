@@ -11,6 +11,7 @@ import { SettingsChrome, isSettingsTabId, type SettingsTabId } from "./SettingsC
 import {
   ProfileSettingsSection,
   PreferencesSettingsSection,
+  HomeSectionsSettingsSection,
   SecuritySettingsSection,
   NotificationsSettingsSection,
   ConnectedAccountsSettingsSection,
@@ -155,6 +156,7 @@ export default function SettingsApp({
       {activeTab === "preferences" && (
         <PreferencesSettingsSection profile={profile} saving={saving} onSave={updateProfile} />
       )}
+      {activeTab === "home" && <HomeSectionsSettingsSection profile={profile} onRefetch={fetchProfile} />}
       {activeTab === "security" && <SecuritySettingsSection profile={profile} onRefetch={fetchProfile} />}
       {activeTab === "notifications" && (
         <NotificationsSettingsSection profile={profile} onRefetch={fetchProfile} />

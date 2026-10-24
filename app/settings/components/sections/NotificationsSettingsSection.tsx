@@ -26,6 +26,7 @@ import type { SettingsProfile } from "./settings-types"
 import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 import { IosAppPushCard } from "@/components/notifications/IosAppPushCard"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
+import { homeSectionMutingCategory } from "@/lib/core-app/homeSections"
 import TeamFollowsSettingsCard from "@/components/settings/TeamFollowsSettingsCard"
 import {
   LIVE_ALERT_LEVELS,
@@ -723,6 +724,25 @@ export function NotificationsSettingsSection({
                 onToggleEnabled={(enabled) => updateCategory(categoryId, { enabled })}
                 onToggleChannel={(channel, value) => updateCategory(categoryId, { [channel]: value })}
               />
+              {/*
+                Settings → Home page silences a hidden section's alerts at send time without touching
+                this switch (lib/core-app/homeSections.ts), so the switch can read ON while nothing
+                arrives. Say why, with the way back — a switch that disagrees with the phone is the
+                confusion this file keeps removing.
+              */}
+              {(() => {
+                const mutedBy = homeSectionMutingCategory(profile?.notificationPreferences, categoryId)
+                return mutedBy ? (
+                  <p className="mt-1 px-1 text-xs" style={{ color: "var(--muted2)" }} data-testid={`home-paused-${categoryId}`}>
+                    {tInterpolate("settings.notifications.pausedByHome", {
+                      section: t(`settings.home.section.${mutedBy}.title`),
+                    })}{" "}
+                    <a href="/settings?tab=home" className="underline">
+                      {t("settings.notifications.pausedByHomeLink")}
+                    </a>
+                  </p>
+                ) : null
+              })()}
             </li>
           ))}
         </ul>
