@@ -7,9 +7,9 @@
  * 🛑 REDRAFT ODD COUNTS ARE FREE AND STAY FREE HERE. A redraft league already offers every size from
  * 2 to 32 (UNIVERSAL_CREATE_TEAM_COUNTS), 7- and 9-team playoff fields were made free on purpose
  * (owner's Oct 15 paywall rule, 08d407e24, pinned by __tests__/free-commissioner-locks.test.ts), and
- * locking either would take a working option away from free commissioners mid-season. Only KEEPER,
- * whose native list was even-only (4–16), gains odd sizes as an AF Commissioner option. Whether
- * redraft odd sizes should become paid is the owner's call; it is one entry in the set below.
+ * locking either would take a working option away from free commissioners mid-season — and the owner
+ * confirmed (2026-10-25) that both stay free. Only KEEPER, whose native list was even-only (4–16),
+ * gains odd sizes as an AF Commissioner option, alongside free even sizes up to 20.
  */
 
 /** League types whose odd sizes are an AF Commissioner option. */
@@ -18,8 +18,13 @@ export const ODD_TEAM_COUNT_GATED_LEAGUE_TYPES: ReadonlySet<string> = new Set(['
 /** League types where an odd size turns league median on by default. */
 export const ODD_TEAM_MEDIAN_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'keeper'])
 
-/** Odd keeper sizes, inside the keeper list's existing 4–16 range (NFL, NBA, NHL, MLB). */
-export const KEEPER_ODD_TEAM_COUNTS: readonly number[] = [5, 7, 9, 11, 13, 15]
+/**
+ * Keeper sizes for NFL, NBA, NHL and MLB (owner's decision 2026-10-25): every size from 4 to 20. The
+ * even ones are free; the odd ones (5–19) are AF Commissioner.
+ */
+export const KEEPER_MAX_TEAMS = 20
+export const KEEPER_EVEN_TEAM_COUNTS: readonly number[] = Array.from({ length: 9 }, (_, i) => 4 + i * 2)
+export const KEEPER_ODD_TEAM_COUNTS: readonly number[] = Array.from({ length: 8 }, (_, i) => 5 + i * 2)
 
 export function isOddTeamCount(teamCount: number | null | undefined): boolean {
   const n = Number(teamCount)

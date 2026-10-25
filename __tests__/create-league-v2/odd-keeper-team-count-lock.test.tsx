@@ -12,15 +12,17 @@ describe('odd keeper sizes in the create wizard', () => {
   it('without AF Commissioner: the stepper walks even sizes and the odd ones are shown locked', () => {
     render(<LeagueBasicsStep state={keeper} onChange={vi.fn()} fieldErrors={null} />)
     expect(screen.getByTestId('g30-team-count')).toHaveAttribute('step', '2')
-    expect(screen.getByTestId('g30-team-count-locked')).toHaveTextContent('Odd sizes (5, 7, 9, 11, 13, 15) are part of AF Commissioner.')
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '20')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4, 6, 8, 10, 12, 14, 16, 18, 20')
+    expect(screen.getByTestId('g30-team-count-locked')).toHaveTextContent('Odd sizes (5, 7, 9, 11, 13, 15, 17, 19) are part of AF Commissioner.')
     expect(screen.getByTestId('g30-team-count-upgrade')).toHaveAttribute('href', '/pricing?plan=commissioner')
   })
 
-  it('with AF Commissioner: every size from 4 to 16, nothing locked', () => {
+  it('with AF Commissioner: every size from 4 to 20, nothing locked', () => {
     render(<LeagueBasicsStep state={keeper} onChange={vi.fn()} fieldErrors={null} hasCommissioner />)
     expect(screen.getByTestId('g30-team-count')).toHaveAttribute('step', '1')
     expect(screen.queryByTestId('g30-team-count-locked')).toBeNull()
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 16')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 20')
   })
 
   it('redraft shows no lock — its odd sizes are free', () => {

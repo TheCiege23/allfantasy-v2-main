@@ -103,10 +103,10 @@ describe('the odd-size policy', () => {
     expect(oddTeamCountNeedsAfCommissioner('keeper', 8)).toBe(false)
     expect(oddTeamCountNeedsAfCommissioner('redraft', 7)).toBe(false)
     const keeper = getTeamCountOptions('NFL', 'keeper')
-    expect(keeper).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
-    expect(teamCountOptionsForPlan(keeper, 'keeper', false)).toEqual([4, 6, 8, 10, 12, 14, 16])
+    expect(keeper).toEqual(Array.from({ length: 17 }, (_, i) => i + 4)) // 4–20
+    expect(teamCountOptionsForPlan(keeper, 'keeper', false)).toEqual([4, 6, 8, 10, 12, 14, 16, 18, 20])
     expect(teamCountOptionsForPlan(keeper, 'keeper', true)).toEqual(keeper)
-    expect(lockedOddTeamCounts(keeper, 'keeper', false)).toEqual([5, 7, 9, 11, 13, 15])
+    expect(lockedOddTeamCounts(keeper, 'keeper', false)).toEqual([5, 7, 9, 11, 13, 15, 17, 19])
     expect(lockedOddTeamCounts(keeper, 'keeper', true)).toEqual([])
   })
 
@@ -135,9 +135,21 @@ describe('creating an odd-team league', () => {
     expect(h.executeMock).toHaveBeenCalledTimes(1)
   })
 
-  it.each([5, 9, 15])('an even keeper size never asks for the plan; %i odd does', async (odd) => {
+  it.each([5, 9, 15, 17, 19])('an even keeper size never asks for the plan; %i odd does', async (odd) => {
     expect((await post(body('keeper', 'NFL', odd - 1))).status).toBe(200)
     expect((await post(body('keeper', 'NFL', odd))).status).toBe(403)
+  })
+
+  it.each(SPORTS)('%s: 18- and 20-team keeper leagues are free', async (sport) => {
+    for (const teams of [18, 20]) {
+      expect(validateCreatePayload(body('keeper', sport, teams)).ok).toBe(true)
+      expect((await post(body('keeper', sport, teams))).status).toBe(200)
+    }
+  })
+
+  it('a keeper league stops at 20', async () => {
+    expect((await post(body('keeper', 'NFL', 21))).status).toBe(400)
+    expect((await post(body('keeper', 'NFL', 22))).status).toBe(400)
   })
 
   it.each([5, 7, 9, 19])('a %i-team redraft league stays free', async (teams) => {
@@ -180,6 +192,22 @@ describe('resizing a league to an odd size before the draft', () => {
     const res = await executeLeagueSettingsPatch('app-user-1', { leagueId: 'league-1', leagueSize: 7 })
     expect(res.status).toBe(403)
     expect(h.resizeMock).not.toHaveBeenCalled()
+  })
+
+  it.each([17, 19])('refuses a keeper league resized to %i without AF Commissioner', async (size) => {
+    h.prismaMock.league.findFirst.mockResolvedValue(leagueRow({}))
+    const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
+    const res = await executeLeagueSettingsPatch('app-user-1', { leagueId: 'league-1', leagueSize: size })
+    expect(res.status).toBe(403)
+    expect(h.resizeMock).not.toHaveBeenCalled()
+  })
+
+  it('resizes a keeper league to 20 without the plan', async () => {
+    h.prismaMock.league.findFirst.mockResolvedValue(leagueRow({}))
+    const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
+    const res = await executeLeagueSettingsPatch('app-user-1', { leagueId: 'league-1', leagueSize: 20 })
+    expect(res.status).toBe(200)
+    expect(h.resizeMock).toHaveBeenCalledTimes(1)
   })
 
   it('resizes a keeper league to 7 for a subscriber, with league median on', async () => {

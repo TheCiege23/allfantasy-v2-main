@@ -35,6 +35,9 @@ describe('league size in commissioner settings', () => {
     expect(options.find((o) => o.value === '7')!.disabled).toBe(true)
     expect(options.find((o) => o.value === '7')!.textContent).toContain('AF Commissioner')
     expect(options.find((o) => o.value === '10')!.disabled).toBe(false)
+    expect(options.find((o) => o.value === '19')!.disabled).toBe(true)
+    expect(options.find((o) => o.value === '20')!.disabled).toBe(false)
+    expect(options.at(-1)!.value).toBe('20')
     expect(screen.getByTestId('settings-odd-keeper-size-locked')).toBeTruthy()
   })
 
@@ -44,8 +47,9 @@ describe('league size in commissioner settings', () => {
     expect(screen.queryByTestId('settings-odd-keeper-size-locked')).toBeNull()
   })
 
-  it('redraft odd sizes stay open without the plan', () => {
+  it('redraft odd sizes stay open without the plan, on the list as before (4–18)', () => {
     renderPanel('redraft', false)
     expect([...sizeSelect().options].every((o) => !o.disabled)).toBe(true)
+    expect([...sizeSelect().options].at(-1)!.value).toBe('18')
   })
 })
