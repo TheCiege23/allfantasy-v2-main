@@ -35,6 +35,22 @@ export function buildPlayerRow(id: string, players: PlayerMap): Record<string, u
   }
 }
 
+/**
+ * The `roster` body `/api/leagues/roster/save` stores, from the slot-aligned lists the tab edits.
+ * Each starter row carries `slotIndex`, the expanded starter slot he holds (QB, RB1, …, FLEX,
+ * lib/league/lineupSlotPositions.ts), so FLEX vs RB2 or UTIL 2 survives a reload. Without it the save
+ * stored a compacted list and the next load re-seated everyone.
+ */
+export function buildLineupSaveRoster(lists: RosterLineupLists, players: PlayerMap): Record<string, Array<Record<string, unknown>>> {
+  return {
+    starters: lists.starters.flatMap((id, slotIndex) => (id ? [{ ...buildPlayerRow(id, players), slotIndex }] : [])),
+    bench: lists.bench.map((id) => buildPlayerRow(id, players)),
+    ir: lists.ir.map((id) => buildPlayerRow(id, players)),
+    taxi: lists.taxi.map((id) => buildPlayerRow(id, players)),
+    devy: lists.devy.map((id) => buildPlayerRow(id, players)),
+  }
+}
+
 export function buildSwapCandidates(args: {
   lists: RosterLineupLists
   slot: ExpandedStarterSlot
