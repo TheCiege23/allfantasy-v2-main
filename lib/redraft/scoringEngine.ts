@@ -17,6 +17,8 @@ import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupVal
 import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
+import { assignExtraMatchupForWeek } from '@/lib/redraft/oddTeamExtraMatchup'
+import { readExtraMatchupRecord, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import {
   dailySlotFor,
   dayKey,
@@ -876,18 +878,19 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
 }
 
 /**
- * Score the team on a bye, when its week still counts for something.
+ * Score the team on a bye, when its week still counts for something: league median, or the extra
+ * matchup an odd-team league can play instead of the bye.
  *
  * 🛑 AN ODD-TEAM LEAGUE'S BYE TEAM LOST ITS MEDIAN GAME EVERY WEEK. A bye row has no opponent, so
  * scoring returned before writing it; `computeWeeklyMedianResults` then saw no completed score for the
  * bye team and sat it out of the median — exactly the result league median exists to give it. A bye row
- * is now scored on the home side alone, but only in a points league with league median on: anywhere
- * else nothing reads the number, and the rows stay as every other reader expects them.
+ * is now scored on the home side alone, but only in a points league with league median or the extra
+ * matchup on: anywhere else nothing reads the number, and the rows stay as every other reader expects.
  *
  * Returns nothing to the week's summary: a bye is not a matchup, and the counters callers read
  * (`updated`, `incomplete`) keep meaning head-to-head games.
  */
-async function updateByeRowScore(m: {
+async function updateByeRowScore(row: {
   id: string
   leagueId: string
   seasonId: string
@@ -895,12 +898,23 @@ async function updateByeRowScore(m: {
   homeRosterId: string
   lineupSnapshots: unknown
 }): Promise<void> {
+  let m = row
   const [league, season] = await Promise.all([
     prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true } }),
     prisma.redraftSeason.findFirst({ where: { id: m.seasonId }, select: { season: true, medianGame: true } }),
   ])
   if (!league || !season) return
-  if (!(league.medianGame ?? season.medianGame)) return
+  // The extra matchup (lib/redraft/oddTeamExtraMatchupRules.ts) is decided on this score too. Its pick is
+  // fixed when the week opens; this is the fallback for a week no advance opened (week 1).
+  let extraMatchup = readExtraMatchupRecord(m.lineupSnapshots) != null
+  if (!extraMatchup && readExtraMatchupSettings(league.settings).enabled) {
+    const assigned = await assignExtraMatchupForWeek({ seasonId: m.seasonId, week: m.week }).catch(() => null)
+    if (assigned && assigned.status !== 'skipped') {
+      extraMatchup = true
+      m = { ...m, lineupSnapshots: { ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}), extraMatchup: assigned.record } }
+    }
+  }
+  if (!(league.medianGame ?? season.medianGame) && !extraMatchup) return
   const scoringSettings = settingsForScoringWeek(league.settings as Record<string, any> | null, season.season, m.week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
   if (scoringMode !== 'points') return

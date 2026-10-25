@@ -1133,6 +1133,10 @@ export function Matchup({ data }: MatchupProps) {
         ) : (
           <p className="af-mu-unavailable af-mu-unavailable--block">{matchupReasonText(data.teams.reason, language)}</p>
         )}
+        {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
+        {data.extraMatchup ? (
+          <p className="af-mu-basis" data-testid="matchup-extra-matchup">{data.extraMatchup.label}</p>
+        ) : null}
       </section>
 
       {/* ── Per-player scoring ──────────────────────────────────────── */}
