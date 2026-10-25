@@ -2949,6 +2949,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.wv.resetHint": "Rotativo: el equipo que gana un reclamo pasa al final. Semanal: cada semana nueva el orden vuelve a la clasificación inversa.",
   "lsHub.wv.reset.rolling": "Rotativo (se mantiene toda la temporada)",
   "lsHub.wv.reset.weekly": "Se reinicia cada semana a la clasificación inversa",
+  "lsHub.wv.resetSurvivor": "Las ligas Survivor mantienen un orden rotativo, así que los impulsos de prioridad de Survivor nunca se reinician.",
   "lsHub.wv.faOnly": "Solo agencia libre (sin waivers)",
   "lsHub.wv.faOnlyHint": "Cualquier mánager puede añadir al momento a un jugador cortado o sin equipo, por orden de llegada.",
   "lsHub.wv.faOnlyApply": "Usar este ajuste",

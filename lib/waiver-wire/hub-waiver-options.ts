@@ -26,6 +26,15 @@ export type HubTiebreakRule = (typeof HUB_TIEBREAK_RULES)[number]
 export const WAIVER_ORDER_RESET_POLICIES = ['rolling', 'weekly'] as const
 export type WaiverOrderResetPolicy = (typeof WAIVER_ORDER_RESET_POLICIES)[number]
 
+/** Why a survivor league cannot take the weekly reset (owner's decision 2026-10-25). */
+export const WEEKLY_RESET_SURVIVOR_REFUSAL =
+  "Survivor leagues keep a rolling priority order: a weekly reset would erase survivor priority boosts."
+
+/** The refusal for a save that turns the weekly reset on in a survivor league, else null. */
+export function weeklyResetSurvivorRefusal(options: HubWaiverOptions, isSurvivor: boolean): string | null {
+  return options.waiverOrderResetPolicy === 'weekly' && isSurvivor ? WEEKLY_RESET_SURVIVOR_REFUSAL : null
+}
+
 /** The waiver types whose order is a priority list a weekly reset can rewrite. */
 export const PRIORITY_RESET_WAIVER_TYPES = ['rolling', 'standard'] as const
 

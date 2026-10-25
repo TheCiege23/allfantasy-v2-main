@@ -27,6 +27,7 @@ import {
   type HubTiebreakRule,
   type WaiverOrderResetPolicy,
 } from '@/lib/waiver-wire/hub-waiver-options'
+import { isSurvivorSettingsLeague } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 /**
@@ -186,6 +187,11 @@ export function WaiversSection({
 
   const showFaab = scheduleUsesFaab(schedule, waiverType)
   const controls = hubWaiverControlsFor({ waiverType, showFaab })
+  // Survivor priority carries survivor boosts, so the weekly reset is not offered (the server refuses it too).
+  const survivor = isSurvivorSettingsLeague({
+    leagueVariant: ctx.league.leagueVariant ?? null,
+    survivorMode: (ctx.league as { survivorMode?: boolean | null }).survivorMode ?? null,
+  })
   const faOnly = isFreeAgencyOnly(waiverType, waiverHours)
 
   return (
@@ -351,12 +357,14 @@ export function WaiversSection({
               data-testid="league-settings-waiver-reset-policy"
             >
               {HUB_RESET_POLICY_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value} className="bg-[#0d1117]">
+                <option key={o.value} value={o.value} disabled={survivor && o.value === 'weekly'} className="bg-[#0d1117]">
                   {t(o.labelKey)}
                 </option>
               ))}
             </select>
-            <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.resetHint')}</span>
+            <span className="mt-1 block text-[11px] leading-snug text-white/40">
+              {survivor ? t('lsHub.wv.resetSurvivor') : t('lsHub.wv.resetHint')}
+            </span>
           </label>
         ) : null}
 
