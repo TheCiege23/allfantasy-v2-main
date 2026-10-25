@@ -16,8 +16,9 @@ import {
  *
  * WRITER: `writeDailySportFormCache`, called only from `/api/cron/import-player-game-stats?multiSport=1`
  * right after that run refreshes `player_game_stats` — the table this is derived from — so the two
- * cannot drift apart by more than one run. READER: `readDailySportForm`, for request paths. Neither
- * calls a provider.
+ * cannot drift apart by more than one run. It also keeps LAST season's lines (season - 1, rebuilt at
+ * most weekly) for the prior-season blend. READERS: `readDailySportForm` and `readPriorDailySportForm`,
+ * for request paths. Neither side calls a provider.
  */
 
 type Db = Pick<PrismaClient, 'playerGameStat' | 'playerIdentityMap' | 'sportsDataCache'>
@@ -41,7 +42,11 @@ export type WriteDailyFormResult = {
   players: number
   written: boolean
   reason?: string
+  /** Last season's lines, for the prior-season blend. */
+  prior?: PriorFormResult
 }
+
+export type PriorFormResult = { season: number; players: number; written: boolean; reason?: string }
 
 export async function writeDailySportFormCache(
   db: Db,
@@ -64,6 +69,73 @@ export async function writeDailySportFormCache(
   if (!newest) return { sport: s, season: null, rowsRead: 0, players: 0, written: false, reason: 'no_game_lines' }
   const season = newest.season
 
+  const rows = await readSeasonRows(db, s, season)
+  const blob = await buildBlob(db, s, season, rows, normalizer, now)
+  const players = Object.keys(blob.players).length
+  if (players === 0) return { sport: s, season, rowsRead: rows.length, players: 0, written: false, reason: 'no_regular_season_games' }
+  // Last season's lines are an input to the blend, never a condition of this season's write.
+  const prior = await writePriorSeasonForm(db, s, season - 1, normalizer, now, Boolean(opts.dryRun)).catch(
+    (err: unknown): PriorFormResult => ({ season: season - 1, players: 0, written: false, reason: `error: ${String(err).slice(0, 120)}` }),
+  )
+  if (opts.dryRun) return { sport: s, season, rowsRead: rows.length, players, written: false, reason: 'dry_run', prior }
+
+  const expiresAt = new Date(now.getTime() + TTL_MS)
+  const data = blob as unknown as object
+  await db.sportsDataCache.upsert({
+    where: { cacheKey: dailyFormKey(s, season) },
+    create: { cacheKey: dailyFormKey(s, season), data, expiresAt },
+    update: { data, expiresAt },
+  })
+  const pointer = { season, computedAt: blob.computedAt }
+  await db.sportsDataCache.upsert({
+    where: { cacheKey: dailyFormPointerKey(s) },
+    create: { cacheKey: dailyFormPointerKey(s), data: pointer, expiresAt },
+    update: { data: pointer, expiresAt },
+  })
+  return { sport: s, season, rowsRead: rows.length, players, written: true, prior }
+}
+
+/**
+ * LAST season's lines, for the prior-season blend (PRIOR_SEASON_BLEND_GAMES in dailySportForm.ts).
+ * Read from the same `player_game_stats` rows, keyed by season. A finished season does not change, so
+ * it is rebuilt at most once per PRIOR_REBUILD_MS rather than on every nightly run, and held for
+ * PRIOR_TTL_MS. No rows for that season = nothing written, and the reader falls back to this season.
+ */
+const PRIOR_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const PRIOR_REBUILD_MS = TTL_MS
+
+async function writePriorSeasonForm(
+  db: Db,
+  sport: string,
+  season: number,
+  normalizer: Normalizer,
+  now: Date,
+  dryRun: boolean,
+): Promise<PriorFormResult> {
+  const held = await db.sportsDataCache.findUnique({ where: { cacheKey: dailyFormKey(sport, season) } })
+  const heldAt = Date.parse(String((held?.data as { computedAt?: unknown } | null)?.computedAt ?? ''))
+  if (held && held.expiresAt > now && Number.isFinite(heldAt) && now.getTime() - heldAt < PRIOR_REBUILD_MS) {
+    return { season, players: Object.keys((held.data as { players?: object }).players ?? {}).length, written: false, reason: 'fresh' }
+  }
+  const rows = await readSeasonRows(db, sport, season)
+  if (rows.length === 0) return { season, players: 0, written: false, reason: 'no_prior_season_game_lines' }
+  const blob = await buildBlob(db, sport, season, rows, normalizer, now)
+  const players = Object.keys(blob.players).length
+  if (players === 0) return { season, players: 0, written: false, reason: 'no_regular_season_games' }
+  if (dryRun) return { season, players, written: false, reason: 'dry_run' }
+  const expiresAt = new Date(now.getTime() + PRIOR_TTL_MS)
+  const data = blob as unknown as object
+  await db.sportsDataCache.upsert({
+    where: { cacheKey: dailyFormKey(sport, season) },
+    create: { cacheKey: dailyFormKey(sport, season), data, expiresAt },
+    update: { data, expiresAt },
+  })
+  return { season, players, written: true }
+}
+
+type Normalizer = NonNullable<ReturnType<typeof getDailySportNormalizer>>
+
+async function readSeasonRows(db: Db, s: string, season: number): Promise<GameLogRow[]> {
   const rows: GameLogRow[] = []
   let cursor: string | undefined
   for (;;) {
@@ -87,7 +159,17 @@ export async function writeDailySportFormCache(
     if (batch.length < ROW_BATCH) break
     cursor = batch[batch.length - 1]!.id
   }
+  return rows
+}
 
+async function buildBlob(
+  db: Db,
+  s: string,
+  season: number,
+  rows: readonly GameLogRow[],
+  normalizer: Normalizer,
+  now: Date,
+): Promise<DailySportFormBlob> {
   const ids = [...new Set(rows.map((r) => r.playerId))]
   const identityPositions = new Map<string, string | null>()
   for (let i = 0; i < ids.length; i += ID_BATCH) {
@@ -98,25 +180,7 @@ export async function writeDailySportFormCache(
     for (const f of found) identityPositions.set(f.id, f.position ?? null)
   }
 
-  const blob = buildDailySportForm({ sport: s, season, rows, identityPositions, normalizer, computedAt: now })
-  const players = Object.keys(blob.players).length
-  if (players === 0) return { sport: s, season, rowsRead: rows.length, players: 0, written: false, reason: 'no_regular_season_games' }
-  if (opts.dryRun) return { sport: s, season, rowsRead: rows.length, players, written: false, reason: 'dry_run' }
-
-  const expiresAt = new Date(now.getTime() + TTL_MS)
-  const data = blob as unknown as object
-  await db.sportsDataCache.upsert({
-    where: { cacheKey: dailyFormKey(s, season) },
-    create: { cacheKey: dailyFormKey(s, season), data, expiresAt },
-    update: { data, expiresAt },
-  })
-  const pointer = { season, computedAt: blob.computedAt }
-  await db.sportsDataCache.upsert({
-    where: { cacheKey: dailyFormPointerKey(s) },
-    create: { cacheKey: dailyFormPointerKey(s), data: pointer, expiresAt },
-    update: { data: pointer, expiresAt },
-  })
-  return { sport: s, season, rowsRead: rows.length, players, written: true }
+  return buildDailySportForm({ sport: s, season, rows, identityPositions, normalizer, computedAt: now })
 }
 
 function isBlob(v: unknown, sport: string): v is DailySportFormBlob {
@@ -133,6 +197,34 @@ const memo = new Map<string, { at: number; blob: DailySportFormBlob | null }>()
 
 export function clearDailySportFormMemo(): void {
   memo.clear()
+}
+
+/**
+ * Last season's stored form blob (the season before `season`), for the prior-season blend. Null when
+ * none is stored — `player_game_stats` has no rows for that season — and the caller then prices from
+ * this season alone.
+ */
+export async function readPriorDailySportForm(
+  db: Pick<PrismaClient, 'sportsDataCache'>,
+  sport: string,
+  season: number,
+  now: Date = new Date(),
+): Promise<DailySportFormBlob | null> {
+  const s = sport.toUpperCase()
+  if (!isDailyFormSport(s) || !Number.isInteger(season)) return null
+  const prior = season - 1
+  const memoKey = `${s}:${prior}`
+  const held = memo.get(memoKey)
+  if (held && now.getTime() - held.at < MEMO_MS) return held.blob
+  let blob: DailySportFormBlob | null = null
+  try {
+    const row = await db.sportsDataCache.findUnique({ where: { cacheKey: dailyFormKey(s, prior) } })
+    if (row && row.expiresAt > now && isBlob(row.data, s) && row.data.season === prior) blob = row.data
+  } catch {
+    blob = null
+  }
+  memo.set(memoKey, { at: now.getTime(), blob })
+  return blob
 }
 
 /** The newest stored form blob for a sport, or null when none is stored or it has expired. */

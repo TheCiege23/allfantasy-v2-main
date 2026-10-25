@@ -175,17 +175,23 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [now, setNow] = useState(() => new Date())
   const [pickedDay, setPickedDay] = useState<string | null>(null)
   const copy = useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
+  /** Only the newest load may land: switching days quickly must not let an older day's answer win. */
+  const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
     if (!userTeam) {
       setLoading(false)
       return
     }
+    const seq = ++loadSeq.current
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/league/roster?leagueId=${encodeURIComponent(league.id)}`, { cache: 'no-store' })
+      // Daily leagues: the AF projection, its games and the opponent are for the day being looked at.
+      const dayParam = pickedDay ? `&day=${encodeURIComponent(pickedDay)}` : ''
+      const res = await fetch(`/api/league/roster?leagueId=${encodeURIComponent(league.id)}${dayParam}`, { cache: 'no-store' })
       const json = (await res.json().catch(() => ({}))) as DbRoster
+      if (seq !== loadSeq.current) return
       if (!res.ok) {
         setError(res.status === 404 ? 'No roster yet for your team.' : 'We could not load your roster.')
         setData(null)
@@ -201,11 +207,11 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
       } else setLists(null)
     } catch {
-      setError('We could not load your roster.')
+      if (seq === loadSeq.current) setError('We could not load your roster.')
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
-  }, [league.id, userTeam])
+  }, [league.id, userTeam, pickedDay])
 
   useEffect(() => {
     void load()
@@ -647,7 +653,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                   <section className="nls-card nls-card-flush" aria-label="Starters">
                     <h3 className="nls-label nls-card-head"><span>Starters</span><span>{startersProj != null ? `Proj ${fmt1(startersProj)}` : ''}</span></h3>
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
-                    {afFormProjected ? <p className="nls-muted" data-testid="lineup-af-projection-note">{AF_FORM_PROJECTION_EXPLAINER}{daily ? ' In a daily league the period is today.' : ''}</p> : null}
+                    {afFormProjected ? <p className="nls-muted" data-testid="lineup-af-projection-note">{AF_FORM_PROJECTION_EXPLAINER}{daily && viewDay ? ` Projections are for ${viewDay.status === 'today' ? 'today' : dayLabel(viewDay.day)}.` : ''}</p> : null}
                   </section>
                   <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dropState({ kind: 'bench' })}>
                     <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null}</h3>
