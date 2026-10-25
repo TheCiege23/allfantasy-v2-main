@@ -139,7 +139,8 @@ import { settleUndeliveredChimmyAnswer } from '@/lib/chimmy/settleDelivery'
 import { suggestChimmyFollowUps } from '@/lib/chimmy/followUps'
 import {
   planAllowanceMeta,
-  readChimmyPlanAllowance,
+  readChimmyAnswerAllowance,
+  ChimmyAllowanceUnavailableError,
   releaseChimmyPlanAllowance,
   takeChimmyPlanAllowance,
   type ChimmyPlanAllowanceMeta,
@@ -164,7 +165,6 @@ import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-event
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
 import { tryDeterministicAnswerDetailed, DETERMINISTIC_SOURCE, isOwnRosterInjuryQuestion } from '@/lib/ai/deterministic'
 import { isScopedRosterReviewQuestion } from '@/lib/chimmy/rosterReviewIntent'
-import { grantDailyFreeTokens } from '@/lib/tokens/dailyFreeTokens'
 
 /** Provenance for an answer that came from the web, not from our rows. */
 const LIVE_SEARCH_SOURCE = 'live_web_search' as const
@@ -1192,7 +1192,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const execute = async (requestReceipt?: import('@/lib/chimmy/requestReceipts').ReceiptContext, parsedRequest?: NextRequest) => {
     const question = newQuestionTelemetry()
     const started = Date.now()
-    const res = await handleChimmyPost(parsedRequest ?? req, question, requestReceipt)
+    const res = await handleChimmyPost(parsedRequest ?? req, question, requestReceipt).catch(error => {
+      if (error instanceof ChimmyAllowanceUnavailableError) {
+        return NextResponse.json({ error: error.message, code: 'chimmy_allowance_unavailable' }, { status: 503 })
+      }
+      throw error
+    })
     void recordChimmyQuestion(question, res, Date.now() - started)
     return res
   }
@@ -1220,7 +1225,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   let planAllowanceRead: Promise<ChimmyPlanAllowanceState | null> | null = null
   const readPlanAllowance = (): Promise<ChimmyPlanAllowanceState | null> =>
     (planAllowanceRead ??= userId
-      ? readChimmyPlanAllowance({ userId, email: userEmail }).catch(() => null)
+      ? readChimmyAnswerAllowance({ userId, email: userEmail })
       : Promise.resolve(null))
 
   const limitRes = requestReceipt ? null : await runAiProtection(req, {
@@ -1674,19 +1679,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     })
   }
 
-  /*
-   * ⚠ THE FREE FLOOR IS TOPPED UP HERE, AHEAD OF EVERY SPEND CHECK IN THIS
-   * ROUTE — and the position is the point. TWO paths price the balance: the
-   * live-search fallback a few lines below, and the main spend ~500 lines down.
-   * Granting before the later one but after the earlier one would refuse a user
-   * who is, moments later, able to pay. I made exactly that mistake first.
-   *
-   * A free account starts at zero and every Chimmy message costs 10, so the
-   * first question anybody ever asked failed on insufficient balance. Two a day
-   * was the intended free tier and had never been implemented.
-   */
-  await grantDailyFreeTokens(userId).catch(() => null)
-
   const requestLocale = resolveLanguage(req.cookies.get('af_lang')?.value)
   /*
    * ⚠ `leagueId` IS PASSED (BUG-1). It is resolved at line ~1159 above and was previously withheld
@@ -1755,14 +1747,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
 
       const mayCharge = Boolean(userId && confirmTokenSpend && preview?.canSpend)
       /*
-       * A plan that includes Chimmy covers this search too, consent or not — there is nothing to
-       * consent to when no tokens move. The allowance is TAKEN only once a sourced answer exists,
-       * on the same "pay for an answer, never for a refusal" rule as the charge below.
+       * Reserve an included answer before searching so simultaneous requests cannot exceed the
+       * daily allowance. Release it if no sourced answer is delivered.
        */
       const searchPlan = await readPlanAllowance()
       const planCoversSearch = Boolean(searchPlan && searchPlan.remaining > 0)
+      const searchIncluded = planCoversSearch && searchPlan && userId
+        ? await takeChimmyPlanAllowance({ userId, state: searchPlan, requestReceipt })
+        : null
 
-      if (mayCharge || planCoversSearch) {
+      if (mayCharge || searchIncluded) {
         const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
         const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
 
@@ -1774,10 +1768,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
          * cost AND withhold the answer. Losing the fee is bad; losing the fee
          * and the answer is worse.
          */
-        const searchIncluded =
-          planCoversSearch && searchPlan && userId
-            ? await takeChimmyPlanAllowance({ userId, state: searchPlan, requestReceipt })
-            : null
         const ledger = searchIncluded || !mayCharge
           ? null
           : await (async () => {
@@ -1848,6 +1838,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         })
         }
         /* Nothing sourced came back. Fall through to the honest refusal. */
+        if (searchIncluded) await releaseChimmyPlanAllowance({ userId, state: searchIncluded })
       }
       /*
        * Not chargeable — anonymous, unconfirmed, or out of balance. We do NOT

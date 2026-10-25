@@ -24,6 +24,7 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
+import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 
 type ClaimRow = {
   id: string
@@ -92,7 +93,7 @@ export async function processWaiverClaimsForLeague(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, sport: true, settings: true, timezone: true },
+      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -155,8 +156,16 @@ export async function processWaiverClaimsForLeague(
     for (const id of ids) rosteredByPlayer.set(id, r.id)
   }
 
+  // Guilly blind FAAB auction (lib/guillotine/blindWaiverCutoff.ts): inside the window, claims made since
+  // it opened wait for the run so every bid on a chopped roster competes together. A manual
+  // commissioner run is not held.
+  const blindCutoff = opts?.runType === 'manual' ? null : await guillotineClaimsCutoff(leagueId, new Date(), league)
+  const dueClaims = blindCutoff
+    ? (pendingClaims as Array<ClaimRow & { createdAt: Date | string }>).filter((c) => new Date(c.createdAt) < blindCutoff)
+    : (pendingClaims as ClaimRow[])
+
   const ordered = orderClaimsForProcessing(
-    pendingClaims as ClaimRow[],
+    dueClaims as ClaimRow[],
     waiverType,
     rankByPlatformUserId,
     tiebreakRule,

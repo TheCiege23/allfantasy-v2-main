@@ -28,6 +28,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
@@ -147,10 +148,15 @@ async function recapSeason(leagueId: string): Promise<number | null> {
 }
 
 
-/** Paid plan for Chimmy recaps — the same feature the on-request route gates on. */
+/**
+ * Paid plan for Chimmy recaps: AF Pro (`guillotine_ai`) OR AF Commissioner. Owner's decision,
+ * 2026-10-25 — the recap is a league feature the commissioner pays for, so it comes with either.
+ * The automatic recap, the on-request button and the League rules toggle all read this one check.
+ */
 export async function hasGuillotineAiRecapPlan(userId: string): Promise<boolean> {
   const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'guillotine_ai').catch(() => null)
-  return Boolean(access?.allowed)
+  if (access?.allowed) return true
+  return hasAfCommissionerPlan({ id: userId })
 }
 
 /** Longest the chop path waits for Chimmy before posting the standard recap instead. */

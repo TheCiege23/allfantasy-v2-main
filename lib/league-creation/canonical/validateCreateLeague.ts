@@ -31,8 +31,7 @@ import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import {
   isSurvivorCreationSportAvailable,
   SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
-  SURVIVOR_PAID_CREATION_ENABLED,
-  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+  readSurvivorEntryFee,
 } from '@/lib/survivor/survivorCreationAvailability'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import type { ValidationIssue } from '@/lib/league-creation/canonical/types'
@@ -219,10 +218,15 @@ export function validateCreatePayload(
     return { ok: false, error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE, status: 400,
       errors: [{ path: 'sport', message: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }] }
   }
-  if (formatId === 'survivor' && !SURVIVOR_PAID_CREATION_ENABLED &&
-      (data.conceptSetup?.survivor_entry_fee_mode === 'paid' || data.conceptSetup?.survivorEntryFeeMode === 'paid')) {
-    return { ok: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE, status: 400,
-      errors: [{ path: 'conceptSetup.survivor_entry_fee_mode', message: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }] }
+  if (formatId === 'survivor') {
+    const fee = readSurvivorEntryFee(
+      data.conceptSetup?.survivorEntryFeeMode ?? data.conceptSetup?.survivor_entry_fee_mode,
+      data.conceptSetup?.survivorEntryFeeAmountCents ?? data.conceptSetup?.survivor_entry_fee_amount_cents,
+    )
+    if ('error' in fee) {
+      return { ok: false, error: fee.error, status: 400,
+        errors: [{ path: 'conceptSetup.survivorEntryFeeAmountCents', message: fee.error }] }
+    }
   }
   // NHL / MLB have no prospect pool: refuse a taxi squad or devy rounds on any concept that carries them.
   if (!sportSupportsProspectStash(sport)) {

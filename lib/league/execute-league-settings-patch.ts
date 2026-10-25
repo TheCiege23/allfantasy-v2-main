@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
@@ -33,7 +34,6 @@ import { MID_SEASON_CONFIRM_FLAG } from '@/lib/league/midSeasonConfirmation'
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { checkByePlan, isNaturalByePlan } from '@/lib/playoff-brackets/byePlan'
 import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
@@ -42,6 +42,7 @@ import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -342,11 +343,18 @@ export async function executeLeagueSettingsPatch(
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
   }
 
-  // The entitlement alone: OR-ing the profile flag kept a lapsed plan's access (livePlanFlags.ts).
-  const commissionerEntitlement = await new EntitlementResolver()
-    .resolveForUser(userId, 'commissioner_ai_tools')
-    .catch(() => ({ hasAccess: false }))
-  const hasSub = Boolean(commissionerEntitlement.hasAccess)
+  // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts) — the same answer
+  // GET /api/league/settings reports as `hasAfCommissionerSub`, so the page never shows a paid control
+  // unlocked that this save then refuses. (It used EntitlementResolver alone, which disagreed for the
+  // allowlisted AllFantasy accounts.) Still the plan alone: OR-ing the profile flag kept a lapsed
+  // plan's access (livePlanFlags.ts).
+  let planUser: { email: string | null; username: string | null } | null = null
+  try {
+    planUser = await prisma.appUser.findUnique({ where: { id: userId }, select: { email: true, username: true } })
+  } catch {
+    planUser = null // no allowlist match; the plan check still runs
+  }
+  const hasSub = await hasAfCommissionerPlan({ id: userId, email: planUser?.email ?? null, username: planUser?.username ?? null })
 
   const premiumCommissionerKeys = requestedPremiumCommissionerKeys(body)
   if (premiumCommissionerKeys.length > 0 && !hasSub) {
@@ -660,6 +668,13 @@ export async function executeLeagueSettingsPatch(
     const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
     if (!parsed.ok) return jsonError(parsed.error, 400)
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
+
+  // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would
+  // fall back to "visible to league", so it is refused rather than stored.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && LEAGUE_LOG_VISIBILITY_KEY in merge) {
+    const parsed = parseLeagueLogVisibility((merge as Record<string, unknown>)[LEAGUE_LOG_VISIBILITY_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
   }
 
   /*

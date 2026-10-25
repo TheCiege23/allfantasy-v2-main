@@ -24,7 +24,7 @@ const LEAGUE_TYPE_TOOLTIPS: Partial<Record<LeagueTypeId, string>> = {
   devy: 'Long-term devy format: NFL/NCAAF or NBA/NCAAB prospect pipelines — not available for MLB, NHL, or Soccer.',
   c2c: 'Campus to Canton: college + pro assets in one league with live college scoring; supports football and basketball ecosystems.',
   guillotine: 'Lowest scorer each week is eliminated. Roster released to waivers. Last team standing wins.',
-  survivor: 'NBA, NFL and NHL Survivor pilot: tribes, private votes, idols, Exile, merge and jury. Full-season automation is still being certified.',
+  survivor: 'NBA, NFL and NHL Survivor: tribes, private votes, idols, Exile, merge and jury, hosted automatically all season.',
   zombie: 'Infection mechanics, whisperer role, serums & weapons. Eliminated teams can spread the virus.',
   salary_cap: 'Salary cap and contracts.',
 }

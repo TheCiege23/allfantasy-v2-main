@@ -322,6 +322,7 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   team_count_invalid: 'basics',
   survivor_tribes_invalid: 'basics',
   survivor_season_too_short: 'basics',
+  survivor_dues_invalid: 'basics',
   league_name_invalid: 'basics',
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
