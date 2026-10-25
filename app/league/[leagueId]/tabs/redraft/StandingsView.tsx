@@ -425,7 +425,7 @@ function BracketRoundCard({
         {matchups.map((matchup) => (
           <div key={matchup.matchupId} className="grid gap-0.5" data-testid={`redraft-playoff-matchup-${matchup.bracketType}`}>
             {matchup.bracketType === 'third_place' ? (
-              <span className="text-[10px] uppercase tracking-[0.14em] text-white/40">Third place</span>
+              <span className="text-[11px] uppercase tracking-[0.14em] text-white/40">Third place</span>
             ) : null}
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[11px]">
               <span className="truncate text-white/70">{teamName(runtime, matchup.homeRosterId, matchup.homeSeed)}</span>
