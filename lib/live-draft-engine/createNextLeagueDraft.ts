@@ -160,6 +160,11 @@ export function placeKeeperRounds<T extends { rosterId: string; roundCost: numbe
   return placed
 }
 
+function isThirdPlaceGame(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
+  return String((metadata as Record<string, unknown>).bracketType ?? '').toLowerCase().replace('-', '_') === 'third_place'
+}
+
 export async function championAndRunnerUp(seasonId: string): Promise<{ championId: string | null; runnerUpId: string | null }> {
   const finalRound = await prisma.redraftPlayoffRound
     .findFirst({
@@ -170,12 +175,13 @@ export async function championAndRunnerUp(seasonId: string): Promise<{ championI
       select: {
         matchups: {
           orderBy: { matchupNumber: 'asc' },
-          select: { homeRosterId: true, awayRosterId: true, winnerRosterId: true, nextMatchupId: true },
+          select: { homeRosterId: true, awayRosterId: true, winnerRosterId: true, nextMatchupId: true, metadata: true },
         },
       },
     })
     .catch(() => null)
-  const title = finalRound?.matchups.find((m) => !m.nextMatchupId && m.winnerRosterId)
+  // The third-place game shares the final's round row; it is not the title game.
+  const title = finalRound?.matchups.find((m) => !m.nextMatchupId && m.winnerRosterId && !isThirdPlaceGame(m.metadata))
   if (!title?.winnerRosterId) return { championId: null, runnerUpId: null }
   const runnerUp = title.homeRosterId === title.winnerRosterId ? title.awayRosterId : title.homeRosterId
   return { championId: title.winnerRosterId, runnerUpId: runnerUp ?? null }

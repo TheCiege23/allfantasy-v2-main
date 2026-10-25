@@ -20,6 +20,8 @@ export type NflRedraftPlayoffRulesInput = {
     bracketType?: string | null
     totalRounds?: number | null
     consolationBracketEnabled?: boolean | null
+    /** Losers advance in the lower bracket; its final's loser finishes last. Wins over `consolationBracketEnabled`. */
+    toiletBowlEnabled?: boolean | null
     thirdPlaceGameEnabled?: boolean | null
     seedingRules?: string | null
     tiebreakerRules?: string[] | null
@@ -99,6 +101,11 @@ export type NflRedraftPlayoffBracketType = 'championship' | 'consolation' | 'thi
 export type NflRedraftPlayoffMatchupStatus = 'scheduled' | 'active' | 'final' | 'bye' | 'cancelled'
 export type NflRedraftPlayoffRoundStatus = 'pending' | 'active' | 'completed' | 'cancelled'
 export type NflRedraftPlayoffQualifiedBy = 'division' | 'wildcard' | 'standings'
+/**
+ * The bracket the non-playoff teams play. `consolation`: winners advance and the final's winner is
+ * the best of the rest. `toilet_bowl`: losers advance and the final's loser finishes last.
+ */
+export type NflRedraftLowerBracketMode = 'none' | 'consolation' | 'toilet_bowl'
 
 export type NflRedraftPlayoffSettings = {
   playoffTeamCount: number
@@ -114,7 +121,11 @@ export type NflRedraftPlayoffSettings = {
    */
   byePlan: number[] | null
   reseedAfterEachRound: boolean
+  /** A winners-advance consolation bracket (`lowerBracket === 'consolation'`). */
   consolationEnabled: boolean
+  /** A losers-advance toilet bowl (`lowerBracket === 'toilet_bowl'`). */
+  toiletBowlEnabled: boolean
+  lowerBracket: NflRedraftLowerBracketMode
   thirdPlaceGameEnabled: boolean
   divisionWinnersEnabled: boolean
   /** The league chose `points_only` seeding: record is NOT the primary sort. */
@@ -205,6 +216,8 @@ export type NflRedraftPlayoffFinalStanding = {
   playoffLosses: number
   champion: boolean
   runnerUp: boolean
+  /** Won the third-place game. */
+  thirdPlace: boolean
 }
 
 export type NflRedraftPlayoffBracketState = {
@@ -213,9 +226,23 @@ export type NflRedraftPlayoffBracketState = {
   locked: boolean
   generated: boolean
   rounds: NflRedraftPlayoffRoundState[]
+  /**
+   * The lower bracket (consolation or toilet bowl), stored at `100 + n`. Its rounds are numbered by
+   * the championship round they are played alongside, so its final is played with the championship.
+   */
   consolationRounds: NflRedraftPlayoffRoundState[]
+  /** What `consolationRounds` is — read from the stored rows, so a later settings change cannot relabel it. */
+  lowerBracket: NflRedraftLowerBracketMode
+  /**
+   * The semifinal losers' game, stored in the championship round's row so it is played and scored
+   * in exactly the final's weeks. Null when the league has none or the field has no two semifinals.
+   */
+  thirdPlaceMatchup: NflRedraftPlayoffMatchupState | null
   championRosterId: string | null
   runnerUpRosterId: string | null
+  thirdPlaceRosterId: string | null
+  /** The consolation final's winner, or the toilet bowl final's loser (last place). */
+  lowerBracketResultRosterId: string | null
   finalStandings: NflRedraftPlayoffFinalStanding[]
 }
 
@@ -237,6 +264,7 @@ export type NflRedraftPlayoffRuntimeState = {
     championshipRounds: number
     championshipMatchups: number
     consolationMatchups: number
+    thirdPlaceMatchups: number
     completedMatchups: number
   }
 }
@@ -274,7 +302,7 @@ export type NflRedraftPlayoffFinalizeResult =
     }
   | {
       ok: false
-      code: 'NO_BRACKET' | 'FINAL_ROUND_INCOMPLETE' | 'NO_WINNER'
+      code: 'NO_BRACKET' | 'FINAL_ROUND_INCOMPLETE' | 'NO_WINNER' | 'LOWER_BRACKET_INCOMPLETE'
       message: string
       events: CanonicalLeagueRuntimeEvent[]
     }
@@ -399,6 +427,13 @@ function resolveSettings(input: {
   const planCheck = byePlan ? checkByePlan(playoffTeamCount, byePlan) : null
   const roundCount = planCheck?.ok ? planCheck.roundCount : Math.max(1, Math.ceil(Math.log2(bracketSize)))
   const tiebreakers = normalizeTiebreakers(input.rules)
+  // Toilet bowl first: the settings reader makes the two exclusive, and a ruleset carrying both is read
+  // the way the standings screen labels it (`readPlayoffFormat`).
+  const lowerBracket: NflRedraftLowerBracketMode = input.rules.playoffs.toiletBowlEnabled
+    ? 'toilet_bowl'
+    : input.rules.playoffs.consolationBracketEnabled
+      ? 'consolation'
+      : 'none'
   const supportWarnings: string[] = []
   if (playoffTeamCount > 16) supportWarnings.push('Playoff brackets above 16 teams are not supported by the G40 runtime.')
   if (input.teamCount < 2) supportWarnings.push('At least two teams are required for playoff generation.')
@@ -411,7 +446,9 @@ function resolveSettings(input: {
     roundCount,
     byePlan,
     reseedAfterEachRound: byePlan != null || includesToken(input.rules.playoffs.reseedBehavior, 'reseed'),
-    consolationEnabled: Boolean(input.rules.playoffs.consolationBracketEnabled),
+    consolationEnabled: lowerBracket === 'consolation',
+    toiletBowlEnabled: lowerBracket === 'toilet_bowl',
+    lowerBracket,
     thirdPlaceGameEnabled: Boolean(input.rules.playoffs.thirdPlaceGameEnabled),
     divisionWinnersEnabled:
       includesToken(input.rules.playoffs.seedingRules, 'division') ||
@@ -993,42 +1030,142 @@ function buildByePlanRounds(input: {
   })
 }
 
-function buildConsolationRounds(input: {
+/** The standings place of every team, 1 = best: `state.teams` is already in seeding order. */
+function standingRanks(teams: NflRedraftPlayoffTeamState[]): Map<string, number> {
+  return new Map(teams.map((team, index) => [team.rosterId, index + 1]))
+}
+
+function lowerBracketRoundName(mode: NflRedraftLowerBracketMode, round: number, roundCount: number): string {
+  const label = mode === 'toilet_bowl' ? 'Toilet Bowl' : 'Consolation'
+  if (round >= roundCount) return `${label} Final`
+  if (round === roundCount - 1) return `${label} Semifinal`
+  return `${label} Round ${round}`
+}
+
+/**
+ * The lower bracket for the teams that missed the playoffs, played to a final.
+ *
+ * - **Field.** At most `2^championshipRounds` teams, so it fits in the weeks the playoffs already
+ *   use: a consolation bracket takes the BEST non-playoff teams, a toilet bowl the WORST. Anyone
+ *   left over plays no lower-bracket game.
+ * - **Rounds line up with the END of the championship bracket.** A lower bracket of `k` rounds plays
+ *   its round `j` alongside championship round `R - k + j`, so its final shares the championship's
+ *   weeks (and its `championship_length`). The round number stored is that championship round, so
+ *   "which weeks" stays the one rule in `playoffRoundWeeks`.
+ * - **Seeds and byes.** The field is paired with the same fixed tree as the title bracket. In a
+ *   consolation bracket the best team is lower seed 1, so byes go to the best teams. In a toilet bowl
+ *   lower seed 1 is the WORST team, so its byes go to the worst — a bye there is a step toward last.
+ * - **The seed columns carry the standings place**, which settles a tied score the way the title
+ *   bracket does (better place wins). In a toilet bowl the team that "loses" the tie advances, so the
+ *   worse team moves on, which is the same rule read the other way.
+ */
+function buildLowerBracketRounds(input: {
   teams: NflRedraftPlayoffTeamState[]
   settings: NflRedraftPlayoffSettings
+  championshipRoundCount: number
 }): NflRedraftPlayoffRoundState[] {
-  if (!input.settings.consolationEnabled) return []
-  const consolationTeams = input.teams.filter((team) => !team.qualified)
-  if (consolationTeams.length < 2) return []
-  const pairs: NflRedraftPlayoffMatchupState[] = []
-  for (let i = 0; i < Math.floor(consolationTeams.length / 2); i += 1) {
-    const home = consolationTeams[i]
-    const away = consolationTeams[consolationTeams.length - 1 - i]
-    pairs.push({
-      matchupId: `consolation:r1:m${i + 1}`,
-      roundId: 'consolation:round:1',
-      roundNumber: 1,
-      roundName: 'Consolation',
-      matchupNumber: i + 1,
+  const mode = input.settings.lowerBracket
+  if (mode === 'none' || input.championshipRoundCount < 1) return []
+  const ranks = standingRanks(input.teams)
+  const nonPlayoff = input.teams.filter((team) => !team.qualified)
+  const cap = 2 ** input.championshipRoundCount
+  const field = mode === 'toilet_bowl' ? nonPlayoff.slice(-cap).reverse() : nonPlayoff.slice(0, cap)
+  if (field.length < 2) return []
+  const size = nextPowerOfTwo(field.length)
+  const roundCount = Math.round(Math.log2(size))
+  const offset = input.championshipRoundCount - roundCount
+  const pairs = generatedSeedPairs(size)
+  const rounds: NflRedraftPlayoffRoundState[] = []
+  for (let lowerRound = 1; lowerRound <= roundCount; lowerRound += 1) {
+    const roundNumber = offset + lowerRound
+    const roundId = `consolation:round:${roundNumber}`
+    const roundName = lowerBracketRoundName(mode, lowerRound, roundCount)
+    const count = size / 2 ** lowerRound
+    const matchups: NflRedraftPlayoffMatchupState[] = Array.from({ length: count }, (_, index) => {
+      const [homeLower, awayLower] = lowerRound === 1 ? pairs[index] : [0, 0]
+      const home = homeLower ? field[homeLower - 1] ?? null : null
+      const away = awayLower ? field[awayLower - 1] ?? null : null
+      const bye = lowerRound === 1 && Boolean(home && !away)
+      return {
+        matchupId: `consolation:r${roundNumber}:m${index + 1}`,
+        roundId,
+        roundNumber,
+        roundName,
+        matchupNumber: index + 1,
+        bracketType: 'consolation',
+        homeRosterId: home?.rosterId ?? null,
+        awayRosterId: away?.rosterId ?? null,
+        homeSeed: home ? ranks.get(home.rosterId) ?? null : null,
+        awaySeed: away ? ranks.get(away.rosterId) ?? null : null,
+        homeScore: null,
+        awayScore: null,
+        winnerRosterId: bye ? home?.rosterId ?? null : null,
+        loserRosterId: null,
+        nextMatchupId: null,
+        status: bye ? 'bye' : 'scheduled',
+        bye,
+        complete: bye,
+        metadata: { lowerBracket: mode, lowerRound, lowerRoundCount: roundCount, ...(bye ? { autoAdvance: true } : {}) },
+      }
+    })
+    const previous = rounds[rounds.length - 1]
+    previous?.matchups.forEach((matchup, index) => {
+      matchup.nextMatchupId = matchups[Math.floor(index / 2)]?.matchupId ?? null
+    })
+    rounds.push({
+      roundId,
+      roundNumber,
+      roundName,
       bracketType: 'consolation',
-      homeRosterId: home?.rosterId ?? null,
-      awayRosterId: away?.rosterId ?? null,
-      homeSeed: home?.playoffSeed ?? null,
-      awaySeed: away?.playoffSeed ?? null,
-      homeScore: null,
-      awayScore: null,
-      winnerRosterId: null,
-      loserRosterId: null,
-      nextMatchupId: null,
-      status: 'scheduled',
-      bye: false,
-      complete: false,
-      metadata: {},
+      status: roundNumber === 1 ? 'active' : 'pending',
+      matchups,
     })
   }
-  return pairs.length
-    ? [{ roundId: 'consolation:round:1', roundNumber: 1, roundName: 'Consolation', bracketType: 'consolation', status: 'active', matchups: pairs }]
-    : []
+  return rounds
+}
+
+/** Games in a round that two teams play — what produces a loser. */
+function contestedCount(round: NflRedraftPlayoffRoundState | undefined): number {
+  return round ? round.matchups.filter((matchup) => !matchup.bye).length : 0
+}
+
+/**
+ * The third-place game: the two semifinal losers, in the championship round, so it is played and
+ * scored over exactly the final's weeks (and `championship_length`).
+ *
+ * It exists only when the semifinal round has TWO games. A 3-team field (one semifinal and a bye)
+ * or a bye plan that seats a team in the final has one semifinal loser; that team simply finishes
+ * third, and there is no game to play. A 2-team field has no semifinal at all.
+ */
+function buildThirdPlaceMatchup(input: {
+  rounds: NflRedraftPlayoffRoundState[]
+  settings: NflRedraftPlayoffSettings
+}): NflRedraftPlayoffMatchupState | null {
+  if (!input.settings.thirdPlaceGameEnabled || input.rounds.length < 2) return null
+  const finalRound = input.rounds[input.rounds.length - 1]
+  const semifinal = input.rounds[input.rounds.length - 2]
+  if (contestedCount(semifinal) !== 2) return null
+  return {
+    matchupId: `third_place:r${finalRound.roundNumber}:m1`,
+    roundId: finalRound.roundId,
+    roundNumber: finalRound.roundNumber,
+    roundName: 'Third Place',
+    matchupNumber: finalRound.matchups.length + 1,
+    bracketType: 'third_place',
+    homeRosterId: null,
+    awayRosterId: null,
+    homeSeed: null,
+    awaySeed: null,
+    homeScore: null,
+    awayScore: null,
+    winnerRosterId: null,
+    loserRosterId: null,
+    nextMatchupId: null,
+    status: 'scheduled',
+    bye: false,
+    complete: false,
+    metadata: {},
+  }
 }
 
 function activeChampionshipRound(rounds: NflRedraftPlayoffRoundState[]): NflRedraftPlayoffRoundState | null {
@@ -1074,33 +1211,90 @@ function seedForRoster(state: NflRedraftPlayoffRuntimeState, rosterId: string | 
   return state.seeds.find((seed) => seed.rosterId === rosterId)?.seed ?? null
 }
 
-function finalStandingRows(state: NflRedraftPlayoffRuntimeState, championRosterId: string, runnerUpRosterId: string | null): NflRedraftPlayoffFinalStanding[] {
-  const winLoss = new Map<string, { wins: number; losses: number }>()
-  for (const round of state.bracket.rounds) {
+/**
+ * The lower bracket's teams, best finish first, from what has been played. A consolation bracket
+ * ranks its final's winner first, then each team by the LAST round it played (going out later is
+ * better); a toilet bowl is the mirror — a team that escapes earlier finishes higher, and the final's
+ * loser is last. Ties within a round go to the better standings place.
+ */
+function lowerBracketOrder(
+  rounds: NflRedraftPlayoffRoundState[],
+  mode: NflRedraftLowerBracketMode,
+  ranks: Map<string, number>,
+): { order: string[]; resultRosterId: string | null } {
+  const lastRound = new Map<string, number>()
+  for (const round of rounds) {
     for (const matchup of round.matchups) {
-      if (matchup.winnerRosterId) {
-        const row = winLoss.get(matchup.winnerRosterId) ?? { wins: 0, losses: 0 }
-        row.wins += matchup.awayRosterId ? 1 : 0
-        winLoss.set(matchup.winnerRosterId, row)
-      }
-      if (matchup.loserRosterId) {
-        const row = winLoss.get(matchup.loserRosterId) ?? { wins: 0, losses: 0 }
-        row.losses += 1
-        winLoss.set(matchup.loserRosterId, row)
+      for (const rosterId of [matchup.homeRosterId, matchup.awayRosterId]) {
+        if (rosterId) lastRound.set(rosterId, Math.max(lastRound.get(rosterId) ?? 0, round.roundNumber))
       }
     }
   }
-  const playoffTeams = state.teams.filter((team) => team.qualified)
-  const ordered = [
-    ...playoffTeams.filter((team) => team.rosterId === championRosterId),
-    ...playoffTeams.filter((team) => team.rosterId === runnerUpRosterId),
-    ...playoffTeams
-      .filter((team) => team.rosterId !== championRosterId && team.rosterId !== runnerUpRosterId)
-      .sort((a, b) => (a.playoffSeed ?? 999) - (b.playoffSeed ?? 999)),
-    // `state.teams` is already in seeding order (record, head-to-head, ...) from `seedTeams`;
-    // re-sorting here would lose head-to-head, which needs the regular-season results.
-    ...state.teams.filter((team) => !team.qualified),
+  const finalRound = rounds[rounds.length - 1]
+  const finalMatchup = finalRound?.matchups.length === 1 ? finalRound.matchups[0] : null
+  const finalWinner = finalMatchup?.winnerRosterId ?? null
+  const finalLoser = finalMatchup && finalWinner ? loserFor(finalMatchup) : null
+  const rank = (id: string) => ranks.get(id) ?? Number.MAX_SAFE_INTEGER
+  const order = [...lastRound.keys()].sort((a, b) => {
+    if (mode === 'toilet_bowl') {
+      return (lastRound.get(a)! - lastRound.get(b)!) || Number(a === finalLoser) - Number(b === finalLoser) || rank(a) - rank(b)
+    }
+    return Number(b === finalWinner) - Number(a === finalWinner) || (lastRound.get(b)! - lastRound.get(a)!) || rank(a) - rank(b)
+  })
+  return { order, resultRosterId: mode === 'toilet_bowl' ? finalLoser : finalWinner }
+}
+
+/**
+ * Every team's finish. 1 and 2 from the final; 3 and 4 from the third-place game when one was
+ * played; the other playoff teams by the round they went out in (later is better), then seed. The
+ * teams that missed the playoffs follow, ordered by their lower bracket when one was played
+ * (`lowerBracketOrder`) and by the standings otherwise.
+ */
+function finalStandingRows(state: NflRedraftPlayoffRuntimeState, championRosterId: string, runnerUpRosterId: string | null): NflRedraftPlayoffFinalStanding[] {
+  const winLoss = new Map<string, { wins: number; losses: number }>()
+  const wentOutIn = new Map<string, number>()
+  const thirdPlace = state.bracket.thirdPlaceMatchup
+  const titleGames = [
+    ...state.bracket.rounds.flatMap((round) => round.matchups),
+    ...(thirdPlace ? [thirdPlace] : []),
   ]
+  for (const matchup of titleGames) {
+    const loser = matchup.loserRosterId ?? loserFor(matchup)
+    if (matchup.winnerRosterId) {
+      const row = winLoss.get(matchup.winnerRosterId) ?? { wins: 0, losses: 0 }
+      row.wins += matchup.awayRosterId ? 1 : 0
+      winLoss.set(matchup.winnerRosterId, row)
+    }
+    if (loser) {
+      const row = winLoss.get(loser) ?? { wins: 0, losses: 0 }
+      row.losses += 1
+      winLoss.set(loser, row)
+      if (matchup.bracketType === 'championship') wentOutIn.set(loser, matchup.roundNumber)
+    }
+  }
+  const thirdPlaceRosterId = thirdPlace?.winnerRosterId ?? null
+  const fourthPlaceRosterId = thirdPlace && thirdPlaceRosterId ? loserFor(thirdPlace) : null
+  const placed = [championRosterId, runnerUpRosterId, thirdPlaceRosterId, fourthPlaceRosterId].filter((id): id is string => Boolean(id))
+  const playoffTeams = state.teams.filter((team) => team.qualified)
+  const byId = new Map(state.teams.map((team) => [team.rosterId, team]))
+  const placedTeams = placed.map((id) => byId.get(id)).filter((team): team is NflRedraftPlayoffTeamState => Boolean(team?.qualified))
+  const otherPlayoffTeams = playoffTeams
+    .filter((team) => !placed.includes(team.rosterId))
+    .sort((a, b) => (wentOutIn.get(b.rosterId) ?? 0) - (wentOutIn.get(a.rosterId) ?? 0) || (a.playoffSeed ?? 999) - (b.playoffSeed ?? 999))
+  // `state.teams` is already in seeding order (record, head-to-head, ...) from `seedTeams`;
+  // re-sorting here would lose head-to-head, which needs the regular-season results.
+  const nonPlayoff = state.teams.filter((team) => !team.qualified)
+  let nonPlayoffOrdered = nonPlayoff
+  if (state.bracket.consolationRounds.length && state.bracket.lowerBracket !== 'none') {
+    const { order } = lowerBracketOrder(state.bracket.consolationRounds, state.bracket.lowerBracket, standingRanks(state.teams))
+    const inField = new Set(order)
+    const field = order.map((id) => byId.get(id)).filter((team): team is NflRedraftPlayoffTeamState => Boolean(team && !team.qualified))
+    const rest = nonPlayoff.filter((team) => !inField.has(team.rosterId))
+    // A consolation bracket is the best of the rest, so those left out finish below it; a toilet bowl
+    // is the worst, so those left out finish above it.
+    nonPlayoffOrdered = state.bracket.lowerBracket === 'toilet_bowl' ? [...rest, ...field] : [...field, ...rest]
+  }
+  const ordered = [...placedTeams, ...otherPlayoffTeams, ...nonPlayoffOrdered]
   return ordered.map((team, index) => {
     const row = winLoss.get(team.rosterId) ?? { wins: 0, losses: team.qualified ? 1 : 0 }
     return {
@@ -1112,6 +1306,7 @@ function finalStandingRows(state: NflRedraftPlayoffRuntimeState, championRosterI
       playoffLosses: row.losses,
       champion: team.rosterId === championRosterId,
       runnerUp: team.rosterId === runnerUpRosterId,
+      thirdPlace: team.rosterId === thirdPlaceRosterId,
     }
   })
 }
@@ -1158,6 +1353,12 @@ export function buildNflRedraftPlayoffRuntimeState(input: {
   const normalizedMatchups = (input.matchups ?? []).map((matchup) => normalizeMatchup(matchup, seedByRosterId))
   const championshipRounds = groupRounds(normalizedMatchups, 'championship')
   const consolationRounds = groupRounds(normalizedMatchups, 'consolation')
+  const thirdPlaceMatchup = normalizedMatchups.find((matchup) => matchup.bracketType === 'third_place') ?? null
+  const storedLowerMode = consolationRounds[0]?.matchups[0]?.metadata.lowerBracket
+  // A bracket stored before the mode was recorded was a winners-advance consolation round.
+  const lowerBracket: NflRedraftLowerBracketMode = consolationRounds.length
+    ? storedLowerMode === 'toilet_bowl' ? 'toilet_bowl' : 'consolation'
+    : 'none'
   const status = bracketStatus(input.bracketStatus, championshipRounds)
   const finalRound = championshipRounds[championshipRounds.length - 1]
   const finalMatchup = finalRound?.matchups.find((matchup) => !matchup.nextMatchupId) ?? finalRound?.matchups[0]
@@ -1181,8 +1382,14 @@ export function buildNflRedraftPlayoffRuntimeState(input: {
       generated: championshipRounds.length > 0,
       rounds: championshipRounds,
       consolationRounds,
+      lowerBracket,
+      thirdPlaceMatchup,
       championRosterId,
       runnerUpRosterId,
+      thirdPlaceRosterId: championRosterId ? thirdPlaceMatchup?.winnerRosterId ?? null : null,
+      lowerBracketResultRosterId: championRosterId
+        ? lowerBracketOrder(consolationRounds, lowerBracket, standingRanks(seeded.teams)).resultRosterId
+        : null,
       finalStandings: [] as NflRedraftPlayoffFinalStanding[],
     },
     coverage: {
@@ -1191,6 +1398,7 @@ export function buildNflRedraftPlayoffRuntimeState(input: {
       championshipRounds: championshipRounds.length,
       championshipMatchups: championshipRounds.reduce((sum, round) => sum + round.matchups.length, 0),
       consolationMatchups: consolationRounds.reduce((sum, round) => sum + round.matchups.length, 0),
+      thirdPlaceMatchups: thirdPlaceMatchup ? 1 : 0,
       completedMatchups: normalizedMatchups.filter((matchup) => matchup.complete || matchup.status === 'bye').length,
     },
   } satisfies NflRedraftPlayoffRuntimeState
@@ -1206,7 +1414,12 @@ export function generateNflRedraftPlayoffBracket(input: {
   lockBracket?: boolean
 }): NflRedraftGeneratedPlayoffBracket {
   const rounds = buildGeneratedRounds({ seeds: input.state.seeds, settings: input.state.settings, bracketType: 'championship' })
-  const consolationRounds = buildConsolationRounds({ teams: input.state.teams, settings: input.state.settings })
+  const consolationRounds = buildLowerBracketRounds({
+    teams: input.state.teams,
+    settings: input.state.settings,
+    championshipRoundCount: rounds.length,
+  })
+  const thirdPlaceMatchup = buildThirdPlaceMatchup({ rounds, settings: input.state.settings })
   const bracket: NflRedraftPlayoffBracketState = {
     bracketId: input.state.bracket.bracketId,
     status: input.lockBracket ? 'locked' : 'active',
@@ -1214,8 +1427,12 @@ export function generateNflRedraftPlayoffBracket(input: {
     generated: true,
     rounds,
     consolationRounds,
+    lowerBracket: consolationRounds.length ? input.state.settings.lowerBracket : 'none',
+    thirdPlaceMatchup,
     championRosterId: null,
     runnerUpRosterId: null,
+    thirdPlaceRosterId: null,
+    lowerBracketResultRosterId: null,
     finalStandings: [],
   }
   const events = [
@@ -1288,7 +1505,12 @@ export function generateNflRedraftPlayoffBracket(input: {
         leagueId: input.state.leagueId,
         type: 'playoffs.consolation.generated',
         actorUserId: input.actorUserId,
-        payload: { seasonId: input.state.seasonId, matchupCount: consolationRounds.reduce((sum, round) => sum + round.matchups.length, 0) },
+        payload: {
+          seasonId: input.state.seasonId,
+          lowerBracket: bracket.lowerBracket,
+          rounds: consolationRounds.length,
+          matchupCount: consolationRounds.reduce((sum, round) => sum + round.matchups.length, 0),
+        },
       }),
     )
   }
@@ -1299,7 +1521,7 @@ export function generateNflRedraftPlayoffBracket(input: {
         leagueId: input.state.leagueId,
         type: 'playoffs.championship.matchup.created',
         actorUserId: input.actorUserId,
-        payload: { seasonId: input.state.seasonId, roundNumber: finalRound.roundNumber },
+        payload: { seasonId: input.state.seasonId, roundNumber: finalRound.roundNumber, thirdPlaceGame: thirdPlaceMatchup != null },
       }),
     )
   }
@@ -1367,6 +1589,93 @@ function fillNextRound(input: {
   return nextRound
 }
 
+type GameResolution = { matchup: NflRedraftPlayoffMatchupState; winnerRosterId: string; loserRosterId: string | null }
+
+/** Decide every game in a group, or report why not. Nothing is written until the whole group is decided. */
+function resolveGames(matchups: NflRedraftPlayoffMatchupState[]): {
+  blocked: Array<{ matchupId: string; reason: string }>
+  resolutions: GameResolution[]
+} {
+  const blocked: Array<{ matchupId: string; reason: string }> = []
+  const resolutions: GameResolution[] = []
+  for (const matchup of matchups) {
+    const resolved = resolveWinner(matchup)
+    if (!resolved.winnerRosterId) {
+      blocked.push({ matchupId: matchup.matchupId, reason: resolved.blockedReason ?? 'Matchup is not ready.' })
+      continue
+    }
+    resolutions.push({ matchup, winnerRosterId: resolved.winnerRosterId, loserRosterId: resolved.loserRosterId })
+  }
+  return { blocked, resolutions }
+}
+
+function applyResolutions(resolutions: GameResolution[]) {
+  for (const { matchup, winnerRosterId, loserRosterId } of resolutions) {
+    matchup.winnerRosterId = winnerRosterId
+    matchup.loserRosterId = loserRosterId
+    matchup.status = matchup.bye ? 'bye' : 'final'
+    matchup.complete = true
+  }
+}
+
+/** The semifinal losers into the third-place game, the better seed at home. */
+function fillThirdPlace(thirdPlace: NflRedraftPlayoffMatchupState, semifinal: NflRedraftPlayoffRoundState, state: NflRedraftPlayoffRuntimeState) {
+  const losers = semifinal.matchups
+    .filter((matchup) => !matchup.bye)
+    .map((matchup) => matchup.loserRosterId ?? loserFor(matchup))
+    .filter((rosterId): rosterId is string => Boolean(rosterId))
+  if (losers.length !== 2) return
+  const [home, away] = losers.sort((a, b) => (seedForRoster(state, a) ?? 999) - (seedForRoster(state, b) ?? 999))
+  thirdPlace.homeRosterId = home
+  thirdPlace.awayRosterId = away
+  thirdPlace.homeSeed = seedForRoster(state, home)
+  thirdPlace.awaySeed = seedForRoster(state, away)
+  thirdPlace.status = 'scheduled'
+}
+
+/**
+ * The lower bracket's next round, along its fixed tree. In a consolation bracket the winner moves
+ * on; in a toilet bowl the LOSER does. A first-round bye moves its team on either way.
+ */
+function fillNextLowerRound(input: {
+  rounds: NflRedraftPlayoffRoundState[]
+  activeRound: NflRedraftPlayoffRoundState
+  mode: NflRedraftLowerBracketMode
+  ranks: Map<string, number>
+}): NflRedraftPlayoffRoundState | null {
+  const nextRound = input.rounds[input.rounds.indexOf(input.activeRound) + 1]
+  if (!nextRound) return null
+  for (const matchup of input.activeRound.matchups) {
+    const advancer = matchup.bye
+      ? matchup.homeRosterId
+      : input.mode === 'toilet_bowl'
+        ? matchup.loserRosterId
+        : matchup.winnerRosterId
+    const target = nextRound.matchups.find((row) => row.matchupId === matchup.nextMatchupId)
+    if (!advancer || !target) continue
+    if (target.homeRosterId === advancer || target.awayRosterId === advancer) continue
+    if (!target.homeRosterId) {
+      target.homeRosterId = advancer
+      target.homeSeed = input.ranks.get(advancer) ?? null
+    } else if (!target.awayRosterId) {
+      target.awayRosterId = advancer
+      target.awaySeed = input.ranks.get(advancer) ?? null
+    }
+  }
+  nextRound.status = 'active'
+  return nextRound
+}
+
+/**
+ * Advance whatever is ready: the championship round being played (with the third-place game when
+ * that round is the final) and, independently, the lower bracket's round.
+ *
+ * ⚠ THE TWO BRACKETS DO NOT WAIT FOR EACH OTHER. A consolation team's abandoned lineup can hold its
+ * week's seal (coverage), and that must never delay the title bracket — nor the reverse. Each group
+ * is all-or-nothing: no winner is written into a round until every game in it is decided. Only when
+ * NEITHER group can move is the refusal returned, and `NO_ACTIVE_ROUND` means every bracket — title,
+ * third place and lower — is finished, which is what lets the roller finalize.
+ */
 export function advanceNflRedraftPlayoffRound(input: {
   state: NflRedraftPlayoffRuntimeState
   actorUserId?: string | null
@@ -1375,29 +1684,26 @@ export function advanceNflRedraftPlayoffRound(input: {
     return { ok: false, code: 'NO_BRACKET', message: 'No playoff bracket has been generated.', blockedMatchupIds: [], events: [] }
   }
   const rounds = input.state.bracket.rounds.map(cloneRound)
+  const lowerRounds = input.state.bracket.consolationRounds.map(cloneRound)
+  const sourceThirdPlace = input.state.bracket.thirdPlaceMatchup
+  const thirdPlace = sourceThirdPlace ? { ...sourceThirdPlace, metadata: { ...sourceThirdPlace.metadata } } : null
   const activeRound = activeChampionshipRound(rounds)
-  if (!activeRound) {
+  const activeLower = activeChampionshipRound(lowerRounds)
+  if (!activeRound && !activeLower) {
     return { ok: false, code: 'NO_ACTIVE_ROUND', message: 'No active playoff round is available.', blockedMatchupIds: [], events: [] }
   }
 
-  const blocked: Array<{ matchupId: string; reason: string }> = []
-  const advancedRosterIds: string[] = []
-  const eliminatedRosterIds: string[] = []
-  for (const matchup of activeRound.matchups) {
-    const resolved = resolveWinner(matchup)
-    if (!resolved.winnerRosterId) {
-      blocked.push({ matchupId: matchup.matchupId, reason: resolved.blockedReason ?? 'Matchup is not ready.' })
-      continue
-    }
-    matchup.winnerRosterId = resolved.winnerRosterId
-    matchup.loserRosterId = resolved.loserRosterId
-    matchup.status = matchup.bye ? 'bye' : 'final'
-    matchup.complete = true
-    advancedRosterIds.push(resolved.winnerRosterId)
-    if (resolved.loserRosterId) eliminatedRosterIds.push(resolved.loserRosterId)
-  }
+  const finalRound = rounds[rounds.length - 1]
+  const mainGames = activeRound
+    ? [...activeRound.matchups, ...(activeRound === finalRound && thirdPlace ? [thirdPlace] : [])]
+    : []
+  const main = activeRound ? resolveGames(mainGames) : null
+  const lower = activeLower ? resolveGames(activeLower.matchups) : null
+  const mainReady = Boolean(main && main.blocked.length === 0)
+  const lowerReady = Boolean(lower && lower.blocked.length === 0)
 
-  if (blocked.length) {
+  if (!mainReady && !lowerReady) {
+    const blocked = [...(main?.blocked ?? []), ...(lower?.blocked ?? [])]
     const tieBlocked = blocked.some((row) => row.reason.toLowerCase().includes('tied'))
     return {
       ok: false,
@@ -1408,9 +1714,34 @@ export function advanceNflRedraftPlayoffRound(input: {
     }
   }
 
-  activeRound.status = 'completed'
-  const nextRound = fillNextRound({ state: input.state, rounds, activeRound, winners: advancedRosterIds })
-  const finalRoundComplete = !nextRound
+  const advancedRosterIds: string[] = []
+  const eliminatedRosterIds: string[] = []
+  let nextRound: NflRedraftPlayoffRoundState | null = null
+  if (mainReady && activeRound && main) {
+    applyResolutions(main.resolutions)
+    for (const row of main.resolutions) {
+      // The third-place game eliminates nobody new: both teams went out in the semifinals.
+      if (row.matchup.bracketType !== 'championship') continue
+      advancedRosterIds.push(row.winnerRosterId)
+      if (row.loserRosterId) eliminatedRosterIds.push(row.loserRosterId)
+    }
+    activeRound.status = 'completed'
+    nextRound = fillNextRound({ state: input.state, rounds, activeRound, winners: advancedRosterIds })
+    if (thirdPlace && nextRound === finalRound) fillThirdPlace(thirdPlace, activeRound, input.state)
+  }
+  let nextLowerRound: NflRedraftPlayoffRoundState | null = null
+  if (lowerReady && activeLower && lower) {
+    applyResolutions(lower.resolutions)
+    activeLower.status = 'completed'
+    nextLowerRound = fillNextLowerRound({
+      rounds: lowerRounds,
+      activeRound: activeLower,
+      mode: input.state.bracket.lowerBracket,
+      ranks: standingRanks(input.state.teams),
+    })
+  }
+
+  const finalRoundComplete = finalRound.status === 'completed'
   const bracketStatus: NflRedraftPlayoffBracketStatus = finalRoundComplete ? 'locked' : 'active'
   const state = {
     ...input.state,
@@ -1419,50 +1750,72 @@ export function advanceNflRedraftPlayoffRound(input: {
       status: bracketStatus,
       locked: bracketStatus === 'locked',
       rounds,
+      consolationRounds: lowerRounds,
+      thirdPlaceMatchup: thirdPlace,
     },
   } satisfies NflRedraftPlayoffRuntimeState
 
-  const events: CanonicalLeagueRuntimeEvent[] = [
-    buildPlayoffRuntimeEvent({
-      leagueId: input.state.leagueId,
-      type: 'playoffs.advancement',
-      actorUserId: input.actorUserId,
-      payload: { seasonId: input.state.seasonId, roundNumber: activeRound.roundNumber, advancedRosterIds, eliminatedRosterIds },
-    }),
-    ...advancedRosterIds.map((rosterId) =>
-      buildPlayoffRuntimeEvent({
-        leagueId: input.state.leagueId,
-        type: 'playoffs.team.advanced',
-        actorUserId: input.actorUserId,
-        payload: { seasonId: input.state.seasonId, roundNumber: activeRound.roundNumber, rosterId },
-      }),
-    ),
-    ...eliminatedRosterIds.map((rosterId) =>
-      buildPlayoffRuntimeEvent({
-        leagueId: input.state.leagueId,
-        type: 'playoffs.team.eliminated',
-        actorUserId: input.actorUserId,
-        payload: { seasonId: input.state.seasonId, roundNumber: activeRound.roundNumber, rosterId },
-      }),
-    ),
-  ]
-  if (input.state.settings.reseedAfterEachRound && nextRound) {
+  const events: CanonicalLeagueRuntimeEvent[] = []
+  if (mainReady && activeRound) {
     events.push(
       buildPlayoffRuntimeEvent({
         leagueId: input.state.leagueId,
-        type: 'playoffs.reseeded',
+        type: 'playoffs.advancement',
         actorUserId: input.actorUserId,
-        payload: { seasonId: input.state.seasonId, roundNumber: nextRound.roundNumber },
+        payload: { seasonId: input.state.seasonId, roundNumber: activeRound.roundNumber, advancedRosterIds, eliminatedRosterIds },
       }),
+      ...advancedRosterIds.map((rosterId) =>
+        buildPlayoffRuntimeEvent({
+          leagueId: input.state.leagueId,
+          type: 'playoffs.team.advanced',
+          actorUserId: input.actorUserId,
+          payload: { seasonId: input.state.seasonId, roundNumber: activeRound.roundNumber, rosterId },
+        }),
+      ),
+      ...eliminatedRosterIds.map((rosterId) =>
+        buildPlayoffRuntimeEvent({
+          leagueId: input.state.leagueId,
+          type: 'playoffs.team.eliminated',
+          actorUserId: input.actorUserId,
+          payload: { seasonId: input.state.seasonId, roundNumber: activeRound.roundNumber, rosterId },
+        }),
+      ),
     )
+    if (input.state.settings.reseedAfterEachRound && nextRound) {
+      events.push(
+        buildPlayoffRuntimeEvent({
+          leagueId: input.state.leagueId,
+          type: 'playoffs.reseeded',
+          actorUserId: input.actorUserId,
+          payload: { seasonId: input.state.seasonId, roundNumber: nextRound.roundNumber },
+        }),
+      )
+    }
+    if (nextRound) {
+      events.push(
+        buildPlayoffRuntimeEvent({
+          leagueId: input.state.leagueId,
+          type: 'playoffs.round.opened',
+          actorUserId: input.actorUserId,
+          payload: { seasonId: input.state.seasonId, roundNumber: nextRound.roundNumber },
+        }),
+      )
+    }
   }
-  if (nextRound) {
+  if (lowerReady && activeLower && lower) {
     events.push(
       buildPlayoffRuntimeEvent({
         leagueId: input.state.leagueId,
-        type: 'playoffs.round.opened',
+        type: 'playoffs.advancement',
         actorUserId: input.actorUserId,
-        payload: { seasonId: input.state.seasonId, roundNumber: nextRound.roundNumber },
+        payload: {
+          seasonId: input.state.seasonId,
+          bracketType: 'consolation',
+          lowerBracket: input.state.bracket.lowerBracket,
+          roundNumber: activeLower.roundNumber,
+          nextRoundNumber: nextLowerRound?.roundNumber ?? null,
+          results: lower.resolutions.map((row) => ({ matchupId: row.matchup.matchupId, winnerRosterId: row.winnerRosterId, loserRosterId: row.loserRosterId })),
+        },
       }),
     )
   }
@@ -1472,7 +1825,7 @@ export function advanceNflRedraftPlayoffRound(input: {
     events,
     advancedRosterIds: Array.from(new Set(advancedRosterIds)),
     eliminatedRosterIds: Array.from(new Set(eliminatedRosterIds)),
-    status: finalRoundComplete ? 'championship_ready' : 'round_complete',
+    status: mainReady && finalRoundComplete ? 'championship_ready' : 'round_complete',
   }
 }
 
@@ -1484,8 +1837,21 @@ export function finalizeNflRedraftPlayoffChampion(input: {
     return { ok: false, code: 'NO_BRACKET', message: 'No playoff bracket has been generated.', events: [] }
   }
   const finalRound = input.state.bracket.rounds[input.state.bracket.rounds.length - 1]
-  if (!finalRound || finalRound.status !== 'completed') {
+  const thirdPlace = input.state.bracket.thirdPlaceMatchup
+  if (!finalRound || finalRound.status !== 'completed' || (thirdPlace && !thirdPlace.winnerRosterId)) {
     return { ok: false, code: 'FINAL_ROUND_INCOMPLETE', message: 'The championship round is not complete.', events: [] }
+  }
+  // The lower bracket's result is part of the final standings; once the season completes, nothing scores it.
+  const lowerIncomplete = input.state.bracket.consolationRounds.some(
+    (round) => round.status !== 'completed' && round.matchups.some((matchup) => !matchup.complete),
+  )
+  if (lowerIncomplete) {
+    return {
+      ok: false,
+      code: 'LOWER_BRACKET_INCOMPLETE',
+      message: input.state.bracket.lowerBracket === 'toilet_bowl' ? 'The toilet bowl is not complete.' : 'The consolation bracket is not complete.',
+      events: [],
+    }
   }
   const championshipMatchup = finalRound.matchups.find((matchup) => !matchup.nextMatchupId) ?? finalRound.matchups[0]
   if (!championshipMatchup?.winnerRosterId) {
@@ -1493,6 +1859,12 @@ export function finalizeNflRedraftPlayoffChampion(input: {
   }
   const championRosterId = championshipMatchup.winnerRosterId
   const runnerUpRosterId = loserFor(championshipMatchup)
+  const thirdPlaceRosterId = thirdPlace?.winnerRosterId ?? null
+  const lowerBracketResultRosterId = lowerBracketOrder(
+    input.state.bracket.consolationRounds,
+    input.state.bracket.lowerBracket,
+    standingRanks(input.state.teams),
+  ).resultRosterId
   const finalStandings = finalStandingRows(input.state, championRosterId, runnerUpRosterId)
   const state = {
     ...input.state,
@@ -1502,6 +1874,8 @@ export function finalizeNflRedraftPlayoffChampion(input: {
       locked: true,
       championRosterId,
       runnerUpRosterId,
+      thirdPlaceRosterId,
+      lowerBracketResultRosterId,
       finalStandings,
     },
   } satisfies NflRedraftPlayoffRuntimeState
@@ -1510,13 +1884,18 @@ export function finalizeNflRedraftPlayoffChampion(input: {
       leagueId: input.state.leagueId,
       type: 'playoffs.champion.crowned',
       actorUserId: input.actorUserId,
-      payload: { seasonId: input.state.seasonId, championRosterId, runnerUpRosterId },
+      payload: { seasonId: input.state.seasonId, championRosterId, runnerUpRosterId, thirdPlaceRosterId },
     }),
     buildPlayoffRuntimeEvent({
       leagueId: input.state.leagueId,
       type: 'playoffs.final_standings.recorded',
       actorUserId: input.actorUserId,
-      payload: { seasonId: input.state.seasonId, finalStandings },
+      payload: {
+        seasonId: input.state.seasonId,
+        finalStandings,
+        lowerBracket: input.state.bracket.lowerBracket,
+        lowerBracketResultRosterId,
+      },
     }),
     buildPlayoffRuntimeEvent({
       leagueId: input.state.leagueId,

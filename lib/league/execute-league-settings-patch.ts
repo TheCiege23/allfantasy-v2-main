@@ -81,6 +81,7 @@ import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { readThirdPlaceGameEnabled, THIRD_PLACE_GAME_SETTINGS_KEY } from '@/lib/playoff-runtime/thirdPlaceGame'
 import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import {
   keepLineupModeFields,
@@ -547,6 +548,25 @@ export async function executeLeagueSettingsPatch(
       if (inPlayoffs) return jsonError('Championship length cannot change while the playoffs are being played.', 409)
     }
     championshipLengthToStore = n
+  }
+
+  /*
+   * Third-place game (lib/playoff-runtime/thirdPlaceGame.ts). A boolean only. Stored in
+   * `settings.playoff_structure`, which the bracket reads when it is generated — so it is REFUSED
+   * (409) once a bracket is being played: the game is in that bracket or it is not, and a save that
+   * changed nothing the league can see would read as a bug.
+   */
+  let thirdPlaceGameToStore: boolean | null = null
+  if (body.thirdPlaceGameEnabled !== undefined) {
+    if (typeof body.thirdPlaceGameEnabled !== 'boolean') return jsonError('thirdPlaceGameEnabled must be true or false', 400)
+    if (body.thirdPlaceGameEnabled !== readThirdPlaceGameEnabled(league.settings, league.sport)) {
+      const inPlayoffs = await prisma.redraftSeason.findFirst({
+        where: { leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) return jsonError('The third-place game cannot change while the playoffs are being played.', 409)
+    }
+    thirdPlaceGameToStore = body.thirdPlaceGameEnabled
   }
 
   /*
@@ -1040,6 +1060,24 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('championship_length')
+  }
+
+  if (thirdPlaceGameToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    const prevStructure =
+      prev.playoff_structure && typeof prev.playoff_structure === 'object' && !Array.isArray(prev.playoff_structure)
+        ? (prev.playoff_structure as Record<string, unknown>)
+        : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          playoff_structure: { ...prevStructure, [THIRD_PLACE_GAME_SETTINGS_KEY]: thirdPlaceGameToStore },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push(THIRD_PLACE_GAME_SETTINGS_KEY)
   }
 
   const derivedSyncKeys = new Set([

@@ -13,6 +13,7 @@ import { MAX_PLAYOFF_TEAMS, maxPlayoffTeamsThatFit } from '@/lib/playoff-runtime
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
+import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
 import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
@@ -50,11 +51,16 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
   const storedMedianInPlayoffs = readMedianGameInPlayoffs(ctx.league.settings)
   const [medianInPlayoffs, setMedianInPlayoffs] = useState(storedMedianInPlayoffs)
 
+  // On unless stored off (lib/playoff-runtime/thirdPlaceGame.ts); read when the bracket is generated.
+  const storedThirdPlace = readThirdPlaceGameEnabled(ctx.league.settings, ctx.league.sport)
+  const [thirdPlace, setThirdPlace] = useState(storedThirdPlace)
+
   useEffect(() => {
     setPlayoffTeams(ctx.league.playoffTeams ?? 6)
     setPlayoffStartWeek(chosenStartWeek)
   }, [ctx.league.playoffTeams, chosenStartWeek])
   useEffect(() => setMedianInPlayoffs(storedMedianInPlayoffs), [storedMedianInPlayoffs])
+  useEffect(() => setThirdPlace(storedThirdPlace), [storedThirdPlace])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
   const startWeekMax = Math.max(18, seasonWeeks, chosenStartWeek)
@@ -171,6 +177,28 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
                 const v = e.target.checked
                 setMedianInPlayoffs(v)
                 queuePatch({ medianGameInPlayoffs: v })
+              }}
+            />
+          </label>
+        ) : null}
+        {native ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="third-place-game-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.thirdPlace')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.thirdPlaceHelp')}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={thirdPlace}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setThirdPlace(v)
+                queuePatch({ thirdPlaceGameEnabled: v })
               }}
             />
           </label>

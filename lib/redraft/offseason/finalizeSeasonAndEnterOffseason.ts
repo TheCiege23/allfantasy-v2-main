@@ -198,6 +198,7 @@ function describe(code: string): string {
   if (code === 'NO_BRACKET') return 'No playoff bracket exists for this season'
   if (code === 'NO_WINNER') return 'Final matchup has no winner - run advance first'
   if (code === 'NO_FINAL_ROUND') return 'No playoff rounds found'
+  if (code === 'LOWER_BRACKET_INCOMPLETE') return 'The consolation bracket or toilet bowl is not yet complete'
   return 'Final playoff round is not yet complete'
 }
 
