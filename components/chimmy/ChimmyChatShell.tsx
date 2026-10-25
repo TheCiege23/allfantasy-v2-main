@@ -16,6 +16,7 @@ import {
 } from '@/lib/chimmy-chat'
 import type { AIChatContext } from '@/lib/chimmy-chat'
 import { loadChimmyConversation } from '@/lib/chimmy-conversation-service'
+import { useAnalysisUnlock } from './useAnalysisUnlock'
 import ChimmyMessageBubble, { type ChimmyMessageMeta } from './ChimmyMessageBubble'
 import ChimmyConversationThread from './ChimmyConversationThread'
 import ChimmyIntentChips from './ChimmyIntentChips'
@@ -275,6 +276,9 @@ export default function ChimmyChatShell({
   const recognitionRef = useRef<any>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const initialPromptApplied = useRef(false)
+  const analysisUnlock = useAnalysisUnlock((id, result) => {
+    setMessages(all => all.map(message => message.id === id ? { ...message, content: result.response, meta: result.meta } : message))
+  }, message => setInlineError(message))
   const sendingRef = useRef(false)
   const sendMessageRef = useRef<((overrideText?: string) => Promise<void>) | null>(null)
 
@@ -783,6 +787,7 @@ export default function ChimmyChatShell({
         setInlineError(null)
       }
 
+      analysisUnlock.register(assistantMessageId, result.unlock)
       const reply = result.response || CHIMMY_GENERIC_ERROR_MESSAGE
       const meta = result.meta
       const providerStatus: ChimmyMessageMeta['providerStatus'] = meta?.providerStatus
@@ -792,6 +797,7 @@ export default function ChimmyChatShell({
         role: 'assistant',
         content: reply,
         meta: {
+          analysisPreview: result.meta?.analysisPreview,
           mode: result.meta?.mode,
           answerContract: result.meta?.answerContract,
           confidencePct: result.meta?.confidencePct,
@@ -865,8 +871,9 @@ export default function ChimmyChatShell({
     const outgoingText = (normalizedOverride ?? input).trim()
     const fromSpeech = normalizedOverride !== undefined
     if (!outgoingText && !imageFile) return
-    if (sendingRef.current) return
+    if (sendingRef.current || analysisUnlock.busy) return
     sendingRef.current = true
+    analysisUnlock.register('')
 
     const priorThread = messages
     const outImage = fromSpeech ? null : imageFile
@@ -908,7 +915,7 @@ export default function ChimmyChatShell({
       setIsTyping(false)
       sendingRef.current = false
     }
-  }, [input, imageFile, imagePreview, messages, runSend])
+  }, [input, imageFile, imagePreview, messages, runSend, analysisUnlock.busy])
 
   sendMessageRef.current = sendMessage
 
@@ -917,7 +924,7 @@ export default function ChimmyChatShell({
     if (lastUserIdx === -1) return
     const lastUserMsg = messages[lastUserIdx]
     if (!lastUserMsg) return
-    if (sendingRef.current || retryLoading) return
+    if (sendingRef.current || retryLoading || analysisUnlock.busy) return
 
     sendingRef.current = true
     setRetryLoading(true)
@@ -1204,7 +1211,9 @@ export default function ChimmyChatShell({
 
         <ChimmyConversationThread
           messages={messages}
-          isTyping={isTyping}
+          isTyping={isTyping || analysisUnlock.busy}
+          analysisUnlockId={analysisUnlock.activeId}
+          onAnalysisUnlock={id => void analysisUnlock.unlock(id)}
           onFollowUpClick={handleFollowUp}
           onFeedbackSubmit={handleFeedbackSubmit}
           feedbackByMessageId={feedbackByMessageId}

@@ -67,7 +67,7 @@ describe('Chimmy drawer — plan allowance', () => {
     open(null)
     expect(
       screen.getByText(
-        "Chimmy answers may cost 10 tokens. Under 2 answers' worth, your balance tops back up to 2 once a day. Free lookups and typing cost nothing.",
+        "Free summaries and lookups cost nothing. Detailed answers use your daily allowance first; review the price before spending tokens.",
       ),
     ).toBeTruthy()
   })
@@ -93,4 +93,19 @@ describe('Chimmy drawer — plan allowance', () => {
     const request = vi.mocked(fetch).mock.calls.find(c => c[0] === '/api/chat/chimmy')
     const posted = (request?.[1] as RequestInit).body as FormData
     expect(posted.get('image')).toBe(file)
-  })})
+  })
+  it('keeps the free preview until explicit unlock and reuses its exact question and request', async () => {
+    const preview={version:1,summary:'Check availability before kickoff.',sections:[{title:'Reasoning',description:'Available evidence'}],access:'tokens',tokenCost:3,currentBalance:10,canUnlock:true,quote:'signed-quote',expiresAt:'2026-10-25T23:00:00Z'}
+    const posted:FormData[]=[]
+    vi.stubGlobal('fetch',vi.fn(async (url,init) => {
+      if(url!=='/api/chat/chimmy') return new Response('{}')
+      const form=(init as RequestInit).body as FormData; const copy=new FormData();for(const [key,value] of form.entries())copy.append(key,value);posted.push(copy)
+      return posted.length===1 ? new Response(JSON.stringify({code:'token_confirmation_required',analysisPreview:preview}),{status:409}) : new Response(JSON.stringify({response:'Full detailed answer.',meta:{tokenSpend:{tokenCost:3}}}))
+    }))
+    open(null);const box=screen.getByLabelText('Message');fireEvent.change(box,{target:{value:'Analyze my options'}});fireEvent.submit(box.closest('form')!)
+    const button=await screen.findByRole('button',{name:'Unlock extra detail · 3 tokens'});expect(screen.getByText(preview.summary)).toBeVisible();expect(posted).toHaveLength(1);expect(consent.confirmTokenSpend).not.toHaveBeenCalled()
+    fireEvent.click(button);expect(await screen.findByText('Full detailed answer.')).toBeVisible();expect(posted).toHaveLength(2)
+    expect(posted[1].get('requestId')).toBe(posted[0].get('requestId'));expect(posted[1].get('conversation')).toBe(posted[0].get('conversation'));expect(posted[1].get('message')).toBe('Analyze my options');expect(posted[1].get('tokenQuote')).toBe('signed-quote');expect(posted[1].get('confirmTokenSpend')).toBe('true')
+    expect(screen.queryByTestId('chimmy-analysis-preview')).toBeNull();expect(screen.getAllByText('Analyze my options')).toHaveLength(1)
+  })
+})

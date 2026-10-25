@@ -39,6 +39,7 @@ import { resolveLeagueIntelligenceGrounding } from '@/lib/intelligence/chimmy/le
 import { resolvePortfolioGrounding } from '@/lib/intelligence/chimmy/portfolioGrounding'
 import { z } from 'zod'
 
+import { readDeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { POST as postChatChimmy } from '@/app/api/chat/chimmy/route'
 import {
   runAgentPipeline,
@@ -100,6 +101,10 @@ const ChimmyJsonRequestSchema = z.object({
   message: z.string().trim().max(MAX_MESSAGE_CHARS).default(''),
   stream: z.boolean().optional(),
   confirmTokenSpend: z.boolean().optional(),
+  analysisPreviewVersion: z.literal('1').optional(),
+  requestId: z.string().trim().min(8).max(120).optional(),
+  tokenQuote: z.string().max(2048).optional(),
+  analysisUnlock: z.boolean().optional(),
   conversation: z.array(ConversationTurnSchema).max(MAX_CONVERSATION_TURNS).optional(),
   image: ChimmyImageSchema.optional(),
   userContext: z.object({
@@ -154,6 +159,11 @@ function resolveCapTier(plans: readonly string[]): 'free' | 'pro' | 'admin' {
 
 function buildCompatibilityPayload(body: unknown, status: number) {
   const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+  const analysisPreview = readDeepAnalysisPreview(record.analysisPreview)
+  if (analysisPreview) return {
+    code: 'token_confirmation_required', response: analysisPreview.summary, result: analysisPreview.summary,
+    analysisPreview, meta: { free: true, mode: 'fast_take', analysisPreview }, upgradeRequired: false,
+  }
   const upgradeRequired = isChimmyPremiumGateResponse({
     status,
     code: record.code,
@@ -400,6 +410,9 @@ function buildForwardedRequest(
 ) {
   const formData = new FormData()
   formData.append('message', payload.message)
+  for (const key of ['analysisPreviewVersion', 'requestId', 'tokenQuote', 'analysisUnlock'] as const) {
+    if (payload[key] != null) formData.append(key, String(payload[key]))
+  }
 
   if (typeof payload.confirmTokenSpend === 'boolean') {
     formData.append('confirmTokenSpend', String(payload.confirmTokenSpend))
@@ -527,6 +540,11 @@ export async function POST(req: NextRequest) {
       },
       { status: 400 }
     )
+  }
+
+  // Versioned clients share the canonical preview, authorization and durable receipt path.
+  if (parseResult.data.analysisPreviewVersion === '1') {
+    return toCompatibilityResponse(await postChatChimmy(buildForwardedRequest(req, parseResult.data) as any))
   }
 
   let cookieStore: Awaited<ReturnType<typeof cookies>> | null = null

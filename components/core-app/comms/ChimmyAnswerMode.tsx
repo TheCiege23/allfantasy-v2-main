@@ -11,15 +11,15 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
  * three (commissioner, dynasty, DFS) only nudge prompt wording or agent choice, and a toggle that
  * visibly does nothing is worse than no toggle.
  *
- * ⚠ SAME PRICE EITHER WAY. Both modes spend the one `ai_chimmy_chat_message` rule, so the copy never
- * implies Deep costs more.
+ * Summary is free and preserves included detailed answers. Deep uses the daily allowance first,
+ * then the server quotes the central token rule before the user explicitly unlocks it.
  *
  * The choice is kept per user in sessionStorage — the same lifetime as the drawer's conversations,
  * and never shared across accounts on one browser.
  */
 
 export const CORE_ANSWER_MODES = [
-  { id: 'fast_take', label: 'Fast', hint: 'The short verdict.' },
+  { id: 'fast_take', label: 'Summary', hint: 'A useful free summary. Keep your included detailed answers.' },
   { id: 'deep_analysis', label: 'Deep', hint: 'The full breakdown, with the reasoning.' },
 ] as const
 
@@ -100,7 +100,7 @@ export function ChimmyAnswerModeToggle({
         ))}
         {children}
       </div>
-      <p className="af-cm-scope-note">{current.hint} Same price either way.</p>
+      <p className="af-cm-scope-note">{current.hint} Included answers come first; token prices are shown before unlocking extra detail.</p>
     </div>
   )
 }
@@ -113,5 +113,5 @@ export function answeredMode(meta: { mode?: unknown } | undefined | null): CoreA
 
 export function answeredModeLabel(mode: CoreAnswerMode | null | undefined): string | null {
   if (!mode) return null
-  return mode === 'deep_analysis' ? 'Deep answer' : 'Fast answer'
+  return mode === 'deep_analysis' ? 'Deep answer' : 'Free summary'
 }

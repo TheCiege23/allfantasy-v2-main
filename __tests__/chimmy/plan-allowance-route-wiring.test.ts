@@ -22,7 +22,8 @@ const at = (re: RegExp) => {
 
 describe('the AF Pro allowance in /api/chat/chimmy', () => {
   it('skips the token preflight when the plan covers the turn', () => {
-    expect(ROUTE).toMatch(/const planCovers = Boolean\(planState && planState\.remaining > 0\)[\s\S]{0,400}?\n\s*if \(!planCovers\) \{\s*\n\s*const blocked = await runTokenGate\(exhaustedPlanMeta\)/)
+    expect(ROUTE).toContain('if (!planCovers || freeSummaryRequested) {')
+    expect(ROUTE).toContain('runTokenGate(freeSummaryRequested && planState ? planAllowanceMeta(planState, false) : exhaustedPlanMeta)')
   })
 
   it('takes the allowance only AFTER the free undecided-trade return', () => {

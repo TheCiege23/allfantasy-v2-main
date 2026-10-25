@@ -1,3 +1,4 @@
+import { readDeepAnalysisPreview } from "@/lib/chimmy/deepAnalysisPreview"
 import type {
   AIChatContext,
   ChimmyAnswerContract,
@@ -49,7 +50,9 @@ type SendChimmyMessageInput = {
   onChunk?: (text: string) => void
 }
 
-type SendChimmyMessageResult = {
+export type SendChimmyMessageResult = {
+  /** Held in memory only; reuses the exact previewed question, context and receipt. */
+  unlock?: () => Promise<SendChimmyMessageResult>
   ok: boolean
   response: string
   meta?: ChimmyMessageMeta
@@ -168,6 +171,7 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
       : undefined
 
   return {
+    analysisPreview: readDeepAnalysisPreview(meta.analysisPreview) ?? undefined,
     mode: modeRaw ? normalizeChimmyAssistantMode(modeRaw) : undefined,
     answerContract,
     confidencePct: typeof meta.confidencePct === "number" ? meta.confidencePct : undefined,
@@ -237,7 +241,7 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
  * Internal only. Set when we are re-sending after collecting consent the server asked for,
  * so a second 409 cannot start an infinite prompt/retry loop.
  */
-type SendChimmyMessageRetryState = { consentAlreadyRequested?: boolean }
+type SendChimmyMessageRetryState = { consentAlreadyRequested?: boolean; payload?: Record<string, unknown> }
 
 export async function sendChimmyMessage(
   input: SendChimmyMessageInput,
@@ -251,7 +255,7 @@ export async function sendChimmyMessage(
     input.context?.assistantMode ?? input.context?.strategyMode ?? DEFAULT_CHIMMY_ASSISTANT_MODE,
   )
   let fileForUpload = input.imageFile
-  if (fileForUpload && fileForUpload.size > 0 && typeof window !== "undefined") {
+  if (!retryState.payload && fileForUpload && fileForUpload.size > 0 && typeof window !== "undefined") {
     try {
       fileForUpload = await prepareImageForChimmyUpload(fileForUpload)
     } catch {
@@ -259,8 +263,10 @@ export async function sendChimmyMessage(
     }
   }
   const imageDataUrl =
-    fileForUpload && fileForUpload.size > 0 ? await fileToDataUrl(fileForUpload) : undefined
-  const payload = {
+    !retryState.payload && fileForUpload && fileForUpload.size > 0 ? await fileToDataUrl(fileForUpload) : undefined
+  const payload = retryState.payload ?? {
+    analysisPreviewVersion: "1",
+    requestId: globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
     message: input.message,
     stream: typeof input.onChunk === "function",
     /* The SERVER's field keeps its name and meaning: "the user consented." */
@@ -296,12 +302,18 @@ export async function sendChimmyMessage(
     },
   }
 
-  const res = await fetch("/api/chimmy", {
+  let res = await fetch("/api/chimmy", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-chimmy-request-id": String(payload.requestId) },
     credentials: "include",
     body: JSON.stringify(payload),
   })
+  const started = Date.now()
+  while (res.status === 202 && Date.now() - started < 5 * 60_000) {
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    res = await fetch(`/api/chat/chimmy?requestId=${encodeURIComponent(String(payload.requestId))}`, { cache: 'no-store', credentials: 'include' })
+  }
+  if (res.status === 202) return { ok: false, response: 'Your answer is still processing. Retry to check the same request.', error: 'Your answer is still processing.' }
   const contentType = res.headers.get("content-type") || ""
   let data: any = {}
 
@@ -389,6 +401,15 @@ export async function sendChimmyMessage(
     data = await res.json().catch(() => ({}))
   }
 
+  const analysisPreview = readDeepAnalysisPreview(data?.analysisPreview)
+  if (res.status === 409 && analysisPreview) return {
+    ok: true, response: analysisPreview.summary,
+    meta: { mode: 'fast_take', analysisPreview },
+    unlock: () => sendChimmyMessage(input, { consentAlreadyRequested: true, payload: {
+      ...payload, confirmTokenSpend: true, tokenQuote: analysisPreview.quote, analysisUnlock: true,
+    } }),
+  }
+
   const response =
     typeof data?.result === "string"
       ? data.result
@@ -430,7 +451,7 @@ export async function sendChimmyMessage(
       } else {
         return await sendChimmyMessage(
           { ...input, promptForTokenSpend: false, tokenSpendConfirmed: true },
-          { consentAlreadyRequested: true },
+          { consentAlreadyRequested: true, payload: { ...payload, confirmTokenSpend: true } },
         )
       }
     } catch (error) {
