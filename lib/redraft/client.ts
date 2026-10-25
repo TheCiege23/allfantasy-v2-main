@@ -133,7 +133,10 @@ export type RedraftTradeProposal = {
   vetoMode: string
   vetoThreshold: number | null
   reason: string | null
+  /** Before acceptance: the offer's deadline. After it: the end of the review window. */
   expiresAt: string | null
+  /** Set when the receiver accepted; the trade is then in review (lib/redraft/tradeReviewWindow.ts). */
+  acceptedAt?: string | null
   createdAt: string
   assets: Array<{
     id: string

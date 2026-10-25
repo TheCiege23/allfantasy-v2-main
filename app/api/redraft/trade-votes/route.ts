@@ -27,6 +27,7 @@ import {
   upsertRedraftTradeDecision as upsertDecision,
   type ProposalWithAssets,
 } from '@/lib/redraft/finalizeRedraftTrade'
+import { reviewWindowEndsAt, reviewWindowEnded, tradeReviewWindowHours } from '@/lib/redraft/tradeReviewWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,7 +186,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Proposal is not pending', proposal }, { status: 409 })
   }
 
-  if (proposal.expiresAt && proposal.expiresAt.getTime() < Date.now()) {
+  /*
+   * AN ACCEPTED TRADE PAST ITS REVIEW WINDOW IS GOING THROUGH (lib/redraft/tradeReviewWindow.ts).
+   *
+   * 🛑 THIS BRANCH USED TO EXPIRE IT. Below, any pending proposal past `expiresAt` is expired on the
+   * next click — which, for a trade both managers had agreed to, meant a late veto vote or even an idle
+   * click killed it. The window closing with no veto is the decision; the hourly sweep executes it. Until
+   * then the commissioner may still approve (it settles now) — nothing else may change the outcome.
+   */
+  if (reviewWindowEnded(proposal, Date.now())) {
+    if (action !== 'commissioner_approve') {
+      return NextResponse.json(
+        { error: 'The review window has ended with no veto. This trade is going through.', code: 'REVIEW_WINDOW_ENDED' },
+        { status: 409 },
+      )
+    }
+  } else if (proposal.expiresAt && proposal.expiresAt.getTime() < Date.now()) {
     const expired = await prisma.redraftTradeProposal.update({
       where: { id: proposal.id },
       data: { status: 'expired' },
@@ -324,9 +340,15 @@ export async function POST(req: NextRequest) {
        * Conditional on BOTH the status and `acceptedAt` being unset, so two simultaneous accepts
        * cannot both record one — the same reason the settlement claim is conditional.
        */
+      /*
+       * Acceptance opens the review window: `expiresAt` stops being the offer's deadline and becomes the
+       * review's end. When it passes with no veto the sweep executes the trade (lib/redraft/tradeReviewWindowSweep.ts).
+       */
+      const acceptedAt = new Date()
+      const windowLeague = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { tradeReviewHours: true } })
       const claimedAccept = await prisma.redraftTradeProposal.updateMany({
         where: { id: proposal.id, status: 'pending', acceptedAt: null },
-        data: { acceptedAt: new Date() },
+        data: { acceptedAt, expiresAt: reviewWindowEndsAt(acceptedAt, tradeReviewWindowHours(windowLeague?.tradeReviewHours)) },
       })
       if (claimedAccept.count === 0) {
         return NextResponse.json({ error: 'This trade is no longer awaiting your acceptance.' }, { status: 409 })
@@ -358,8 +380,8 @@ export async function POST(req: NextRequest) {
         actorUserId: userId,
         detail:
           proposal.vetoMode === 'league_vote'
-            ? 'It goes to a league vote before it processes.'
-            : 'It goes to commissioner review before it processes.',
+            ? 'It goes to a league vote, and goes through when the review window ends unless the league vetoes it.'
+            : 'It goes to commissioner review, and goes through when the review window ends unless the commissioner vetoes it.',
       })
       return NextResponse.json({
         proposal: awaitingReview,
