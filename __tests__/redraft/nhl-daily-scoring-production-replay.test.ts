@@ -108,7 +108,8 @@ const IDENTITIES = [
   { id: '1c0124d6-695c-4dbc-b882-a6442acff757', rollingInsightsId: '3142', sleeperId: null, normalizedName: 'adam edstrom' },
   { id: 'a6b13833-fbdb-4375-b540-2967aa4b510a', rollingInsightsId: '298', sleeperId: null, normalizedName: 'aaron ekblad' },
   { id: '5e29404b-ccbb-4c21-9ef0-9e231c8395f6', rollingInsightsId: '1789', sleeperId: null, normalizedName: 'akira schmid' },
-  { id: 'pim-ness', rollingInsightsId: '854', sleeperId: null, normalizedName: 'aaron ness' },
+  // Production: status INACT, no game all season (RI id 854).
+  { id: 'pim-ness', rollingInsightsId: '854', sleeperId: null, normalizedName: 'aaron ness', status: 'INACT', currentTeam: 'WASHINGTON CAPITALS' },
 ]
 
 const sk = (s: Record<string, number>) => ({
@@ -161,6 +162,7 @@ function arrange(days: readonly string[], dailyLineups: Array<{ rosterId: string
   db.playerIdentityMap.findMany.mockImplementation(async ({ where }: { where: Record<string, { in: string[] }> }) => {
     if (where.rollingInsightsId) return IDENTITIES.filter((r) => where.rollingInsightsId.in.includes(r.rollingInsightsId))
     if (where.normalizedName) return IDENTITIES.filter((r) => where.normalizedName.in.includes(r.normalizedName))
+    if (where.id) return IDENTITIES.filter((r) => where.id.in.includes(r.id)).map((r) => ({ status: 'ACT', currentTeam: null, ...r }))
     return []
   })
   db.playerGameStat.findMany.mockImplementation(async ({ where }: { where: { playerId: { in: string[] }; gameDate: { gte: Date; lt: Date } } }) =>
@@ -208,8 +210,11 @@ describe('NHL daily scoring, replayed on production week 3', () => {
       'tsdb_34160301@2026-10-13', 'tsdb_34160301@2026-10-17', 'tsdb_34176537@2026-10-13', 'tsdb_34176537@2026-10-17',
       'tsdb_34202901@2026-10-13', 'tsdb_34220053@2026-10-13', 'tsdb_34220053@2026-10-17',
     ])
+    // The refused copy has no identity, so no evidence: still no row.
     expect(weeklyStore.has('tsdb_34185172')).toBe(false)
-    expect(weeklyStore.has('854')).toBe(false) // inactive all season: no row, and none invented
+    // Inactive all season: a written 0 with no stat line (dailySportParticipation.ts), never a day row.
+    expect(weeklyStore.get('854')).toMatchObject({ stats: {}, fantasyPts: 0 })
+    expect(summary.dailyZeroScored).toEqual([{ playerId: '854', reason: 'inactive' }])
   })
 
   for (const [d, byRoster] of Object.entries(HAND)) {
@@ -231,8 +236,9 @@ describe('NHL daily scoring, replayed on production week 3', () => {
     expect(ot4.points).toBe(round(5.7 + 0 + 9.4 + 1.1))
     // Formenton (bench): 13 Oct HIT1 0.3, BLK1 0.5, SOG1 0.5; 17 Oct HIT3 0.9, BLK1 0.5, SOG1 0.5.
     expect(cj.benchPoints).toBe(round(1.3 + 1.9))
-    // Ness started and never played: missing, not a fabricated zero.
-    expect(cj.missingPlayerIds).toEqual(['854'])
+    // Ness started and never played, and his identity is INACT: a real 0, so nobody is missing.
+    expect(cj.missingPlayerIds).toEqual([])
+    expect(cj.scoredStarterCount).toBe(3)
   })
 
   it('a daily bench move takes only that day off the score', async () => {
