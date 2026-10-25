@@ -22,7 +22,8 @@ const at = (re: RegExp) => {
 
 describe('the AF Pro allowance in /api/chat/chimmy', () => {
   it('skips the token preflight when the plan covers the turn', () => {
-    expect(ROUTE).toMatch(/const planCovers = Boolean\(planState && planState\.remaining > 0\)[\s\S]{0,400}?\n\s*if \(!planCovers\) \{\s*\n\s*const blocked = await runTokenGate\(exhaustedPlanMeta\)/)
+    expect(ROUTE).toContain('if (!planCovers || freeSummaryRequested) {')
+    expect(ROUTE).toContain('runTokenGate(freeSummaryRequested && planState ? planAllowanceMeta(planState, false) : exhaustedPlanMeta)')
   })
 
   it('takes the allowance only AFTER the free undecided-trade return', () => {
@@ -33,7 +34,12 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('never charges tokens for a turn the plan included', () => {
-    expect(ROUTE).toMatch(/^\s*if \(!planIncluded && !tokenPreviewFailed\) \{\s*\n\s*try \{[\s\S]{0,400}?const ledger = await spendService\.spendTokensForRule\(/m)
+    expect(ROUTE).toMatch(/^\s*if \(!planIncluded\) \{\s*\n\s*try \{[\s\S]{0,400}?const ledger = await spendService\.spendTokensForRule\(/m)
+  })
+
+  it('stops before generation if a token price cannot be checked', () => {
+    expect(ROUTE).toMatch(/code: 'token_preview_unavailable' \},\s*\n\s*\{ status: 503 \}/)
+    expect(ROUTE).not.toContain('tokenPreviewFailed')
   })
 
   it('falls back to the token preflight when the last included answer went elsewhere', () => {
@@ -46,11 +52,13 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
     expect(ROUTE).toMatch(/\} catch \(error\) \{\s*\n\s*if \(planIncluded && userId\) await releaseChimmyPlanAllowance\(\{ userId, state: planIncluded \}\)/)
   })
 
-  it('covers the live-search answer too, taken only once a sourced answer exists', () => {
+  it('reserves an included answer before live search and releases it if no answer arrives', () => {
     const searched = at(/^\s*const searched = await answerSportsQuestionFromSearch\(/m)
     const take = at(/^\s*\? await takeChimmyPlanAllowance\(\{ userId, state: searchPlan, requestReceipt \}\)/m)
     expect(searched).toBeGreaterThan(-1)
-    expect(take).toBeGreaterThan(searched)
+    expect(take).toBeGreaterThan(-1)
+    expect(take).toBeLessThan(searched)
+    expect(ROUTE).toContain('if (searchIncluded) await releaseChimmyPlanAllowance({ userId, state: searchIncluded })')
     expect(ROUTE).toMatch(/const ledger = searchIncluded \|\| !mayCharge\s*\n\s*\? null/)
   })
 
@@ -73,5 +81,11 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   it('reads the plan lazily', () => {
     expect(ROUTE).toMatch(/let planAllowanceRead: Promise<ChimmyPlanAllowanceState \| null> \| null = null/)
     expect(ROUTE).toMatch(/\(planAllowanceRead \?\?= userId/)
+  })
+
+  it('uses the answer allowance without topping up the purchased token wallet', () => {
+    expect(ROUTE).toContain('readChimmyAnswerAllowance({ userId, email: userEmail })')
+    expect(ROUTE).not.toContain('grantDailyFreeTokens')
+    expect(ROUTE).toContain("code: 'chimmy_allowance_unavailable'")
   })
 })

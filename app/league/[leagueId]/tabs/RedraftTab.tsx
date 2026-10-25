@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRedraftStream } from '@/lib/hooks/useRedraftStream'
 import { MatchupView } from './redraft/MatchupView'
+import { extraMatchupForRoster } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { RosterManager } from './redraft/RosterManager'
 import { ScheduleView } from './redraft/ScheduleView'
 import { StandingsView } from './redraft/StandingsView'
@@ -148,6 +149,17 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     )
   }, [matchups, selectedRosterId])
 
+  // An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts).
+  const extraMatchup = useMemo(() => {
+    if (!selectedRosterId) return null
+    const names = new Map<string, string>()
+    for (const m of matchups) {
+      names.set(m.homeRosterId, m.homeRoster?.teamName?.trim() || m.homeRoster?.ownerName || '')
+      if (m.awayRosterId && m.awayRoster) names.set(m.awayRosterId, m.awayRoster.teamName?.trim() || m.awayRoster.ownerName || '')
+    }
+    return extraMatchupForRoster(matchups, currentWeek, selectedRosterId, (id) => names.get(id))
+  }, [matchups, currentWeek, selectedRosterId])
+
   const visibleLiveMatchup = useMemo(() => {
     const liveMatchups = liveScoring?.matchups ?? []
     if (!selectedRosterId) return liveMatchups[0] ?? null
@@ -214,6 +226,7 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
             liveMatchup={visibleLiveMatchup}
             selectedRosterId={selectedRosterId}
             sport={sport}
+            extraMatchup={extraMatchup}
           />
 
           <MatchupPremiumShells

@@ -12,6 +12,7 @@ import { GlassCard, SectionHeader } from '@/components/create-league-v2/primitiv
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { localizeDraftTypeOption } from '@/lib/i18n/createLeagueWire'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
+import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
 
 const TRADE_REVIEW_LABEL: Record<TradeReviewMode, string> = {
   none: 'No review',
@@ -36,6 +37,11 @@ function monetizationLabel(state: CreateLeagueV2State): string {
   const leagueType = getEffectiveLeagueType(state)
   if (leagueType && isDynastyConcept(leagueType)) {
     return state.dynasty.monetization === 'paid' ? 'Paid intent' : 'Free'
+  }
+  if (leagueType === 'survivor') {
+    if (state.survivorEntryFeeMode !== 'paid') return 'Free'
+    const cents = parseSurvivorDuesUsd(state.survivorDuesUsd ?? '')
+    return typeof cents === 'number' ? `Paid · $${(cents / 100).toFixed(2)} dues (collected off the app)` : 'Paid · dues collected off the app'
   }
   return '—'
 }

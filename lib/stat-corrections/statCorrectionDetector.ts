@@ -28,10 +28,18 @@ import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import { buildLeagueStatScorer, isScoringStarterSlot, leagueIsBestBall } from '@/lib/redraft/scoringEngine'
 import { isTeamDefenseRow } from '@/lib/scoring-runtime/nflStatNormalization'
 import type { NflWeekStatsFetcher } from '@/lib/redraft/playerWeeklyScoreService'
+import { readScoreAdjustments, statCorrectionApplied } from '@/lib/score-adjustments/scoreAdjustments'
 import { reviewStatCorrections, type StatCorrectionReview } from './statCorrectionReview'
+import {
+  EXTENDED_CORRECTION_WEEKS,
+  EXTENDED_CORRECTION_WINDOW_DAYS,
+  FREE_CORRECTION_WINDOW_DAYS,
+  readExtendedCorrections,
+} from './extendedCorrections'
+import { applyStatCorrections, ownerHasAfCommissionerPlan } from './applyStatCorrections'
 
-/** How long after a week's seal it is still re-checked. Corrections land within the week. */
-export const STAT_CORRECTION_WINDOW_MS = 6 * 24 * 60 * 60 * 1000
+/** How long after a week's seal it is still re-checked (free leagues). Corrections land within the week. */
+export const STAT_CORRECTION_WINDOW_MS = FREE_CORRECTION_WINDOW_DAYS * 24 * 60 * 60 * 1000
 /** The cron runs every five minutes; the provider is asked about a week at most this often. */
 export const STAT_CORRECTION_RECHECK_MS = 60 * 60 * 1000
 /** The stored review outlives the window so the card can still show it. */
@@ -95,7 +103,12 @@ export function readStoredReview(data: unknown): StoredStatCorrectionReview | nu
 
 export async function checkStatCorrectionsForSeason(
   seasonId: string,
-  deps: { now?: number; fetchStats?: NflWeekStatsFetcher } = {},
+  deps: {
+    now?: number
+    fetchStats?: NflWeekStatsFetcher
+    ownerHasPlan?: (userId: string | null) => Promise<boolean>
+    applyCorrections?: typeof applyStatCorrections
+  } = {},
 ): Promise<StatCorrectionCheckOutcome> {
   const now = deps.now ?? Date.now()
   const season = await prisma.redraftSeason.findUnique({
@@ -105,7 +118,8 @@ export async function checkStatCorrectionsForSeason(
       leagueId: true,
       season: true,
       sport: true,
-      league: { select: { platform: true, sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true } },
+      status: true,
+      league: { select: { platform: true, sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true, userId: true } },
     },
   })
   const league = season?.league
@@ -114,21 +128,25 @@ export async function checkStatCorrectionsForSeason(
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_supported'
   if (leagueIsBestBall(league) || gamesCountActive(league.settings, 'NFL')) return 'not_supported'
 
-  // The latest week whose matchups are all final.
-  const latest = await prisma.redraftMatchup.findFirst({
-    where: { seasonId, status: 'final' },
-    orderBy: { week: 'desc' },
-    select: { week: true },
-  })
-  if (!latest) return 'no_sealed_week'
-  const week = latest.week
+  // Extended scoring corrections (./extendedCorrections.ts): AF Commissioner leagues that switched it
+  // on re-check the last two finished weeks for 14 days and APPLY what they find. Everyone else: the
+  // latest finished week, 6 days, shown to the commissioner only — exactly as before.
+  const extended = readExtendedCorrections(league.settings) && (await (deps.ownerHasPlan ?? ownerHasAfCommissionerPlan)(league.userId))
+  const windowMs = (extended ? EXTENDED_CORRECTION_WINDOW_DAYS : FREE_CORRECTION_WINDOW_DAYS) * 24 * 60 * 60 * 1000
+
+  const weeks = extended
+    ? (await prisma.redraftMatchup.findMany({ where: { seasonId, status: 'final' }, distinct: ['week'], orderBy: { week: 'desc' }, take: EXTENDED_CORRECTION_WEEKS, select: { week: true } })).map((r) => r.week)
+    : [(await prisma.redraftMatchup.findFirst({ where: { seasonId, status: 'final' }, orderBy: { week: 'desc' }, select: { week: true } }))?.week].filter((w): w is number => typeof w === 'number')
+  if (weeks.length === 0) return 'no_sealed_week'
+
+  const checkWeek = async (week: number): Promise<StatCorrectionCheckOutcome> => {
   const rows = await prisma.redraftMatchup.findMany({
     where: { seasonId, week },
     select: { id: true, status: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, lineupSnapshots: true },
   })
   if (!isSealedWeek(rows)) return 'no_sealed_week'
   const sealedAt = Math.max(0, ...rows.map((r) => scoredAt(r.lineupSnapshots) ?? 0))
-  if (!sealedAt || now - sealedAt > STAT_CORRECTION_WINDOW_MS) return 'outside_window'
+  if (!sealedAt || now - sealedAt > windowMs) return 'outside_window'
 
   // Checked after the cheap gates: these two each read the league again.
   const weekSettings = settingsForScoringWeek(league.settings, season.season, week)
@@ -139,9 +157,22 @@ export async function checkStatCorrectionsForSeason(
   const previous = readStoredReview((await prisma.sportsDataCache.findUnique({ where: { cacheKey: key } }))?.data)
   if (previous && now - Date.parse(previous.checkedAt) < STAT_CORRECTION_RECHECK_MS) return 'throttled'
 
+  /*
+   * ⚠ MEASURED FROM THE SEALED SCORE, NOT THE STORED ONE. Applying a correction (the commissioner's
+   * Apply, via applyStatCorrectionAdjustment) moves the stored score by the correction. Comparing the
+   * next re-check against that would add the same correction twice. Taking the applied part back out
+   * keeps "before" the sealed result and "after" the fully corrected one on every check.
+   */
+  const adjustments = readScoreAdjustments(league.settings)
   const matchups = rows.flatMap((r) =>
     r.awayRosterId
-      ? [{ matchupId: r.id, homeRosterId: r.homeRosterId, awayRosterId: r.awayRosterId, homeScore: r.homeScore, awayScore: r.awayScore }]
+      ? [{
+          matchupId: r.id,
+          homeRosterId: r.homeRosterId,
+          awayRosterId: r.awayRosterId,
+          homeScore: r.homeScore - statCorrectionApplied(adjustments, r.id, r.homeRosterId),
+          awayScore: r.awayScore - statCorrectionApplied(adjustments, r.id, r.awayRosterId),
+        }]
       : [],
   )
   const rosterIds = [...new Set(matchups.flatMap((m) => [m.homeRosterId, m.awayRosterId]))]
@@ -211,6 +242,9 @@ export async function checkStatCorrectionsForSeason(
   })
   await write(review)
   if (review.changes.length === 0) return 'no_change'
+  // Applied on every check that sees changes, not only the first: it adds only what is still owed,
+  // so a repeat is a no-op and a second correction to the same week adds only itself.
+  if (extended) await (deps.applyCorrections ?? applyStatCorrections)({ leagueId: season.leagueId, seasonStatus: season.status, league, week, review })
   if (previous?.review.fingerprint === review.fingerprint) return 'changes_seen'
 
   await prisma.leagueAuditLog.create({
@@ -231,4 +265,13 @@ export async function checkStatCorrectionsForSeason(
     },
   })
   return 'changes_logged'
+  }
+
+  // The outcome reported is the latest week's; an older week is checked for its late corrections only.
+  let latestOutcome: StatCorrectionCheckOutcome | null = null
+  for (const week of weeks) {
+    const outcome = await checkWeek(week)
+    latestOutcome ??= outcome
+  }
+  return latestOutcome ?? 'no_sealed_week'
 }

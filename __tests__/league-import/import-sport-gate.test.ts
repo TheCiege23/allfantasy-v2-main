@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * any sport the provider returned. This file pins, in the real pipeline:
  *   - every provider's listed sports still pass;
  *   - for Yahoo, a sport it is not listed for, or no sport at all, is refused with UNSUPPORTED_SPORT;
- *   - for the live providers, behaviour is unchanged: an unlisted sport is NOT refused (refusing it,
- *     e.g. a non-NFL Sleeper league, is an owner decision not yet taken).
+ *   - for the live providers, a sport they are not listed for but AllFantasy runs is NOT refused, while
+ *     a sport AllFantasy does not run, or no sport at all, is (owner, 2026-10-25).
  *
  * The provider fetch services and the adapter normalization are stubbed so the test isolates the
  * gate itself; each stub returns `league.sport` exactly as that provider's adapter spells it
@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * `normalizeToSupportedSport`, Sleeper and Yahoo uppercase the provider's code). No network.
  */
 
-const sportBox = vi.hoisted(() => ({ sport: 'NFL' as string | null }))
+const sportBox = vi.hoisted(() => ({ sport: 'NFL' as string | null, sleeperRaw: undefined as string | null | undefined }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -34,7 +34,10 @@ vi.mock('@/lib/league-import/ImportNormalizationPipeline', () => ({
 
 vi.mock('@/lib/league-import/sleeper/SleeperLeagueFetchService', async (orig) => ({
   ...(await orig<object>()),
-  fetchSleeperLeagueForImport: vi.fn(async () => ({ league: { league_id: 'sl-1' } })),
+  fetchSleeperLeagueForImport: vi.fn(async () => {
+    const raw = sportBox.sleeperRaw === undefined ? sportBox.sport?.toLowerCase() : sportBox.sleeperRaw
+    return { league: { league_id: 'sl-1', ...(raw ? { sport: raw } : {}) } }
+  }),
 }))
 vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', async (orig) => ({
   ...(await orig<object>()),
@@ -84,6 +87,7 @@ async function runFor(provider: ImportProvider, sport: string | null, extra: { r
 
 beforeEach(() => {
   sportBox.sport = 'NFL'
+  sportBox.sleeperRaw = undefined
 })
 
 describe('import sport gate — every provider', () => {
@@ -124,16 +128,43 @@ describe('import sport gate — every provider', () => {
         })
       } else {
         for (const sport of unlisted) {
-          it(`live importer unchanged: an unlisted sport (${sport}) is not refused`, async () => {
+          it(`live importer: an unlisted sport AllFantasy runs (${sport}) is not refused`, async () => {
             const out = await runFor(provider, sport)
             expect(out.success).toBe(true)
           })
         }
+
+        it('refuses a sport AllFantasy does not run', async () => {
+          const out = await runFor(provider, 'LOL')
+          expect(out.success).toBe(false)
+          if (out.success) return
+          expect(out.code).toBe('UNSUPPORTED_SPORT')
+          expect(out.error).toContain('is LOL')
+        })
+
+        it('refuses a league with no sport rather than defaulting it', async () => {
+          const out = await runFor(provider, null)
+          expect(out.success).toBe(false)
+          if (out.success) return
+          expect(out.error).toMatch(/did not say which sport/)
+        })
       }
     })
   }
 
+  it('Sleeper: a league Sleeper sent without a sport is refused even though the mapper says NFL', async () => {
+    sportBox.sleeperRaw = null
+    const out = await runFor('sleeper', 'NFL')
+    expect(out.success).toBe(false)
+    if (out.success) return
+    expect(out.code).toBe('UNSUPPORTED_SPORT')
+    expect(out.error).toMatch(/Sleeper did not say which sport/)
+  })
+
   it('a refresh of an already-imported league is not gated (it must keep syncing)', async () => {
+    const lol = await runFor('sleeper', 'LOL', { refreshOfImportedLeague: true })
+    expect(lol.success).toBe(true)
+
     const out = await runFor('sleeper', 'NBA', { refreshOfImportedLeague: true })
     expect(out.success).toBe(true)
   })

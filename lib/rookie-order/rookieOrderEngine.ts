@@ -20,6 +20,15 @@
  * in which case the worse finish picks first. Byes need no special case: a bye team simply has no
  * game in round 1.
  *
+ * ## A lower bracket that plays for the pick
+ *
+ * With `consolation_plays_for = 'pick'` (`lowerBracket.playsForPick`), the non-playoff teams are
+ * seated by what the lower bracket decided instead of by `nonPlayoff`: a consolation bracket's winner
+ * picks first and the rest follow by consolation finish; a toilet bowl's final loser (last place)
+ * picks first and the rest follow worst finish first. The playoff teams are unchanged. Until the
+ * bracket is decided those slots are provisional and the order is never `final`, so automation does
+ * not save an order the lower bracket can still change. `cash` / `none` change nothing.
+ *
  * ## Max PF
  *
  * Max PF must be TRUE Max PF (the optimal legal lineup each week), never points-for. See
@@ -77,11 +86,21 @@ export type RookieOrderPlayoffGame = {
   winner: string | null
 }
 
+export type RookieOrderLowerBracket = {
+  mode: 'consolation' | 'toilet_bowl'
+  /** `consolation_plays_for === 'pick'`. Anything else leaves the order alone. */
+  playsForPick: boolean
+  /** Non-playoff teams, best finish first, once the lower bracket is decided; null while it is played. */
+  finishOrder: readonly string[] | null
+}
+
 export type RookieOrderInput = {
   teams: readonly RookieOrderTeam[]
   regularSeasonComplete: boolean
   playoffGames: readonly RookieOrderPlayoffGame[]
   config?: Partial<RookieOrderConfig>
+  /** The season's consolation bracket or toilet bowl; absent when it had none. */
+  lowerBracket?: RookieOrderLowerBracket | null
 }
 
 export type RookieOrderSlot = {
@@ -232,15 +251,20 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
   const nonPlayoff = teams.filter((t) => t.playoffSeed == null).sort(nonPlayoffComparator(config.nonPlayoff, ctx))
   const playoff = teams.filter((t) => t.playoffSeed != null)
 
-  const slots: RookieOrderSlot[] = nonPlayoff.map((t, i) => ({
-    slot: i + 1,
-    teamId: t.teamId,
-    name: t.name,
-    group: 'non_playoff',
-    status: 'locked',
-    finish: null,
-    reason: nonPlayoffReason(config.nonPlayoff, t, i + 1, nonPlayoff.length, ctx),
-  }))
+  const lower = input.lowerBracket?.playsForPick && nonPlayoff.length > 0 ? input.lowerBracket : null
+  const slots: RookieOrderSlot[] = lower
+    ? lowerBracketSlots(nonPlayoff, lower)
+    : nonPlayoff.map((t, i) => ({
+        slot: i + 1,
+        teamId: t.teamId,
+        name: t.name,
+        group: 'non_playoff',
+        status: 'locked',
+        finish: null,
+        reason: nonPlayoffReason(config.nonPlayoff, t, i + 1, nonPlayoff.length, ctx),
+      }))
+  // The order is not final while a lower bracket that plays for the pick is undecided.
+  const lowerPending = Boolean(lower && !lower.finishOrder)
   const push = (t: RookieOrderTeam, status: RookieOrderSlot['status'], finish: string | null, reason: string) =>
     slots.push({ slot: slots.length + 1, teamId: t.teamId, name: t.name, group: 'playoff', status, finish, reason })
 
@@ -251,7 +275,7 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
       const value = method === 'reverse_record' ? recordLabel(t) : `${ctx.metric(t).toFixed(1)} ${ctx.metricLabel}`
       push(t, 'locked', `Seed ${t.playoffSeed}`, `${value} — ${ordinal(i + 1)} ${method === 'reverse_record' ? 'worst' : 'lowest'} of ${playoff.length} playoff teams`)
     })
-    return { ...base, phase: 'final', slots }
+    return { ...base, phase: lowerPending ? 'playoffs' : 'final', slots }
   }
 
   // ── Playoff finish, then seed. ──
@@ -346,5 +370,55 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
   )
   if (champion) push(champion, 'locked', 'Champion', 'Won the title — picks last')
 
-  return { ...base, phase: champion ? 'final' : 'playoffs', slots }
+  return { ...base, phase: champion && !lowerPending ? 'final' : 'playoffs', slots }
+}
+
+/**
+ * Non-playoff slots from the lower bracket. Consolation: best finish first. Toilet bowl: worst
+ * finish first. A team the result does not name (it cannot happen for a native bracket, whose
+ * standings place every team) keeps its standings slot after the named ones.
+ */
+function lowerBracketSlots(nonPlayoff: RookieOrderTeam[], lower: RookieOrderLowerBracket): RookieOrderSlot[] {
+  const label = lower.mode === 'toilet_bowl' ? 'toilet bowl' : 'consolation bracket'
+  if (!lower.finishOrder) {
+    return nonPlayoff.map((t, i) => ({
+      slot: i + 1,
+      teamId: t.teamId,
+      name: t.name,
+      group: 'non_playoff',
+      status: 'provisional',
+      finish: null,
+      reason: `Waiting on the ${label} — it plays for the pick`,
+    }))
+  }
+  const ids = new Set(nonPlayoff.map((t) => t.teamId))
+  const named = lower.finishOrder.filter((id) => ids.has(id))
+  const ordered = lower.mode === 'toilet_bowl' ? [...named].reverse() : named
+  const byId = new Map(nonPlayoff.map((t) => [t.teamId, t]))
+  const rest = nonPlayoff.filter((t) => !named.includes(t.teamId))
+  const out: RookieOrderSlot[] = ordered.map((id, i) => {
+    const t = byId.get(id)!
+    const finishRank = named.indexOf(id) + 1
+    const finish =
+      lower.mode === 'toilet_bowl'
+        ? finishRank === named.length
+          ? 'Toilet bowl loser'
+          : `${ordinal(named.length - finishRank + 1)} from last`
+        : finishRank === 1
+          ? 'Consolation winner'
+          : `${ordinal(finishRank)} in consolation`
+    const reason =
+      lower.mode === 'toilet_bowl'
+        ? i === 0
+          ? 'Lost the toilet bowl final (last place) — picks first'
+          : `${finish} after the toilet bowl — worst finish picks first`
+        : i === 0
+          ? 'Won the consolation bracket — picks first'
+          : `${finish} — the consolation bracket plays for the pick`
+    return { slot: i + 1, teamId: t.teamId, name: t.name, group: 'non_playoff', status: 'locked', finish, reason }
+  })
+  for (const t of rest) {
+    out.push({ slot: out.length + 1, teamId: t.teamId, name: t.name, group: 'non_playoff', status: 'locked', finish: null, reason: 'Not placed by the lower bracket' })
+  }
+  return out
 }

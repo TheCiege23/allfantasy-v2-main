@@ -57,6 +57,12 @@ const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
 const getInsightBundleMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // These fixtures exercise the paid-token path after the two daily answers are used.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))

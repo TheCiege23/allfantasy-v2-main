@@ -11,6 +11,9 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { MAX_PLAYOFF_TEAMS, maxPlayoffTeamsThatFit } from '@/lib/playoff-runtime/playoffFit'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
+import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
 import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
@@ -28,10 +31,36 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
   const chosenStartWeek = native ? resolvePlayoffStartWeek(ctx.league).week : (ctx.league.playoffStartWeek ?? 14)
   const [playoffStartWeek, setPlayoffStartWeek] = useState(chosenStartWeek)
 
+  // The league median game itself. Its own save, so a refusal (the server locks it once the season's
+  // first week is final, lib/redraft/medianGameSwitch.ts) puts back only this switch.
+  const medianSave = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
+  const storedMedianGame = savedOr(leagueId, 'medianGame', ctx.league.medianGame === true) === true
+  const [medianGame, setMedianGame] = useState(storedMedianGame)
+  useEffect(() => setMedianGame(storedMedianGame), [storedMedianGame])
+  useEffect(() => {
+    if (medianSave.lastError && !medianSave.manual) setMedianGame(storedMedianGame)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [medianSave.lastError])
+  // A median of category results means nothing, so it is offered to points leagues (and to any league
+  // that already has it on, so it can be turned off).
+  const settingsObj = (ctx.league.settings ?? {}) as Record<string, unknown>
+  const pointsLeague = String(settingsObj.scoring_mode ?? settingsObj.scoringMode ?? 'points').toLowerCase() === 'points'
+  const offerMedianGame = pointsLeague || storedMedianGame
+
+  // Off unless the commissioner turned it on (lib/redraft/medianGame.ts); only offered with the median game on.
+  const storedMedianInPlayoffs = readMedianGameInPlayoffs(ctx.league.settings)
+  const [medianInPlayoffs, setMedianInPlayoffs] = useState(storedMedianInPlayoffs)
+
+  // On unless stored off (lib/playoff-runtime/thirdPlaceGame.ts); read when the bracket is generated.
+  const storedThirdPlace = readThirdPlaceGameEnabled(ctx.league.settings, ctx.league.sport)
+  const [thirdPlace, setThirdPlace] = useState(storedThirdPlace)
+
   useEffect(() => {
     setPlayoffTeams(ctx.league.playoffTeams ?? 6)
     setPlayoffStartWeek(chosenStartWeek)
   }, [ctx.league.playoffTeams, chosenStartWeek])
+  useEffect(() => setMedianInPlayoffs(storedMedianInPlayoffs), [storedMedianInPlayoffs])
+  useEffect(() => setThirdPlace(storedThirdPlace), [storedThirdPlace])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
   const startWeekMax = Math.max(18, seasonWeeks, chosenStartWeek)
@@ -105,6 +134,75 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
             />
           </label>
         </div>
+        {offerMedianGame ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="median-game-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.medianGame')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.medianGameHelp')}</span>
+              {medianSave.lastError ? (
+                <span role="alert" className="mt-1 block text-[11px] text-red-300">{medianSave.lastError}</span>
+              ) : null}
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={medianGame}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setMedianGame(v)
+                medianSave.queuePatch({ medianGame: v })
+              }}
+            />
+          </label>
+        ) : null}
+        {medianGame ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="median-in-playoffs-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.medianPlayoffs')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.medianPlayoffsHelp')}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={medianInPlayoffs}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setMedianInPlayoffs(v)
+                queuePatch({ medianGameInPlayoffs: v })
+              }}
+            />
+          </label>
+        ) : null}
+        {native ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="third-place-game-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.thirdPlace')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.thirdPlaceHelp')}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={thirdPlace}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setThirdPlace(v)
+                queuePatch({ thirdPlaceGameEnabled: v })
+              }}
+            />
+          </label>
+        ) : null}
       </div>
 
       {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}

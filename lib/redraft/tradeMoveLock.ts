@@ -22,7 +22,11 @@ export const REDRAFT_MOVES_LOCKED_CODE = 'MOVE_LOCKED' as const
 export const REDRAFT_MOVES_LOCKED_MESSAGE =
   'The commissioner has locked all roster moves in this league. Trades cannot be proposed, accepted or processed until the lock is lifted.'
 
-/** HTTP status for a lock refusal on the redraft trade routes: the request is valid, the league state forbids it. */
+/** The same lock on a redraft lineup, IR or waiver-claim write (the routes beside the AF engine's own refusal). */
+export const REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE =
+  'The commissioner has locked all roster moves in this league. Lineup, IR and waiver moves are paused until the lock is lifted.'
+
+/** HTTP status for a lock refusal on the redraft routes: the request is valid, the league state forbids it. */
 export const REDRAFT_MOVES_LOCKED_STATUS = 409
 
 type MoveLockDb = Pick<PrismaClient, 'league'>

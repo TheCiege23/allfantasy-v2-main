@@ -158,6 +158,10 @@ export interface CreateLeagueV2State {
   survivorTribeCount: number
   /** Whether the creator occupies one of the Survivor cast seats. */
   survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
+  /** Survivor-only: a LABEL. Dues are collected off the app; AllFantasy takes no payments. */
+  survivorEntryFeeMode: 'free' | 'paid'
+  /** Survivor-only: optional dues per manager as typed (USD), shown in League Dues. */
+  survivorDuesUsd: string
   draftType: WizardDraftType
   /** Third-round reversal — snake drafts only. */
   thirdRoundReversal: boolean
@@ -349,6 +353,8 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
   survivorCommissionerParticipationMode: 'non_participating_host',
+  survivorEntryFeeMode: 'free',
+  survivorDuesUsd: '',
   draftType: 'snake',
   thirdRoundReversal: false,
   name: '',

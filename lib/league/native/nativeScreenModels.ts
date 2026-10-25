@@ -149,8 +149,13 @@ function finiteInt(v: unknown): number | null {
  * `lib/playoff-defaults/PlayoffBracketConfigResolver.ts` does — `settings.playoff_structure.<key>`
  * first, then `settings.<key>` — plus the `League.playoffStartWeek` column. A key the league never
  * set comes back null so the card can say "League default" instead of inventing a number.
+ *
+ * ⚠ THE LOWER BRACKET COMES FROM THE `League.playoffLowerBracket` COLUMN when it is set — the column
+ * the bracket is built from (`getBracketConfigForLeague`) and the one the playoff settings panel
+ * writes. The JSON flags beside it go stale when the commissioner changes the column, so the card
+ * used to name a bracket the league would not play. The flags are read only when the column is unset.
  */
-export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number | null): PlayoffFormat {
+export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number | null, playoffLowerBracket?: string | null): PlayoffFormat {
   const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
   const structure =
     s.playoff_structure && typeof s.playoff_structure === 'object' ? (s.playoff_structure as Record<string, unknown>) : {}
@@ -170,12 +175,23 @@ export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number |
   const weeks = explicitWeeks ?? (teams != null && byes != null ? playoffRoundsFor(teams) : null)
   const toilet = read('toilet_bowl_enabled')
   const consolation = read('consolation_bracket_enabled')
+  const column = String(playoffLowerBracket ?? '').trim().toLowerCase()
+  // Exactly the bracket config's reading of the column: any other set value plays no lower bracket.
+  const fromColumn: PlayoffFormat['consolation'] = !column
+    ? null
+    : column === 'toilet'
+      ? 'toilet_bowl'
+      : column === 'consolation' || column === 'consolation_bracket'
+        ? 'consolation'
+        : 'none'
   return {
     teams,
     byes,
     startWeek,
     weeks,
-    consolation: toilet === true ? 'toilet_bowl' : consolation === true ? 'consolation' : toilet === false && consolation === false ? 'none' : null,
+    consolation:
+      fromColumn ??
+      (toilet === true ? 'toilet_bowl' : consolation === true ? 'consolation' : toilet === false && consolation === false ? 'none' : null),
   }
 }
 

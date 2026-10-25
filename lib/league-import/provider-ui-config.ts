@@ -162,6 +162,39 @@ export type ImportSportCheck =
  * A missing sport is refused, never defaulted: a league of unknown sport imported as NFL is a
  * basketball league with football rules.
  */
+/** Every sport AllFantasy runs leagues for. A league in any other sport has nowhere to go. */
+export const IMPORT_RUNNABLE_SPORTS: readonly ImportSupportedSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL'];
+
+/**
+ * The looser gate for the live importers that are not held to their `supportedSports` list
+ * (Sleeper, ESPN, MFL, Fantrax, Fleaflicker): refuse only a league in a sport AllFantasy does not run
+ * at all, or one that does not say its sport. Owner decision 2026-10-25 ("use your judgment"):
+ * NBA / NHL / MLB leagues those importers already accept keep importing, while a Sleeper esports
+ * league no longer lands as a broken or football league.
+ */
+export function checkImportSportRunnable(
+  provider: ImportProvider,
+  sport: string | null | undefined,
+): ImportSportCheck {
+  const label = getImportProviderLabel(provider);
+  const normalized = typeof sport === 'string' ? sport.trim().toUpperCase() : '';
+  if (!normalized) {
+    return {
+      ok: false,
+      reason: 'missing',
+      message: `${label} did not say which sport this league is, so it was not imported. Nothing was saved.`,
+    };
+  }
+  if (!(IMPORT_RUNNABLE_SPORTS as readonly string[]).includes(normalized)) {
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: `AllFantasy runs ${IMPORT_RUNNABLE_SPORTS.join(', ')} leagues — this ${label} league is ${normalized}, so it was not imported. Nothing was saved.`,
+    };
+  }
+  return { ok: true, sport: normalized as ImportSupportedSport };
+}
+
 export function checkImportSportSupported(
   provider: ImportProvider,
   sport: string | null | undefined,

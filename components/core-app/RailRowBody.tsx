@@ -323,6 +323,10 @@ export function RailRowBody({
         {showScoreStatus && (syncPaused || delayed) ? <span className="af-rail-delayed">{syncPaused ? (language === 'es' ? 'Sincronización en pausa' : 'Sync paused') : (language === 'es' ? 'Actualizaciones retrasadas' : 'Updates delayed')}</span> : null}
         {!delayed && m?.source === 'history_fallback' ? <span>{language === 'es' ? 'Último resultado' : 'Last result'}</span> : null}
       </span>
+      {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
+      {m?.extraMatchup ? (
+        <span className="af-rail-row-career" data-testid="rail-extra-matchup">{m.extraMatchup.line}</span>
+      ) : null}
       {m ? (
         <span className="af-rail-row-line">
           <span className="af-rail-row-labels" aria-hidden>

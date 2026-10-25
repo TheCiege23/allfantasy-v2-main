@@ -186,6 +186,10 @@ export function PlayoffSettingsPanel(props: {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
+          <span className="block text-xs text-white/50">
+            Draft pick: next season, the consolation winner picks first among non-playoff teams; in a toilet bowl, last
+            place (the final&apos;s loser) picks first.
+          </span>
         </label>
       </div>
 

@@ -25,6 +25,9 @@ import { starterGameStates, type StarterGameState } from './matchupGameState'
 import { bestBallProjectedFinal } from './bestBallForecast'
 import { realManagerName, rosterLabel } from './managerName'
 import { eliminationFormat, type EliminationFormat } from './railMatchupMode'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
+import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /*
  * The opposing side's two name lines. The importer stores an unowned Sleeper roster as team
@@ -238,6 +241,11 @@ export type MatchupData = {
   }
   week: SectionState<{ week: number; season: number; isFinal: boolean }>
   /**
+   * An odd-team native league's extra matchup involving your team this week — the game the leftover
+   * team plays instead of a bye. "Extra matchup vs <team> (last week's top scorer)". Null otherwise.
+   */
+  extraMatchup?: ExtraMatchupView | null
+  /**
    * The two managers, available as soon as both rosters are identified — scored
    * week or not. `sides` below stays the SCORE, and stays unavailable until
    * there is one.
@@ -365,6 +373,65 @@ export async function getMatchupData(
   ctx?: LeagueContext | null,
 ): Promise<MatchupData | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
+  const data = await buildMatchupData(lc, userId, weekParam)
+  if (!data) return data
+  return withExtraMatchupOpponent(data, await nativeExtraMatchup(lc, userId, weekParam))
+}
+
+/**
+ * An odd-team native league's extra matchup for your team this week, if it has one — read from the
+ * leftover team's bye row, where the week-open hook fixed it (lib/redraft/oddTeamExtraMatchup.ts).
+ *
+ * ⚠ READ FROM THE NATIVE SEASON, NOT FROM `data.week`. This screen's week comes from `WeeklyMatchup`,
+ * which only importers write, so for a native league `data.week` is unavailable and keying on it would
+ * never find the pick. The week is the one asked for, else the season's current week. Null for every
+ * imported league, and on any failure.
+ */
+async function nativeExtraMatchup(lc: LeagueContext, userId: string, weekParam: number | null | undefined): Promise<ExtraMatchupView | null> {
+  try {
+    const league = await lc.league()
+    if (!league || !isNativePlatform(league.platform)) return null
+    const season = await prisma.redraftSeason.findFirst({
+      where: { leagueId: league.id },
+      orderBy: { season: 'desc' },
+      select: { id: true, currentWeek: true },
+    })
+    if (!season) return null
+    const week = weekParam ?? season.currentWeek
+    if (!(week >= 1)) return null
+    const roster = await prisma.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: userId }, select: { id: true } })
+    if (!roster) return null
+    return await readExtraMatchupViewForSeason({ seasonId: season.id, week, redraftRosterId: roster.id })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The leftover team's "opponent" is the chosen team: name it, and its score, wherever this screen's
+ * consumers (the matchup screen, the league home card, the live strip) would otherwise print
+ * "Opponent not identified" for a bye.
+ */
+function withExtraMatchupOpponent(data: MatchupData, extra: ExtraMatchupView | null): MatchupData {
+  if (!extra || extra.role !== 'leftover') return { ...data, extraMatchup: extra }
+  const opponent = { teamName: extra.teamName, ownerName: '', record: null, isYou: false as const, avatarUrl: null }
+  return {
+    ...data,
+    extraMatchup: extra,
+    teams: data.teams.available
+      ? { available: true, data: { ...data.teams.data, opponent: { ...data.teams.data.opponent, ...opponent } } }
+      : data.teams,
+    sides: data.sides.available && extra.theirScore != null
+      ? { available: true, data: { ...data.sides.data, opponent: { ...data.sides.data.opponent, ...opponent, points: extra.theirScore } } }
+      : data.sides,
+  }
+}
+
+async function buildMatchupData(
+  lc: LeagueContext,
+  userId: string,
+  weekParam?: number | null,
+): Promise<MatchupData | null> {
   const league = await lc.league()
   if (!league) return null
 

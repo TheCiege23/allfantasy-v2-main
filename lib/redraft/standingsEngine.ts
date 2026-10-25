@@ -3,7 +3,8 @@ import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringTyp
 import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
-import { computeWeeklyMedianResults, isMatchupComplete } from '@/lib/redraft/medianGame'
+import { computeWeeklyMedianResults, isMatchupComplete, medianEligibleRows, readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { extraMatchupResults } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 /**
@@ -117,23 +118,60 @@ export async function updateStandings(
     matchupsCounted += 1
   }
 
+  // The extra matchup an odd-team league plays instead of the bye (lib/redraft/oddTeamExtraMatchupRules.ts).
+  // Recorded on the leftover team's bye row; it counts for the leftover team, and for the chosen
+  // team too only when the week was fixed under "both count". Points weeks only (a pick is never
+  // fixed for any other scoring, and a bye row is scored only on points). PF/PA move for
+  // the leftover team alone — the chosen team's points that week are already counted in its own game.
+  for (const extra of extraMatchupResults(matchups)) {
+    const leftover = rows.get(extra.leftoverRosterId)
+    const opponent = rows.get(extra.opponentRosterId)
+    if (!leftover || !opponent) continue
+    leftover.pointsFor += extra.leftoverScore
+    leftover.pointsAgainst += extra.opponentScore
+    const flipped = extra.outcome === 'W' ? 'L' : extra.outcome === 'L' ? 'W' : 'T'
+    const tally = (row: typeof leftover, result: 'W' | 'L' | 'T') => {
+      if (result === 'W') row.wins += 1
+      else if (result === 'L') row.losses += 1
+      else row.ties += 1
+      row.streakEvents.push({ week: extra.week, result })
+    }
+    tally(leftover, extra.outcome)
+    if (extra.scoring === 'both') tally(opponent, flipped)
+    matchupsCounted += 1
+  }
+
   // League median: a second game each week against the week's median score. The commissioner's
   // current `League.medianGame` wins over the season's copy, which is taken once at the draft.
   // A failed read of the flag means "no median this pass", never "no standings".
+  // ⚠ PLAYOFF WEEKS ARE WIN OR GO HOME. Unless the commissioner turned on
+  // `settings.median_game_in_playoffs`, no week on or after the playoff start (and no week holding a
+  // non-regular game) gets a median result — see `medianEligibleRows`.
   let medianGameOn = false
+  let medianInPlayoffs = false
+  let playoffStartWeek: number | null = null
   let pointsOnlySeeding = false
+  let bracketExists = false
   try {
     const seasonRow = await prisma.redraftSeason.findUnique({
       where: { id: seasonId },
-      select: { medianGame: true, league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } } },
+      select: {
+        medianGame: true,
+        playoffStartWeek: true,
+        playoffBracket: { select: { id: true } },
+        league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } },
+      },
     })
     medianGameOn = seasonRow?.league?.medianGame ?? seasonRow?.medianGame ?? false
+    medianInPlayoffs = readMedianGameInPlayoffs(seasonRow?.league?.settings)
+    playoffStartWeek = seasonRow?.playoffStartWeek ?? null
+    bracketExists = Boolean(seasonRow?.playoffBracket)
     pointsOnlySeeding = isPointsOnlySeeding(resolveConfiguredPlayoffSeedingRule(seasonRow?.league ?? {}))
   } catch {
     medianGameOn = false
   }
   if (medianGameOn) {
-    for (const weekResult of computeWeeklyMedianResults(matchups)) {
+    for (const weekResult of computeWeeklyMedianResults(medianEligibleRows(matchups, { playoffStartWeek, medianInPlayoffs }))) {
       for (const [rosterId, outcome] of weekResult.outcomes) {
         const row = rows.get(rosterId)
         if (!row) continue
@@ -147,9 +185,10 @@ export async function updateStandings(
         data: { medianScore: weekResult.median },
       })
     }
-    // Keep each roster's events in week order (stable: H2H stays ahead of that week's median).
-    for (const row of rows.values()) row.streakEvents.sort((a, b) => a.week - b.week)
   }
+  // Keep each roster's events in week order (stable: within a week the H2H game, then the extra
+  // matchup, then the median).
+  for (const row of rows.values()) row.streakEvents.sort((a, b) => a.week - b.week)
 
   const categorySeasonRow = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
   const categorySettings = categorySeasonRow?.league?.settings as Record<string,any> | null
@@ -173,17 +212,24 @@ export async function updateStandings(
   }
   const ordered = [...rows.entries()].sort(([aId, a], [bId, b]) => {
     if (pointsOnlySeeding || rotoStats.size) return b.pointsFor - a.pointsFor || aId.localeCompare(bId)
-    const categorySeason = matchups.some(m => (m.lineupSnapshots as any)?.categoryRecordMode === 'each')
-    if (categorySeason) {
-      const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
-      if (pct(a) !== pct(b)) return pct(b)-pct(a)
-    }
+    // Win percentage first, ties as half a win. An odd-team league plays unequal numbers of games
+    // (a bye week, or a week with an extra game), and counting wins would rank a team ahead for
+    // having played more — the playoff seeding (`win_pct` first) and the schedule standings already
+    // rank this way, so the stored seed now agrees with them.
+    const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
+    if (pct(a) !== pct(b)) return pct(b)-pct(a)
     if (b.wins !== a.wins) return b.wins - a.wins
     if (a.losses !== b.losses) return a.losses - b.losses
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor
     return a.pointsAgainst - b.pointsAgainst
   })
   const seedByRoster = new Map(ordered.map(([rosterId], index) => [rosterId, index + 1]))
+  const seedsFrozen = playoffSeedsFrozen({
+    week,
+    playoffStartWeek,
+    bracketExists,
+    roto: categorySettings?.scoring_mode === 'roto' || rotoStats.size > 0,
+  })
 
   for (const [rosterId, row] of rows.entries()) {
     const results = row.streakEvents.map((e) => e.result)
@@ -207,7 +253,7 @@ export async function updateStandings(
         pointsFor: Math.round(row.pointsFor * 100) / 100,
         pointsAgainst: Math.round(row.pointsAgainst * 100) / 100,
         streak,
-        playoffSeed: seedByRoster.get(rosterId) ?? null,
+        ...(seedsFrozen ? {} : { playoffSeed: seedByRoster.get(rosterId) ?? null }),
       },
     })
   }
@@ -226,6 +272,32 @@ export async function updateStandings(
   })
 
   return { seasonId, week, rostersUpdated: rows.size, matchupsCounted }
+}
+
+/**
+ * Whether this recompute must leave `RedraftRoster.playoffSeed` alone. W-L, points and streaks still
+ * update; only the seed column is held.
+ *
+ * 🛑 ONCE THE PLAYOFFS START THE SEEDS ARE SETTLED. The bracket generator writes each qualifier's seed
+ * (and null for everyone else), and reseeding reads those roster seeds back
+ * (lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime.ts). A recompute that rewrote them from the
+ * whole-season order would hand a seed to an eliminated team and reshuffle the field mid-bracket.
+ * Frozen when a bracket exists for the season, or when the week being recomputed is on or after
+ * `playoffStartWeek`.
+ *
+ * ⚠ ROTO KEEPS ITS RANK. A rotisserie season stores its category rank in this column all season and has
+ * no playoff weeks (its `playoffStartWeek` is past the last week), so only a bracket freezes it there —
+ * an older roto season with a real-looking start week must not stop ranking mid-season.
+ */
+export function playoffSeedsFrozen(input: {
+  week: number
+  playoffStartWeek: number | null
+  bracketExists: boolean
+  roto: boolean
+}): boolean {
+  if (input.bracketExists) return true
+  if (input.roto) return false
+  return input.playoffStartWeek != null && input.playoffStartWeek > 0 && input.week >= input.playoffStartWeek
 }
 
 /**

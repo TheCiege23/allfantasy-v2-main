@@ -1,3 +1,5 @@
+import { NFL_EXTRA_PLAYER_STAT_KEYS, NFL_EXTRA_TEAM_STAT_KEYS } from './nflExtraStatKeys'
+
 type JsonRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -71,6 +73,8 @@ export function normalizeNflWeeklyStats(raw: unknown): Record<string, number> {
   setIfNumber(out, 'idp_safety', firstNumber(source, ['idp_safety', 'safety']))
   setIfNumber(out, 'idp_tfl', firstNumber(source, ['idp_tfl', 'tackle_loss', 'tfl']))
   setIfNumber(out, 'idp_qb_hit', firstNumber(source, ['idp_qb_hit', 'qb_hit', 'qb_hits']))
+  // Scored straight from the provider's own count (first downs, long plays, bonuses, special teams).
+  for (const key of NFL_EXTRA_PLAYER_STAT_KEYS) setIfNumber(out, key, asNumber(source[key]))
 
   return out
 }
@@ -109,6 +113,7 @@ export function normalizeNflTeamDefenseWeeklyStats(raw: unknown): Record<string,
   )
   setIfNumber(out, 'def_kr_yd', firstNumber(source, ['def_kr_yd', 'kr_yd', 'kick_return_yards', 'kr_yards']))
   setIfNumber(out, 'def_pr_yd', firstNumber(source, ['def_pr_yd', 'pr_yd', 'punt_return_yards', 'pr_yards']))
+  for (const key of NFL_EXTRA_TEAM_STAT_KEYS) setIfNumber(out, key, asNumber(source[key]))
 
   return out
 }

@@ -8,6 +8,7 @@ const stateFindMany = vi.fn()
 const stateFindFirst = vi.fn()
 const seasonFindFirst = vi.fn()
 const evaluateUserFeatureAccess = vi.fn()
+const hasAfCommissionerPlan = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -23,6 +24,7 @@ vi.mock('@/lib/subscription/FeatureGateService', () => ({
     evaluateUserFeatureAccess = (...a: unknown[]) => evaluateUserFeatureAccess(...a)
   },
 }))
+vi.mock('@/lib/entitlements/afCommissionerPlan', () => ({ hasAfCommissionerPlan: (...a: unknown[]) => hasAfCommissionerPlan(...a) }))
 vi.mock('@/lib/ai/providerRouter', () => ({ routeTextCall: (...a: unknown[]) => routeTextCall(...a) }))
 vi.mock('@/lib/guillotine/rosterDisplayNames', () => ({
   resolveRosterDisplayNames: async () => new Map([['r1', 'Hoop Dreams'], ['r2', 'Bench Mob'], ['r3', 'Ice Cold'], ['r4', 'Triple Threat']]),
@@ -81,6 +83,15 @@ describe('postAutomaticGuillotineRecap', () => {
     seasonFindFirst.mockResolvedValue({ season: 2026 })
     createLeagueChatMessage.mockResolvedValue({ id: 'm1' })
     evaluateUserFeatureAccess.mockResolvedValue({ allowed: false })
+    hasAfCommissionerPlan.mockResolvedValue(false)
+  })
+
+  it('AF Commissioner without AF Pro also gets Chimmy\'s recap (owner\'s decision, 2026-10-25)', async () => {
+    hasAfCommissionerPlan.mockResolvedValue(true)
+    routeTextCall.mockResolvedValue({ ok: true, text: 'Ice Cold melted at 98.8.' })
+    expect(await run()).toBe(true)
+    expect(hasAfCommissionerPlan).toHaveBeenCalledWith({ id: 'owner' })
+    expect(createLeagueChatMessage.mock.calls[0]![3]).toMatchObject({ idempotencyKey: 'guillotine-recap:L1:2026:w3:ai' })
   })
 
   it('free league: posts the standard recap once per week, with no model call', async () => {

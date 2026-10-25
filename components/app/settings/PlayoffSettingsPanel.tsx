@@ -62,6 +62,10 @@ const BYE_RULES = [
   { value: 'top_two_seeds_bye', label: 'Top two seeds bye' },
 ] as const
 
+/** What "Draft pick" does (lib/playoff-runtime/consolationPlaysFor.ts). Cash and Nothing leave the draft order alone. */
+const CONSOLATION_PLAYS_FOR_HELP =
+  "Draft pick: next season, the consolation winner picks first among non-playoff teams; in a toilet bowl, last place (the final's loser) picks first."
+
 const CONSOLATION_PLAYS_FOR = [
   { value: 'none', label: 'Nothing' },
   { value: 'pick', label: 'Draft pick' },
@@ -452,6 +456,7 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
+              <span className="mt-1 block text-[11px] text-white/45">{CONSOLATION_PLAYS_FOR_HELP}</span>
             </label>
           </div>
 

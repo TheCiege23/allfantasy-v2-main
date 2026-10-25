@@ -1,3 +1,4 @@
+import { extraMatchupForRoster, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import type {
   CanonicalLeagueRules,
   CanonicalLeagueRuntimeEvent,
@@ -44,6 +45,8 @@ export type ScheduleRuntimeMatchupInput = {
   awayScore?: number | null
   status?: string | null
   isMedianMatchup?: boolean | null
+  /** A bye row's `extraMatchup` pick lives here (lib/redraft/oddTeamExtraMatchupRules.ts). */
+  lineupSnapshots?: unknown
 }
 
 export type CanonicalScheduleRuntimeMatchup = {
@@ -67,6 +70,11 @@ export type CanonicalScheduleRuntimeMatchup = {
   locked: boolean
   homeScore: number | null
   awayScore: number | null
+  /**
+   * On a bye row of an odd-team league that plays the extra matchup instead: "Extra matchup vs
+   * <team> (<reason>) · 112.4–98.0", from the leftover (home) team's side. Absent otherwise.
+   */
+  extraMatchup?: { opponentRosterId: string; opponentName: string; line: string } | null
 }
 
 export type CanonicalScheduleRuntimeWeek = {
@@ -405,6 +413,22 @@ export function generateCanonicalRegularSeasonSchedule(input: {
   return { matchups, regularSeasonWeeks, playoffStartWeek, validationIssues }
 }
 
+/** A bye row's extra matchup, named for the schedule (lib/redraft/oddTeamExtraMatchupRules.ts). */
+function extraMatchupOn(
+  rows: readonly ScheduleRuntimeMatchupInput[],
+  bye: ScheduleRuntimeMatchupInput,
+  teamsById: Map<string, ScheduleRuntimeTeamInput>,
+): { extraMatchup?: CanonicalScheduleRuntimeMatchup['extraMatchup'] } {
+  if (!readExtraMatchupRecord(bye.lineupSnapshots)) return {}
+  const view = extraMatchupForRoster(
+    rows.map((r) => ({ ...r, awayRosterId: r.awayRosterId ?? null, homeScore: r.homeScore ?? null, awayScore: r.awayScore ?? null, status: r.status ?? null })),
+    bye.week,
+    bye.homeRosterId,
+    (id) => { const t = teamsById.get(id); return t ? teamName(t) : null },
+  )
+  return view ? { extraMatchup: { opponentRosterId: view.otherRosterId, opponentName: view.teamName, line: view.line } } : {}
+}
+
 function materializePersistedMatchups(
   teamsById: Map<string, ScheduleRuntimeTeamInput>,
   matchups: ScheduleRuntimeMatchupInput[],
@@ -443,6 +467,7 @@ function materializePersistedMatchups(
         locked: LOCKED_STATUSES.has(status) || matchup.week < currentWeek,
         homeScore: finiteScore(matchup.homeScore),
         awayScore: finiteScore(matchup.awayScore),
+        ...(bye ? extraMatchupOn(sorted, matchup, teamsById) : {}),
       } satisfies CanonicalScheduleRuntimeMatchup
     })
 }

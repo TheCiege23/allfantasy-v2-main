@@ -652,6 +652,28 @@ function scoreActiveRound(state: NflRedraftPlayoffRuntimeState, baseScore: numbe
   }
 }
 
+/** Scores the lower bracket's active round, which `scoreActiveRound` leaves to the title bracket. */
+function scoreActiveLowerRound(state: NflRedraftPlayoffRuntimeState, baseScore: number): NflRedraftPlayoffRuntimeState {
+  return {
+    ...state,
+    bracket: {
+      ...state.bracket,
+      consolationRounds: state.bracket.consolationRounds.map((round) =>
+        round.status === 'active'
+          ? {
+              ...round,
+              matchups: round.matchups.map((matchup, index) =>
+                matchup.bye || !matchup.homeRosterId || !matchup.awayRosterId
+                  ? matchup
+                  : { ...matchup, homeScore: baseScore + index, awayScore: baseScore - 4 - index, status: 'final' },
+              ),
+            }
+          : round,
+      ),
+    },
+  }
+}
+
 function simulationEvent(type: string, payload: Record<string, unknown> = {}): CanonicalLeagueRuntimeEvent {
   return toCanonicalLeagueRuntimeEvent({
     leagueId,
@@ -1032,7 +1054,18 @@ export function runNflRedraftFullSeasonSimulation(): G43FullSeasonSimulationResu
   if (!advanced.ok) throw new Error(`G43 playoff advancement failed: ${advanced.code}`)
   events.push(...advanced.events)
   activePlayoffs = advanced.state
-  const finalized = finalizeNflRedraftPlayoffChampion({ state: activePlayoffs, actorUserId: commissionerUserId })
+  let finalized = finalizeNflRedraftPlayoffChampion({ state: activePlayoffs, actorUserId: commissionerUserId })
+  // The season closes only once the lower bracket is decided too: play its remaining rounds out.
+  for (let guard = 0; !finalized.ok && finalized.code === 'LOWER_BRACKET_INCOMPLETE' && guard < 5; guard += 1) {
+    const lower = advanceNflRedraftPlayoffRound({
+      state: scoreActiveLowerRound(activePlayoffs, 110),
+      actorUserId: commissionerUserId,
+    })
+    if (!lower.ok) throw new Error(`G43 lower-bracket advancement failed: ${lower.code}`)
+    events.push(...lower.events)
+    activePlayoffs = lower.state
+    finalized = finalizeNflRedraftPlayoffChampion({ state: activePlayoffs, actorUserId: commissionerUserId })
+  }
   if (!finalized.ok) throw new Error(`G43 playoff finalize failed: ${finalized.code}`)
   events.push(...finalized.events)
 

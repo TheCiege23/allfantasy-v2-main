@@ -39,6 +39,8 @@ export async function assertLeagueActionGate(
     lifecycle?: { commissionerOverride?: boolean }
     /** The roster move, for the post-draft lock (see `assertLifecycleActionAllowed`). */
     rosterMove?: RosterMoveKind
+    /** Forwarded to `assertLifecycleActionAllowed`: first-come adds in an offseason opened to free agency. */
+    offseasonFreeAgency?: boolean
   },
 ): Promise<{ ok: true; postDraftLock?: PostDraftRosterLockStatus } | { ok: false; err: LeagueActionGateError }> {
   if (!userId) {
@@ -64,5 +66,6 @@ export async function assertLeagueActionGate(
     isElevatedCommissioner: elevated || Boolean(opts?.treatAsElevated),
     commissionerOverride: opts?.lifecycle?.commissionerOverride,
     ...(opts?.rosterMove ? { rosterMove: opts.rosterMove } : {}),
+    ...(opts?.offseasonFreeAgency ? { offseasonFreeAgency: true } : {}),
   })
 }

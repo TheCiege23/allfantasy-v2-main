@@ -229,6 +229,12 @@ export type RailMatchup = {
   guillotine?: RailGuillotineLine | null
   /** Built from the native tables, not `WeeklyMatchup`; `/api/core/rail-scores` refreshes it the same way. */
   native?: boolean
+  /**
+   * An odd-team native league's extra matchup involving your team this week — the game the leftover
+   * team plays instead of a bye (lib/redraft/oddTeamExtraMatchupRules.ts). For the leftover team the
+   * row above IS that game; for the chosen team its own game stays the row and this is the second one.
+   */
+  extraMatchup?: { label: string; line: string; yourScore: number | null; theirScore: number | null } | null
 }
 
 export type RailMatchups = {

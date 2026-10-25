@@ -656,7 +656,12 @@ export function buildNflRedraftScoringStandings(input: {
     }
   }
 
+  // Win percentage first (ties as half a win), as the stored standings and the playoff seeds rank:
+  // an odd-team league plays unequal numbers of games.
+  const winPctOf = (r: { wins: number; losses: number; ties: number }) =>
+    (r.wins + 0.5 * r.ties) / Math.max(1, r.wins + r.losses + r.ties)
   const ordered = [...rows.values()].sort((a, b) => {
+    if (winPctOf(a) !== winPctOf(b)) return winPctOf(b) - winPctOf(a)
     if (b.wins !== a.wins) return b.wins - a.wins
     if (a.losses !== b.losses) return a.losses - b.losses
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor

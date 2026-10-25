@@ -9,6 +9,8 @@ import {
   expireDueRedraftTradeProposals,
   type RedraftTradeExpirySweepResult,
 } from '@/lib/redraft/tradeProposalExpiry'
+import { processDueTradeReviews, type TradeReviewSweepResult } from '@/lib/redraft/tradeReviewWindowSweep'
+import type { InactiveLineupRunResult } from '@/lib/inactive-manager/inactiveManagerService'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -117,6 +119,51 @@ export async function GET(request: Request) {
     tradeExpiry = { due: 0, expired: 0, skipped: 0, failures: [], error }
   }
 
+  /*
+   * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
+   * guarded and on their own job identity for the same reasons as the expiry sweep above.
+   */
+  let tradeReviews: TradeReviewSweepResult & { error?: string } = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [] }
+  try {
+    tradeReviews = await withSyncJobRun(
+      { jobName: 'cron-redraft-trade-review-window', trigger: 'cron' },
+      () => processDueTradeReviews(),
+      (r) => ({
+        rowsRead: r.due,
+        rowsWritten: r.processed + r.closed,
+        errors: r.failures.map((f) => `${f.proposalId}: ${f.error}`),
+        metadata: { waitingOnLock: r.waitingOnLock, closed: r.closed },
+      }),
+    )
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    console.error('[redraft/waiver-process] trade review window sweep failed', e)
+    tradeReviews = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [], error }
+  }
+
+  /*
+   * Inactive manager mode (lib/inactive-manager): set the best lineup for teams the commissioner handed
+   * to AllFantasy. Hourly keeps it current as injuries and projections move; guarded and on its own job
+   * identity, for the same reasons as the sweep above.
+   */
+  let inactiveLineups: InactiveLineupRunResult | { error: string } | null = null
+  try {
+    const { runInactiveManagerLineups } = await import('@/lib/inactive-manager/inactiveManagerService')
+    inactiveLineups = await withSyncJobRun(
+      { jobName: 'cron-inactive-manager-lineups', trigger: 'cron' },
+      () => runInactiveManagerLineups(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.set,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, unchanged: r.unchanged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] inactive manager lineups failed', e)
+    inactiveLineups = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -142,5 +189,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, exileRollover })
 }

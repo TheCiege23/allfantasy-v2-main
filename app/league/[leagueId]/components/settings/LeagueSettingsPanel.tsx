@@ -7,6 +7,12 @@ import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
+import { KEEPER_MAX_TEAMS, ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import {
+  EXTRA_MATCHUP_SETTINGS_KEY,
+  readExtraMatchupSettings,
+  type ExtraMatchupSettings,
+} from '@/lib/redraft/oddTeamExtraMatchupRules'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
@@ -59,6 +65,7 @@ export function LeagueSettingsPanel({
   )
   const [timezone, setTimezone] = useState(initialData.timezone ?? 'America/New_York')
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
+  const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
   const [leagueType, setLeagueType] = useState((initialData.leagueType ?? 'redraft') as string)
   const [leagueSize, setLeagueSize] = useState(initialData.leagueSize ?? 12)
   const [allowPreDraft, setAllowPreDraft] = useState(Boolean(initialData.allowPreDraftMoves))
@@ -93,6 +100,7 @@ export function LeagueSettingsPanel({
     )
     setTimezone(initialData.timezone ?? 'America/New_York')
     setMedianGame(Boolean(initialData.medianGame))
+    setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
     setLeagueType(initialData.leagueType ?? 'redraft')
     setLeagueSize(initialData.leagueSize ?? 12)
     setAllowPreDraft(Boolean(initialData.allowPreDraftMoves))
@@ -258,6 +266,7 @@ export function LeagueSettingsPanel({
       <div>
         <SettingsSectionLabel>Number of teams</SettingsSectionLabel>
         <select
+          data-testid="settings-league-size"
           className={controlClass}
           disabled={disabled}
           value={leagueSize}
@@ -267,12 +276,26 @@ export function LeagueSettingsPanel({
             debouncedSave({ leagueSize: n })
           }}
         >
-          {Array.from({ length: 15 }, (_, i) => i + 4).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
+          {/* Keeper runs to 20 teams (lib/league/oddTeamLeagues.ts); every other format keeps 4–18 here. */}
+          {Array.from({ length: (leagueType === 'keeper' ? Math.max(KEEPER_MAX_TEAMS, leagueSize) : Math.max(18, leagueSize)) - 3 }, (_, i) => i + 4).map((n) => {
+            // An odd keeper size is an AF Commissioner option; the settings PATCH refuses it without the plan.
+            const locked = !hasCommissionerAccess && n !== leagueSize && oddTeamCountNeedsAfCommissioner(leagueType, n)
+            return (
+              <option key={n} value={n} disabled={locked}>
+                {n}{locked ? ' · AF Commissioner' : ''}
+              </option>
+            )
+          })}
         </select>
+        {!hasCommissionerAccess && leagueType === 'keeper' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="settings-odd-keeper-size-locked">
+            <SettingsHelper>Odd team counts for a keeper league are part of AF Commissioner.</SettingsHelper>
+            <SubscriptionGateBadge
+              featureId="commissioner_ai_tools"
+              onClick={() => subscriptionGate?.gate('commissioner_ai_tools')}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -286,6 +309,27 @@ export function LeagueSettingsPanel({
             void save({ medianGame: v })
           }}
         />
+        {medianGame ? (
+          <SettingsToggleRow
+            label="League median in playoffs"
+            description="Off: playoff weeks are win-or-go-home only. On: median results still count in playoff weeks, in season records only — the bracket is decided by playoff scores alone."
+            checked={medianInPlayoffs}
+            disabled={disabled}
+            onChange={(v) => {
+              setMedianInPlayoffs(v)
+              void save({ medianGameInPlayoffs: v })
+            }}
+          />
+        ) : null}
+        {isOddTeamCount(leagueSize) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(leagueType) ? (
+          <ExtraMatchupSettingsBlock
+            initial={readExtraMatchupSettings(settingsSnapshot)}
+            disabled={disabled}
+            hasAccess={hasCommissionerAccess}
+            onUpgrade={() => subscriptionGate?.gate('commissioner_ai_tools')}
+            save={(value) => void save({ settingsMerge: { [EXTRA_MATCHUP_SETTINGS_KEY]: value } })}
+          />
+        ) : null}
         <SettingsToggleRow
           label="Allow moves pre-draft"
           checked={allowPreDraft}
@@ -672,6 +716,76 @@ export function LeagueSettingsPanel({
             </PremiumGate>
           ) : null}
         </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The extra matchup an odd-team league can play instead of the weekly bye (AF Commissioner). Without
+ * the plan the controls are shown locked with the upgrade badge — except "off", which is always
+ * allowed so a league whose plan lapsed can still turn it off. The server enforces the same.
+ */
+function ExtraMatchupSettingsBlock({
+  initial,
+  disabled,
+  hasAccess,
+  onUpgrade,
+  save,
+}: {
+  initial: ExtraMatchupSettings
+  disabled: boolean
+  hasAccess: boolean
+  onUpgrade: () => void
+  save: (value: ExtraMatchupSettings) => void
+}) {
+  const [value, setValue] = useState(initial)
+  useEffect(() => setValue(initial), [initial.enabled, initial.opponent, initial.scoring])
+  const locked = !hasAccess
+  const apply = (next: ExtraMatchupSettings) => {
+    setValue(next)
+    save(next)
+  }
+  return (
+    <div className="space-y-3 rounded-xl border border-white/[0.08] bg-black/15 p-4" data-testid="settings-extra-matchup">
+      <SettingsToggleRow
+        label="Extra matchup instead of a bye"
+        description="Each week the team the schedule leaves without an opponent plays an extra game. Regular season only; league median still applies to everyone."
+        checked={value.enabled}
+        disabled={disabled || (locked && !value.enabled)}
+        onChange={(enabled) => apply({ ...value, enabled })}
+      />
+      {locked ? (
+        <div className="flex flex-wrap items-center gap-2" data-testid="settings-extra-matchup-locked">
+          <SettingsHelper>The extra matchup is part of AF Commissioner.</SettingsHelper>
+          <SubscriptionGateBadge featureId="commissioner_ai_tools" onClick={onUpgrade} />
+        </div>
+      ) : null}
+      {value.enabled ? (
+        <>
+          <SettingsSectionLabel>Extra matchup opponent</SettingsSectionLabel>
+          <SettingsRadioGroup
+            name="Extra matchup opponent"
+            value={value.opponent}
+            disabled={disabled || locked}
+            onChange={(opponent) => apply({ ...value, opponent })}
+            options={[
+              { id: 'top_scorer', title: "Last week's top scorer", description: 'Week 1: the highest projected team, or a seeded draw.' },
+              { id: 'median', title: "Last week's median team", description: 'The middle scorer; ties go by the standings.' },
+            ]}
+          />
+          <SettingsSectionLabel>The extra game counts for</SettingsSectionLabel>
+          <SettingsRadioGroup
+            name="Extra matchup scoring"
+            value={value.scoring}
+            disabled={disabled || locked}
+            onChange={(scoring) => apply({ ...value, scoring })}
+            options={[
+              { id: 'leftover_only', title: 'The leftover team only', description: "The chosen team's own game is its result that week." },
+              { id: 'both', title: 'Both teams', description: 'The chosen team can go 2-0, 1-1 or 0-2. Standings rank by win %.' },
+            ]}
+          />
+        </>
       ) : null}
     </div>
   )

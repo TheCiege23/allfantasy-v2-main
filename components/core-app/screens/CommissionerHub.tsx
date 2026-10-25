@@ -1,6 +1,7 @@
 import CommissionerActionQueue from '@/components/core-app/CommissionerActionQueue'
 import CommissionerWeeklyPlan from '@/components/core-app/CommissionerWeeklyPlan'
 import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubsControls'
+import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'
 import Link from 'next/link'
 import { Suspense, type ReactNode } from 'react'
 import '@/components/core-app/af-commish-hub.css'
@@ -256,6 +257,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
       {data.role === 'commissioner' && <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <InactiveManagerCommissioner leagueId={league.id} />}
 
       <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
         <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
@@ -423,6 +425,11 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           {/* The constitution: written from these settings, changed by league vote. */}
           <p className="af-ch-setting-why" style={{ marginTop: 12 }}>
             <Link href={`/league/${encodeURIComponent(league.id)}/constitution`}>{t('League constitution and amendments →')}</Link>
+          </p>
+
+          {/* The league log: every commissioner action, readable by the league unless set commish-only. */}
+          <p className="af-ch-setting-why">
+            <Link href={`/league/${encodeURIComponent(league.id)}/log`}>{t('League log: who can see your actions →')}</Link>
           </p>
         </HubSection>
 

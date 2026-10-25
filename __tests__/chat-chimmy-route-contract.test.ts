@@ -40,6 +40,13 @@ const prepareDecisionMock = vi.hoisted(() => vi.fn())
 const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
+const readAnswerAllowanceMock = vi.hoisted(() => vi.fn())
+const takeAnswerAllowanceMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  readChimmyAnswerAllowance: readAnswerAllowanceMock,
+  takeChimmyPlanAllowance: takeAnswerAllowanceMock,
+}))
 vi.mock("@/lib/chimmy/tools/myRosterInjuriesTool", () => ({
   buildMyRosterInjuriesContext: buildMyRosterInjuriesMock,
 }))
@@ -187,7 +194,11 @@ vi.setConfig({ testTimeout: 60000 })
 
 describe("POST /api/chat/chimmy contract", () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    readAnswerAllowanceMock.mockResolvedValue({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+      used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' })
+    takeAnswerAllowanceMock.mockImplementation(async ({ state }) => ({ ...state, used: state.used + 1,
+      remaining: Math.max(0, state.remaining - 1) }))
     // These fixtures isolate orchestration/billing. Decision-service behavior is tested below and in chimmy-decision-answer.
     prepareDecisionMock.mockResolvedValue(null)
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
@@ -294,6 +305,36 @@ describe("POST /api/chat/chimmy contract", () => {
         ],
       },
     })
+  })
+
+  it('returns a grounded free summary without exposing the full decision or running billing or models', async () => {
+    vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
+    const detail='PRIVATE detailed comparison '.repeat(20)
+    prepareDecisionMock.mockResolvedValueOnce({version:1,kind:'trade',decisionType:'manager.trade.evaluate',authority:'explanation_only',status:'ready',leagueId:'league-1',answer:'Keep your starter. Protect your depth. '+detail,sources:['trade_engine'],scenario:{privateReport:detail}})
+    const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','preview-request');form.set('assistantMode','deep_analysis')
+    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(409);const body=await res.json();expect(body.analysisPreview).toMatchObject({summary:'Keep your starter. Protect your depth.',tokenCost:15,access:'tokens'});expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(JSON.stringify(body)).not.toContain('privateReport')
+    expect(takeAnswerAllowanceMock).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled();expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+  it('preserves the daily allowance when the user requests a free summary', async () => {
+    vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
+    readAnswerAllowanceMock.mockResolvedValue({kind:'free',planName:'Free Chimmy',used:0,remaining:2,limit:2,resetsAt:'2026-10-26T00:00:00.000Z'})
+    const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','summary-request');form.set('assistantMode','fast_take')
+    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(409);expect(await res.json()).toMatchObject({analysisPreview:{access:'daily_answer',dailyRemaining:2,tokenCost:0},meta:{free:true,tokenSpend:null}})
+    expect(previewSpendMock).not.toHaveBeenCalled();expect(takeAnswerAllowanceMock).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled();expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+
+  it('returns a screenshot preview before calling image interpretation or charging', async () => {
+    vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
+    const vision=await import('@/lib/chimmy/screenshotVision');const interpret=vi.spyOn(vision,'parseScreenshotWithVision').mockResolvedValue('PRIVATE image details')
+    try {
+      const file=new File(['screenshot'], 'trade.png', {type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new TextEncoder().encode('screenshot').buffer})
+      const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','screenshot-request');form.set('assistantMode','deep_analysis');form.set('image',file)
+      const request=buildMultipartRequest();vi.spyOn(request,'formData').mockResolvedValue(form)
+      const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(request as any)
+      expect(res.status).toBe(409);const body=await res.json();expect(body.analysisPreview.summary).toContain('has not been interpreted');expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(interpret).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+    } finally { interpret.mockRestore() }
   })
 
   it("returns 401 when unauthenticated", async () => {
@@ -498,7 +539,40 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
 
-  it("continues the Chimmy run when token preview fails", async () => {
+  it('delivers a free daily answer with a zero token balance and no token consent', async () => {
+    readAnswerAllowanceMock.mockResolvedValueOnce({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+      used: 0, remaining: 2, resetsAt: '2026-10-26T00:00:00.000Z' })
+    previewSpendMock.mockResolvedValueOnce({ canSpend: false, currentBalance: 0, tokenCost: 10 })
+    const form = new FormData()
+    form.append('message', 'Should I trade this player?')
+    form.append('leagueId', 'league-1')
+    const { POST } = await import('@/app/api/chat/chimmy/route')
+    const res = await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.response).toContain('Accept the trade.')
+    expect(body.meta.planAllowance).toMatchObject({ kind: 'free', included: true, used: 1, limit: 2 })
+    expect(previewSpendMock).not.toHaveBeenCalled()
+    expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+    expect(takeAnswerAllowanceMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not charge or run a model when free allowance status cannot be read', async () => {
+    const { ChimmyAllowanceUnavailableError } = await import('@/lib/chimmy/planAllowance')
+    readAnswerAllowanceMock.mockRejectedValueOnce(new ChimmyAllowanceUnavailableError())
+    const form = new FormData()
+    form.append('message', 'Should I trade this player?')
+    form.append('leagueId', 'league-1')
+    const { POST } = await import('@/app/api/chat/chimmy/route')
+    const res = await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ code: 'chimmy_allowance_unavailable' })
+    expect(previewSpendMock).not.toHaveBeenCalled()
+    expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+    expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+
+  it("returns a retryable error without charging or running Chimmy when token preview fails", async () => {
     previewSpendMock.mockRejectedValueOnce(new Error("monetization context exploded"))
 
     const formData = new FormData()
@@ -508,16 +582,12 @@ describe("POST /api/chat/chimmy contract", () => {
     const { POST } = await import("@/app/api/chat/chimmy/route")
     const res = await POST(buildMultipartRequest(formData) as any)
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(503)
     expect(spendTokensForRuleMock).not.toHaveBeenCalled()
-    const body = await res.json()
-    expect(body.response).toContain("Accept the trade.")
-    expect(body.meta?.answerContract).toMatchObject({
-      answerType: "trade",
-      recommendation: expect.any(String),
-      confidence: {
-        level: expect.any(String),
-      },
+    expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({
+      error: "Unable to check the token price. Please try again.",
+      code: "token_preview_unavailable",
     })
   })
 

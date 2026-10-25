@@ -18,6 +18,17 @@ export function createTeamInjuryNewsBatch(budget?: { exhausted(): boolean }) {
     const team=String(request.meta?.team ?? '').trim()
     if(!team){outcomes[index].failed=true;return}
     const headline=request.meta?.injuryHeadline
+    /*
+     * A lineup alert (lib/notifications/lineupImpactCopy.ts) is its own message, one per player per
+     * person, sent as written. Any other row carrying the same headline for that person joins it and
+     * is collapsed, so a manager who also follows the team is told once.
+     */
+    if(request.meta?.lineupImpact){
+     const key=JSON.stringify([user,'lineup',request.meta?.sport,request.meta?.lineupPlayerKey??headline])
+     if(headline)for(const d of ['instant','digest',null])headlineGroups.set(JSON.stringify([user,request.meta?.sport,team.toUpperCase(),headline,d]),key)
+     const entries=groups.get(key)??[];entries.push({index,request,user});groups.set(key,entries)
+     return
+    }
     const storyKey=headline?JSON.stringify([user,request.meta?.sport,team.toUpperCase(),headline,(request.meta?.playerNews as {delivery?:string}|undefined)?.delivery??null]):undefined
     // Push-now and digest-only halves of the player-news gate never share one message.
     const delivery=JSON.stringify([(request.meta?.playerNews as {delivery?:string}|undefined)?.delivery??null,request.skipChannels??null])
@@ -28,6 +39,14 @@ export function createTeamInjuryNewsBatch(budget?: { exhausted(): boolean }) {
    for(const entries of groups.values()) {
     if(budget?.exhausted()){for(const entry of entries)outcomes[entry.index].failed=true;continue}
     const first=entries[0]
+    if(first.request.meta?.lineupImpact){
+     repeatsSuppressed+=entries.length-1
+     try {
+      const result=await dispatchNotification({...first.request,userIds:[first.user]})
+      for(const entry of entries) { if(result.failed) outcomes[entry.index].failed=true; else outcomes[entry.index].users.add(entry.user) }
+     } catch { for(const entry of entries)outcomes[entry.index].failed=true }
+     continue
+    }
     const members=[...new Map(entries.map(e=>[e.request.meta?.injuryHeadline??e.request.dedupePrefix??e.request.body,e.request])).values()]
     repeatsSuppressed+=entries.length-members.length
     const digest=createHash('sha256').update(JSON.stringify([first.request.category,first.request.leagueId,first.request.meta?.team,members.map(m=>m.dedupePrefix??m.body).sort()])).digest('hex')

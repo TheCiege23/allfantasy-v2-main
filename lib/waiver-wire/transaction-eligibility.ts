@@ -46,6 +46,11 @@ export type WaiverClaimEligibilityInput = {
   claimMetadata?: unknown | null
   /** When editing an existing pending claim, exclude it from weekly drop counts. */
   excludeClaimId?: string | null
+  /**
+   * A first-come add in an offseason the commissioner opened to free agency
+   * (lib/waiver-wire/season-phase-policy.ts): a `completed` season does not lock it.
+   */
+  offseasonFreeAgency?: boolean
 }
 
 function sectionForPlayerId(playerData: unknown, pid: string): RosterSectionKey | null {
@@ -99,7 +104,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   if (league.lockAllMoves) {
     throw new Error('All roster moves are locked by the commissioner.')
   }
-  if (league.lifecycleState === 'archived' || league.lifecycleState === 'completed') {
+  if (league.lifecycleState === 'archived' || (league.lifecycleState === 'completed' && !input.offseasonFreeAgency)) {
     throw new Error('This league season is complete; roster moves are locked.')
   }
 

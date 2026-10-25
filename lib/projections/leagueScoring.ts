@@ -428,6 +428,15 @@ function extractProviderStatNames(scoringSettings: unknown): Map<string, string>
   return out
 }
 
+/**
+ * A provider-captured rulebook (ESPN / Yahoo / MFL) translated into Sleeper's key vocabulary, or
+ * null when nothing translated (Sleeper and Fantrax rules already use that vocabulary). Exported for
+ * the native-league scoring carry-over (`importedNflScoring`).
+ */
+export function providerScoringRulesInSleeperKeys(s: Record<string, unknown>): Record<string, unknown> | null {
+  return bridgeProviderScoringRules(s)
+}
+
 function bridgeProviderScoringRules(s: Record<string, unknown>): Record<string, unknown> | null {
   const snapshot = s.scoringSettings
   const rules =

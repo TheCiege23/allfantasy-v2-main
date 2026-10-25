@@ -33,6 +33,8 @@ import {
   findPremiumCreateSettingKeys,
   hasAfCommissionerCreateEntitlement,
 } from '@/lib/league-creation/canonical/premiumCreateSettingsGate'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -215,6 +217,28 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
             {
               path: 'conceptSetup.advancedSetup',
               message: 'Upgrade to AF Commissioner before saving premium advanced setup.',
+            },
+          ],
+        },
+        { status: 403 },
+      )
+    }
+  }
+
+  // Odd keeper sizes are an AF Commissioner option (lib/league/oddTeamLeagues.ts). A carryover keeps
+  // the imported league's own size, so it is never refused here.
+  if (!importedTeamCountAllowed && oddTeamCountNeedsAfCommissioner(catalogConcept, validated.data.teamCount)) {
+    const hasPlan = await hasAfCommissionerPlan({ ...session.user, id: resolvedUser.appUserId })
+    if (!hasPlan) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'AF Commissioner is required for an odd-team keeper league',
+          errors: [
+            {
+              path: 'teamCount',
+              message: `A ${validated.data.teamCount}-team keeper league is part of AF Commissioner. Choose an even team count or upgrade.`,
+              code: 'ODD_TEAM_COUNT_REQUIRES_AF_COMMISSIONER',
             },
           ],
         },

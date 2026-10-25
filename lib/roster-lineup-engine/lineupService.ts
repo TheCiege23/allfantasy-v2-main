@@ -18,6 +18,7 @@ import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-loc
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
 import { resolveLineupStarterSlots } from '@/lib/league/lineupStarterSlots'
+import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 
 /**
  * Locked starters keep their exact slot; a locked bench/IR player stays in that section.
@@ -133,7 +134,10 @@ export async function persistRosterLineupWithEngine(
       leagueVariant: league.leagueVariant,
       settings: league.settings,
       lifecycleState: league.lifecycleState,
-      lockAllMoves: league.lockAllMoves,
+      // The move lock binds members, not the commissioner correcting a roster under it — the same
+      // exemption the trade and waiver runtimes give `commissionerOverride`. `skipLockCheck` alone did
+      // not reach this validation, so the override tool was refused by the lock it exists to work around.
+      lockAllMoves: input.source === 'commissioner_override' ? false : league.lockAllMoves,
       irAllowOut: league.irAllowOut,
       irAllowCovid: league.irAllowCovid,
       irAllowSuspended: league.irAllowSuspended,
@@ -331,6 +335,21 @@ export async function persistRosterLineupWithEngine(
       skipNotifications: true,
     }).catch(() => {}),
   ).catch(() => {})
+
+  /*
+   * The owner set a lineup of their own: if AllFantasy was setting it while they were away
+   * (lib/inactive-manager), they are back and it stops. Only the OWNER's save — AllFantasy's own system
+   * save and a commissioner override never end it. Read from the league already loaded, so an ordinary
+   * save pays nothing; and best-effort, because the owner's save has already succeeded.
+   */
+  if (input.source === 'user_save' && roster.platformUserId && input.actorUserId === roster.platformUserId && readManagedLineups(league.settings)[input.rosterId]) {
+    try {
+      const { endInactiveManagerModeOnOwnerSave } = await import('@/lib/inactive-manager/inactiveManagerService')
+      await endInactiveManagerModeOnOwnerSave(input.leagueId, input.rosterId, input.actorUserId)
+    } catch (e) {
+      console.warn('[lineup] could not end inactive manager mode after the owner saved', e instanceof Error ? e.message : e)
+    }
+  }
 
   return { ok: true }
 }

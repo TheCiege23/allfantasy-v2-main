@@ -289,7 +289,7 @@ async function runRedraftReconciliation() {
           },
         )
         playoffOutcomes[playoff.outcome] = (playoffOutcomes[playoff.outcome] ?? 0) + 1
-        playoffMatchupsScored += playoff.matchupsScored
+        playoffMatchupsScored += playoff.matchupsScored + (playoff.lowerBracket?.matchupsScored ?? 0)
       } catch {
         playoffFailed += 1
       }

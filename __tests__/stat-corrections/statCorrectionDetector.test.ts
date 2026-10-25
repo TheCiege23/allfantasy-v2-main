@@ -99,6 +99,20 @@ describe('checkStatCorrectionsForSeason', () => {
     expect(m.prisma.sportsDataCache.upsert).toHaveBeenCalledTimes(1)
   })
 
+  it('measures from the sealed score after an Apply, so a re-check never counts a correction twice', async () => {
+    const applied = { id: 'a', matchupId: 'm1', rosterId: 'A', week: 7, points: -4.5, reason: 'Stat correction', byUserId: 'c', at: 'now', source: 'stat_correction' }
+    const own = { ...applied, id: 'b', points: -2, source: undefined, reason: 'penalty' }
+    seed({ settings: { commissioner_score_adjustments: [applied, own] } })
+    // Stored score now carries both: 100 sealed, -4.5 applied correction, -2 commissioner penalty.
+    m.prisma.redraftMatchup.findMany.mockResolvedValue([
+      { id: 'm1', status: 'final', homeRosterId: 'A', awayRosterId: 'B', homeScore: 93.5, awayScore: 99, lineupSnapshots: snapshot },
+    ])
+    await run()
+    const review = m.prisma.sportsDataCache.upsert.mock.calls[0][0].create.data.review
+    // The penalty stays in both sides of the comparison; only the applied correction is taken out.
+    expect(review.matchups[0].home).toEqual({ rosterId: 'A', before: 98, after: 93.5 })
+  })
+
   it('asks the provider at most once an hour per week', async () => {
     m.prisma.sportsDataCache.findUnique.mockResolvedValue({
       data: { seasonId: 'S', leagueId: 'L', season: 2026, week: 7, sealedAt: new Date(SEALED).toISOString(), checkedAt: new Date(NOW - 60_000).toISOString(), review: { changes: [], matchups: [], unchecked: 0, fingerprint: '' } },

@@ -160,6 +160,8 @@ export type RailMatchupSummary = {
   guillotine?: RailGuillotineLine | null
   /** Built from the native tables; polled through /api/core/rail-scores like a Sleeper row. */
   native?: boolean
+  /** An odd-team native league's extra matchup this week (lib/core-app/railMatchups.ts). */
+  extraMatchup?: { label: string; line: string; yourScore: number | null; theirScore: number | null } | null
 }
 
 export type CoreNavKey =

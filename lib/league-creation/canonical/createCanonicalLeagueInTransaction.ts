@@ -1,7 +1,9 @@
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
+import { readSurvivorEntryFee, survivorDuesTrackerSeed } from '@/lib/survivor/survivorCreationAvailability'
 import { buildScoringFromPresetId, isNativeCategoryScoringPreset, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
@@ -452,6 +454,15 @@ export async function createCanonicalLeagueInTransaction(
     const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup, defaultTeamCount: managerCount,
       tribeCount: setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount })
     Object.assign(mergedSettings, buildSurvivorSettingsSnapshotPatch({ ...settings }))
+    // Free/paid is a label; validateCreatePayload already refused a bad amount. A paid league
+    // starts with League Dues on so the commissioner can mark managers paid (dues are off-app).
+    const fee = readSurvivorEntryFee(setup.survivorEntryFeeMode ?? setup.survivor_entry_fee_mode,
+      setup.survivorEntryFeeAmountCents ?? setup.survivor_entry_fee_amount_cents)
+    if (!('error' in fee)) {
+      mergedSettings.survivor_entry_fee_mode = fee.mode
+      mergedSettings.survivor_entry_fee_amount_cents = fee.amountCents
+      if (fee.mode === 'paid') mergedSettings.dues_tracker = survivorDuesTrackerSeed(fee.amountCents)
+    }
     // A new league defaults to the score boss (median); a missing value would read as legacy Chimmy.
     Object.assign(mergedSettings, withNewLeagueLateSeasonDefaults(mergedSettings))
   }
@@ -632,8 +643,11 @@ export async function createCanonicalLeagueInTransaction(
       // three-keeper league to every consumer that trusts the column. A league created here
       // without keepers has decided: none.
       ...(keeperBootstrap ? keeperBootstrap.league : { keeperCount: 0 }),
-      // League-median game — the standings engine plays it when this is on.
-      medianGame: scoringMode === 'points' && conceptSetupForPrivacy.medianGame === true,
+      // League-median game — the standings engine plays it when this is on. An odd redraft or keeper
+      // league starts with it on when the request says nothing (lib/league/oddTeamLeagues.ts).
+      medianGame: scoringMode === 'points' && (ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(formatId))
+        ? defaultMedianGameFor(managerCount, typeof conceptSetupForPrivacy.medianGame === 'boolean' ? conceptSetupForPrivacy.medianGame : null)
+        : conceptSetupForPrivacy.medianGame === true),
       ...(scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
       ...(isGuillotine
         ? {
