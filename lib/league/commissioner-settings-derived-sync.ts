@@ -36,8 +36,8 @@ const WAIVER_COLUMNS = [
  * After `League` row changes, mirror playoff + waiver fields into JSON + waiver settings row.
  *
  * ⚠ PASS `changedKeys`. `settings.playoff_structure` and the `LeagueWaiverSettings` row are also
- * written directly (PUT /api/commissioner/leagues/[id]/playoffs and .../waivers), which never update
- * the `League` columns. Mirroring every column on every save therefore reverted those saves from
+ * written directly (the playoff fields that have no column, and PUT /api/commissioner/leagues/[id]/waivers),
+ * which never update the `League` columns. Mirroring every column on every save therefore reverted those saves from
  * stale column values — a playoff-only save reset the waiver type and FAAB budget, a waiver-only
  * save reset the playoff team count. With `changedKeys`, only the columns this save changed are
  * mirrored onto values that already exist; a missing value is still filled from its column.
