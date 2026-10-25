@@ -10,6 +10,8 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { getLeagueRole } from '@/lib/league/permissions'
+import { UNDO_BLOCK_TEXT } from '@/lib/commissioner-undo/commissionerUndo'
+import { readUndoStatus } from '@/lib/commissioner-undo/commissionerUndoService'
 import {
   describeLogEntry,
   LOG_ACTIONS,
@@ -106,8 +108,15 @@ export async function readLeagueLog(leagueId: string, userId: string | null | un
   const page = rows.slice(0, limit)
   const names = await lookUpNames(leagueId, page)
   const lang = query.lang === 'es' ? 'es' : 'en'
+  // Commissioners see whether each recent edit can still be undone; members never get the field.
+  const undo = canManage ? await readUndoStatus(leagueId, page) : new Map()
   const entries = page
-    .map((row) => describeLogEntry(row, { lang, names, forCommissioner: canManage }))
+    .map((row) => {
+      const entry = describeLogEntry(row, { lang, names, forCommissioner: canManage })
+      const u = undo.get(row.id)
+      if (entry && u) entry.undo = { available: u.available, reason: u.reason ? UNDO_BLOCK_TEXT[u.reason as keyof typeof UNDO_BLOCK_TEXT] : null }
+      return entry
+    })
     .filter((e): e is LeagueLogEntry => e !== null)
   return {
     ok: true,

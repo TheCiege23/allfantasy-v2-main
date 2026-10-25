@@ -212,6 +212,25 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: () => ({ en: 'Edited the standings', es: 'Editó la clasificación' }),
   },
+  // An undo of one of the edits above (lib/commissioner-undo). Members saw the edit, so they see it taken back.
+  commissioner_undo: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const t = team(ctx, m.rosterId)
+      switch (str(m.undoneActionType)) {
+        case 'commissioner_edit_faab':
+          return { en: `Undid the FAAB change for ${t.en}`, es: `Deshizo el cambio de FAAB de ${t.es}` }
+        case 'commissioner_edit_waiver_priority':
+          return { en: `Undid the waiver priority change for ${t.en}`, es: `Deshizo el cambio de prioridad de reclamos de ${t.es}` }
+        case 'commissioner_edit_standings':
+          return { en: 'Undid a standings edit', es: 'Deshizo una edición de la clasificación' }
+        default:
+          return { en: 'Undid a commissioner change', es: 'Deshizo un cambio del comisionado' }
+      }
+    },
+  },
   commissioner_recompute_standings: {
     category: 'scoring',
     members: true,
@@ -365,6 +384,8 @@ export type LeagueLogEntry = {
   detail: string | null
   /** Commissioners only: the action type and the row's states, for the cases the sentence leaves out. */
   raw?: { actionType: string; beforeState: unknown; afterState: unknown; metadata: unknown }
+  /** Commissioners only, on an action that can be undone (lib/commissioner-undo): whether it still can, and why not. */
+  undo?: { available: boolean; reason: string | null }
 }
 
 /**
@@ -400,7 +421,7 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
   const ids = new Set<string>()
   for (const row of rows) {
     const m = obj(row.metadata)
-    if (row.actionType.startsWith('score_adjustment_') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo') && str(m.rosterId)) ids.add(str(m.rosterId)!)
     if (
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||

@@ -25,6 +25,12 @@ const COPY = {
     commishOnly: 'Commish only',
     saveFailed: 'Could not change who sees the log.',
     by: 'by',
+    undo: 'Undo',
+    confirmUndo: 'Confirm undo',
+    cancel: 'Cancel',
+    undoing: 'Undoing…',
+    undone: 'Undone.',
+    undoFailed: 'Could not undo this.',
   },
   es: {
     title: 'Registro de la liga',
@@ -41,6 +47,12 @@ const COPY = {
     commishOnly: 'Solo el comisionado',
     saveFailed: 'No se pudo cambiar quién ve el registro.',
     by: 'por',
+    undo: 'Deshacer',
+    confirmUndo: 'Confirmar',
+    cancel: 'Cancelar',
+    undoing: 'Deshaciendo…',
+    undone: 'Deshecho.',
+    undoFailed: 'No se pudo deshacer.',
   },
 } as const
 
@@ -63,6 +75,9 @@ export function LeagueLog({ leagueId, refreshSignal = 0 }: { leagueId: string; r
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const [undoing, setUndoing] = useState<string | null>(null)
+  const [undoMessage, setUndoMessage] = useState<{ id: string; ok: boolean; text: string } | null>(null)
 
   const load = useCallback(
     async (cursor: string | null) => {
@@ -105,6 +120,30 @@ export function LeagueLog({ leagueId, refreshSignal = 0 }: { leagueId: string; r
       setError(c.saveFailed)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const undo = async (auditId: string) => {
+    setUndoing(auditId)
+    setUndoMessage(null)
+    try {
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/league-log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auditId }),
+      })
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        setUndoMessage({ id: auditId, ok: false, text: body.error || c.undoFailed })
+        return
+      }
+      setUndoMessage({ id: auditId, ok: true, text: c.undone })
+      await load(null)
+    } catch {
+      setUndoMessage({ id: auditId, ok: false, text: c.undoFailed })
+    } finally {
+      setUndoing(null)
+      setConfirming(null)
     }
   }
 
@@ -167,6 +206,31 @@ export function LeagueLog({ leagueId, refreshSignal = 0 }: { leagueId: string; r
                 {new Date(e.at).toLocaleString(lang === 'es' ? 'es' : 'en')} · {c.by} {e.actor}
                 {e.category ? ` · ${LOG_CATEGORY_LABELS[e.category][lang]}` : ''}
               </p>
+              {e.undo?.available ? (
+                <div className="mt-1 flex items-center gap-2" data-testid="league-log-undo">
+                  {confirming === e.id ? (
+                    <>
+                      <button type="button" disabled={undoing !== null} onClick={() => void undo(e.id)}
+                        className="rounded-full border border-amber-300/50 bg-amber-400/10 px-2.5 py-0.5 text-[11px] text-amber-100">
+                        {undoing === e.id ? c.undoing : c.confirmUndo}
+                      </button>
+                      <button type="button" disabled={undoing !== null} onClick={() => setConfirming(null)} className="text-[11px] text-white/50">
+                        {c.cancel}
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" disabled={undoing !== null} onClick={() => setConfirming(e.id)}
+                      className="rounded-full border border-white/15 px-2.5 py-0.5 text-[11px] text-white/70">
+                      {c.undo}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+              {undoMessage?.id === e.id ? (
+                <p className={`mt-1 text-[11px] ${undoMessage.ok ? 'text-emerald-300/90' : 'text-red-300/90'}`} role={undoMessage.ok ? 'status' : 'alert'}>
+                  {undoMessage.text}
+                </p>
+              ) : null}
               {e.raw ? (
                 <details className="mt-1">
                   <summary className="cursor-pointer text-[11px] text-white/40">{c.details}</summary>

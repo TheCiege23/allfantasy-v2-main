@@ -141,6 +141,16 @@ describe('stat corrections', () => {
   })
 })
 
+describe('undo', () => {
+  it('words an undo for the league, naming the team, and in Spanish', () => {
+    const undone = row({ actionType: 'commissioner_undo', metadata: { undoneActionType: 'commissioner_edit_faab', rosterId: 'r9' } })
+    expect(describeLogEntry(undone, member)?.title).toBe('Undid the FAAB change for Taco Tuesday')
+    expect(describeLogEntry(undone, { ...member, lang: 'es' })?.title).toBe('Deshizo el cambio de FAAB de Taco Tuesday')
+    expect(describeLogEntry(row({ actionType: 'commissioner_undo', metadata: { undoneActionType: 'commissioner_edit_standings' } }), member)?.title).toBe('Undid a standings edit')
+    expect(rosterIdsNamedBy([undone])).toEqual(['r9'])
+  })
+})
+
 describe('names to look up', () => {
   it('collects the rosters and users a page of rows mentions', () => {
     const rows = [
