@@ -37,7 +37,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: db.prisma }))
 vi.mock('@/lib/c2c/scoringEngine', () => ({ leagueUsesC2CEngine: c2c }))
 vi.mock('@/lib/redraft/standingsEngine', () => ({ updateStandings: standings }))
 
-import { addScoreAdjustment, removeScoreAdjustment } from '@/lib/score-adjustments/scoreAdjustmentService'
+import { addScoreAdjustment, applyStatCorrectionAdjustment, removeScoreAdjustment } from '@/lib/score-adjustments/scoreAdjustmentService'
 
 const add = (over: Record<string, unknown> = {}) => addScoreAdjustment('L', 'commish', { matchupId: 'm1', rosterId: 'away', points: -5, reason: 'empty slot penalty', ...over })
 
@@ -103,5 +103,57 @@ describe('score adjustment service', () => {
     expect(await add()).toMatchObject({ ok: true })
     expect(db.state.matchups[0].awayScore).toBe(85)
     warn.mockRestore()
+  })
+})
+
+describe('applying a stat correction', () => {
+  const apply = (targetNet: number, rosterId = 'away') =>
+    applyStatCorrectionAdjustment('L', 'commish', { matchupId: 'm1', rosterId, targetNet, reason: 'Stat correction, week 4: Run Back −4.5' })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    c2c.mockResolvedValue(false)
+    db.state.settings = { scoring_mode: 'points' }
+    db.state.matchups = [{ id: 'm1', leagueId: 'L', seasonId: 's1', week: 4, homeRosterId: 'home', awayRosterId: 'away', homeScore: 100, awayScore: 90 }]
+  })
+
+  it('adds a tagged adjustment for the correction, moves the sealed score, refreshes standings and audits', async () => {
+    const r = await apply(-4.5)
+    expect(r).toMatchObject({ ok: true, net: -4.5, adjustment: { points: -4.5, source: 'stat_correction', week: 4, byUserId: 'commish' } })
+    expect(db.state.matchups[0].awayScore).toBe(85.5)
+    expect(standings).toHaveBeenCalledWith('s1', 4)
+    expect(db.prisma.leagueAuditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ actionType: 'score_adjustment_added' }) }))
+  })
+
+  it('applies a correction once: a second tap adds nothing and moves nothing', async () => {
+    await apply(-4.5)
+    vi.clearAllMocks()
+    const again = await apply(-4.5)
+    expect(again).toMatchObject({ ok: true, adjustment: null, net: -4.5 })
+    expect(db.state.matchups[0].awayScore).toBe(85.5)
+    expect(db.tx.league.update).not.toHaveBeenCalled()
+    expect(db.prisma.leagueAuditLog.create).not.toHaveBeenCalled()
+  })
+
+  it('adds only the difference when a further correction changes the total', async () => {
+    await apply(-4.5)
+    const r = await apply(-6)
+    expect(r).toMatchObject({ ok: true, adjustment: { points: -1.5 } })
+    expect(db.state.matchups[0].awayScore).toBe(84)
+  })
+
+  it("leaves the commissioner's own adjustment out of what counts as applied", async () => {
+    await add({ points: -5, reason: 'late lineup penalty' })
+    const r = await apply(-4.5)
+    expect(r).toMatchObject({ ok: true, adjustment: { points: -4.5 }, net: -9.5 })
+    expect(db.state.matchups[0].awayScore).toBe(80.5)
+  })
+
+  it('refuses a category league and a team not in the matchup', async () => {
+    db.state.settings = { scoring_mode: 'h2h_category' }
+    expect(await apply(-4.5)).toEqual({ ok: false, error: 'not_points' })
+    db.state.settings = { scoring_mode: 'points' }
+    expect(await apply(-4.5, 'stranger')).toEqual({ ok: false, error: 'bad_target' })
+    expect(db.state.matchups[0].awayScore).toBe(90)
   })
 })

@@ -6,11 +6,14 @@ import { prisma } from '@/lib/prisma'
 import { leagueUsesC2CEngine } from '@/lib/c2c/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import {
+  MAX_ADJUSTMENT_POINTS,
   MAX_ADJUSTMENTS_PER_LEAGUE,
+  REASON_MAX,
   SCORE_ADJUSTMENTS_KEY,
   adjustmentFor,
   parseAdjustmentInput,
   readScoreAdjustments,
+  statCorrectionApplied,
   type AdjustmentInputError,
   type ScoreAdjustment,
 } from './scoreAdjustments'
@@ -123,6 +126,53 @@ export async function addScoreAdjustment(
   await refreshStandings(matchup.seasonId, matchup.week)
   await audit(leagueId, userId, 'score_adjustment_added', adjustment, result.net)
   return { ok: true, adjustment, net: result.net }
+}
+
+/**
+ * Bring one team's STAT-CORRECTION adjustment in one matchup to `targetNet` — the corrected points the
+ * league office's new stats are worth (lib/stat-corrections). Adds only the difference from what is
+ * already applied, and works that out under the league lock, so a double tap or two commissioners at
+ * once apply a correction once. Nothing to add is success with no adjustment. The commissioner's own
+ * adjustments are not counted: a penalty and a stat correction on the same team stay separate.
+ */
+export async function applyStatCorrectionAdjustment(
+  leagueId: string,
+  userId: string,
+  input: { matchupId: string; rosterId: string; targetNet: number; reason: string },
+): Promise<{ ok: true; adjustment: ScoreAdjustment | null; net: number } | { ok: false; error: AdjustmentError }> {
+  if (!Number.isFinite(input.targetNet)) return { ok: false, error: 'bad_points' }
+  const matchup = await prisma.redraftMatchup.findFirst({
+    where: { id: input.matchupId, leagueId },
+    select: { id: true, seasonId: true, week: true, homeRosterId: true, awayRosterId: true },
+  })
+  if (!matchup) return { ok: false, error: 'not_found' }
+  if (!matchup.awayRosterId) return { ok: false, error: 'median_only' }
+  const side: Side | null = input.rosterId === matchup.homeRosterId ? 'home' : input.rosterId === matchup.awayRosterId ? 'away' : null
+  if (!side) return { ok: false, error: 'bad_target' }
+  if (await leagueUsesC2CEngine(leagueId)) return { ok: false, error: 'c2c' }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const league = await lockedLeague(tx, leagueId)
+    if (!league) return { ok: false as const, error: 'not_found' as const }
+    if (league.scoringMode !== 'points') return { ok: false as const, error: 'not_points' as const }
+    const points = Math.round((input.targetNet - statCorrectionApplied(league.list, matchup.id, input.rosterId)) * 100) / 100
+    if (points === 0) return { ok: true as const, adjustment: null, net: adjustmentFor(league.list, matchup.id, input.rosterId) }
+    if (Math.abs(points) > MAX_ADJUSTMENT_POINTS) return { ok: false as const, error: 'bad_points' as const }
+    if (league.list.length >= MAX_ADJUSTMENTS_PER_LEAGUE) return { ok: false as const, error: 'too_many' as const }
+    const adjustment: ScoreAdjustment = {
+      id: randomUUID(), matchupId: matchup.id, rosterId: input.rosterId, week: matchup.week,
+      points, reason: input.reason.trim().slice(0, REASON_MAX), byUserId: userId, at: new Date().toISOString(),
+      source: 'stat_correction',
+    }
+    const list = [...league.list, adjustment]
+    await writeList(tx, leagueId, league.settings, list)
+    await shiftScore(tx, matchup.id, side, points)
+    return { ok: true as const, adjustment, net: adjustmentFor(list, matchup.id, input.rosterId) }
+  })
+  if (!result.ok || !result.adjustment) return result
+  await refreshStandings(matchup.seasonId, matchup.week)
+  await audit(leagueId, userId, 'score_adjustment_added', result.adjustment, result.net)
+  return result
 }
 
 export async function removeScoreAdjustment(

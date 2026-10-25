@@ -1,40 +1,75 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { StatCorrectionView } from '@/lib/stat-corrections/statCorrectionService'
+import { ScoreAdjustmentsEditor } from './ScoreAdjustmentsEditor'
 
 const signed = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(2)}`
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
+const opsUrl = (leagueId: string) => `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/operations`
+
 /**
  * Stat corrections for the last sealed week (lib/stat-corrections): which scores would change if the
- * league office's corrected stats were applied, and whether a result would flip. Read-only — results
- * and standings stay as sealed; the commissioner decides, using the score adjustments below.
+ * league office's corrected stats were applied, whether a result would flip, and Apply — which posts
+ * each team's correction as a score adjustment, so the sealed result, the standings and the audit log
+ * move together. Nothing changes until the commissioner taps it.
  */
-export function StatCorrectionsCard({ leagueId }: { leagueId: string }) {
+export function StatCorrectionsCard({ leagueId, onApplied }: { leagueId: string; onApplied?: () => void }) {
   const [view, setView] = useState<StatCorrectionView | null>(null)
   const [error, setError] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
-  useEffect(() => {
-    let live = true
-    fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/operations?view=stat_corrections`, { credentials: 'include', cache: 'no-store' })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(String(res.status))
-        const data = (await res.json()) as StatCorrectionView
-        if (live) setView(data)
-      })
-      .catch(() => live && setError(true))
-    return () => {
-      live = false
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${opsUrl(leagueId)}?view=stat_corrections`, { credentials: 'include', cache: 'no-store' })
+      if (!res.ok) throw new Error(String(res.status))
+      setView((await res.json()) as StatCorrectionView)
+    } catch {
+      setError(true)
     }
   }, [leagueId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const apply = async (matchupId: string) => {
+    setBusy(matchupId)
+    setMessage(null)
+    try {
+      const res = await fetch(opsUrl(leagueId), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stat_correction_apply', matchupId }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; adjustmentsAdded?: number }
+      if (!res.ok) {
+        setMessage({ ok: false, text: data.error || 'Could not apply the correction.' })
+        return
+      }
+      setMessage({
+        ok: true,
+        text: data.adjustmentsAdded ? 'Applied. Scores and standings are updated.' : 'Already applied. Nothing changed.',
+      })
+      await load()
+      onApplied?.()
+    } catch {
+      setMessage({ ok: false, text: 'Could not reach the server. Try again.' })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   if (error) return null
   if (!view) return <p className="lsh-help" role="status">Checking for stat corrections…</p>
   if (!view.covered) return null
 
   const latest = view.latest
+  const pending = latest?.matchups.filter((m) => !m.fullyApplied) ?? []
   return (
     <div className="lsh-field-card" data-testid="stat-corrections">
       <p className="lsh-field-label">Stat corrections</p>
@@ -49,20 +84,33 @@ export function StatCorrectionsCard({ leagueId }: { leagueId: string }) {
       ) : (
         <>
           <p className="lsh-help">
-            Week {latest.week}: the league office changed some stats after the week was final. Results and standings have not
-            changed. To apply a correction, add a score adjustment below.
+            Week {latest.week}: the league office changed some stats after the week was final. Nothing changes until you apply
+            it. Applying adds each team&apos;s correction as a score adjustment, which updates the result, the standings and the
+            league log.
           </p>
-          <ul className="space-y-1 pt-1">
+          <ul className="space-y-2 pt-1">
             {latest.matchups.map((m) => (
               <li key={m.matchupId} className="text-[13px]" data-testid="stat-correction-matchup">
-                <span className="tabular-nums">
+                <div className="tabular-nums">
                   {m.home.teamName} {m.home.before.toFixed(2)} → <strong>{m.home.after.toFixed(2)}</strong> vs {m.away.teamName}{' '}
                   {m.away.before.toFixed(2)} → <strong>{m.away.after.toFixed(2)}</strong>
-                </span>
-                {m.resultFlipped && <strong className="lsh-error"> Result would change</strong>}
+                  {m.resultFlipped && <strong className="lsh-error"> Result changes</strong>}
+                </div>
+                {m.fullyApplied ? (
+                  <span className="lsh-ok" data-testid="stat-correction-applied">Applied</span>
+                ) : (
+                  <button type="button" className="lsh-secondary" disabled={busy !== null} onClick={() => void apply(m.matchupId)}>
+                    {busy === m.matchupId ? 'Applying…' : 'Apply'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
+          {pending.length > 1 && (
+            <button type="button" className="lsh-primary mt-2" disabled={busy !== null} onClick={() => void apply('all')}>
+              {busy === 'all' ? 'Applying…' : `Apply all ${pending.length}`}
+            </button>
+          )}
           <ul className="space-y-1 pt-2">
             {latest.changes.map((c) => (
               <li key={`${c.rosterId}:${c.playerId}`} className="flex justify-between gap-3 text-[13px]" data-testid="stat-correction-player">
@@ -78,12 +126,28 @@ export function StatCorrectionsCard({ leagueId }: { leagueId: string }) {
           <p className="lsh-help pt-1">Last checked {when(latest.checkedAt)}; checks stop {when(latest.windowClosesAt)}.</p>
         </>
       )}
+      {message && (
+        <p className={message.ok ? 'lsh-ok' : 'lsh-error'} role={message.ok ? 'status' : 'alert'}>
+          {message.text}
+        </p>
+      )}
       {latest && latest.unchecked > 0 && (
         <p className="lsh-help">
           {latest.unchecked} starter{latest.unchecked === 1 ? '' : 's'} could not be re-checked: no stat line to compare.
         </p>
       )}
       {latest && <p className="lsh-help">Team defenses and players dropped since that week are not re-checked yet.</p>}
+    </div>
+  )
+}
+
+/** The Score adjustments page: corrections on top, and the adjustment list reloaded after an Apply. */
+export function ScoreAdjustmentsWithCorrections({ leagueId }: { leagueId: string }) {
+  const [version, setVersion] = useState(0)
+  return (
+    <div className="space-y-4">
+      <StatCorrectionsCard leagueId={leagueId} onApplied={() => setVersion((v) => v + 1)} />
+      <ScoreAdjustmentsEditor key={version} leagueId={leagueId} />
     </div>
   )
 }

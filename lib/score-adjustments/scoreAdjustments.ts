@@ -35,6 +35,11 @@ export type ScoreAdjustment = {
   reason: string
   byUserId: string
   at: string
+  /**
+   * Set when the adjustment applies a stat correction the league office posted after the week was
+   * sealed (lib/stat-corrections). Absent on a commissioner's own adjustment.
+   */
+  source?: 'stat_correction'
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -59,6 +64,11 @@ export function adjustmentFor(list: readonly ScoreAdjustment[], matchupId: strin
   let sum = 0
   for (const a of list) if (a.matchupId === matchupId && a.rosterId === rosterId) sum += a.points
   return round2(sum)
+}
+
+/** The part of a team's adjustment in one matchup that applies stat corrections. */
+export function statCorrectionApplied(list: readonly ScoreAdjustment[], matchupId: string, rosterId: string): number {
+  return adjustmentFor(list.filter((a) => a.source === 'stat_correction'), matchupId, rosterId)
 }
 
 /** A computed score with the commissioner's adjustment on top. */

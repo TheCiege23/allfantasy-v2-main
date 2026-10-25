@@ -28,6 +28,7 @@ import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import { buildLeagueStatScorer, isScoringStarterSlot, leagueIsBestBall } from '@/lib/redraft/scoringEngine'
 import { isTeamDefenseRow } from '@/lib/scoring-runtime/nflStatNormalization'
 import type { NflWeekStatsFetcher } from '@/lib/redraft/playerWeeklyScoreService'
+import { readScoreAdjustments, statCorrectionApplied } from '@/lib/score-adjustments/scoreAdjustments'
 import { reviewStatCorrections, type StatCorrectionReview } from './statCorrectionReview'
 
 /** How long after a week's seal it is still re-checked. Corrections land within the week. */
@@ -139,9 +140,22 @@ export async function checkStatCorrectionsForSeason(
   const previous = readStoredReview((await prisma.sportsDataCache.findUnique({ where: { cacheKey: key } }))?.data)
   if (previous && now - Date.parse(previous.checkedAt) < STAT_CORRECTION_RECHECK_MS) return 'throttled'
 
+  /*
+   * ⚠ MEASURED FROM THE SEALED SCORE, NOT THE STORED ONE. Applying a correction (the commissioner's
+   * Apply, via applyStatCorrectionAdjustment) moves the stored score by the correction. Comparing the
+   * next re-check against that would add the same correction twice. Taking the applied part back out
+   * keeps "before" the sealed result and "after" the fully corrected one on every check.
+   */
+  const adjustments = readScoreAdjustments(league.settings)
   const matchups = rows.flatMap((r) =>
     r.awayRosterId
-      ? [{ matchupId: r.id, homeRosterId: r.homeRosterId, awayRosterId: r.awayRosterId, homeScore: r.homeScore, awayScore: r.awayScore }]
+      ? [{
+          matchupId: r.id,
+          homeRosterId: r.homeRosterId,
+          awayRosterId: r.awayRosterId,
+          homeScore: r.homeScore - statCorrectionApplied(adjustments, r.id, r.homeRosterId),
+          awayScore: r.awayScore - statCorrectionApplied(adjustments, r.id, r.awayRosterId),
+        }]
       : [],
   )
   const rosterIds = [...new Set(matchups.flatMap((m) => [m.homeRosterId, m.awayRosterId]))]
