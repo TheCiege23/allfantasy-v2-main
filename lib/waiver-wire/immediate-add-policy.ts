@@ -8,6 +8,7 @@
  * waivers comes back as WAIVER_REQUIRED and the page falls back to the claim form.
  */
 import type { DailyWaiverMode } from '@/lib/waivers/dailyWaiverSchedule'
+import type { WaiverPhasePolicy } from './season-phase-policy'
 
 export type DailyPolicySnapshot = {
   mode: DailyWaiverMode
@@ -23,10 +24,14 @@ export function isImmediateAddAllowedToday(
         instantFaAfterClear?: boolean | null
         freeAgentUnlockBehavior?: string | null
         dailyPolicy?: DailyPolicySnapshot | null
+        phasePolicy?: WaiverPhasePolicy | null
       }
     | null
     | undefined,
 ): boolean {
+  // The season phase (lib/waiver-wire/season-phase-policy.ts) decides first when it changes anything:
+  // a closed offseason or locked playoffs allow no add, a first-come offseason allows every add.
+  if (settings?.phasePolicy?.code) return settings.phasePolicy.immediateAddsAllowed
   if (settings?.dailyPolicy) return settings.dailyPolicy.immediateAddsAllowed
   // 'daily' unlock (NBA/MLB/NHL default): non-waiver players are first-come; the server refuses a
   // player still on waivers with WAIVER_REQUIRED and the page falls back to the claim form.
@@ -50,4 +55,33 @@ const MODE_LABELS: Record<DailyWaiverMode, string> = {
 export function dailyModeLabel(policy: DailyPolicySnapshot): string {
   if (policy.mode === 'waivers_then_fa' && policy.immediateAddsAllowed) return 'Free agents — waivers cleared'
   return MODE_LABELS[policy.mode] ?? policy.mode
+}
+
+/**
+ * A player on waivers after a drop (`onWaiversUntil`, lib/waiver-wire/dropped-player-waivers.ts) needs a
+ * claim even on a day free agents are instant adds — unless the offseason is first-come, where no
+ * waiver period applies. Null = no hold; else the time he clears.
+ */
+export function playerWaiverHoldUntil(
+  player: { onWaiversUntil?: string | null } | null | undefined,
+  settings: { phasePolicy?: WaiverPhasePolicy | null } | null | undefined,
+  now: Date = new Date(),
+): Date | null {
+  if (settings?.phasePolicy?.firstComeAdds) return null
+  const raw = player?.onWaiversUntil
+  if (!raw) return null
+  const until = new Date(raw)
+  return Number.isFinite(until.getTime()) && until > now ? until : null
+}
+
+/** "On waivers until Tue 3:00 PM" in the viewer's own time zone. */
+export function onWaiversUntilLabel(until: Date): string {
+  return `On waivers until ${until.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+}
+
+/** The phase's blocking reason for the waiver screen, when no claim and no add is possible. */
+export function phaseMoveBlockReason(settings: { phasePolicy?: WaiverPhasePolicy | null } | null | undefined): string | null {
+  const p = settings?.phasePolicy
+  if (!p?.code) return null
+  return p.reason
 }

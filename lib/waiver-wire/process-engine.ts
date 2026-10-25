@@ -25,6 +25,8 @@ import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-loc
 import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
+import { loadWaiverRunPhaseGate } from './season-phase-gate'
+import { DROPPER_RECLAIM_MESSAGE, droppedPlayerWaiverHours, loadDroppedPlayerHolds, type DroppedPlayerHold } from './dropped-player-waivers'
 
 type ClaimRow = {
   id: string
@@ -93,7 +95,7 @@ export async function processWaiverClaimsForLeague(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true },
+      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -174,6 +176,19 @@ export async function processWaiverClaimsForLeague(
   if (ordered.length === 0) {
     return []
   }
+
+  // Season phase (season-phase-policy.ts): in a closed or first-come offseason, with rosters locked
+  // for the playoffs, or for a team out of the title bracket under the alive-only rule, a claim fails
+  // with the reason. Read once per run; an unreadable phase keeps the regular season's rules.
+  const phaseRefusal = await loadWaiverRunPhaseGate(leagueId).catch(() => (): string | null => null)
+  // A dropped player on waivers (dropped-player-waivers.ts) cannot go back to the team that dropped
+  // him. The claims on him otherwise run in the order above, like any claim.
+  const holdHours = droppedPlayerWaiverHours({ normalizedWaiverType: configuredWaiverType, waiverHours: league.waiverHours })
+  const dropHolds: Map<string, DroppedPlayerHold> = holdHours > 0
+    ? await loadDroppedPlayerHolds(leagueId, holdHours, {
+        playerIds: Array.from(new Set(ordered.map((c) => String(c.addPlayerId)))),
+      }).catch(() => new Map<string, DroppedPlayerHold>())
+    : new Map<string, DroppedPlayerHold>()
 
   const waiverRun = await (prisma as any).waiverRun.create({
     data: {
@@ -267,8 +282,19 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
+    const phaseBlock = phaseRefusal(claim.rosterId)
+    if (phaseBlock) {
+      await pushFail(phaseBlock)
+      continue
+    }
+
     const addId = claim.addPlayerId
     const dropId = claim.dropPlayerId
+
+    if (dropHolds.get(String(addId))?.droppedByRosterId === claim.rosterId) {
+      await pushFail(DROPPER_RECLAIM_MESSAGE)
+      continue
+    }
 
     const ownerRosterId = rosteredByPlayer.get(addId)
     if (ownerRosterId) {
