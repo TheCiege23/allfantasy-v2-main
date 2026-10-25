@@ -73,6 +73,7 @@ import {
 } from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
+import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
@@ -401,6 +402,16 @@ export async function executeLeagueSettingsPatch(
       const refusal = await gamesCountChangeRefusal({ leagueId, from, to })
       if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
     }
+  }
+
+  // The league median game: a boolean only, and not once the season's first week is final — a change
+  // then would add or remove a median result in every played week (lib/redraft/medianGameSwitch.ts).
+  let medianGameChanged = false
+  if (body.medianGame !== undefined) {
+    if (typeof body.medianGame !== 'boolean') return jsonError('medianGame must be true or false', 400)
+    const refusal = await medianGameChangeRefusal({ leagueId, from: league.medianGame === true, to: body.medianGame })
+    if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    medianGameChanged = body.medianGame !== (league.medianGame === true)
   }
 
   if (body.season != null) {
@@ -952,6 +963,16 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push(DAILY_WAIVER_SCHEDULE_SETTINGS_KEY)
+  }
+
+  // The season copy (`RedraftSeason.medianGame`, taken at the draft) is what the weekly history, the
+  // season outlook and the next season's shell read. The timing rule above has already settled that no
+  // running season has a final week, so its copy follows the league; a completed season keeps its own.
+  if (medianGameChanged) {
+    await prisma.redraftSeason.updateMany({
+      where: { leagueId, status: { not: REDRAFT_SEASON_STATUS.COMPLETE } },
+      data: { medianGame: body.medianGame as boolean },
+    })
   }
 
   if (typeof body.medianGameInPlayoffs === 'boolean') {
