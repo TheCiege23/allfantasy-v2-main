@@ -265,6 +265,31 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  // Inactive manager mode (lib/inactive-manager): the league should know who is setting a team's lineup.
+  'inactive_manager_mode.on': {
+    category: 'rosters',
+    members: true,
+    line: (ctx) => {
+      const t = team(ctx, ctx.row.entityId)
+      return { en: `AllFantasy now sets ${t.en}'s best lineup each week while the manager is away`, es: `AllFantasy ahora pone la mejor alineación de ${t.es} cada semana mientras el mánager no está` }
+    },
+  },
+  'inactive_manager_mode.off': {
+    category: 'rosters',
+    members: true,
+    line: (ctx) => {
+      const t = team(ctx, ctx.row.entityId)
+      return { en: `AllFantasy stopped setting ${t.en}'s lineup`, es: `AllFantasy dejó de poner la alineación de ${t.es}` }
+    },
+  },
+  'inactive_manager_mode.ended': {
+    category: 'rosters',
+    members: true,
+    line: (ctx) => {
+      const t = team(ctx, ctx.row.entityId)
+      return { en: `${t.en}'s manager is back and set their own lineup, so AllFantasy stopped`, es: `El mánager de ${t.es} volvió y puso su alineación, así que AllFantasy se detuvo` }
+    },
+  },
   'native_autosubs.policy_changed': {
     category: 'rosters',
     members: true,
@@ -379,7 +404,8 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
     if (
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||
-        row.actionType === 'commissioner_edit_waiver_priority') &&
+        row.actionType === 'commissioner_edit_waiver_priority' ||
+        row.actionType.startsWith('inactive_manager_mode.')) &&
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)
