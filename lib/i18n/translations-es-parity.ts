@@ -2984,6 +2984,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.po.teams": "Equipos en playoffs",
   "lsHub.po.start": "Inicio de playoffs (semana)",
   "lsHub.po.stages": "Fases y brackets",
+  "lsHub.po.medianGame": "Juego contra la mediana de la liga",
+  "lsHub.po.medianGameHelp": "Cada semana de temporada regular cada equipo también juega contra la puntuación mediana de la liga: por encima suma una victoria extra, por debajo una derrota extra. Solo se puede cambiar hasta que la primera semana de la temporada tenga resultados finales.",
   "lsHub.po.medianPlayoffs": "Mediana de la liga en playoffs",
   "lsHub.po.medianPlayoffsHelp": "Desactivada: las semanas de playoffs son solo ganar o quedar fuera. Activada: los resultados contra la mediana siguen contando en playoffs, solo en el récord de temporada; el bracket se decide solo con los puntos de playoffs.",
   "lsHub.po.br.title": "Formato del bracket",

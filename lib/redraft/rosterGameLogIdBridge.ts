@@ -27,15 +27,32 @@
  * `sleeperId`, so a numeric pool id in these sports IS an RI id. Should that change, an id that is
  * ALSO some player's `sleeperId` in the sport is ambiguous: it is NOT bridged, and is reported, so a
  * roster slot is never scored from another man's games.
+ *
+ * 🛑 A `tsdb_…` ROSTER ID IS BRIDGED BY NAME, AND ONLY WHEN THE NAME IS ONE MAN (2026-10-25). Leagues
+ * drafted before the pool stopped handing out TheSportsDB ids (`isScorablePoolId`) still hold them, and
+ * nothing mapped them: in the one live NHL redraft season 21 of 72 roster players were `tsdb_…`, and
+ * Adam Fox, Adam Fantilli, Aaron Ekblad, Adin Hill and four other STARTERS scored 0 every week with
+ * 7-13 games each in `player_game_stats`. PlayerIdentityMap has no TheSportsDB column, so the roster
+ * row's own name is the only link. The rule is the one `collapseSamePersonRows` already uses: exactly
+ * one identity carries that normalized name in the sport, else nothing. And an identity another roster
+ * id of this league already reaches is REFUSED, not shared — the old pool listed one man under both ids,
+ * and that league drafted Aatu Raty twice (`3020` on one team, `tsdb_34184761` on another). Crediting
+ * both would score one man's games for two teams.
  */
+import { normalizePlayerName } from '@/lib/team-abbrev'
 
-type IdentityRow = { id: string; rollingInsightsId: string | null; sleeperId: string | null }
+type IdentityRow = {
+  id: string
+  rollingInsightsId: string | null
+  sleeperId: string | null
+  normalizedName?: string | null
+}
 
 export type IdentityDb = {
   playerIdentityMap: {
     findMany(args: {
       where: Record<string, unknown>
-      select: { id: true; rollingInsightsId: true; sleeperId: true }
+      select: { id: true; rollingInsightsId: true; sleeperId: true; normalizedName?: true }
     }): Promise<IdentityRow[]>
   }
 }
@@ -49,14 +66,26 @@ export type GameLogIdBridge = {
   ambiguous: string[]
   /** How many roster ids were translated through the identity map. */
   bridged: number
+  /** How many of those were `tsdb_…` ids matched by name (already counted in `bridged`). */
+  bridgedByName: number
+  /** `tsdb_…` ids whose name is another roster id's identity, or more than one man — refused. */
+  nameRefused: string[]
 }
 
 const NUMERIC = /^\d+$/
+const TSDB = /^tsdb_/
+
+/** The form `PlayerIdentityMap.normalizedName` holds: accents folded first ("Räty" -> "raty"). */
+export function identityNameKey(name: string | null | undefined): string {
+  return normalizePlayerName(String(name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+}
 
 export async function bridgeRosterIdsToGameLogIds(
   db: IdentityDb,
   sportKeys: string[],
   rosterIds: string[],
+  /** Roster id -> the roster row's player name. Only `tsdb_…` ids read it. */
+  namesById?: ReadonlyMap<string, string | null | undefined>,
 ): Promise<GameLogIdBridge> {
   const toRoster = new Map<string, string>(rosterIds.map((id) => [id, id]))
   const numeric = rosterIds.filter((id) => NUMERIC.test(id))
@@ -91,10 +120,44 @@ export async function bridgeRosterIdsToGameLogIds(
     }
   }
 
+  // After the numeric pass, so an identity a Rolling Insights id already reaches is seen as claimed.
+  let bridgedByName = 0
+  const nameRefused: string[] = []
+  const byName = new Map<string, string[]>()
+  for (const id of rosterIds) {
+    if (!TSDB.test(id)) continue
+    const key = identityNameKey(namesById?.get(id))
+    if (key) byName.set(key, [...(byName.get(key) ?? []), id])
+  }
+  if (byName.size > 0) {
+    const rows = await db.playerIdentityMap.findMany({
+      where: { sport: { in: sportKeys }, normalizedName: { in: [...byName.keys()] } },
+      select: { id: true, rollingInsightsId: true, sleeperId: true, normalizedName: true },
+    })
+    const people = new Map<string, Set<string>>()
+    for (const row of rows) {
+      const key = String(row.normalizedName ?? '')
+      people.set(key, (people.get(key) ?? new Set()).add(row.id))
+    }
+    for (const [key, ids] of byName) {
+      const identities = [...(people.get(key) ?? [])]
+      if (identities.length === 0) continue
+      if (identities.length > 1 || ids.length > 1 || toRoster.has(identities[0])) {
+        nameRefused.push(...ids)
+        continue
+      }
+      toRoster.set(identities[0], ids[0])
+      bridged += 1
+      bridgedByName += 1
+    }
+  }
+
   return {
     gameLogIds: [...toRoster.keys()],
     rosterIdFor: (gameLogId) => toRoster.get(gameLogId),
     ambiguous: [...new Set(ambiguous)],
     bridged,
+    bridgedByName,
+    nameRefused,
   }
 }

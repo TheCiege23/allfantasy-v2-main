@@ -35,6 +35,8 @@ export type IntegritySettingsValue = {
   tankingIllegalLineupCheck: boolean
   tankingBenchPatternCheck: boolean
   tankingWaiverPatternCheck: boolean
+  /** Suspicious-trade alerts (League.settings, lib/integrity/tradeAlerts.ts). Absent = on. */
+  tradeAlertsEnabled?: boolean
 }
 
 type Draft = {
@@ -45,6 +47,7 @@ type Draft = {
   tankingIllegalLineupCheck: boolean
   tankingBenchPatternCheck: boolean
   tankingWaiverPatternCheck: boolean
+  tradeAlertsEnabled: boolean
 }
 
 function toDraft(v: IntegritySettingsValue): Draft {
@@ -56,6 +59,7 @@ function toDraft(v: IntegritySettingsValue): Draft {
     tankingIllegalLineupCheck: v.tankingIllegalLineupCheck !== false,
     tankingBenchPatternCheck: v.tankingBenchPatternCheck !== false,
     tankingWaiverPatternCheck: Boolean(v.tankingWaiverPatternCheck),
+    tradeAlertsEnabled: v.tradeAlertsEnabled !== false,
   }
 }
 
@@ -131,6 +135,19 @@ export function IntegritySettings({
           <p className="af-cm-setgroup-note">
             Always on. Runs the trade review on every settled trade &mdash; value, partners, activity, standings; no chat access.
           </p>
+          <div className="af-cm-setrow">
+            <span className="af-cm-setrow-label">Alert me when a trade is flagged</span>
+            <button
+              type="button"
+              className="af-cm-toggle af-num"
+              aria-pressed={draft.tradeAlertsEnabled}
+              aria-label="Suspicious trade alerts"
+              disabled={saving || readOnly}
+              onClick={() => set('tradeAlertsEnabled', !draft.tradeAlertsEnabled)}
+            >
+              {draft.tradeAlertsEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
           <div className="af-label">Sensitivity</div>
           <Segmented
             name="Collusion"

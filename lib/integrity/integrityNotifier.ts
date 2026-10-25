@@ -4,6 +4,7 @@ import "server-only"
 
 import { prisma } from "@/lib/prisma"
 import { getNotificationsQueue } from "@/lib/queues/bullmq"
+import { readTradeAlertsEnabled } from "@/lib/integrity/tradeAlerts"
 
 async function enqueueIntegrityNotification(
   userId: string,
@@ -41,11 +42,13 @@ export async function notifyCommissionerOfFlag(flagId: string): Promise<void> {
   const flag = await prisma.integrityFlag.findFirst({
     where: { id: flagId },
     include: {
-      league: { select: { userId: true } },
+      league: { select: { userId: true, settings: true } },
     },
   })
   if (!flag) return
   if (flag.notifiedAt) return
+  // The commissioner switched suspicious-trade alerts off: the flag stays on the review page, unsent.
+  if (flag.flagType === "collusion" && !readTradeAlertsEnabled(flag.league.settings)) return
 
   const severity = flag.severity === "high" ? "high" : "medium"
   const flagType: "collusion" | "tanking" =

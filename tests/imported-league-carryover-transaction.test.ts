@@ -117,6 +117,32 @@ describe('standalone carryover transaction', () => {
     }))
   })
 
+  it('NFL: writes the imported rules into the commissioner scoring store, marked imported (owner, 2026-10-25)', async () => {
+    const tx = transaction()
+    tx.league.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+      where.id === 'source'
+        ? { platform: 'sleeper', sport: 'NFL', settings: { scoringSettings: { format: 'points', rules: { pass_yd: 0.04, pass_td: 6, rec: 0.5, bonus_rec_te: 0.5, bonus_rec_rb: 1 } } } }
+        : { settings: { existing: true, sportConfig: { scoringPreset: 'PPR', categoryPoints: { pass_td: 4 } } } })
+    await carryOverImportedLeague(tx as never, { sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'NFL', teamCount: 2 })
+    const settings = tx.league.update.mock.calls.at(-1)![0].data.settings
+    expect(settings.nfl_scoring_config).toMatchObject({
+      presetKey: 'custom', source: 'IMPORTED_MAPPED', lastUpdatedBy: 'creator',
+      rules: expect.objectContaining({ passing_yards: 0.04, passing_td: 6, reception: 0.5, te_premium: 0.5, rushing_td: 0 }),
+      importNotScored: ['bonus rec rb'],
+    })
+    // categoryPoints outranks the panel store, so the stale preset value must not survive.
+    expect(settings.sportConfig).toEqual({ scoringPreset: 'PPR', enableTEPremium: true })
+    expect(settings.importCarryover.scoring).toEqual({ convertedCount: 4, notScored: ['bonus rec rb'], approximated: [] })
+  })
+
+  it('NFL: a source with no scoring rules leaves the preset alone', async () => {
+    const tx = transaction()
+    await carryOverImportedLeague(tx as never, { sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'NFL', teamCount: 2 })
+    const settings = tx.league.update.mock.calls.at(-1)![0].data.settings
+    expect(settings).not.toHaveProperty('nfl_scoring_config')
+    expect(settings.importCarryover).not.toHaveProperty('scoring')
+  })
+
   it('refuses an unmapped player before writing any target roster', async () => {
     const tx = transaction()
     tx.playerIdentityMap.findMany.mockResolvedValue([])

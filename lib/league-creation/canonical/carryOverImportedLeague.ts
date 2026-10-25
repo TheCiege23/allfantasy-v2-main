@@ -4,6 +4,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
 import { importedMlbScoring } from './importedMlbScoring'
+import { importedNflScoring } from './importedNflScoring'
 import { copyImportedHistory } from './copyImportedHistory'
 import { importedMlbRoster } from './importedMlbRoster'
 import { isNativeFuturePickLeague, loadNativePickHorizonStart } from '@/lib/league-trade-engine/nativeFuturePicks'
@@ -197,6 +198,8 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     try { mlbScoring = importedMlbScoring(source.settings); mlbRoster = importedMlbRoster(source.settings) }
     catch (error) { refuse(error instanceof Error ? error.message : 'Imported scoring cannot be verified.') }
   }
+  // Best-effort, never refuses: null keeps the preset the creator picked (owner, 2026-10-25).
+  const nflScoring = args.sport === 'NFL' ? importedNflScoring(source.settings) : null
   if (teams.length !== args.teamCount || slots.length !== args.teamCount || !session) {
     refuse('Team count must match the imported league exactly to carry over every roster.')
   }
@@ -357,10 +360,41 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: mlbScoring.scoringMode, categoryPoints: mlbScoring.categoryPoints, lineupLockType:'first_game_of_week' },
         mlb_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: mlbScoring.uiRules, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
       } : {}),
+      ...(nflScoring ? importedNflSettings(asRecord(target.settings), nflScoring, args.creatorUserId) : {}),
       importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length,
+        ...(nflScoring ? { scoring: { convertedCount: nflScoring.convertedCount, notScored: nflScoring.notScored, approximated: nflScoring.approximated } } : {}),
         ...(futurePicks ? { futurePickCount: futurePicks.copied, futurePicksSkipped: futurePicks.skippedUnmapped + futurePicks.skippedNotTraded + futurePicks.skippedPastSeason } : {}),
         copiedAt: new Date().toISOString() },
     } as Prisma.InputJsonValue,
   } })
   return picks.length
+}
+
+/**
+ * The settings keys an imported NFL rule set writes: the commissioner panel's store, marked
+ * IMPORTED_MAPPED so post-create bootstrap does not re-seed the preset over it. Any engine-key
+ * `categoryPoints` is removed because it outranks the panel store, and the imported rules must
+ * be what scores.
+ */
+function importedNflSettings(
+  target: Record<string, unknown>,
+  nfl: NonNullable<ReturnType<typeof importedNflScoring>>,
+  creatorUserId: string,
+): Record<string, unknown> {
+  const { categoryPoints: _replaced, ...sportConfig } = asRecord(target.sportConfig)
+  return {
+    nfl_scoring_config: {
+      presetKey: 'custom',
+      source: 'IMPORTED_MAPPED',
+      rules: nfl.rules,
+      matchesPreset: false,
+      premiumFeaturesUsed: false,
+      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedBy: creatorUserId,
+      warningFlags: nfl.notScored.length || nfl.approximated.length ? ['imported_rules_not_exact'] : [],
+      importNotScored: nfl.notScored,
+      importApproximated: nfl.approximated,
+    },
+    sportConfig: { ...sportConfig, ...(nfl.enableTEPremium ? { enableTEPremium: true } : {}) },
+  }
 }
