@@ -12,6 +12,7 @@ import {
   type GuillotineRules,
 } from '@/lib/guillotine/guillotineRules'
 import { MAX_CHOPS_PER_WEEK } from '@/lib/guillotine/chopSchedule'
+import { FAAB_ON_CHOP_OPTIONS, type FaabOnChop } from '@/lib/guillotine/faabOnChop'
 import { SettingsSubPageFooter } from './LeagueSettingsHome'
 
 type RulesView = {
@@ -114,6 +115,7 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
 
   const endgameHelp = ENDGAME_OPTIONS.find((o) => o.value === rules.endgame)?.help
   const releaseHelp = RELEASE_OPTIONS.find((o) => o.value === rules.rosterReleaseTiming)?.help
+  const faabHelp = `${FAAB_ON_CHOP_OPTIONS.find((o) => o.value === rules.faabOnChop)?.help ?? ''} Only matters if your league uses FAAB bidding.`
 
   return (
     <div className="space-y-5" data-testid="guillotine-rules">
@@ -148,6 +150,19 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
           onChange={(e) => update({ rosterReleaseTiming: e.target.value as GuillotineRules['rosterReleaseTiming'] })}
         >
           {RELEASE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="A chopped team's unspent FAAB" help={faabHelp}>
+        <select
+          className={inputClass}
+          value={rules.faabOnChop}
+          onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })}
+          data-testid="guillotine-rules-faab-on-chop"
+        >
+          {FAAB_ON_CHOP_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>

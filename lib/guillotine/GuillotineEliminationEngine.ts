@@ -22,6 +22,9 @@ import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 import { applyImmunity, immuneRosterIds, readAdvanced, scheduledChops } from './chopSchedule'
+import { readFaabOnChop } from './faabOnChop'
+import { redistributeChoppedFaab } from './faabOnChopApply'
+import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 
 export interface RunEliminationInput {
   leagueId: string
@@ -452,6 +455,46 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     reason,
     commissionerOverride: Boolean(input.commissionerChoppedRosterIds?.length),
   })
+
+  /*
+   * The chopped team's unspent FAAB, when the commissioner chose to split it (lib/guillotine/faabOnChop.ts).
+   * Idempotent on its own — the chopped balance is zeroed in the same transaction that pays it out — and
+   * best-effort: the chop is recorded, so a failure here is logged, never turned into a failed chop.
+   */
+  if (readFaabOnChop(endgameLeague?.settings) === 'split') {
+    try {
+      const split = await redistributeChoppedFaab({
+        choppedRosterIds,
+        survivorRosterIds: evalResult.activeRosterIds.filter((id) => !chopSet.has(id)),
+      })
+      if (split) {
+        await appendEvent(input.leagueId, 'faab_split', {
+          weekOrPeriod: input.weekOrPeriod,
+          choppedRosterIds,
+          pool: split.pool,
+          shares: Object.fromEntries(split.shares),
+        })
+        if (!input.skipChat && input.systemUserId) {
+          const whose = choppedRosterIds.length === 1 ? "The chopped team's" : "The chopped teams'"
+          await createLeagueChatMessage(
+            input.leagueId,
+            input.systemUserId,
+            `💰 ${whose} $${split.pool} of unspent FAAB was split among the ${split.survivors} teams still alive: about $${split.perTeam} each.`,
+            {
+              idempotencyKey: `guillotine-faab-split:${input.leagueId}:${input.season ?? 'na'}:w${input.weekOrPeriod}`,
+              type: 'host_announcement',
+              metadata: { senderIsHost: true, guillotineFaabSplit: true },
+            },
+          )
+        }
+      }
+    } catch (e) {
+      console.warn(
+        '[guillotine] FAAB split after chop failed; the chop itself stands',
+        JSON.stringify({ leagueId: input.leagueId, week: input.weekOrPeriod, error: e instanceof Error ? e.message : String(e) }),
+      )
+    }
+  }
 
   if (!input.skipRosterRelease) {
     await releaseChoppedRosters({

@@ -11,6 +11,7 @@
  *   statCorrectionHours   nativeGuillotineWeek (how long to wait before a chop is final)
  *   dangerMarginPoints    GuillotineDangerEngine (who shows as "in danger")
  *   rosterReleaseTiming   GuillotineEliminationEngine → releaseChoppedRosters
+ *   faabOnChop            GuillotineEliminationEngine → redistributeChoppedFaab (./faabOnChop.ts)
  *
  * components/league/GuillotineFormatTab.tsx used to list ~25 settings, most of which nothing read
  * (AI toggles, "Chop Clock", "FAAB visible"…) and whose save always failed. It was deleted rather
@@ -20,6 +21,7 @@
 import type { GuillotineEndgameFormat } from './endgameRules'
 import type { TiebreakStep } from './types'
 import { MAX_CHOPS_PER_WEEK } from './chopSchedule'
+import { FAAB_ON_CHOP_OPTIONS, type FaabOnChop } from './faabOnChop'
 
 export type GuillotineRules = {
   teamsPerChop: number
@@ -31,6 +33,8 @@ export type GuillotineRules = {
   rosterReleaseTiming: 'immediate' | 'next_waiver_run'
   /** Chimmy writes the weekly recap after each chop (paid leagues; ./weeklyRecap.ts). Stored in League.settings. */
   aiRecapAuto: boolean
+  /** What happens to a chopped team's unspent FAAB. Stored in League.settings (FAAB_ON_CHOP_KEY). */
+  faabOnChop: FaabOnChop
 }
 
 /** League.settings key for `aiRecapAuto`. Absent = on. */
@@ -91,6 +95,7 @@ export type RulesPatchError = { field: GuillotineRuleField | null; message: stri
 const ENDGAMES = new Set(ENDGAME_OPTIONS.map((o) => o.value))
 const TIEBREAKS = new Set(TIEBREAK_OPTIONS.map((o) => o.value))
 const RELEASES = new Set(RELEASE_OPTIONS.map((o) => o.value))
+const FAAB_ON_CHOP = new Set<string>(FAAB_ON_CHOP_OPTIONS.map((o) => o.value))
 
 function int(raw: unknown): number | null {
   const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw
@@ -163,6 +168,12 @@ export function normalizeGuillotineRulesPatch(
   if ('aiRecapAuto' in r) {
     if (typeof r.aiRecapAuto !== 'boolean') return { ok: false, error: { field: 'aiRecapAuto', message: 'Turn the Chimmy recap on or off.' } }
     out.aiRecapAuto = r.aiRecapAuto
+  }
+  if ('faabOnChop' in r) {
+    if (typeof r.faabOnChop !== 'string' || !FAAB_ON_CHOP.has(r.faabOnChop)) {
+      return { ok: false, error: { field: 'faabOnChop', message: "Pick what happens to a chopped team's FAAB." } }
+    }
+    out.faabOnChop = r.faabOnChop as FaabOnChop
   }
   if (Object.keys(out).length === 0) return { ok: false, error: { field: null, message: 'Nothing to save.' } }
   return { ok: true, value: out }
