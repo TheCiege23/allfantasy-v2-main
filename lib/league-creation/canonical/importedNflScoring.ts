@@ -36,6 +36,9 @@ const SLEEPER_TO_PANEL: Readonly<Record<string, readonly string[]>> = {
   pass_sack: ['qb_sacked'],
   pass_cmp_40p: ['forty_yd_completion_bonus'],
   pass_td_40p: ['forty_yd_pass_td_bonus'],
+  pass_td_50p: ['fifty_yd_pass_td_bonus'],
+  bonus_pass_cmp_25: ['twenty_five_completions_bonus'],
+  bonus_fd_qb: ['first_down_bonus_qb'],
   bonus_pass_yd_300: ['three_hundred_yd_pass_bonus'],
   bonus_pass_yd_400: ['four_hundred_yd_pass_bonus'],
   rush_yd: ['rushing_yards'],
@@ -45,6 +48,11 @@ const SLEEPER_TO_PANEL: Readonly<Record<string, readonly string[]>> = {
   rush_att: ['rush_attempt'],
   rush_40p: ['forty_yd_rush_bonus'],
   rush_td_40p: ['forty_yd_rush_td_bonus'],
+  rush_td_50p: ['fifty_yd_rush_td_bonus'],
+  bonus_rush_att_20: ['twenty_carries_bonus'],
+  bonus_rush_rec_yd_100: ['one_hundred_combined_bonus'],
+  bonus_rush_rec_yd_200: ['two_hundred_combined_bonus'],
+  bonus_fd_rb: ['first_down_bonus_rb'],
   bonus_rush_yd_100: ['one_hundred_yd_rush_bonus'],
   bonus_rush_yd_200: ['two_hundred_yd_rush_bonus'],
   rec: ['reception'],
@@ -55,6 +63,16 @@ const SLEEPER_TO_PANEL: Readonly<Record<string, readonly string[]>> = {
   rec_tgt: ['target'],
   rec_40p: ['forty_yd_reception_bonus'],
   rec_td_40p: ['forty_yd_rec_td_bonus'],
+  rec_td_50p: ['fifty_yd_rec_td_bonus'],
+  rec_0_4: ['rec_0_4_bonus'],
+  rec_5_9: ['rec_5_9_bonus'],
+  rec_10_19: ['rec_10_19_bonus'],
+  rec_20_29: ['rec_20_29_bonus'],
+  rec_30_39: ['rec_30_39_bonus'],
+  bonus_rec_rb: ['rec_bonus_rb'],
+  bonus_rec_wr: ['rec_bonus_wr'],
+  bonus_fd_wr: ['first_down_bonus_wr'],
+  bonus_fd_te: ['first_down_bonus_te'],
   bonus_rec_yd_100: ['one_hundred_yd_rec_bonus'],
   bonus_rec_yd_200: ['two_hundred_yd_rec_bonus'],
   bonus_rec_te: ['te_premium'],
@@ -68,11 +86,22 @@ const SLEEPER_TO_PANEL: Readonly<Record<string, readonly string[]>> = {
   fgm_30_39: ['fg_30_39'],
   fgm_40_49: ['fg_40_49'],
   fgm_50p: ['fg_50_plus'],
+  fgm_50_59: ['fg_50_59'],
+  fgm_60p: ['fg_60_plus'],
   fgmiss_0_19: ['fg_missed_0_19'],
   fgmiss_20_29: ['fg_missed_20_29'],
   fgmiss_30_39: ['fg_missed_30_39'],
   fgmiss_40_49: ['fg_missed_40_49'],
   fgmiss_50p: ['fg_missed_50_plus'],
+  fgmiss_50_59: ['fg_missed_50_59'],
+  fgmiss_60p: ['fg_missed_60_plus'],
+  st_td: ['st_player_td'],
+  st_ff: ['st_player_forced_fumble'],
+  st_fum_rec: ['st_player_fumble_recovery'],
+  kr_yd: ['st_player_kick_return_yards'],
+  pr_yd: ['st_player_punt_return_yards'],
+  def_st_ff: ['st_forced_fumble'],
+  def_st_fum_rec: ['st_fumble_recovery'],
   sack: ['dst_sack'],
   int: ['dst_interception'],
   fum_rec: ['dst_fumble_recovery'],
@@ -116,13 +145,11 @@ const SLEEPER_TO_PANEL: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * Sleeper rules that FILL IN for a missing specific rule rather than map on their own: a league
- * that scores every missed FG the same uses `fgmiss`; a league on Sleeper's newer kicker tiers
- * uses `fgm_50_59`. Each applies only to panel keys no specific rule set.
+ * that scores every missed FG the same uses `fgmiss`. It applies only to panel keys no specific
+ * rule set.
  */
 const FALLBACKS: Readonly<Record<string, readonly string[]>> = {
   fgmiss: ['fg_missed_0_19', 'fg_missed_20_29', 'fg_missed_30_39', 'fg_missed_40_49', 'fg_missed_50_plus'],
-  fgm_50_59: ['fg_50_plus'],
-  fgmiss_50_59: ['fg_missed_50_plus'],
 }
 
 /** The stats that make a rule set recognisably NFL points scoring. Without one, convert nothing. */

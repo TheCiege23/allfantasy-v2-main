@@ -58,6 +58,7 @@ export const NFL_SCORING_CATEGORIES: ScoringCategory[] = [
       { key: 'receiving_td', label: 'Receiving TD', defaultValue: 6 },
       { key: 'receiving_first_down', label: 'Receiving 1st Down', defaultValue: 0 },
       { key: 'receiving_2pt', label: '2-Pt Conversion', defaultValue: 2 },
+      { key: 'target', label: 'Target', defaultValue: 0 },
       { key: 'rec_0_4_bonus', label: '0-4 Yard Reception Bonus', defaultValue: 0 },
       { key: 'rec_5_9_bonus', label: '5-9 Yard Reception Bonus', defaultValue: 0 },
       { key: 'rec_10_19_bonus', label: '10-19 Yard Reception Bonus', defaultValue: 0 },

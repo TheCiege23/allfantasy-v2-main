@@ -41,7 +41,9 @@ describe('importedNflScoring', () => {
       def_sack: 1, def_int: 2, def_fr: 2, def_safety: 2, def_td: 6, def_blk_kick: 2, def_st_td: 6,
       def_pa_0: 10, def_pa_1_6: 7, def_pa_7_13: 4, def_pa_14_20: 1, def_pa_21_27: 0, def_pa_28_34: -1, def_pa_35_plus: -4,
     })
-    expect(out.notScored).toEqual(['Pat Missed', 'st td'].map((s) => expect.stringMatching(new RegExp(s, 'i'))))
+    // Missed PATs and player special-teams TDs score since the engine gained provider-count rules.
+    expect(engine(out.rules).overrides).toMatchObject({ xpmiss: -1, st_td: 6 })
+    expect(out.notScored).toEqual([])
     expect(out.approximated).toEqual([])
     expect(out.enableTEPremium).toBe(false)
     expect(out.rules).not.toHaveProperty('te_premium')
@@ -71,11 +73,21 @@ describe('importedNflScoring', () => {
   })
 
   it('lists rules that award points with no AllFantasy equivalent, and stays quiet about zero ones', () => {
-    const out = importedNflScoring(scoringSettings({ ...SLEEPER_HALF_PPR, bonus_rec_rb: 0.5, pass_fd: 1, rec_5_9: 0 }))!
-    expect(out.notScored).toEqual(expect.arrayContaining(['bonus rec rb', 'Passing 1st Down']))
-    expect(out.notScored.join(' ')).not.toMatch(/rec 5 9/)
-    // A panel key is kept for the commissioner to see, even though nothing scores it yet.
-    expect(out.rules.passing_first_down).toBe(1)
+    const out = importedNflScoring(scoringSettings({ ...SLEEPER_HALF_PPR, def_3_and_out: 1, bonus_rush_td_qb: 1, def_4_and_stop: 0 }))!
+    expect(out.notScored).toEqual(['bonus rush td qb', 'def 3 and out'])
+  })
+
+  it('the most-used Sleeper extras carry over and score (owner, 2026-10-25)', () => {
+    const out = importedNflScoring(scoringSettings({
+      ...SLEEPER_HALF_PPR,
+      pass_fd: 1, rush_fd: 0.5, rec_fd: 0.5, rush_td_40p: 2, rec_td_50p: 3, pass_cmp_40p: 1,
+      bonus_rec_rb: 0.5, bonus_fd_te: 0.25, bonus_rush_rec_yd_100: 2, fum: -1, st_ff: 1, def_st_fum_rec: 1, kr_yd: 0.04,
+    }))!
+    expect(out.notScored).toEqual([])
+    expect(engine(out.rules).overrides).toMatchObject({
+      pass_fd: 1, rush_fd: 0.5, rec_fd: 0.5, rush_td_40p: 2, rec_td_50p: 3, pass_cmp_40p: 1,
+      bonus_rec_rb: 0.5, bonus_fd_te: 0.25, bonus_rush_rec_yd_100: 2, fum: -1, st_ff: 1, def_st_fum_rec: 1, kr_yd: 0.04,
+    })
   })
 
   it('a tight-end reception bonus turns on TE premium and scores its amount', () => {
