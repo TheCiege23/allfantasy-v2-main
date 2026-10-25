@@ -166,7 +166,7 @@ export function pickExtraMatchupOpponent(input: {
 }
 
 export type ExtraMatchupRow = {
-  id?: string
+  id?: string | null
   week: number
   homeRosterId: string
   awayRosterId: string | null
@@ -254,9 +254,80 @@ export type ExtraMatchupView = {
   /** `leftover`: you play the extra game. `opponent`: you were chosen to play it. */
   role: 'leftover' | 'opponent'
   /** The other team in the extra game. */
+  otherRosterId: string
   teamName: string
   reason: ExtraMatchupReason
   /** Whether the extra game's result counts for YOU. */
   countsForYou: boolean
+  /** Your score and theirs that week, from your perspective. Null before anything is scored. */
+  yourScore: number | null
+  theirScore: number | null
+  /** Both sides' weeks are final. */
+  final: boolean
+  /** "Extra matchup vs <team> (last week's top scorer)" — or, for the chosen team, who plays it. */
   label: string
+  /** The label with the score: "… · 112.4–98.0". */
+  line: string
+}
+
+function scored(row: Pick<ExtraMatchupRow, 'status' | 'homeScore' | 'awayScore'> | undefined): boolean {
+  if (!row) return false
+  return complete(row) || row.status === 'active' || Number(row.homeScore ?? 0) !== 0 || Number(row.awayScore ?? 0) !== 0
+}
+
+export function extraMatchupLabel(role: 'leftover' | 'opponent', teamName: string, reason: ExtraMatchupReason, countsForYou: boolean): string {
+  const why = describeExtraMatchupReason(reason)
+  return role === 'leftover'
+    ? `Extra matchup vs ${teamName} (${why})`
+    : `Extra matchup: ${teamName} plays you this week (you were ${why})${countsForYou ? ' — it counts for you too' : ' — only your own game counts for you'}`
+}
+
+export function extraMatchupLine(label: string, yourScore: number | null, theirScore: number | null): string {
+  return yourScore == null || theirScore == null ? label : `${label} · ${yourScore.toFixed(1)}–${theirScore.toFixed(1)}`
+}
+
+/**
+ * The extra game `rosterId` is part of in `week`, from that week's rows (the bye row carries the pick;
+ * the chosen team's score is its own game's). Pure — every surface that already holds the week's rows
+ * uses this; `nameOf` turns a roster id into a team name. Null when the roster has no extra game.
+ */
+export function extraMatchupForRoster(
+  rows: readonly ExtraMatchupRow[],
+  week: number,
+  rosterId: string,
+  nameOf: (rosterId: string) => string | null | undefined,
+): ExtraMatchupView | null {
+  for (const bye of rows) {
+    if (bye.week !== week || bye.awayRosterId) continue
+    const record = readExtraMatchupRecord(bye.lineupSnapshots)
+    if (!record) continue
+    const role = bye.homeRosterId === rosterId ? 'leftover' : record.opponentRosterId === rosterId ? 'opponent' : null
+    if (!role) continue
+    const game = rows.find(
+      (r) => r.week === week && r.awayRosterId && (r.homeRosterId === record.opponentRosterId || r.awayRosterId === record.opponentRosterId),
+    )
+    const leftoverScore = scored(bye) ? Number(bye.homeScore ?? 0) : null
+    const opponentScore = scored(game)
+      ? Number(game!.homeRosterId === record.opponentRosterId ? game!.homeScore ?? 0 : game!.awayScore ?? 0)
+      : null
+    const otherRosterId = role === 'leftover' ? record.opponentRosterId : bye.homeRosterId
+    const teamName = nameOf(otherRosterId)?.trim() || 'another team'
+    const countsForYou = role === 'leftover' || record.scoring === 'both'
+    const yourScore = role === 'leftover' ? leftoverScore : opponentScore
+    const theirScore = role === 'leftover' ? opponentScore : leftoverScore
+    const label = extraMatchupLabel(role, teamName, record.reason, countsForYou)
+    return {
+      role,
+      otherRosterId,
+      teamName,
+      reason: record.reason,
+      countsForYou,
+      yourScore,
+      theirScore,
+      final: complete(bye) && Boolean(game && complete(game)),
+      label,
+      line: extraMatchupLine(label, yourScore, theirScore),
+    }
+  }
+  return null
 }

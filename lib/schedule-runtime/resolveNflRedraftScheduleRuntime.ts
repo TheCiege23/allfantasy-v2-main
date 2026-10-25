@@ -173,8 +173,10 @@ function toScheduleMatchupInput(row: {
   awayScore: number
   status: string
   isMedianMatchup: boolean
+  lineupSnapshots?: unknown
 }): ScheduleRuntimeMatchupInput {
   return {
+    lineupSnapshots: row.lineupSnapshots,
     id: row.id,
     week: row.week,
     type: row.type,

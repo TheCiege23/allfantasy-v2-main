@@ -1135,7 +1135,7 @@ export function Matchup({ data }: MatchupProps) {
         )}
         {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
         {data.extraMatchup ? (
-          <p className="af-mu-basis" data-testid="matchup-extra-matchup">{data.extraMatchup.label}</p>
+          <p className="af-mu-basis" data-testid="matchup-extra-matchup">{data.extraMatchup.line}</p>
         ) : null}
       </section>
 

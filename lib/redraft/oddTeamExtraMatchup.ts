@@ -8,11 +8,10 @@ import { prisma } from '@/lib/prisma'
 import { isOddTeamCount } from '@/lib/league/oddTeamLeagues'
 import {
   completedWeekScores,
-  describeExtraMatchupReason,
+  extraMatchupForRoster,
   pickExtraMatchupOpponent,
   readExtraMatchupRecord,
   readExtraMatchupSettings,
-  type ExtraMatchupReason,
   type ExtraMatchupRecord,
   type ExtraMatchupView,
 } from '@/lib/redraft/oddTeamExtraMatchupRules'
@@ -120,9 +119,33 @@ export async function assignExtraMatchupForWeek(input: {
 }
 
 /**
- * The extra game a native roster is part of in `week`, for the matchup screen and the week board.
- * Null when there is none, and on any read failure (the screens render without it).
+ * The extra game a native roster is part of in `week` of a season, with both scores — for every
+ * surface that does not already hold the week's rows. Null when there is none, and on any read
+ * failure (the surfaces render without it).
  */
+export async function readExtraMatchupViewForSeason(input: {
+  seasonId: string
+  week: number
+  redraftRosterId: string
+}): Promise<ExtraMatchupView | null> {
+  try {
+    const rows = await prisma.redraftMatchup.findMany({
+      where: { seasonId: input.seasonId, week: input.week },
+      select: { week: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, status: true, lineupSnapshots: true },
+    })
+    if (!rows.some((r) => !r.awayRosterId && readExtraMatchupRecord(r.lineupSnapshots))) return null
+    const rosters = await prisma.redraftRoster.findMany({
+      where: { seasonId: input.seasonId },
+      select: { id: true, teamName: true, ownerName: true },
+    })
+    const names = new Map(rosters.map((r) => [r.id, r.teamName?.trim() || r.ownerName]))
+    return extraMatchupForRoster(rows, input.week, input.redraftRosterId, (id) => names.get(id))
+  } catch {
+    return null
+  }
+}
+
+/** The same, for a league's season by year (the matchup screen and the week board know the year). */
 export async function readExtraMatchupView(input: {
   leagueId: string
   season: number
@@ -135,31 +158,7 @@ export async function readExtraMatchupView(input: {
       select: { id: true },
     })
     if (!season) return null
-    const byes = await prisma.redraftMatchup.findMany({
-      where: { seasonId: season.id, week: input.week, awayRosterId: null },
-      select: { homeRosterId: true, lineupSnapshots: true },
-    })
-    for (const bye of byes) {
-      const record = readExtraMatchupRecord(bye.lineupSnapshots)
-      if (!record) continue
-      const role = bye.homeRosterId === input.redraftRosterId ? 'leftover' : record.opponentRosterId === input.redraftRosterId ? 'opponent' : null
-      if (!role) continue
-      const otherId = role === 'leftover' ? record.opponentRosterId : bye.homeRosterId
-      const other = await prisma.redraftRoster.findFirst({ where: { id: otherId }, select: { teamName: true, ownerName: true } })
-      const teamName = other?.teamName?.trim() || other?.ownerName || 'another team'
-      const why = describeExtraMatchupReason(record.reason)
-      const countsForYou = role === 'leftover' || record.scoring === 'both'
-      return {
-        role,
-        teamName,
-        reason: record.reason,
-        countsForYou,
-        label: role === 'leftover'
-          ? `Extra matchup vs ${teamName} (${why})`
-          : `Extra matchup: ${teamName} plays you this week (you were ${why})${countsForYou ? ' — it counts for you too' : ' — only your own game counts for you'}`,
-      }
-    }
-    return null
+    return await readExtraMatchupViewForSeason({ seasonId: season.id, week: input.week, redraftRosterId: input.redraftRosterId })
   } catch {
     return null
   }
