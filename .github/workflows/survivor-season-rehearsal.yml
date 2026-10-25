@@ -44,9 +44,14 @@ jobs:
       - name: Require the isolated connection
         env:
           URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
+        # Reasons go out as ::error:: annotations, which are readable where the job log is not. The
+        # value itself is never printed; only which rule it broke.
         run: |
-          if [ -z "$URL" ]; then echo "Add the SURVIVOR_REHEARSAL_DATABASE_URL repository secret first." >&2; exit 1; fi
-          case "$URL" in *ep-curly-block-ad0dlt9o*) echo "Refusing the production endpoint." >&2; exit 1;; esac
+          if [ -z "$URL" ]; then echo "::error::SURVIVOR_REHEARSAL_DATABASE_URL is empty or not a repository Actions secret."; exit 1; fi
+          case "$URL" in postgres://*|postgresql://*) ;; *) echo "::error::The secret does not start with postgresql:// (check for quotes or a psql command around it)."; exit 1;; esac
+          case "$URL" in *ep-curly-block-ad0dlt9o*) echo "::error::Refusing the production endpoint."; exit 1;; esac
+          case "$URL" in *ep-old-queen-ade7otjh*) ;; *) echo "::error::The secret is not the staging-survivor-season branch (endpoint ep-old-queen-ade7otjh)."; exit 1;; esac
+          echo "::notice::Isolated connection accepted (staging-survivor-season branch)."
       - run: npm ci
       - name: Run the season
         env:
