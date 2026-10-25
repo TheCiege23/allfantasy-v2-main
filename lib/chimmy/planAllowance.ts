@@ -118,7 +118,7 @@ const defaultDeps: PlanAllowanceDeps = {
     const row = await prisma.apiRateLimitRecord.findFirst({
       where: { provider: PROVIDER, endpoint, windowStart, windowEnd },
       select: { callsMade: true },
-    })
+    }).catch(() => null)
     return row?.callsMade ?? limit
   },
   giveBack: async (endpoint, { windowStart, windowEnd }) => {

@@ -104,6 +104,17 @@ describe('daily free Chimmy answers', () => {
     expect(d.giveBack).toHaveBeenCalledOnce()
     expect(d.giveBack).toHaveBeenCalledWith(expect.stringMatching(/^chimmy_free:/), expect.anything())
   })
+
+  it('retains ownership of a successful reservation if its display-count read fails', async () => {
+    db.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('Unique window', { code: 'P2002', clientVersion: 'test' }))
+    db.updateMany.mockResolvedValue({ count: 1 })
+    db.findFirst.mockRejectedValue(new Error('display count unavailable'))
+    const taken = await takeChimmyPlanAllowance({ userId: 'u1', state: freeState })
+    expect(taken).toMatchObject({ kind: 'free', used: 2, remaining: 0 })
+    const d = deps()
+    await expect(releaseChimmyPlanAllowance({ userId: 'u1', state: taken! }, d)).resolves.toBe(true)
+    expect(d.giveBack).toHaveBeenCalledOnce()
+  })
 })
 
 describe('free answer display', () => {
