@@ -16,7 +16,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') return { ok: true, status: 200, json: async () => ({ settings: {} }) }
-    return { ok: true, status: 200, json: async () => ({ settings: { tankingMonitorEnabled: false, collusionSensitivity: 'medium' } }) }
+    return { ok: true, status: 200, json: async () => ({ settings: { tankingMonitorEnabled: false, collusionSensitivity: 'medium', tradeAlertsEnabled: true } }) }
   })
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -28,7 +28,7 @@ describe('Survivor commissioner tools', () => {
   it('uses the working league controls panel and drops the controls that had nothing behind them', () => {
     render(<CommissionerToolsTab leagueId="L1" hasAfCommissionerSub={false} />)
     expect(screen.getByTestId('control-panel').textContent).toBe('L1')
-    for (const dead of ['Extended Scoring Corrections', 'Suspicious Trade Alerts', 'Playoff Bracket', 'Force Player to Bench', 'Override Weekly Result']) {
+    for (const dead of ['Playoff Bracket', 'Force Player to Bench', 'Override Weekly Result']) {
       expect(screen.queryByText(dead)).toBeNull()
     }
   })
@@ -63,6 +63,15 @@ describe('Survivor commissioner tools', () => {
     expect(JSON.parse(String((puts()[0]![1] as RequestInit).body))).toEqual({ collusionSensitivity: 'high' })
     expect(await screen.findByText('Could not save. Try again.')).toBeTruthy()
     expect(select.value).toBe('medium')
+  })
+
+  it('suspicious trade alerts load as on and a tap switches them off', async () => {
+    render(<CommissionerToolsTab leagueId="L1" hasAfCommissionerSub />)
+    const toggle = screen.getByTestId('survivor-integrity-trade-alerts')
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'))
+    fireEvent.click(toggle)
+    await waitFor(() => expect(puts()).toHaveLength(1))
+    expect(JSON.parse(String((puts()[0]![1] as RequestInit).body))).toEqual({ tradeAlertsEnabled: false })
   })
 
   it('shows the lineup-neglect report and links to the integrity review page', () => {
