@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
@@ -33,7 +34,6 @@ import { MID_SEASON_CONFIRM_FLAG } from '@/lib/league/midSeasonConfirmation'
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { checkByePlan, isNaturalByePlan } from '@/lib/playoff-brackets/byePlan'
 import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
@@ -320,11 +320,18 @@ export async function executeLeagueSettingsPatch(
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
   }
 
-  // The entitlement alone: OR-ing the profile flag kept a lapsed plan's access (livePlanFlags.ts).
-  const commissionerEntitlement = await new EntitlementResolver()
-    .resolveForUser(userId, 'commissioner_ai_tools')
-    .catch(() => ({ hasAccess: false }))
-  const hasSub = Boolean(commissionerEntitlement.hasAccess)
+  // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts) — the same answer
+  // GET /api/league/settings reports as `hasAfCommissionerSub`, so the page never shows a paid control
+  // unlocked that this save then refuses. (It used EntitlementResolver alone, which disagreed for the
+  // allowlisted AllFantasy accounts.) Still the plan alone: OR-ing the profile flag kept a lapsed
+  // plan's access (livePlanFlags.ts).
+  let planUser: { email: string | null; username: string | null } | null = null
+  try {
+    planUser = await prisma.appUser.findUnique({ where: { id: userId }, select: { email: true, username: true } })
+  } catch {
+    planUser = null // no allowlist match; the plan check still runs
+  }
+  const hasSub = await hasAfCommissionerPlan({ id: userId, email: planUser?.email ?? null, username: planUser?.username ?? null })
 
   const premiumCommissionerKeys = requestedPremiumCommissionerKeys(body)
   if (premiumCommissionerKeys.length > 0 && !hasSub) {
