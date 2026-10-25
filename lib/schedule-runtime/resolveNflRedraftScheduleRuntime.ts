@@ -1,4 +1,5 @@
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
+import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
 import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
@@ -532,6 +533,19 @@ export async function advanceNflRedraftScheduleWeek(input: {
 
   if (input.action === 'complete_week' || input.action === 'advance_week') {
     await updateStandings(input.seasonId, input.week ?? resolved.state.currentWeek)
+  }
+
+  // A new scoring week opened: a league on the weekly priority reset goes back to reverse standings
+  // (lib/waiver-wire/weekly-priority-reset.ts — a no-op for rolling, and once per week). After the
+  // standings above, so the order reflects the week just finished. Best-effort: the advance stands.
+  if ((input.action === 'advance_week' || input.action === 'open_week') && transition.currentWeek > resolved.state.currentWeek) {
+    await applyWeeklyWaiverPriorityReset({
+      leagueId: resolved.state.leagueId,
+      seasonId: input.seasonId,
+      week: transition.currentWeek,
+    }).catch((error) => {
+      console.error('[schedule-runtime] weekly waiver priority reset failed', { seasonId: input.seasonId, error })
+    })
   }
 
   // The commissioner already made the "regular season is over" call by
