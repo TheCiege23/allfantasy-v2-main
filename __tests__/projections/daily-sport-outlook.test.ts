@@ -10,17 +10,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-const store = vi.hoisted(() => ({ blob: null as unknown }))
-vi.mock('@/lib/projections/dailySportFormStore', () => ({ readDailySportForm: vi.fn(async () => store.blob) }))
+const store = vi.hoisted(() => ({ blob: null as unknown, prior: null as unknown }))
+vi.mock('@/lib/projections/dailySportFormStore', () => ({
+  readDailySportForm: vi.fn(async () => store.blob),
+  readPriorDailySportForm: vi.fn(async () => store.prior),
+}))
 
-const slate = vi.hoisted(() => ({ byTeamDay: new Map<string, Map<string, Date>>(), calls: [] as unknown[] }))
+type Opp = { opponent: string; home: boolean }
+const slate = vi.hoisted(() => ({
+  byTeamDay: new Map<string, Map<string, Date>>(),
+  opponents: new Map<string, Map<string, { opponent: string; home: boolean }>>(),
+  calls: [] as unknown[],
+}))
 vi.mock('@/lib/redraft/lineupLock', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/redraft/lineupLock')>()
   return {
     ...real,
     buildWeekKickoffMap: vi.fn(async (_db: unknown, args: unknown) => {
       slate.calls.push(args)
-      return { byTeam: new Map(), firstKickoff: null, byTeamDay: slate.byTeamDay, warnings: [] }
+      return { byTeam: new Map(), firstKickoff: null, byTeamDay: slate.byTeamDay, opponentsByTeamDay: slate.opponents, warnings: [] }
     }),
   }
 })
@@ -63,7 +71,12 @@ const league = (settings: Record<string, unknown> = {}) => ({ sport: 'NBA', seas
 
 beforeEach(() => {
   store.blob = blob
+  store.prior = null
   slate.calls.length = 0
+  slate.opponents = new Map<string, Map<string, Opp>>([
+    ['DENVER NUGGETS', new Map([['2026-10-24', { opponent: 'Miami Heat', home: false }], ['2026-10-25', { opponent: 'Utah Jazz', home: true }]])],
+    ['MIAMI HEAT', new Map([['2026-10-26', { opponent: 'Boston Celtics', home: true }]])],
+  ])
   // TheSportsDB names, normalized the way the lineup lock keys them.
   slate.byTeamDay = new Map([
     ['DENVER NUGGETS', days('2026-10-21', '2026-10-24', '2026-10-25')],
@@ -137,6 +150,114 @@ describe('loadDailySportOutlook', () => {
     expect(none.reason).toBe('form_not_computed')
     const nfl = await loadDailySportOutlook(db, { league: { sport: 'NFL', season: 2026, settings: {} }, players: [], now: NOW })
     expect(nfl.reason).toBe('not_a_daily_form_sport')
+  })
+})
+
+describe('the day picker: a daily league prices the SELECTED day', () => {
+  const daily = { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } }
+  const roster = [
+    { key: 'den', lookupId: '907', team: 'Denver Nuggets', injuryStatus: null },
+    { key: 'mia', lookupId: '74', team: 'Miami Heat', injuryStatus: null },
+  ]
+
+  it('a future day: that day\'s games and that day\'s opponent, not today\'s', async () => {
+    const out = await loadDailySportOutlook(db, { league: league(daily), players: roster, now: NOW, day: '2026-10-26' })
+    expect(out.period).toEqual({ kind: 'day', season: 2026, week: 1, day: '2026-10-26' })
+    // Denver plays today (the 25th) but not on the 26th; Miami is the other way round.
+    expect(out.byKey.get('den')).toMatchObject({ periodGames: 0, projectedPoints: 0, opponent: null, homeAway: null })
+    expect(out.byKey.get('mia')).toMatchObject({ periodGames: 1, projectedPoints: 10, opponent: 'BOS', homeAway: 'home' })
+  })
+
+  it('a past day in the week, and today when nothing (or garbage) is selected', async () => {
+    const sat = await loadDailySportOutlook(db, { league: league(daily), players: roster, now: NOW, day: '2026-10-24' })
+    expect(sat.byKey.get('den')).toMatchObject({ periodGames: 1, projectedPoints: 20, opponent: 'MIA', homeAway: 'away' })
+    for (const day of [undefined, null, 'tomorrow', '2026-13-45']) {
+      const today = await loadDailySportOutlook(db, { league: league(daily), players: roster, now: NOW, day })
+      expect(today.period?.day).toBe('2026-10-25')
+      expect(today.byKey.get('den')).toMatchObject({ periodGames: 1, opponent: 'UTA', homeAway: 'home' })
+    }
+  })
+
+  it('a day in the NEXT week reads that week\'s slate', async () => {
+    await loadDailySportOutlook(db, { league: league(daily), players: roster, now: NOW, day: '2026-10-27' })
+    expect(slate.calls).toEqual([{ sport: 'NBA', season: 2026, week: 2 }])
+  })
+
+  it('a weekly league ignores a day: its period stays the week, and it names no opponent', async () => {
+    const out = await loadDailySportOutlook(db, { league: league(), players: roster, now: NOW, day: '2026-10-26' })
+    expect(out.period).toEqual({ kind: 'week', season: 2026, week: 1, day: null })
+    expect(out.byKey.get('den')).toMatchObject({ periodGames: 3, projectedPoints: 60 })
+    expect(out.byKey.get('den')).not.toHaveProperty('opponent')
+  })
+
+  it('the opponent reaches the wire row, and from there the lineup row', async () => {
+    const out = await loadDailySportOutlook(db, { league: league(daily), players: roster, now: NOW, day: '2026-10-26' })
+    const [den, mia] = applyDailySportOutlook([{ id: 'den', projectedPoints: null, projectionsSource: null }, { id: 'mia', projectedPoints: null, projectionsSource: null }], out)
+    expect(mia).toMatchObject({ periodOpponent: 'BOS', periodHomeAway: 'home', projectedPoints: 10 })
+    expect(den).toMatchObject({ periodOpponent: null, projectedPoints: 0 })
+  })
+})
+
+describe('prior-season blend through the loader', () => {
+  it('blends last season in by PRIOR_SEASON_BLEND_GAMES and prices a player with no game yet', async () => {
+    store.prior = {
+      ...blob,
+      season: 2025,
+      players: {
+        'uuid-a': { pos: 'C', team: 'DEN', sg: 70, ss: { pts: 700 }, rg: 10, rs: { pts: 0 }, part: null }, // 10 a game
+        'uuid-z': { pos: 'C', team: 'DEN', sg: 60, ss: { pts: 900 }, rg: 10, rs: { pts: 0 }, part: null }, // 15 a game
+      },
+    }
+    identity.push({ id: 'uuid-z', rollingInsightsId: '300', sleeperId: null })
+    try {
+      const out = await loadDailySportOutlook(db, {
+        league: league(),
+        players: [
+          { key: 'a', lookupId: '907', team: 'DEN', injuryStatus: null },
+          { key: 'z', lookupId: '300', team: 'DEN', injuryStatus: null },
+        ],
+        now: NOW,
+      })
+      expect(out.priorSeason).toBe(2025)
+      // a: (3 x 20 + 6 x 10) / 9 = 13.33 a game, x 3 Denver games
+      expect(out.byKey.get('a')).toMatchObject({ perGame: 13.33, projectedPoints: 39.99, positionRank: { position: 'C', rank: 1, of: 2 } })
+      // z: no game this season — last season's 15 a game, x 3; not ranked this season
+      expect(out.byKey.get('z')).toMatchObject({ perGame: 15, projectedPoints: 45, positionRank: null })
+    } finally {
+      identity.pop()
+    }
+  })
+
+  it('no prior season stored: this season alone, unchanged', async () => {
+    const out = await loadDailySportOutlook(db, { league: league(), players: [{ key: 'a', lookupId: '907', team: 'DEN', injuryStatus: null }], now: NOW })
+    expect(out.priorSeason).toBeNull()
+    expect(out.byKey.get('a')).toMatchObject({ perGame: 20, projectedPoints: 60 })
+  })
+})
+
+describe('MLB pitcher participation (owner: kept as is)', () => {
+  it('a starter who takes one turn in five projects a fifth of his per-start rate; a hitter does not scale', async () => {
+    store.blob = {
+      v: 1, sport: 'MLB', season: 2026, computedAt: blob.computedAt, recentGames: 15,
+      players: {
+        'uuid-a': { pos: 'SP', team: 'NYY', sg: 2, ss: { so: 20 }, rg: 2, rs: { so: 20 }, part: 0.2 },
+        'uuid-b': { pos: 'OF', team: 'NYY', sg: 2, ss: { r: 4 }, rg: 2, rs: { r: 4 }, part: null },
+      },
+    }
+    slate.byTeamDay = new Map([['NYY', days('2026-03-26', '2026-03-27', '2026-03-28', '2026-03-29', '2026-03-30')]])
+    const mlb = { sport: 'MLB', season: 2026, settings: { sportConfig: { categoryPoints: { so: 1, r: 1 } } } }
+    const now = new Date('2026-03-27T18:00:00Z')
+    const out = await loadDailySportOutlook(db, {
+      league: mlb,
+      players: [
+        { key: 'sp', lookupId: '907', team: 'NYY', injuryStatus: null },
+        { key: 'of', lookupId: '74', team: 'NYY', injuryStatus: null },
+      ],
+      now,
+    })
+    // SP: 10 a start x 5 team games x 0.2 participation = 10; OF: 2 a game x 5 = 10 with no scaling.
+    expect(out.byKey.get('sp')).toMatchObject({ perGame: 10, periodGames: 5, projectedPoints: 10 })
+    expect(out.byKey.get('of')).toMatchObject({ perGame: 2, periodGames: 5, projectedPoints: 10 })
   })
 })
 

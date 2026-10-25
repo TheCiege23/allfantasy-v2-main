@@ -14,8 +14,10 @@
  * the matchup uses. There is ONE implementation of each rule; this file owns neither.
  *
  * ── 🛑 IT IS A RECENT-FORM NUMBER, NOT A VENDOR PROJECTION, AND IS LABELLED SO ──────────────────
- *   projection = recent per-game points (league scoring)
- *              × his pro team's games in the scoring period (week, or today in a daily league)
+ *   projection = recent per-game points (league scoring), blended with LAST season's per-game rate
+ *                while this season's sample is small (PRIOR_SEASON_BLEND_GAMES)
+ *              × his pro team's games in the scoring period (week, or in a daily league the day the
+ *                lineup screen has selected — today by default)
  *              × availability (0 when ruled out or inactive)
  *              × participation (MLB pitchers only: a starter does not pitch every team game)
  * It knows nothing about a coming role change. Every surface prints `AF_FORM_PROJECTION_LABEL`.
@@ -42,6 +44,37 @@ export const RECENT_FORM_GAMES: Readonly<Record<string, number>> = { NBA: 10, NH
 
 /** Below this many recent games there is no per-game rate worth multiplying out. */
 export const MIN_RECENT_FORM_GAMES = 2
+
+/**
+ * Prior-season shrinkage: how many games of LAST season's per-game rate are blended in.
+ *
+ *   rate = (thisSeasonGames × thisRate + K × lastSeasonRate) / (thisSeasonGames + K)
+ *
+ * A player with K games this season is half this season, half last; at 4K he is 80% this season.
+ * `thisRate` is the recent-form rate the projection already uses, `thisSeasonGames` his regular-season
+ * games this season. No prior season: this season alone (the two-game floor still applies). No game
+ * this season: last season alone.
+ *
+ * K is set by how noisy ONE game line is in each sport, the same reason RECENT_FORM_GAMES looks
+ * further back for baseball. An NBA line is minutes-driven and steady, so a few games say a lot (6).
+ * An NHL line rests on rare events — a goal, a point — so it needs more (8). An MLB line is the
+ * noisiest, a hitter's 0-for-4 or a starter's short outing, and a starter only takes the ball every
+ * fifth day, so it leans on last season longest (10). All three sit in the owner's 5–10 band.
+ */
+export const PRIOR_SEASON_BLEND_GAMES: Readonly<Record<string, number>> = { NBA: 6, NHL: 8, MLB: 10 }
+
+/** The blended per-game rate. Null only when neither season has a rate. */
+export function blendPerGame(args: {
+  thisSeasonGames: number
+  thisRate: number | null
+  lastSeasonRate: number | null
+  k: number
+}): number | null {
+  const n = args.thisRate == null ? 0 : Math.max(0, args.thisSeasonGames)
+  if (args.lastSeasonRate == null || !(args.k > 0)) return args.thisRate
+  if (n === 0) return args.lastSeasonRate
+  return (n * args.thisRate! + args.k * args.lastSeasonRate) / (n + args.k)
+}
 
 export { AF_FORM_PROJECTION_LABEL, AF_FORM_PROJECTION_SOURCE } from './dailySportFormLabels'
 
@@ -246,11 +279,18 @@ export type StatScorer = (stats: Record<string, number>, position?: string | nul
 export type ScoredFormPlayer = {
   id: string
   pos: string | null
-  /** Season fantasy points under THIS league's scoring. */
+  /** Season fantasy points under THIS league's scoring (0 for a player with no game this season). */
   seasonPoints: number
-  /** Recent per-game points under this league's scoring; null below MIN_RECENT_FORM_GAMES. */
+  /**
+   * Per-game points under this league's scoring: recent form, blended with last season's rate by
+   * PRIOR_SEASON_BLEND_GAMES when a prior season is stored. Null when there is no rate.
+   */
   perGame: number | null
   recentGames: number
+  /** Regular-season games THIS season. 0 = priced from last season alone, and not ranked. */
+  seasonGames?: number
+  /** Last season's games behind the blend; 0 when none were stored. */
+  priorGames?: number
   part: number | null
   team: string | null
 }
@@ -259,12 +299,60 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-export function scoreFormBlob(blob: DailySportFormBlob, scorer: StatScorer): Map<string, ScoredFormPlayer> {
+/**
+ * Score a season's form lines under one league's scorer. With `prior` (last season's blob for the same
+ * sport), each rate is blended toward last season's per-game rate (`blendPerGame`), and a player with
+ * no game this season is priced from last season alone — but carries `seasonGames: 0`, so the position
+ * rank, which is THIS season's, leaves him out.
+ */
+export function scoreFormBlob(
+  blob: DailySportFormBlob,
+  scorer: StatScorer,
+  prior?: DailySportFormBlob | null,
+): Map<string, ScoredFormPlayer> {
   const out = new Map<string, ScoredFormPlayer>()
+  const k = PRIOR_SEASON_BLEND_GAMES[blob.sport] ?? 0
+  const priorPlayers = prior && prior.sport === blob.sport && prior.season < blob.season ? prior.players : null
+  const priorRate = (p: FormPlayer | undefined): number | null => (p && p.sg > 0 ? scorer(p.ss, p.pos) / p.sg : null)
+
   for (const [id, p] of Object.entries(blob.players)) {
     const seasonPoints = round2(scorer(p.ss, p.pos))
-    const perGame = p.rg >= MIN_RECENT_FORM_GAMES ? round2(scorer(p.rs, p.pos) / p.rg) : null
-    out.set(id, { id, pos: p.pos, seasonPoints, perGame, recentGames: p.rg, part: p.part, team: p.team })
+    const last = priorPlayers?.[id]
+    const lastRate = priorRate(last)
+    const thisRate = p.rg > 0 ? scorer(p.rs, p.pos) / p.rg : null
+    const perGame =
+      lastRate == null
+        ? p.rg >= MIN_RECENT_FORM_GAMES ? round2(thisRate!) : null
+        : round2(blendPerGame({ thisSeasonGames: p.sg, thisRate, lastSeasonRate: lastRate, k })!)
+    out.set(id, {
+      id,
+      pos: p.pos,
+      seasonPoints,
+      perGame,
+      recentGames: p.rg,
+      seasonGames: p.sg,
+      priorGames: last?.sg ?? 0,
+      part: p.part,
+      team: p.team,
+    })
+  }
+  if (priorPlayers) {
+    for (const [id, last] of Object.entries(priorPlayers)) {
+      if (out.has(id)) continue
+      const lastRate = priorRate(last)
+      if (lastRate == null) continue
+      out.set(id, {
+        id,
+        pos: last.pos,
+        seasonPoints: 0,
+        perGame: round2(lastRate),
+        recentGames: 0,
+        seasonGames: 0,
+        priorGames: last.sg,
+        part: last.part,
+        team: last.team,
+      })
+    }
   }
   return out
 }
@@ -279,7 +367,8 @@ export type PositionRank = { position: string; rank: number; of: number }
 export function positionRanks(players: Iterable<ScoredFormPlayer>): Map<string, PositionRank> {
   const groups = new Map<string, ScoredFormPlayer[]>()
   for (const p of players) {
-    if (!p.pos) continue
+    // Ranked on THIS season only: a player priced from last season alone has no place in it yet.
+    if (!p.pos || p.seasonGames === 0) continue
     const list = groups.get(p.pos) ?? []
     list.push(p)
     groups.set(p.pos, list)

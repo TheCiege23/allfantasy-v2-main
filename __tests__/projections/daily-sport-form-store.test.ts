@@ -11,31 +11,33 @@ import {
   dailyFormKey,
   dailyFormPointerKey,
   readDailySportForm,
+  readPriorDailySportForm,
   writeDailySportFormCache,
 } from '@/lib/projections/dailySportFormStore'
 
-const line = (id: string, playerId: string, day: string, points: number) => ({
+const line = (id: string, playerId: string, day: string, points: number, season = 2026) => ({
   id,
   playerId,
   gameId: `g-${id}`,
   providerGameId: `g-${id}`,
   gameDate: new Date(`${day}T00:00:00Z`),
-  season: 2026,
+  season,
   team: 'DEN',
   normalizedStatMap: { seasonType: 'regular', group: 'all', stats: { points } },
 })
 
 function makeDb(rows: ReturnType<typeof line>[]) {
   const cache = new Map<string, { data: unknown; expiresAt: Date }>()
-  const findMany = vi.fn(async (args: { take: number; cursor?: { id: string } }) => {
-    const start = args.cursor ? rows.findIndex((r) => r.id === args.cursor!.id) + 1 : 0
-    return rows.slice(start, start + args.take)
+  const findMany = vi.fn(async (args: { where: { season: number }; take: number; cursor?: { id: string } }) => {
+    const ofSeason = rows.filter((r) => r.season === args.where.season)
+    const start = args.cursor ? ofSeason.findIndex((r) => r.id === args.cursor!.id) + 1 : 0
+    return ofSeason.slice(start, start + args.take)
   })
   return {
     cache,
     findMany,
     db: {
-      playerGameStat: { findFirst: vi.fn(async () => (rows.length ? { season: 2026 } : null)), findMany },
+      playerGameStat: { findFirst: vi.fn(async () => (rows.length ? { season: Math.max(...rows.map((r) => r.season)) } : null)), findMany },
       playerIdentityMap: { findMany: vi.fn(async () => [{ id: 'p1', position: 'C' }]) },
       sportsDataCache: {
         upsert: vi.fn(async (a: { where: { cacheKey: string }; create: { data: unknown; expiresAt: Date } }) => {
@@ -55,7 +57,10 @@ describe('writeDailySportFormCache / readDailySportForm', () => {
     const now = new Date('2026-10-25T07:00:00Z')
     const r = await writeDailySportFormCache(t.db, 'NBA', { now })
     expect(r).toMatchObject({ sport: 'NBA', season: 2026, rowsRead: 2, players: 1, written: true })
+    // No 2025 rows: nothing is written for last season, and the run says so.
+    expect(r.prior).toEqual({ season: 2025, players: 0, written: false, reason: 'no_prior_season_game_lines' })
     expect([...t.cache.keys()].sort()).toEqual([dailyFormKey('NBA', 2026), dailyFormPointerKey('NBA')].sort())
+    expect(await readPriorDailySportForm(t.db, 'NBA', 2026, now)).toBeNull()
     const blob = await readDailySportForm(t.db, 'NBA', now)
     expect(blob?.players.p1).toMatchObject({ pos: 'C', sg: 2, ss: { pts: 30 } })
   })
@@ -64,7 +69,8 @@ describe('writeDailySportFormCache / readDailySportForm', () => {
     const many = Array.from({ length: 10_001 }, (_, i) => line(String(i).padStart(6, '0'), 'p1', '2026-10-21', 1))
     const t = makeDb(many)
     const r = await writeDailySportFormCache(t.db, 'NBA', { now: new Date('2026-10-25T07:00:00Z') })
-    expect(t.findMany).toHaveBeenCalledTimes(2)
+    // Two pages of 2026, plus one (empty) read of 2025 for the prior-season blend.
+    expect(t.findMany).toHaveBeenCalledTimes(3)
     expect(r.rowsRead).toBe(10_001)
   })
 
@@ -79,5 +85,25 @@ describe('writeDailySportFormCache / readDailySportForm', () => {
     expect((await writeDailySportFormCache(t.db, 'NFL')).reason).toBe('not_a_daily_form_sport')
     expect((await writeDailySportFormCache(t.db, 'NHL')).reason).toBe('no_game_lines')
     expect(t.cache.size).toBe(0)
+  })
+
+  it('keeps last season\'s lines from the same table, keyed by season, and rebuilds them at most weekly', async () => {
+    const t = makeDb([
+      line('1', 'p1', '2026-10-21', 20),
+      line('2', 'p1', '2026-10-23', 10),
+      line('a', 'p1', '2025-12-01', 30, 2025),
+      line('b', 'p1', '2026-01-10', 10, 2025),
+    ])
+    const now = new Date('2026-10-25T07:00:00Z')
+    const r = await writeDailySportFormCache(t.db, 'NBA', { now })
+    expect(r.prior).toEqual({ season: 2025, players: 1, written: true })
+    const prior = await readPriorDailySportForm(t.db, 'NBA', 2026, now)
+    expect(prior).toMatchObject({ season: 2025, players: { p1: { sg: 2, ss: { pts: 40 } } } })
+
+    // The next night: last season is fresh, so it is not re-read.
+    const reads = t.findMany.mock.calls.length
+    const again = await writeDailySportFormCache(t.db, 'NBA', { now: new Date('2026-10-26T07:00:00Z') })
+    expect(again.prior).toMatchObject({ season: 2025, written: false, reason: 'fresh' })
+    expect(t.findMany.mock.calls.length - reads).toBe(1)
   })
 })
