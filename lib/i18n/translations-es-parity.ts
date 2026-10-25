@@ -2963,6 +2963,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.wv.playoffs.alive_only": "Solo los equipos que siguen vivos por el título",
   "lsHub.wv.playoffs.locked": "Bloquear todas las plantillas",
   "lsHub.wv.playoffsHint": "Con las plantillas bloqueadas no hay altas, bajas ni reclamos hasta que termine la temporada.",
+  "waiverClaim.processesAfter": "El reclamo se procesa después del {{date}}",
   "lsHub.ai.intro": "Controla los ajustes del Asistente de la liga. Los controles premium requieren AF Commissioner o AF Supreme.",
   "lsHub.ai.helper": "Asistente de la liga",
   "lsHub.ai.helperHint": "Configuración en el chat, ayuda con las reglas y orientación según tu liga.",

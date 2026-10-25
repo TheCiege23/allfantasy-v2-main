@@ -166,14 +166,14 @@ export async function processWaiverClaimsForLeague(
     ? (pendingClaims as Array<ClaimRow & { createdAt: Date | string }>).filter((c) => new Date(c.createdAt) < blindCutoff)
     : (pendingClaims as ClaimRow[])
 
-  const ordered = orderClaimsForProcessing(
+  const orderedAll = orderClaimsForProcessing(
     dueClaims as ClaimRow[],
     waiverType,
     rankByPlatformUserId,
     tiebreakRule,
   )
 
-  if (ordered.length === 0) {
+  if (orderedAll.length === 0) {
     return []
   }
 
@@ -182,13 +182,32 @@ export async function processWaiverClaimsForLeague(
   // with the reason. Read once per run; an unreadable phase keeps the regular season's rules.
   const phaseRefusal = await loadWaiverRunPhaseGate(leagueId).catch(() => (): string | null => null)
   // A dropped player on waivers (dropped-player-waivers.ts) cannot go back to the team that dropped
-  // him. The claims on him otherwise run in the order above, like any claim.
+  // him: that claim fails. Every other claim on him waits — it stays pending, untouched, until the
+  // first run after his hold ends, and there competes with the other claims on him in the order
+  // above, like any claim. An unreadable hold processes nothing this run rather than run a held
+  // player's claims early; they are all still pending for the next one.
+  const runAt = new Date()
   const holdHours = droppedPlayerWaiverHours({ normalizedWaiverType: configuredWaiverType, waiverHours: league.waiverHours })
-  const dropHolds: Map<string, DroppedPlayerHold> = holdHours > 0
-    ? await loadDroppedPlayerHolds(leagueId, holdHours, {
-        playerIds: Array.from(new Set(ordered.map((c) => String(c.addPlayerId)))),
-      }).catch(() => new Map<string, DroppedPlayerHold>())
-    : new Map<string, DroppedPlayerHold>()
+  let dropHolds: Map<string, DroppedPlayerHold> = new Map()
+  if (holdHours > 0) {
+    try {
+      dropHolds = await loadDroppedPlayerHolds(leagueId, holdHours, {
+        now: runAt,
+        playerIds: Array.from(new Set(orderedAll.map((c) => String(c.addPlayerId)))),
+      })
+    } catch (err) {
+      console.warn('[waiver-wire] dropped-player holds unreadable; waiver run deferred', { leagueId, err })
+      return []
+    }
+  }
+  const ordered = orderedAll.filter((c) => {
+    const hold = dropHolds.get(String(c.addPlayerId))
+    return !(hold && hold.until > runAt && hold.droppedByRosterId !== c.rosterId)
+  })
+  const deferredHeldClaimCount = orderedAll.length - ordered.length
+  if (ordered.length === 0) {
+    return []
+  }
 
   const waiverRun = await (prisma as any).waiverRun.create({
     data: {
@@ -198,6 +217,7 @@ export async function processWaiverClaimsForLeague(
       processedByUserId: opts?.processedByUserId ?? null,
       metadata: {
         claimCount: ordered.length,
+        ...(deferredHeldClaimCount > 0 ? { deferredHeldClaimCount } : {}),
         ...(opts?.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
       },
     },

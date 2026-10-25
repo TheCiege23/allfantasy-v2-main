@@ -44,6 +44,7 @@ import {
   droppedPlayerWaiverHours,
 } from '@/lib/waiver-wire/dropped-player-waivers'
 import { isImmediateAddAllowedToday, playerWaiverHoldUntil } from '@/lib/waiver-wire/immediate-add-policy'
+import { PENDING_CLAIM_ON_PLAYER_MESSAGE } from '@/lib/waiver-wire/daily-schedule-gate'
 import { PHASE_REASONS } from '@/lib/waiver-wire/season-phase-policy'
 import { isOffseasonFreeAgencyAllowed } from '@/server/services/leagueLifecycleService'
 
@@ -122,6 +123,22 @@ describe('add/drop in an instant-free-agent league', () => {
     const r = await call()
     expect(r.status).toBe(200)
     expect(m.executeAdd).toHaveBeenCalledWith('L', 'r1', { addPlayerId: 'p9', dropPlayerId: null })
+  })
+
+  it('after he clears, a claim placed while he was on waivers keeps him off the free-agent list until the run', async () => {
+    m.prisma.waiverTransaction.findMany.mockResolvedValue([
+      { dropPlayerId: 'p9', processedAt: new Date('2026-10-19T14:59:00Z'), rosterId: 'r2' },
+    ])
+    m.prisma.waiverClaim.findFirst.mockResolvedValue({ id: 'c1' })
+    const r = await call()
+    expect(r.status).toBe(409)
+    expect(r.body).toMatchObject({ code: 'WAIVER_REQUIRED', error: PENDING_CLAIM_ON_PLAYER_MESSAGE })
+    expect(m.prisma.waiverClaim.findFirst.mock.calls[0][0].where).toEqual({ leagueId: 'L', addPlayerId: 'p9', status: 'pending' })
+    expect(m.executeAdd).not.toHaveBeenCalled()
+
+    m.prisma.waiverClaim.findFirst.mockRejectedValue(new Error('db down'))
+    expect((await call()).body.code).toBe('WAIVER_REQUIRED')
+    expect(m.executeAdd).not.toHaveBeenCalled()
   })
 
   it('a failed read fails closed to a claim', async () => {
