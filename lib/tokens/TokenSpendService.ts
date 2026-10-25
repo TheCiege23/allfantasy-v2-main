@@ -120,6 +120,13 @@ export class TokenSpendConfirmationRequiredError extends Error {
   }
 }
 
+export class TokenSpendPriceChangedError extends Error {
+  constructor(readonly quotedCost: number, readonly currentCost: number) {
+    super('The token price changed. Review the new price before continuing.')
+    this.name = 'TokenSpendPriceChangedError'
+  }
+}
+
 export class TokenInsufficientBalanceError extends Error {
   constructor(readonly requiredTokens: number, readonly currentBalance: number) {
     super("Insufficient token balance")
@@ -693,6 +700,8 @@ export class TokenSpendService {
     /** Session email — enables ADMIN_EMAILS platform-admin bypass for token charges. */
     userEmail?: string | null
     assertWithinTransaction?: (tx: Prisma.TransactionClient) => Promise<void>
+    /** Server-verified quote. A changed price requires fresh consent before any wallet write. */
+    expectedTokenCost?: number
   }): Promise<TokenLedgerEntryView> {
     if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
       return buildDevAdminSpendLedgerEntry({
@@ -738,6 +747,9 @@ export class TokenSpendService {
         baseTokenCost,
       })
       const tokenCost = Math.max(1, Number(decision.effectiveTokenCost || baseTokenCost))
+      if (input.expectedTokenCost !== undefined && input.expectedTokenCost !== tokenCost) {
+        throw new TokenSpendPriceChangedError(input.expectedTokenCost, tokenCost)
+      }
       if (rule.requiresConfirmation && !input.confirmed) {
         throw new TokenSpendConfirmationRequiredError(String(rule.code), tokenCost)
       }

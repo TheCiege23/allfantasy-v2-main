@@ -307,6 +307,36 @@ describe("POST /api/chat/chimmy contract", () => {
     })
   })
 
+  it('returns a grounded free summary without exposing the full decision or running billing or models', async () => {
+    vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
+    const detail='PRIVATE detailed comparison '.repeat(20)
+    prepareDecisionMock.mockResolvedValueOnce({version:1,kind:'trade',decisionType:'manager.trade.evaluate',authority:'explanation_only',status:'ready',leagueId:'league-1',answer:'Keep your starter. Protect your depth. '+detail,sources:['trade_engine'],scenario:{privateReport:detail}})
+    const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','preview-request');form.set('assistantMode','deep_analysis')
+    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(409);const body=await res.json();expect(body.analysisPreview).toMatchObject({summary:'Keep your starter. Protect your depth.',tokenCost:15,access:'tokens'});expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(JSON.stringify(body)).not.toContain('privateReport')
+    expect(takeAnswerAllowanceMock).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled();expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+  it('preserves the daily allowance when the user requests a free summary', async () => {
+    vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
+    readAnswerAllowanceMock.mockResolvedValue({kind:'free',planName:'Free Chimmy',used:0,remaining:2,limit:2,resetsAt:'2026-10-26T00:00:00.000Z'})
+    const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','summary-request');form.set('assistantMode','fast_take')
+    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(409);expect(await res.json()).toMatchObject({analysisPreview:{access:'daily_answer',dailyRemaining:2,tokenCost:0},meta:{free:true,tokenSpend:null}})
+    expect(previewSpendMock).not.toHaveBeenCalled();expect(takeAnswerAllowanceMock).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled();expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+
+  it('returns a screenshot preview before calling image interpretation or charging', async () => {
+    vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
+    const vision=await import('@/lib/chimmy/screenshotVision');const interpret=vi.spyOn(vision,'parseScreenshotWithVision').mockResolvedValue('PRIVATE image details')
+    try {
+      const file=new File(['screenshot'], 'trade.png', {type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new TextEncoder().encode('screenshot').buffer})
+      const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','screenshot-request');form.set('assistantMode','deep_analysis');form.set('image',file)
+      const request=buildMultipartRequest();vi.spyOn(request,'formData').mockResolvedValue(form)
+      const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(request as any)
+      expect(res.status).toBe(409);const body=await res.json();expect(body.analysisPreview.summary).toContain('has not been interpreted');expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(interpret).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+    } finally { interpret.mockRestore() }
+  })
+
   it("returns 401 when unauthenticated", async () => {
     getServerSessionMock.mockResolvedValueOnce(null)
 

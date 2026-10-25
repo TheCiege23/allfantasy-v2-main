@@ -221,9 +221,20 @@ describe('live search fallback charges for what it costs', () => {
     expect(BLOCK).toContain('ledgerId')
   })
 
-  /* A failed charge must not also swallow the answer we already paid for. */
-  it('still returns the answer if the charge races and fails', () => {
-    expect(BLOCK).toMatch(/spendTokensForRule[\s\S]*?\.catch\(\(\) => null\)/)
+  it('withholds the locked result when a versioned unlock debit fails', () => {
+    // Cached older clients retain their existing fallback; the preview contract
+    // must stop before any full searched text or citations enter the response.
+    expect(BLOCK).toContain('searchChargeFailed = analysisContract')
+    const debit = BLOCK.indexOf('spendTokensForRule')
+    const failure = BLOCK.indexOf('if (searchChargeFailed)')
+    const fullResponse = BLOCK.indexOf('const sourceLines =')
+    expect(failure).toBeGreaterThan(debit)
+    expect(fullResponse).toBeGreaterThan(failure)
+    const stop = BLOCK.slice(failure, fullResponse)
+    expect(stop).toContain("code: 'chimmy_unlock_failed'")
+    expect(stop).toContain('{ status: 503 }')
+    expect(stop).toContain('if (searchPriceChanged)')
+    expect(stop).toContain('await searchAccess(true, true)')
   })
 })
 

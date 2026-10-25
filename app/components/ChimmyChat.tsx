@@ -5,6 +5,9 @@ import { Send, Volume2, VolumeX, Image as ImageIcon, Mic, MicOff, Loader2, Squar
 import { toast } from 'sonner';
 import { getDefaultChimmyChips } from '@/lib/chimmy-interface';
 import { isSupportedSport } from '@/lib/sport-scope';
+import { ChimmyAnalysisPreview } from '@/components/chimmy/ChimmyAnalysisPreview';
+import { useAnalysisUnlock } from '@/components/chimmy/useAnalysisUnlock';
+import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types';
 import { sendChimmyMessage } from '@/lib/chimmy-chat/ChimmyChatService';
 import {
   CHIMMY_DEFAULT_UPGRADE_PATH,
@@ -36,6 +39,7 @@ type ChatMessage = {
   content: string;
   image?: string | null;
   upgradePath?: string | null;
+  meta?: ChimmyMessageMeta;
   /** Unix ms — for timestamps & threaded grouping */
   createdAt: number;
 };
@@ -394,7 +398,12 @@ export default function ChimmyChat({
     reader.readAsDataURL(file);
   };
 
+  const analysisUnlock = useAnalysisUnlock((id, result) => {
+    setMessages(all => all.map(message => message.id === id ? { ...message, content: result.response, meta: result.meta, upgradePath: null } : message));
+  }, message => toast.error(message), setIsTyping);
+
   const sendMessage = async (overrideText?: string) => {
+    if (isTyping || analysisUnlock.isBusy()) return;
     const outgoingText = (overrideText !== undefined ? overrideText : input).trim();
     if (!outgoingText && !imageFile) return;
 
@@ -420,6 +429,7 @@ export default function ChimmyChat({
       imageFileInputRef.current.value = '';
     }
     setIsTyping(true);
+    analysisUnlock.register('');
 
     try {
       let streamedAssistantHandled = false;
@@ -481,11 +491,13 @@ export default function ChimmyChat({
       if (result.sessionId) {
         setSessionId(result.sessionId);
       }
+      analysisUnlock.register(assistantMessageId, result.unlock);
       const reply = result.response || CHIMMY_GENERIC_ERROR_MESSAGE;
       const assistantMessage: ChatMessage = {
         id: assistantMessageId,
         role: 'assistant',
         content: reply,
+        meta: result.meta,
         upgradePath: result.upgradeRequired ? result.upgradePath ?? CHIMMY_DEFAULT_UPGRADE_PATH : null,
         createdAt: assistantCreatedAt,
       };
@@ -706,7 +718,10 @@ export default function ChimmyChat({
                     widePanel ? 'w-full max-w-full' : 'max-w-[85%]'
                   } ${embedded ? 'p-3 text-[13px]' : 'p-5'}`}
                 >
-                  {renderContentWithLinks(msg.content)}
+                  {msg.meta?.analysisPreview ? <ChimmyAnalysisPreview preview={msg.meta.analysisPreview}
+                    busy={isTyping || analysisUnlock.busy}
+                    onUnlock={analysisUnlock.activeId === msg.id ? () => void analysisUnlock.unlock(msg.id) : undefined} />
+                    : renderContentWithLinks(msg.content)}
                   <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
                     <button
                       type="button"

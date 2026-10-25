@@ -287,6 +287,20 @@ describe("sendChimmyMessage", () => {
     })
   })
 
+  it('shows a free preview without a modal and unlocks only the same quoted request', async () => {
+    const preview = {version:1, summary:'Check availability before kickoff.', sections:[{title:'Reasoning',description:'Available evidence'}], access:'tokens', tokenCost:3, currentBalance:10, canUnlock:true, quote:'signed-quote', expiresAt:'2026-10-25T23:00:00Z'}
+    const f = global.fetch as unknown as ReturnType<typeof vi.fn>
+    f.mockResolvedValueOnce(new Response(JSON.stringify({code:'token_confirmation_required',analysisPreview:preview}),{status:409,headers:{'Content-Type':'application/json'}}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({response:'Full answer'}),{headers:{'Content-Type':'application/json'}}))
+    const {sendChimmyMessage} = await import('@/lib/chimmy-chat/ChimmyChatService')
+    const result = await sendChimmyMessage({message:'Original question',context:{assistantMode:'fast_take',leagueId:'league-1'}})
+    expect(result.ok).toBe(true); expect(result.response).toBe(preview.summary); expect(f).toHaveBeenCalledTimes(1); expect(confirmTokenSpendMock).not.toHaveBeenCalled()
+    expect((await result.unlock!()).response).toBe('Full answer')
+    const first=JSON.parse(String(f.mock.calls[0][1].body));const second=JSON.parse(String(f.mock.calls[1][1].body))
+    expect(second).toEqual({...first,confirmTokenSpend:true,analysisUnlock:true,tokenQuote:preview.quote})
+    expect(f.mock.calls[1][1].headers['x-chimmy-request-id']).toBe(first.requestId)
+  })
+
   afterEach(() => {
     global.fetch = originalFetch
   })
