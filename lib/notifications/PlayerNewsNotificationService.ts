@@ -2,6 +2,8 @@ import { planPlayerNews, markPlayerNewsTold, playerNewsDispatches, type PlayerNe
 import { statusBucket } from './playerNewsStatus'
 import type { PlayerNewsRelation } from '@/lib/notification-settings/playerNewsLevel'
 import { createTeamInjuryNewsBatch } from './teamInjuryNewsBatch'
+import { resolveLineupImpacts } from './lineupImpact'
+import { lineupImpactCopy } from './lineupImpactCopy'
 import type { DispatchNotificationParams } from './NotificationDispatcher'
 /**
  * Player News Notification Service
@@ -762,14 +764,63 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const isStarter = (id: string) => starterUsers.has(id)
 
     if (isInjury) {
+      /*
+       * Owner's rule (2026-10-25): a manager who rosters him hears about it by push and email ONLY
+       * when it changes a starting lineup — a starter ruled out (with the options), questionable
+       * (with the backup) or cleared, or a bench player back healthy who out-projects a starter
+       * (with the swap). Every other rostered manager gets the in-app bell only, kept out of the
+       * daily digest. Followers keep their own routing below. See ./lineupImpactCopy.ts.
+       */
+      const rosteredNow = new Set([...byLeague.values()].flatMap(ids => [...ids]))
+      const leaguesOf = new Map<string, { all: Set<string>; starting: Set<string> }>()
+      for (const rp of rosterPlayers) {
+        const uid = rp.roster?.ownerId, lid = rp.roster?.leagueId
+        if (!uid || !lid || !rosteredNow.has(uid)) continue
+        const entry = leaguesOf.get(uid) ?? { all: new Set<string>(), starting: new Set<string>() }
+        entry.all.add(lid)
+        if (!NON_STARTER_SLOT.test(String(rp.slotType ?? '').trim())) entry.starting.add(lid)
+        leaguesOf.set(uid, entry)
+      }
+      // A story classified "active" (activated, cleared, returns) is itself the recovery.
+      const prior = subject.bucket === 'active' ? 'out' as const : null
+      let impactFailed = false
+      for (const [uid, entry] of leaguesOf) {
+        const impacts = await resolveLineupImpacts({ userId: uid, leagueIds: [...entry.all], startingLeagueIds: [...entry.starting], sport: row.sport,
+          sleeperId: binding.identity.sleeperId, playerName: row.playerName, team: playerTeam, bucket: statusBucket(subject.bucket), prior }).catch(() => [])
+        const copy = lineupImpactCopy(row.playerName, impacts)
+        if (!copy) continue
+        const impactLeagueIds = impacts.filter(i => i.kind !== 'none').map(i => i.leagueId)
+        const ok = await dispatchNotification({
+          userIds: [uid], leagueIds: impactLeagueIds, leagueId: impactLeagueIds[0] ?? null,
+          category: copy.kind === 'starter_out' ? 'lineup_alerts' : 'injury_alerts',
+          type: copy.kind === 'starter_out' ? 'injured_starter' : copy.kind,
+          title: copy.title, body: copy.body + '\n' + row.headline.slice(0, 300),
+          actionHref: copy.fixHref ?? undefined, actionLabel: 'Review lineup', severity: 'high',
+          dedupePrefix: 'player-news:' + row.id + ':lineup', skipChannels: { sms: true },
+          meta: { team: playerTeam, sport: row.sport, newsCategory: category, injuryHeadline: row.headline, lineupImpact: copy.kind,
+            playerNews: { ...newsInfo, starter: starterUsers.has(uid), delivery: 'instant', digest: false } },
+        }).then(r => r.failed === 0, () => false)
+        // A failed lineup alert is retried with the row, never downgraded to the bell.
+        if (!ok) { impactFailed = true; for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }; continue }
+        recipients++
+        await markPlayerNewsTold([uid], subject)
+        await recordToldAbout([uid], news)
+        for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }
+        notified++
+      }
       const requests: DispatchNotificationParams[] = []
       const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
         severity:'high' as const, dedupePrefix:'player-news:'+row.id,
         meta:{team:playerTeam??'Players without a current team',injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}
-      for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts'})
+      // Rostered, no lineup change: the bell only, and not in the digest.
+      const bellOnly = { sms: true, email: true, push: true }
+      for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts',skipChannels:bellOnly,meta:{...base.meta,lineupBellOnly:true}})
       if(gatedFollowersOnly.length)requests.push({...base,userIds:gatedFollowersOnly,leagueId:null,category:'followed_players',meta:{...base.meta,followed:true}})
       if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams',meta:{...base.meta,followedTeam:teamAbbr}})
-      injuryBatch.add(requests.flatMap(r=>playerNewsDispatches(r,plan,newsInfo,isStarter)),async (users,failed)=>{
+      const gated = requests.flatMap(r => playerNewsDispatches(r, plan, newsInfo, isStarter)).map(d =>
+        d.meta?.lineupBellOnly ? { ...d, skipChannels: bellOnly, meta: { ...d.meta, playerNews: { ...(d.meta.playerNews as object), delivery: 'bell', digest: false } } } : d)
+      if (!gated.length) { await settle(row, impactFailed ? 'dispatch-failed' : 'delivered'); continue }
+      injuryBatch.add(gated,async (users,failed)=>{
         const toldNow=[...users]
         recipients+=users.size
         followerRecipients+=gatedFollowersOnly.filter(id=>users.has(id)).length
@@ -780,7 +831,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
           if(teamHeadline)await recordToldAbout(toldNow,teamHeadline,undefined,{storyOnly:true})
           notified++
         }
-        await settle(row,failed?'dispatch-failed':toldNow.length?'delivered':'all-suppressed')
+        await settle(row,failed||impactFailed?'dispatch-failed':toldNow.length?'delivered':'all-suppressed')
       })
       continue
     }
