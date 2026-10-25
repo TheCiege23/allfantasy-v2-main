@@ -3,7 +3,7 @@ import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringTyp
 import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
-import { computeWeeklyMedianResults, isMatchupComplete } from '@/lib/redraft/medianGame'
+import { computeWeeklyMedianResults, isMatchupComplete, medianEligibleRows, readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 /**
@@ -120,20 +120,27 @@ export async function updateStandings(
   // League median: a second game each week against the week's median score. The commissioner's
   // current `League.medianGame` wins over the season's copy, which is taken once at the draft.
   // A failed read of the flag means "no median this pass", never "no standings".
+  // ⚠ PLAYOFF WEEKS ARE WIN OR GO HOME. Unless the commissioner turned on
+  // `settings.median_game_in_playoffs`, no week on or after the playoff start (and no week holding a
+  // non-regular game) gets a median result — see `medianEligibleRows`.
   let medianGameOn = false
+  let medianInPlayoffs = false
+  let playoffStartWeek: number | null = null
   let pointsOnlySeeding = false
   try {
     const seasonRow = await prisma.redraftSeason.findUnique({
       where: { id: seasonId },
-      select: { medianGame: true, league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } } },
+      select: { medianGame: true, playoffStartWeek: true, league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } } },
     })
     medianGameOn = seasonRow?.league?.medianGame ?? seasonRow?.medianGame ?? false
+    medianInPlayoffs = readMedianGameInPlayoffs(seasonRow?.league?.settings)
+    playoffStartWeek = seasonRow?.playoffStartWeek ?? null
     pointsOnlySeeding = isPointsOnlySeeding(resolveConfiguredPlayoffSeedingRule(seasonRow?.league ?? {}))
   } catch {
     medianGameOn = false
   }
   if (medianGameOn) {
-    for (const weekResult of computeWeeklyMedianResults(matchups)) {
+    for (const weekResult of computeWeeklyMedianResults(medianEligibleRows(matchups, { playoffStartWeek, medianInPlayoffs }))) {
       for (const [rosterId, outcome] of weekResult.outcomes) {
         const row = rows.get(rosterId)
         if (!row) continue

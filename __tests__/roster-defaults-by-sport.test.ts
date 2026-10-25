@@ -10,6 +10,8 @@ describe('Default Roster Settings by Sport', () => {
     expect(slotNames).toEqual(
       expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST', 'BENCH', 'IR'])
     )
+    expect(nfl.slots.find((s) => s.slotName === 'RB')?.count).toBe(2)
+    expect(nfl.totalStarterSlots).toBe(9)
     expect(nfl.totalBenchSlots).toBeGreaterThan(0)
     expect(nfl.totalIRSlots).toBeGreaterThan(0)
   })
@@ -44,13 +46,19 @@ describe('Default Roster Settings by Sport', () => {
     expect(nhl.totalBenchSlots).toBeGreaterThan(0)
   })
 
-  it('defines NCAAF expected football roster shape with superflex', () => {
+  it('defines NCAAF expected football roster shape (FLEX + K, no team defense, no default superflex)', () => {
     const ncaaf = getRosterTemplateDefinition('NCAAF')
     const slotNames = ncaaf.slots.map((s) => s.slotName)
 
     expect(slotNames).toEqual(
-      expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPERFLEX', 'K', 'DST', 'BENCH'])
+      expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'BENCH'])
     )
+    expect(ncaaf.slots.find((s) => s.slotName === 'RB')?.count).toBe(2)
+    // No college team defense exists to draft (redraftTeamDefenseEnabled), and superflex has been
+    // opt-in for NCAAF since 595959f64 — neither is in the default template.
+    expect(slotNames).not.toContain('DST')
+    expect(slotNames).not.toContain('DEF')
+    expect(slotNames).not.toContain('SUPERFLEX')
     expect(ncaaf.totalBenchSlots).toBeGreaterThan(0)
   })
 

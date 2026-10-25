@@ -155,6 +155,27 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: () => ({ en: 'The vote to unlock settings failed', es: 'La votación para desbloquear ajustes no se aprobó' }),
   },
+  // Written by the stat-correction review (lib/stat-corrections): a re-check of a sealed week found
+  // corrected stats. Nothing was applied, so it is the commissioner's to act on, not the league's news.
+  stat_correction_detected: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const flipped = num(m.flipped) ?? 0
+      const changes = obj(ctx.row.afterState).changes
+      const n = Array.isArray(changes) ? changes.length : null
+      const wk = { en: week != null ? ` for week ${week}` : '', es: week != null ? ` de la semana ${week}` : '' }
+      const players = { en: n != null ? `: ${n} player${n === 1 ? '' : 's'} changed` : '', es: n != null ? `: ${n} jugador${n === 1 ? '' : 'es'} con cambios` : '' }
+      return {
+        en: `Stat corrections found${wk.en}${players.en}`,
+        es: `Se encontraron correcciones de estadísticas${wk.es}${players.es}`,
+        detailEn: flipped ? `${flipped} result${flipped === 1 ? '' : 's'} would change. Nothing was applied.` : 'No result would change. Nothing was applied.',
+        detailEs: flipped ? `Cambiaría${flipped === 1 ? '' : 'n'} ${flipped} resultado${flipped === 1 ? '' : 's'}. No se aplicó nada.` : 'Ningún resultado cambiaría. No se aplicó nada.',
+      }
+    },
+  },
   score_adjustment_added: {
     category: 'scoring',
     members: true,

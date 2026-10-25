@@ -498,7 +498,7 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
 
-  it("continues the Chimmy run when token preview fails", async () => {
+  it("returns a retryable error without charging or running Chimmy when token preview fails", async () => {
     previewSpendMock.mockRejectedValueOnce(new Error("monetization context exploded"))
 
     const formData = new FormData()
@@ -508,16 +508,12 @@ describe("POST /api/chat/chimmy contract", () => {
     const { POST } = await import("@/app/api/chat/chimmy/route")
     const res = await POST(buildMultipartRequest(formData) as any)
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(503)
     expect(spendTokensForRuleMock).not.toHaveBeenCalled()
-    const body = await res.json()
-    expect(body.response).toContain("Accept the trade.")
-    expect(body.meta?.answerContract).toMatchObject({
-      answerType: "trade",
-      recommendation: expect.any(String),
-      confidence: {
-        level: expect.any(String),
-      },
+    expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({
+      error: "Unable to check the token price. Please try again.",
+      code: "token_preview_unavailable",
     })
   })
 

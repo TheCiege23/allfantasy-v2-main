@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveCreateLeagueHeroMedia } from '@/lib/create-league-v2/media-priority'
 import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import {
@@ -157,8 +157,8 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
     expect(isSportAllowedForType('SOCCER', 'survivor')).toBe(false)
   })
 
-  it('hides new NFL Survivor creation while preserving its existing draft and cast rules', () => {
-    expect(isSportAllowedForType('NFL', 'survivor')).toBe(false)
+  it('offers new NFL Survivor creation alongside NBA, with its draft and cast rules', () => {
+    expect(isSportAllowedForType('NFL', 'survivor')).toBe(true)
     expect(isSportAllowedForType('NBA', 'survivor')).toBe(true)
     const opts = getDraftTypeOptions('survivor', 'NFL').map((o) => o.id)
     expect(opts).toContain('snake')
@@ -176,11 +176,21 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
     // getTeamCountOptions reads the catalog when it has loaded and a hardcoded list otherwise.
     // Those two disagreed, so Survivor offered different sizes depending on whether
     // /api/leagues/create-options had resolved.
-    const fromCatalog = getTeamCountOptions('NFL', 'survivor')
-    setClientLeagueCreateOptionsCatalog(null)
-    const fromFallback = getTeamCountOptions('NFL', 'survivor')
-    expect(fromFallback).toEqual(fromCatalog)
-    expect(fromFallback).toEqual([...SURVIVOR_CREATE_CAST_SIZES])
+    // Preseason, so every size still fits the NFL schedule (later in the season both paths drop
+    // the sizes that no longer fit, identically).
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-01T12:00:00Z') })
+    try {
+      const fromCatalog = getTeamCountOptions('NFL', 'survivor')
+      setClientLeagueCreateOptionsCatalog(null)
+      const fromFallback = getTeamCountOptions('NFL', 'survivor')
+      expect(fromFallback).toEqual(fromCatalog)
+      expect(fromFallback).toEqual([...SURVIVOR_CREATE_CAST_SIZES])
+      vi.setSystemTime(new Date('2026-10-22T12:00:00Z'))
+      const lateFallback = getTeamCountOptions('NFL', 'survivor')
+      setClientLeagueCreateOptionsCatalog(LEAGUE_CREATE_OPTIONS_CATALOG_V1)
+      expect(getTeamCountOptions('NFL', 'survivor')).toEqual(lateFallback)
+      expect(lateFallback).not.toContain(24)
+    } finally { vi.useRealTimers() }
   })
 
   it('every offered cast size survives the server clamp unchanged, on BOTH resolution paths', () => {

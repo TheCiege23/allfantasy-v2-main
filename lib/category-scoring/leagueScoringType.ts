@@ -45,6 +45,10 @@ const POINTS_ONLY: SportScoringTypes = { modes: ['points'], presets: {}, catalog
 /**
  * Mirrors what the engines and `nativeCategoryScoringContext` accept today: NBA H2H categories and
  * 9-cat roto, MLB and NHL H2H categories and roto. Every other sport is points only on this base.
+ *
+ * 🛑 A preset missing here scores NOTHING: the scoring and standings engines read categories through
+ * `resolveLeagueCategories`, which only knows these presets. A sport's category presets must be
+ * listed here the moment they can be created.
  */
 export const SPORT_SCORING_TYPES: Readonly<Record<string, SportScoringTypes>> = {
   NBA: {

@@ -298,6 +298,7 @@ import {
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
 import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
+import { readHiddenHomeSections, type HomeSectionId } from '@/lib/core-app/homeSections'
 
 export const dynamic = 'force-dynamic'
 
@@ -1333,6 +1334,12 @@ export default async function AfCorePage({
     : false
 
   /*
+   * The home sections this viewer switched off in Settings → Home page (lib/core-app/homeSections.ts).
+   * Same row as the SMS nudge above, so it costs no query. A failed read hides nothing.
+   */
+  const hiddenHomeSections = readHiddenHomeSections(shellUser?.profile?.notificationPreferences)
+
+  /*
    * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
    * synced" — with a comment saying a per-league timestamp was not wired through.
    * It is: the league list already selects `League.lastSyncedAt`. Measured on
@@ -1603,6 +1610,7 @@ export default async function AfCorePage({
         weekLineups: railMatchups
           ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek }
           : null,
+        hiddenHomeSections,
       }}
     />
   )
@@ -1928,6 +1936,8 @@ type CoreScreenContext = {
    * Your Week screens show them without a second load. Null when the rail read failed.
    */
   weekLineups: WeekLineups | null
+  /** Home sections switched off in Settings → Home page — lib/core-app/homeSections.ts. */
+  hiddenHomeSections: ReadonlySet<HomeSectionId>
 }
 
 /**
@@ -1979,6 +1989,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     leagueCtx,
     homeScope,
     favoriteIds,
+    hiddenHomeSections,
   } = ctx
 
   /*
@@ -5450,6 +5461,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               }),
             })}
             prefetch={{ unreadNotifications, gameDayActive: coreActivity.gameDayActive }}
+            hiddenSections={hiddenHomeSections}
             lead={
               <>
                 {/* Pre-launch, no plan: "Everything's free until Oct 15" + countdown. Null otherwise. */}

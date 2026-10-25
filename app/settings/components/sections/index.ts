@@ -1,5 +1,6 @@
 export { ProfileSettingsSection } from "./ProfileSettingsSection"
 export { PreferencesSettingsSection } from "./PreferencesSettingsSection"
+export { HomeSectionsSettingsSection } from "./HomeSectionsSettingsSection"
 export { SecuritySettingsSection } from "./SecuritySettingsSection"
 export { NotificationsSettingsSection } from "./NotificationsSettingsSection"
 export { ConnectedAccountsSettingsSection } from "./ConnectedAccountsSettingsSection"

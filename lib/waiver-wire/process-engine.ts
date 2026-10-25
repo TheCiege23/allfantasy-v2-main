@@ -6,6 +6,7 @@ import {
   removePlayerFromRosterData,
   rosterContainsPlayer,
 } from './roster-utils'
+import { countTowardRosterLimit, leagueRosterLimit } from '@/lib/league/rosterLimit'
 import { onWaiverRunComplete } from './run-hooks'
 import { getSpecialtySpecByVariant } from '@/lib/specialty-league/registry'
 import { isWaiverFrozenForRoster } from '@/lib/survivor/SurvivorEffectEngine'
@@ -181,7 +182,8 @@ export async function processWaiverClaimsForLeague(
   const waiverRunStartedAt = Date.now()
 
   const results: ProcessedClaimResult[] = []
-  const rosterSize = league.rosterSize ?? 20
+  // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
+  const { limit: rosterSize, counts: rosterCounts } = leagueRosterLimit(league, 20)
   const resultRows: Array<{
     claimId: string | null
     rosterId: string
@@ -256,7 +258,6 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
-    const currentPlayerIds = getRosterPlayerIds(roster.playerData)
     const addId = claim.addPlayerId
     const dropId = claim.dropPlayerId
 
@@ -270,7 +271,7 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
-    const needDrop = currentPlayerIds.length >= rosterSize && !dropId
+    const needDrop = countTowardRosterLimit(roster.playerData, rosterCounts) >= rosterSize && !dropId
     if (needDrop) {
       await pushFail('Roster full; no drop specified')
       continue
@@ -529,6 +530,20 @@ export async function processWaiverClaimsForLeague(
 }
 
 /** Exported for deterministic unit tests (FAAB / priority / rolling tie-breaks). */
+/**
+ * Reverse standings: the WORST team claims first. `LeagueTeam.currentRank` 1 is first place
+ * (standings are read `orderBy currentRank asc`), so the highest rank number goes first. A team
+ * with no rank yet goes after every ranked team rather than ahead of them.
+ */
+function worstStandingFirst(a: ClaimRow, b: ClaimRow, rankByPlatformUserId: Map<string, number>): number {
+  const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '')
+  const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '')
+  if (rankA === rankB) return 0
+  if (rankA == null) return 1
+  if (rankB == null) return -1
+  return rankB - rankA
+}
+
 export function orderClaimsForProcessing(
   claims: ClaimRow[],
   waiverType: string,
@@ -542,9 +557,8 @@ export function orderClaimsForProcessing(
       if (bidB !== bidA) return bidB - bidA
       const tb = tiebreakRule
       if (tb === 'reverse_standings' || tb === 'reverse_standings_order') {
-        const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '') ?? 999
-        const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '') ?? 999
-        if (rankA !== rankB) return rankA - rankB
+        const byStanding = worstStandingFirst(a, b, rankByPlatformUserId)
+        if (byStanding !== 0) return byStanding
       }
       if (tb === 'earliest_claim' || tb === 'earliest_claim_timestamp') {
         const ta = (a as any).createdAt
@@ -562,9 +576,8 @@ export function orderClaimsForProcessing(
 
   if (waiverType === 'reverse_standings') {
     return [...claims].sort((a, b) => {
-      const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '') ?? 999
-      const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '') ?? 999
-      if (rankA !== rankB) return rankA - rankB
+      const byStanding = worstStandingFirst(a, b, rankByPlatformUserId)
+      if (byStanding !== 0) return byStanding
       return a.priorityOrder - b.priorityOrder
     })
   }

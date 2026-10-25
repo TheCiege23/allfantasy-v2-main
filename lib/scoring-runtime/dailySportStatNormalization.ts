@@ -300,23 +300,34 @@ const NHL_GAME_THRESHOLDS: ReadonlyArray<[bonus: string, stat: (s: Record<string
  * Each needs its own denominator from the same line, and a game without one earns nothing rather
  * than a perfect rate: save % needs a shot against, GAA needs goalie minutes (`g_toi`, stored only
  * on lines ingested since 2026-10-20), shooting % needs a shot on goal.
+ *
+ * 🛑 AND A MINIMUM SAMPLE (owner's decision 2026-10-23). One goal on one shot is 100%, a reliever
+ * stopping 3 of 3 is 1.000, and a goalie pulled after ten clean minutes is a 0.00 GAA — each a
+ * near-maximal bonus for a game that proves nothing. A game below the minimum earns 0 for that
+ * bonus; exactly at it, the bonus is earned. Fixed defaults, not panel settings: these bonuses are
+ * baked into the shared `PlayerWeeklyScore` / `PlayerDailyScore` rows (keyed by player, not league)
+ * before any league's settings are read, so a per-league minimum would need the rate scored at
+ * league time instead. The panel help text states them (`NhlScoringCategories.ts`).
  */
 const NHL_SAVE_PCT_FLOOR = 0.9 //   panel: bonus per 0.010 above .900
 const NHL_GAA_CEILING = 2.5 //      panel: bonus for a GAA below 2.50
 const NHL_SHOOTING_PCT_FLOOR = 10 // panel: bonus per point above 10%
+export const NHL_SAVE_PCT_MIN_SHOTS_AGAINST = 20
+export const NHL_GAA_MIN_GOALIE_MINUTES = 40
+export const NHL_SHOOTING_PCT_MIN_SHOTS_ON_GOAL = 4
 
 function addNhlRateBonuses(stats: Record<string, number>): void {
   if (stats.g_sv !== undefined) {
     const shotsAgainst = stats.g_sa ?? stats.g_sv + (stats.g_ga ?? 0)
-    if (shotsAgainst > 0) {
+    if (shotsAgainst >= NHL_SAVE_PCT_MIN_SHOTS_AGAINST) {
       const steps = (stats.g_sv / shotsAgainst - NHL_SAVE_PCT_FLOOR) / 0.01
       if (steps > 0) stats.g_sv_pct_bonus = steps
     }
   }
-  if (stats.g_toi !== undefined && stats.g_toi > 0 && stats.g_ga !== undefined) {
+  if (stats.g_toi !== undefined && stats.g_toi >= NHL_GAA_MIN_GOALIE_MINUTES && stats.g_ga !== undefined) {
     if ((stats.g_ga * 60) / stats.g_toi < NHL_GAA_CEILING) stats.g_gaa_bonus = 1
   }
-  if (stats.sog !== undefined && stats.sog > 0) {
+  if (stats.sog !== undefined && stats.sog >= NHL_SHOOTING_PCT_MIN_SHOTS_ON_GOAL) {
     const points = ((stats.g ?? 0) / stats.sog) * 100 - NHL_SHOOTING_PCT_FLOOR
     if (points > 0) stats.sh_pct_bonus = points
   }

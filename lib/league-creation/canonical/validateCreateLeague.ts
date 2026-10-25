@@ -2,6 +2,7 @@ import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSetting
 import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 /**
@@ -14,6 +15,7 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import {
   isDraftTypeAllowedForFormat,
@@ -124,7 +126,17 @@ function issuesFromZod(err: z.ZodError): ValidationIssue[] {
 /**
  * Structural + business validation (format-engine allowlists, team counts).
  */
-export function validateCreatePayload(input: unknown): ValidateCreateLeagueResult {
+export function validateCreatePayload(
+  input: unknown,
+  options: {
+    /**
+     * Set only when the request carries over an imported league: that league's real team count.
+     * A request for exactly this count is accepted for the import-flexible league types even when
+     * the native list lacks it (see lib/league-creation/importedTeamCount.ts).
+     */
+    importedTeamCount?: number | null
+  } = {},
+): ValidateCreateLeagueResult {
   const stripped = stripForbiddenCreateLeagueFields(input)
   const parsed = createLeagueBodySchema.safeParse(stripped.body)
   if (!parsed.success) {
@@ -330,7 +342,12 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
 
   const teamOpts = getTeamCountOptions(sport as SupportedSport, formatId as LeagueTypeId, data.soccerPipeline ?? null)
 
-  if (!teamOpts.includes(data.teamCount)) {
+  const importedCountAccepted =
+    options.importedTeamCount != null &&
+    options.importedTeamCount === data.teamCount &&
+    isImportedTeamCountAllowed(idpRequested ? 'idp' : formatId, data.teamCount, teamOpts)
+
+  if (!teamOpts.includes(data.teamCount) && !importedCountAccepted) {
     return {
       ok: false,
       error: 'Invalid team count for this concept and sport',
@@ -426,13 +443,13 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     const message = validateTribeSlots(schedule.survivorTribeSlots, data.teamCount, count)
     if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.survivorTribeSlots', message }] }
   }
-  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+  if (formatId === 'survivor' && isSurvivorPlanSport(sport)) {
     try {
       if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')
       const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
       if (draftAt && draftAt.getTime() <= Date.now()) throw new Error('Choose a future Survivor draft date and time.')
       const exileSettings = normalizeSurvivorFoundationSettings(schedule)
-      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, finalistCount: readSurvivorLateSeasonSettings(schedule).finalistCount, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
+      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: typeof schedule.exileReturnWeek === 'number' || typeof schedule.survivorExileReturnWeek === 'number' ? exileSettings.exileReturnWeek : undefined, finalistCount: readSurvivorLateSeasonSettings(schedule).finalistCount, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
         endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid Survivor season calendar'

@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { createTtlMemo } from '@/lib/ttl-memo'
 import { getTeamIndex, isTeamFollowSport, listFollowerIdsForTeam } from '@/lib/follows/teamFollows'
 import { resolveTeam } from '@/lib/follows/teamResolver'
 import { starterImpactsByPlayerId } from '@/lib/live/bigPlayNotifier'
@@ -19,7 +20,13 @@ import type { GameObservation } from './gameEvents'
  * stops a game's alerts. Starters cost two queries per game, so they are cached per process.
  */
 const CACHE_MS = 5 * 60_000
-const starterCache = new Map<string, { at: number; value: { users: Set<string>; byAthlete: Map<string, Set<string>> } }>()
+// Bounded: keyed per game, and a finished game's key is never read again, so a read-only TTL kept
+// every game ever seen. Expired entries are swept on write; enabled in tests to keep behaviour as-is.
+const starterCache = createTtlMemo<{ users: Set<string>; byAthlete: Map<string, Set<string>> }>({
+  ttlMs: CACHE_MS,
+  maxEntries: 500,
+  enabled: () => true,
+})
 
 export async function gameFollowerIds(sport: string, game: GameObservation): Promise<string[]> {
   if (!isTeamFollowSport(sport)) return []
@@ -44,7 +51,7 @@ export async function gameStarterIds(sport: string, gameId: string, detail: Live
   if (!espnIds.length) return empty
   const key = `${sport}:${gameId}`
   const hit = starterCache.get(key)
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value
+  if (hit) return hit
   try {
     const identities = await prisma.playerIdentityMap.findMany({
       where: { sport, espnId: { in: espnIds }, rollingInsightsId: { not: null } },
@@ -60,7 +67,7 @@ export async function gameStarterIds(sport: string, gameId: string, detail: Live
       for (const u of users) { set.add(u.userId); value.users.add(u.userId) }
       value.byAthlete.set(espnId, set)
     }
-    starterCache.set(key, { at: Date.now(), value })
+    starterCache.set(key, value)
     return value
   } catch {
     return empty

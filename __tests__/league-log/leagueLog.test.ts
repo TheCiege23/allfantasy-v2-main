@@ -119,6 +119,28 @@ describe('what a commissioner sees', () => {
   })
 })
 
+describe('stat corrections', () => {
+  const found = row({
+    actionType: 'stat_correction_detected',
+    userId: null,
+    afterState: { changes: [{ playerId: 'p1' }, { playerId: 'p2' }], fingerprint: 'f' },
+    metadata: { season: 2026, week: 7, flipped: 1 },
+  })
+
+  it('are for the commissioner only: a member never sees one', () => {
+    expect(describeLogEntry(found, member)).toBeNull()
+    expect(MEMBER_LOG_ACTION_TYPES).not.toContain('stat_correction_detected')
+  })
+
+  it('tell the commissioner the week, how many players, and whether a result would flip', () => {
+    const e = describeLogEntry(found, commish)
+    expect(e).toMatchObject({ title: 'Stat corrections found for week 7: 2 players changed', category: 'scoring' })
+    expect(e?.detail).toBe('1 result would change. Nothing was applied.')
+    expect(e?.actor).toBe('AllFantasy (automatic)')
+    expect(describeLogEntry(found, { ...commish, lang: 'es' })?.title).toBe('Se encontraron correcciones de estadísticas de la semana 7: 2 jugadores con cambios')
+  })
+})
+
 describe('names to look up', () => {
   it('collects the rosters and users a page of rows mentions', () => {
     const rows = [

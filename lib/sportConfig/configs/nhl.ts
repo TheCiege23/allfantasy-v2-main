@@ -57,9 +57,10 @@ export const NHL_CONFIG: SportConfigFull = {
     { key: 'g_toi', label: 'Minute Played (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
     // Rate-stat bonuses, evaluated PER GAME in `normalizeNhlGameStats` and summed. 0 by default, gated
     // like the rows above. Save % and shooting % count steps above the floor; GAA is one per game.
-    { key: 'g_sv_pct_bonus', label: 'Save % Bonus (per .010 over .900, per game)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
-    { key: 'g_gaa_bonus', label: 'GAA Under 2.50 Game (G)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
-    { key: 'sh_pct_bonus', label: 'Shooting % Bonus (per point over 10%, per game)', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
+    // Each needs a minimum sample in the game (20 shots faced / 40 goalie minutes / 4 SOG).
+    { key: 'g_sv_pct_bonus', label: 'Save % Bonus (per .010 over .900, per game, min. 20 shots faced)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'g_gaa_bonus', label: 'GAA Under 2.50 Game (G, min. 40 minutes)', defaultPoints: 0, isToggleable: true, group: 'goalie', sport: 'NHL' },
+    { key: 'sh_pct_bonus', label: 'Shooting % Bonus (per point over 10%, per game, min. 4 SOG)', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NHL' },
   ],
 
   scoringPresets: [{ name: 'Standard', categories: [] }],

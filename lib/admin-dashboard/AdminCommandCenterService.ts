@@ -35,6 +35,7 @@ import {
   type ProviderTeamReconciliationSummary,
 } from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
+import { getPlayInstallStats, type PlayInstallStatsResult } from "@/lib/google-play/playInstallStats"
 
 type MetricValue = number | string
 
@@ -325,6 +326,32 @@ function notTracked(label: string, note = "Not tracked yet"): AdminMetric {
   return { label, value: note, tracked: false, note }
 }
 
+/**
+ * Google Play downloads come from the Play Console's bulk-report export, not from
+ * our database. "Not configured" and "could not read" stay NOT TRACKED so they are
+ * never shown as a real zero; see lib/google-play/playInstallStats.ts.
+ */
+export function buildGooglePlayMetrics(result: PlayInstallStatsResult): AdminMetric[] {
+  if (result.status === "not_configured") {
+    const note = `Set ${result.missing.join(" and ")} to show Play Console installs`
+    return [notTracked("Google Play downloads", note)]
+  }
+  if (result.status === "error") {
+    return [notTracked("Google Play downloads", result.reason)]
+  }
+  const { stats } = result
+  const through = stats.latestDate ? `Play Console data through ${stats.latestDate}` : "Play Console"
+  const metrics = [
+    metric("Google Play downloads", stats.installsAllTime, `All time · ${through}`),
+    metric("Google Play downloads 7 days", stats.installs7Days, through),
+    metric("Google Play downloads 28 days", stats.installs28Days, through),
+  ]
+  if (stats.activeDevices !== null) {
+    metrics.push(metric("Android active devices", stats.activeDevices, through))
+  }
+  return metrics
+}
+
 function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 }
@@ -582,6 +609,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   const sevenHoursAgo = hoursAgo(7)
   const sevenDaysAgo = daysAgo(7)
   const thirtyDaysAgo = daysAgo(30)
+  // Started before the DB queries so the Google round-trips overlap them. Never rejects.
+  const playInstallsPromise = getPlayInstallStats()
 
   const [
     totalAccounts,
@@ -921,11 +950,14 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     aiProviders,
   })
 
+  const googlePlayMetrics = buildGooglePlayMetrics(await playInstallsPromise)
+
   return {
     generatedAt: new Date().toISOString(),
     morning: [
       metric("Signups last 7h", accounts7h, "Rolling 7-hour window"),
       metric("Signups today", accountsToday, "UTC day"),
+      googlePlayMetrics[0],
       loginMetric("Logins last 7h", loginSessions7h, "Rolling 7-hour window"),
       loginMetric("Logins today", loginSessionsToday, "UTC day"),
       metric("Active sessions now", activeSessionsNow),
@@ -961,6 +993,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Free users", Math.max(0, totalAccounts - activeSubscriptionUserCount), "Derived from active subscriptions"),
       metric("Pro/subscribed users", activeSubscriptionUserCount),
       metric("Admin users", adminUsers, "Derived from ADMIN_EMAILS allowlist"),
+      ...googlePlayMetrics,
     ],
     subscriptions: [
       metric("Total subscriptions", subscriptions.length),

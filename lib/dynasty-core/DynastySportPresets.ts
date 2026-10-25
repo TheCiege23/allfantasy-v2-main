@@ -16,8 +16,9 @@
  * ⚠ NHL AND MLB PRESETS CARRY NO TAXI. There is no NHL/MLB prospect or minor-league player pool
  * (owner's decision 2026-10-20, `lib/league-creation/prospectStashPolicy.ts`), so their
  * `taxiSlotCount` is 0 and `rosterSlotsWithDynastySportPreset` clamps TAXI to 0 for them as a
- * backstop. The removed taxi depth is deliberately NOT moved to bench. The template's own NA / PROSPECT
- * counts are left exactly as they are.
+ * backstop. Each preset's former taxi depth is on its BENCH instead (owner, 2026-10-23), so total
+ * roster depth and the gaps between presets are what they were: bench = old bench + old taxi. The
+ * template's own NA / PROSPECT counts are left exactly as they are.
  *
  * The FIRST preset of each sport equals what the create wizard already defaults to
  * (`defaultDynastyBySport` + `getDefaultDynastySetup`), so offering presets changes no default.
@@ -44,13 +45,13 @@ export const DYNASTY_SPORT_PRESETS: readonly DynastySportPreset[] = [
   { id: 'nba_dynasty_points_compact', sport: 'NBA', scoringPresetId: 'nba_points', benchCount: 5, irCount: 3, taxiSlotCount: 3, taxiEligibilityYears: 1, startupRosterDepth: 18 },
   { id: 'nba_dynasty_points_deep', sport: 'NBA', scoringPresetId: 'nba_points', benchCount: 12, irCount: 4, taxiSlotCount: 6, taxiEligibilityYears: 3, startupRosterDepth: 28 },
   // NHL starters (template): C×2 LW×2 RW×2 D×4 UTIL×2 G×2 = 14 (skaters + goalies, one points table).
-  // No taxi (see header). `_minors` startup depth is 27, the roster it builds (14 + 10 BN + 3 IR): it was
-  // 30 when the row carried 8 taxi, and a startup draft cannot be deeper than the roster.
-  { id: 'nhl_dynasty_points_taxi', sport: 'NHL', scoringPresetId: 'nhl_points', benchCount: 9, irCount: 3, taxiSlotCount: 0, taxiEligibilityYears: 2, startupRosterDepth: 26 },
-  { id: 'nhl_dynasty_points_minors', sport: 'NHL', scoringPresetId: 'nhl_points', benchCount: 10, irCount: 3, taxiSlotCount: 0, taxiEligibilityYears: 3, startupRosterDepth: 27 },
-  // MLB starters (template): C 1B 2B 3B SS CI MI OF×5 UTIL×2 SP×3 RP×2 P×4 = 23.
-  { id: 'mlb_dynasty_points_minors', sport: 'MLB', scoringPresetId: 'mlb_points', benchCount: 12, irCount: 4, taxiSlotCount: 0, taxiEligibilityYears: 2, startupRosterDepth: 34 },
-  { id: 'mlb_dynasty_points_deep', sport: 'MLB', scoringPresetId: 'mlb_points', benchCount: 16, irCount: 6, taxiSlotCount: 0, taxiEligibilityYears: 3, startupRosterDepth: 40 },
+  // No taxi (see header); bench carries the old 4 / 8 taxi: 9+4 = 13, 10+8 = 18. Roster 30 / 35.
+  { id: 'nhl_dynasty_points_taxi', sport: 'NHL', scoringPresetId: 'nhl_points', benchCount: 13, irCount: 3, taxiSlotCount: 0, taxiEligibilityYears: 2, startupRosterDepth: 26 },
+  { id: 'nhl_dynasty_points_minors', sport: 'NHL', scoringPresetId: 'nhl_points', benchCount: 18, irCount: 3, taxiSlotCount: 0, taxiEligibilityYears: 3, startupRosterDepth: 30 },
+  // MLB starters (template): C 1B 2B 3B SS CI MI OF×5 UTIL×2 SP×3 RP×2 P×4 = 23, plus the template's NA×5.
+  // No taxi; bench carries the old 6 / 10 taxi: 12+6 = 18, 16+10 = 26. Roster 50 / 60.
+  { id: 'mlb_dynasty_points_minors', sport: 'MLB', scoringPresetId: 'mlb_points', benchCount: 18, irCount: 4, taxiSlotCount: 0, taxiEligibilityYears: 2, startupRosterDepth: 34 },
+  { id: 'mlb_dynasty_points_deep', sport: 'MLB', scoringPresetId: 'mlb_points', benchCount: 26, irCount: 6, taxiSlotCount: 0, taxiEligibilityYears: 3, startupRosterDepth: 40 },
 ]
 
 export function isDynastySportPresetSport(sport: string | null | undefined): sport is DynastySportPresetSport {

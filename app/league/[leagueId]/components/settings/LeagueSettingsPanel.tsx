@@ -59,6 +59,7 @@ export function LeagueSettingsPanel({
   )
   const [timezone, setTimezone] = useState(initialData.timezone ?? 'America/New_York')
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
+  const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
   const [leagueType, setLeagueType] = useState((initialData.leagueType ?? 'redraft') as string)
   const [leagueSize, setLeagueSize] = useState(initialData.leagueSize ?? 12)
   const [allowPreDraft, setAllowPreDraft] = useState(Boolean(initialData.allowPreDraftMoves))
@@ -93,6 +94,7 @@ export function LeagueSettingsPanel({
     )
     setTimezone(initialData.timezone ?? 'America/New_York')
     setMedianGame(Boolean(initialData.medianGame))
+    setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
     setLeagueType(initialData.leagueType ?? 'redraft')
     setLeagueSize(initialData.leagueSize ?? 12)
     setAllowPreDraft(Boolean(initialData.allowPreDraftMoves))
@@ -286,6 +288,18 @@ export function LeagueSettingsPanel({
             void save({ medianGame: v })
           }}
         />
+        {medianGame ? (
+          <SettingsToggleRow
+            label="League median in playoffs"
+            description="Off: playoff weeks are win-or-go-home only. On: median results still count in playoff weeks, in season records only — the bracket is decided by playoff scores alone."
+            checked={medianInPlayoffs}
+            disabled={disabled}
+            onChange={(v) => {
+              setMedianInPlayoffs(v)
+              void save({ medianGameInPlayoffs: v })
+            }}
+          />
+        ) : null}
         <SettingsToggleRow
           label="Allow moves pre-draft"
           checked={allowPreDraft}

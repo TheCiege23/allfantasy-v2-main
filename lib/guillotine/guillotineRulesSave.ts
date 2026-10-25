@@ -16,6 +16,7 @@ import {
   type GuillotineRules,
   type RulesPatchError,
 } from './guillotineRules'
+import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -74,6 +75,7 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       // `custom_time` has no editor yet; show it as the default rather than an option nobody can pick.
       rosterReleaseTiming: config.rosterReleaseTiming === 'immediate' ? 'immediate' : 'next_waiver_run',
       aiRecapAuto: settings[AI_RECAP_AUTO_KEY] !== false,
+      faabOnChop: readFaabOnChop(settings),
     },
     startWeek: config.eliminationStartWeek,
     seasonWeeks,
@@ -108,7 +110,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  const { endgame, aiRecapAuto, ...configPatch } = patch
+  const { endgame, aiRecapAuto, faabOnChop, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -135,7 +137,8 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
 
   const endgameChanged = endgame !== undefined && endgame !== current.rules.endgame
   const recapChanged = aiRecapAuto !== undefined && aiRecapAuto !== current.rules.aiRecapAuto
-  if (endgameChanged || recapChanged) {
+  const faabChanged = faabOnChop !== undefined && faabOnChop !== current.rules.faabOnChop
+  if (endgameChanged || recapChanged || faabChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
@@ -143,6 +146,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
       if (endgameChanged) settings.guillotineEndgame = endgame
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
+      if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
       await tx.league.update({
         where: { id: leagueId },
         data: {

@@ -19,6 +19,7 @@ import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { shouldSuppressTokenMonetizationNotification } from "@/lib/notifications/tokenMonetizationNotificationBypass"
 import { quietHoursSuppression } from "@/lib/notifications/quietHours"
 import { isCategoryAllowedForLeague } from "@/lib/notifications/leagueOverrides"
+import { isCategoryHiddenByHomeSection } from "@/lib/core-app/homeSections"
 import { pushTagFor } from "@/lib/notifications/pushTag"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
 import { prisma } from "@/lib/prisma"
@@ -135,6 +136,8 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
 
       const catPrefs = prefs.categories?.[category]
       if (!catPrefs?.enabled) { suppressAll('category_off'); return }
+      // Settings → Home page: a hidden home section silences its alerts too (lib/core-app/homeSections.ts).
+      if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) { suppressAll('home_section_hidden'); return }
 
       /*
        * Per-league override (spec item 15: global by default, per-league where wanted).
