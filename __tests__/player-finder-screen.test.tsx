@@ -168,9 +168,18 @@ const LEAGUE_VIEW: PlayerLeagueView = {
   coverage: { sampled: 12, matched: 12, fraction: 1, usable: true },
 }
 
+/**
+ * The fixture's slate kicks off at a fixed instant (2026-10-25 17:00 UTC). Without a pinned clock the
+ * component reads the real one, so every run after that instant saw the games as started: the lineup
+ * moves turned locked and sorted below the claim, and the move-order test failed from that moment on.
+ * Pinned to the same pre-kickoff instant the describe blocks below use; a test that needs "after" passes
+ * its own `nowIso` (KICKED_OFF), which still wins.
+ */
+const BEFORE_KICKOFF = '2026-10-25T16:18:00.000Z'
+
 function renderCore(extra: Partial<React.ComponentProps<typeof PlayerFinder>> = {}) {
   return render(
-    <PlayerFinder query="Dalton Kincaid" matches={[DETAIL.player]} detail={DETAIL} leagueCount={6} {...extra} />,
+    <PlayerFinder query="Dalton Kincaid" matches={[DETAIL.player]} detail={DETAIL} leagueCount={6} nowIso={BEFORE_KICKOFF} {...extra} />,
   )
 }
 
