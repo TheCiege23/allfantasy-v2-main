@@ -113,3 +113,9 @@ actually sent. It reads `notification_outbox`, `platform_notifications`, `EmailP
 - opt-outs and the spread of live alert levels
 
 Texts are logged from 2026-10-22.
+
+## Breaking news
+
+Breaking news (`lib/news/breakingNewsAlerts.ts`) goes by push and the in-app bell only, never email or
+text, since 2026-10-25. After the player-news changes it was the biggest email type left: 176 emails to 43
+people in two and a half days. The cap of 4 a day per person still applies.

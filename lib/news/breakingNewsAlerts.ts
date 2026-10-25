@@ -36,6 +36,8 @@ import {
  *     the teams named.
  *   - `notable` stories (an ordinary signing, a release): followers of the teams named only.
  * Both under the `breaking_news` category, capped at BREAKING_NEWS_PER_DAY per person.
+ * PUSH + BELL ONLY, never email or text (owner's call, 2026-10-25): after the player-news fix it was
+ * the biggest email type left — 176 emails to 43 people in two and a half days, up to 5 a day each.
  *
  * DB-FIRST: reads `sports_news` only. The cron that calls this refreshes ESPN news first.
  *
@@ -197,6 +199,7 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
       leagueId: null,
       severity: c.classification.tier === 'major' ? 'high' : 'medium',
       dedupePrefix: c.storyKey,
+      skipChannels: { email: true, sms: true },
       meta: {
         sport,
         eventKey: c.storyKey,

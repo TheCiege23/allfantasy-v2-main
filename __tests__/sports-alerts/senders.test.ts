@@ -87,6 +87,12 @@ describe('breaking news', () => {
     expect(call.title).toContain('(report)')
   })
 
+  it('is push and bell only — never an email or a text', async () => {
+    h.newsFind.mockResolvedValue([news()])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ email: true, sms: true })
+  })
+
   it('does not resend a story another run already claimed', async () => {
     h.newsFind.mockResolvedValue([news()])
     h.ledgerCreate.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }))
