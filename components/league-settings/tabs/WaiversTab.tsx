@@ -16,6 +16,17 @@ import {
   type DailyWaiverSchedule,
   type WaiverDayKey,
 } from '@/lib/waivers/dailyWaiverSchedule'
+import {
+  FREE_AGENCY_ONLY_PRESET,
+  HUB_TIEBREAK_RULES,
+  PRIORITY_RESET_WAIVER_TYPES,
+  WAIVER_ORDER_RESET_POLICIES,
+  isFreeAgencyOnly,
+  readHubTiebreakRule,
+  readWaiverOrderResetPolicy,
+  type HubTiebreakRule,
+  type WaiverOrderResetPolicy,
+} from '@/lib/waiver-wire/hub-waiver-options'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 /**
@@ -30,6 +41,27 @@ export const HUB_WAIVER_TYPE_OPTIONS = [
   { value: 'standard', labelKey: 'lsHub.wv.standard' },
   { value: 'fcfs', labelKey: 'lsHub.wv.fcfs' },
 ]
+
+/** FAAB bid-tie rules (lib/waiver-wire/hub-waiver-options.ts). Shown only while FAAB is in use. */
+export const HUB_TIEBREAK_OPTIONS: Array<{ value: HubTiebreakRule; labelKey: string }> = HUB_TIEBREAK_RULES.map((value) => ({
+  value,
+  labelKey: { priority_lowest_first: 'lsHub.wv.tb.priority', reverse_standings: 'lsHub.wv.tb.reverse', earliest_claim: 'lsHub.wv.tb.earliest' }[value],
+}))
+
+/** Priority reset policy. Shown only for the priority-list types (rolling, standard). */
+export const HUB_RESET_POLICY_OPTIONS: Array<{ value: WaiverOrderResetPolicy; labelKey: string }> = WAIVER_ORDER_RESET_POLICIES.map((value) => ({
+  value,
+  labelKey: value === 'weekly' ? 'lsHub.wv.reset.weekly' : 'lsHub.wv.reset.rolling',
+}))
+
+/** Which of the hub's extra waiver controls apply to a league. Pure, so tests can read it directly. */
+export function hubWaiverControlsFor(input: { waiverType: string; showFaab: boolean }) {
+  return {
+    faabFields: input.showFaab,
+    tiebreak: input.showFaab,
+    resetPolicy: (PRIORITY_RESET_WAIVER_TYPES as readonly string[]).includes(input.waiverType),
+  }
+}
 
 const MODE_LABEL_KEYS: Record<DailyWaiverMode, string> = {
   waivers: 'lsHub.wv.mode.waivers',
@@ -97,6 +129,36 @@ export function WaiversSection({
   const [waiverHours, setWaiverHours] = useState(() => seed().waiverHours)
   const [schedule, setSchedule] = useState<DailyWaiverSchedule>(() => seed().schedule)
 
+  // These three live on the league's waiver-settings row, not on League, so they are read from the
+  // effective waiver settings. Until that answers, the engine's defaults show.
+  const [allowZeroBid, setAllowZeroBid] = useState(() => Boolean(savedOr(leagueId, 'waiverAllowZeroBid', true)))
+  const [tiebreakRule, setTiebreakRule] = useState<HubTiebreakRule>(() =>
+    readHubTiebreakRule(savedOr<string | null>(leagueId, 'waiverTiebreakRule', null)),
+  )
+  const [resetPolicy, setResetPolicy] = useState<WaiverOrderResetPolicy>(() =>
+    readWaiverOrderResetPolicy(savedOr<string | null>(leagueId, 'waiverOrderResetPolicy', null)),
+  )
+  const touchedRef = useRef(new Set<string>())
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      try {
+        const res = await fetch(`/api/waiver-wire/leagues/${encodeURIComponent(leagueId)}/settings`, { cache: 'no-store' })
+        if (!res.ok || !live) return
+        const eff = (await res.json()) as { allowZeroFaabBid?: boolean; tiebreakRule?: string | null; waiverOrderResetPolicy?: string | null }
+        if (!live) return
+        if (!touchedRef.current.has('zero') && typeof eff.allowZeroFaabBid === 'boolean') setAllowZeroBid(eff.allowZeroFaabBid)
+        if (!touchedRef.current.has('tb')) setTiebreakRule(readHubTiebreakRule(eff.tiebreakRule))
+        if (!touchedRef.current.has('reset')) setResetPolicy(readWaiverOrderResetPolicy(eff.waiverOrderResetPolicy))
+      } catch {
+        // The defaults stay; a save still writes what the commissioner picks.
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [leagueId])
+
   useEffect(() => {
     const s = seed()
     setWaiverType(s.waiverType)
@@ -123,6 +185,8 @@ export function WaiversSection({
   }
 
   const showFaab = scheduleUsesFaab(schedule, waiverType)
+  const controls = hubWaiverControlsFor({ waiverType, showFaab })
+  const faOnly = isFreeAgencyOnly(waiverType, waiverHours)
 
   return (
     <section className={SETTINGS_CARD_CLASS} data-testid="league-settings-waivers-section">
@@ -135,6 +199,35 @@ export function WaiversSection({
       {canEdit && !manual ? <p className="-mt-2 mb-4 text-[11px] leading-snug text-white/40">{t('lsHub.wv.autosaveNote')}</p> : null}
 
       <div className="space-y-4">
+        <div
+          className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2.5"
+          data-testid="league-settings-waiver-fa-only-preset"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-white/90">{t('lsHub.wv.faOnly')}</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-white/40">{t('lsHub.wv.faOnlyHint')}</p>
+          </div>
+          {faOnly ? (
+            <span className="shrink-0 rounded-full bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+              {t('lsHub.wv.faOnlyActive')}
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => {
+                setWaiverType(FREE_AGENCY_ONLY_PRESET.waiverType)
+                setWaiverHours(FREE_AGENCY_ONLY_PRESET.waiverHours)
+                queuePatch({ ...FREE_AGENCY_ONLY_PRESET })
+              }}
+              className="shrink-0 rounded-lg border border-cyan-400/30 px-3 py-1.5 text-[12px] font-semibold text-cyan-100 hover:bg-cyan-500/10 disabled:opacity-50"
+              data-testid="league-settings-waiver-fa-only-apply"
+            >
+              {t('lsHub.wv.faOnlyApply')}
+            </button>
+          )}
+        </div>
+
         <label className="block">
           <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.type')}</span>
           <select
@@ -190,12 +283,82 @@ export function WaiversSection({
                   queuePatch({ waiverMinBid: v })
                 }}
                 className={SETTINGS_INPUT_CLASS}
+                data-testid="league-settings-faab-min-bid"
               />
+              <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.minBidHint')}</span>
             </label>
+            <div className="flex items-center gap-3 min-[380px]:col-span-2" data-testid="league-settings-faab-allow-zero">
+              <div className="min-w-0 flex-1">
+                <p id={`faab-zero-label-${leagueId}`} className="text-[13px] font-semibold text-white/90">{t('lsHub.wv.allowZero')}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-white/40">
+                  {waiverMinBid > 0 ? t('lsHub.wv.allowZeroMooted') : t('lsHub.wv.allowZeroHint')}
+                </p>
+              </div>
+              <SettingsSwitch
+                id={`faab-zero-toggle-${leagueId}`}
+                checked={allowZeroBid && waiverMinBid <= 0}
+                onChange={(next) => {
+                  touchedRef.current.add('zero')
+                  setAllowZeroBid(next)
+                  queuePatch({ waiverAllowZeroBid: next })
+                }}
+                disabled={!canEdit || waiverMinBid > 0}
+                labelledBy={`faab-zero-label-${leagueId}`}
+              />
+            </div>
+            {controls.tiebreak ? (
+              <label className="block min-w-0 min-[380px]:col-span-2">
+                <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.tiebreak')}</span>
+                <select
+                  value={tiebreakRule}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const v = e.target.value as HubTiebreakRule
+                    touchedRef.current.add('tb')
+                    setTiebreakRule(v)
+                    queuePatch({ waiverTiebreakRule: v })
+                  }}
+                  className={SETTINGS_INPUT_CLASS}
+                  data-testid="league-settings-waiver-tiebreak"
+                >
+                  {HUB_TIEBREAK_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value} className="bg-[#0d1117]">
+                      {t(o.labelKey)}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.tiebreakHint')}</span>
+              </label>
+            ) : null}
           </div>
         ) : (
           <p className="text-[11px] leading-snug text-white/40">{t('lsHub.wv.faabOnlyNote')}</p>
         )}
+
+        {controls.resetPolicy ? (
+          <label className="block">
+            <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.reset')}</span>
+            <select
+              value={resetPolicy}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.value as WaiverOrderResetPolicy
+                touchedRef.current.add('reset')
+                setResetPolicy(v)
+                queuePatch({ waiverOrderResetPolicy: v })
+              }}
+              className={SETTINGS_INPUT_CLASS}
+              data-testid="league-settings-waiver-reset-policy"
+            >
+              {HUB_RESET_POLICY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value} className="bg-[#0d1117]">
+                  {t(o.labelKey)}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.resetHint')}</span>
+          </label>
+        ) : null}
 
         <label className="block">
           <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.period')}</span>

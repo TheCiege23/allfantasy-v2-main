@@ -37,6 +37,7 @@ import { readFetchJson } from '@/lib/http/readFetchJson'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigation'
 import { useSportPreset } from '@/hooks/useSportPreset'
+import { wizardWaiverPreviewDefaults } from '@/lib/league-creation/wizardWaiverPreview'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import {
   getAllowedLeagueTypesForSport,
@@ -1155,7 +1156,7 @@ export function LeagueCreationWizard({
 
   useEffect(() => {
     if (!creationPreset?.waiver) return
-    const key = `${state.sport}|${state.leagueVariant ?? state.scoringPreset ?? ''}`
+    const key = `${state.sport}|${state.leagueVariant ?? state.scoringPreset ?? ''}|${state.leagueType ?? ''}`
     if (skipInitialWaiverPresetSyncRef.current) {
       skipInitialWaiverPresetSyncRef.current = false
       lastWaiverPresetKeyRef.current = key
@@ -1169,9 +1170,13 @@ export function LeagueCreationWizard({
       return
     }
     if (lastWaiverPresetKeyRef.current === key) return
-    setState((s) => ({ ...s, waiverSettings: toWizardWaiverSettings(creationPreset.waiver) }))
+    setState((s) => ({
+      ...s,
+      // Redraft previews what creation writes (FAAB $100), not the scoring variant's preset.
+      waiverSettings: toWizardWaiverSettings(wizardWaiverPreviewDefaults(creationPreset.waiver, s.sport, s.leagueType)),
+    }))
     lastWaiverPresetKeyRef.current = key
-  }, [creationPreset?.waiver, state.sport, state.leagueVariant, state.scoringPreset])
+  }, [creationPreset?.waiver, state.sport, state.leagueVariant, state.scoringPreset, state.leagueType])
 
   useEffect(() => {
     if (!creationPreset?.defaultLeagueSettings) return

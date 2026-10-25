@@ -57,6 +57,8 @@ import {
   type PriorWaiverProcessing,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
+import { HUB_WAIVER_OPTION_KEYS, hasHubWaiverOptions, parseHubWaiverOptions } from '@/lib/waiver-wire/hub-waiver-options'
 import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
 import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
@@ -315,6 +317,13 @@ export async function executeLeagueSettingsPatch(
   // regardless of which door (sectioned or not) the request came through.
   const structuralRefusal = await structuralPatchRefusal(leagueId, body, league)
   if (structuralRefusal) return jsonError(structuralRefusal, 409)
+
+  // The hub's waiver options (lib/waiver-wire/hub-waiver-options.ts): the minimum bid is checked
+  // against the budget this save leaves in place; the option keys are written after the columns.
+  const hubWaiver = parseHubWaiverOptions(body as Record<string, unknown>, {
+    budget: body.waiverBudget != null ? Number(body.waiverBudget) : league.waiverBudget,
+  })
+  if (!hubWaiver.ok) return jsonError(hubWaiver.error, 400)
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
@@ -966,6 +975,21 @@ export async function executeLeagueSettingsPatch(
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncCommissionerDerivedLeagueState', e)
     }
+  }
+
+  if (hasHubWaiverOptions(hubWaiver.options)) {
+    // After the derived sync, which rewrites waiverEngineConfig from the columns: re-read the row so
+    // the $0-bid flag merges into what that sync just wrote.
+    const row = await prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } })
+    const { allowZeroFaabBid, tiebreakRule, waiverOrderResetPolicy } = hubWaiver.options
+    await upsertLeagueWaiverSettings(leagueId, {
+      ...(allowZeroFaabBid !== undefined
+        ? { waiverEngineConfig: { ...parseWaiverEngineConfig(row?.waiverEngineConfig ?? null), allow_zero_faab_bid: allowZeroFaabBid } }
+        : {}),
+      ...(tiebreakRule !== undefined ? { tiebreakRule } : {}),
+      ...(waiverOrderResetPolicy !== undefined ? { waiverOrderResetPolicy } : {}),
+    })
+    updatedFieldNames.push(...HUB_WAIVER_OPTION_KEYS.filter((k) => body[k] !== undefined))
   }
 
   if (dailyWaiverScheduleToStore) {
