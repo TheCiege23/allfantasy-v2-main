@@ -155,6 +155,7 @@ function fallbackRulesForSeason(season: PlayoffSeasonForRuntime): NflRedraftPlay
       startWeek: playoffStartWeek,
       firstRoundByes: null,
       consolationBracketEnabled: false,
+      toiletBowlEnabled: false,
       thirdPlaceGameEnabled: false,
       seedingRules: 'standings',
       tiebreakerRules: ['win_pct', 'wins', 'points_for', 'points_against'],
@@ -358,6 +359,7 @@ export function rulesWithPlayoffTeamOverride(
       firstRoundByes: state.settings.firstRoundByes,
       totalRounds: state.settings.roundCount,
       consolationBracketEnabled: state.settings.consolationEnabled,
+      toiletBowlEnabled: state.settings.toiletBowlEnabled,
       thirdPlaceGameEnabled: state.settings.thirdPlaceGameEnabled,
       // Carry an explicit points-only choice through; 'standings' here would re-seed it by record.
       seedingRules: state.settings.pointsOnlySeeding
@@ -411,6 +413,18 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
     lockBracket: input.lockBracket,
   })
 
+  const structure = {
+    playoffTeams: state.settings.playoffTeamCount,
+    bracketSize: state.settings.bracketSize,
+    byes: state.settings.firstRoundByes,
+    rounds: state.settings.roundCount,
+    reseedAfterEachRound: state.settings.reseedAfterEachRound,
+    byePlan: state.settings.byePlan,
+    consolationEnabled: state.settings.consolationEnabled,
+    lowerBracket: generated.bracket.lowerBracket,
+    thirdPlaceGame: generated.bracket.thirdPlaceMatchup != null,
+    generatedAt: new Date().toISOString(),
+  }
   const written = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     if (input.regenerate !== false) {
       await tx.redraftPlayoffMatchup.deleteMany({ where: { seasonId: state.seasonId } })
@@ -422,30 +436,12 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
       where: { seasonId: state.seasonId },
       update: {
         status: generated.bracket.status === 'locked' ? 'locked' : 'active',
-        structure: {
-          playoffTeams: state.settings.playoffTeamCount,
-          bracketSize: state.settings.bracketSize,
-          byes: state.settings.firstRoundByes,
-          rounds: state.settings.roundCount,
-          reseedAfterEachRound: state.settings.reseedAfterEachRound,
-          byePlan: state.settings.byePlan,
-          consolationEnabled: state.settings.consolationEnabled,
-          generatedAt: new Date().toISOString(),
-        },
+        structure,
       },
       create: {
         seasonId: state.seasonId,
         status: generated.bracket.status === 'locked' ? 'locked' : 'active',
-        structure: {
-          playoffTeams: state.settings.playoffTeamCount,
-          bracketSize: state.settings.bracketSize,
-          byes: state.settings.firstRoundByes,
-          rounds: state.settings.roundCount,
-          reseedAfterEachRound: state.settings.reseedAfterEachRound,
-          byePlan: state.settings.byePlan,
-          consolationEnabled: state.settings.consolationEnabled,
-          generatedAt: new Date().toISOString(),
-        },
+        structure,
       },
     })
 
@@ -487,14 +483,23 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
       })
     }
 
+    // The third-place game is a matchup of the championship round's row, played in the final's weeks.
+    const thirdPlace = generated.bracket.thirdPlaceMatchup
+    const finalRound = generated.bracket.rounds[generated.bracket.rounds.length - 1]
+    const roundsToWrite = [
+      ...generated.bracket.rounds.map((round) =>
+        round === finalRound && thirdPlace ? { ...round, matchups: [...round.matchups, thirdPlace] } : round,
+      ),
+      ...generated.bracket.consolationRounds,
+    ]
     const matchupIdByRuntimeId = new Map<string, string>()
-    for (const round of [...generated.bracket.rounds, ...generated.bracket.consolationRounds]) {
+    for (const round of roundsToWrite) {
       for (const matchup of round.matchups) {
         matchupIdByRuntimeId.set(matchup.matchupId, crypto.randomUUID())
       }
     }
 
-    for (const round of [...generated.bracket.rounds, ...generated.bracket.consolationRounds]) {
+    for (const round of roundsToWrite) {
       const roundId = roundIdByRuntimeId.get(round.roundId)
       if (!roundId) continue
       for (const matchup of round.matchups) {
@@ -510,13 +515,14 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
             awaySeed: matchup.awaySeed,
             winnerRosterId: matchup.winnerRosterId,
             status: matchup.status,
-            metadata: { ...matchup.metadata, bracketType: round.bracketType },
+            // The matchup's own type: the third-place game sits in a championship round.
+            metadata: { ...matchup.metadata, bracketType: matchup.bracketType },
           },
         })
       }
     }
 
-    for (const round of generated.bracket.rounds) {
+    for (const round of [...generated.bracket.rounds, ...generated.bracket.consolationRounds]) {
       for (const matchup of round.matchups) {
         if (!matchup.nextMatchupId) continue
         const id = matchupIdByRuntimeId.get(matchup.matchupId)
@@ -577,9 +583,11 @@ export async function advanceNflRedraftPlayoffRuntimeRound(input: {
   const result = advanceNflRedraftPlayoffRound({ state: resolved.state, actorUserId: input.actorUserId })
   if (!result.ok) return result
 
-  const allMatchups = result.state.bracket.rounds.flatMap((round) =>
-    round.matchups.map((matchup) => ({ ...matchup, roundStatus: round.status })),
-  )
+  const allRounds = [...result.state.bracket.rounds, ...result.state.bracket.consolationRounds]
+  const allMatchups = [
+    ...allRounds.flatMap((round) => round.matchups),
+    ...(result.state.bracket.thirdPlaceMatchup ? [result.state.bracket.thirdPlaceMatchup] : []),
+  ]
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     for (const matchup of allMatchups) {
       await tx.redraftPlayoffMatchup.update({
@@ -595,7 +603,7 @@ export async function advanceNflRedraftPlayoffRuntimeRound(input: {
         },
       }).catch(() => null)
     }
-    for (const round of result.state.bracket.rounds) {
+    for (const round of allRounds) {
       await tx.redraftPlayoffRound.update({
         where: { id: round.roundId },
         data: { status: round.status },
@@ -669,6 +677,9 @@ export async function finalizeNflRedraftPlayoffRuntimeSeason(input: {
           finalStandings: result.finalStandings as unknown as Prisma.InputJsonValue,
           championRosterId: result.championRosterId,
           runnerUpRosterId: result.runnerUpRosterId,
+          thirdPlaceRosterId: result.state.bracket.thirdPlaceRosterId,
+          lowerBracket: result.state.bracket.lowerBracket,
+          lowerBracketResultRosterId: result.state.bracket.lowerBracketResultRosterId,
         },
       },
     }).catch(() => null)
@@ -701,7 +712,12 @@ export async function overrideNflRedraftPlayoffMatchup(input: {
 }) {
   const resolved = await resolveNflRedraftPlayoffRuntime({ seasonId: input.seasonId })
   if (!resolved.ok) throw new Error(resolved.reason)
-  const matchup = resolved.state.bracket.rounds.flatMap((round) => round.matchups).find((row) => row.matchupId === input.matchupId)
+  const bracket = resolved.state.bracket
+  const matchup = [
+    ...bracket.rounds.flatMap((round) => round.matchups),
+    ...(bracket.thirdPlaceMatchup ? [bracket.thirdPlaceMatchup] : []),
+    ...bracket.consolationRounds.flatMap((round) => round.matchups),
+  ].find((row) => row.matchupId === input.matchupId)
   if (!matchup) throw new Error('matchup_not_found')
   const validRosterIds = [matchup.homeRosterId, matchup.awayRosterId].filter((id): id is string => Boolean(id))
   if (!validRosterIds.includes(input.winnerRosterId)) throw new Error('winner_not_in_matchup')

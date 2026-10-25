@@ -1205,6 +1205,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.po.medianGameHelp": "Each regular-season week every team also plays the league's median score: above it is an extra win, below it an extra loss. Can change only until the season's first week is final.",
     "lsHub.po.medianPlayoffs": "League median in playoffs",
     "lsHub.po.medianPlayoffsHelp": "Off: playoff weeks are win-or-go-home only. On: median results still count in playoff weeks, in season records only — the bracket is decided by playoff scores alone.",
+    "lsHub.po.thirdPlace": "Third-place game",
+    "lsHub.po.thirdPlaceHelp": "The two semifinal losers play for third during the championship week(s). Set before the playoffs start.",
     "lsHub.po.br.title": "Bracket format",
     "lsHub.po.br.teams": "{{n}} playoff teams",
     "lsHub.po.br.standard": "Standard bracket",

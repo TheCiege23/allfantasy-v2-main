@@ -29,6 +29,7 @@ export function PlayoffSettingsPanel({
   const [champLength, setChampLength] = useState(initialData.championshipLength ?? 1)
   const [seeding, setSeeding] = useState((initialData.playoffSeedingRule ?? 'default') as string)
   const [lower, setLower] = useState((initialData.playoffLowerBracket ?? 'toilet') as string)
+  const [thirdPlace, setThirdPlace] = useState(initialData.thirdPlaceGameEnabled !== false)
 
   useEffect(() => {
     setStartWeek(initialData.playoffStartWeek ?? 14)
@@ -37,6 +38,7 @@ export function PlayoffSettingsPanel({
     setChampLength(initialData.championshipLength ?? 1)
     setSeeding(initialData.playoffSeedingRule ?? 'default')
     setLower(initialData.playoffLowerBracket ?? 'toilet')
+    setThirdPlace(initialData.thirdPlaceGameEnabled !== false)
   }, [initialData])
 
   /*
@@ -186,6 +188,29 @@ export function PlayoffSettingsPanel({
             },
           ]}
         />
+      </div>
+
+      <div>
+        <SettingsSectionLabel>Third-place game</SettingsSectionLabel>
+        <SettingsRadioGroup
+          name="playoff-third-place"
+          value={thirdPlace ? 'on' : 'off'}
+          disabled={disabled}
+          onChange={(v) => {
+            const on = v === 'on'
+            setThirdPlace(on)
+            debouncedSave({ thirdPlaceGameEnabled: on })
+          }}
+          options={[
+            {
+              id: 'on',
+              title: 'Play for third',
+              description: 'The two semifinal losers play during the championship week(s); the winner finishes 3rd.',
+            },
+            { id: 'off', title: 'No third-place game', description: 'Semifinal losers finish 3rd and 4th by seed.' },
+          ]}
+        />
+        <SettingsHelper>Locked while the playoffs are being played.</SettingsHelper>
       </div>
 
       <div>

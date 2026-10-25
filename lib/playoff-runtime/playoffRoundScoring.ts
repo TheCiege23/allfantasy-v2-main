@@ -26,6 +26,11 @@
  * over every roster it is given, and an eliminated team's abandoned lineup — injured starters, a
  * player on a bye — can hold the whole league's week below the floor. `rosterIds` narrows it.
  *
+ * ⚠ THE THIRD-PLACE GAME AND THE LOWER BRACKET ARE SCORED BY THE SAME RULE. The third-place game is a
+ * matchup in the championship round's own row, so it is scored with the final over the same weeks.
+ * The consolation bracket / toilet bowl (rounds at `100 + n`) used to be generated and never scored;
+ * it is now its own group, scored over championship round `n`'s weeks and sealed separately.
+ *
  * The score of each team is `scoreRosterForWeek`, the function the guillotine uses for a week
  * scored outside a head-to-head matchup: starter slots, best ball's optimal lineup, or the devy
  * engine, by the same rules as a regular-season matchup. Nothing is re-implemented here.
@@ -36,7 +41,7 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { finalizeWeekWithRefresh, type WeekFinalizerDeps } from '@/lib/redraft/weekFinalizer'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
-import { CHAMPIONSHIP_ROUND_WHERE, playoffRoundWeeks, readChampionshipLength } from './playoffRoundWeeks'
+import { CHAMPIONSHIP_ROUND_WHERE, CONSOLATION_ROUND_OFFSET, playoffRoundWeeks, readChampionshipLength } from './playoffRoundWeeks'
 
 export type PlayoffRoundScoreOutcome =
   /** The season is not in its playoffs (still regular season, or already complete). */
@@ -65,6 +70,8 @@ export type PlayoffRoundScoreResult = {
   weekRefusals: Record<number, string>
   /** Set when `RedraftSeason.currentWeek` was moved forward onto the round being played. */
   currentWeekMovedTo?: number
+  /** The consolation bracket or toilet bowl, when the bracket has one (`LowerBracketScoreResult`). */
+  lowerBracket?: LowerBracketScoreResult
 }
 
 export type PlayoffRoundScoreDeps = {
@@ -99,6 +106,47 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {}
 }
 
+type PlayoffRoundRow = { roundNumber: number; status: string; matchups: PlayoffMatchupRow[] }
+
+const ROUND_SELECT = {
+  roundNumber: true,
+  status: true,
+  matchups: {
+    orderBy: { matchupNumber: 'asc' },
+    select: {
+      id: true,
+      homeRosterId: true,
+      awayRosterId: true,
+      homeScore: true,
+      awayScore: true,
+      winnerRosterId: true,
+      status: true,
+      metadata: true,
+    },
+  },
+} as const
+
+/** The same "which round is live" rule the runtime's advance uses: the one marked active, else the first with a matchup still to decide. */
+function activeRoundOf(rounds: PlayoffRoundRow[]): PlayoffRoundRow | undefined {
+  return rounds.find((r) => r.status === 'active') ?? rounds.find((r) => r.status !== 'completed' && r.matchups.some(isContested))
+}
+
+type GroupScore = {
+  outcome: Exclude<PlayoffRoundScoreOutcome, 'not_in_playoffs' | 'no_bracket'>
+  roundNumber?: number
+  weeks?: number[]
+  matchupsScored: number
+  matchupsLive: number
+  weekRefusals: Record<number, string>
+}
+
+/**
+ * The lower bracket (consolation or toilet bowl), scored on its own. Its rounds are stored at
+ * `100 + n`, where `n` is the championship round it is played alongside, so its weeks are that
+ * round's weeks — and its final is the championship's, `championship_length` included.
+ */
+export type LowerBracketScoreResult = GroupScore
+
 export async function scoreActivePlayoffRound(
   params: { seasonId: string; calendarWeek: number },
   deps: PlayoffRoundScoreDeps = {},
@@ -120,128 +168,144 @@ export async function scoreActivePlayoffRound(
   })
   if (!season || season.status !== REDRAFT_SEASON_STATUS.PLAYOFFS) return result
 
-  const rounds = await db.redraftPlayoffRound.findMany({
+  const rounds = (await db.redraftPlayoffRound.findMany({
     where: { seasonId: season.id, roundNumber: CHAMPIONSHIP_ROUND_WHERE },
     orderBy: { roundNumber: 'asc' },
-    select: {
-      roundNumber: true,
-      status: true,
-      matchups: {
-        orderBy: { matchupNumber: 'asc' },
-        select: {
-          id: true,
-          homeRosterId: true,
-          awayRosterId: true,
-          homeScore: true,
-          awayScore: true,
-          winnerRosterId: true,
-          status: true,
-          metadata: true,
-        },
-      },
-    },
-  })
+    select: ROUND_SELECT,
+  })) as PlayoffRoundRow[]
   if (rounds.length === 0) return { ...result, outcome: 'no_bracket' }
+  // Every championship round is generated up front, so the highest one IS the final.
+  const finalRoundNumber = rounds[rounds.length - 1].roundNumber
 
-  // The same "which round is live" rule the runtime's advance uses: the one marked active, else the
-  // first with a matchup still to decide.
-  const active =
-    rounds.find((r) => r.status === 'active') ??
-    rounds.find((r) => r.status !== 'completed' && r.matchups.some(isContested))
-  if (!active) return { ...result, outcome: 'no_active_round' }
+  let leagueRead: Promise<{ playoffWeeksPerRound: number | null; settings: unknown } | null> | null = null
+  const league = () =>
+    (leagueRead ??= db.league.findFirst({
+      where: { id: season.leagueId },
+      select: { playoffWeeksPerRound: true, settings: true },
+    }) as Promise<{ playoffWeeksPerRound: number | null; settings: unknown } | null>)
 
-  const contested = active.matchups.filter(isContested)
-  if (contested.length === 0 || contested.every(isScoredFinal)) {
-    return { ...result, outcome: contested.length === 0 ? 'no_active_round' : 'already_scored', roundNumber: active.roundNumber }
+  let pointer = season.currentWeek
+  const scoreGroup = async (active: PlayoffRoundRow | undefined, roundNumber: (r: PlayoffRoundRow) => number): Promise<GroupScore> => {
+    const group: GroupScore = { outcome: 'no_active_round', matchupsScored: 0, matchupsLive: 0, weekRefusals: {} }
+    if (!active) return group
+    const contested = active.matchups.filter(isContested)
+    if (contested.length === 0 || contested.every(isScoredFinal)) {
+      return { ...group, outcome: contested.length === 0 ? 'no_active_round' : 'already_scored', roundNumber: active.roundNumber }
+    }
+    const leagueRow = await league()
+    const weeks = playoffRoundWeeks({
+      playoffStartWeek: season.playoffStartWeek,
+      roundNumber: roundNumber(active),
+      weeksPerRound: leagueRow?.playoffWeeksPerRound,
+      finalRoundNumber,
+      championshipLength: readChampionshipLength(leagueRow?.settings),
+    })
+    group.roundNumber = active.roundNumber
+    group.weeks = weeks
+    if (params.calendarWeek < weeks[0]) return { ...group, outcome: 'round_not_started' }
+
+    /*
+     * Keep the league's week pointer on the round being played, forward only. Nothing moved
+     * `currentWeek` after the bracket was generated, so My Team and Matchup sat on the first
+     * playoff week for the whole postseason.
+     */
+    const target = Math.min(Math.max(params.calendarWeek, weeks[0]), weeks[weeks.length - 1])
+    if (pointer < target) {
+      await db.redraftSeason.update({ where: { id: season.id }, data: { currentWeek: target } })
+      pointer = target
+      result.currentWeekMovedTo = target
+    }
+
+    const rosterIds = [...new Set(contested.flatMap((m) => [m.homeRosterId, m.awayRosterId]))]
+    const playedWeeks = weeks.filter((w) => w <= params.calendarWeek)
+    const sealed = new Set<number>()
+    for (const week of playedWeeks) {
+      const sealing = await finalizeWeek(
+        { seasonId: season.id, week, rosterIds },
+        { prisma: db, now: deps.now, syncWeekStats: deps.syncWeekStats },
+      )
+      if (sealing.finalized || sealing.alreadyFinal) sealed.add(week)
+      else if (sealing.refusal) group.weekRefusals[week] = sealing.refusal
+    }
+    const roundSealed = weeks.every((w) => sealed.has(w))
+
+    const totals = async (rosterId: string) => {
+      let points = 0
+      let allFinal = true
+      for (const week of playedWeeks) {
+        const summary = await scoreRoster({ leagueId: season.leagueId, rosterId, week, seasonYear: season.season })
+        points += summary.points
+        if (!summary.allFinal) allFinal = false
+      }
+      return { points: Math.round(points * 100) / 100, allFinal }
+    }
+
+    const scoredAt = (deps.now?.() ?? new Date()).toISOString()
+    for (const matchup of contested) {
+      const home = await totals(matchup.homeRosterId)
+      const away = await totals(matchup.awayRosterId)
+      const metadata = asRecord(matchup.metadata)
+
+      if (roundSealed && home.allFinal && away.allFinal) {
+        delete metadata.live
+        await db.redraftPlayoffMatchup.update({
+          where: { id: matchup.id },
+          data: {
+            homeScore: home.points,
+            awayScore: away.points,
+            status: 'final',
+            metadata: { ...metadata, scoredWeeks: weeks, scoredAt } as Prisma.InputJsonObject,
+          },
+        })
+        group.matchupsScored += 1
+      } else {
+        // ⚠ STATUS IS LEFT ALONE WHILE LIVE. The column is CHECK-constrained to scheduled /
+        // in_progress / final / bye / cancelled, so the runtime's 'active' is refused (23514) — the
+        // first real-database season run died here. Writing in_progress instead would move the failure,
+        // not remove it: the runtime reads in_progress back as 'active', and the round advance writes
+        // every matchup's status back inside one transaction, so the whole advance would refuse.
+        // Only 'final' is written, and only when the round is final.
+        await db.redraftPlayoffMatchup.update({
+          where: { id: matchup.id },
+          data: {
+            metadata: {
+              ...metadata,
+              live: { homeScore: home.points, awayScore: away.points, weeks: playedWeeks, updatedAt: scoredAt },
+            } as Prisma.InputJsonObject,
+          },
+        })
+        group.matchupsLive += 1
+      }
+    }
+    return { ...group, outcome: group.matchupsLive === 0 ? 'scored' : 'live' }
   }
 
-  const league = await db.league.findFirst({
-    where: { id: season.leagueId },
-    select: { playoffWeeksPerRound: true, settings: true },
-  })
-  const weeks = playoffRoundWeeks({
-    playoffStartWeek: season.playoffStartWeek,
-    roundNumber: active.roundNumber,
-    weeksPerRound: league?.playoffWeeksPerRound,
-    // Every championship round is generated up front, so the highest one IS the final.
-    finalRoundNumber: rounds[rounds.length - 1].roundNumber,
-    championshipLength: readChampionshipLength(league?.settings),
-  })
-  const withRound = { ...result, roundNumber: active.roundNumber, weeks }
-  if (params.calendarWeek < weeks[0]) return { ...withRound, outcome: 'round_not_started' }
+  // The title bracket: the round being played, with the third-place game that shares the final's row.
+  const title = await scoreGroup(activeRoundOf(rounds), (r) => r.roundNumber)
 
   /*
-   * Keep the league's week pointer on the round being played, forward only. Nothing moved
-   * `currentWeek` after the bracket was generated, so My Team and Matchup sat on the first
-   * playoff week for the whole postseason.
+   * ⚠ THE LOWER BRACKET IS SEALED AND SCORED SEPARATELY, AFTER THE TITLE BRACKET. Its teams missed the
+   * playoffs and are the likeliest to leave a lineup abandoned; sealing them in the same call would let
+   * that lineup's coverage hold the title round's week below the floor. Its own round is chosen by its
+   * own status, so a lower round that lags (its week refused) is still scored on a later run.
    */
-  const pointer = Math.min(Math.max(params.calendarWeek, weeks[0]), weeks[weeks.length - 1])
-  if (season.currentWeek < pointer) {
-    await db.redraftSeason.update({ where: { id: season.id }, data: { currentWeek: pointer } })
-    withRound.currentWeekMovedTo = pointer
+  const lowerRows = ((await db.redraftPlayoffRound.findMany({
+    where: { seasonId: season.id, roundNumber: { gte: CONSOLATION_ROUND_OFFSET } },
+    orderBy: { roundNumber: 'asc' },
+    select: ROUND_SELECT,
+  })) as PlayoffRoundRow[] | null ?? []).filter((r) => r.roundNumber >= CONSOLATION_ROUND_OFFSET)
+  const lower = lowerRows.length
+    ? await scoreGroup(activeRoundOf(lowerRows), (r) => r.roundNumber - CONSOLATION_ROUND_OFFSET)
+    : null
+
+  return {
+    ...result,
+    outcome: title.outcome,
+    roundNumber: title.roundNumber,
+    weeks: title.weeks,
+    matchupsScored: title.matchupsScored,
+    matchupsLive: title.matchupsLive,
+    weekRefusals: title.weekRefusals,
+    ...(lower ? { lowerBracket: lower } : {}),
   }
-
-  const rosterIds = [...new Set(contested.flatMap((m) => [m.homeRosterId, m.awayRosterId]))]
-  const playedWeeks = weeks.filter((w) => w <= params.calendarWeek)
-  const sealed = new Set<number>()
-  for (const week of playedWeeks) {
-    const sealing = await finalizeWeek(
-      { seasonId: season.id, week, rosterIds },
-      { prisma: db, now: deps.now, syncWeekStats: deps.syncWeekStats },
-    )
-    if (sealing.finalized || sealing.alreadyFinal) sealed.add(week)
-    else if (sealing.refusal) withRound.weekRefusals[week] = sealing.refusal
-  }
-  const roundSealed = weeks.every((w) => sealed.has(w))
-
-  const totals = async (rosterId: string) => {
-    let points = 0
-    let allFinal = true
-    for (const week of playedWeeks) {
-      const summary = await scoreRoster({ leagueId: season.leagueId, rosterId, week, seasonYear: season.season })
-      points += summary.points
-      if (!summary.allFinal) allFinal = false
-    }
-    return { points: Math.round(points * 100) / 100, allFinal }
-  }
-
-  const scoredAt = (deps.now?.() ?? new Date()).toISOString()
-  for (const matchup of contested) {
-    const home = await totals(matchup.homeRosterId)
-    const away = await totals(matchup.awayRosterId)
-    const metadata = asRecord(matchup.metadata)
-
-    if (roundSealed && home.allFinal && away.allFinal) {
-      delete metadata.live
-      await db.redraftPlayoffMatchup.update({
-        where: { id: matchup.id },
-        data: {
-          homeScore: home.points,
-          awayScore: away.points,
-          status: 'final',
-          metadata: { ...metadata, scoredWeeks: weeks, scoredAt } as Prisma.InputJsonObject,
-        },
-      })
-      withRound.matchupsScored += 1
-    } else {
-      // ⚠ STATUS IS LEFT ALONE WHILE LIVE. The column is CHECK-constrained to scheduled /
-      // in_progress / final / bye / cancelled, so the runtime's 'active' is refused (23514) — the
-      // first real-database season run died here. Writing in_progress instead would move the failure,
-      // not remove it: the runtime reads in_progress back as 'active', and the round advance writes
-      // every matchup's status back inside one transaction, so the whole advance would refuse.
-      // Only 'final' is written, and only when the round is final.
-      await db.redraftPlayoffMatchup.update({
-        where: { id: matchup.id },
-        data: {
-          metadata: {
-            ...metadata,
-            live: { homeScore: home.points, awayScore: away.points, weeks: playedWeeks, updatedAt: scoredAt },
-          } as Prisma.InputJsonObject,
-        },
-      })
-      withRound.matchupsLive += 1
-    }
-  }
-
-  return { ...withRound, outcome: withRound.matchupsLive === 0 ? 'scored' : 'live' }
 }

@@ -3,6 +3,7 @@ import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { capSlotTokens, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 import { readLineupMode, type LineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 /** Subset of `League` exposed to commissioner settings UI (GET + PATCH). */
@@ -31,6 +32,11 @@ export type CommissionerSettingsFormData = {
    * league never stored one. Not a column — PATCHed as `championshipLength` (execute-league-settings-patch).
    */
   championshipLength?: number | null
+  /**
+   * Semifinal losers play for third (`settings.playoff_structure.third_place_game_enabled`, else the
+   * sport default — lib/playoff-runtime/thirdPlaceGame.ts). Not a column — PATCHed as `thirdPlaceGameEnabled`.
+   */
+  thirdPlaceGameEnabled?: boolean
   /** `settings.games_limits` (lib/redraft/gamesLimits.ts); null = off. PATCHed as `gamesLimits`. */
   gamesLimits?: GamesLimits | null
   /** Whether the league scores daily lineups — games limits are refused without it. Read-only here. */
@@ -194,6 +200,7 @@ export function commissionerLeagueFieldsFromRow(
     playoffTeams: league.playoffTeams,
     playoffWeeksPerRound: league.playoffWeeksPerRound,
     championshipLength: readChampionshipLength(league.settings),
+    thirdPlaceGameEnabled: readThirdPlaceGameEnabled(league.settings, league.sport),
     gamesLimits: readGamesLimits(league.settings, league.sport),
     dailyLineupsActive: isDailyLineupScoringEnabled(league.settings, league.sport),
     gamesLimitsCapSlots: ['NBA', 'NHL', 'MLB'].includes(String(league.sport)) ? capSlotTokens(String(league.sport), league.settings) : [],
