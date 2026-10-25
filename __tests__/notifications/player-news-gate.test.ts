@@ -132,7 +132,7 @@ describe('the news feed sender, end to end', () => {
     h.rosterFind.mockResolvedValue([rostered('starter', 'L1', 'RB'), rostered('bench', 'L2', 'bench')])
     await dispatchPendingPlayerNewsNotifications()
     expect(delivery('starter')).toEqual(['instant'])
-    expect(delivery('bench')).toEqual(['bell'])
+    expect(delivery('bench')).toEqual(['digest'])
     const starter = calls().find((c) => c.userIds.includes('starter'))!
     expect(starter.skipChannels).toEqual({ sms: true })
     expect(starter.title).toBe('🚨 Jahmyr Gibbs is OUT — your lineup options')
@@ -166,6 +166,8 @@ describe('the news feed sender, end to end', () => {
     ])
     await dispatchPendingPlayerNewsNotifications()
     expect(delivery('quiet')).toEqual([])
-    expect(delivery('all')).toEqual(['bell'])
+    expect(delivery('all')).toEqual(['instant'])
+    // …but it is still the bell only: no push, no email, not in the digest.
+    expect(calls().find((c) => c.userIds.includes('all'))!.skipChannels).toEqual({ sms: true, email: true, push: true })
   })
 })
