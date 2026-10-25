@@ -187,11 +187,12 @@ export async function updateStandings(
   }
   const ordered = [...rows.entries()].sort(([aId, a], [bId, b]) => {
     if (pointsOnlySeeding || rotoStats.size) return b.pointsFor - a.pointsFor || aId.localeCompare(bId)
-    const categorySeason = matchups.some(m => (m.lineupSnapshots as any)?.categoryRecordMode === 'each')
-    if (categorySeason) {
-      const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
-      if (pct(a) !== pct(b)) return pct(b)-pct(a)
-    }
+    // Win percentage first, ties as half a win. An odd-team league plays unequal numbers of games
+    // (a bye week, or a week with an extra game), and counting wins would rank a team ahead for
+    // having played more — the playoff seeding (`win_pct` first) and the schedule standings already
+    // rank this way, so the stored seed now agrees with them.
+    const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
+    if (pct(a) !== pct(b)) return pct(b)-pct(a)
     if (b.wins !== a.wins) return b.wins - a.wins
     if (a.losses !== b.losses) return a.losses - b.losses
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor

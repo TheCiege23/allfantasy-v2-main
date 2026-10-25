@@ -713,7 +713,11 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
       awayRoster: { include: { players: true } },
     },
   })
-  if (!m || !m.homeRoster || !m.awayRosterId) return null
+  if (!m || !m.homeRoster) return null
+  if (!m.awayRosterId) {
+    await updateByeRowScore(m)
+    return null
+  }
 
   const leagueId = m.leagueId
   const week = m.week
@@ -869,6 +873,70 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     isComplete,
     missingPlayerIds,
   }
+}
+
+/**
+ * Score the team on a bye, when its week still counts for something.
+ *
+ * 🛑 AN ODD-TEAM LEAGUE'S BYE TEAM LOST ITS MEDIAN GAME EVERY WEEK. A bye row has no opponent, so
+ * scoring returned before writing it; `computeWeeklyMedianResults` then saw no completed score for the
+ * bye team and sat it out of the median — exactly the result league median exists to give it. A bye row
+ * is now scored on the home side alone, but only in a points league with league median on: anywhere
+ * else nothing reads the number, and the rows stay as every other reader expects them.
+ *
+ * Returns nothing to the week's summary: a bye is not a matchup, and the counters callers read
+ * (`updated`, `incomplete`) keep meaning head-to-head games.
+ */
+async function updateByeRowScore(m: {
+  id: string
+  leagueId: string
+  seasonId: string
+  week: number
+  homeRosterId: string
+  lineupSnapshots: unknown
+}): Promise<void> {
+  const [league, season] = await Promise.all([
+    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true } }),
+    prisma.redraftSeason.findFirst({ where: { id: m.seasonId }, select: { season: true, medianGame: true } }),
+  ])
+  if (!league || !season) return
+  if (!(league.medianGame ?? season.medianGame)) return
+  const scoringSettings = settingsForScoringWeek(league.settings as Record<string, any> | null, season.season, m.week)
+  const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
+  if (scoringMode !== 'points') return
+  if (await leagueUsesC2CEngine(m.leagueId)) return
+
+  const useDevyEngine = await leagueUsesDevyEngine(m.leagueId)
+  const bestBall = useDevyEngine ? null : await loadBestBallContext(m.leagueId)
+  const home = await scoreRosterStarters({
+    leagueId: m.leagueId,
+    rosterId: m.homeRosterId,
+    week: m.week,
+    seasonYear: season.season,
+    useDevyEngine,
+    bestBall,
+  })
+  const adjustments = readScoreAdjustments(scoringSettings)
+  if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
+  const isComplete =
+    home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
+  await prisma.redraftMatchup.update({
+    where: { id: m.id },
+    data: {
+      homeScore: home.points,
+      status: isComplete && home.allFinal ? 'final' : 'active',
+      lineupSnapshots: {
+        ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}),
+        redraftScoring: {
+          scoredAt: new Date().toISOString(),
+          isComplete,
+          bye: true,
+          home,
+          missingPlayerIds: home.missingPlayerIds,
+        },
+      },
+    },
+  })
 }
 
 export async function recalculateMatchupsForSeasonWeek(

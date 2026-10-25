@@ -4,7 +4,7 @@ import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleEliminati
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Minus, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
@@ -31,6 +31,7 @@ import {
   resolveValidScoringPresetIdForSelection,
 } from '@/lib/create-league-v2/rules-engine'
 import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, lockedOddTeamCounts, teamCountOptionsForPlan } from '@/lib/league/oddTeamLeagues'
 import {
   IMPORT_LEAGUE_PROVIDERS,
   PREMIUM_ADVANCED_CREATE_KEYS,
@@ -514,7 +515,7 @@ export function CreateLeagueWizard(props: WizardProps) {
               <SportStep state={props.state} onChange={props.onChange} importCarryover={props.importCarryover} />
             ) : null}
             {activeStep === 'basics' ? (
-              <LeagueBasicsStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} importCarryover={props.importCarryover} />
+              <LeagueBasicsStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} importCarryover={props.importCarryover} hasCommissioner={isCommissioner} />
             ) : null}
             {activeStep === 'draft' ? (
               <DraftStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} />
@@ -717,15 +718,27 @@ export function LeagueBasicsStep({
   onChange,
   fieldErrors,
   importCarryover,
-}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors' | 'importCarryover'>) {
+  hasCommissioner = false,
+}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors' | 'importCarryover'> & { hasCommissioner?: boolean }) {
   const { t } = useLanguage()
   // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
   // A carryover keeps the imported league's team count, which the import-flexible types accept
   // even when their native list lacks it (lib/league-creation/importedTeamCount.ts).
   const importedTeamCount = importCarryover ? state.teamCount : null
+  // Odd keeper sizes are an AF Commissioner option: without the plan they leave the stepper and are
+  // shown locked below instead (lib/league/oddTeamLeagues.ts). A carryover keeps its own size.
   const teamCountOptionsFor = (leagueType: LeagueTypeId) =>
-    teamCountOptionsWithImported(getTeamCountOptions(state.sport, leagueType, state.soccerPipeline), leagueType, importedTeamCount)
+    teamCountOptionsWithImported(
+      importCarryover
+        ? getTeamCountOptions(state.sport, leagueType, state.soccerPipeline)
+        : teamCountOptionsForPlan(getTeamCountOptions(state.sport, leagueType, state.soccerPipeline), leagueType, hasCommissioner),
+      leagueType,
+      importedTeamCount,
+    )
   const teamCountOptions = teamCountOptionsFor(getEffectiveLeagueType(state) ?? 'redraft')
+  const lockedTeamCounts = importCarryover
+    ? []
+    : lockedOddTeamCounts(getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline), getEffectiveLeagueType(state), hasCommissioner)
   const teamCountStep = teamCountOptions.length > 1 ? teamCountOptions[1] - teamCountOptions[0] : 1
   const catalog = getClientLeagueCreateOptionsCatalog()
   const typeOptions = catalog.concepts.filter((concept) =>
@@ -737,7 +750,12 @@ export function LeagueBasicsStep({
     (!importCarryover || teamCountOptionsFor('redraft').includes(state.teamCount))
   const setTeamCount = (teamCount: number) => {
     const tribeOptions = getSurvivorTribeOptions(teamCount)
-    onChange({ teamCount, ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)
+    // League median follows the size's parity until the commissioner sets it: an odd league leaves one
+    // team without an opponent each week, and the median game is what still gives it a result.
+    const medianFollowsSize = ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(getEffectiveLeagueType(state) ?? 'redraft') &&
+      isOddTeamCount(teamCount) !== isOddTeamCount(state.teamCount)
+    onChange({ teamCount, ...(medianFollowsSize ? { medianGame: isOddTeamCount(teamCount) } : {}),
+      ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)
       ? { survivorTribeCount: tribeOptions[0] ?? 2 } : {}),
       ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}),
       ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
@@ -909,6 +927,17 @@ export function LeagueBasicsStep({
           <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
             {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
           </span>
+          {lockedTeamCounts.length > 0 ? (
+            <span className="block text-xs text-[color:var(--text-secondary)]" data-testid="g30-team-count-locked">
+              <Lock aria-hidden="true" className="mr-1 inline h-3 w-3" />
+              {lockedTeamCounts.includes(state.teamCount)
+                ? tx(t, 'createLeague.g30.teamCount.oddLockedChosen', `A ${state.teamCount}-team keeper league is part of AF Commissioner. Choose an even size, or upgrade.`)
+                : tx(t, 'createLeague.g30.teamCount.oddLocked', `Odd sizes (${lockedTeamCounts.join(', ')}) are part of AF Commissioner.`)}{' '}
+              <a href="/pricing?plan=commissioner" className="font-bold text-violet-600 underline dark:text-violet-300" data-testid="g30-team-count-upgrade">
+                {tx(t, 'createLeague.g30.teamCount.oddUpgrade', 'Upgrade')}
+              </a>
+            </span>
+          ) : null}
           {getEffectiveLeagueType(state) === 'guillotine' && guillotineNeedsDoubleElimination(state.teamCount) ? (
             <span className="block text-xs text-amber-300" data-testid="g30-guilly-double-elimination-note">
               {tx(t, 'createLeague.g30.teamCount.guillyDouble', `Over ${GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS} teams needs double-elimination weeks — add them in league settings after creating.`)}
