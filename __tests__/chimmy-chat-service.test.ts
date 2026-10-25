@@ -10,12 +10,11 @@ describe("sendChimmyMessage", () => {
   const originalFetch = global.fetch
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     global.fetch = vi.fn()
   })
 
-  it("continues the Chimmy request when token preview preflight fails", async () => {
-    confirmTokenSpendMock.mockRejectedValueOnce(new Error("Failed to load monetization context"))
+  it("lets the server apply included answers before checking the token wallet", async () => {
     ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       new Response(JSON.stringify({ result: "Agent response." }), {
         status: 200,
@@ -32,7 +31,7 @@ describe("sendChimmyMessage", () => {
       },
     })
 
-    expect(confirmTokenSpendMock).toHaveBeenCalledWith("ai_chimmy_chat_message")
+    expect(confirmTokenSpendMock).not.toHaveBeenCalled()
     expect(global.fetch).toHaveBeenCalledTimes(1)
     const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
     const payload = JSON.parse(String(init?.body))
@@ -44,7 +43,7 @@ describe("sendChimmyMessage", () => {
     })
   })
 
-  it("still blocks when preview succeeds but balance is insufficient", async () => {
+  it("still blocks when the server reports that no allowance or token balance remains", async () => {
     confirmTokenSpendMock.mockResolvedValueOnce({
       confirmed: false,
       preview: {
@@ -56,6 +55,11 @@ describe("sendChimmyMessage", () => {
         requiresConfirmation: true,
       },
     })
+    ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 'insufficient_token_balance' }), {
+        status: 402, headers: { 'Content-Type': 'application/json' },
+      })
+    )
 
     const { sendChimmyMessage } = await import("@/lib/chimmy-chat/ChimmyChatService")
     const result = await sendChimmyMessage({
@@ -66,7 +70,7 @@ describe("sendChimmyMessage", () => {
       },
     })
 
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(global.fetch).toHaveBeenCalledOnce()
     expect(result).toEqual({
       ok: true,
       response:

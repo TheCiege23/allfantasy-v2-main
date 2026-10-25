@@ -58,10 +58,11 @@ import {
 } from '@/lib/chimmy-chat/response-copy'
 import { buildChimmyResponseStructure } from '@/lib/chimmy-chat/presentation'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { checkDailyCap, incrementDailyCap } from '@/lib/ai/dailyCaps'
 import {
-  readChimmyPlanAllowance,
+  readChimmyAnswerAllowance,
   releaseChimmyPlanAllowance,
   takeChimmyPlanAllowance,
   type ChimmyPlanAllowanceState,
@@ -618,9 +619,20 @@ export async function POST(req: NextRequest) {
    * It now uses the same allowance as /api/chat/chimmy: answers left are included and counted; none
    * left sends the plan holder down the token path a free account takes (`forceTokenFallback`).
    */
-  const planState = await readChimmyPlanAllowance({ userId, email: session?.user?.email }).catch(() => null)
+  let planState: ChimmyPlanAllowanceState
+  try {
+    planState = await readChimmyAnswerAllowance({ userId, email: session?.user?.email })
+  } catch {
+    return NextResponse.json({ error: 'Unable to check your included Chimmy answers. Please try again.',
+      code: 'chimmy_allowance_unavailable' }, { status: 503 })
+  }
 
-  const gate = await requireFeatureEntitlement({
+  const gate = planState.remaining > 0 ? {
+    ok: true as const,
+    decision: await new FeatureGateService().evaluateUserFeatureAccess(userId, 'ai_chat', session?.user?.email),
+    tokenSpend: null,
+    tokenPreview: null,
+  } : await requireFeatureEntitlement({
     userId,
     userEmail: session?.user?.email,
     featureId: 'ai_chat',
@@ -641,7 +653,8 @@ export async function POST(req: NextRequest) {
     return toCompatibilityResponse(gate.response)
   }
 
-  const resolvedTier = resolveServerTier(gate.decision.entitlement.plans)
+  const resolvedTier = planState.remaining > 0 || gate.tokenSpend
+    ? 'pro' : resolveServerTier(gate.decision.entitlement.plans)
   const anthropicContext = buildAnthropicUserContext(parseResult.data, userId, resolvedTier, afLang, anthropicImage)
   // G15.10 — attach commissioner grounding (gated inside; null if not a commissioner/intent miss).
   anthropicContext.commissionerGrounding = await resolveChimmyCommissionerGrounding({
@@ -676,7 +689,12 @@ export async function POST(req: NextRequest) {
    */
   let planIncluded: ChimmyPlanAllowanceState | null = null
   if (planState && !tokenSpendId) {
-    planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    try {
+      planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    } catch {
+      return NextResponse.json({ error: 'Unable to reserve your included Chimmy answer. Please try again.',
+        code: 'chimmy_allowance_unavailable' }, { status: 503 })
+    }
     if (!planIncluded) {
       /* Another request took the last included answer since the read above. The next send pays tokens. */
       return NextResponse.json(
