@@ -12,6 +12,7 @@ import {
   removeScoreAdjustment,
   type AdjustmentError,
 } from '@/lib/score-adjustments/scoreAdjustmentService'
+import { readStatCorrections } from '@/lib/stat-corrections/statCorrectionService'
 
 function adjustmentErrorResponse(error: AdjustmentError) {
   const text = (ADJUSTMENT_ERROR_TEXT as Record<string, string>)[error] ?? (ADJUSTMENT_SERVICE_ERROR_TEXT as Record<string, string>)[error] ?? 'Could not save the adjustment.'
@@ -22,6 +23,9 @@ function adjustmentErrorResponse(error: AdjustmentError) {
 /**
  * GET ?view=score_adjustments&week=N — one week's head-to-head matchups with their scores and the
  * commissioner's score adjustments (lib/score-adjustments). Commissioner only.
+ *
+ * GET ?view=stat_corrections — the latest stat-correction review of a sealed week
+ * (lib/stat-corrections): which scores would change and whether a result flips. Nothing is applied.
  */
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -34,7 +38,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const view = req.nextUrl.searchParams.get('view')
-  if (view !== 'score_adjustments') return NextResponse.json({ error: 'Unknown view. Use: score_adjustments' }, { status: 400 })
+  if (view === 'stat_corrections') return NextResponse.json(await readStatCorrections(params.leagueId))
+  if (view !== 'score_adjustments') return NextResponse.json({ error: 'Unknown view. Use: score_adjustments, stat_corrections' }, { status: 400 })
   const week = await readAdjustmentWeek(params.leagueId, req.nextUrl.searchParams.get('week'))
   if (!week) return NextResponse.json({ error: 'This league has no season schedule yet.' }, { status: 404 })
   return NextResponse.json(week)
