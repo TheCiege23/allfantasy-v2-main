@@ -59,7 +59,10 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
     return () => ac.abort()
   }, [league.id, season, week])
 
-  const format = useMemo(() => readPlayoffFormat(league.settings, league.playoffStartWeek ?? null), [league.settings, league.playoffStartWeek])
+  const format = useMemo(
+    () => readPlayoffFormat(league.settings, league.playoffStartWeek ?? null, league.playoffLowerBracket ?? null),
+    [league.settings, league.playoffStartWeek, league.playoffLowerBracket],
+  )
   const rows = useMemo(() => [...(data?.standings ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999)), [data])
   const oddsFor = useMemo(() => {
     const byId = new Map((forecast ?? []).map((f) => [f.teamId, f]))

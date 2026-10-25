@@ -80,6 +80,22 @@ describe('readPlayoffFormat', () => {
   it('returns nulls for keys the league never set, never a guess', () => {
     expect(readPlayoffFormat(null)).toEqual({ teams: null, byes: null, startWeek: null, weeks: null, consolation: null })
   })
+
+  it('the playoffLowerBracket column — what the bracket is built from — wins over stale JSON flags', () => {
+    const stale = { toilet_bowl_enabled: false, consolation_bracket_enabled: true }
+    expect(readPlayoffFormat(stale, 15, 'toilet').consolation).toBe('toilet_bowl')
+    expect(readPlayoffFormat({ toilet_bowl_enabled: true }, 15, 'consolation').consolation).toBe('consolation')
+    expect(readPlayoffFormat({ toilet_bowl_enabled: true }, 15, 'consolation_bracket').consolation).toBe('consolation')
+    expect(readPlayoffFormat(stale, 15, 'none').consolation).toBe('none')
+    // Any other set value plays no lower bracket, exactly as getBracketConfigForLeague reads it.
+    expect(readPlayoffFormat(stale, 15, 'toilet_bowl').consolation).toBe('none')
+  })
+
+  it('[control] with the column unset the JSON flags still decide', () => {
+    expect(readPlayoffFormat({ consolation_bracket_enabled: true }, 15, null).consolation).toBe('consolation')
+    expect(readPlayoffFormat({ toilet_bowl_enabled: true }, 15, '').consolation).toBe('toilet_bowl')
+    expect(readPlayoffFormat({}, 15, undefined).consolation).toBeNull()
+  })
 })
 
 describe('standings helpers', () => {

@@ -580,6 +580,7 @@ export async function getDashboardLeagueListForUser(
           lifecycleState: true,
           tradeDeadlineWeek: true,
           playoffStartWeek: true,
+          playoffLowerBracket: true,
           leagueSettings: {
             select: { draftDateUtc: true },
           },
@@ -773,6 +774,7 @@ export async function getDashboardLeagueListForUser(
       lifecycleState: lgCore.lifecycleState ?? null,
       tradeDeadlineWeek: lgCore.tradeDeadlineWeek ?? null,
       playoffStartWeek: lgCore.playoffStartWeek ?? null,
+      playoffLowerBracket: lgCore.playoffLowerBracket ?? null,
       draftDate: viewerLeagueSettings?.draftDateUtc ? viewerLeagueSettings.draftDateUtc.toISOString() : null,
     }
   })
