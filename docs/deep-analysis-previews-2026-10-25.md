@@ -15,7 +15,7 @@ Versioned drawer and JSON chat requests use the canonical multipart handler and 
 
 An unlock preserves the original form or JSON snapshot in memory. A changed quote, price, request or allowance state leads to a fresh preview. The wallet transaction checks the quoted price after resolving its actual effective price and before writing the balance. Both a higher and a lower price require new consent. Existing receipt and ledger idempotency prevent a second debit on retries.
 
-A reloaded multipart preview starts a fresh unconfirmed preview if the original form context is unavailable. Approved in-memory retries keep the same receipt. Ambiguous debit failures are terminal for their receipt and are reconciled through the existing refund mechanism; no locked search result is returned on debit failure.
+A reloaded multipart preview starts a fresh unconfirmed preview if the original form context is unavailable. Approved in-memory retries keep the same receipt, including the legacy chat’s generic Retry action after a lost unlock response. A generic retry never acts as consent to a new or replacement price, and all send controls share the unlock busy state. Ambiguous debit failures are terminal for their receipt and are reconciled through the existing refund mechanism; no locked search result is returned on debit failure.
 
 ## Compatibility and remaining scope
 
@@ -29,6 +29,6 @@ Response fields are selected explicitly and authorization runs before releasing 
 
 ## Verification and release
 
-Focused checks cover quote tampering/expiry, account and question binding, both price-change directions, free allowance preservation, exact three-token debit and replay, public response field privacy, explicit unlock UI, and stable request identity. The focused verification has 206 passing checks. Required CI gates and production verification are tracked in [release PR #2721](https://github.com/TheCiege23/allfantasy-v2-main/pull/2721).
+Focused checks cover quote tampering/expiry, account and question binding, both price-change directions, free allowance preservation, exact three-token debit and replay, public response field privacy, explicit unlock UI, and stable request identity. The focused verification has 210 passing checks. Required CI gates and production verification are tracked in [release PR #2721](https://github.com/TheCiege23/allfantasy-v2-main/pull/2721).
 
 Rollback: revert the release commit through the protected main workflow if previews expose extra detail, unlocks charge the wrong amount, or included answers stop working. No migration rollback is needed.

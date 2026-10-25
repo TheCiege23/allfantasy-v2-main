@@ -278,7 +278,7 @@ export default function ChimmyChatShell({
   const initialPromptApplied = useRef(false)
   const analysisUnlock = useAnalysisUnlock((id, result) => {
     setMessages(all => all.map(message => message.id === id ? { ...message, content: result.response, meta: result.meta } : message))
-  }, message => setInlineError(message))
+  }, message => setInlineError(message), setIsTyping)
   const sendingRef = useRef(false)
   const sendMessageRef = useRef<((overrideText?: string) => Promise<void>) | null>(null)
 
@@ -871,7 +871,7 @@ export default function ChimmyChatShell({
     const outgoingText = (normalizedOverride ?? input).trim()
     const fromSpeech = normalizedOverride !== undefined
     if (!outgoingText && !imageFile) return
-    if (sendingRef.current || analysisUnlock.busy) return
+    if (sendingRef.current || analysisUnlock.isBusy()) return
     sendingRef.current = true
     analysisUnlock.register('')
 
@@ -920,11 +920,12 @@ export default function ChimmyChatShell({
   sendMessageRef.current = sendMessage
 
   const handleRetry = useCallback(async () => {
+    if (await analysisUnlock.retryIfAttempted()) return
     const lastUserIdx = messages.map((m) => m.role).lastIndexOf('user')
     if (lastUserIdx === -1) return
     const lastUserMsg = messages[lastUserIdx]
     if (!lastUserMsg) return
-    if (sendingRef.current || retryLoading || analysisUnlock.busy) return
+    if (sendingRef.current || retryLoading || analysisUnlock.isBusy()) return
 
     sendingRef.current = true
     setRetryLoading(true)

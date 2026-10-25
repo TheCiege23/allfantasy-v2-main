@@ -400,10 +400,10 @@ export default function ChimmyChat({
 
   const analysisUnlock = useAnalysisUnlock((id, result) => {
     setMessages(all => all.map(message => message.id === id ? { ...message, content: result.response, meta: result.meta, upgradePath: null } : message));
-  }, message => toast.error(message));
+  }, message => toast.error(message), setIsTyping);
 
   const sendMessage = async (overrideText?: string) => {
-    if (isTyping || analysisUnlock.busy) return;
+    if (isTyping || analysisUnlock.isBusy()) return;
     const outgoingText = (overrideText !== undefined ? overrideText : input).trim();
     if (!outgoingText && !imageFile) return;
 
