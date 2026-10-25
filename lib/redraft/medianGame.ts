@@ -18,6 +18,8 @@ export type MedianMatchupRow = {
   awayScore: number | null
   status: string | null
   lineupSnapshots?: unknown
+  /** `RedraftMatchup.type`; a playoff, consolation or toilet-bowl type marks a playoff-phase game. */
+  type?: string | null
 }
 
 export type MedianOutcome = 'W' | 'L' | 'T'
@@ -32,6 +34,50 @@ export function isMatchupComplete(row: Pick<MedianMatchupRow, 'status' | 'lineup
   // isComplete means every starter has a stat row, including live rows. Only
   // the period finalizer can certify the slate and its correction window.
   return row.status === 'final' || row.status === 'completed'
+}
+
+/**
+ * `League.settings` key: does the league median keep playing in playoff weeks?
+ *
+ * ⚠ OFF UNLESS THE COMMISSIONER TURNS IT ON. The playoffs are win or go home, so a second result
+ * against the median means nothing there. Only a stored `true` counts as on; a missing key, a stale
+ * settings blob or any other value is off.
+ */
+export const MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY = 'median_game_in_playoffs'
+
+export function readMedianGameInPlayoffs(settings: unknown): boolean {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return false
+  return (settings as Record<string, unknown>)[MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY] === true
+}
+
+const PLAYOFF_PHASE_TYPE = /playoff|consolation|toilet|championship|third_place/i
+
+/**
+ * Is `week` a playoff-phase week by number: on or after the playoff start? A season without a usable
+ * playoff start week has no playoff phase by week number (rows can still mark one by their type).
+ */
+export function isPlayoffPhaseWeek(week: number, playoffStartWeek: number | null | undefined): boolean {
+  const start = Number(playoffStartWeek)
+  return Number.isInteger(start) && start >= 1 && week >= start
+}
+
+/**
+ * The rows a median may be taken over. With the league median off in the playoffs (the default),
+ * every playoff-phase week is dropped whole — every team in it, in the bracket or not — so no median
+ * result is produced, counted or stored for it. Regular-season weeks are untouched.
+ */
+export function medianEligibleRows<T extends Pick<MedianMatchupRow, 'week' | 'type'>>(
+  rows: readonly T[],
+  opts: { playoffStartWeek: number | null | undefined; medianInPlayoffs: boolean },
+): T[] {
+  if (opts.medianInPlayoffs) return [...rows]
+  const playoffWeeks = new Set<number>()
+  for (const row of rows) {
+    if (PLAYOFF_PHASE_TYPE.test(String(row.type ?? '')) || isPlayoffPhaseWeek(row.week, opts.playoffStartWeek)) {
+      playoffWeeks.add(row.week)
+    }
+  }
+  return rows.filter((row) => !playoffWeeks.has(row.week))
 }
 
 function median(values: number[]): number {
