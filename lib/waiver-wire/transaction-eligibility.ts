@@ -9,11 +9,10 @@ import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster
 import { computePerPlayerKickoffLocks } from '@/lib/roster-lineup-engine/lineupLockService'
 import {
   addPlayerToRosterData,
-  getRosterPlayerIds,
-  getRosterSize,
   removePlayerFromRosterData,
   rosterContainsPlayer,
 } from './roster-utils'
+import { countTowardRosterLimit, leagueRosterLimit } from '@/lib/league/rosterLimit'
 import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import { normalizeWaiverTypeForEngine, parseWaiverEngineConfig } from './waiver-engine-config'
 import { assertWeeklyDropLimit } from './waiver-validation'
@@ -77,6 +76,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
         id: true,
         rosterSize: true,
         sport: true,
+        settings: true,
         isDynasty: true,
         leagueVariant: true,
         lockAllMoves: true,
@@ -122,8 +122,8 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
     throw new Error('This player is already on another roster in this league.')
   }
 
-  const rosterSizeLimit = league.rosterSize ?? 20
-  const currentIds = getRosterPlayerIds(roster.playerData)
+  // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
+  const { limit: rosterSizeLimit, counts: rosterCounts } = leagueRosterLimit(league, 20)
   const dropId = dropPlayerId && String(dropPlayerId).trim() ? String(dropPlayerId).trim() : null
 
   if (dropId && !rosterContainsPlayer(roster.playerData, dropId)) {
@@ -149,7 +149,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
     if (!dropLimit.ok) throw new Error(dropLimit.message)
   }
 
-  if (currentIds.length >= rosterSizeLimit && !dropId) {
+  if (countTowardRosterLimit(roster.playerData, rosterCounts) >= rosterSizeLimit && !dropId) {
     throw new Error('You cannot add this player because your roster is already at the limit. Choose a player to drop.')
   }
 
@@ -189,7 +189,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   let projected = addPlayerToRosterData(roster.playerData, addId)
   if (dropId) projected = removePlayerFromRosterData(projected, dropId)
 
-  if (getRosterSize(projected) > rosterSizeLimit) {
+  if (countTowardRosterLimit(projected, rosterCounts) > rosterSizeLimit) {
     throw new Error('You cannot add this player because your roster would be over the limit.')
   }
 
