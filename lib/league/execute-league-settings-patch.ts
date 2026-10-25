@@ -79,6 +79,7 @@ import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } 
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import {
@@ -517,6 +518,38 @@ export async function executeLeagueSettingsPatch(
     byePlan: (league.settings as Record<string, unknown> | null)?.playoff_bye_plan,
   })
   if (bracketRefusal) return jsonError(bracketRefusal.message, bracketRefusal.status)
+
+  // The extra matchup an odd-team league can play instead of the bye (lib/redraft/oddTeamExtraMatchupRules.ts)
+  // is an AF Commissioner setting. Checked only when it is turned on or changed while on, so turning
+  // it off is always allowed and a league keeps a setting saved before its plan lapsed.
+  {
+    const merge = body.settingsMerge && typeof body.settingsMerge === 'object' && !Array.isArray(body.settingsMerge)
+      ? (body.settingsMerge as Record<string, unknown>)
+      : null
+    if (merge && EXTRA_MATCHUP_SETTINGS_KEY in merge) {
+      const parsed = parseExtraMatchupSettings(merge[EXTRA_MATCHUP_SETTINGS_KEY])
+      if (!parsed.ok) return jsonError(parsed.error, 400)
+      const next = parsed.value
+      if (next.enabled) {
+        const size = body.leagueSize != null ? Number(body.leagueSize) : league.leagueSize ?? league.teams.length
+        if (!isOddTeamCount(size)) return jsonError('The extra matchup is for leagues with an odd number of teams.', 400)
+        if (!ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(league.leagueType ?? 'redraft'))) {
+          return jsonError('The extra matchup is available for redraft and keeper leagues.', 400)
+        }
+        const mode = String((league.settings as Record<string, unknown> | null)?.scoring_mode ?? 'points')
+        if (mode !== 'points') return jsonError('The extra matchup needs a points league.', 400)
+        const stored = readExtraMatchupSettings(league.settings)
+        const unchanged = stored.enabled && stored.opponent === next.opponent && stored.scoring === next.scoring
+        if (!unchanged && !hasSub) {
+          return NextResponse.json(
+            { error: 'The extra matchup is part of AF Commissioner.', code: 'EXTRA_MATCHUP_REQUIRES_AF_COMMISSIONER' },
+            { status: 403 },
+          )
+        }
+      }
+      body.settingsMerge = { ...merge, [EXTRA_MATCHUP_SETTINGS_KEY]: next }
+    }
+  }
 
   /*
    * League median in the playoffs (lib/redraft/medianGame.ts) — off unless stored true. A boolean only:
