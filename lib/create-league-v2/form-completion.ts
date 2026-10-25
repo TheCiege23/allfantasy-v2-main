@@ -26,6 +26,7 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSett
 import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { toUtc } from '@/lib/timezone'
+import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
 
 export type CreateLeagueCompletionIssue = {
   code: string
@@ -57,6 +58,9 @@ export function analyzeCreateLeagueCompletion(
 
   if (lt === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)) {
     issues.push({ code: 'survivor_tribes_invalid', message: 'Choose a valid starting tribe count for this cast size.' })
+  }
+  if (lt === 'survivor' && state.survivorEntryFeeMode === 'paid' && parseSurvivorDuesUsd(state.survivorDuesUsd ?? '') === 'invalid') {
+    issues.push({ code: 'survivor_dues_invalid', message: 'Enter a dues amount greater than zero, or leave it blank.' })
   }
 
   if (!state.sport) {

@@ -33,7 +33,9 @@ import {
   SelectableCard,
   Toggle,
   Segmented,
+  GlassInput,
 } from './primitives'
+import { parseSurvivorDuesUsd, SURVIVOR_DUES_OFF_APP_NOTE } from '@/lib/survivor/survivorCreationAvailability'
 
 // ── League type cards (12 format IDs + IDP pseudo-card) ─────────────
 
@@ -389,6 +391,37 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
           <p className="mt-3 text-[11px] text-white/40">
             Tribes shuffle automatically at the merge week (configurable after league creation).
           </p>
+        </GlassCard>
+      )}
+
+      {/* Survivor dues: a label only. AllFantasy takes no payments of any kind. */}
+      {isSurvivor && (
+        <GlassCard>
+          <SectionHeader title="League Dues" hint="Every league is free on AllFantasy. Mark it paid if your league collects dues." />
+          <Segmented
+            options={[
+              { value: 'free' as const, label: 'Free' },
+              { value: 'paid' as const, label: 'Paid', hint: 'Dues on LeagueSafe or FanCred' },
+            ]}
+            value={state.survivorEntryFeeMode === 'paid' ? 'paid' : 'free'}
+            onChange={(survivorEntryFeeMode) => onChange({ survivorEntryFeeMode, ...(survivorEntryFeeMode === 'free' ? { survivorDuesUsd: '' } : {}) })}
+            accent={accent}
+            ariaLabel="Survivor league dues"
+          />
+          {state.survivorEntryFeeMode === 'paid' && (
+            <div className="mt-4 max-w-[220px]">
+              <GlassInput
+                label="Dues per manager (USD)"
+                value={state.survivorDuesUsd ?? ''}
+                onChange={(survivorDuesUsd) => onChange({ survivorDuesUsd })}
+                placeholder="Optional, e.g. 25"
+                accent={accent}
+                maxLength={10}
+                error={parseSurvivorDuesUsd(state.survivorDuesUsd ?? '') === 'invalid' ? 'Enter an amount greater than zero, or leave it blank.' : null}
+              />
+            </div>
+          )}
+          <p className="mt-3 text-[11px] text-white/40">{SURVIVOR_DUES_OFF_APP_NOTE}</p>
         </GlassCard>
       )}
 

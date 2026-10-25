@@ -17,6 +17,7 @@ import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { getEnabledPremiumAdvancedSettings } from '@/lib/create-league-v2/simple-create'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
+import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
 
 /** Execution modes must stay verbatim on the wire so persistence keeps isOffline / isAuto flags. */
 const EXECUTION_DRAFT_IDS = new Set(['offline', 'auto', 'team'])
@@ -102,6 +103,11 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
     conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
+    conceptSetup.survivorEntryFeeMode = state.survivorEntryFeeMode === 'paid' ? 'paid' : 'free'
+    if (state.survivorEntryFeeMode === 'paid') {
+      const cents = parseSurvivorDuesUsd(state.survivorDuesUsd ?? '')
+      if (typeof cents === 'number') conceptSetup.survivorEntryFeeAmountCents = cents
+    }
   }
   if (isFootballLike(state.sport) && state.thirdRoundReversal && isThirdRoundReversalAvailable(state.draftType)) {
     conceptSetup.thirdRoundReversal = true
