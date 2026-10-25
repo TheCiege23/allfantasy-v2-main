@@ -61,7 +61,7 @@ _Last updated: 2026-10-20 — every PR in the three built sections has merged (#
 | ⬜ | Trade review window that explains itself to managers | Free | |
 | ⬜ | Inactive manager mode — AF sets the best lineup weekly | Free | auto-subs cover part of it |
 | ⬜ | Waiver hold after drops, per player type | Free | a single hold period exists |
-| ⬜ | Weekly side contests (high score, closest loss) feeding the payout calculator | Free | |
+| ✅ | Weekly side contests (high score, closest loss) feeding the payout calculator | Free | This PR. The commissioner turns on weekly high score and closest loss on the Standings screen, each with an optional prize per week; every member sees each week's winners and the season's prize money per team. Worked out from the stored final scores on every read, so an adjustment or applied stat correction moves the winner. Regular-season weeks only; a tie splits the prize; a tied game has no loser. `prizeTotals` is what the payout calculator will sum. Saved through the settings patch under the co-commissioner money scope. |
 | ⬜ | Playoff reseeding, 2-week rounds, play-in week | Plan | rest of spec §1.3 |
 | ⬜ | Consolation / toilet bowl with a last-place flag | Plan | |
 | ⬜ | Lineup minimums for eliminated teams | Plan | |
