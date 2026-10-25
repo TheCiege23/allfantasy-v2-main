@@ -5,19 +5,17 @@ import { prisma } from '@/lib/prisma'
 import { getLiveADP, type ADPEntry } from '@/lib/adp-data'
 import { applyRealtimeAdpAdjustments } from '@/lib/mock-draft/adp-realtime-adjuster'
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
-import { resolveLeagueMockTeamCount, MAX_LEAGUE_MOCK_TEAMS, mockRoundOrder, mockTeamPickOveralls } from '@/lib/mock-draft/mockTeamCount'
+import { resolveLeagueMockTeamCount, MAX_LEAGUE_MOCK_TEAMS, mockRoundOrder, mockTeamPickOveralls, type MockDraftOrder } from '@/lib/mock-draft/mockTeamCount'
+import { resolveLeagueMockDraftOrder } from '@/lib/mock-draft/leagueMockDraftOrder'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-/** This tool models a snake draft (lib/mock-draft/mockTeamCount.ts). */
-const snakeOrder = (teamCount: number, round: number) => mockRoundOrder(teamCount, round, 'snake')
 
-const getUserPickOveralls = (teamCount: number, userIdx: number, rounds: number) => mockTeamPickOveralls(teamCount, userIdx, rounds, 'snake')
 
-function getManagerPickOveralls(teamCount: number, managerIdx: number, rounds: number): number[] {
-  return getUserPickOveralls(teamCount, managerIdx, rounds)
+function getManagerPickOveralls(teamCount: number, managerIdx: number, rounds: number, draftOrder: MockDraftOrder): number[] {
+  return mockTeamPickOveralls(teamCount, managerIdx, rounds, draftOrder)
 }
 
 function draftPickValue(overall: number, teamCount: number): number {
@@ -132,6 +130,8 @@ export async function POST(req: NextRequest) {
 
     // The league's real size: a 4- or 20-team league is not a 12-team draft.
     const teamCount = resolveLeagueMockTeamCount(league.leagueSize, league.teams.length)
+    // The league's own pick order: linear, snake, or snake with third-round reversal.
+    const draftOrder = await resolveLeagueMockDraftOrder(league.id)
 
     const dnaCards: ManagerDNA[] = league.teams.length
       ? buildManagerDNAFromLeague(
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    const userPicks = getUserPickOveralls(teamCount, userIdx, rounds)
+    const userPicks = mockTeamPickOveralls(teamCount, userIdx, rounds, draftOrder)
     const targetPicks = focusPick > 0 ? userPicks.filter(p => p === focusPick) : userPicks.slice(0, 3)
 
     if (targetPicks.length === 0) {
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
 
       let overall = 1
       for (let round = 1; round <= rounds; round++) {
-        const order = snakeOrder(teamCount, round)
+        const order = mockRoundOrder(teamCount, round, draftOrder)
         for (let pick = 1; pick <= teamCount; pick++) {
           const managerIdx = order[pick - 1]
           const profile = counts[managerIdx]
@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
 
       for (let mIdx = 0; mIdx < teamCount; mIdx++) {
         if (mIdx === userIdx) continue
-        const partnerPicks = getManagerPickOveralls(teamCount, mIdx, rounds)
+        const partnerPicks = getManagerPickOveralls(teamCount, mIdx, rounds, draftOrder)
         const partnerDna = dnaCards[mIdx] || null
 
         for (const partnerPick of partnerPicks) {
@@ -354,7 +354,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       simulations,
       rounds,
-      league: { id: league.id, name: league.name, size: teamCount },
+      league: { id: league.id, name: league.name, size: teamCount, draftType: draftOrder.draftType, thirdRoundReversal: draftOrder.thirdRoundReversal },
       userManager: teamNames[userIdx],
       userDraftSlot: userIdx + 1,
       userPicks: targetPicks.map(p => ({
