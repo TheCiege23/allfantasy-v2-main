@@ -14,6 +14,11 @@ import {
   type RedraftLineupValidationResult,
 } from '@/lib/redraft/lineupValidation'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
+import {
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_STATUS,
+  REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE,
+} from '@/lib/redraft/tradeMoveLock'
 import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
 import { applyNbaSurvivorPickLineupLocks } from '@/lib/survivor/survivorNbaWeeklyScoring'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
@@ -654,8 +659,16 @@ export async function PATCH(req: NextRequest) {
   // applying moves, so a player whose game has kicked off cannot be moved.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true, platform: true, survivorMode: true },
+    select: { settings: true, platform: true, survivorMode: true, lockAllMoves: true },
   })
+  // 🛑 The commissioner's move lock. The lineup screen's save (persistRosterLineupWithEngine) refuses every
+  // lineup and IR move under it; this PATCH has no UI caller and did not, so it was the way around the lock.
+  if (leagueForLock?.lockAllMoves === true) {
+    return NextResponse.json(
+      { error: REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
+      { status: REDRAFT_MOVES_LOCKED_STATUS },
+    )
+  }
   const { players: hydratedPlayers } = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,
     season: roster.season.season,
