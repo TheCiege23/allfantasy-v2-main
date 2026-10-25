@@ -57,7 +57,7 @@ _Last updated: 2026-10-20 — every PR in the three built sections has merged (#
 | | Feature | Tier | Notes |
 |---|---|---|---|
 | 🟡 | One-tap stat-correction review before standings move | Free | Part 1: for 6 days after a week is final, the score cron re-checks its stats hourly and shows the commissioner (League settings → Score adjustments) which scores would change and whether a result flips. Read-only: results and standings stay as sealed. Native NFL points leagues; team defenses and players dropped since the week are not re-checked. Part 2 (one-tap apply) to follow. |
-| ⬜ | Undo for commissioner actions until the next dependent event | Free | spec rule §0.3 |
+| 🟡 | Undo for commissioner actions until the next dependent event | Free | spec rule §0.3. Undo in the league log for FAAB, waiver-order and standings edits: for 24h, while the value is still what was set, until waivers run (FAAB, waiver order) or anything else writes the standings row. Commissioners and co-commissioners. Next: settings changes and roster/lineup overrides (overrides need a before-snapshot first). |
 | ⬜ | Trade review window that explains itself to managers | Free | |
 | ⬜ | Inactive manager mode — AF sets the best lineup weekly | Free | auto-subs cover part of it |
 | ⬜ | Waiver hold after drops, per player type | Free | a single hold period exists |

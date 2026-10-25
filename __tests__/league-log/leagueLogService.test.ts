@@ -16,6 +16,8 @@ const m = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: m.membership }))
 vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: m.role }))
+const undoStatus = vi.hoisted(() => vi.fn(async () => new Map()))
+vi.mock('@/lib/commissioner-undo/commissionerUndoService', () => ({ readUndoStatus: undoStatus }))
 
 import { readLeagueLog } from '@/lib/league-log/leagueLogService'
 import { MEMBER_LOG_ACTION_TYPES } from '@/lib/league-log/leagueLog'
@@ -42,6 +44,7 @@ beforeEach(() => {
   // A `Roster` with no redraft link is named through its league team.
   m.prisma.roster.findMany.mockResolvedValue([{ id: 'ros-1', platformUserId: 'p-7', redraftRoster: null }])
   m.prisma.leagueTeam.findMany.mockResolvedValue([{ platformUserId: 'p-7', teamName: 'Gridiron Goats', ownerName: 'Jo' }])
+  undoStatus.mockResolvedValue(new Map())
 })
 
 describe('readLeagueLog', () => {
@@ -80,6 +83,23 @@ describe('readLeagueLog', () => {
     expect(res.canManage).toBe(true)
     expect(res.hidden).toBe(false)
     expect(res.entries[0].raw?.beforeState).toEqual({ faabRemaining: 100 })
+  })
+
+  it('tells a commissioner which recent edits can still be undone, and why not', async () => {
+    m.role.mockResolvedValue('commissioner')
+    undoStatus.mockResolvedValue(new Map([['r-2', { available: false, reason: 'waiver_run_since' }]]))
+    const res = await readLeagueLog('L', 'c1')
+    if (!res.ok) throw new Error('expected ok')
+    expect(undoStatus).toHaveBeenCalledWith('L', ROWS)
+    expect(res.entries[0].undo).toEqual({ available: false, reason: 'Waivers have run since, and they used this value.' })
+    expect(res.entries[1].undo).toBeUndefined()
+  })
+
+  it('never looks up undo for a member', async () => {
+    const res = await readLeagueLog('L', 'm1')
+    if (!res.ok) throw new Error('expected ok')
+    expect(undoStatus).not.toHaveBeenCalled()
+    expect(res.entries.every((e) => e.undo === undefined)).toBe(true)
   })
 
   it('a category narrows the query to that category, inside the member list', async () => {

@@ -4,6 +4,8 @@
  *   GET  ?lang=en|es&limit=&cursor=&category=   any member; what they see depends on role and the setting
  *   PUT  { visibility: 'league' | 'commish_only' }  commissioner — through the settings patch, so the
  *        co-commissioner scopes and the settings lock apply exactly as they do to any other setting.
+ *   POST { auditId }   commissioner or co-commissioner — undo a recent FAAB, waiver-order or standings
+ *        edit (lib/commissioner-undo), while nothing has come to depend on it.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -11,6 +13,8 @@ import { authOptions } from '@/lib/auth'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { LEAGUE_LOG_VISIBILITY_KEY, LOG_CATEGORY_LABELS, parseLeagueLogVisibility, type LogCategory } from '@/lib/league-log/leagueLog'
 import { readLeagueLog } from '@/lib/league-log/leagueLogService'
+import { UNDO_BLOCK_TEXT } from '@/lib/commissioner-undo/commissionerUndo'
+import { undoCommissionerAction } from '@/lib/commissioner-undo/commissionerUndoService'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,4 +57,16 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     { leagueId, settingsMerge: { [LEAGUE_LOG_VISIBILITY_KEY]: parsed.value } },
     { section: 'commissioner' },
   )
+}
+
+export async function POST(req: NextRequest, ctx: Ctx) {
+  const { leagueId } = await ctx.params
+  const userId = await sessionUserId()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const body = (await req.json().catch(() => null)) as { auditId?: unknown } | null
+  const r = await undoCommissionerAction(leagueId, userId, body?.auditId)
+  if (r.ok) return NextResponse.json({ status: 'ok', actionType: r.actionType })
+  const error =
+    r.message ?? (r.error === 'not_found' ? 'That action is not in this league.' : r.error === 'forbidden' ? 'Forbidden' : UNDO_BLOCK_TEXT[r.error])
+  return NextResponse.json({ error, code: r.error }, { status: r.status })
 }
