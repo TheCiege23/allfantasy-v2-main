@@ -108,4 +108,12 @@ describe('Chimmy drawer — plan allowance', () => {
     expect(posted[1].get('requestId')).toBe(posted[0].get('requestId'));expect(posted[1].get('conversation')).toBe(posted[0].get('conversation'));expect(posted[1].get('message')).toBe('Analyze my options');expect(posted[1].get('tokenQuote')).toBe('signed-quote');expect(posted[1].get('confirmTokenSpend')).toBe('true')
     expect(screen.queryByTestId('chimmy-analysis-preview')).toBeNull();expect(screen.getAllByText('Analyze my options')).toHaveLength(1)
   })
+  it('does not describe a free short engine answer as spending tokens after the allowance is used', async () => {
+    vi.stubGlobal('fetch',vi.fn(async url => url==='/api/chat/chimmy' ? new Response(JSON.stringify({response:'Short complete engine answer.',meta:{free:true,mode:'fast_take',tokenSpend:null,planAllowance:{kind:'free',included:false,planName:'Free Chimmy',used:2,limit:2,resetsAt:'2026-10-26T00:00:00Z'}}})) : new Response('{}')))
+    open(null);const box=screen.getByLabelText('Message');fireEvent.change(box,{target:{value:'Give the short answer'}});fireEvent.submit(box.closest('form')!)
+    await screen.findByText('Short complete engine answer.')
+    expect(screen.getByText('Not charged')).toBeTruthy()
+    expect(screen.queryByText(/this answer used tokens/)).toBeNull()
+  })
+
 })

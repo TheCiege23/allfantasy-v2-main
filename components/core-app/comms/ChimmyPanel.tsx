@@ -1016,11 +1016,11 @@ export function ChimmyPanel({
              * answer, the league-data-usage answer, and the empty-message
              * prompt. All of them were being billed 10 tokens on screen.
              *
-             * Now it prints what the server says it spent, and nothing when it
-             * spent nothing. `tokenCost` remains only as the composer's
+             * Now it prints what the server says it spent, or Not charged when
+             * the server explicitly marks the answer free. `tokenCost` remains only as the composer's
              * "an answer costs this much" estimate, which is a different claim.
              */
-            cost: payload.meta?.tokenSpend?.tokenCost ?? null,
+            cost: payload.meta?.tokenSpend?.tokenCost ?? (payload.meta?.free ? 0 : null),
             grounding,
             connectedScope: payload.meta?.connectedFranchise ?? null,
             players: payload.meta?.players ?? null,
@@ -1034,7 +1034,8 @@ export function ChimmyPanel({
             advice: readAdvice(payload),
             mode: answeredMode(payload.meta),
             followUps: scenarioFollowUps(readReadyScenario(payload.meta?.scenario)) ?? readFollowUps(payload.meta?.followUps),
-            plan: answeredPlan,
+            // A free engine summary may report the quota without using it.
+            plan: payload.meta?.free && !answeredPlan?.included && !answeredPlan?.released ? null : answeredPlan,
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
             actionCards: readActionCards(payload.meta),

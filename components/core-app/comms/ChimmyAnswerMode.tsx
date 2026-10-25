@@ -113,5 +113,5 @@ export function answeredMode(meta: { mode?: unknown } | undefined | null): CoreA
 
 export function answeredModeLabel(mode: CoreAnswerMode | null | undefined): string | null {
   if (!mode) return null
-  return mode === 'deep_analysis' ? 'Deep answer' : 'Free summary'
+  return mode === 'deep_analysis' ? 'Deep answer' : 'Summary'
 }

@@ -154,6 +154,15 @@ describe('which mode answered', () => {
     expect(screen.getByText('Deep answer')).toBeTruthy()
   })
 
+  it('keeps older paid brief replies distinct from free summary claims', async () => {
+    postMock.mockResolvedValue(jsonResponse(200,{response:'An older paid brief.',meta:{mode:'fast_take',tokenSpend:{tokenCost:3}}}))
+    openDrawer();ask('Old brief')
+    await screen.findByText('An older paid brief.')
+    expect(document.querySelector('.af-cm-mode-tag')?.textContent).toBe('Summary')
+    expect(screen.getByText('3 tokens')).toBeTruthy()
+    expect(screen.queryByText('Free summary')).toBeNull()
+  })
+
   it('claims nothing when the server did not say, or said something else', async () => {
     postMock
       .mockResolvedValueOnce(jsonResponse(200, { response: 'First.', meta: {} }))
