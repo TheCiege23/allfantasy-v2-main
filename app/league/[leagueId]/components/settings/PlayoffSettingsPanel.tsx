@@ -52,7 +52,10 @@ export function PlayoffSettingsPanel({
     const final = playoffFinalWeek({ playoffStartWeek: startWeek, teams: n, weeksPerRound: weeksPer, championshipLength: champLength })
     return final == null || final <= seasonWeeks
   }
-  const teamOptions = [4, 6, 8, 10, 12, 14, 16].filter((n) => n <= leagueCap || n === teams)
+  // Odd fields (3, 5 … 15) are free, like the even ones: the bracket engine gives the top seeds
+  // first-round byes (canonicalNflRedraftPlayoffRuntime), and the server accepts any field up to 16
+  // (owner's rule, 08d407e24; reconfirmed 2026-10-25).
+  const teamOptions = Array.from({ length: MAX_PLAYOFF_TEAMS - 2 }, (_, i) => i + 3).filter((n) => n <= leagueCap || n === teams)
   // The last eight weeks of the sport's season (weeks 11-18 when the sport is unknown), and the current one.
   const firstStartOption = seasonWeeks == null ? 11 : Math.max(2, seasonWeeks - 7)
   const startWeekOptions = Array.from(
