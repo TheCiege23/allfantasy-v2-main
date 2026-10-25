@@ -7,6 +7,7 @@ import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
+import { oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
@@ -260,6 +261,7 @@ export function LeagueSettingsPanel({
       <div>
         <SettingsSectionLabel>Number of teams</SettingsSectionLabel>
         <select
+          data-testid="settings-league-size"
           className={controlClass}
           disabled={disabled}
           value={leagueSize}
@@ -269,12 +271,25 @@ export function LeagueSettingsPanel({
             debouncedSave({ leagueSize: n })
           }}
         >
-          {Array.from({ length: 15 }, (_, i) => i + 4).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
+          {Array.from({ length: 15 }, (_, i) => i + 4).map((n) => {
+            // An odd keeper size is an AF Commissioner option; the settings PATCH refuses it without the plan.
+            const locked = !hasCommissionerAccess && n !== leagueSize && oddTeamCountNeedsAfCommissioner(leagueType, n)
+            return (
+              <option key={n} value={n} disabled={locked}>
+                {n}{locked ? ' · AF Commissioner' : ''}
+              </option>
+            )
+          })}
         </select>
+        {!hasCommissionerAccess && leagueType === 'keeper' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="settings-odd-keeper-size-locked">
+            <SettingsHelper>Odd team counts for a keeper league are part of AF Commissioner.</SettingsHelper>
+            <SubscriptionGateBadge
+              featureId="commissioner_ai_tools"
+              onClick={() => subscriptionGate?.gate('commissioner_ai_tools')}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-2">
