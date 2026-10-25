@@ -59,3 +59,10 @@ it('uses verified engine sentences and practical guidance without inventing a pl
  expect(buildFreeAnalysisSummary({question:'lineup',engineAnswer:'Start A. Check the injury report. PRIVATE breakdown and projections.'})).toBe('Start A. Check the injury report.')
  expect(buildFreeAnalysisSummary({question:'Should I trade?',leagueName:'My league'})).toContain('For My league, compare')
 })
+
+it('answers common rules questions directly without inventing league-specific settings', () => {
+ expect(buildFreeAnalysisSummary({question:'Explain PPR scoring'})).toContain('half PPR adds 0.5')
+ expect(buildFreeAnalysisSummary({question:'What is superflex?'})).toContain('start a quarterback')
+ expect(buildFreeAnalysisSummary({question:'What does FAAB mean?'})).toContain('blind waiver bids')
+ expect(buildFreeAnalysisSummary({question:'Which unknown mystery option wins?'})).toContain('do not have a verified')
+})
