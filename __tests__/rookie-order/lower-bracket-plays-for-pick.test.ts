@@ -4,11 +4,15 @@
  * Before this, the setting was stored and shown ("Draft pick") and read by nothing: the next
  * draft seated every non-playoff team by standings whatever the lower bracket decided.
  *
- *   consolation + pick — the consolation winner picks first; the rest of the non-playoff teams by
- *                        consolation finish; then the playoff teams exactly as before.
- *   toilet bowl + pick — the toilet bowl final's loser (last place) picks first; the rest worst
- *                        finish first; then the playoff teams exactly as before.
+ *   consolation + pick — the consolation winner picks first; every other non-playoff team follows
+ *                        in reverse standings; then the playoff teams exactly as before.
+ *   toilet bowl + pick — the toilet bowl final's loser (last place) picks first; the rest the same.
  *   cash / none, or no lower bracket — nothing changes.
+ *
+ * Owner's rollout rule: a stored `pick` moves the order only for a league created from now on, or
+ * one whose commissioner saved the setting — both stamp `consolation_plays_for_sets_draft_order`.
+ * Creation always stored the sport default (`pick`), so an older league stores `pick` too and must
+ * keep the order it always had.
  *
  * Every case is played through the real bracket runtime (seeding → champion → lower final →
  * finalize), and its `RedraftPlayoffBracket.structure` is what the draft order reads.
@@ -16,7 +20,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
-  league: { findUnique: vi.fn() },
+  league: { findUnique: vi.fn(), update: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },
   redraftRoster: { findMany: vi.fn() },
   redraftPlayoffSeed: { findMany: vi.fn() },
@@ -34,7 +38,12 @@ import {
   type NflRedraftPlayoffMatchupState,
   type NflRedraftPlayoffRuntimeState,
 } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
-import { readConsolationPlaysFor, readLowerBracketDraftResult } from '@/lib/playoff-runtime/consolationPlaysFor'
+import {
+  consolationPlaysForSetsDraftOrder,
+  readConsolationPlaysFor,
+  readLowerBracketDraftResult,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
+import { buildInitialLeagueSettings } from '@/lib/sport-defaults/LeagueDefaultSettingsService'
 import { CONSOLATION_ROUND_OFFSET } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { computeRookieOrder, type RookieOrderInput } from '@/lib/rookie-order/rookieOrderEngine'
 import { playoffGamesFromRedraftMatchups } from '@/lib/rookie-order/playoffGameAdapters'
@@ -169,15 +178,20 @@ describe('plays for the pick', () => {
 
       expect(pick.phase).toBe('final')
       const pickNonPlayoff = pick.slots.slice(0, nonPlayoffCount).map((s) => s.teamId)
+      const standingsNonPlayoff = cash.slots.slice(0, nonPlayoffCount).map((s) => s.teamId)
+      // Consolation: its winner (finish playoffTeams + 1). Toilet bowl: last place, the final's loser.
+      const first =
+        field.lower === 'consolation'
+          ? standings.find((r) => r.finish === field.playoffTeams + 1)!.rosterId
+          : standings.find((r) => r.finish === field.teams)!.rosterId
+      expect(nonPlayoffByFinish).toContain(first)
+      expect(pickNonPlayoff[0]).toBe(first)
+      // Everyone else: reverse standings, exactly the order they have without the setting.
+      expect(pickNonPlayoff.slice(1)).toEqual(standingsNonPlayoff.filter((id) => id !== first))
       if (field.lower === 'consolation') {
-        // The consolation winner (finish playoffTeams + 1) picks first; the rest by consolation finish.
-        expect(pickNonPlayoff[0]).toBe(standings.find((r) => r.finish === field.playoffTeams + 1)!.rosterId)
-        expect(pickNonPlayoff).toEqual(nonPlayoffByFinish)
         expect(pick.slots[0].reason).toMatch(/Won the consolation bracket/)
+        expect(pick.slots[0].finish).toBe('Consolation winner')
       } else {
-        // Last place — the toilet bowl final's loser — picks first; the rest worst finish first.
-        expect(pickNonPlayoff[0]).toBe(standings.find((r) => r.finish === field.teams)!.rosterId)
-        expect(pickNonPlayoff).toEqual([...nonPlayoffByFinish].reverse())
         expect(pick.slots[0].finish).toBe('Toilet bowl loser')
       }
       // The playoff teams are seated exactly as without the setting.
@@ -189,12 +203,22 @@ describe('plays for the pick', () => {
     })
   }
 
-  it('positive control: in every field above the pick moves at least one non-playoff team', () => {
+  it('positive control: the pick moves the order exactly when the lower bracket did not pick the standings-first team', () => {
+    let moved = 0
     for (const field of FIELDS) {
       const season = playSeason(field)
       const n = field.teams - field.playoffTeams
-      expect(order(engineInput(season, 'pick')).slice(0, n), JSON.stringify(field)).not.toEqual(order(engineInput(season, 'cash')).slice(0, n))
+      const pick = order(engineInput(season, 'pick')).slice(0, n)
+      const cash = order(engineInput(season, 'cash')).slice(0, n)
+      if (pick[0] !== cash[0]) {
+        moved += 1
+        expect(pick, JSON.stringify(field)).not.toEqual(cash)
+      } else {
+        expect(pick, JSON.stringify(field)).toEqual(cash)
+      }
     }
+    // Not every field in the list lands on the standings-first team, or the cases above prove nothing.
+    expect(moved).toBeGreaterThan(0)
   })
 
   it('no lower bracket: the setting does nothing', () => {
@@ -272,18 +296,118 @@ describe('loadRookieOrderInput (native) carries the lower bracket and the settin
 
   it('toilet bowl + pick from a real season: last place picks first', async () => {
     const season = playSeason({ sport: 'NFL', teams: 12, playoffTeams: 6, lower: 'toilet_bowl' })
-    mockSeason(season, { playoff_structure: { consolation_plays_for: 'pick' } })
+    mockSeason(season, { playoff_structure: { consolation_plays_for: 'pick', consolation_plays_for_sets_draft_order: true } })
     const loaded = await loadRookieOrderInput('L')
     expect(loaded?.input.lowerBracket).toMatchObject({ mode: 'toilet_bowl', playsForPick: true })
     const last = season.finalized.ok ? season.finalized.finalStandings.at(-1)!.rosterId : null
     expect(computeRookieOrder(loaded!.input).slots[0].teamId).toBe(last)
   })
 
+  it('a league that stores pick from before the rule (no flag) keeps the standings order', async () => {
+    // A field whose consolation winner is not already the standings-first team, so the flag can show.
+    const field = FIELDS.find((f) => {
+      if (f.lower !== 'consolation') return false
+      const s = playSeason(f)
+      return order(engineInput(s, 'pick'))[0] !== order(engineInput(s, 'cash'))[0]
+    })!
+    expect(field).toBeDefined()
+    const season = playSeason(field)
+    for (const settings of [{ playoff_structure: { consolation_plays_for: 'pick' } }, {}]) {
+      mockSeason(season, settings)
+      const loaded = await loadRookieOrderInput('L')
+      expect(loaded?.input.lowerBracket).toMatchObject({ mode: 'consolation', playsForPick: false })
+      expect(order(loaded!.input)).toEqual(order({ ...loaded!.input, lowerBracket: null }))
+    }
+    // [control] the same season, flagged: the order moves.
+    mockSeason(season, { playoff_structure: { consolation_plays_for: 'pick', consolation_plays_for_sets_draft_order: true } })
+    const flagged = await loadRookieOrderInput('L')
+    expect(order(flagged!.input)).not.toEqual(order({ ...flagged!.input, lowerBracket: null }))
+  })
+
   it('[control] the same season with cash keeps the standings order', async () => {
     const season = playSeason({ sport: 'NFL', teams: 12, playoffTeams: 6, lower: 'toilet_bowl' })
-    mockSeason(season, { playoff_structure: { consolation_plays_for: 'cash' } })
+    mockSeason(season, { playoff_structure: { consolation_plays_for: 'cash', consolation_plays_for_sets_draft_order: true } })
     const loaded = await loadRookieOrderInput('L')
     expect(loaded?.input.lowerBracket).toMatchObject({ mode: 'toilet_bowl', playsForPick: false })
     expect(order(loaded!.input)).toEqual(order({ ...loaded!.input, lowerBracket: null }))
+  })
+})
+
+describe('the consolation winner picks first, then reverse standings, then the playoff teams', () => {
+  // Eight teams, four in the playoffs. Non-playoff by standings (worst first): e(2-12), f(4-10), g(5-9), h(6-8).
+  const t = (teamId: string, wins: number, playoffSeed: number | null) => ({
+    teamId, name: teamId.toUpperCase(), wins, losses: 14 - wins, ties: 0, pointsFor: 1000 + wins * 10, maxPf: null, playoffSeed,
+  })
+  const base: RookieOrderInput = {
+    teams: [t('a', 12, 1), t('b', 11, 2), t('c', 10, 3), t('d', 9, 4), t('h', 6, null), t('g', 5, null), t('f', 4, null), t('e', 2, null)],
+    regularSeasonComplete: true,
+    playoffGames: [
+      { round: 1, kind: 'championship', place: null, teamA: 'a', teamB: 'd', winner: 'a' },
+      { round: 1, kind: 'championship', place: null, teamA: 'b', teamB: 'c', winner: 'b' },
+      { round: 2, kind: 'championship', place: null, teamA: 'a', teamB: 'b', winner: 'a' },
+    ],
+    config: { nonPlayoff: 'reverse_record' },
+  }
+  const without = order(base)
+
+  it('[control] without the setting the non-playoff teams go worst record first', () => {
+    expect(without.slice(0, 4)).toEqual(['e', 'f', 'g', 'h'])
+  })
+
+  it('consolation winner g gets pick 1; e, f, h follow in reverse standings; playoff teams as before', () => {
+    const res = computeRookieOrder({ ...base, lowerBracket: { mode: 'consolation', playsForPick: true, finishOrder: ['g', 'h', 'e', 'f'] } })
+    expect(res.slots.map((s) => s.teamId)).toEqual(['g', 'e', 'f', 'h', ...without.slice(4)])
+    expect(res.slots[0]).toMatchObject({ slot: 1, finish: 'Consolation winner', status: 'locked' })
+    expect(res.slots.slice(1, 4).every((s) => s.finish === null && s.group === 'non_playoff')).toBe(true)
+    expect(res.slots.at(-1)!.teamId).toBe('a')
+    expect(res.phase).toBe('final')
+  })
+
+  it('a consolation winner who was already worst in the standings changes nothing', () => {
+    const res = computeRookieOrder({ ...base, lowerBracket: { mode: 'consolation', playsForPick: true, finishOrder: ['e', 'h', 'g', 'f'] } })
+    expect(res.slots.map((s) => s.teamId)).toEqual(without)
+  })
+
+  it('toilet bowl: last place (the final loser) picks first, the rest by standings', () => {
+    const res = computeRookieOrder({ ...base, lowerBracket: { mode: 'toilet_bowl', playsForPick: true, finishOrder: ['h', 'e', 'g', 'f'] } })
+    expect(res.slots.map((s) => s.teamId)).toEqual(['f', 'e', 'g', 'h', ...without.slice(4)])
+  })
+})
+
+describe('rollout: new leagues play for the pick in the draft order, older ones only once saved', () => {
+  it('a league created now stores the flag beside the sport default', () => {
+    for (const sport of ['NFL', 'NBA', 'NHL']) {
+      const settings = buildInitialLeagueSettings(sport)
+      expect((settings.playoff_structure as Record<string, unknown>).consolation_plays_for_sets_draft_order).toBe(true)
+      expect(consolationPlaysForSetsDraftOrder(settings, sport)).toBe(true)
+    }
+    // MLB defaults to Nothing, flagged or not.
+    expect(consolationPlaysForSetsDraftOrder(buildInitialLeagueSettings('MLB'), 'MLB')).toBe(false)
+  })
+  it('the post-create playoff bootstrap stamps the flag only when it fills "plays for" in', async () => {
+    const { bootstrapLeaguePlayoffConfig } = await import('@/lib/playoff-defaults/LeaguePlayoffBootstrapService')
+    const run = async (settings: Record<string, unknown>) => {
+      db.league.update.mockReset()
+      db.league.findUnique.mockResolvedValueOnce({ id: 'L', sport: 'NFL', leagueVariant: null, settings, platform: 'manual', playoffTeams: 6, playoffStartWeek: 15, playoffSeedingRule: null })
+      await bootstrapLeaguePlayoffConfig('L')
+      return db.league.update.mock.calls[0]?.[0]?.data?.settings?.playoff_structure as Record<string, unknown> | undefined
+    }
+    // A league being created (best ball writes a structure with only its seeding rule first).
+    const created = await run({ playoff_structure: { seeding_rules: 'points_only' } })
+    expect(created).toMatchObject({ consolation_plays_for: 'pick', consolation_plays_for_sets_draft_order: true })
+    // An existing league that stores the sport default: the bootstrap fills other gaps, never the flag.
+    const existing = await run({ playoff_structure: { consolation_plays_for: 'pick' } })
+    expect(existing?.consolation_plays_for_sets_draft_order).toBeUndefined()
+  })
+
+  it('an older league — the sport default stored by creation, or nothing stored — does not', () => {
+    expect(consolationPlaysForSetsDraftOrder({ playoff_structure: { consolation_plays_for: 'pick' } }, 'NFL')).toBe(false)
+    expect(consolationPlaysForSetsDraftOrder({}, 'NFL')).toBe(false)
+    // The value it shows is unchanged.
+    expect(readConsolationPlaysFor({}, 'NFL')).toBe('pick')
+  })
+  it('a commissioner save (the flag) with pick does; with cash it does not', () => {
+    expect(consolationPlaysForSetsDraftOrder({ playoff_structure: { consolation_plays_for: 'pick', consolation_plays_for_sets_draft_order: true } }, 'NFL')).toBe(true)
+    expect(consolationPlaysForSetsDraftOrder({ playoff_structure: { consolation_plays_for: 'cash', consolation_plays_for_sets_draft_order: true } }, 'NFL')).toBe(false)
   })
 })

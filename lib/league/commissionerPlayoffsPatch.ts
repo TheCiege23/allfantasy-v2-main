@@ -14,8 +14,10 @@
  * the lifecycle and co-commissioner gates.
  *
  * Only the fields with no column — playoff weeks, start point, byes, rounds, tiebreakers,
- * bye rules, reseeding, third place, what the consolation bracket plays for — stay JSON, merged into
- * `settings.playoff_structure` through the same patch's `settingsMerge`.
+ * bye rules, reseeding, third place — stay JSON, merged into `settings.playoff_structure` through the
+ * same patch's `settingsMerge`. What the consolation bracket plays for is JSON too but is forwarded as
+ * the canonical `consolationPlaysFor`, because saving it is what opts an existing league's draft order
+ * in (lib/playoff-runtime/consolationPlaysFor.ts) — so the panel sends it only when it was changed.
  */
 
 export type PlayoffsPanelBody = Record<string, unknown>
@@ -48,7 +50,6 @@ const JSON_ONLY_KEYS: Array<[string, string]> = [
   ['byeRules', 'bye_rules'],
   ['reseedBehavior', 'reseed_behavior'],
   ['thirdPlaceGameEnabled', 'third_place_game_enabled'],
-  ['consolationPlaysFor', 'consolation_plays_for'],
 ]
 
 /** The lower bracket the column holds now, read the way the bracket resolver reads it. */
@@ -116,6 +117,9 @@ export function commissionerPlayoffsPatch(body: PlayoffsPanelBody, league: Commi
     // Forwarded as well as stored below, so the canonical patch's own third-place rule applies where it has one.
     patch.thirdPlaceGameEnabled = body.thirdPlaceGameEnabled === true
   }
+
+  // Validated and stored (with the draft-order flag) by the canonical patch.
+  if (hasOwn(body, 'consolationPlaysFor')) patch.consolationPlaysFor = body.consolationPlaysFor
 
   const settingsMerge: Record<string, unknown> = {}
   const structureChanges: Record<string, unknown> = {}

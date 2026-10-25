@@ -64,7 +64,7 @@ const BYE_RULES = [
 
 /** What "Draft pick" does (lib/playoff-runtime/consolationPlaysFor.ts). Cash and Nothing leave the draft order alone. */
 const CONSOLATION_PLAYS_FOR_HELP =
-  "Draft pick: next season, the consolation winner picks first among non-playoff teams; in a toilet bowl, last place (the final's loser) picks first."
+  "Draft pick: next season, the consolation winner picks first among non-playoff teams; in a toilet bowl, last place (the final's loser) picks first. Everyone else follows in reverse standings."
 
 const CONSOLATION_PLAYS_FOR = [
   { value: 'none', label: 'Nothing' },
@@ -120,6 +120,9 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<EditablePlayoffForm | null>(null)
+  // Saving "plays for" opts an existing league's draft order in (lib/playoff-runtime/consolationPlaysFor.ts),
+  // so the whole-form save sends it only once the commissioner has touched it.
+  const [playsForTouched, setPlaysForTouched] = useState(false)
 
   useEffect(() => {
     if (!leagueId) return
@@ -148,6 +151,7 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
   useEffect(() => {
     if (!config) return
     setForm(toEditableForm(config))
+    setPlaysForTouched(false)
   }, [config])
 
   async function saveOverrides() {
@@ -175,7 +179,7 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
             thirdPlaceGameEnabled: form.thirdPlaceGameEnabled,
             toiletBowlEnabled: form.toiletBowlEnabled,
             championshipLength: form.championshipLength,
-            consolationPlaysFor: form.consolationPlaysFor,
+            ...(playsForTouched ? { consolationPlaysFor: form.consolationPlaysFor } : {}),
           }),
         }
       )
@@ -186,6 +190,7 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
       }
       setEditing(false)
       setForm(toEditableForm(json as PlayoffConfig))
+      setPlaysForTouched(false)
       toast.success('Playoff overrides saved')
       await reload()
     } finally {
@@ -234,6 +239,7 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
             onClick={() => {
               if (editing) {
                 setForm(toEditableForm(config))
+                setPlaysForTouched(false)
                 setEditing(false)
               } else {
                 setEditing(true)
@@ -447,9 +453,10 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
               <select
                 aria-label="Consolation plays for"
                 value={form.consolationPlaysFor}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setPlaysForTouched(true)
                   setForm((prev) => (prev ? { ...prev, consolationPlaysFor: e.target.value } : prev))
-                }
+                }}
                 className="mt-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
               >
                 {CONSOLATION_PLAYS_FOR.map((option) => (
@@ -564,6 +571,7 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
               data-testid="playoff-settings-cancel"
               onClick={() => {
                 setForm(toEditableForm(config))
+                setPlaysForTouched(false)
                 setEditing(false)
               }}
               className="rounded border border-white/20 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"

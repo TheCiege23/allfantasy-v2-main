@@ -188,7 +188,7 @@ export function PlayoffSettingsPanel(props: {
           </select>
           <span className="block text-xs text-white/50">
             Draft pick: next season, the consolation winner picks first among non-playoff teams; in a toilet bowl, last
-            place (the final&apos;s loser) picks first.
+            place (the final&apos;s loser) picks first. Everyone else follows in reverse standings.
           </span>
         </label>
       </div>

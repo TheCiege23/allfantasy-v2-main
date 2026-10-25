@@ -8,6 +8,7 @@ import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { getDefaultLeagueSettingsForVariant } from '@/lib/sport-defaults/LeagueDefaultSettingsService'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { firstRoundByesForTeams, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
+import { CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY, CONSOLATION_PLAYS_FOR_SETTINGS_KEY } from '@/lib/playoff-runtime/consolationPlaysFor'
 
 export interface LeaguePlayoffBootstrapResult {
   leagueId: string
@@ -66,6 +67,16 @@ export async function bootstrapLeaguePlayoffConfig(leagueId: string): Promise<Le
       nextStructure[key] = key === 'seeding_rules' ? resolveConfiguredPlayoffSeedingRule(league, String(value)) : value
       applied = true
     }
+  }
+  /*
+   * 🛑 THE DRAFT-ORDER FLAG ONLY COMES WITH A "PLAYS FOR" THIS CALL IS FILLING IN — i.e. on a league
+   * being created. A league that already stores `consolation_plays_for` was set up before that setting
+   * moved the draft order, and must keep its order until its commissioner saves it
+   * (lib/playoff-runtime/consolationPlaysFor.ts).
+   */
+  if (currentStructure[CONSOLATION_PLAYS_FOR_SETTINGS_KEY] == null && nextStructure[CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY] == null) {
+    nextStructure[CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY] = true
+    applied = true
   }
 
   const nextSettings: Record<string, unknown> = { ...settings }
