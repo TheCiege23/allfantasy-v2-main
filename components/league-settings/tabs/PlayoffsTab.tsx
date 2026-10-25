@@ -14,6 +14,11 @@ import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
+import {
+  CONSOLATION_PLAYS_FOR_VALUES,
+  consolationPlaysForAppliesToDraftOrder,
+  readConsolationPlaysFor,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
 import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
@@ -54,6 +59,16 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
   // On unless stored off (lib/playoff-runtime/thirdPlaceGame.ts); read when the bracket is generated.
   const storedThirdPlace = readThirdPlaceGameEnabled(ctx.league.settings, ctx.league.sport)
   const [thirdPlace, setThirdPlace] = useState(storedThirdPlace)
+
+  // What the lower bracket plays for (lib/playoff-runtime/consolationPlaysFor.ts). A league created
+  // before it moved the draft order shows "Not set" until the commissioner picks one — saving it is
+  // what opts that league in, so the stored sport default is not shown as a choice already made.
+  const storedPlaysFor = consolationPlaysForAppliesToDraftOrder(ctx.league.settings)
+    ? readConsolationPlaysFor(ctx.league.settings, ctx.league.sport, ctx.league.leagueVariant)
+    : ''
+  const savedPlaysFor = savedOr<string>(leagueId, 'consolationPlaysFor', storedPlaysFor)
+  const [playsFor, setPlaysFor] = useState(savedPlaysFor)
+  useEffect(() => setPlaysFor(savedPlaysFor), [savedPlaysFor])
 
   useEffect(() => {
     setPlayoffTeams(ctx.league.playoffTeams ?? 6)
@@ -205,6 +220,32 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
         ) : null}
       </div>
 
+      {native ? (
+        <label className="block rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4" data-testid="consolation-plays-for">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.po.playsFor')}</span>
+          <select
+            aria-label={t('lsHub.po.playsFor')}
+            value={playsFor}
+            disabled={!canEdit}
+            onChange={(e) => {
+              const v = e.target.value
+              if (!v) return
+              setPlaysFor(v)
+              queuePatch({ consolationPlaysFor: v })
+            }}
+            className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {playsFor === '' ? <option value="">{t('lsHub.po.playsForUnset')}</option> : null}
+            {CONSOLATION_PLAYS_FOR_VALUES.map((v) => (
+              <option key={v} value={v}>{t(`lsHub.po.playsFor.${v}`)}</option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] text-white/45">{t('lsHub.po.playsForHelp')}</span>
+          {playsFor === '' ? (
+            <span className="mt-1 block text-[11px] text-white/45" data-testid="consolation-plays-for-unset">{t('lsHub.po.playsForUnsetHelp')}</span>
+          ) : null}
+        </label>
+      ) : null}
       {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}
       {native ? (
         <TiebreakerOrderEditor
