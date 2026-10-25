@@ -10,6 +10,7 @@ const hasFirstChopHappened = vi.fn()
 const evaluateUserFeatureAccess = vi.fn()
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/guillotine/weeklyRecap', () => ({ hasGuillotineAiRecapPlan: async () => false }))
 vi.mock('@/lib/prisma', () => {
   const tx = {
     $queryRaw: (...a: unknown[]) => queryRaw(...a),
@@ -156,7 +157,21 @@ describe('saveGuillotineRules', () => {
     expect(upsertGuillotineConfig).not.toHaveBeenCalled()
   })
 
-  it('saves the chopped-team FAAB choice to League.settings for a free commissioner', async () => {
+  it('sharing a chopped team\'s FAAB is AF Commissioner: refused (402) for a free commissioner', async () => {
+    const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'split' })
+    expect(r).toMatchObject({ ok: false, status: 402, fields: ['faabOnChop'] })
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('a free commissioner can still put a league left on "split" back to "keep"', async () => {
+    leagueFindUnique.mockResolvedValue({ sport: 'NBA', settings: { guillotineFaabOnChop: 'split' }, guillotineEndgame: 'last_team_standing' })
+    const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'keep' })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotineFaabOnChop).toBe('keep')
+  })
+
+  it('saves the chopped-team FAAB choice to League.settings for an AF Commissioner', async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
     const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'split' })
     expect(r.ok).toBe(true)
     expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotineFaabOnChop).toBe('split')

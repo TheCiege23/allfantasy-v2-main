@@ -54,6 +54,9 @@ export const GUILLOTINE_PAID_RULE_FIELDS: ReadonlySet<GuillotineRuleField> = new
   'tiebreakerOrder',
   'statCorrectionHours',
   'dangerMarginPoints',
+  // Owner's call, 2026-10-25: sharing a chopped team's FAAB is an AF Commissioner rule. Gating the
+  // setting rather than the chop means a lapsed plan never changes a league's rules mid-season.
+  'faabOnChop',
 ])
 
 export const ENDGAME_OPTIONS: ReadonlyArray<{ value: GuillotineEndgameFormat; label: string; help: string }> = [
@@ -83,8 +86,10 @@ export const RULE_LIMITS = {
 } as const
 
 /** Values a lapsed plan may always return to, so a league is never stuck on rules it cannot edit. */
-export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOrder' | 'statCorrectionHours' | 'dangerMarginPoints'> = {
+export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOrder' | 'statCorrectionHours' | 'dangerMarginPoints' | 'faabOnChop'> = {
   teamsPerChop: 1,
+  // Anyone may put the FAAB rule back to "keep", so a league left on "split" by a lapsed plan can undo it.
+  faabOnChop: 'keep',
   tiebreakerOrder: ['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'],
   statCorrectionHours: 48,
   dangerMarginPoints: 10,

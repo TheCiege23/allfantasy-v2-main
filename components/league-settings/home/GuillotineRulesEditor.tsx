@@ -155,16 +155,22 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
         </select>
       </Field>
 
-      <Field label="A chopped team's unspent FAAB" help={faabHelp}>
+      <Field label="A chopped team's unspent FAAB" help={faabHelp} paid={paidLocked('faabOnChop')}>
         <select
           className={inputClass}
           value={rules.faabOnChop}
           onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })}
           data-testid="guillotine-rules-faab-on-chop"
         >
-          {FAAB_ON_CHOP_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+          {FAAB_ON_CHOP_OPTIONS.map((o) => {
+            // Without AF Commissioner only "keep" is selectable — and the current value, so the page still shows it.
+            const locked = paidLocked('faabOnChop') && o.value !== 'keep' && o.value !== rules.faabOnChop
+            return (
+              <option key={o.value} value={o.value} disabled={locked}>
+                {o.label}{paidLocked('faabOnChop') && o.value !== 'keep' ? ' · AF Commissioner' : ''}
+              </option>
+            )
+          })}
         </select>
       </Field>
 
@@ -175,7 +181,7 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
             <span className="block text-[12px] text-white/50">
               {view.aiRecapAvailable
                 ? 'After every chop, Chimmy posts a story-style recap to league chat. Off = the standard recap.'
-                : 'Included with a Chimmy plan. Without one, the standard recap posts after every chop.'}
+                : 'Included with AF Pro or AF Commissioner. Without one, the standard recap posts after every chop.'}
             </span>
           </span>
           <input
