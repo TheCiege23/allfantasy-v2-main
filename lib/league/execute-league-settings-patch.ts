@@ -42,6 +42,7 @@ import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -73,6 +74,7 @@ import {
 } from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
+import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
@@ -410,6 +412,16 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  // The league median game: a boolean only, and not once the season's first week is final — a change
+  // then would add or remove a median result in every played week (lib/redraft/medianGameSwitch.ts).
+  let medianGameChanged = false
+  if (body.medianGame !== undefined) {
+    if (typeof body.medianGame !== 'boolean') return jsonError('medianGame must be true or false', 400)
+    const refusal = await medianGameChangeRefusal({ leagueId, from: league.medianGame === true, to: body.medianGame })
+    if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    medianGameChanged = body.medianGame !== (league.medianGame === true)
+  }
+
   if (body.season != null) {
     const y = Number(body.season)
     if (!Number.isFinite(y) || y < 2000 || y > 2100) return jsonError('Invalid season year', 400)
@@ -667,6 +679,13 @@ export async function executeLeagueSettingsPatch(
     const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
     if (!parsed.ok) return jsonError(parsed.error, 400)
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
+
+  // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would
+  // fall back to "visible to league", so it is refused rather than stored.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && LEAGUE_LOG_VISIBILITY_KEY in merge) {
+    const parsed = parseLeagueLogVisibility((merge as Record<string, unknown>)[LEAGUE_LOG_VISIBILITY_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
   }
 
   /*
@@ -959,6 +978,16 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push(DAILY_WAIVER_SCHEDULE_SETTINGS_KEY)
+  }
+
+  // The season copy (`RedraftSeason.medianGame`, taken at the draft) is what the weekly history, the
+  // season outlook and the next season's shell read. The timing rule above has already settled that no
+  // running season has a final week, so its copy follows the league; a completed season keeps its own.
+  if (medianGameChanged) {
+    await prisma.redraftSeason.updateMany({
+      where: { leagueId, status: { not: REDRAFT_SEASON_STATUS.COMPLETE } },
+      data: { medianGame: body.medianGame as boolean },
+    })
   }
 
   if (typeof body.medianGameInPlayoffs === 'boolean') {

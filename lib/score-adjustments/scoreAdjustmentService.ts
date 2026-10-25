@@ -60,7 +60,7 @@ async function shiftScore(tx: Prisma.TransactionClient, matchupId: string, side:
   })
 }
 
-async function audit(leagueId: string, userId: string, actionType: string, adjustment: ScoreAdjustment, net: number) {
+async function audit(leagueId: string, userId: string | null, actionType: string, adjustment: ScoreAdjustment, net: number) {
   try {
     await prisma.leagueAuditLog.create({
       data: {
@@ -70,7 +70,7 @@ async function audit(leagueId: string, userId: string, actionType: string, adjus
         entityType: 'score_adjustment',
         entityId: adjustment.id,
         afterState: adjustment as unknown as Prisma.InputJsonValue,
-        metadata: { matchupId: adjustment.matchupId, rosterId: adjustment.rosterId, week: adjustment.week, netAdjustment: net },
+        metadata: { matchupId: adjustment.matchupId, rosterId: adjustment.rosterId, week: adjustment.week, netAdjustment: net, byUserId: adjustment.byUserId },
       },
     })
   } catch (e) {
@@ -87,10 +87,16 @@ async function refreshStandings(seasonId: string, week: number) {
   }
 }
 
+/**
+ * `opts.systemActor`: an adjustment AllFantasy makes itself (an applied stat correction). It is
+ * recorded under that actor name in the list, and the audit row carries no user — the audit table's
+ * user column must name a real account.
+ */
 export async function addScoreAdjustment(
   leagueId: string,
   userId: string,
   body: unknown,
+  opts: { systemActor?: string } = {},
 ): Promise<{ ok: true; adjustment: ScoreAdjustment; net: number } | { ok: false; error: AdjustmentError }> {
   const parsed = parseAdjustmentInput(body)
   if (!parsed.ok) return parsed
@@ -107,7 +113,7 @@ export async function addScoreAdjustment(
 
   const adjustment: ScoreAdjustment = {
     id: randomUUID(), matchupId: matchup.id, rosterId: input.rosterId, week: matchup.week,
-    points: input.points, reason: input.reason, byUserId: userId, at: new Date().toISOString(),
+    points: input.points, reason: input.reason, byUserId: opts.systemActor ?? userId, at: new Date().toISOString(),
   }
   const result = await prisma.$transaction(async (tx) => {
     const league = await lockedLeague(tx, leagueId)
@@ -121,7 +127,7 @@ export async function addScoreAdjustment(
   })
   if (!result.ok) return result
   await refreshStandings(matchup.seasonId, matchup.week)
-  await audit(leagueId, userId, 'score_adjustment_added', adjustment, result.net)
+  await audit(leagueId, opts.systemActor ? null : userId, 'score_adjustment_added', adjustment, result.net)
   return { ok: true, adjustment, net: result.net }
 }
 
