@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { appliedCorrection, correctionApplyRefusal, planCorrectionAdjustments, readExtendedCorrections, STAT_CORRECTION_ACTOR } from '@/lib/stat-corrections/extendedCorrections'
 import type { MatchupCorrection } from '@/lib/stat-corrections/statCorrectionReview'
-import type { ScoreAdjustment } from '@/lib/score-adjustments/scoreAdjustments'
+import { statCorrectionApplied, type ScoreAdjustment } from '@/lib/score-adjustments/scoreAdjustments'
 
 const m = (homeAfter: number, awayAfter: number): MatchupCorrection => ({
   matchupId: 'M1', home: { rosterId: 'H', before: 100, after: homeAfter }, away: { rosterId: 'A', before: 98, after: awayAfter }, resultFlipped: homeAfter < awayAfter,
@@ -33,6 +33,20 @@ describe('planCorrectionAdjustments', () => {
   it('a commissioner\'s own adjustment is not mistaken for an applied correction', () => {
     expect(appliedCorrection([adj('H', -5, 'commish-user')], 'M1', 'H')).toBe(0)
     expect(planCorrectionAdjustments([m(96.5, 98)], [adj('H', -5, 'commish-user')])).toEqual([{ matchupId: 'M1', rosterId: 'H', points: -3.5 }])
+  })
+})
+
+describe('the commissioner\'s Apply and the automatic path count each other', () => {
+  const manual = (rosterId: string, points: number): ScoreAdjustment => ({ ...adj(rosterId, points, 'commish-user'), source: 'stat_correction' })
+
+  it('a correction the commissioner already applied is not applied again automatically', () => {
+    expect(appliedCorrection([manual('H', -3.5)], 'M1', 'H')).toBe(-3.5)
+    expect(planCorrectionAdjustments([m(96.5, 98)], [manual('H', -3.5)])).toEqual([])
+  })
+
+  it('an automatic correction counts toward what the commissioner\'s Apply owes', () => {
+    expect(statCorrectionApplied([adj('H', -3.5)], 'M1', 'H')).toBe(-3.5)
+    expect(statCorrectionApplied([adj('H', -3.5), manual('H', -1.5), adj('H', -5, 'commish-user')], 'M1', 'H')).toBe(-5)
   })
 })
 
