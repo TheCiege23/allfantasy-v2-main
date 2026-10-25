@@ -331,8 +331,8 @@ describe('a pre-draft resize re-derives untouched playoff defaults and keeps a c
 /*
  * Keeper leagues play the same season (no dynasty config, so the sport's default length) and had the
  * same unplayed last week: a 4-team NFL keeper bracket started in week 15 and finished in 16 of 17,
- * while its JSON said 6 teams / 2 byes beside a column of 4. They now take the same start week and the
- * one shape, but keep the field they were always created with — the registry's 6, clamped to the league.
+ * while its JSON said 6 teams / 2 byes beside a column of 4, and a 6-team keeper league sent all six.
+ * They now take redraft's field (4 under ten teams, 6 from ten), start week and one shape.
  */
 const ALL_TEAM_COUNTS = Array.from({ length: 17 }, (_, i) => i + 4)
 
@@ -346,8 +346,9 @@ describe.each(SPORTS)('%s keeper creation — the bracket fits the season at eve
     const teams = data.playoffTeams as number
     const start = data.playoffStartWeek as number
 
-    // The keeper field is unchanged: the registry's 6, clamped (even) to the league.
-    expect(teams).toBe(teamCount >= 6 ? 6 : 4)
+    // The redraft field: 4 under ten managers, 6 from ten — not everyone makes it from six teams up.
+    expect(teams).toBe(teamCount >= 10 ? 6 : 4)
+    if (teamCount >= 6) expect(teams).toBeLessThan(teamCount)
 
     const createdWeeks = resolveCreatedSeasonWeeks(
       { settings: s, dynastyConfig: null, playoffTeams: teams, playoffWeeksPerRound: data.playoffWeeksPerRound },
@@ -400,7 +401,17 @@ describe('a keeper pre-draft resize re-derives the untouched default start week'
       .toEqual({ playoffTeams: 4, playoffStartWeek: 16 })
   })
 
-  it('NHL keeper created today at 4 (4 from 26) grown to 12 → 6 from 25; the field stays the registry\'s', () => {
+  it('NBA keeper created before this change at 8 (the registry\'s 6 from 23) grown to 9 → the redraft rule, 4 from 24', () => {
+    expect(resizedPlayoffColumns({ ...base, sport: 'NBA', oldSize: 8, newSize: 9, playoffTeams: 6, playoffStartWeek: 23 }))
+      .toEqual({ playoffTeams: 4, playoffStartWeek: 24 })
+  })
+
+  it('NFL keeper created today at 8 (4 from 16) grown to 12 → 6 from 15', () => {
+    expect(resizedPlayoffColumns({ ...base, sport: 'NFL', oldSize: 8, newSize: 12, playoffTeams: 4, playoffStartWeek: 16 }))
+      .toEqual({ playoffTeams: 6, playoffStartWeek: 15 })
+  })
+
+  it('NHL keeper created today at 4 (4 from 26) grown to 12 → 6 from 25', () => {
     expect(resizedPlayoffColumns({ ...base, sport: 'NHL', oldSize: 4, newSize: 12, playoffTeams: 4, playoffStartWeek: 26, championshipLength: 2 }))
       .toEqual({ playoffTeams: 6, playoffStartWeek: 25 })
   })
