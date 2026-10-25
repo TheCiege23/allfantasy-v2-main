@@ -512,12 +512,17 @@ export async function createCanonicalLeagueInTransaction(
    * length (a 4-team NFL bracket plays weeks 16-17, not 15-16 with week 17 unplayed), and the one
    * shape is written to the columns AND every JSON copy — they used to say 4 teams and 6 teams / 2
    * byes about the same league.
+   *
+   * Keeper leagues play the same season and get the same start week and the same one shape, but keep
+   * the field they were always created with (the registry's, clamped to the league).
    */
   const redraftShape =
-    formatId === 'redraft' && scoringMode !== 'roto'
+    (formatId === 'redraft' || formatId === 'keeper') && scoringMode !== 'roto'
       ? redraftPlayoffShapeFor({
           sport,
           leagueSize: managerCount,
+          leagueType: formatId,
+          playoffTeams: formatId === 'keeper' ? clampPlayoffTeams(readNumber(playoffSettings, 'playoffTeams', 6)) : undefined,
           weeksPerRound: readNumber(playoffSettings, 'playoffWeeksPerRound', 1),
           championshipLength: readChampionshipLength(mergedSettings),
         })
