@@ -783,14 +783,15 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       }
       // A story classified "active" (activated, cleared, returns) is itself the recovery.
       const prior = subject.bucket === 'active' ? 'out' as const : null
-      let impactFailed = false
+      // Built here, sent with the team batch at the end of the run, so the scan never waits on a send.
+      const lineupRequests: DispatchNotificationParams[] = []
       for (const [uid, entry] of leaguesOf) {
         const impacts = await resolveLineupImpacts({ userId: uid, leagueIds: [...entry.all], startingLeagueIds: [...entry.starting], sport: row.sport,
           sleeperId: binding.identity.sleeperId, playerName: row.playerName, team: playerTeam, bucket: statusBucket(subject.bucket), prior }).catch(() => [])
         const copy = lineupImpactCopy(row.playerName, impacts)
         if (!copy) continue
         const impactLeagueIds = impacts.filter(i => i.kind !== 'none').map(i => i.leagueId)
-        const ok = await dispatchNotification({
+        lineupRequests.push({
           userIds: [uid], leagueIds: impactLeagueIds, leagueId: impactLeagueIds[0] ?? null,
           // Same category as before this rule, so the person's Injury alerts switch still governs it.
           category: 'injury_alerts',
@@ -798,17 +799,11 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
           title: copy.title, body: copy.body + '\n' + row.headline.slice(0, 300),
           actionHref: copy.fixHref ?? undefined, actionLabel: 'Review lineup', severity: 'high',
           dedupePrefix: 'player-news:' + row.id + ':lineup', skipChannels: { sms: true },
-          meta: { team: playerTeam, sport: row.sport, newsCategory: category, injuryHeadline: row.headline, lineupImpact: copy.kind,
+          meta: { team: playerTeam ?? 'Players without a current team', sport: row.sport, newsCategory: category, injuryHeadline: row.headline,
+            lineupImpact: copy.kind, lineupPlayerKey: binding.identity.id,
             playerNews: { ...newsInfo, starter: starterUsers.has(uid), delivery: 'instant', digest: false } },
-        }).then(r => r.failed === 0, () => false)
-        // A failed lineup alert is retried with the row, never downgraded to the bell.
-        if (!ok) { impactFailed = true; for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }; continue }
-        recipients++
-        await markPlayerNewsTold([uid], subject)
-        await recordToldAbout([uid], news)
-        if (teamHeadline) await recordToldAbout([uid], teamHeadline, undefined, { storyOnly: true })
+        })
         for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }
-        notified++
       }
       const requests: DispatchNotificationParams[] = []
       const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
@@ -822,8 +817,9 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       const gated = requests.flatMap(r => playerNewsDispatches(r, plan, newsInfo, isStarter)).map(d =>
         d.meta?.lineupBellOnly ? { ...d, skipChannels: bellOnly, meta: { ...d.meta, playerNews: { ...(d.meta.playerNews as object), digest: false } } } : d)
       // `delivery` is left as the gate set it: the team batch groups one headline's rows by it.
-      if (!gated.length) { await settle(row, impactFailed ? 'dispatch-failed' : 'delivered'); continue }
-      injuryBatch.add(gated,async (users,failed)=>{
+      const outgoing = [...lineupRequests, ...gated]
+      if (!outgoing.length) { await settle(row, 'all-suppressed'); continue }
+      injuryBatch.add(outgoing,async (users,failed)=>{
         const toldNow=[...users]
         recipients+=users.size
         followerRecipients+=gatedFollowersOnly.filter(id=>users.has(id)).length
@@ -834,7 +830,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
           if(teamHeadline)await recordToldAbout(toldNow,teamHeadline,undefined,{storyOnly:true})
           notified++
         }
-        await settle(row,failed||impactFailed?'dispatch-failed':toldNow.length?'delivered':'all-suppressed')
+        await settle(row,failed?'dispatch-failed':toldNow.length?'delivered':'all-suppressed')
       })
       continue
     }
