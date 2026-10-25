@@ -42,6 +42,7 @@ import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -660,6 +661,13 @@ export async function executeLeagueSettingsPatch(
     const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
     if (!parsed.ok) return jsonError(parsed.error, 400)
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
+
+  // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would
+  // fall back to "visible to league", so it is refused rather than stored.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && LEAGUE_LOG_VISIBILITY_KEY in merge) {
+    const parsed = parseLeagueLogVisibility((merge as Record<string, unknown>)[LEAGUE_LOG_VISIBILITY_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
   }
 
   /*
