@@ -128,13 +128,16 @@ describe('the gate', () => {
 })
 
 describe('the news feed sender, end to end', () => {
-  it('idea 1: the starter gets a push now; the bench manager waits for the digest; nobody is emailed', async () => {
+  it('a starter ruled out gets push + email with the lineup options; a bench player hurt is the bell only', async () => {
     h.rosterFind.mockResolvedValue([rostered('starter', 'L1', 'RB'), rostered('bench', 'L2', 'bench')])
     await dispatchPendingPlayerNewsNotifications()
     expect(delivery('starter')).toEqual(['instant'])
-    expect(delivery('bench')).toEqual(['digest'])
-    for (const c of calls()) expect(c.skipChannels.email).toBe(true)
-    expect(calls().find((c) => c.userIds.includes('bench'))!.skipChannels.push).toBe(true)
+    expect(delivery('bench')).toEqual(['bell'])
+    const starter = calls().find((c) => c.userIds.includes('starter'))!
+    expect(starter.skipChannels).toEqual({ sms: true })
+    expect(starter.title).toBe('🚨 Jahmyr Gibbs is OUT — your lineup options')
+    expect(calls().find((c) => c.userIds.includes('bench'))!.skipChannels).toEqual({ sms: true, email: true, push: true })
+    for (const c of calls()) expect((c.meta?.playerNews as { digest?: boolean }).digest).toBe(false)
   })
   it('idea 2: the same player and status the same day is one alert, even from a second story', async () => {
     h.rosterFind.mockResolvedValue([rostered('starter', 'L1', 'RB')])
@@ -155,7 +158,7 @@ describe('the news feed sender, end to end', () => {
     await dispatchPendingPlayerNewsNotifications()
     expect(calls()).toHaveLength(0)
   })
-  it('idea 5: "Off" hears nothing; "My whole roster" gets the bench player now', async () => {
+  it('"Off" hears nothing; a bench injury is the bell only even on "My whole roster"', async () => {
     h.rosterFind.mockResolvedValue([rostered('quiet', 'L1', 'RB'), rostered('all', 'L2', 'bench')])
     h.profiles.mockResolvedValue([
       { userId: 'quiet', notificationPreferences: { playerNewsLevel: 'off' } },
@@ -163,6 +166,6 @@ describe('the news feed sender, end to end', () => {
     ])
     await dispatchPendingPlayerNewsNotifications()
     expect(delivery('quiet')).toEqual([])
-    expect(delivery('all')).toEqual(['instant'])
+    expect(delivery('all')).toEqual(['bell'])
   })
 })
