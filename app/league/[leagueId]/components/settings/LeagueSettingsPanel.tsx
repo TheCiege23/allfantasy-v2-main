@@ -7,7 +7,7 @@ import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
-import { oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { KEEPER_MAX_TEAMS, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
@@ -271,7 +271,8 @@ export function LeagueSettingsPanel({
             debouncedSave({ leagueSize: n })
           }}
         >
-          {Array.from({ length: 15 }, (_, i) => i + 4).map((n) => {
+          {/* Keeper runs to 20 teams (lib/league/oddTeamLeagues.ts); every other format keeps 4–18 here. */}
+          {Array.from({ length: (leagueType === 'keeper' ? Math.max(KEEPER_MAX_TEAMS, leagueSize) : Math.max(18, leagueSize)) - 3 }, (_, i) => i + 4).map((n) => {
             // An odd keeper size is an AF Commissioner option; the settings PATCH refuses it without the plan.
             const locked = !hasCommissionerAccess && n !== leagueSize && oddTeamCountNeedsAfCommissioner(leagueType, n)
             return (

@@ -2,7 +2,7 @@ import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
-import { KEEPER_ODD_TEAM_COUNTS } from '@/lib/league/oddTeamLeagues'
+import { KEEPER_EVEN_TEAM_COUNTS, KEEPER_ODD_TEAM_COUNTS } from '@/lib/league/oddTeamLeagues'
 
 export type CreateMode = 'quick' | 'advanced'
 
@@ -32,7 +32,7 @@ const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
 
-const KEEPER_TEAM_COUNTS_WITH_ODD = [4, 6, 8, 10, 12, 14, 16, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
+const KEEPER_TEAM_COUNTS_WITH_ODD = [...KEEPER_EVEN_TEAM_COUNTS, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
 
 export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   version: 1,
@@ -281,7 +281,8 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAB: [4, 6, 8, 10, 12, 14, 16],
       SOCCER: [4, 6, 8, 10, 12, 14, 16],
     },
-    // Odd keeper sizes (5–15) are an AF Commissioner option: listed so the server accepts them,
+    // Keeper runs 4–20 for these four sports. Even sizes are free; odd sizes (5–19) are an AF
+    // Commissioner option: listed so the server accepts them,
     // refused at POST /api/leagues without the plan, and shown locked in the wizard
     // (lib/league/oddTeamLeagues.ts). Redraft has offered every size from 2 to 32 all along.
     keeper: {
