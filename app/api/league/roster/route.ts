@@ -13,6 +13,8 @@ import { expandLockedRedraftStarterSlots, resolveLockedRedraftStarterLayout } fr
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
+import { isDailyFormSport } from '@/lib/projections/dailySportForm'
+import { applyDailySportOutlook, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -252,6 +254,20 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       }
     } catch {
       unifiedRoster = []
+    }
+
+    // NBA / NHL / MLB: an AF projection for this period and a position rank, both under this
+    // league's scoring, from stored game lines (lib/projections/dailySportOutlook.ts). No-op elsewhere.
+    if (isDailyFormSport(leagueSport) && unifiedRoster.length > 0) {
+      try {
+        const outlook = await loadDailySportOutlook(prisma, {
+          league: { sport: leagueSport, season: league.season ?? null, settings: league.settings },
+          players: unifiedRoster.map((r) => ({ key: r.id, lookupId: r.id, team: r.team, injuryStatus: r.injuryStatus })),
+        })
+        unifiedRoster = applyDailySportOutlook(unifiedRoster, outlook)
+      } catch (e) {
+        console.warn('[league/roster] daily-sport outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      }
     }
 
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation

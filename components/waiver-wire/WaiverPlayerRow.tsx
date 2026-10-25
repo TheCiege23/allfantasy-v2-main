@@ -22,6 +22,8 @@ type Props = {
     aiAdp?: number | null
     byeWeek?: number | null
     rank?: number | null
+    /** NBA / NHL / MLB: "C12". Shown in place of the overall rank, which those sports do not have. */
+    positionRank?: string | null
     ownershipPercent?: number | null
     projectionSourceLabel?: string | null
     adpSourceLabel?: string | null
@@ -192,7 +194,11 @@ export default function WaiverPlayerRow({
             <Metric label="ADP" value={formatDecimal(player.adp)} testId={`waiver-player-adp-${player.id}`} />
             <Metric label="AF ADP" value={player.aiAdp != null ? formatDecimal(player.aiAdp) : "Soon"} />
             <Metric label="Bye" value={player.byeWeek != null ? String(player.byeWeek) : "-"} />
-            <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
+            {player.positionRank ? (
+              <Metric label="Pos rank" value={player.positionRank} testId={`waiver-player-position-rank-${player.id}`} />
+            ) : (
+              <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
+            )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">

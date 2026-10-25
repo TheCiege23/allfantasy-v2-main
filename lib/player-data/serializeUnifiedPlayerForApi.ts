@@ -79,6 +79,13 @@ export type UnifiedPlayerWireDto = {
   }
   /** Present when rows came from `getNormalizedPlayerData` with diagnostics enabled */
   providerFallbackDiagnostics?: ProviderFallbackDiagnostics
+  /**
+   * NBA / NHL / MLB only: rank within position by season fantasy points under THIS league's scoring,
+   * stamped by the roster and waiver routes (lib/projections/dailySportOutlook.ts). Absent elsewhere.
+   */
+  positionRank?: { position: string; rank: number; of: number } | null
+  /** The same rank as the screens print it: "C12", "SP34". */
+  positionRankLabel?: string | null
 }
 
 export type { ProviderFallbackDiagnostics }
