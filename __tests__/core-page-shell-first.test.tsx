@@ -535,5 +535,5 @@ describe('/core when the league list cannot be read', () => {
 vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: (shell.hubs = gatedValue(undefined)) }))
 vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/chimmy/planAllowance')>()),
-  readChimmyPlanAllowance: (shell.planAllowance = gatedValue(null)),
+  readChimmyAnswerAllowance: (shell.planAllowance = gatedValue(null)),
 }))

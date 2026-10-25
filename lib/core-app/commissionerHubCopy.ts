@@ -100,6 +100,7 @@ const ES: Record<string, string> = {
   'Weekly recap': 'Resumen semanal',
   'Share the dispute desk with your league →': 'Comparte la mesa de disputas con tu liga →',
   'League constitution and amendments →': 'Constitución de la liga y enmiendas →',
+  'League log: who can see your actions →': 'Registro de la liga: quién ve tus acciones →',
   'Open integrity monitor →': 'Abrir el monitor de integridad →',
   '1 person': '1 persona',
   you: 'tú',

@@ -26,16 +26,10 @@ type SendChimmyMessageInput = {
   imageFile?: File | null
   conversation?: ChimmyThreadMessage[]
   context?: AIChatContext
-  /**
-   * Whether THIS service should ask the user. Defaults to true.
-   *
-   * Set false only when the caller has already asked — and then say what the
-   * answer was in `tokenSpendConfirmed`. Suppressing the prompt does not imply
-   * consent.
-   */
+  /** Compatibility flag. The server now checks included answers before any token prompt. */
   promptForTokenSpend?: boolean
   /**
-   * Whether the CALLER already has the user's consent. Defaults to false.
+   * Whether the caller already has the user's consent. Defaults to false.
    *
    * 🛑 THIS REPLACES A SINGLE `confirmTokenSpend` FLAG THAT MEANT BOTH "prompt?"
    * AND "tell the server yes?", WHICH MADE THE HONEST CALLER THE BROKEN ONE.
@@ -249,46 +243,8 @@ export async function sendChimmyMessage(
   input: SendChimmyMessageInput,
   retryState: SendChimmyMessageRetryState = {},
 ): Promise<SendChimmyMessageResult> {
-  const promptForTokenSpend = input.promptForTokenSpend ?? true
-  /*
-   * Starts at what the caller claims and is only ever raised by an actual "yes"
-   * from the user. A failed preflight leaves it alone, so the request still goes
-   * out — and goes out UNCONFIRMED, which is the honest state: a Pro account is
-   * served, and a token account gets the 409 rather than a silent charge.
-   */
-  let tokenSpendConfirmed = input.tokenSpendConfirmed ?? false
-  if (promptForTokenSpend) {
-    try {
-      const { confirmed, preview } = await confirmTokenSpend("ai_chimmy_chat_message")
-      if (!preview.canSpend) {
-        return {
-          ok: true,
-          response: CHIMMY_PREMIUM_FEATURE_MESSAGE,
-          meta: {
-            variant: "premium_gate",
-            ctaLabel: CHIMMY_PREMIUM_CTA_LABEL,
-            ctaHref: CHIMMY_DEFAULT_UPGRADE_PATH,
-          },
-          upgradeRequired: true,
-          upgradePath: CHIMMY_DEFAULT_UPGRADE_PATH,
-        }
-      }
-      if (!confirmed) {
-        return {
-          ok: false,
-          response: "Token spend cancelled.",
-          error: "Token spend cancelled by user.",
-        }
-      }
-      tokenSpendConfirmed = true
-    } catch (error) {
-      console.error(
-        "[sendChimmyMessage] Token preview failed, continuing without preflight:",
-        error instanceof Error ? error.message : error
-      )
-      tokenSpendConfirmed = false
-    }
-  }
+  // Let the server use included daily answers first. Ask for token consent only on its 409 below.
+  const tokenSpendConfirmed = input.tokenSpendConfirmed ?? false
 
   const conversation = toConversationPayload(input.conversation)
   const selectedMode = normalizeChimmyAssistantMode(

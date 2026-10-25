@@ -58,6 +58,12 @@ const buildChimmyStalenessWarningMock = vi.fn()
 const buildChimmySourceReferencesMock = vi.fn()
 const buildChimmySportDataDigestMock = vi.fn()
 const getInsightBundleMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // The authorization fixture uses the paid-token path after today's free answers.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 const prismaUserProfileFindUniqueMock = vi.fn()
 const prismaUserProfileUpsertMock = vi.fn()
 const prismaAppUserFindUniqueMock = vi.fn()

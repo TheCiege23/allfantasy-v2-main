@@ -62,6 +62,8 @@ export type WeeklyScoreSyncSummary = {
   preseasonRowsSkipped?: number
   /** Daily sports: roster ids translated to game-log (PlayerIdentityMap) ids — see rosterGameLogIdBridge.ts. */
   gameLogIdsBridged?: number
+  /** Of those, `tsdb_…` roster ids matched by name to one identity. */
+  gameLogIdsBridgedByName?: number
   /** NFL, foreign platform: roster ids translated to a Sleeper id through the crosswalk before any read or write. */
   foreignIdsTranslated?: number
   /** NFL, foreign platform: roster ids with no one-to-one Sleeper id — skipped, never read or written under. */
@@ -443,8 +445,20 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
      * Rolling Insights id; player_game_stats is keyed on PlayerIdentityMap.id. Queried directly,
      * every NHL/NCAAB starter found ZERO rows (measured 2026-09-24) — see rosterGameLogIdBridge.ts.
      */
-    const bridge = await bridgeRosterIdsToGameLogIds(prisma, candidateSportKeys(sport), playerIds)
+    // A `tsdb_…` id (an older draft pool) is bridged by its roster row's name — see the bridge.
+    const namesById = new Map(
+      ordinaryRosterPlayers.map((p: { playerId: string; playerName?: string | null }) => [p.playerId, p.playerName ?? null]),
+    )
+    const bridge = await bridgeRosterIdsToGameLogIds(prisma, candidateSportKeys(sport), playerIds, namesById)
     summary.gameLogIdsBridged = bridge.bridged
+    if (bridge.bridgedByName) summary.gameLogIdsBridgedByName = bridge.bridgedByName
+    if (bridge.nameRefused.length) {
+      summary.warnings.push(
+        `${bridge.nameRefused.length} TheSportsDB roster id(s) name a player this league already rosters under another id, ` +
+          `or more than one ${sport} player; they were NOT matched to game logs rather than score one man for two teams: ` +
+          `${bridge.nameRefused.slice(0, 5).join(', ')}.`,
+      )
+    }
     if (bridge.ambiguous.length) {
       summary.warnings.push(
         `${bridge.ambiguous.length} roster id(s) are both a Rolling Insights id and another player's Sleeper id in ${sport}; ` +
