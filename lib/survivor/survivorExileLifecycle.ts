@@ -33,7 +33,21 @@ export async function resolveScheduledExileReturn(leagueId: string, completedWee
     const game = await tx.survivorGameState.findUnique({ where: { leagueId } })
     if (!game || ['finale', 'complete'].includes(game.phase) || game.activeCouncilId) return null
     const players = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile', eliminatedWeek: { lt: settings.exileReturnWeek } } })
-    const finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week: settings.exileReturnWeek, action: 'exile_week_scored' }, select: { id: true, data: true } })
+    let finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week: settings.exileReturnWeek, action: 'exile_week_scored' }, select: { id: true, data: true } })
+    // ⚠ NOBODY ON EXILE SET A ROSTER IN THE RETURN WEEK. scoreExileWeek only runs when the week has an
+    // entry, so it never writes this snapshot and the season used to wait here forever (found by the
+    // staging season rehearsal, 2026-10-25). With no entries no token can be earned or wiped that
+    // week, so today's balances ARE the deadline balances; record them as the week's snapshot.
+    if (!finalized && players.length) {
+      const island = await tx.exileIsland.findUnique({ where: { leagueId }, select: { id: true } })
+      const entryCount = island ? await tx.exileWeeklyEntry.count({ where: { exileId: island.id, week: settings.exileReturnWeek } }) : 0
+      if (entryCount === 0) {
+        const balances = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile' }, select: { userId: true, tokenBalance: true, totalTokensEarned: true, eliminatedWeek: true } })
+        finalized = await tx.survivorAuditEntry.create({ data: { leagueId, week: settings.exileReturnWeek, category: 'exile', action: 'exile_week_scored',
+          data: { entryCount: 0, bossScore: null, bossWon: false, winnerUserId: null, noEntries: true, balances }, isVisibleToCommissioner: true, isVisibleToPublic: false },
+          select: { id: true, data: true } })
+      }
+    }
     const recorded = finalized?.data as { balances?: ExileReturnCandidate[] } | null
     if (players.length && !Array.isArray(recorded?.balances)) return null
     // Retry in a later week uses the deadline snapshot, never tokens earned after the cutoff.
