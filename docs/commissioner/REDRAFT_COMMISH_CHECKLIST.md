@@ -37,6 +37,7 @@ _Last updated: 2026-10-20 — every PR in the three built sections has merged (#
 | ✅ | Settings lock — lock areas for the season; mid-season changes need a league vote | Free | #2568 |
 | ✅ | Trade deadline enforced server-side (other session) | Free | #2554 |
 | ✅ | Trade deadline day + time — trades close at the moment the commissioner picks (league timezone) or after the deadline week, whichever comes first | Free | #2582 |
+| 🟡 | League log — every commissioner action in plain words, readable by the league unless set commish only; the raw audit rows are now commissioners-only | Free | this PR |
 
 ## Rules, playoffs and the league's identity
 
@@ -55,8 +56,6 @@ _Last updated: 2026-10-20 — every PR in the three built sections has merged (#
 
 | | Feature | Tier | Notes |
 |---|---|---|---|
-| ⬜ | Separate deadlines for player trades and pick trades | Free | builds on #2554 and #2582 |
-| ⬜ | League log for members, with a "commish only" toggle | Free | today members only reach a raw JSON viewer on the old league page |
 | 🟡 | One-tap stat-correction review before standings move | Free | Part 1: for 6 days after a week is final, the score cron re-checks its stats hourly and shows the commissioner (League settings → Score adjustments) which scores would change and whether a result flips. Read-only: results and standings stay as sealed. Native NFL points leagues; team defenses and players dropped since the week are not re-checked. Part 2 (one-tap apply) to follow. |
 | ⬜ | Undo for commissioner actions until the next dependent event | Free | spec rule §0.3 |
 | ✅ | Trade review window that explains itself to managers | Free | The review window opens when the receiver accepts (`League.tradeReviewHours`, 48 by default — the existing setting, now enforced). The trade goes through when it ends unless vetoed; before, it silently expired. Each pending trade in the Trade Center says who reviews it, the vote tally and when it goes through. |
@@ -73,6 +72,8 @@ _Last updated: 2026-10-20 — every PR in the three built sections has merged (#
 | ⬜ | Ask Chimmy as commissioner | Plan | |
 
 ## Not redraft (parked for later formats)
+
+Separate deadlines for player trades and pick trades: dropped for redraft. A redraft league trades only the current draft's picks (`lib/league-trade-engine/redraftDraftPicks.ts`), and that window closes when the draft completes — before any in-season trade deadline — so a separate pick deadline would never bite. Keep it for dynasty/keeper.
 
 Keeper: missed-deadline rule #2558, keeper value report #2562, imported keeper cost grid #2544.
 Survivor: idol expiry #2535, idol play cutoff #2553. Guillotine: FAAB after a chop #2545.

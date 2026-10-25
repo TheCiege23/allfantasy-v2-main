@@ -5,14 +5,11 @@ import { Send, Volume2, VolumeX, Image as ImageIcon, Mic, MicOff, Loader2, Squar
 import { toast } from 'sonner';
 import { getDefaultChimmyChips } from '@/lib/chimmy-interface';
 import { isSupportedSport } from '@/lib/sport-scope';
-import { isNoChargeChimmyIntent } from '@/lib/ai/chimmyIntentRouter';
-import { confirmTokenSpend } from '@/lib/tokens/client-confirm';
 import { sendChimmyMessage } from '@/lib/chimmy-chat/ChimmyChatService';
 import {
   CHIMMY_DEFAULT_UPGRADE_PATH,
   CHIMMY_GENERIC_ERROR_MESSAGE,
   CHIMMY_PREMIUM_CTA_LABEL,
-  CHIMMY_PREMIUM_FEATURE_MESSAGE,
 } from '@/lib/chimmy-chat/response-copy';
 import {
   getVoiceConfig,
@@ -424,50 +421,6 @@ export default function ChimmyChat({
     }
     setIsTyping(true);
 
-    const skipClientTokenPreflight = outgoingText ? isNoChargeChimmyIntent(outgoingText) : false;
-    /*
-     * 🛑 THIS IS A CLAIM THAT REACHES BILLING, SO IT IS ONLY EVER SET BY AN ACTUAL
-     * "yes" BELOW. A skipped preflight is not consent, and neither is a preflight
-     * that threw — both leave this false and let the server ask for confirmation
-     * rather than charging somebody who was never asked.
-     */
-    let tokenSpendConfirmed = false;
-    if (!skipClientTokenPreflight) {
-      try {
-        const { confirmed, preview } = await confirmTokenSpend('ai_chimmy_chat_message');
-        if (!preview.canSpend) {
-          setMessages((prev) => [
-            ...prev.slice(0, -1),
-            {
-              id: createMessageId(),
-              role: 'assistant',
-              content: CHIMMY_PREMIUM_FEATURE_MESSAGE,
-              upgradePath: CHIMMY_DEFAULT_UPGRADE_PATH,
-              createdAt: Date.now(),
-            },
-          ]);
-          setIsTyping(false);
-          return;
-        }
-        if (!confirmed) {
-          setMessages((prev) => prev.slice(0, -1));
-          setInput(capturedInput);
-          if (capturedImageFile) {
-            setImageFile(capturedImageFile);
-            setImagePreview(capturedImagePreview);
-          }
-          setIsTyping(false);
-          return;
-        }
-        tokenSpendConfirmed = true;
-      } catch (error) {
-        console.error(
-          '[ChimmyChat] Token preview failed, continuing without preflight:',
-          error instanceof Error ? error.message : error
-        );
-      }
-    }
-
     try {
       let streamedAssistantHandled = false;
       const assistantMessageId = createMessageId();
@@ -492,9 +445,8 @@ export default function ChimmyChat({
               }
             : {}),
         },
-        /* We already asked, just above — so do not ask again, and pass on the answer. */
-        promptForTokenSpend: false,
-        tokenSpendConfirmed,
+        // The service asks for consent only if the server says no included answers remain.
+        tokenSpendConfirmed: false,
         onChunk: (text) => {
           streamedAssistantHandled = true;
           setMessages((prev) => {
@@ -517,6 +469,15 @@ export default function ChimmyChat({
           });
         },
       });
+      if (result.error === 'Token spend cancelled by user.') {
+        setMessages((prev) => prev.filter((message) => message.id !== userMessage.id));
+        setInput(capturedInput || outgoingText);
+        if (capturedImageFile) {
+          setImageFile(capturedImageFile);
+          setImagePreview(capturedImagePreview);
+        }
+        return;
+      }
       if (result.sessionId) {
         setSessionId(result.sessionId);
       }

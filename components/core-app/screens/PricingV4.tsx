@@ -8,6 +8,7 @@ import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
 import { manageAppleSubscriptions, restoreApplePurchases, useAppleIapPrices } from '@/lib/monetization/apple-iap-client'
 import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/planIncludes'
+import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBanner'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
@@ -110,6 +111,7 @@ const FREE_INCLUDES = [
   'Drafts, trades, waivers and live scoring',
   'Commissioner basics: settings, invites and playoffs',
   'Every league you play, in one place',
+  `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy answers each day`,
 ]
 
 function money(n: number): string {
@@ -304,7 +306,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         <span className="af-pr-eyebrow">Pricing</span>
         <h1 className="af-pr-title">Win more with tools built for fantasy managers</h1>
         <p className="af-pr-sub">
-          Creating, importing and running your leagues is free forever. Subscribe for Chimmy and
+          Creating, importing and running your leagues is free forever. Subscribe for more Chimmy answers and
           player tools or commissioner automation — or buy tokens when you need them.
         </p>
 

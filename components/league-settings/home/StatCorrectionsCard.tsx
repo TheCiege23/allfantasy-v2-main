@@ -9,12 +9,36 @@ const when = (iso: string) =>
 
 /**
  * Stat corrections for the last sealed week (lib/stat-corrections): which scores would change if the
- * league office's corrected stats were applied, and whether a result would flip. Read-only — results
- * and standings stay as sealed; the commissioner decides, using the score adjustments below.
+ * league office's corrected stats were applied, and whether a result would flip. Free leagues: shown
+ * only — the commissioner decides, using the score adjustments below. "Extended scoring corrections"
+ * (AF Commissioner, lib/stat-corrections/extendedCorrections.ts): applied automatically, for 14 days.
  */
 export function StatCorrectionsCard({ leagueId }: { leagueId: string }) {
   const [view, setView] = useState<StatCorrectionView | null>(null)
   const [error, setError] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const setExtended = async (enabled: boolean) => {
+    if (!view?.extended) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/operations`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_extended_corrections', enabled }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof d?.error === 'string' ? d.error : 'Could not save.')
+      setView((v) => (v?.extended ? { ...v, extended: { ...v.extended, enabled, windowDays: enabled ? 14 : 6 } } : v))
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Could not save.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   useEffect(() => {
     let live = true
@@ -35,12 +59,37 @@ export function StatCorrectionsCard({ leagueId }: { leagueId: string }) {
   if (!view.covered) return null
 
   const latest = view.latest
+  const ext = view.extended
+  const autoApplied = Boolean(ext?.enabled && !ext.refusal)
   return (
     <div className="lsh-field-card" data-testid="stat-corrections">
       <p className="lsh-field-label">Stat corrections</p>
+      {ext ? (
+        <div className="space-y-1 pb-2" data-testid="stat-corrections-extended">
+          <label className="flex items-center justify-between gap-3">
+            <span className="text-[13px] font-semibold">Extended scoring corrections{ext.available ? '' : ' · AF Commissioner'}</span>
+            <input
+              type="checkbox"
+              className="h-5 w-5"
+              checked={ext.enabled}
+              disabled={saving || (!ext.available && !ext.enabled)}
+              onChange={(e) => void setExtended(e.target.checked)}
+              data-testid="stat-corrections-extended-toggle"
+            />
+          </label>
+          <p className="lsh-help">
+            {ext.refusal === 'elimination_format'
+              ? 'In an elimination league a week can already have cost a team its season, so corrections are shown, never applied.'
+              : ext.refusal === 'playoffs'
+                ? 'Playoff seeds are set, so corrections are shown, never applied.'
+                : 'On: AllFantasy checks the last two finished weeks for 14 days and applies any stat correction for you, moving the score and the standings. Off: corrections are shown here for six days and you decide.'}
+          </p>
+          {saveError ? <p className="lsh-error" role="status">{saveError}</p> : null}
+        </div>
+      ) : null}
       {!latest ? (
         <p className="lsh-help">
-          After a week is final, AllFantasy re-checks its stats for six days and lists any correction here. Nothing to show yet.
+          After a week is final, AllFantasy re-checks its stats for {ext?.windowDays === 14 ? '14' : 'six'} days and lists any correction here. Nothing to show yet.
         </p>
       ) : latest.changes.length === 0 ? (
         <p className="lsh-help" data-testid="stat-corrections-none">
@@ -49,8 +98,9 @@ export function StatCorrectionsCard({ leagueId }: { leagueId: string }) {
       ) : (
         <>
           <p className="lsh-help">
-            Week {latest.week}: the league office changed some stats after the week was final. Results and standings have not
-            changed. To apply a correction, add a score adjustment below.
+            {autoApplied
+              ? `Week ${latest.week}: the league office changed some stats after the week was final. AllFantasy applied them as score adjustments, and the standings follow.`
+              : `Week ${latest.week}: the league office changed some stats after the week was final. Results and standings have not changed. To apply a correction, add a score adjustment below.`}
           </p>
           <ul className="space-y-1 pt-1">
             {latest.matchups.map((m) => (

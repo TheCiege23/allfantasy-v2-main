@@ -12,7 +12,7 @@ import {
   removeScoreAdjustment,
   type AdjustmentError,
 } from '@/lib/score-adjustments/scoreAdjustmentService'
-import { readStatCorrections } from '@/lib/stat-corrections/statCorrectionService'
+import { readStatCorrections, setExtendedCorrections } from '@/lib/stat-corrections/statCorrectionService'
 
 function adjustmentErrorResponse(error: AdjustmentError) {
   const text = (ADJUSTMENT_ERROR_TEXT as Record<string, string>)[error] ?? (ADJUSTMENT_SERVICE_ERROR_TEXT as Record<string, string>)[error] ?? 'Could not save the adjustment.'
@@ -67,6 +67,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (action === 'score_adjustment_add') {
     const r = await addScoreAdjustment(params.leagueId, userId, body)
     return r.ok ? NextResponse.json({ status: 'ok', adjustment: r.adjustment, net: r.net }) : adjustmentErrorResponse(r.error)
+  }
+  if (action === 'set_extended_corrections') {
+    const r = await setExtendedCorrections(params.leagueId, body?.enabled)
+    return r.ok ? NextResponse.json({ status: 'ok', enabled: r.enabled }) : NextResponse.json({ error: r.error }, { status: r.status })
   }
   if (action === 'score_adjustment_remove') {
     const r = await removeScoreAdjustment(params.leagueId, userId, body?.adjustmentId)
