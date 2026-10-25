@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
+import { loadValueSnapshotCombos } from '@/lib/player-values/valueSnapshotCombos'
 import { createRunBudget, rotateForFairness } from '@/lib/cron/runBudget'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { createOsStore, safeRead, type OsDomain, type OsFactSource, type OsFeed } from '@/lib/decision-os/domain-os'
@@ -464,8 +465,7 @@ async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeo
   const valueOs = createValueOs({ store })
   const projectionOs = createProjectionOs({ store })
 
-  const combos = await prisma.playerValueSnapshot
-    .findMany({ select: { format: true, qbFormat: true }, distinct: ['format', 'qbFormat'], take: APP_COMBO_CAP })
+  const combos = await loadValueSnapshotCombos(APP_COMBO_CAP)
     .catch((e: unknown) => {
       counts.errors.push(`value_combo_query: ${e instanceof Error ? e.message : String(e)}`)
       return [] as { format: string; qbFormat: string }[]
