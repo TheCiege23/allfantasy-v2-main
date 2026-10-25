@@ -14,6 +14,8 @@ type IntegrityApi = {
     tankingStartWeek: number | null
     tankingIllegalLineupCheck: boolean
     tankingBenchPatternCheck: boolean
+    /** Suspicious-trade alerts (League.settings, lib/integrity/tradeAlerts.ts). Absent = on. */
+    tradeAlertsEnabled?: boolean
     tankingWaiverPatternCheck: boolean
   }
   stats: {
@@ -70,6 +72,7 @@ export function IntegritySettingsPanel(props: {
           tankingIllegalLineupCheck: data.settings.tankingIllegalLineupCheck,
           tankingBenchPatternCheck: data.settings.tankingBenchPatternCheck,
           tankingWaiverPatternCheck: data.settings.tankingWaiverPatternCheck,
+          tradeAlertsEnabled: data.settings.tradeAlertsEnabled !== false,
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { settings?: IntegrityApi['settings']; error?: string }
@@ -153,6 +156,23 @@ export function IntegritySettingsPanel(props: {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-white/80">Alert me when a trade is flagged</p>
+          <button
+            type="button"
+            aria-pressed={s.tradeAlertsEnabled !== false}
+            aria-label="Suspicious trade alerts"
+            onClick={() =>
+              setData((d) => (d ? { ...d, settings: { ...d.settings, tradeAlertsEnabled: d.settings.tradeAlertsEnabled === false } } : d))
+            }
+            className={`rounded-lg border px-2 py-1 text-[11px] ${
+              s.tradeAlertsEnabled !== false ? 'border-emerald-400/40 bg-emerald-500/15' : 'border-white/15'
+            }`}
+          >
+            {s.tradeAlertsEnabled !== false ? 'On' : 'Off'}
+          </button>
         </div>
 
         <div className="border-t border-white/[0.06] pt-4">
