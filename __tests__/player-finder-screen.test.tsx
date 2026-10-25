@@ -168,9 +168,13 @@ const LEAGUE_VIEW: PlayerLeagueView = {
   coverage: { sampled: 12, matched: 12, fraction: 1, usable: true },
 }
 
+// The fixture's kickoffs are Sun 2026-10-25 1:00pm ET; pin the clock before them so the
+// move cards are not read as locked by whatever day the suite happens to run.
+const FIXTURE_NOW_ISO = '2026-10-24T14:30:00.000Z'
+
 function renderCore(extra: Partial<React.ComponentProps<typeof PlayerFinder>> = {}) {
   return render(
-    <PlayerFinder query="Dalton Kincaid" matches={[DETAIL.player]} detail={DETAIL} leagueCount={6} {...extra} />,
+    <PlayerFinder query="Dalton Kincaid" matches={[DETAIL.player]} detail={DETAIL} leagueCount={6} nowIso={FIXTURE_NOW_ISO} {...extra} />,
   )
 }
 
