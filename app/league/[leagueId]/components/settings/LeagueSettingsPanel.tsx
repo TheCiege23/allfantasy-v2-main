@@ -7,6 +7,7 @@ import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { KEEPER_MAX_TEAMS, ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import {
   EXTRA_MATCHUP_SETTINGS_KEY,
@@ -54,6 +55,7 @@ export function LeagueSettingsPanel({
   save: (partial: Record<string, unknown>) => Promise<void>
   debouncedSave: (partial: Record<string, unknown>) => void
 }) {
+  const { t } = useOptionalLanguage()
   const [name, setName] = useState(initialData.name ?? '')
   const [season, setSeason] = useState(initialData.season ?? new Date().getFullYear())
   const [language, setLanguage] = useState(initialData.language ?? 'en')
@@ -349,7 +351,8 @@ export function LeagueSettingsPanel({
           }}
         />
         <SettingsToggleRow
-          label="Lock all free agent and waiver moves"
+          label={t('leagueSettings.lockAllRosterMoves')}
+          description={t('leagueSettings.lockAllRosterMovesHint')}
           checked={lockMoves}
           disabled={disabled}
           dimmed={false}
