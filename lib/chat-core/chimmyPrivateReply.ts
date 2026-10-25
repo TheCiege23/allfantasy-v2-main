@@ -11,6 +11,7 @@ import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice
 import { consumeRateLimit } from '@/lib/rate-limit'
 import {
   readChimmyPlanAllowance,
+  readChimmyAnswerAllowance,
   releaseChimmyPlanAllowance,
   takeChimmyPlanAllowance,
 } from '@/lib/chimmy/planAllowance'
@@ -122,8 +123,8 @@ export async function generateChimmyPrivateReply(
    *
    * Now: a member of the league (membership proven here, never assumed from the client's id) whose
    * plan includes Chimmy with allowance left gets the SAME tool loop and prompt as the panel, paid
-   * from the SAME daily allowance (given back when no answer arrives). Everyone else keeps the short
-   * grounded answer they had — rate-limited, so it is no longer an uncapped model call.
+   * from the SAME daily allowance (given back when no answer arrives). The short fallback uses
+   * the account's remaining daily answers too, including the two free answers for non-subscribers.
    */
   const provenLeagueId = context.leagueId && context.userId ? await provenMembership(context.userId, context.leagueId) : null
   const full = context.userId
@@ -144,7 +145,15 @@ export async function generateChimmyPrivateReply(
     }
   }
 
-  const grounding = await buildPrivateGrounding(context)
+  if (!context.userId) return 'Sign in to ask Chimmy a fantasy question.'
+  const allowance = await readChimmyAnswerAllowance({ userId: context.userId }).catch(() => null)
+  if (!allowance) return 'Your included answers could not be checked. Please try again in a moment.'
+  if (allowance.remaining <= 0) {
+    return "Today's included Chimmy answers are used. Open the Chimmy panel to see your options, or come back after midnight UTC."
+  }
+  const taken = await takeChimmyPlanAllowance({ userId: context.userId, state: allowance }).catch(() => null)
+  if (!taken) return 'Your included answer could not be reserved. Please try again in the Chimmy panel.'
+  const grounding = await buildPrivateGrounding(context).catch(() => NO_LEAGUE_NOTE)
 
   const result = await openaiChatText({
     temperature: 0.5,
@@ -158,12 +167,13 @@ ${grounding}`,
       },
       { role: 'user', content: userContent },
     ],
-  })
+  }).catch(() => null)
 
-  if (result.ok && result.text.trim()) {
+  if (result?.ok && result.text.trim()) {
     return result.text.trim()
   }
 
+  await releaseChimmyPlanAllowance({ userId: context.userId, state: taken }).catch(() => false)
   return "I'm having trouble reaching the AI right now. Try again in a moment, or open the full Chimmy panel from the dashboard."
 }
 

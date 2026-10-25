@@ -34,6 +34,21 @@ describe("EntitlementResolver", () => {
     })
   })
 
+  it('rejects subscription read failures when a charging caller requires known allowance status', async () => {
+    userSubscriptionFindManyMock.mockRejectedValueOnce(new Error('subscriptions unavailable'))
+    const { EntitlementResolver } = await import('@/lib/subscription/EntitlementResolver')
+    await expect(new EntitlementResolver().resolveForUser('u1', 'ai_chat', null, { strictReads: true }))
+      .rejects.toThrow('subscriptions unavailable')
+  })
+
+  it('rejects grant read failures in strict mode instead of assuming a free account', async () => {
+    userSubscriptionFindManyMock.mockResolvedValueOnce([])
+    adminSubscriptionGrantFindManyMock.mockRejectedValueOnce(new Error('grants unavailable'))
+    const { EntitlementResolver } = await import('@/lib/subscription/EntitlementResolver')
+    await expect(new EntitlementResolver().resolveSnapshot('u1', null, { strictReads: true }))
+      .rejects.toThrow('grants unavailable')
+  })
+
   it("maps supreme plan and inherits other feature groups", async () => {
     userSubscriptionFindManyMock.mockResolvedValueOnce([
       {
