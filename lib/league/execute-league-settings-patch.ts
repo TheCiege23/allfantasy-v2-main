@@ -62,6 +62,7 @@ import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
 import {
   HUB_WAIVER_OPTION_KEYS,
   hasHubWaiverOptions,
+  hubWaiverEngineConfigPatch,
   parseHubWaiverOptions,
   weeklyResetSurvivorRefusal,
 } from '@/lib/waiver-wire/hub-waiver-options'
@@ -1069,12 +1070,15 @@ export async function executeLeagueSettingsPatch(
 
   if (hasHubWaiverOptions(hubWaiver.options)) {
     // After the derived sync, which rewrites waiverEngineConfig from the columns: re-read the row so
-    // the $0-bid flag merges into what that sync just wrote.
+    // the engine keys merge into what that sync just wrote.
     const row = await prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } })
-    const { allowZeroFaabBid, tiebreakRule, waiverOrderResetPolicy } = hubWaiver.options
+    const { tiebreakRule, waiverOrderResetPolicy } = hubWaiver.options
+    // The $0-bid flag and the season-phase rules (lib/waiver-wire/season-phase-policy.ts) all live in
+    // waiverEngineConfig, so they merge into one write.
+    const engineKeys = hubWaiverEngineConfigPatch(hubWaiver.options)
     await upsertLeagueWaiverSettings(leagueId, {
-      ...(allowZeroFaabBid !== undefined
-        ? { waiverEngineConfig: { ...parseWaiverEngineConfig(row?.waiverEngineConfig ?? null), allow_zero_faab_bid: allowZeroFaabBid } }
+      ...(Object.keys(engineKeys).length > 0
+        ? { waiverEngineConfig: { ...parseWaiverEngineConfig(row?.waiverEngineConfig ?? null), ...engineKeys } }
         : {}),
       ...(tiebreakRule !== undefined ? { tiebreakRule } : {}),
       ...(waiverOrderResetPolicy !== undefined ? { waiverOrderResetPolicy } : {}),

@@ -41,6 +41,10 @@ type Props = {
   watchlisted?: boolean
   alreadyClaimed?: boolean
   trendScore?: number
+  /** "On waivers until …" for a recently dropped player (lib/waiver-wire/dropped-player-waivers.ts). */
+  waiverHoldLabel?: string | null
+  /** The season phase closes every move (offseason / playoff rules); the button is disabled. */
+  movesClosedReason?: string | null
 }
 
 function formatDecimal(value: number | null | undefined, digits = 1): string {
@@ -111,6 +115,8 @@ export default function WaiverPlayerRow({
   watchlisted,
   alreadyClaimed,
   trendScore,
+  waiverHoldLabel,
+  movesClosedReason,
 }: Props) {
   const pos = player.position || "UNK"
   const team = player.team || "FA"
@@ -170,6 +176,11 @@ export default function WaiverPlayerRow({
             {player.injuryStatus ? (
               <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-100">
                 {player.injuryStatus}
+              </span>
+            ) : null}
+            {waiverHoldLabel ? (
+              <span data-testid={`waiver-player-hold-${player.id}`}>
+                <SourcePill label={waiverHoldLabel} tone="warn" />
               </span>
             ) : null}
             {watchlisted ? <SourcePill label="Watchlist" tone="good" /> : null}
@@ -241,7 +252,8 @@ export default function WaiverPlayerRow({
         ) : addMode ? (
           <button
             type="button"
-            disabled={actionLoading}
+            disabled={actionLoading || Boolean(movesClosedReason)}
+            title={movesClosedReason ?? undefined}
             onClick={(e) => {
               e.stopPropagation()
               ;(onAdd ?? onAddClick)()
@@ -255,7 +267,8 @@ export default function WaiverPlayerRow({
         ) : (
           <button
             type="button"
-            disabled={actionLoading}
+            disabled={actionLoading || Boolean(movesClosedReason)}
+            title={movesClosedReason ?? undefined}
             onClick={(e) => {
               e.stopPropagation()
               onAddClick()

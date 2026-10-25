@@ -45,7 +45,15 @@ import CommissionerWaiverInsightsPanel from "@/components/waivers/CommissionerWa
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-wire/waiver-outcome-labels"
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
-import { isImmediateAddAllowedToday, dailyModeLabel, type DailyPolicySnapshot } from "@/lib/waiver-wire/immediate-add-policy"
+import {
+  isImmediateAddAllowedToday,
+  dailyModeLabel,
+  onWaiversUntilLabel,
+  phaseMoveBlockReason,
+  playerWaiverHoldUntil,
+  type DailyPolicySnapshot,
+} from "@/lib/waiver-wire/immediate-add-policy"
+import type { WaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-policy"
 
 type WaiverSettings = {
   leagueId?: string
@@ -62,6 +70,8 @@ type WaiverSettings = {
   instantFaAfterClear?: boolean
   /** Today under the per-day waiver schedule; null/absent when the league has none. */
   dailyPolicy?: DailyPolicySnapshot | null
+  /** The season phase's rule for my team (offseason / playoffs); `code` null when nothing changes. */
+  phasePolicy?: WaiverPhasePolicy | null
 }
 
 type Player = UnifiedPlayerWireDto
@@ -557,7 +567,8 @@ export default function WaiverWirePage({
 
   const handleAddClick = useCallback(
     (player: Player) => {
-      const immediateAddAllowed = isImmediateAddAllowedToday(settings)
+      // A player still on waivers after a drop needs a claim even when free agents are instant adds.
+      const immediateAddAllowed = isImmediateAddAllowedToday(settings) && !playerWaiverHoldUntil(player, settings)
       if (!immediateAddAllowed) {
         // Waiver league — use the existing claim drawer.
         setImmediateMode(false)
@@ -634,6 +645,11 @@ export default function WaiverWirePage({
   const isFaab = settings?.waiverType === "faab"
   const hasOpenRosterSpot = rosterCapacity == null ? true : rosterPlayerIds.length < rosterCapacity
   const immediateAddAllowed = isImmediateAddAllowedToday(settings)
+  // Why the season phase limits moves (offseason / playoff rules), and whether it closes them all.
+  const phaseReason = phaseMoveBlockReason(settings)
+  const movesClosed = Boolean(
+    settings?.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed,
+  )
   const watchlistIdSet = useMemo(() => new Set(watchlistPlayerIds), [watchlistPlayerIds])
   const uniqueTeams = useMemo(
     () =>
@@ -1069,6 +1085,12 @@ export default function WaiverWirePage({
         </div>
       )}
 
+      {phaseReason && (
+        <div className="rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100" data-testid="waiver-phase-reason" role="status">
+          {phaseReason}
+        </div>
+      )}
+
       <section className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4" data-testid="waiver-automation-status">
         <h2 className="text-sm font-semibold text-[var(--text)]">Waiver automation status</h2>
         <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
@@ -1151,6 +1173,7 @@ export default function WaiverWirePage({
               visiblePlayerList.map((p) => {
                 const alreadyClaimed = claims.some((c) => c.addPlayerId === p.id)
                 const row = adaptWaiverWirePlayer(p)
+                const holdUntil = playerWaiverHoldUntil(p, settings)
                 return (
                   <WaiverPlayerRow
                     key={p.id}
@@ -1177,11 +1200,13 @@ export default function WaiverWirePage({
                     }}
                     sport={settings?.sport ?? null}
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
-                    addMode={immediateAddAllowed}
+                    addMode={immediateAddAllowed && !holdUntil}
+                    waiverHoldLabel={holdUntil ? onWaiversUntilLabel(holdUntil) : null}
+                    movesClosedReason={movesClosed ? phaseReason : null}
                     actionLoading={actionPlayerId === p.id}
                     onRowClick={() => {
-                      if (alreadyClaimed) return
-                      if (immediateAddAllowed) handleAddClick(p)
+                      if (alreadyClaimed || movesClosed) return
+                      if (immediateAddAllowed && !holdUntil) handleAddClick(p)
                       else {
                         setImmediateMode(false)
                         setDrawerPlayer(p)

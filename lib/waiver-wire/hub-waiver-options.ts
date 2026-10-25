@@ -2,14 +2,21 @@
  * Waiver options the league settings hub (components/league-settings/tabs/WaiversTab.tsx) saves
  * through the `waivers` section of PATCH /api/leagues/:id/settings, beyond the League columns.
  *
- * The engine already honours all of them — `allow_zero_faab_bid` and `faab_min_bid` in
- * `waiverEngineConfig`, `tiebreakRule` and `waiverOrderResetPolicy` on `LeagueWaiverSettings` — so
- * these keys only validate and route the values there. Pure; the write is in
+ * The engine already honours all of them — `allow_zero_faab_bid`, `faab_min_bid` and the
+ * season-phase rules (`offseason_waiver_rules`, `playoff_waiver_rules`) in `waiverEngineConfig`,
+ * `tiebreakRule` and `waiverOrderResetPolicy` on `LeagueWaiverSettings` — so these keys only
+ * validate and route the values there. Pure; the write is in
  * lib/league/execute-league-settings-patch.ts.
  */
 
 /** Hub patch keys. Each names "waiver" so the settings lock files it under the waivers group. */
-export const HUB_WAIVER_OPTION_KEYS = ['waiverAllowZeroBid', 'waiverTiebreakRule', 'waiverOrderResetPolicy'] as const
+export const HUB_WAIVER_OPTION_KEYS = [
+  'waiverAllowZeroBid',
+  'waiverTiebreakRule',
+  'waiverOrderResetPolicy',
+  'waiverOffseasonRule',
+  'waiverPlayoffRule',
+] as const
 
 /**
  * FAAB bid-tie rules the hub offers. `faab_highest` (the registry default) is not a tiebreak — the
@@ -59,10 +66,38 @@ export function isFreeAgencyOnly(waiverType: string | null | undefined, waiverHo
   return String(waiverType ?? '') === 'fcfs' && Number(waiverHours ?? -1) === 0
 }
 
+/**
+ * Offseason rule (`waiverEngineConfig.offseason_waiver_rules`), between the season's end and next
+ * season's draft. `closed` (the default) keeps waivers and free agency shut, which is what the
+ * lifecycle gate already did; `fcfs` opens first-come free agency with no claims and no waiver period.
+ * A dynasty-family league is not governed by it: its offseason stays open (leagueLifecycleService).
+ */
+export const OFFSEASON_WAIVER_RULES = ['closed', 'fcfs'] as const
+export type OffseasonWaiverRule = (typeof OFFSEASON_WAIVER_RULES)[number]
+
+/**
+ * Playoff rule (`waiverEngineConfig.playoff_waiver_rules`). `all_teams` (the default, as on most
+ * hosts) keeps waivers running for everyone; `alive_only` lets only teams still alive in the title
+ * bracket move; `locked` freezes every roster until the season ends.
+ */
+export const PLAYOFF_WAIVER_RULES = ['all_teams', 'alive_only', 'locked'] as const
+export type PlayoffWaiverRule = (typeof PLAYOFF_WAIVER_RULES)[number]
+
+export function readOffseasonWaiverRule(stored: unknown): OffseasonWaiverRule {
+  return String(stored ?? '').trim().toLowerCase() === 'fcfs' ? 'fcfs' : 'closed'
+}
+
+export function readPlayoffWaiverRule(stored: unknown): PlayoffWaiverRule {
+  const v = String(stored ?? '').trim().toLowerCase()
+  return v === 'alive_only' || v === 'locked' ? v : 'all_teams'
+}
+
 export type HubWaiverOptions = {
   allowZeroFaabBid?: boolean
   tiebreakRule?: HubTiebreakRule
   waiverOrderResetPolicy?: WaiverOrderResetPolicy
+  offseasonWaiverRule?: OffseasonWaiverRule
+  playoffWaiverRule?: PlayoffWaiverRule
 }
 
 /**
@@ -108,7 +143,35 @@ export function parseHubWaiverOptions(
     options.waiverOrderResetPolicy = v as WaiverOrderResetPolicy
   }
 
+  if (body.waiverOffseasonRule !== undefined) {
+    const v = body.waiverOffseasonRule
+    if (typeof v !== 'string' || !(OFFSEASON_WAIVER_RULES as readonly string[]).includes(v)) {
+      return { ok: false, error: 'Invalid waiverOffseasonRule' }
+    }
+    options.offseasonWaiverRule = v as OffseasonWaiverRule
+  }
+
+  if (body.waiverPlayoffRule !== undefined) {
+    const v = body.waiverPlayoffRule
+    if (typeof v !== 'string' || !(PLAYOFF_WAIVER_RULES as readonly string[]).includes(v)) {
+      return { ok: false, error: 'Invalid waiverPlayoffRule' }
+    }
+    options.playoffWaiverRule = v as PlayoffWaiverRule
+  }
+
   return { ok: true, options }
+}
+
+/**
+ * The `waiverEngineConfig` keys a hub save writes: the $0-bid flag and the season-phase rules
+ * (lib/waiver-wire/season-phase-policy.ts). Empty when the save names none of them.
+ */
+export function hubWaiverEngineConfigPatch(options: HubWaiverOptions): Record<string, unknown> {
+  return {
+    ...(options.allowZeroFaabBid !== undefined ? { allow_zero_faab_bid: options.allowZeroFaabBid } : {}),
+    ...(options.offseasonWaiverRule !== undefined ? { offseason_waiver_rules: options.offseasonWaiverRule } : {}),
+    ...(options.playoffWaiverRule !== undefined ? { playoff_waiver_rules: options.playoffWaiverRule } : {}),
+  }
 }
 
 export function hasHubWaiverOptions(options: HubWaiverOptions): boolean {

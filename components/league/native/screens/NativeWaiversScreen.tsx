@@ -10,7 +10,14 @@ import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { adaptWaiverWirePlayer } from '@/lib/player-data/adapters/waiverPlayerAdapter'
 import { waiverPositionMatches } from '@/lib/waiver-wire/SportWaiverResolver'
-import { isImmediateAddAllowedToday, type DailyPolicySnapshot } from '@/lib/waiver-wire/immediate-add-policy'
+import {
+  isImmediateAddAllowedToday,
+  onWaiversUntilLabel,
+  phaseMoveBlockReason,
+  playerWaiverHoldUntil,
+  type DailyPolicySnapshot,
+} from '@/lib/waiver-wire/immediate-add-policy'
+import type { WaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-policy'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
@@ -32,6 +39,7 @@ type Settings = {
   tiebreakRule?: string | null
   instantFaAfterClear?: boolean
   dailyPolicy?: DailyPolicySnapshot | null
+  phasePolicy?: WaiverPhasePolicy | null
 }
 type Claim = { id: string; addPlayerId: string; dropPlayerId: string | null; faabBid: number | null; priorityOrder: number; status: string }
 type Tx = { id: string; addPlayerId: string; dropPlayerId: string | null; faabSpent: number | null; processedAt: string; roster?: { id: string } | null }
@@ -147,6 +155,9 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
 
   const faabMode = String(settings?.waiverType ?? '').toLowerCase() === 'faab'
   const immediate = isImmediateAddAllowedToday(settings)
+  // The season phase (offseason / playoffs rules): why moves are limited, and whether none are open.
+  const phaseReason = phaseMoveBlockReason(settings)
+  const movesClosed = Boolean(settings?.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed)
   const trend = useMemo(() => waiverTrendByPlayer(history, claims), [history, claims])
   const claimedIds = useMemo(() => new Set(claims.map((c) => c.addPlayerId)), [claims])
   const positions = useMemo(() => {
@@ -254,7 +265,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   }
 
   const onAdd = (player: UnifiedPlayerWireDto) => {
-    if (!immediate) return setDrawer({ player, immediate: false })
+    // A player still on waivers after a drop needs a claim even when free agents are instant adds.
+    if (!immediate || playerWaiverHoldUntil(player, settings)) return setDrawer({ player, immediate: false })
     const open = roster.capacity == null ? true : roster.ids.length < roster.capacity
     if (open) void addDrop(player, null)
     else setDrawer({ player, immediate: true })
@@ -302,6 +314,9 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       </div>
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
+      {phaseReason ? (
+        <p className="nls-muted" role="status" data-testid="native-waivers-phase-reason">{phaseReason}</p>
+      ) : null}
 
       <div className="nls-cols">
         <section className="nls-card nls-card-flush" aria-label="Players" aria-busy={loading}>
@@ -324,6 +339,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                   const t = trend.get(p.id) ?? 0
                   const pct = rosteredPct(p)
                   const claimed = claimedIds.has(p.id)
+                  const holdUntil = playerWaiverHoldUntil(p, settings)
+                  const rowImmediate = immediate && !holdUntil
                   return (
                     <tr key={p.id}>
                       <td data-align="left">
@@ -337,6 +354,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                               {p.team ?? 'FA'}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
                             </small>
                             {a.seasonStatsSummary.length ? <small data-stats>{a.seasonStatsSummary.join(' · ')}</small> : null}
+                            {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil)}</small> : null}
                           </div>
                           <button type="button" className="nls-iconbtn" aria-pressed={watch.includes(p.id)} aria-label={watch.includes(p.id) ? `Remove ${p.name} from watchlist` : `Watch ${p.name}`} onClick={() => toggleWatch(p.id)} data-watch>
                             <Star size={16} aria-hidden fill={watch.includes(p.id) ? 'currentColor' : 'none'} />
@@ -347,14 +365,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                       <td>{fmt1(p.projectedPoints)}</td>
                       <td data-hide="phone" data-pts={t > 0 ? 'good' : t < 0 ? 'bad' : 'neutral'}>{signed(t)}</td>
                       <td data-align="left" data-hide="phone">
-                        {immediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
+                        {rowImmediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
                       </td>
                       <td>
                         {claimed ? (
                           <button type="button" className="nls-btn" data-size="sm" onClick={() => setTab('claims')}>Claimed</button>
                         ) : (
-                          <button type="button" className="nls-btn" data-size="sm" data-variant="primary" disabled={busy === p.id} onClick={() => onAdd(p)}>
-                            {immediate ? 'Add' : 'Claim'}
+                          <button type="button" className="nls-btn" data-size="sm" data-variant="primary" disabled={busy === p.id || movesClosed} title={movesClosed ? phaseReason ?? undefined : undefined} onClick={() => onAdd(p)}>
+                            {rowImmediate ? 'Add' : 'Claim'}
                           </button>
                         )}
                       </td>

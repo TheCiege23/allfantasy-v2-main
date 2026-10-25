@@ -9,6 +9,12 @@ import {
   type WaiverEngineConfigJson,
 } from "./waiver-engine-config"
 import { defaultProcessingDaysList, resolveFreeAgentUnlockBehavior } from "./free-agent-unlock"
+import {
+  readOffseasonWaiverRule,
+  readPlayoffWaiverRule,
+  type OffseasonWaiverRule,
+  type PlayoffWaiverRule,
+} from "./hub-waiver-options"
 
 function toIntOrNull(value: unknown): number | null {
   if (value == null || value === "") return null
@@ -108,6 +114,10 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
   allowZeroFaabBid: boolean
   maxDropsPerWeek: number | null
   commissionerOverrideRules: unknown | null
+  /** `waiverEngineConfig.offseason_waiver_rules` (season-phase-policy.ts); default `closed`. */
+  offseasonWaiverRule: OffseasonWaiverRule
+  /** `waiverEngineConfig.playoff_waiver_rules`; default `all_teams`. */
+  playoffWaiverRule: PlayoffWaiverRule
 }> {
   const [league, row] = await Promise.all([
     (prisma as any).league.findUnique({
@@ -159,6 +169,8 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       maxDropsPerWeek:
         typeof engineConfig.max_drops_per_week === "number" ? engineConfig.max_drops_per_week : null,
       commissionerOverrideRules: row.commissionerOverrideRules ?? null,
+      offseasonWaiverRule: readOffseasonWaiverRule(engineConfig.offseason_waiver_rules),
+      playoffWaiverRule: readPlayoffWaiverRule(engineConfig.playoff_waiver_rules),
     }
   }
   const defaults = sportDefaults
@@ -205,6 +217,8 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
     allowZeroFaabBid: true,
     maxDropsPerWeek: null,
     commissionerOverrideRules: null,
+    offseasonWaiverRule: "closed",
+    playoffWaiverRule: "all_teams",
   }
 }
 
