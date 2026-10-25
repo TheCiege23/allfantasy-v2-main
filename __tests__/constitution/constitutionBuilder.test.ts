@@ -37,6 +37,15 @@ describe('buildConstitution', () => {
     expect(t).toContain('beating it counts as a win')
   })
 
+  it('says the median game stops at the playoffs unless the league keeps it on', () => {
+    expect(text(facts)).toContain('Each regular-season week every team also plays the league median')
+    expect(text(facts)).toContain('Playoff weeks are win or go home')
+    const on = text({ ...facts, medianGameInPlayoffs: true })
+    expect(on).toContain('Each week, playoffs included')
+    expect(on).toContain('Playoff games themselves are decided by score alone')
+    expect(on).not.toContain('win or go home')
+  })
+
   it('leaves out what the league does not have', () => {
     const t = text({ ...facts, leagueType: 'redraft', dues: null, tradeDeadlineWeek: null, draftPickTrading: false, medianGame: false })
     expect(t).not.toContain('Keepers')

@@ -56,7 +56,7 @@ type PushConfig = { configured: boolean; vapidPublicKey: string | null }
  */
 let pushConfigRequest: Promise<PushConfig | null> | null = null
 
-function loadPushConfig(): Promise<PushConfig | null> {
+export function loadPushConfig(): Promise<PushConfig | null> {
   if (!pushConfigRequest) {
     pushConfigRequest = fetch('/api/push/subscribe')
       .then((res) => res.json() as Promise<{ configured?: boolean; vapidPublicKey?: string | null }>)

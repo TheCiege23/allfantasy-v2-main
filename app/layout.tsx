@@ -9,6 +9,7 @@ import { FloatingMusicWidget } from '@/components/MusicWidget';
 import { DefaultJsonLd } from '@/components/seo/JsonLd';
 import { SafeGlobalChrome } from '@/components/shell/SafeGlobalChrome';
 import { IosAppPushRegistrar } from '@/components/notifications/IosAppPushRegistrar';
+import { SignInPushSheet } from '@/components/notifications/SignInPushSheet';
 import { IosAppLinkHandler } from '@/components/platform/IosAppLinkHandler';
 import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTracker';
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
@@ -545,6 +546,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
                 league, player or settings page was ignored — the app just reopened where it was.
               */}
               <IosAppPushRegistrar />
+              {/*
+                After sign-up or sign-in: one "turn on phone alerts" sheet per visit, "Not now" asks
+                again later (up to three times). Rules in lib/push-notifications/signInPushAsk.ts.
+              */}
+              <SignInPushSheet />
             </Suspense>
           </ErrorBoundaryClient>
 
