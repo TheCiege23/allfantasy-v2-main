@@ -7,15 +7,13 @@ import { applyRealtimeAdpAdjustments } from '@/lib/mock-draft/adp-realtime-adjus
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
 import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
 import { resolveLeagueMockTeamCount, MAX_LEAGUE_MOCK_TEAMS, mockRoundOrder, mockTeamPickOveralls } from '@/lib/mock-draft/mockTeamCount'
+import { resolveLeagueMockDraftOrder } from '@/lib/mock-draft/leagueMockDraftOrder'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-/** This tool models a snake draft (lib/mock-draft/mockTeamCount.ts). */
-const snakeOrder = (teamCount: number, round: number) => mockRoundOrder(teamCount, round, 'snake')
 
-const getUserPickOveralls = (teamCount: number, userIdx: number, rounds: number) => mockTeamPickOveralls(teamCount, userIdx, rounds, 'snake')
 
 const POSITION_TARGETS: Record<string, number> = { QB: 2, RB: 5, WR: 5, TE: 2 }
 
@@ -100,6 +98,8 @@ export async function POST(req: NextRequest) {
 
     // The league's real size: a 4- or 20-team league is not a 12-team draft.
     const teamCount = resolveLeagueMockTeamCount(league.leagueSize, league.teams.length)
+    // The league's own pick order: linear, snake, or snake with third-round reversal.
+    const draftOrder = await resolveLeagueMockDraftOrder(league.id)
 
     const dnaCards: ManagerDNA[] = league.teams.length
       ? buildManagerDNAFromLeague(
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    const userPickOveralls = getUserPickOveralls(teamCount, userIdx, rounds)
+    const userPickOveralls = mockTeamPickOveralls(teamCount, userIdx, rounds, draftOrder)
 
     const playerValueMap = new Map<string, number>()
     for (const p of pool) {
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
 
       let overall = 1
       for (let round = 1; round <= rounds; round++) {
-        const order = snakeOrder(teamCount, round)
+        const order = mockRoundOrder(teamCount, round, draftOrder)
         for (let pick = 1; pick <= teamCount; pick++) {
           const managerIdx = order[pick - 1]
           const profile = counts[managerIdx]
@@ -332,7 +332,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       simulations,
       rounds,
-      league: { id: league.id, name: league.name, size: teamCount },
+      league: { id: league.id, name: league.name, size: teamCount, draftType: draftOrder.draftType, thirdRoundReversal: draftOrder.thirdRoundReversal },
       userManager: teamNames[userIdx],
       userDraftSlot: userIdx + 1,
       snipeRadar,
