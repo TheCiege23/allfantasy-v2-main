@@ -17,7 +17,7 @@ const statCorrections = vi.hoisted(() => vi.fn(async () => ({ covered: true, lat
 const applyCorrections = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({
   readStatCorrections: statCorrections,
-  applyStatCorrections: applyCorrections,
+  commissionerApplyStatCorrections: applyCorrections,
   APPLY_STAT_CORRECTION_ERROR_TEXT: { not_in_review: 'not in review', not_covered: 'not covered', no_review: 'no review' },
 }))
 

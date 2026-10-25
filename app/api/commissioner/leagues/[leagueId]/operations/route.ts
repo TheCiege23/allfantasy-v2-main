@@ -12,7 +12,12 @@ import {
   removeScoreAdjustment,
   type AdjustmentError,
 } from '@/lib/score-adjustments/scoreAdjustmentService'
-import { APPLY_STAT_CORRECTION_ERROR_TEXT, applyStatCorrections, readStatCorrections } from '@/lib/stat-corrections/statCorrectionService'
+import {
+  APPLY_STAT_CORRECTION_ERROR_TEXT,
+  commissionerApplyStatCorrections,
+  readStatCorrections,
+  setExtendedCorrections,
+} from '@/lib/stat-corrections/statCorrectionService'
 
 function adjustmentErrorResponse(error: AdjustmentError) {
   const text = (ADJUSTMENT_ERROR_TEXT as Record<string, string>)[error] ?? (ADJUSTMENT_SERVICE_ERROR_TEXT as Record<string, string>)[error] ?? 'Could not save the adjustment.'
@@ -69,6 +74,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     const r = await addScoreAdjustment(params.leagueId, userId, body)
     return r.ok ? NextResponse.json({ status: 'ok', adjustment: r.adjustment, net: r.net }) : adjustmentErrorResponse(r.error)
   }
+  if (action === 'set_extended_corrections') {
+    const r = await setExtendedCorrections(params.leagueId, body?.enabled)
+    return r.ok ? NextResponse.json({ status: 'ok', enabled: r.enabled }) : NextResponse.json({ error: r.error }, { status: r.status })
+  }
   if (action === 'score_adjustment_remove') {
     const r = await removeScoreAdjustment(params.leagueId, userId, body?.adjustmentId)
     return r.ok ? NextResponse.json({ status: 'ok', adjustment: r.adjustment, net: r.net }) : adjustmentErrorResponse(r.error)
@@ -78,7 +87,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     // An explicit 'all' or one matchup: a body that names neither applies nothing.
     const target = typeof body?.matchupId === 'string' ? body.matchupId.trim() : ''
     if (!target) return NextResponse.json({ error: "Name a matchup, or 'all'." }, { status: 400 })
-    const r = await applyStatCorrections(params.leagueId, userId, target)
+    const r = await commissionerApplyStatCorrections(params.leagueId, userId, target)
     if (r.ok) return NextResponse.json({ status: 'ok', week: r.week, adjustmentsAdded: r.adjustmentsAdded })
     const text = (APPLY_STAT_CORRECTION_ERROR_TEXT as Record<string, string>)[r.error]
     return text ? NextResponse.json({ error: text, code: r.error }, { status: r.error === 'not_covered' ? 409 : 404 }) : adjustmentErrorResponse(r.error as AdjustmentError)

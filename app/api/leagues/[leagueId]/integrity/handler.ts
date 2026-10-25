@@ -7,6 +7,7 @@ import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
+import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
 
 export const dynamic = "force-dynamic"
 
@@ -23,7 +24,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true } })
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
   const settings = await prisma.leagueIntegritySettings.upsert({
@@ -57,7 +58,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   })
 
   return NextResponse.json({
-    settings,
+    // `tradeAlertsEnabled` lives in League.settings (lib/integrity/tradeAlerts.ts), shown beside these.
+    settings: { ...settings, tradeAlertsEnabled: readTradeAlertsEnabled(league.settings) },
     openFlags,
     recentDismissed,
     canReview: league.userId === userId,
@@ -130,5 +132,20 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     },
   })
 
-  return NextResponse.json({ settings: updated })
+  // Suspicious-trade alerts: a League.settings key, merged inside a row lock like other settings writes.
+  let tradeAlertsEnabled: boolean | undefined
+  if (typeof body.tradeAlertsEnabled === "boolean") {
+    tradeAlertsEnabled = body.tradeAlertsEnabled
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
+      const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+      const current = (row?.settings as Record<string, unknown> | null) ?? {}
+      await tx.league.update({ where: { id: leagueId }, data: { settings: { ...current, [TRADE_ALERTS_KEY]: tradeAlertsEnabled } } })
+    })
+  } else {
+    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    tradeAlertsEnabled = readTradeAlertsEnabled(row?.settings)
+  }
+
+  return NextResponse.json({ settings: { ...updated, tradeAlertsEnabled } })
 }

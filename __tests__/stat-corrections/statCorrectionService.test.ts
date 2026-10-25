@@ -12,7 +12,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 const applyAdj = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/score-adjustments/scoreAdjustmentService', () => ({ applyStatCorrectionAdjustment: applyAdj }))
 
-import { applyStatCorrections, readStatCorrections, statCorrectionReason } from '@/lib/stat-corrections/statCorrectionService'
+import { commissionerApplyStatCorrections, readStatCorrections, statCorrectionReason } from '@/lib/stat-corrections/statCorrectionService'
 
 const stored = (week: number, leagueId = 'L') => ({
   data: {
@@ -73,33 +73,42 @@ describe('readStatCorrections', () => {
   })
 })
 
-describe('applyStatCorrections', () => {
+describe('commissionerApplyStatCorrections', () => {
   it("brings each team in the matchup to its correction, with the players in the reason", async () => {
-    expect(await applyStatCorrections('L', 'commish', 'm')).toEqual({ ok: true, week: 7, adjustmentsAdded: 2 })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'm')).toEqual({ ok: true, week: 7, adjustmentsAdded: 2 })
     expect(applyAdj).toHaveBeenNthCalledWith(1, 'L', 'commish', { matchupId: 'm', rosterId: 'A', targetNet: -4.5, reason: 'Stat correction, week 7: P −4.5' })
     expect(applyAdj).toHaveBeenNthCalledWith(2, 'L', 'commish', { matchupId: 'm', rosterId: 'B', targetNet: 0, reason: 'Stat correction, week 7' })
   })
 
   it("'all' covers every matchup in the review; already-applied teams count as nothing added", async () => {
     applyAdj.mockResolvedValue({ ok: true, adjustment: null, net: -4.5 })
-    expect(await applyStatCorrections('L', 'commish', 'all')).toEqual({ ok: true, week: 7, adjustmentsAdded: 0 })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'all')).toEqual({ ok: true, week: 7, adjustmentsAdded: 0 })
     expect(applyAdj).toHaveBeenCalledTimes(2)
   })
 
   it('refuses a matchup the review does not list, and stops at the first refusal', async () => {
-    expect(await applyStatCorrections('L', 'commish', 'other')).toEqual({ ok: false, error: 'not_in_review' })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'other')).toEqual({ ok: false, error: 'not_in_review' })
     expect(applyAdj).not.toHaveBeenCalled()
     applyAdj.mockResolvedValueOnce({ ok: false, error: 'not_points' })
-    expect(await applyStatCorrections('L', 'commish', 'm')).toEqual({ ok: false, error: 'not_points' })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'm')).toEqual({ ok: false, error: 'not_points' })
     expect(applyAdj).toHaveBeenCalledTimes(1)
   })
 
   it('refuses a league the review does not cover, and one with no review', async () => {
     m.prisma.league.findUnique.mockResolvedValue({ sport: 'NFL', platform: 'sleeper', settings: {} })
-    expect(await applyStatCorrections('L', 'commish', 'all')).toEqual({ ok: false, error: 'not_covered' })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'all')).toEqual({ ok: false, error: 'not_covered' })
     m.prisma.league.findUnique.mockResolvedValue({ sport: 'NFL', platform: 'allfantasy', settings: {} })
     m.prisma.sportsDataCache.findMany.mockResolvedValue([])
-    expect(await applyStatCorrections('L', 'commish', 'all')).toEqual({ ok: false, error: 'no_review' })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'all')).toEqual({ ok: false, error: 'no_review' })
+    expect(applyAdj).not.toHaveBeenCalled()
+  })
+
+  it('refuses where the automatic path does: an elimination format, or once playoff seeds are set', async () => {
+    m.prisma.league.findUnique.mockResolvedValue({ sport: 'NFL', platform: 'allfantasy', settings: {}, leagueVariant: 'guillotine', guillotineMode: null })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'all')).toEqual({ ok: false, error: 'elimination_format' })
+    m.prisma.league.findUnique.mockResolvedValue({ sport: 'NFL', platform: 'allfantasy', settings: {}, leagueVariant: null, guillotineMode: null })
+    m.prisma.redraftSeason.findFirst.mockResolvedValue({ id: 'S', status: 'playoffs' })
+    expect(await commissionerApplyStatCorrections('L', 'commish', 'all')).toEqual({ ok: false, error: 'playoffs' })
     expect(applyAdj).not.toHaveBeenCalled()
   })
 
