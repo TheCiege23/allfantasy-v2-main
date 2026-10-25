@@ -56,11 +56,9 @@ function planFamilyToSubscriptionPlanId(
  * at $9.99/mo alongside Pro and Commissioner rather than sitting above Supreme,
  * so Supreme bundles the two general tiers and Legacy is bought separately.
  *
- * ⚠ THIS TAKES AN ENTITLEMENT AWAY FROM EXISTING SUPREME SUBSCRIBERS. Anyone on
- * Supreme today has draft-room and dynasty access through this list and loses it
- * the moment this deploys. That is a customer-communications decision, not a code
- * one — if those accounts are to be grandfathered, it has to happen here or in the
- * entitlement resolution, and it has to happen BEFORE this ships.
+ * Owner approved preserving existing benefits on 2026-10-25. A production inventory
+ * found no Supreme subscription rows or active Supreme grants. Any existing holder
+ * found before rollout must receive an explicit preserved Legacy entitlement first.
  */
 export const SUPREME_INCLUDED_PLAN_IDS: readonly SubscriptionPlanId[] = [
   "pro",
@@ -86,8 +84,7 @@ export function getRequiredPlanForFeature(
  *
  * The catalog has always modelled `requiredPlan` as an ARRAY, and the access
  * check read only element [0]. That was harmless for every feature shipped so
- * far: all 32 entries are [X, 'af_supreme'], and Supreme is short-circuited
- * separately, so the ignored entries never mattered. It stops being harmless the
+ * far: most entries are [X, 'af_supreme']. It stops being harmless the
  * moment a feature is genuinely sold on two independent plans — Manager
  * Psychology is offered on Pro and on War Room, and War Room is not a superset
  * of Pro, so reading only [0] would silently lock out every War Room subscriber.
@@ -171,10 +168,7 @@ export function hasFeatureAccessForPlans(
   const expandedPlans = expandPlansWithBundle(plans)
   const accepted = getAcceptedPlansForFeature(featureId)
   if (accepted.length === 0) return false
-  return (
-    accepted.some((plan) => expandedPlans.includes(plan)) ||
-    expandedPlans.includes("supreme")
-  )
+  return accepted.some((plan) => expandedPlans.includes(plan))
 }
 
 export function buildFeatureUpgradePath(featureId: SubscriptionFeatureId): string {

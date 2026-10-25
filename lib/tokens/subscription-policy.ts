@@ -159,8 +159,7 @@ export function resolveTokenChargeDecisionForEntitlement(input: {
   const hasActiveSubscription = isActiveOrGraceStatus(input.entitlement.status)
   const requiredPlanEligible =
     !requiredPlan ||
-    expandedPlans.includes(requiredPlan) ||
-    expandedPlans.includes("supreme")
+    expandedPlans.includes(requiredPlan)
   const subscriptionEligible = hasActiveSubscription && requiredPlanEligible
 
   if (!subscriptionEligible) {
