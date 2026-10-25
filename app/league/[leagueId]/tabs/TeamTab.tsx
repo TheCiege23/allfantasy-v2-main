@@ -34,7 +34,7 @@ import type { SwapCandidate } from '@/components/league/TeamLineupSwapModal'
 import { StartVsComparisonLauncher } from '@/components/app/player-comparison/StartVsComparisonLauncher'
 import {
   applyLineupPick,
-  buildPlayerRow,
+  buildLineupSaveRoster,
   buildReserveSwapCandidates,
   buildSwapCandidates,
   initOrSyncLineupLists,
@@ -1456,15 +1456,8 @@ const maxWeekMenu = useMemo(() => {
       if (!dbRosterMeta?.rosterId || !lineupEditable) return false
       setSavingLineup(true)
       try {
-        const roster = {
-          starters: next.starters
-            .map((id) => (id ? buildPlayerRow(id, players) : null))
-            .filter((x): x is Record<string, unknown> => x != null),
-          bench: next.bench.map((id) => buildPlayerRow(id, players)),
-          ir: next.ir.map((id) => buildPlayerRow(id, players)),
-          taxi: next.taxi.map((id) => buildPlayerRow(id, players)),
-          devy: next.devy.map((id) => buildPlayerRow(id, players)),
-        }
+        // Each starter carries his slot index, so FLEX vs RB2 (or UTIL 2) is still his after a reload.
+        const roster = buildLineupSaveRoster(next, players)
         const res = await fetch('/api/leagues/roster/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

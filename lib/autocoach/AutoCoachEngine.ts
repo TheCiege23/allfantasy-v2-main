@@ -148,6 +148,45 @@ async function enqueueSwapNotification(
   }
 }
 
+/**
+ * The sections after an AutoCoach swap: `playerIn` (bench) takes `playerOut`'s starter row, and
+ * `playerOut` goes to the bench in his place. Throws when either is not where the swap expects.
+ */
+export function buildAutoCoachSwapSections(
+  sections: Record<RosterSectionKey, Array<Record<string, unknown>>>,
+  playerOut: { id: string },
+  playerIn: { id: string; position: string },
+): Record<RosterSectionKey, Array<Record<string, unknown>>> {
+  const si = sections.starters.findIndex((p) => String(p.id) === playerOut.id)
+  if (si < 0) {
+    throw new Error('Player to remove not in starters')
+  }
+  const bi = sections.bench.findIndex((p) => String(p.id) === playerIn.id)
+  if (bi < 0) {
+    throw new Error('Replacement not on bench')
+  }
+
+  const next: Record<RosterSectionKey, Array<Record<string, unknown>>> = {
+    starters: [...sections.starters],
+    bench: [...sections.bench],
+    ir: [...sections.ir],
+    taxi: [...sections.taxi],
+    devy: [...sections.devy],
+  }
+
+  const outRow = next.starters[si]!
+  const inRow = next.bench[bi]!
+  // The incoming player takes the outgoing starter's lineup slot (lib/league/lineupSlotPositions.ts),
+  // so a swap in FLEX stays in FLEX; buildPlayerDataFromSections strips it from the benched row.
+  const incoming: Record<string, unknown> = { ...inRow, position: String(inRow.position ?? playerIn.position) }
+  if (outRow.slotIndex !== undefined) incoming.slotIndex = outRow.slotIndex
+  else delete incoming.slotIndex
+  next.starters[si] = incoming
+  next.bench[bi] = { ...outRow, position: String(outRow.position ?? playerOut.id) }
+
+  return next
+}
+
 export async function executeAutoCoachSwap(
   rosterId: string,
   userId: string,
@@ -176,28 +215,7 @@ export async function executeAutoCoachSwap(
     throw new Error('Roster not found')
   }
 
-  const sections = getNormalizedLineupSections(roster.playerData)
-  const si = sections.starters.findIndex((p) => String(p.id) === playerOut.id)
-  if (si < 0) {
-    throw new Error('Player to remove not in starters')
-  }
-  const bi = sections.bench.findIndex((p) => String(p.id) === playerIn.id)
-  if (bi < 0) {
-    throw new Error('Replacement not on bench')
-  }
-
-  const next: Record<RosterSectionKey, Array<Record<string, unknown>>> = {
-    starters: [...sections.starters],
-    bench: [...sections.bench],
-    ir: [...sections.ir],
-    taxi: [...sections.taxi],
-    devy: [...sections.devy],
-  }
-
-  const outRow = next.starters[si]!
-  const inRow = next.bench[bi]!
-  next.starters[si] = { ...inRow, position: String(inRow.position ?? playerIn.position) }
-  next.bench[bi] = { ...outRow, position: String(outRow.position ?? playerOut.id) }
+  const next = buildAutoCoachSwapSections(getNormalizedLineupSections(roster.playerData), playerOut, playerIn)
 
   const nextPlayerData = buildPlayerDataFromSections(roster.playerData, next)
 
