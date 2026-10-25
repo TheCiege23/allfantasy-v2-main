@@ -13,6 +13,11 @@
  *    `applyPlayoffShapeToSettings` writes the one shape into every copy.
  *
  * Only creation and a pre-draft resize use this. A commissioner's own choice is never re-derived.
+ *
+ * ⚠ KEEPER LEAGUES PLAY THE SAME SEASON (ensureRedraftSeason, the sport's default length — no dynasty
+ * config) AND HAD THE SAME UNPLAYED LAST WEEK, so they take the same start week and the same one shape.
+ * Their field is NOT re-derived: a keeper league keeps the registry's 6, clamped to the league, exactly
+ * as it was created before; only where that bracket starts, and what the JSON copies say, change.
  */
 
 import { derivePlayoffTeams } from '@/lib/league-concepts/redraftDefaults'
@@ -28,6 +33,18 @@ import {
 } from '@/lib/playoff-runtime/playoffFit'
 
 export const REDRAFT_PLAYOFF_FIT_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB'])
+/** League types whose default bracket is fitted to the season. */
+export const PLAYOFF_FIT_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'keeper'])
+
+function isKeeper(leagueType: string | null | undefined): boolean {
+  return String(leagueType ?? '').toLowerCase() === 'keeper'
+}
+
+/** The registry's playoff field for a sport (6 in every one this sizes) — a keeper league's default. */
+function registryPlayoffTeams(sport: string): number {
+  const n = Number(resolveDefaultPlayoffConfig(sport as SportType).playoff_team_count)
+  return Number.isInteger(n) && n >= 2 ? n : 6
+}
 
 export type RedraftPlayoffShape = {
   playoffTeams: number
@@ -55,12 +72,14 @@ function fitTeams(requested: number, leagueSize: number): number {
 }
 
 /**
- * The default shape for a redraft league of `leagueSize`, or null for a sport this does not size.
- * `playoffTeams` overrides the size-derived field (already clamped by the caller).
+ * The default shape for a redraft (or keeper) league of `leagueSize`, or null for a sport this does not
+ * size. `playoffTeams` overrides the default field (already clamped by the caller). Without it, a redraft
+ * league's field comes from its size and a keeper league's from the registry.
  */
 export function redraftPlayoffShapeFor(input: {
   sport: string
   leagueSize: number
+  leagueType?: string | null
   playoffTeams?: number | null
   weeksPerRound?: number | null
   championshipLength?: number | null
@@ -69,7 +88,12 @@ export function redraftPlayoffShapeFor(input: {
   if (!REDRAFT_PLAYOFF_FIT_SPORTS.has(sport)) return null
   const seasonWeeks = seasonWeeksFor(sport)
   if (seasonWeeks == null) return null
-  const requested = input.playoffTeams != null && Number(input.playoffTeams) >= 2 ? Number(input.playoffTeams) : derivePlayoffTeams(input.leagueSize)
+  const requested =
+    input.playoffTeams != null && Number(input.playoffTeams) >= 2
+      ? Number(input.playoffTeams)
+      : isKeeper(input.leagueType)
+        ? registryPlayoffTeams(sport)
+        : derivePlayoffTeams(input.leagueSize)
   const playoffTeams = fitTeams(requested, input.leagueSize)
   const championshipLength =
     input.championshipLength ?? resolveDefaultPlayoffConfig(sport as SportType).championship_length ?? null
@@ -91,11 +115,13 @@ export function redraftPlayoffShapeFor(input: {
 /**
  * The (team count, start week) pairs a league of `leagueSize` would hold if nobody had touched them:
  * today's creation rule, and the rule leagues were created with before it (NFL size-aware teams /
- * daily-sport flat 6, both clamped to the league, and the sport's fixed default start week).
+ * daily-sport flat 6, both clamped to the league, and the sport's fixed default start week). A keeper
+ * league's field was the registry's 6, clamped, under both rules; only its start week moved.
  */
 export function untouchedRedraftPlayoffDefaults(input: {
   sport: string
   leagueSize: number
+  leagueType?: string | null
   weeksPerRound?: number | null
   championshipLength?: number | null
 }): Array<{ playoffTeams: number; playoffStartWeek: number }> {
@@ -105,7 +131,11 @@ export function untouchedRedraftPlayoffDefaults(input: {
   if (current) out.push({ playoffTeams: current.playoffTeams, playoffStartWeek: current.playoffStartWeek })
   const legacyStart = tryGetSportConfig(sport)?.defaultPlayoffStartWeek
   if (REDRAFT_PLAYOFF_FIT_SPORTS.has(sport) && Number.isInteger(legacyStart)) {
-    const legacyTeams = sport === 'NFL' ? derivePlayoffTeams(input.leagueSize) : fitTeams(6, input.leagueSize)
+    const legacyTeams = isKeeper(input.leagueType)
+      ? fitTeams(registryPlayoffTeams(sport), input.leagueSize)
+      : sport === 'NFL'
+        ? derivePlayoffTeams(input.leagueSize)
+        : fitTeams(6, input.leagueSize)
     out.push({ playoffTeams: legacyTeams, playoffStartWeek: Number(legacyStart) })
   }
   return out
@@ -182,8 +212,8 @@ export function resizedPlayoffColumns(input: {
   const teams = Number(input.playoffTeams)
   if (!Number.isInteger(teams) || teams < 2) return null
   const roto = (obj(input.settings)?.scoring_mode ?? null) === 'roto'
-  if (String(input.leagueType ?? '').toLowerCase() === 'redraft' && !roto) {
-    const shapeArgs = { sport: input.sport, weeksPerRound: input.weeksPerRound, championshipLength: input.championshipLength }
+  if (PLAYOFF_FIT_LEAGUE_TYPES.has(String(input.leagueType ?? '').toLowerCase()) && !roto) {
+    const shapeArgs = { sport: input.sport, leagueType: input.leagueType, weeksPerRound: input.weeksPerRound, championshipLength: input.championshipLength }
     const untouched = untouchedRedraftPlayoffDefaults({ ...shapeArgs, leagueSize: input.oldSize }).some(
       (d) => d.playoffTeams === teams && d.playoffStartWeek === input.playoffStartWeek,
     )
