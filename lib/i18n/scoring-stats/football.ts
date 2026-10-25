@@ -60,6 +60,7 @@ export const FOOTBALL_STATS_ES: StatTable = {
   'Receiving Yards': 'Yardas por recepción',
   'Receiving TD': 'TD por recepción',
   'Receiving 1st Down': 'Primer down por recepción',
+  'Target': 'Pase dirigido',
   '0-4 Yard Reception Bonus': 'Bono por recepción de 0-4 yardas',
   '5-9 Yard Reception Bonus': 'Bono por recepción de 5-9 yardas',
   '10-19 Yard Reception Bonus': 'Bono por recepción de 10-19 yardas',
