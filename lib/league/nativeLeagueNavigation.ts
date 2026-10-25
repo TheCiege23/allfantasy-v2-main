@@ -13,6 +13,32 @@ export function nativeLeaguePhase(league: Pick<UserLeague, 'lifecycleState' | 's
   return 'Setup'
 }
 
+/**
+ * Tabs a native league registers that "More tools" leaves out, because a screen above already is
+ * them. They stay valid tabs, so a deep link (?view=…) or a button inside a screen still opens them.
+ *
+ *   home         the classic home; League home replaces it
+ *   team         renders the same screen as My team (roster / squad)
+ *   redraft      the old season dashboard; Matchup, Standings and My team are its native screens
+ *   draft_intel  the live Sleeper draft cockpit; an AllFantasy league has no Sleeper draft to read
+ */
+function duplicateOfPrimary(id: string, used: ReadonlySet<string>) {
+  if (id === 'home') return used.has('native_home')
+  if (id === 'team') return used.has('roster') || used.has('squad')
+  return id === 'redraft' || id === 'draft_intel'
+}
+
+/** Plain names for the "More tools" rows; the registry's labels were written for a desktop tab strip. */
+const MORE_LABELS: Record<string, string> = {
+  players: 'Player research',
+  league: 'League overview',
+  commissioner: 'Commissioner hub',
+  finance: 'League dues',
+  ai_coaching: 'Chimmy coaching',
+  history: 'Past seasons',
+  legacy: 'League history',
+}
+
 export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false) {
   const used = new Set<string>()
   const item = (label: string, icon: string, ...ids: string[]): WorkspaceNavItem[] => {
@@ -46,8 +72,36 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('Decision OS', 'insight', 'decide'),
   ]
   // Secondary tools remain reachable; role checks stay in the server and existing tab registry.
-  const more = tabs.filter(tab => !used.has(tab.id) && tab.id !== 'settings' && !(tab.id === 'home' && used.has('native_home')) && (commissioner || tab.id !== 'commissioner')).map(tab => ({ ...tab, icon: 'more' }))
+  const more = tabs
+    .filter(tab => !used.has(tab.id) && tab.id !== 'settings' && (commissioner || tab.id !== 'commissioner') && !duplicateOfPrimary(tab.id, used))
+    .map(tab => ({ ...tab, label: MORE_LABELS[tab.id] ?? tab.label.replace(/^[^\p{L}\p{N}]+/u, ''), icon: 'more' }))
   return [{ title: 'This league', items: primary }, { title: 'Survivor', items: survivor }, { title: 'This week', items: weekly }, { title: 'More tools', items: more }].filter(group => group.items.length)
+}
+
+/**
+ * The phone's bottom tab bar: five screens a manager opens every day, then More, which opens the full
+ * league menu. Built from the menu's own items so a tab the league does not have is never drawn.
+ *
+ * The second slot follows the league: Draft HQ before and during the draft, then the format's own
+ * screen (Guilly's chop line, Survivor's Island) or, for everyone else, Matchup.
+ */
+export function nativeLeagueBottomTabs(groups: ReadonlyArray<{ items: WorkspaceNavItem[] }>, phase: string): WorkspaceNavItem[] {
+  const all = groups.flatMap(group => group.items)
+  const find = (...ids: string[]) => ids.map(id => all.find(item => item.id === id)).find(Boolean)
+  const preDraft = phase === 'Setup' || phase === 'Draft'
+  const slots: Array<[WorkspaceNavItem | undefined, string]> = [
+    [find('native_home', 'home'), 'League'],
+    preDraft && find('draft') ? [find('draft'), 'Draft'] : [find('guillotine', 'survivor', 'matchups', 'matchup', 'fixtures'), ''],
+    [find('roster', 'team', 'squad'), 'Team'],
+    [find('waivers', 'players'), 'Players'],
+    [find('league_chat'), 'Chat'],
+  ]
+  const short: Record<string, string> = { guillotine: 'Guilly', survivor: 'Island', matchups: 'Matchup', matchup: 'Matchup', fixtures: 'Fixtures' }
+  const out: WorkspaceNavItem[] = []
+  for (const [item, label] of slots) {
+    if (item && !out.some(row => row.id === item.id)) out.push({ ...item, label: label || short[item.id] || item.label })
+  }
+  return out
 }
 
 /**
