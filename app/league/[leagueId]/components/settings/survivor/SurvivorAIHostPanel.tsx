@@ -34,6 +34,6 @@ export function SurvivorAIHostPanel({
       <SettingsRow label="Episode recaps" control={<div className="flex items-center gap-2"><Toggle checked={recaps} disabled={!canEdit} onChange={(value) => { if (!hasAfCommissionerSub) { subscriptionGate?.gate('commissioner_ai_recap', { highlightParam: 'ai_recap' }); return } setRecaps(value); debouncedSave({ aiRecaps: value }) }} />{!hasAfCommissionerSub && <SubscriptionGateBadge featureId="commissioner_ai_recap" onClick={() => subscriptionGate?.gate('commissioner_ai_recap', { highlightParam: 'ai_recap' })} />}</div>} />
       <SettingsRow label="Commissioner AI alerts" control={<Toggle checked={alerts} disabled={!canEdit} onChange={(value) => { setAlerts(value); debouncedSave({ leagueAiCommissionerAlerts: value }) }} />} />
     </SettingsSection>
-    <p className="text-xs text-white/50">Automated announcement approvals, custom story arcs and confessionals are not configurable in the NBA pilot yet.</p>
+    <p className="text-xs text-white/50">Automated announcement approvals, custom story arcs and confessionals are not configurable yet.</p>
   </div>
 }

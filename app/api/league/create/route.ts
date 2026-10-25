@@ -50,8 +50,8 @@ import {
 import {
   isSurvivorCreationSportAvailable,
   SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
-  SURVIVOR_PAID_CREATION_ENABLED,
-  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+  readSurvivorEntryFee,
+  survivorDuesTrackerSeed,
 } from '@/lib/survivor/survivorCreationAvailability';
 
 const createSchema = z.object({
@@ -598,26 +598,13 @@ export async function POST(req: Request) {
               ? Number(sw.survivor_creation_team_count)
               : effectiveLeagueSize;
         effectiveLeagueSize = clampSurvivorCastSize(raw);
-        const feeMode = String(sw.survivor_entry_fee_mode ?? 'free')
-          .toLowerCase()
-          .trim();
-        if (feeMode === 'paid') {
-          if (!SURVIVOR_PAID_CREATION_ENABLED) {
-            return NextResponse.json({ success: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
-          }
-          const centsRaw = sw.survivor_entry_fee_amount_cents;
-          const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
-          if (!Number.isFinite(cents) || cents < 1) {
-            return NextResponse.json(
-              {
-                success: false,
-                error:
-                  'Paid Survivor leagues require a buy-in amount greater than zero (set by the commissioner).',
-                errors: [{ path: 'survivor_entry_fee_amount_cents', message: 'Invalid buy-in amount' }],
-              },
-              { status: 400 }
-            );
-          }
+        // "Paid" is a label only (dues are collected off the app); a bad optional amount is refused.
+        const fee = readSurvivorEntryFee(sw.survivor_entry_fee_mode, sw.survivor_entry_fee_amount_cents);
+        if ('error' in fee) {
+          return NextResponse.json(
+            { success: false, error: fee.error, errors: [{ path: 'survivor_entry_fee_amount_cents', message: fee.error }] },
+            { status: 400 }
+          );
         }
       }
 
@@ -1083,21 +1070,17 @@ export async function POST(req: Request) {
       (initialSettings as Record<string, unknown>).default_team_count = cast;
       (initialSettings as Record<string, unknown>).cast_size = cast;
       initialSettings.roster_mode = 'redraft';
-      const feeMode = String((initialSettings as Record<string, unknown>).survivor_entry_fee_mode ?? 'free')
-        .toLowerCase()
-        .trim();
-      if (feeMode === 'paid') {
-        if (!SURVIVOR_PAID_CREATION_ENABLED) {
-          return NextResponse.json({ error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
-        }
-        const centsRaw = (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents;
-        const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
-        if (!Number.isFinite(cents) || cents < 1) {
-          return NextResponse.json(
-            { error: 'Paid Survivor leagues require a buy-in amount greater than zero (set by the commissioner).' },
-            { status: 400 }
-          );
-        }
+      const fee = readSurvivorEntryFee(
+        (initialSettings as Record<string, unknown>).survivor_entry_fee_mode,
+        (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents,
+      );
+      if ('error' in fee) {
+        return NextResponse.json({ error: fee.error }, { status: 400 });
+      }
+      (initialSettings as Record<string, unknown>).survivor_entry_fee_mode = fee.mode;
+      (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents = fee.amountCents;
+      if (fee.mode === 'paid' && !(initialSettings as Record<string, unknown>).dues_tracker) {
+        (initialSettings as Record<string, unknown>).dues_tracker = survivorDuesTrackerSeed(fee.amountCents);
       }
     }
 

@@ -155,6 +155,19 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     })
   })
 
+  it('sends the Survivor free/paid label and optional dues, never a payment', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4 }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorEntryFeeMode: 'free' })
+    expect(lastFetchBody().conceptSetup).not.toHaveProperty('survivorEntryFeeAmountCents')
+
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4, survivorEntryFeeMode: 'paid', survivorDuesUsd: '$25.50' }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorEntryFeeMode: 'paid', survivorEntryFeeAmountCents: 2550 })
+
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4, survivorEntryFeeMode: 'paid', survivorDuesUsd: '' }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorEntryFeeMode: 'paid' })
+    expect(lastFetchBody().conceptSetup).not.toHaveProperty('survivorEntryFeeAmountCents')
+  })
+
   it('a Guilly league never carries a median game, even one ticked before switching concept', async () => {
     await submitCreateLeagueV2(state({ leagueType: 'guillotine', medianGame: true }))
     const body = lastFetchBody()
