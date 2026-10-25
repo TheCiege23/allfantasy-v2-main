@@ -820,6 +820,22 @@ export async function finalizeCompletedWeeksForSeason(
     select: { week: true },
   })
 
+  /*
+   * 🛑 PLUS THE OLDEST OPEN WEEK BEHIND THE WINDOW — ONE, NOT ALL. A week that was still refusing when
+   * it aged out of the lookback was never looked at again, and one open week blocks `advance_week` for
+   * the rest of the season. Measured 2026-10-25: the live NHL season's week 1 had refused for coverage
+   * every tick since it ended, and would leave the window on 27 Oct with `currentWeek` still 1. Taking
+   * the single oldest keeps the bound: a long-dead league costs one extra week per tick, never a replay.
+   */
+  if (earliest > 1) {
+    const stale = await prisma.redraftMatchup.findFirst({
+      where: { seasonId: params.seasonId, week: { lt: earliest }, status: { not: 'final' }, awayRosterId: { not: null } },
+      orderBy: { week: 'asc' },
+      select: { week: true },
+    })
+    if (stale) open.push(stale)
+  }
+
   const weeks = [...new Set(open.map((m) => m.week))].sort((a, b) => a - b)
 
   const results: WeekFinalizeResult[] = []
