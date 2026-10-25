@@ -45,7 +45,9 @@ export function readDeepAnalysisPreview(value: unknown): DeepAnalysisPreview | n
 /** A complete first thought from an engine, never a hidden full report covered by CSS. */
 export function analysisSummaryFromAnswer(answer: string): string {
   const text = answer.trim().replace(/\s+/g, ' ')
-  const sentences = text.match(/[^.!?]+[.!?](?:\s|$)|[^.!?]+$/g) ?? [text]
+  // Consume the whole sentence, including decimal punctuation and initials.
+  // A negated-punctuation prefix can skip the text before a decimal entirely.
+  const sentences = text.match(/.+?(?:[.!?](?=\s|$)|$)/g) ?? [text]
   let summary = ''
   for (const sentence of sentences.slice(0, 2)) {
     if ((summary + sentence).length > 500) break

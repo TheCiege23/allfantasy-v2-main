@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { gateAnalysisAccess } from '@/lib/chimmy/analysisAccess'
 import { issueAnalysisQuote, verifyAnalysisQuote } from '@/lib/chimmy/analysisQuote'
 import { fingerprintChimmyRequest } from '@/lib/chimmy/requestFingerprint'
-import { buildFreeAnalysisSummary, readDeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
+import { analysisSummaryFromAnswer, buildFreeAnalysisSummary, readDeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 const form = () => { const f = new FormData(); f.set('requestId','request-one'); f.set('analysisPreviewVersion','1'); f.set('message','Should I change my lineup?'); f.set('assistantMode','deep_analysis'); return f }
 const quoteInput = { userId:'u1', requestId:'request-one', fingerprint:'original', tokenCost:3, access:'tokens' as const }
 const plan = { kind:'free' as const, included:false, planName:'Free Chimmy', used:2, limit:2, resetsAt:'2026-10-26T00:00:00.000Z' }
@@ -65,4 +65,10 @@ it('answers common rules questions directly without inventing league-specific se
  expect(buildFreeAnalysisSummary({question:'What is superflex?'})).toContain('start a quarterback')
  expect(buildFreeAnalysisSummary({question:'What does FAAB mean?'})).toContain('blind waiver bids')
  expect(buildFreeAnalysisSummary({question:'Which unknown mystery option wins?'})).toContain('do not have a verified')
+})
+
+it('preserves decimals, percentages and the complete first two sentences in a free engine summary', () => {
+ const answer='Projected score: 12.5 points. The change is 7.25%. Additional private comparisons follow.'
+ expect(analysisSummaryFromAnswer(answer)).toBe('Projected score: 12.5 points. The change is 7.25%.')
+ expect(analysisSummaryFromAnswer('A.J. Brown has 15.75 projected points. More detail follows.')).toBe('A.J. Brown has 15.75 projected points.')
 })
