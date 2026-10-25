@@ -792,7 +792,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         const impactLeagueIds = impacts.filter(i => i.kind !== 'none').map(i => i.leagueId)
         const ok = await dispatchNotification({
           userIds: [uid], leagueIds: impactLeagueIds, leagueId: impactLeagueIds[0] ?? null,
-          category: copy.kind === 'starter_out' ? 'lineup_alerts' : 'injury_alerts',
+          // Same category as before this rule, so the person's Injury alerts switch still governs it.
+          category: 'injury_alerts',
           type: copy.kind === 'starter_out' ? 'injured_starter' : copy.kind,
           title: copy.title, body: copy.body + '\n' + row.headline.slice(0, 300),
           actionHref: copy.fixHref ?? undefined, actionLabel: 'Review lineup', severity: 'high',
@@ -805,6 +806,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         recipients++
         await markPlayerNewsTold([uid], subject)
         await recordToldAbout([uid], news)
+        if (teamHeadline) await recordToldAbout([uid], teamHeadline, undefined, { storyOnly: true })
         for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }
         notified++
       }
@@ -818,7 +820,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       if(gatedFollowersOnly.length)requests.push({...base,userIds:gatedFollowersOnly,leagueId:null,category:'followed_players',meta:{...base.meta,followed:true}})
       if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams',meta:{...base.meta,followedTeam:teamAbbr}})
       const gated = requests.flatMap(r => playerNewsDispatches(r, plan, newsInfo, isStarter)).map(d =>
-        d.meta?.lineupBellOnly ? { ...d, skipChannels: bellOnly, meta: { ...d.meta, playerNews: { ...(d.meta.playerNews as object), delivery: 'bell', digest: false } } } : d)
+        d.meta?.lineupBellOnly ? { ...d, skipChannels: bellOnly, meta: { ...d.meta, playerNews: { ...(d.meta.playerNews as object), digest: false } } } : d)
+      // `delivery` is left as the gate set it: the team batch groups one headline's rows by it.
       if (!gated.length) { await settle(row, impactFailed ? 'dispatch-failed' : 'delivered'); continue }
       injuryBatch.add(gated,async (users,failed)=>{
         const toldNow=[...users]
