@@ -14,6 +14,7 @@ import type {
   MockRoomMode,
   MockSlotConfigEntry,
 } from './types'
+import { normalizeMockDraftTeamCount } from '@/lib/mock-draft/mockTeamCount'
 
 type MockDraftRow = {
   id: string
@@ -33,7 +34,8 @@ const CPU_LOOP_LIMIT = 250
 
 function parseSettings(metadata: unknown): MockDraftSettings {
   const raw = (metadata || {}) as Record<string, unknown>
-  const numTeams = Math.min(16, Math.max(8, Number(raw.numTeams) || 12))
+  // Any size a league of this sport and type accepts (lib/mock-draft/mockTeamCount.ts).
+  const numTeams = normalizeMockDraftTeamCount(raw.numTeams, raw.sport, raw.leagueType)
   const roomModeRaw = String(raw.roomMode ?? 'solo')
   const roomMode: MockRoomMode =
     roomModeRaw === 'cpu_only' || roomModeRaw === 'mixed' || roomModeRaw === 'linked_public'
@@ -165,7 +167,7 @@ function isParticipant(draft: MockDraftRow, userId?: string): boolean {
   return draft.slotConfig.some((slot: any) => slot?.userId === userId)
 }
 
-function getSlotForOverall(overall: number, numTeams: number, draftType: string): number {
+export function getSlotForOverall(overall: number, numTeams: number, draftType: string): number {
   const round = Math.floor((overall - 1) / numTeams) + 1
   const pickInRound = ((overall - 1) % numTeams) + 1
   if (draftType === 'linear' || draftType === 'auction') return pickInRound
