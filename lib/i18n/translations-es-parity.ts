@@ -3300,4 +3300,7 @@ export const translationsEsParity: Record<string, string> = {
   "schedRegen.err.archived": "No se puede regenerar el calendario de una liga archivada.",
   "schedRegen.err.noWeeks": "Todas las semanas de la temporada regular ya comenzaron, así que no queda nada por regenerar.",
   "schedRegen.err.generic": "No se pudo regenerar el calendario.",
+  "leagueSettings.lockAllRosterMoves": "Bloquear todos los movimientos de plantilla",
+  "leagueSettings.lockAllRosterMovesHint":
+    "Los miembros no pueden cambiar alineaciones ni la IR, ni hacer altas, bajas, reclamos o trades hasta que lo levantes. Los reclamos pendientes esperan sin procesarse.",
 }

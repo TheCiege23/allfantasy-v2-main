@@ -5422,6 +5422,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lineupMode.err.unavailable": "Daily lineups aren't available yet.",
     "lineupMode.err.sport": "Daily lineups are only available in NBA, NHL and MLB leagues.",
     "lineupMode.err.failed": "Could not save the lineup setting. Try again.",
+    "leagueSettings.lockAllRosterMoves": "Lock all roster moves",
+    "leagueSettings.lockAllRosterMovesHint": "Members can't change lineups or IR, file waiver claims, add, drop or trade until you lift it. Pending waiver claims wait, unprocessed.",
   },
   es: {
     ...translationsEsParity,
