@@ -59,6 +59,42 @@ describe('NFL provider-count rules', () => {
     expect(score(rules, normalizeNflWeeklyStats(RB_WEEK))).toBe(round(22.3 + extra))
   })
 
+  it('team defence: forced fumbles, 3-and-outs, 4th-down stops, tackles and return yards score from the DEF row', () => {
+    const def = normalizeNflTeamDefenseWeeklyStats({
+      sack: 3, pts_allow: 17, yds_allow: 310, ff: 2, def_3_and_out: 4, def_4_and_stop: 1, tkl_loss: 5, qb_hit: 6,
+      tkl: 60, tkl_solo: 40, tkl_ast: 20, int_ret_yd: 35, def_pass_def: 7, def_forced_punts: 5, sack_yd: 21,
+    })
+    expect(def).toMatchObject({ def_sack: 3, def_ff: 2, def_3_and_out: 4, def_4_and_stop: 1, def_tkl_loss: 5, def_qb_hit: 6, def_int_ret_yd: 35 })
+    const rules = {
+      dst_sack: 1, dst_pa_14_20: 1, dst_forced_fumble: 1, dst_three_and_out: 0.5, dst_fourth_down_stop: 1,
+      dst_tackle_for_loss: 0.5, dst_qb_hit: 0.25, dst_int_return_yards: 0.1, dst_pts_per_pa: -0.1,
+    }
+    // 3 + 1 + 2 + 2 + 1 + 2.5 + 1.5 + 3.5 − 1.7, every other DEF rule at its preset/0 default.
+    const { categories, overrides } = resolveLeagueScoringRules({ sport: 'NFL', settings: { nfl_scoring_config: { rules } } })!
+    const only = categories.filter((c) => c.group === 'team_def')
+    expect(round(scoreStatsWithCategories(only, def, overrides))).toBe(round(3 + 1 + 2 + 2 + 1 + 2.5 + 1.5 + 3.5 - 1.7))
+  })
+
+  it('kicker: FG made, points per FG yard and per yard over 30', () => {
+    const k = normalizeNflWeeklyStats({ fgm_30_39: 1, fgm_40_49: 1, fgm: 2, fgm_yds: 81, fgm_yds_over_30: 21, xpm: 3 })
+    expect(score({ fg_30_39: 0, fg_40_49: 0, pat_made: 0, fg_made: 3, fg_per_yard: 0.1, fg_per_yard_over_30: 0.1 }, k)).toBe(round(6 + 8.1 + 2.1))
+  })
+
+  it('IDP: Sleeper-named tackles, passes defended, recoveries, TFLs, TDs and safeties now reach the IDP rules', () => {
+    const lb = normalizeNflWeeklyStats({
+      idp_tkl_solo: 7, idp_tkl_ast: 4, idp_pass_def: 2, idp_fum_rec: 1, idp_tkl_loss: 2, idp_def_td: 1, idp_safe: 1,
+      idp_tkl: 11, bonus_tkl_10p: 1, idp_sack_yd: 9,
+    })
+    expect(lb).toMatchObject({ idp_solo: 7, idp_assist: 4, idp_pd: 2, idp_fr: 1, idp_tfl: 2, idp_td: 1, idp_safety: 1, idp_tkl: 11, bonus_tkl_10p: 1 })
+    const settings = { sportConfig: { enableIDP: true }, nfl_scoring_config: { rules: { idp_ten_tackle_bonus: 2, idp_sack_yards: 0.1 } } }
+    const { categories, overrides } = resolveLeagueScoringRules({ sport: 'NFL', settings })!
+    expect(categories.some((c) => c.key === 'bonus_tkl_10p')).toBe(true)
+    expect(overrides).toMatchObject({ bonus_tkl_10p: 2, idp_sack_yd: 0.1 })
+    // Without IDP on, the new IDP rules are not scored, like every other IDP rule.
+    const off = resolveLeagueScoringRules({ sport: 'NFL', settings: { nfl_scoring_config: { rules: {} } } })!
+    expect(off.categories.some((c) => c.key === 'bonus_tkl_10p')).toBe(false)
+  })
+
   it('every new rule is reachable from a commissioner panel row', () => {
     const panelEngineKeys = new Set(
       NFL_SCORING_CATEGORIES.flatMap((c) => c.rows.map((r) => bridgeScoringKey(r.key))).filter(Boolean),
