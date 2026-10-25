@@ -76,6 +76,7 @@ import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import {
@@ -351,6 +352,19 @@ export async function executeLeagueSettingsPatch(
   const premiumCommissionerKeys = requestedPremiumCommissionerKeys(body)
   if (premiumCommissionerKeys.length > 0 && !hasSub) {
     return jsonError('AF Commissioner or AF Supreme is required for Commissioner Intelligence and League Helper settings.', 403)
+  }
+
+  // A pre-draft resize to an odd keeper size is the same AF Commissioner option creation offers
+  // (lib/league/oddTeamLeagues.ts). Redraft odd sizes stay free.
+  if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize &&
+      oddTeamCountNeedsAfCommissioner(league.leagueType, Number(body.leagueSize)) && !hasSub) {
+    return NextResponse.json(
+      {
+        error: `A ${Number(body.leagueSize)}-team keeper league is part of AF Commissioner. Choose an even team count or upgrade.`,
+        code: 'ODD_TEAM_COUNT_REQUIRES_AF_COMMISSIONER',
+      },
+      { status: 403 },
+    )
   }
 
   // ⚠ 7- and 9-team playoff brackets are NOT a paid feature. They were refused here without
@@ -740,6 +754,16 @@ export async function executeLeagueSettingsPatch(
     Object.assign(leaguePatch, nativeFormatPatch(body.leagueType, league.settings))
   }
   if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize && isNativePlatform(league.platform)) {
+    // An even league resized to an odd size starts with league median on, as a new odd league does:
+    // otherwise the team without an opponent each week gets no result. A choice sent in the same
+    // request wins, and an odd-to-odd resize keeps whatever the league already had.
+    const scoringModeNow = String((league.settings as Record<string, unknown> | null)?.scoring_mode ?? 'points')
+    if (body.medianGame == null && isOddTeamCount(Number(body.leagueSize)) && !isOddTeamCount(league.leagueSize) &&
+        ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(league.leagueType ?? 'redraft')) && scoringModeNow === 'points' &&
+        !league.medianGame && !leagueKeys.includes('medianGame')) {
+      leaguePatch.medianGame = true
+      leagueKeys.push('medianGame')
+    }
     // An untouched default bracket follows the new size; a commissioner's own is kept, clamped to it
     // (lib/league-defaults/redraftPlayoffFit.ts). Playoff fields saved in the same request win.
     if (body.playoffTeams == null && body.playoffStartWeek == null) {
