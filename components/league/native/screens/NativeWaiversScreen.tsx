@@ -10,7 +10,9 @@ import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { adaptWaiverWirePlayer } from '@/lib/player-data/adapters/waiverPlayerAdapter'
 import { waiverPositionMatches } from '@/lib/waiver-wire/SportWaiverResolver'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
+  claimProcessesAfterDate,
   isImmediateAddAllowedToday,
   onWaiversUntilLabel,
   phaseMoveBlockReason,
@@ -165,6 +167,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     if (known) return known
     return Array.from(new Set(players.map((p) => String(p.position ?? '').toUpperCase()).filter(Boolean))).slice(0, 8)
   }, [settings?.sport, league.sport, players])
+  const { language, tInterpolate } = useOptionalLanguage()
   const nameOf = useCallback(
     (pid: string | null) => {
       if (!pid) return null
@@ -393,6 +396,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                 {[...claims].sort((a, b) => a.priorityOrder - b.priorityOrder).map((c, i) => {
                   const addName = nameOf(c.addPlayerId) ?? 'Player'
                   const dropName = nameOf(c.dropPlayerId)
+                  // A claim on a player still on waivers after a drop runs at the first waiver run after he clears.
+                  const holdUntil = playerWaiverHoldUntil(players.find((p) => p.id === c.addPlayerId), settings)
                   const draft = bidDrafts[c.id] ?? (c.faabBid != null ? String(c.faabBid) : '')
                   return (
                     <li key={c.id} className="nls-claim">
@@ -400,6 +405,11 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                       <div>
                         <strong>Add {addName}</strong>
                         <small>{dropName ? `Drop ${dropName}` : c.dropPlayerId ? 'Drop a rostered player' : 'No drop'}</small>
+                        {holdUntil ? (
+                          <small data-hold data-testid={`native-waivers-claim-hold-${c.id}`}>
+                            {tInterpolate('waiverClaim.processesAfter', { date: claimProcessesAfterDate(holdUntil, language) })}
+                          </small>
+                        ) : null}
                       </div>
                       <button type="button" className="nls-iconbtn" aria-label={`Cancel claim for ${addName}`} onClick={() => void cancelClaim(c.id)}>
                         <X size={16} aria-hidden />

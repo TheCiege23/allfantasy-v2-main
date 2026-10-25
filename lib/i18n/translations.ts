@@ -1180,6 +1180,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.wv.playoffs.alive_only": "Only teams still alive for the title",
     "lsHub.wv.playoffs.locked": "Lock all rosters",
     "lsHub.wv.playoffsHint": "Locked rosters take no adds, drops or claims until the season ends.",
+    "waiverClaim.processesAfter": "Processes after {{date}}",
     "lsHub.ai.intro": "Control League Helper settings. Premium controls require AF Commissioner or AF Supreme.",
     "lsHub.ai.helper": "League helper",
     "lsHub.ai.helperHint": "In-chat setup, rule help, and league-aware guidance.",

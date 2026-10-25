@@ -3,8 +3,11 @@
  * hub's "Waiver period"), and only then becomes a free agent. While he is on waivers:
  *   - nobody can add him as a free agent — the add/drop route answers WAIVER_REQUIRED and the screen
  *     opens the claim form instead;
- *   - claims on him run in the league's own order (FAAB, rolling, reverse standings — the processor's
- *     `orderClaimsForProcessing`), at the next waiver run;
+ *   - a claim on him is accepted and stays pending: it runs at the FIRST waiver run after his hold
+ *     ends (`until`), never earlier, and there competes with the other claims on him in the league's
+ *     own order (FAAB, rolling, reverse standings — the processor's `orderClaimsForProcessing`);
+ *   - once he clears, a pending claim on him still keeps him off the free-agent list until that run
+ *     (the add/drop route), so the claims are not beaten to him by a first-come add;
  *   - the team that dropped him cannot claim him back.
  *
  * The drop is read from `WaiverTransaction.dropPlayerId` / `processedAt`, which every native drop
@@ -18,7 +21,7 @@
 import { prisma } from '@/lib/prisma'
 
 export const DROPPED_PLAYER_ON_WAIVERS_MESSAGE =
-  'This player was dropped recently and is on waivers until he clears. Submit a claim for the next waiver run.'
+  'This player was dropped recently and is on waivers until he clears. Submit a claim; it runs at the first waiver run after he clears.'
 
 export const DROPPER_RECLAIM_MESSAGE =
   'You dropped this player, so you cannot claim him back until he clears waivers.'

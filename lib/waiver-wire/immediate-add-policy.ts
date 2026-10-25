@@ -79,6 +79,14 @@ export function onWaiversUntilLabel(until: Date): string {
   return `On waivers until ${until.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
 }
 
+/**
+ * The date in "Processes after …" on a pending claim for a player still on waivers: his claim runs at
+ * the first waiver run after this, in the viewer's own time zone and language.
+ */
+export function claimProcessesAfterDate(until: Date, locale?: string): string {
+  return until.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 /** The phase's blocking reason for the waiver screen, when no claim and no add is possible. */
 export function phaseMoveBlockReason(settings: { phasePolicy?: WaiverPhasePolicy | null } | null | undefined): string | null {
   const p = settings?.phasePolicy
