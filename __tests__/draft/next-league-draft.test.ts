@@ -63,6 +63,7 @@ vi.mock('@/lib/draft-lottery/rookieDraftLottery', () => ({
 }))
 
 import {
+  championAndRunnerUp,
   createNextLeagueDraft,
   draftRosterIdForOwner,
   placeKeeperRounds,
@@ -385,5 +386,27 @@ describe('a saved rookie order wins over standings', () => {
     expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
     expect(seated()[0]).toBe('R-b') // 2-11, the worst team, picks first
     expect(seated().at(-1)).toBe('R-a') // the champion picks last
+  })
+})
+
+describe('championAndRunnerUp', () => {
+  it('reads the title game, never the third-place game that shares its round', async () => {
+    m.playoffRoundFindFirst.mockResolvedValue({
+      matchups: [
+        { homeRosterId: 's-a', awayRosterId: 's-b', winnerRosterId: null, nextMatchupId: null, metadata: { bracketType: 'championship' } },
+        { homeRosterId: 's-c', awayRosterId: 's-d', winnerRosterId: 's-c', nextMatchupId: null, metadata: { bracketType: 'third_place' } },
+      ],
+    })
+    expect(await championAndRunnerUp('season-1')).toEqual({ championId: null, runnerUpId: null })
+  })
+
+  it('[control] once the title game has a winner it is the one read', async () => {
+    m.playoffRoundFindFirst.mockResolvedValue({
+      matchups: [
+        { homeRosterId: 's-a', awayRosterId: 's-b', winnerRosterId: 's-b', nextMatchupId: null, metadata: { bracketType: 'championship' } },
+        { homeRosterId: 's-c', awayRosterId: 's-d', winnerRosterId: 's-c', nextMatchupId: null, metadata: { bracketType: 'third_place' } },
+      ],
+    })
+    expect(await championAndRunnerUp('season-1')).toEqual({ championId: 's-b', runnerUpId: 's-a' })
   })
 })

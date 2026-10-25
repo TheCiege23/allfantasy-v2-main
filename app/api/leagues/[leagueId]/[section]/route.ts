@@ -54,6 +54,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'guillotine-war-room': () => import('../guillotine-war-room/handler'),
   'hall-of-fame': () => import('../hall-of-fame/handler'),
   'history': () => import('../history/handler'),
+  'inactive-managers': () => import('../inactive-managers/handler'),
   'integrity': () => import('../integrity/handler'),
   'intro': () => import('../intro/handler'),
   'intro-seen': () => import('../intro-seen/handler'),

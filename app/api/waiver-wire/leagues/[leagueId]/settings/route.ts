@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from "@/lib/waiver-wire"
 import { buildWriteAuthorityEnvelope } from "@/lib/league/write-authority"
 import { loadDailyTransactionPolicy } from "@/lib/waiver-wire/daily-schedule-gate"
+import { loadWaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-gate"
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -20,9 +21,10 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
   const hasAccess = league && (league.userId === userId || rosterAsMember)
   if (!hasAccess) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
-  const [settings, daily] = await Promise.all([
+  const [settings, daily, phasePolicy] = await Promise.all([
     getEffectiveLeagueWaiverSettings(leagueId),
     loadDailyTransactionPolicy(leagueId).catch(() => null),
+    loadWaiverPhasePolicy(leagueId, (rosterAsMember as { id?: string } | null)?.id ?? null).catch(() => null),
   ])
   const variant = (league as { leagueVariant?: string })?.leagueVariant ?? ""
   const formatType = (variant === "IDP" || variant === "DYNASTY_IDP" || variant === "idp") ? "IDP" : undefined
@@ -40,6 +42,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
           immediateRefusal: daily.policy.immediateRefusal,
         }
       : null,
+    // The season phase's rule for the viewer's team (lib/waiver-wire/season-phase-policy.ts), so the
+    // page can say why a move is blocked before the server refuses it.
+    phasePolicy,
     // Loaded with the rest of the waiver shell so the page can disclose SHADOW status before a
     // manager files a claim, not only in the toast afterwards.
     writeAuthority: buildWriteAuthorityEnvelope('waiver_claim', (league as { platform?: string })?.platform ?? null),

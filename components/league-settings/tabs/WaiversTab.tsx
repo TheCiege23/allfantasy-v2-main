@@ -19,12 +19,18 @@ import {
 import {
   FREE_AGENCY_ONLY_PRESET,
   HUB_TIEBREAK_RULES,
+  OFFSEASON_WAIVER_RULES,
+  PLAYOFF_WAIVER_RULES,
   PRIORITY_RESET_WAIVER_TYPES,
   WAIVER_ORDER_RESET_POLICIES,
   isFreeAgencyOnly,
   readHubTiebreakRule,
+  readOffseasonWaiverRule,
+  readPlayoffWaiverRule,
   readWaiverOrderResetPolicy,
   type HubTiebreakRule,
+  type OffseasonWaiverRule,
+  type PlayoffWaiverRule,
   type WaiverOrderResetPolicy,
 } from '@/lib/waiver-wire/hub-waiver-options'
 import { isSurvivorSettingsLeague } from '@/lib/league-settings-home/buildLeagueSettingsHome'
@@ -53,6 +59,16 @@ export const HUB_TIEBREAK_OPTIONS: Array<{ value: HubTiebreakRule; labelKey: str
 export const HUB_RESET_POLICY_OPTIONS: Array<{ value: WaiverOrderResetPolicy; labelKey: string }> = WAIVER_ORDER_RESET_POLICIES.map((value) => ({
   value,
   labelKey: value === 'weekly' ? 'lsHub.wv.reset.weekly' : 'lsHub.wv.reset.rolling',
+}))
+
+/** Season-phase rules (lib/waiver-wire/season-phase-policy.ts). Always shown; defaults first. */
+export const HUB_OFFSEASON_RULE_OPTIONS: Array<{ value: OffseasonWaiverRule; labelKey: string }> = OFFSEASON_WAIVER_RULES.map((value) => ({
+  value,
+  labelKey: `lsHub.wv.offseason.${value}`,
+}))
+export const HUB_PLAYOFF_RULE_OPTIONS: Array<{ value: PlayoffWaiverRule; labelKey: string }> = PLAYOFF_WAIVER_RULES.map((value) => ({
+  value,
+  labelKey: `lsHub.wv.playoffs.${value}`,
 }))
 
 /** Which of the hub's extra waiver controls apply to a league. Pure, so tests can read it directly. */
@@ -139,6 +155,12 @@ export function WaiversSection({
   const [resetPolicy, setResetPolicy] = useState<WaiverOrderResetPolicy>(() =>
     readWaiverOrderResetPolicy(savedOr<string | null>(leagueId, 'waiverOrderResetPolicy', null)),
   )
+  const [offseasonRule, setOffseasonRule] = useState<OffseasonWaiverRule>(() =>
+    readOffseasonWaiverRule(savedOr<string | null>(leagueId, 'waiverOffseasonRule', null)),
+  )
+  const [playoffRule, setPlayoffRule] = useState<PlayoffWaiverRule>(() =>
+    readPlayoffWaiverRule(savedOr<string | null>(leagueId, 'waiverPlayoffRule', null)),
+  )
   const touchedRef = useRef(new Set<string>())
   useEffect(() => {
     let live = true
@@ -146,11 +168,19 @@ export function WaiversSection({
       try {
         const res = await fetch(`/api/waiver-wire/leagues/${encodeURIComponent(leagueId)}/settings`, { cache: 'no-store' })
         if (!res.ok || !live) return
-        const eff = (await res.json()) as { allowZeroFaabBid?: boolean; tiebreakRule?: string | null; waiverOrderResetPolicy?: string | null }
+        const eff = (await res.json()) as {
+          allowZeroFaabBid?: boolean
+          tiebreakRule?: string | null
+          waiverOrderResetPolicy?: string | null
+          offseasonWaiverRule?: string | null
+          playoffWaiverRule?: string | null
+        }
         if (!live) return
         if (!touchedRef.current.has('zero') && typeof eff.allowZeroFaabBid === 'boolean') setAllowZeroBid(eff.allowZeroFaabBid)
         if (!touchedRef.current.has('tb')) setTiebreakRule(readHubTiebreakRule(eff.tiebreakRule))
         if (!touchedRef.current.has('reset')) setResetPolicy(readWaiverOrderResetPolicy(eff.waiverOrderResetPolicy))
+        if (!touchedRef.current.has('offseason')) setOffseasonRule(readOffseasonWaiverRule(eff.offseasonWaiverRule))
+        if (!touchedRef.current.has('playoffs')) setPlayoffRule(readPlayoffWaiverRule(eff.playoffWaiverRule))
       } catch {
         // The defaults stay; a save still writes what the commissioner picks.
       }
@@ -367,6 +397,52 @@ export function WaiversSection({
             </span>
           </label>
         ) : null}
+
+        <label className="block">
+          <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.offseason')}</span>
+          <select
+            value={offseasonRule}
+            disabled={!canEdit}
+            onChange={(e) => {
+              const v = e.target.value as OffseasonWaiverRule
+              touchedRef.current.add('offseason')
+              setOffseasonRule(v)
+              queuePatch({ waiverOffseasonRule: v })
+            }}
+            className={SETTINGS_INPUT_CLASS}
+            data-testid="league-settings-waiver-offseason-rule"
+          >
+            {HUB_OFFSEASON_RULE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value} className="bg-[#0d1117]">
+                {t(o.labelKey)}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.offseasonHint')}</span>
+        </label>
+
+        <label className="block">
+          <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.playoffs')}</span>
+          <select
+            value={playoffRule}
+            disabled={!canEdit}
+            onChange={(e) => {
+              const v = e.target.value as PlayoffWaiverRule
+              touchedRef.current.add('playoffs')
+              setPlayoffRule(v)
+              queuePatch({ waiverPlayoffRule: v })
+            }}
+            className={SETTINGS_INPUT_CLASS}
+            data-testid="league-settings-waiver-playoff-rule"
+          >
+            {HUB_PLAYOFF_RULE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value} className="bg-[#0d1117]">
+                {t(o.labelKey)}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.playoffsHint')}</span>
+        </label>
 
         <label className="block">
           <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.period')}</span>

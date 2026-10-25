@@ -25,6 +25,9 @@ import { starterGameStates, type StarterGameState } from './matchupGameState'
 import { bestBallProjectedFinal } from './bestBallForecast'
 import { realManagerName, rosterLabel } from './managerName'
 import { eliminationFormat, type EliminationFormat } from './railMatchupMode'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchup'
+import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /*
  * The opposing side's two name lines. The importer stores an unowned Sleeper roster as team
@@ -238,6 +241,11 @@ export type MatchupData = {
   }
   week: SectionState<{ week: number; season: number; isFinal: boolean }>
   /**
+   * An odd-team native league's extra matchup involving your team this week — the game the leftover
+   * team plays instead of a bye. "Extra matchup vs <team> (last week's top scorer)". Null otherwise.
+   */
+  extraMatchup?: ExtraMatchupView | null
+  /**
    * The two managers, available as soon as both rosters are identified — scored
    * week or not. `sides` below stays the SCORE, and stays unavailable until
    * there is one.
@@ -365,6 +373,41 @@ export async function getMatchupData(
   ctx?: LeagueContext | null,
 ): Promise<MatchupData | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
+  const data = await buildMatchupData(lc, userId, weekParam)
+  if (!data) return data
+  return { ...data, extraMatchup: await nativeExtraMatchup(lc, data) }
+}
+
+/**
+ * An odd-team native league's extra matchup for your team this week, if it has one — read from the
+ * leftover team's bye row, where the week-open hook fixed it (lib/redraft/oddTeamExtraMatchup.ts).
+ * Null for every imported league, and on any failure.
+ */
+async function nativeExtraMatchup(lc: LeagueContext, data: MatchupData): Promise<ExtraMatchupView | null> {
+  if (!data.week.available) return null
+  try {
+    const league = await lc.league()
+    if (!league || !isNativePlatform(league.platform)) return null
+    const team = await lc.claimedTeam()
+    if (!team?.externalId) return null
+    const roster = await prisma.roster.findFirst({ where: { id: team.externalId }, select: { redraftRosterId: true } })
+    if (!roster?.redraftRosterId) return null
+    return await readExtraMatchupView({
+      leagueId: league.id,
+      season: data.week.data.season,
+      week: data.week.data.week,
+      redraftRosterId: roster.redraftRosterId,
+    })
+  } catch {
+    return null
+  }
+}
+
+async function buildMatchupData(
+  lc: LeagueContext,
+  userId: string,
+  weekParam?: number | null,
+): Promise<MatchupData | null> {
   const league = await lc.league()
   if (!league) return null
 

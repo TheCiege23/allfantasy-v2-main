@@ -32,6 +32,12 @@ import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportS
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
+import {
+  DAILY_NO_ROW_VERDICT_SPORTS,
+  DAILY_ZERO_VERDICTS,
+  loadDailyWindowParticipation,
+  type DailyNoRowVerdict,
+} from '@/lib/redraft/dailySportParticipation'
 import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
 import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/player-identity/verifiedNcaafReserves'
 import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
@@ -76,6 +82,10 @@ export type WeeklyScoreSyncSummary = {
    * they recorded nothing (see ncaafWeekParticipation.ts) — and why the rest with no row stayed missing.
    */
   ncaafZeroScored?: Array<{ playerId: string; reason: 'bye' | 'no_stat' }>
+  /** NBA / NHL / MLB: players with no row written as a real 0, and why (dailySportParticipation.ts). */
+  dailyZeroScored?: Array<{ playerId: string; reason: 'inactive' | 'no_stat' }>
+  /** NBA / NHL / MLB: players with no row left missing, by verdict. */
+  dailyMissingByReason?: Partial<Record<DailyNoRowVerdict, number>>
   ncaafMissingByReason?: Partial<Record<'pending' | 'not_ingested' | 'unmatched' | 'no_team' | NcaafReserveAvailability, number>>
   ncaafSeasonAvailability?: Array<{ playerId: string; status: NcaafReserveAvailability; reason: string; evidenceUrl: string }>
   scoresUpserted: number
@@ -397,6 +407,9 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   /** Schedule start instants by game id, read once and only for a games-count league. */
   let scheduleStartByGame: Map<string, string | null> | null = null
   let dailyWindow: { start: Date; end: Date } | null = null
+  /** NBA / NHL / MLB: why a player with no row this week has none (see dailySportParticipation.ts). */
+  let dailyVerdictFor: ((identityId: string | null | undefined) => DailyNoRowVerdict) | null = null
+  const identityIdByRosterId = new Map<string, string>()
   if (isDailySport) {
     /**
      * 🛑 SELECTED BY DATE WINDOW, NOT BY `weekOrRound` — AND AN EARLIER VERSION
@@ -524,6 +537,24 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     }
     dailyWindow = window
     summary.cacheRowsRead = gameRows.length
+
+    // A player with no row is judged once, here, for the zero-or-missing decision in the loop below.
+    const noRow = playerIds.filter((id) => !dailyRowsByPlayer.has(id))
+    if (noRow.length > 0 && DAILY_NO_ROW_VERDICT_SPORTS.includes(sport)) {
+      // Roster id -> its identity: the bridged id where there is one, else the roster id itself.
+      for (const gameLogId of bridge.gameLogIds) {
+        const rosterId = bridge.rosterIdFor(gameLogId)
+        if (rosterId && (gameLogId !== rosterId || !identityIdByRosterId.has(rosterId))) identityIdByRosterId.set(rosterId, gameLogId)
+      }
+      dailyVerdictFor = await loadDailyWindowParticipation(prisma as never, {
+        sport,
+        sportKeys: candidateSportKeys(sport),
+        season: seasonYear,
+        week,
+        window,
+        identityIds: [...new Set(noRow.map((id) => identityIdByRosterId.get(id) ?? id))],
+      })
+    }
   }
 
   /**
@@ -831,6 +862,27 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     if (isDailySport) {
       const dailyRows = dailyRowsByPlayer.get(playerId) ?? []
       if (dailyRows.length === 0) {
+        /*
+         * No row is not "no data" when there is EVIDENCE he did not play: an inactive identity, or his
+         * team's games all final with their rows ingested. That is a real 0, written like NCAAF's, so
+         * the scorer and the finalizer's coverage both count him. Without evidence he stays missing.
+         * No daily row is written: a day with no row already scores 0 in a daily-lineup league.
+         */
+        const verdict = dailyVerdictFor ? dailyVerdictFor(identityIdByRosterId.get(playerId) ?? playerId) : null
+        if (verdict && DAILY_ZERO_VERDICTS.has(verdict)) {
+          await prisma.playerWeeklyScore.upsert({
+            where: { playerId_week_season_sport: { playerId, week, season: seasonYear, sport: playerSport } },
+            update: { stats: {}, fantasyPts: 0, isFinalized: false },
+            create: { playerId, week, season: seasonYear, sport: playerSport, stats: {}, fantasyPts: 0, isFinalized: false },
+          })
+          summary.scoresUpserted += 1
+          ;(summary.dailyZeroScored ??= []).push({ playerId, reason: verdict as 'inactive' | 'no_stat' })
+          continue
+        }
+        if (verdict) {
+          const byReason = (summary.dailyMissingByReason ??= {})
+          byReason[verdict] = (byReason[verdict] ?? 0) + 1
+        }
         summary.missingCachePlayerIds.push(playerId)
         continue
       }

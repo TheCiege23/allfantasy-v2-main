@@ -17,12 +17,12 @@
  * not applied.
  */
 import type { MatchupCorrection } from './statCorrectionReview'
-import type { ScoreAdjustment } from '@/lib/score-adjustments/scoreAdjustments'
+import { STAT_CORRECTION_ACTOR, statCorrectionApplied, type ScoreAdjustment } from '@/lib/score-adjustments/scoreAdjustments'
 
 /** League.settings key. Absent = off. */
 export const EXTENDED_CORRECTIONS_KEY = 'stat_corrections_extended'
 /** The actor every automatic correction is recorded under, so earlier ones can be found again. */
-export const STAT_CORRECTION_ACTOR = 'system:stat-corrections'
+export { STAT_CORRECTION_ACTOR }
 export const FREE_CORRECTION_WINDOW_DAYS = 6
 export const EXTENDED_CORRECTION_WINDOW_DAYS = 14
 /** How many finished weeks an extended league re-checks. */
@@ -34,11 +34,13 @@ export function readExtendedCorrections(settings: unknown): boolean {
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-/** What earlier automatic corrections already added to one team in one matchup. */
+/**
+ * What earlier corrections already added to one team in one matchup — automatic ones AND a
+ * commissioner's Apply (lib/stat-corrections/statCorrectionService.ts), so neither path adds a
+ * correction the other already landed.
+ */
 export function appliedCorrection(list: readonly ScoreAdjustment[], matchupId: string, rosterId: string): number {
-  let sum = 0
-  for (const a of list) if (a.byUserId === STAT_CORRECTION_ACTOR && a.matchupId === matchupId && a.rosterId === rosterId) sum += a.points
-  return round2(sum)
+  return statCorrectionApplied(list, matchupId, rosterId)
 }
 
 export type CorrectionAdjustment = { matchupId: string; rosterId: string; points: number }

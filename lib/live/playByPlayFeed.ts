@@ -83,15 +83,40 @@ export async function inProgressRiGameIds(now: Date = new Date(), trackedGames: 
         source: 'rolling_insights',
         startTime: { gte: from, lte: to },
       },
-      select: { externalId: true, status: true },
+      select: { externalId: true, status: true, startTime: true },
       take: 40,
     })
     .catch(() => [])
 
   return rows
-    .filter((r) => normaliseStatus(r.status ?? undefined) === 'in_progress' || normaliseStatus(r.status ?? undefined) === 'final' && trackedGames.has(r.externalId))
+    .filter((r) => isPollable(r, now, trackedGames))
     .map((r) => r.externalId)
     .filter(Boolean)
+}
+
+const CALLED_OFF = /postpon|cancel|suspend|delay/i
+
+/**
+ * Should this game's play-by-play be read now?
+ *
+ * 🛑 KICKOFF, NOT THE STORED STATUS (2026-10-25). The row's status is written by the slower schedule
+ * sync, not by the live tick, so it can say "scheduled" long after kickoff. On 2026-10-25 the London
+ * game (PIT at NO, 13:30 UTC) read "scheduled" until 16:17 UTC: every tick skipped it as
+ * "no-live-games", and every starter play from the first three quarters went out in one burst at
+ * 16:18. So a game whose kickoff has passed is polled unless it is final or called off. The window
+ * (4h after kickoff) bounds a status that never catches up, and a final game is still read once more
+ * while it has a cursor, so its last plays are not lost.
+ */
+export function isPollable(
+  row: { externalId: string; status: string | null; startTime: Date | null },
+  now: Date,
+  trackedGames: ReadonlySet<string>,
+): boolean {
+  const status = normaliseStatus(row.status ?? undefined)
+  if (status === 'final') return trackedGames.has(row.externalId)
+  if (status === 'in_progress') return true
+  if (CALLED_OFF.test(row.status ?? '')) return false
+  return row.startTime != null && row.startTime.getTime() <= now.getTime()
 }
 
 type Cursor = Record<string, number>

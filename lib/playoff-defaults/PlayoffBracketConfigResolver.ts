@@ -7,6 +7,7 @@ import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoff
 import type { SportType } from '@/lib/sport-defaults/types'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
 import { firstRoundByesForTeams, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
+import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 
 export interface PlayoffBracketConfig {
   playoff_team_count: number
@@ -121,10 +122,8 @@ export async function getBracketConfigForLeague(leagueId: string): Promise<Playo
     matchup_length: matchupLength,
     total_rounds: totalRounds,
     consolation_bracket_enabled: consolationEnabled,
-    third_place_game_enabled: fromSettings<boolean>(
-      'third_place_game_enabled',
-      defaults.third_place_game_enabled ?? false
-    ),
+    // The reader the settings screen uses too (lib/playoff-runtime/thirdPlaceGame.ts).
+    third_place_game_enabled: readThirdPlaceGameEnabled(settings, sport, variant),
     toilet_bowl_enabled: toiletBowlEnabled,
     championship_length: fromSettings<number>(
       'championship_length',

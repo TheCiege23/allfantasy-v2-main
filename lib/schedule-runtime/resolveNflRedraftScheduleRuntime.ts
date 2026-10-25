@@ -1,5 +1,6 @@
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
+import { assignExtraMatchupForWeek } from '@/lib/redraft/oddTeamExtraMatchup'
 import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
@@ -545,6 +546,11 @@ export async function advanceNflRedraftScheduleWeek(input: {
       week: transition.currentWeek,
     }).catch((error) => {
       console.error('[schedule-runtime] weekly waiver priority reset failed', { seasonId: input.seasonId, error })
+    })
+    // An odd-team league on the extra matchup fixes this week's leftover-team opponent now, from the
+    // week just finished (lib/redraft/oddTeamExtraMatchup.ts — idempotent, a no-op when it is off).
+    await assignExtraMatchupForWeek({ seasonId: input.seasonId, week: transition.currentWeek }).catch((error) => {
+      console.error('[schedule-runtime] extra matchup assignment failed', { seasonId: input.seasonId, error })
     })
   }
 

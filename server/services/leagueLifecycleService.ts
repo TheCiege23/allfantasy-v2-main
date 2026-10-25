@@ -260,6 +260,28 @@ export function isDynastyOffseasonMoveAllowed(
   return state === 'pre_draft' && ctx.hasPriorSeason
 }
 
+/**
+ * An offseason the commissioner opened to first-come free agency
+ * (`waiverEngineConfig.offseason_waiver_rules = 'fcfs'`, lib/waiver-wire/season-phase-policy.ts):
+ * the add/drop route passes `offseasonFreeAgency` once that policy has said so, and only a free-agent
+ * pickup is let through — claims, trades and every other move stay closed by the table above.
+ */
+const OFFSEASON_FREE_AGENCY_STATES: ReadonlySet<LeagueLifecycleState> = new Set([
+  'completed',
+  'offseason',
+  'renewal_pending',
+  'setup',
+  'pre_draft',
+])
+
+export function isOffseasonFreeAgencyAllowed(
+  action: LeagueLifecycleAction,
+  state: LeagueLifecycleState,
+  rosterMove: RosterMoveKind | null | undefined,
+): boolean {
+  return action === 'waiver_claim_submit' && rosterMove === 'free_agent_pickup' && OFFSEASON_FREE_AGENCY_STATES.has(state)
+}
+
 function dynastyContextCanMatter(action: LeagueLifecycleAction, state: LeagueLifecycleState): boolean {
   return DYNASTY_OFFSEASON_MOVE_ACTIONS.has(action) && (state === 'offseason' || state === 'pre_draft')
 }
@@ -515,6 +537,8 @@ export async function assertLifecycleActionAllowed(
      * `free_agent_pickup` because it shares `waiver_claim_submit` with claims.
      */
     rosterMove?: RosterMoveKind
+    /** First-come free agency in an opened offseason (`isOffseasonFreeAgencyAllowed`). */
+    offseasonFreeAgency?: boolean
   },
 ): Promise<{ ok: true; postDraftLock?: PostDraftRosterLockStatus } | { ok: false; err: LifecycleGateError }> {
   const row = await loadLeagueForLifecycle(leagueId)
@@ -563,11 +587,12 @@ export async function assertLifecycleActionAllowed(
   const league = dynastyContextCanMatter(action, state)
     ? await loadLifecycleLeagueContext(leagueId, { ...row, lifecycleState: state })
     : null
-  const allowed = isActionAllowed(action, state, {
-    commissionerOverride: opts?.commissionerOverride,
-    roleIsElevated: elevated,
-    league,
-  })
+  const allowed =
+    isActionAllowed(action, state, {
+      commissionerOverride: opts?.commissionerOverride,
+      roleIsElevated: elevated,
+      league,
+    }) || (opts?.offseasonFreeAgency === true && isOffseasonFreeAgencyAllowed(action, state, opts?.rosterMove))
 
   if (!allowed) {
     return {

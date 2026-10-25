@@ -1,4 +1,5 @@
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
@@ -642,8 +643,11 @@ export async function createCanonicalLeagueInTransaction(
       // three-keeper league to every consumer that trusts the column. A league created here
       // without keepers has decided: none.
       ...(keeperBootstrap ? keeperBootstrap.league : { keeperCount: 0 }),
-      // League-median game — the standings engine plays it when this is on.
-      medianGame: scoringMode === 'points' && conceptSetupForPrivacy.medianGame === true,
+      // League-median game — the standings engine plays it when this is on. An odd redraft or keeper
+      // league starts with it on when the request says nothing (lib/league/oddTeamLeagues.ts).
+      medianGame: scoringMode === 'points' && (ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(formatId))
+        ? defaultMedianGameFor(managerCount, typeof conceptSetupForPrivacy.medianGame === 'boolean' ? conceptSetupForPrivacy.medianGame : null)
+        : conceptSetupForPrivacy.medianGame === true),
       ...(scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
       ...(isGuillotine
         ? {

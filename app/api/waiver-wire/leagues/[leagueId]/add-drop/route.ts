@@ -17,17 +17,27 @@ import { logAction } from "@/server/services/auditService"
 import { invalidateIntelligence } from "@/lib/dashboard/intelligence-events"
 import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
 import { POST_DRAFT_ROSTER_LOCK_CODE } from "@/lib/league/postDraftRosterLock"
+import { loadWaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-gate"
+import {
+  DROPPED_PLAYER_ON_WAIVERS_MESSAGE,
+  loadDroppedPlayerHold,
+  loadDroppedPlayerWaiverHours,
+} from "@/lib/waiver-wire/dropped-player-waivers"
 
 export const dynamic = "force-dynamic"
 
-function errorResponse(code: AddDropErrorCode, message?: string) {
-  return NextResponse.json({ ok: false, code, error: message ?? ADD_DROP_ERROR_COPY[code] }, { status: addDropErrorStatus(code) })
+function errorResponse(code: AddDropErrorCode, message?: string, extra?: Record<string, unknown>) {
+  return NextResponse.json(
+    { ok: false, code, error: message ?? ADD_DROP_ERROR_COPY[code], ...(extra ?? {}) },
+    { status: addDropErrorStatus(code) },
+  )
 }
 
 /**
  * POST — immediate free-agent add/drop for NFL/NCAAF redraft.
  *
- * Only performs an immediate move when the league allows it (FCFS or instant-free-agent). When the
+ * Only performs an immediate move when the league allows it (FCFS or instant-free-agent, a daily
+ * free-agent unlock, or an offseason opened as first-come free agency). When the
  * player must be claimed through waivers, returns `WAIVER_REQUIRED` so the client routes to the
  * claim drawer instead. Single-roster only — never runs the league-wide processor, so other teams'
  * pending claims are untouched and never exposed.
@@ -54,9 +64,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const dropPlayerId = body.dropPlayerId ?? body.drop_player_id ?? null
   if (!addPlayerId) return errorResponse("VALIDATION_FAILED", "addPlayerId is required.")
 
+  // Season phase (lib/waiver-wire/season-phase-policy.ts): a closed offseason, rosters locked for the
+  // playoffs, or a team out of the title bracket under the alive-only rule cannot add. An offseason
+  // opened as first-come free agency lets the add through the lifecycle gate, as a first-come add.
+  const phase = await loadWaiverPhasePolicy(leagueId, roster.id)
+  if (!phase.immediateAddsAllowed) {
+    return errorResponse("LEAGUE_NOT_ACTIVE", phase.reason ?? undefined, { phaseCode: phase.code })
+  }
+
   // League + roster gates (locks, season state, legality).
   // An immediate add is a free-agent pickup, refused during the post-draft roster lock (claims are not).
-  const gate = await assertLeagueActionGate(leagueId, userId, "waiver_claim_submit", { rosterMove: "free_agent_pickup" })
+  const gate = await assertLeagueActionGate(leagueId, userId, "waiver_claim_submit", {
+    rosterMove: "free_agent_pickup",
+    ...(phase.firstComeAdds ? { offseasonFreeAgency: true } : {}),
+  })
   if (!gate.ok) {
     if (gate.err.code === POST_DRAFT_ROSTER_LOCK_CODE) {
       return NextResponse.json(
@@ -78,14 +99,30 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   // any other waiver day → claim through waivers. Otherwise: FCFS or instant-free-agent leagues; or a
   // 'daily' free-agent-unlock league (the NBA/MLB/NHL default) for a player not on waivers — not in the
   // after-drop waiver period and not named by a pending claim. NFL ('after_waiver_run') is unchanged.
-  const daily = await loadDailyTransactionPolicy(leagueId).catch(() => null)
-  if (daily) {
+  //
+  // A player dropped inside the league's waiver period is on waivers whatever the path, so an
+  // instant-free-agent league checks him too (lib/waiver-wire/dropped-player-waivers.ts); FCFS has no
+  // waiver period. An offseason opened as first-come free agency skips all of this.
+  const daily = phase.firstComeAdds ? null : await loadDailyTransactionPolicy(leagueId).catch(() => null)
+  if (phase.firstComeAdds) {
+    // First come, first served: no waiver type and no waiver period apply.
+  } else if (daily) {
     if (daily.policy.mode === "locked") return errorResponse("LEAGUE_NOT_ACTIVE", daily.policy.immediateRefusal ?? undefined)
     const refusal = await dailyScheduleImmediateAddRefusal(leagueId, daily, String(addPlayerId))
     if (refusal) return errorResponse("WAIVER_REQUIRED", refusal)
   } else {
     const settings = await getEffectiveLeagueWaiverSettings(leagueId)
     const immediateAllowed = settings.normalizedWaiverType === "fcfs" || settings.instantFaAfterClear === true
+    if (immediateAllowed && settings.normalizedWaiverType !== "fcfs") {
+      // Fails CLOSED like the daily path: an unreadable hold means a claim, never a free add.
+      const hold = await loadDroppedPlayerWaiverHours(leagueId, settings.normalizedWaiverType)
+        .then((hours) => loadDroppedPlayerHold(leagueId, String(addPlayerId), hours))
+        .catch(() => "unknown" as const)
+      if (hold === "unknown") return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
+      if (hold) {
+        return errorResponse("WAIVER_REQUIRED", DROPPED_PLAYER_ON_WAIVERS_MESSAGE, { onWaiversUntil: hold.until.toISOString() })
+      }
+    }
     if (!immediateAllowed) {
       if (!isDailyFreeAgentUnlock(settings.freeAgentUnlockBehavior)) {
         return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
@@ -98,7 +135,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   }
 
   try {
-    const result = await executeImmediateAddDrop(leagueId, roster.id, { addPlayerId: String(addPlayerId), dropPlayerId })
+    const result = await executeImmediateAddDrop(
+      leagueId,
+      roster.id,
+      { addPlayerId: String(addPlayerId), dropPlayerId },
+      ...(phase.firstComeAdds ? [{ offseasonFreeAgency: true }] : []),
+    )
 
     void logAction({
       leagueId,

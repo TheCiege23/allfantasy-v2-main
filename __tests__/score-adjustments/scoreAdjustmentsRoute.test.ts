@@ -14,7 +14,12 @@ vi.mock('@/lib/score-adjustments/scoreAdjustmentService', () => ({
 }))
 
 const statCorrections = vi.hoisted(() => vi.fn(async () => ({ covered: true, latest: null })))
-vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({ readStatCorrections: statCorrections }))
+const applyCorrections = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({
+  readStatCorrections: statCorrections,
+  commissionerApplyStatCorrections: applyCorrections,
+  APPLY_STAT_CORRECTION_ERROR_TEXT: { not_in_review: 'not in review', not_covered: 'not covered', no_review: 'no review' },
+}))
 
 import { GET, POST } from '@/app/api/commissioner/leagues/[leagueId]/operations/route'
 
@@ -29,6 +34,8 @@ describe('score adjustments on the commissioner operations route', () => {
     expect((await GET(new NextRequest('http://x/api?view=score_adjustments'), params)).status).toBe(403)
     expect((await GET(new NextRequest('http://x/api?view=stat_corrections'), params)).status).toBe(403)
     expect(statCorrections).not.toHaveBeenCalled()
+    expect((await post({ action: 'stat_correction_apply', matchupId: 'all' })).status).toBe(403)
+    expect(applyCorrections).not.toHaveBeenCalled()
     expect((await post({ action: 'score_adjustment_add' })).status).toBe(403)
     expect(svc.add).not.toHaveBeenCalled()
     expect(svc.week).not.toHaveBeenCalled()
@@ -61,5 +68,23 @@ describe('score adjustments on the commissioner operations route', () => {
     expect(res.status).toBe(200)
     expect(statCorrections).toHaveBeenCalledWith('L')
     expect(await res.json()).toEqual({ covered: true, latest: null })
+  })
+  it('applies stat corrections only for a named matchup or an explicit all', async () => {
+    expect((await post({ action: 'stat_correction_apply' })).status).toBe(400)
+    expect(applyCorrections).not.toHaveBeenCalled()
+
+    applyCorrections.mockResolvedValueOnce({ ok: true, week: 7, adjustmentsAdded: 2 })
+    const ok = await post({ action: 'stat_correction_apply', matchupId: 'all' })
+    expect(ok.status).toBe(200)
+    expect(applyCorrections).toHaveBeenCalledWith('L', 'u1', 'all')
+    expect(await ok.json()).toEqual({ status: 'ok', week: 7, adjustmentsAdded: 2 })
+
+    applyCorrections.mockResolvedValueOnce({ ok: false, error: 'not_in_review' })
+    const missing = await post({ action: 'stat_correction_apply', matchupId: 'm9' })
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({ error: 'not in review', code: 'not_in_review' })
+
+    applyCorrections.mockResolvedValueOnce({ ok: false, error: 'not_points' })
+    expect((await post({ action: 'stat_correction_apply', matchupId: 'm1' })).status).toBe(409)
   })
 })

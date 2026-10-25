@@ -30,6 +30,11 @@ import {
 
 export type UnifiedPlayerWireDto = {
   id: string
+  /**
+   * Waiver wire only: a recently dropped player is on waivers until this ISO time
+   * (lib/waiver-wire/dropped-player-waivers.ts). Absent for every other player and surface.
+   */
+  onWaiversUntil?: string | null
   name: string
   position: string | null
   team: string | null

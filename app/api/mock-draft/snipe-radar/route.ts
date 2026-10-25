@@ -6,25 +6,16 @@ import { getLiveADP, type ADPEntry } from '@/lib/adp-data'
 import { applyRealtimeAdpAdjustments } from '@/lib/mock-draft/adp-realtime-adjuster'
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
 import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
+import { resolveLeagueMockTeamCount, MAX_LEAGUE_MOCK_TEAMS, mockRoundOrder, mockTeamPickOveralls } from '@/lib/mock-draft/mockTeamCount'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-function snakeOrder(teamCount: number, round: number): number[] {
-  const arr = Array.from({ length: teamCount }, (_, i) => i)
-  return round % 2 === 1 ? arr : arr.reverse()
-}
+/** This tool models a snake draft (lib/mock-draft/mockTeamCount.ts). */
+const snakeOrder = (teamCount: number, round: number) => mockRoundOrder(teamCount, round, 'snake')
 
-function getUserPickOveralls(teamCount: number, userIdx: number, rounds: number): number[] {
-  const picks: number[] = []
-  for (let r = 1; r <= rounds; r++) {
-    const order = snakeOrder(teamCount, r)
-    const slot = order.indexOf(userIdx)
-    if (slot >= 0) picks.push((r - 1) * teamCount + slot + 1)
-  }
-  return picks
-}
+const getUserPickOveralls = (teamCount: number, userIdx: number, rounds: number) => mockTeamPickOveralls(teamCount, userIdx, rounds, 'snake')
 
 const POSITION_TARGETS: Record<string, number> = { QB: 2, RB: 5, WR: 5, TE: 2 }
 
@@ -95,9 +86,9 @@ export async function POST(req: NextRequest) {
         teams: {
           include: { performances: { orderBy: { week: 'desc' }, take: 12 } },
           orderBy: { currentRank: 'asc' },
-          take: 20,
+          take: MAX_LEAGUE_MOCK_TEAMS,
         },
-        rosters: { select: { platformUserId: true, playerData: true }, take: 20 },
+        rosters: { select: { platformUserId: true, playerData: true }, take: MAX_LEAGUE_MOCK_TEAMS },
       },
     })
 
@@ -107,7 +98,8 @@ export async function POST(req: NextRequest) {
     const adjusted = await applyRealtimeAdpAdjustments(adp, { isDynasty: league.isDynasty })
     const pool = adjusted.entries.filter(p => ['QB', 'RB', 'WR', 'TE'].includes(p.position)).slice(0, 180)
 
-    const teamCount = Math.max(league.leagueSize || 0, league.teams.length || 0, 12)
+    // The league's real size: a 4- or 20-team league is not a 12-team draft.
+    const teamCount = resolveLeagueMockTeamCount(league.leagueSize, league.teams.length)
 
     const dnaCards: ManagerDNA[] = league.teams.length
       ? buildManagerDNAFromLeague(
