@@ -133,7 +133,10 @@ export async function persistRosterLineupWithEngine(
       leagueVariant: league.leagueVariant,
       settings: league.settings,
       lifecycleState: league.lifecycleState,
-      lockAllMoves: league.lockAllMoves,
+      // The move lock binds members, not the commissioner correcting a roster under it — the same
+      // exemption the trade and waiver runtimes give `commissionerOverride`. `skipLockCheck` alone did
+      // not reach this validation, so the override tool was refused by the lock it exists to work around.
+      lockAllMoves: input.source === 'commissioner_override' ? false : league.lockAllMoves,
       irAllowOut: league.irAllowOut,
       irAllowCovid: league.irAllowCovid,
       irAllowSuspended: league.irAllowSuspended,
