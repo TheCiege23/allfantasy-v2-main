@@ -64,6 +64,7 @@ import {
   isTaxiIncreaseRefused,
 } from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
@@ -462,6 +463,14 @@ export async function executeLeagueSettingsPatch(
     byePlan: (league.settings as Record<string, unknown> | null)?.playoff_bye_plan,
   })
   if (bracketRefusal) return jsonError(bracketRefusal.message, bracketRefusal.status)
+
+  /*
+   * League median in the playoffs (lib/redraft/medianGame.ts) — off unless stored true. A boolean only:
+   * anything else is refused rather than read as off, so a bad client cannot silently flip it.
+   */
+  if (body.medianGameInPlayoffs !== undefined && typeof body.medianGameInPlayoffs !== 'boolean') {
+    return jsonError('medianGameInPlayoffs must be true or false', 400)
+  }
 
   /*
    * Championship length — how many weeks the final is scored over (lib/playoff-runtime/playoffRoundWeeks.ts).
@@ -922,6 +931,15 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push(DAILY_WAIVER_SCHEDULE_SETTINGS_KEY)
+  }
+
+  if (typeof body.medianGameInPlayoffs === 'boolean') {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY]: body.medianGameInPlayoffs } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY)
   }
 
   if (championshipLengthToStore != null) {

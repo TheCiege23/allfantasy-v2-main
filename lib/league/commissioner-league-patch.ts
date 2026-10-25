@@ -2,6 +2,7 @@ import type { League, LeagueSport, Prisma } from '@prisma/client'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { capSlotTokens, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { readLineupMode, type LineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 /** Subset of `League` exposed to commissioner settings UI (GET + PATCH). */
@@ -52,6 +53,11 @@ export type CommissionerSettingsFormData = {
   irAllowDoubtful?: boolean | null
   leagueType?: string | null
   medianGame?: boolean | null
+  /**
+   * Whether the league median also plays in playoff weeks (`settings.median_game_in_playoffs`,
+   * lib/redraft/medianGame.ts); false unless stored true. Not a column — PATCHed as `medianGameInPlayoffs`.
+   */
+  medianGameInPlayoffs?: boolean
   allowPreDraftMoves?: boolean | null
   preventBenchDrops?: boolean | null
   lockAllMoves?: boolean | null
@@ -203,6 +209,7 @@ export function commissionerLeagueFieldsFromRow(
     irAllowDoubtful: league.irAllowDoubtful,
     leagueType: league.leagueType,
     medianGame: league.medianGame,
+    medianGameInPlayoffs: readMedianGameInPlayoffs(league.settings),
     allowPreDraftMoves: league.allowPreDraftMoves,
     preventBenchDrops: league.preventBenchDrops,
     lockAllMoves: league.lockAllMoves,
