@@ -50,7 +50,9 @@ describe('redraft Trade Center rebuild — stepped flow contract', () => {
   it('settles accepted trades for real (players + FAAB) on the accept path', () => {
     expect(settlementSrc).toContain('redraftRosterPlayer.updateMany')
     expect(settlementSrc).toContain('faabBalance')
-    expect(voteRouteSrc).toContain('settleRedraftTradeAssets')
+    // The route settles through the shared finalizer (also used by the review-window sweep).
+    expect(voteRouteSrc).toContain('finalizeRedraftTrade')
+    expect(read('lib/redraft/finalizeRedraftTrade.ts')).toContain('settleRedraftTradeAssets')
   })
 
   it('surfaces league trade settings and a multi-team coming-soon affordance', () => {

@@ -13,6 +13,7 @@ import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 
 export const DEFAULT_MOCK_TEAM_COUNT = 12
 
@@ -63,10 +64,31 @@ export function resolveLeagueMockTeamCount(leagueSize: number | null | undefined
 /** Largest team count any league may have — the league-derived tools read this many team rows. */
 export const MAX_LEAGUE_MOCK_TEAMS = Math.max(...UNIVERSAL_CREATE_TEAM_COUNTS)
 
-/** Team indexes (0-based) in pick order for one round. Snake reverses even rounds; linear never does. */
-export function mockRoundOrder(teamCount: number, round: number, draftType: 'snake' | 'linear' = 'snake'): number[] {
-  const arr = Array.from({ length: teamCount }, (_, i) => i)
-  return draftType === 'snake' && round % 2 === 0 ? arr.reverse() : arr
+/**
+ * A league's pick order: snake or linear, and third-round reversal (snake only). Resolved for a real
+ * league by `resolveLeagueMockDraftOrder` (lib/mock-draft/leagueMockDraftOrder.ts).
+ */
+export type MockDraftOrder = { draftType: 'snake' | 'linear'; thirdRoundReversal: boolean }
+
+function asOrder(order: MockDraftOrder | 'snake' | 'linear'): MockDraftOrder {
+  return typeof order === 'string' ? { draftType: order, thirdRoundReversal: false } : order
+}
+
+/**
+ * Team indexes (0-based) in pick order for one round, by the live draft engine's own rule
+ * (`getSlotInRoundForOverall`): snake reverses even rounds, 3RR reverses rounds 2 and 3 and then odd
+ * rounds from 5, linear never reverses.
+ */
+export function mockRoundOrder(teamCount: number, round: number, order: MockDraftOrder | 'snake' | 'linear' = 'snake'): number[] {
+  const o = asOrder(order)
+  return Array.from({ length: teamCount }, (_, i) =>
+    getSlotInRoundForOverall({
+      overall: (round - 1) * teamCount + i + 1,
+      teamCount,
+      draftType: o.draftType,
+      thirdRoundReversal: o.draftType === 'snake' && o.thirdRoundReversal,
+    }) - 1,
+  )
 }
 
 /** Overall pick numbers (1-based) a team (0-based index) makes in the first `rounds` rounds. */
@@ -74,11 +96,11 @@ export function mockTeamPickOveralls(
   teamCount: number,
   teamIdx: number,
   rounds: number,
-  draftType: 'snake' | 'linear' = 'snake',
+  order: MockDraftOrder | 'snake' | 'linear' = 'snake',
 ): number[] {
   const picks: number[] = []
   for (let r = 1; r <= rounds; r++) {
-    const slot = mockRoundOrder(teamCount, r, draftType).indexOf(teamIdx)
+    const slot = mockRoundOrder(teamCount, r, order).indexOf(teamIdx)
     if (slot >= 0) picks.push((r - 1) * teamCount + slot + 1)
   }
   return picks
