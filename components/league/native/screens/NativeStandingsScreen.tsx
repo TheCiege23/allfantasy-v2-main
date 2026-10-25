@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { allPlayShare, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
 import { Card, ScreenHead, Segmented } from './NativeScreenParts'
+import { SideContestsCard } from './SideContestsCard'
 
 /**
  * Standings & playoffs — handoff §3, `Standings.png` / `MobileStandings.png`.
@@ -288,6 +289,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
               </dl>
               {isCommissioner ? <button type="button" className="nl-text-link" onClick={() => onSelectTab('settings')}>Edit in Commissioner</button> : null}
             </Card>
+            <SideContestsCard leagueId={league.id} />
           </aside>
         </div>
       ) : null}
