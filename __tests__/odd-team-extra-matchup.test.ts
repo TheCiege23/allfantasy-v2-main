@@ -257,16 +257,22 @@ describe('fixing the pick when the week opens', () => {
     expect(h.db.redraftMatchup.update).not.toHaveBeenCalled()
   })
 
-  it('the screens read it back: "Extra matchup vs <team> (last week\'s top scorer)"', async () => {
+  it('the screens read it back with both scores: "Extra matchup vs <team> (last week\'s top scorer)"', async () => {
     h.db.redraftSeason.findFirst.mockResolvedValue({ id: 's1' })
     h.db.redraftMatchup.findMany.mockResolvedValue([
-      { homeRosterId: 'C', lineupSnapshots: { extraMatchup: { opponentRosterId: 'A', rule: 'top_scorer', reason: 'top_scorer', scoring: 'leftover_only', basisWeek: 2, decidedAt: 'x' } } },
+      { week: 3, homeRosterId: 'A', awayRosterId: 'D', homeScore: 101.5, awayScore: 90, status: 'final', lineupSnapshots: null },
+      { week: 3, homeRosterId: 'B', awayRosterId: 'E', homeScore: 80, awayScore: 85, status: 'final', lineupSnapshots: null },
+      { week: 3, homeRosterId: 'C', awayRosterId: null, homeScore: 120.25, awayScore: 0, status: 'final', lineupSnapshots: { extraMatchup: { opponentRosterId: 'A', rule: 'top_scorer', reason: 'top_scorer', scoring: 'leftover_only', basisWeek: 2, decidedAt: 'x' } } },
     ])
-    h.db.redraftRoster.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) => ({ teamName: `Team ${where.id}`, ownerName: 'o' }))
+    h.db.redraftRoster.findMany.mockResolvedValue(['A', 'B', 'C', 'D', 'E'].map((id) => ({ id, teamName: `Team ${id}`, ownerName: 'o' })))
     const mine = await readExtraMatchupView({ leagueId: 'L1', season: 2026, week: 3, redraftRosterId: 'C' })
-    expect(mine).toMatchObject({ role: 'leftover', label: "Extra matchup vs Team A (last week's top scorer)", countsForYou: true })
+    expect(mine).toMatchObject({
+      role: 'leftover', otherRosterId: 'A', countsForYou: true, yourScore: 120.25, theirScore: 101.5, final: true,
+      label: "Extra matchup vs Team A (last week's top scorer)",
+      line: "Extra matchup vs Team A (last week's top scorer) · 120.3–101.5",
+    })
     const theirs = await readExtraMatchupView({ leagueId: 'L1', season: 2026, week: 3, redraftRosterId: 'A' })
-    expect(theirs).toMatchObject({ role: 'opponent', teamName: 'Team C', countsForYou: false })
+    expect(theirs).toMatchObject({ role: 'opponent', teamName: 'Team C', countsForYou: false, yourScore: 101.5, theirScore: 120.25 })
     expect(await readExtraMatchupView({ leagueId: 'L1', season: 2026, week: 3, redraftRosterId: 'B' })).toBeNull()
   })
 })

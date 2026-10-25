@@ -19,10 +19,15 @@ import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 
 const EXTRA = {
   role: 'leftover' as const,
+  otherRosterId: 'r9',
   teamName: 'Gridiron Gang',
   reason: 'top_scorer' as const,
   countsForYou: true,
+  yourScore: 112.4,
+  theirScore: 98,
+  final: false,
   label: "Extra matchup vs Gridiron Gang (last week's top scorer)",
+  line: "Extra matchup vs Gridiron Gang (last week's top scorer) · 112.4–98.0",
 }
 
 beforeEach(() => {
@@ -70,12 +75,12 @@ function board(extraMatchup: LeagueWeekBoard['extraMatchup']): LeagueWeekBoard {
 describe('the extra matchup on screen', () => {
   it('the matchup screen names it', () => {
     render(<Matchup data={matchupData(EXTRA)} />)
-    expect(screen.getByTestId('matchup-extra-matchup').textContent).toBe("Extra matchup vs Gridiron Gang (last week's top scorer)")
+    expect(screen.getByTestId('matchup-extra-matchup').textContent).toBe("Extra matchup vs Gridiron Gang (last week's top scorer) · 112.4–98.0")
   })
 
   it('the week board names it, in place of the bye', () => {
     render(<YourWeekLeague board={board(EXTRA)} allWeeksHref="/core/week" />)
-    expect(screen.getByTestId('week-board-extra-matchup').textContent).toContain('Extra matchup vs Gridiron Gang')
+    expect(screen.getByTestId('week-board-extra-matchup').textContent).toContain('Extra matchup vs Gridiron Gang (last week\'s top scorer) · 112.4–98.0')
   })
 
   it('neither shows anything without one', () => {

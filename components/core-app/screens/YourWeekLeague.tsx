@@ -147,7 +147,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
       {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
       {board.extraMatchup ? (
         <section className="af-wl-hero" aria-label={copy('Extra matchup')} data-testid="week-board-extra-matchup">
-          <p className="af-wl-hero-why">{board.extraMatchup.label}</p>
+          <p className="af-wl-hero-why">{board.extraMatchup.line}</p>
         </section>
       ) : null}
 

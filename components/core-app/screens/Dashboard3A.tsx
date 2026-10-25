@@ -816,9 +816,11 @@ export function Dash3AMatchups({
           platform: r.platform,
           you: r.pointsFor,
           them: r.pointsAgainst,
-          note: es
+          note: (es
             ? `Semana ${r.week} · ${MATCH_RESULT_ES[result]}`
-            : `Week ${r.week} · ${MATCH_RESULT_EN[result]}`,
+            : `Week ${r.week} · ${MATCH_RESULT_EN[result]}`) +
+            // An odd-team league's extra game, in place of the bye (lib/core-app/weekAll.ts).
+            (r.extraMatchupLabel ? ` · ${r.extraMatchupLabel}` : ''),
           completed: r.completed === true,
           period: `${r.season} · ${es ? 'Semana' : 'Week'} ${r.week}`,
         }
