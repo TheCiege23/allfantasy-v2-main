@@ -1457,7 +1457,8 @@ const maxWeekMenu = useMemo(() => {
       setSavingLineup(true)
       try {
         // Each starter carries his slot index, so FLEX vs RB2 (or UTIL 2) is still his after a reload.
-        const roster = buildLineupSaveRoster(next, players)
+        // IR rows carry the player's real designation; the save route refuses an IR row marked healthy.
+        const roster = buildLineupSaveRoster(next, players, payload && payload.source !== 'sleeper' ? payload.roster : null)
         const res = await fetch('/api/leagues/roster/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1495,7 +1496,7 @@ const maxWeekMenu = useMemo(() => {
         setSavingLineup(false)
       }
     },
-    [dbRosterMeta, lineupEditable, players, league.id, week, load, lineupWriteCopy],
+    [dbRosterMeta, lineupEditable, players, payload, league.id, week, load, lineupWriteCopy],
   )
 
   const replacementContextsByPlayer = useMemo(() => {
