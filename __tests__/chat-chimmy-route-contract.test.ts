@@ -325,6 +325,18 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(previewSpendMock).not.toHaveBeenCalled();expect(takeAnswerAllowanceMock).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled();expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
 
+  it('returns a screenshot preview before calling image interpretation or charging', async () => {
+    vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
+    const vision=await import('@/lib/chimmy/screenshotVision');const interpret=vi.spyOn(vision,'parseScreenshotWithVision').mockResolvedValue('PRIVATE image details')
+    try {
+      const file=new File(['screenshot'], 'trade.png', {type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new TextEncoder().encode('screenshot').buffer})
+      const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','screenshot-request');form.set('assistantMode','deep_analysis');form.set('image',file)
+      const request=buildMultipartRequest();vi.spyOn(request,'formData').mockResolvedValue(form)
+      const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(request as any)
+      expect(res.status).toBe(409);const body=await res.json();expect(body.analysisPreview.summary).toContain('has not been interpreted');expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(interpret).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+    } finally { interpret.mockRestore() }
+  })
+
   it("returns 401 when unauthenticated", async () => {
     getServerSessionMock.mockResolvedValueOnce(null)
 

@@ -18,4 +18,3 @@ export async function fingerprintChimmyRequest(form: FormData): Promise<string> 
   }
   return hash.digest('hex')
 }
-

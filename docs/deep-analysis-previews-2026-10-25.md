@@ -29,6 +29,6 @@ Response fields are selected explicitly and authorization runs before releasing 
 
 ## Verification and release
 
-Focused checks cover quote tampering/expiry, account and question binding, both price-change directions, free allowance preservation, exact three-token debit and replay, public response field privacy, explicit unlock UI, and stable request identity. Required CI gates and production verification are recorded below after completion.
+Focused checks cover quote tampering/expiry, account and question binding, both price-change directions, free allowance preservation, exact three-token debit and replay, public response field privacy, explicit unlock UI, and stable request identity. The focused verification has 106 passing checks. Required CI gates and production verification are tracked in [release PR #2721](https://github.com/TheCiege23/allfantasy-v2-main/pull/2721).
 
 Rollback: revert the release commit through the protected main workflow if previews expose extra detail, unlocks charge the wrong amount, or included answers stop working. No migration rollback is needed.
