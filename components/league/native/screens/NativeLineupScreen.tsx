@@ -35,6 +35,7 @@ import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, project
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
 
 /**
  * My team / Lineup — handoff §3, `Lineup.png` / `MobileLineup.png`.
@@ -144,6 +145,12 @@ function gameLine(p: DisplayPlayerRecord | undefined): string {
 /** `2026-10-20` → `Tue 20`, read as the calendar day it names (not shifted by the viewer's zone). */
 function dayLabel(day: string): string {
   return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+/** NBA / NHL / MLB: "C12" beside the name — rank within position by season points in this league's scoring. */
+function RankTag({ p }: { p: DisplayPlayerRecord | undefined }) {
+  if (!p?.positionRankLabel) return null
+  return <span className="nls-player-pos" title={AF_POSITION_RANK_TITLE} data-testid={`lineup-position-rank-${p.id}`}> {p.positionRankLabel}</span>
 }
 
 function untilLabel(ms: number): string {
@@ -397,6 +404,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const record = formatRecord({ wins: userTeam.wins, losses: userTeam.losses, ties: userTeam.ties })
   const place = ordinal(userTeam.currentRank)
   const startersProj = lists ? projectedTotal(lists.starters, players) : null
+  const afFormProjected = Object.values(players).some((p) => p.projectionsSource === AF_FORM_PROJECTION_SOURCE)
   const faab = data?.faabRemaining ?? null
   const runLabel = nextRunAt ? new Date(nextRunAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null
 
@@ -462,6 +470,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           <strong>
             {p?.name ?? (id ? 'Unknown player' : 'Empty')}
             {kind !== 'starter' && p?.position ? <span className="nls-player-pos"> {p.position}</span> : null}
+            <RankTag p={p} />
             <InjuryFlag status={p?.injuryStatus} />
           </strong>
           <small>{gameLine(p) || (id ? '—' : 'Open slot')}</small>
@@ -638,6 +647,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                   <section className="nls-card nls-card-flush" aria-label="Starters">
                     <h3 className="nls-label nls-card-head"><span>Starters</span><span>{startersProj != null ? `Proj ${fmt1(startersProj)}` : ''}</span></h3>
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
+                    {afFormProjected ? <p className="nls-muted" data-testid="lineup-af-projection-note">{AF_FORM_PROJECTION_EXPLAINER}{daily ? ' In a daily league the period is today.' : ''}</p> : null}
                   </section>
                   <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dropState({ kind: 'bench' })}>
                     <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null}</h3>
@@ -682,7 +692,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                       <li key={id}>
                         <div className="nls-lrow" data-cols="3">
                           <PosPill label={p?.position ?? '—'} />
-                          <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<InjuryFlag status={p?.injuryStatus} /></strong><small>{gameLine(p) || '—'}</small></div>
+                          <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<RankTag p={p} /><InjuryFlag status={p?.injuryStatus} /></strong><small>{gameLine(p) || '—'}</small></div>
                           <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
                         </div>
                       </li>

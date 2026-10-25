@@ -1191,6 +1191,7 @@ export default function WaiverWirePage({
                       aiAdp: row.displayAiAdp,
                       byeWeek: row.displayByeWeek,
                       rank: playerNumber(p, ["rank", "overallRank", "ecr", "consensusRank"]),
+                      positionRank: row.displayPositionRank,
                       ownershipPercent: playerNumber(p, ["ownershipPercent", "rosteredPercent", "rosterPercent"]),
                       projectionSourceLabel: row.projectionSourceLabel,
                       adpSourceLabel: row.adpSourceLabel,
