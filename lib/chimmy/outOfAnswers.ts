@@ -58,13 +58,14 @@ export function describeOutOfAnswers(
   opts: { inIosApp?: boolean } = {},
 ): OutOfAnswers {
   const buyTokens = (primary: boolean): OutOfAnswersAction => ({ label: 'Buy tokens', href: CHIMMY_BUY_TOKENS_HREF, primary })
-  const free = FREE_CHIMMY_QUESTIONS_PER_DAY
+  const free = plan?.kind === 'free' ? plan.limit : FREE_CHIMMY_QUESTIONS_PER_DAY
+  const subscription = plan?.kind === 'free' ? null : plan
 
   if (opts.inIosApp) {
-    return plan
+    return subscription
       ? {
-          title: `Today's ${plan.limit} ${plan.planName} answers are used`,
-          body: `This answer was not bought. Your ${plan.planName} answers refill at midnight UTC.`,
+          title: `Today's ${subscription.limit} ${subscription.planName} answers are used`,
+          body: `This answer was not bought. Your ${subscription.planName} answers refill at midnight UTC.`,
           actions: [],
         }
       : {
@@ -76,12 +77,12 @@ export function describeOutOfAnswers(
         }
   }
 
-  if (plan) {
+  if (subscription) {
     return {
-      title: `Today's ${plan.limit} ${plan.planName} answers are used`,
+      title: `Today's ${subscription.limit} ${subscription.planName} answers are used`,
       body:
         'You are out of tokens too, so this answer was not bought. Buy tokens to keep going now — ' +
-        `your ${plan.planName} answers refill at midnight UTC.`,
+        `your ${subscription.planName} answers refill at midnight UTC.`,
       actions: [buyTokens(true)],
     }
   }

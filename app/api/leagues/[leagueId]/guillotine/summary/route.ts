@@ -24,6 +24,7 @@ import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
 import { describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
+import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,21 @@ export async function GET(
     }
     const view = await readGuillotineRules(leagueId, userId)
     return view ? NextResponse.json(view) : NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+  }
+
+  // `?view=preview`: the commissioner's chop-week preview (lib/guillotine/chopPreview.ts). AF Commissioner,
+  // by the same check as the paid league rules. Reads only — nothing is chopped, moved or posted.
+  if (req.nextUrl.searchParams?.get('view') === 'preview') {
+    try {
+      await assertCommissioner(leagueId, userId)
+    } catch {
+      return NextResponse.json({ error: 'Only the commissioner can preview the chop.' }, { status: 403 })
+    }
+    if (!(await viewerCanEditPaidGuillotineRules(userId))) {
+      return NextResponse.json({ error: 'The chop preview is part of AF Commissioner.', code: 'feature_not_entitled', upgradePath: '/commissioner-upgrade' }, { status: 402 })
+    }
+    const preview = await loadChopPreview(leagueId)
+    return 'error' in preview ? NextResponse.json(preview, { status: 409 }) : NextResponse.json(preview)
   }
 
   // No `?week=` means "the current week" — it used to mean week 1, all season.

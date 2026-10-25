@@ -31,7 +31,7 @@ const EN: GamesLimitsCopy = {
   needsDaily: 'These limits need daily lineups, which are not on for this league yet.',
   capsLabel: 'Games-played caps (per lineup slot, season)',
   capsHelp:
-    'Maximum games each lineup seat can count for the season — two G seats with a cap of 82 allow 164 games. The day a slot reaches its cap counts in full; after that, that slot scores 0. Leave blank for no cap.',
+    'Maximum games each lineup seat can count for the season — two G seats with a cap of 82 allow 164 games. Only games played while in your starting lineup count — bench and injured-list games do not. The day a slot reaches its cap counts in full; after that, that slot scores 0. Leave blank for no cap.',
   capPlaceholder: 'No cap',
   goalieLabel: 'Goalie minimum (games per week)',
   goalieHelp: 'If your starting goalies play fewer games in a week, that week’s goalie points score 0.',
@@ -60,7 +60,7 @@ const ES: GamesLimitsCopy = {
   needsDaily: 'Estos límites requieren alineaciones diarias, que aún no están activas en esta liga.',
   capsLabel: 'Tope de partidos jugados (por puesto de alineación, temporada)',
   capsHelp:
-    'Máximo de partidos que cuenta cada puesto en la temporada: dos puestos G con un tope de 82 permiten 164 partidos. El día en que un puesto alcanza su tope cuenta completo; después, ese puesto suma 0. Déjalo en blanco para no tener tope.',
+    'Máximo de partidos que cuenta cada puesto en la temporada: dos puestos G con un tope de 82 permiten 164 partidos. Solo cuentan los partidos jugados en tu alineación titular; los de la banca y la lista de lesionados no. El día en que un puesto alcanza su tope cuenta completo; después, ese puesto suma 0. Déjalo en blanco para no tener tope.',
   capPlaceholder: 'Sin tope',
   goalieLabel: 'Mínimo de porteros (partidos por semana)',
   goalieHelp: 'Si tus porteros titulares juegan menos partidos en la semana, sus puntos de esa semana valen 0.',

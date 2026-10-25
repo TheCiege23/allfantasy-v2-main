@@ -17,6 +17,7 @@ import {
   type RulesPatchError,
 } from './guillotineRules'
 import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
+import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -41,7 +42,7 @@ export type GuillotineRulesView = {
   endgameLocked: boolean
   /** The viewer can change the AF Commissioner fields — the same check the save enforces. */
   canEditPaid: boolean
-  /** The viewer's plan includes Chimmy recaps (`guillotine_ai`), so `aiRecapAuto` takes effect. */
+  /** The viewer's plan includes Chimmy recaps (AF Pro or AF Commissioner), so `aiRecapAuto` takes effect. */
   aiRecapAvailable: boolean
 }
 
@@ -61,7 +62,7 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
   const [endgameLocked, canEditPaid, aiRecapAvailable] = await Promise.all([
     hasFirstChopHappened(leagueId).catch(() => false),
     viewerCanEditPaidGuillotineRules(userId),
-    new FeatureGateService().evaluateUserFeatureAccess(userId, 'guillotine_ai').then((a) => Boolean(a?.allowed)).catch(() => false),
+    hasGuillotineAiRecapPlan(userId).catch(() => false),
   ])
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
   return {

@@ -10,6 +10,12 @@ const getServerSessionMock = vi.fn()
 const runAiProtectionMock = vi.fn()
 const requireFeatureEntitlementMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // These fixtures exercise the paid-token path after the two daily answers are used.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 
 vi.mock("@/app/api/chat/chimmy/route", () => ({
   POST: chatChimmyPostMock,
@@ -69,7 +75,7 @@ describe("POST /api/chimmy compatibility route", () => {
           plans: ["pro"],
         },
       },
-      tokenSpend: null,
+      tokenSpend: { id: 'alias-ledger', balanceAfter: 10 },
       tokenPreview: null,
     })
     refundSpendByLedgerMock.mockResolvedValue(null)
