@@ -529,6 +529,20 @@ export async function processWaiverClaimsForLeague(
 }
 
 /** Exported for deterministic unit tests (FAAB / priority / rolling tie-breaks). */
+/**
+ * Reverse standings: the WORST team claims first. `LeagueTeam.currentRank` 1 is first place
+ * (standings are read `orderBy currentRank asc`), so the highest rank number goes first. A team
+ * with no rank yet goes after every ranked team rather than ahead of them.
+ */
+function worstStandingFirst(a: ClaimRow, b: ClaimRow, rankByPlatformUserId: Map<string, number>): number {
+  const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '')
+  const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '')
+  if (rankA === rankB) return 0
+  if (rankA == null) return 1
+  if (rankB == null) return -1
+  return rankB - rankA
+}
+
 export function orderClaimsForProcessing(
   claims: ClaimRow[],
   waiverType: string,
@@ -542,9 +556,8 @@ export function orderClaimsForProcessing(
       if (bidB !== bidA) return bidB - bidA
       const tb = tiebreakRule
       if (tb === 'reverse_standings' || tb === 'reverse_standings_order') {
-        const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '') ?? 999
-        const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '') ?? 999
-        if (rankA !== rankB) return rankA - rankB
+        const byStanding = worstStandingFirst(a, b, rankByPlatformUserId)
+        if (byStanding !== 0) return byStanding
       }
       if (tb === 'earliest_claim' || tb === 'earliest_claim_timestamp') {
         const ta = (a as any).createdAt
@@ -562,9 +575,8 @@ export function orderClaimsForProcessing(
 
   if (waiverType === 'reverse_standings') {
     return [...claims].sort((a, b) => {
-      const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '') ?? 999
-      const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '') ?? 999
-      if (rankA !== rankB) return rankA - rankB
+      const byStanding = worstStandingFirst(a, b, rankByPlatformUserId)
+      if (byStanding !== 0) return byStanding
       return a.priorityOrder - b.priorityOrder
     })
   }
