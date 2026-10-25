@@ -57,6 +57,14 @@ import {
   type PriorWaiverProcessing,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
+import {
+  HUB_WAIVER_OPTION_KEYS,
+  hasHubWaiverOptions,
+  parseHubWaiverOptions,
+  weeklyResetSurvivorRefusal,
+} from '@/lib/waiver-wire/hub-waiver-options'
+import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
 import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
@@ -64,6 +72,7 @@ import {
   isTaxiIncreaseRefused,
 } from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
@@ -315,6 +324,19 @@ export async function executeLeagueSettingsPatch(
   // regardless of which door (sectioned or not) the request came through.
   const structuralRefusal = await structuralPatchRefusal(leagueId, body, league)
   if (structuralRefusal) return jsonError(structuralRefusal, 409)
+
+  // The hub's waiver options (lib/waiver-wire/hub-waiver-options.ts): the minimum bid is checked
+  // against the budget this save leaves in place; the option keys are written after the columns.
+  const hubWaiver = parseHubWaiverOptions(body as Record<string, unknown>, {
+    budget: body.waiverBudget != null ? Number(body.waiverBudget) : league.waiverBudget,
+  })
+  if (!hubWaiver.ok) return jsonError(hubWaiver.error, 400)
+  // Owner's decision 2026-10-25: a survivor league's priority carries survivor boosts, which a weekly
+  // reset would erase, so it stays rolling (lib/waiver-wire/weekly-priority-reset.ts).
+  if (hubWaiver.options.waiverOrderResetPolicy === 'weekly') {
+    const refusal = weeklyResetSurvivorRefusal(hubWaiver.options, league.survivorMode === true || (await isSurvivorLeague(leagueId)))
+    if (refusal) return jsonError(refusal, 400)
+  }
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
@@ -462,6 +484,14 @@ export async function executeLeagueSettingsPatch(
     byePlan: (league.settings as Record<string, unknown> | null)?.playoff_bye_plan,
   })
   if (bracketRefusal) return jsonError(bracketRefusal.message, bracketRefusal.status)
+
+  /*
+   * League median in the playoffs (lib/redraft/medianGame.ts) — off unless stored true. A boolean only:
+   * anything else is refused rather than read as off, so a bad client cannot silently flip it.
+   */
+  if (body.medianGameInPlayoffs !== undefined && typeof body.medianGameInPlayoffs !== 'boolean') {
+    return jsonError('medianGameInPlayoffs must be true or false', 400)
+  }
 
   /*
    * Championship length — how many weeks the final is scored over (lib/playoff-runtime/playoffRoundWeeks.ts).
@@ -924,6 +954,15 @@ export async function executeLeagueSettingsPatch(
     updatedFieldNames.push(DAILY_WAIVER_SCHEDULE_SETTINGS_KEY)
   }
 
+  if (typeof body.medianGameInPlayoffs === 'boolean') {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY]: body.medianGameInPlayoffs } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY)
+  }
+
   if (championshipLengthToStore != null) {
     const prev = await readCurrentLeagueSettings(leagueId)
     const prevStructure =
@@ -966,6 +1005,21 @@ export async function executeLeagueSettingsPatch(
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncCommissionerDerivedLeagueState', e)
     }
+  }
+
+  if (hasHubWaiverOptions(hubWaiver.options)) {
+    // After the derived sync, which rewrites waiverEngineConfig from the columns: re-read the row so
+    // the $0-bid flag merges into what that sync just wrote.
+    const row = await prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } })
+    const { allowZeroFaabBid, tiebreakRule, waiverOrderResetPolicy } = hubWaiver.options
+    await upsertLeagueWaiverSettings(leagueId, {
+      ...(allowZeroFaabBid !== undefined
+        ? { waiverEngineConfig: { ...parseWaiverEngineConfig(row?.waiverEngineConfig ?? null), allow_zero_faab_bid: allowZeroFaabBid } }
+        : {}),
+      ...(tiebreakRule !== undefined ? { tiebreakRule } : {}),
+      ...(waiverOrderResetPolicy !== undefined ? { waiverOrderResetPolicy } : {}),
+    })
+    updatedFieldNames.push(...HUB_WAIVER_OPTION_KEYS.filter((k) => body[k] !== undefined))
   }
 
   if (dailyWaiverScheduleToStore) {

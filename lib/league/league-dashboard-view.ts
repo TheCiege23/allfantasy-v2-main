@@ -12,6 +12,7 @@ import type {
 } from '@/app/league/[leagueId]/league-dashboard-types'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { buildLeagueScoringDashboardSummary } from '@/lib/league/league-scoring-dashboard'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 
 function weekFromSettings(settings: unknown): number | null {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
@@ -153,6 +154,10 @@ export function buildLeagueSettingsRows(league: League): LeagueSettingsRow[] {
 
   if (league.medianGame) {
     rows.push({ label: 'Median Game', value: 'Enabled' })
+    rows.push({
+      label: 'Median in Playoffs',
+      value: readMedianGameInPlayoffs(league.settings) ? 'Counts in playoff weeks' : 'Off — win or go home',
+    })
   }
 
   return rows

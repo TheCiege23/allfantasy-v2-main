@@ -13,6 +13,9 @@ vi.mock('@/lib/score-adjustments/scoreAdjustmentService', () => ({
   addScoreAdjustment: svc.add, removeScoreAdjustment: svc.remove, readAdjustmentWeek: svc.week,
 }))
 
+const statCorrections = vi.hoisted(() => vi.fn(async () => ({ covered: true, latest: null })))
+vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({ readStatCorrections: statCorrections }))
+
 import { GET, POST } from '@/app/api/commissioner/leagues/[leagueId]/operations/route'
 
 const params = { params: Promise.resolve({ leagueId: 'L' }) }
@@ -24,6 +27,8 @@ describe('score adjustments on the commissioner operations route', () => {
   it('is commissioner-only for both reading and writing', async () => {
     commish.mockRejectedValue(new Error('Forbidden'))
     expect((await GET(new NextRequest('http://x/api?view=score_adjustments'), params)).status).toBe(403)
+    expect((await GET(new NextRequest('http://x/api?view=stat_corrections'), params)).status).toBe(403)
+    expect(statCorrections).not.toHaveBeenCalled()
     expect((await post({ action: 'score_adjustment_add' })).status).toBe(403)
     expect(svc.add).not.toHaveBeenCalled()
     expect(svc.week).not.toHaveBeenCalled()
@@ -50,5 +55,11 @@ describe('score adjustments on the commissioner operations route', () => {
     const res = await GET(new NextRequest('http://x/api?view=score_adjustments&week=3'), params)
     expect(svc.week).toHaveBeenCalledWith('L', '3')
     expect(await res.json()).toMatchObject({ week: 3 })
+  })
+  it('reads the stat-correction review for the league', async () => {
+    const res = await GET(new NextRequest('http://x/api?view=stat_corrections'), params)
+    expect(res.status).toBe(200)
+    expect(statCorrections).toHaveBeenCalledWith('L')
+    expect(await res.json()).toEqual({ covered: true, latest: null })
   })
 })

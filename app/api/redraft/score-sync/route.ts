@@ -18,6 +18,7 @@ import { REDRAFT_SEASON_STATUS, SCORING_SEASON_STATUSES, engineSeasonScope } fro
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
 import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
+import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrectionDetector'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
@@ -231,6 +232,8 @@ async function runRedraftReconciliation() {
   let playoffMatchupsScored = 0
   let playoffFailed = 0
   const playoffOutcomes: Record<string, number> = {}
+  let statCorrectionFailed = 0
+  const statCorrectionOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
     // A finished contest needs no provider fetch or live-season calendar to repair its archive.
@@ -383,6 +386,18 @@ async function runRedraftReconciliation() {
     }
 
     /*
+     * Stat corrections for the latest SEALED week: compared and shown to the commissioner, never
+     * applied. Read-only against scoring (see statCorrectionDetector.ts), throttled to an hourly
+     * provider pull per week, and only for a few days after the seal.
+     */
+    try {
+      const outcome = await checkStatCorrectionsForSeason(season.id)
+      statCorrectionOutcomes[outcome] = (statCorrectionOutcomes[outcome] ?? 0) + 1
+    } catch {
+      statCorrectionFailed += 1
+    }
+
+    /*
      * A native guillotine league chops its lowest team once each finished week. It runs after the
      * sweep for the same reason the sweep runs after the sync: an older week is still owed its chop
      * even when this tick's sync failed. One chop per week, guarded inside.
@@ -429,6 +444,8 @@ async function runRedraftReconciliation() {
     playoffMatchupsScored,
     playoffFailed,
     playoffOutcomes,
+    statCorrectionFailed,
+    statCorrectionOutcomes,
   }
 }
 

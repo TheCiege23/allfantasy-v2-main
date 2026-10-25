@@ -3,6 +3,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { isPollClosed, readViewerPoll } from '@/lib/chat-core/messagePolls'
 import {
@@ -112,6 +113,7 @@ export async function readLeagueFacts(leagueId: string): Promise<LeagueFacts | n
     ...cols,
     name: l.name ?? 'This league',
     sport: String(l.sport),
+    medianGameInPlayoffs: readMedianGameInPlayoffs(settings),
     tradeReviewMode: typeof settings.trade_review_mode === 'string' ? settings.trade_review_mode : null,
     dues: dues.enabled === true && typeof dues.amount === 'number' ? { amount: dues.amount, currency: typeof dues.currency === 'string' ? dues.currency : 'USD' } : null,
   }

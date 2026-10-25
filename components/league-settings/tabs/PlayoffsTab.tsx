@@ -11,6 +11,7 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { MAX_PLAYOFF_TEAMS, maxPlayoffTeamsThatFit } from '@/lib/playoff-runtime/playoffFit'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
 import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
@@ -28,10 +29,15 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
   const chosenStartWeek = native ? resolvePlayoffStartWeek(ctx.league).week : (ctx.league.playoffStartWeek ?? 14)
   const [playoffStartWeek, setPlayoffStartWeek] = useState(chosenStartWeek)
 
+  // Off unless the commissioner turned it on (lib/redraft/medianGame.ts); only offered with the median game on.
+  const storedMedianInPlayoffs = readMedianGameInPlayoffs(ctx.league.settings)
+  const [medianInPlayoffs, setMedianInPlayoffs] = useState(storedMedianInPlayoffs)
+
   useEffect(() => {
     setPlayoffTeams(ctx.league.playoffTeams ?? 6)
     setPlayoffStartWeek(chosenStartWeek)
   }, [ctx.league.playoffTeams, chosenStartWeek])
+  useEffect(() => setMedianInPlayoffs(storedMedianInPlayoffs), [storedMedianInPlayoffs])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
   const startWeekMax = Math.max(18, seasonWeeks, chosenStartWeek)
@@ -105,6 +111,28 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
             />
           </label>
         </div>
+        {ctx.league.medianGame ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="median-in-playoffs-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.medianPlayoffs')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.medianPlayoffsHelp')}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={medianInPlayoffs}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setMedianInPlayoffs(v)
+                queuePatch({ medianGameInPlayoffs: v })
+              }}
+            />
+          </label>
+        ) : null}
       </div>
 
       {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}
