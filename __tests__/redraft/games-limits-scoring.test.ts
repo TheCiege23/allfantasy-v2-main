@@ -91,6 +91,19 @@ describe('a games-played cap counts the season so far from stored rows', () => {
     expect(r.gamesLimits).toEqual({ caps: [{ slot: 'PG', used: 3, cap: 3 }] })
   })
 
+  it('only starting-lineup games use the cap: two week-1 games on the bench add nothing (owner, 2026-10-25)', async () => {
+    arrange({ ...DAILY_ON, games_limits: { gamesPlayedCaps: { PG: 3 } } })
+    db.redraftDailyLineup.findMany.mockResolvedValue([
+      { rosterId: 'r1', playerId: 'p1', scoringDay: day('2026-10-20'), slotType: 'BN' },
+      { rosterId: 'r1', playerId: 'p1', scoringDay: day('2026-10-22'), slotType: 'BN' },
+      { rosterId: 'r1', playerId: 'p1', scoringDay: day('2026-10-24'), slotType: 'PG' },
+    ])
+    const r = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 2, seasonYear: 2026 })
+    // Week 1 used 1 (24 Oct); 27 and 29 Oct both count and reach the cap of 3.
+    expect(r.points).toBe(round((await pts(10)) + (await pts(7, 'C')) + (await pts(10))))
+    expect(r.gamesLimits?.caps).toEqual([{ slot: 'PG', used: 3, cap: 3 }])
+  })
+
   it('cap 4: 27 Oct is the day that reaches it and counts; 29 Oct does not', async () => {
     arrange({ ...DAILY_ON, games_limits: { gamesPlayedCaps: { PG: 4 } } })
     const r = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 2, seasonYear: 2026 })

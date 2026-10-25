@@ -263,7 +263,7 @@ import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
 import { buildToolsHub } from '@/lib/core-app/toolsHub'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
-import { planAllowanceMeta, readChimmyPlanAllowance } from '@/lib/chimmy/planAllowance'
+import { planAllowanceMeta, readChimmyAnswerAllowance } from '@/lib/chimmy/planAllowance'
 import { getCoreActivitySnapshot } from '@/lib/core-app/coreActivity'
 import { isCoreSurfaceKey, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import CoreLeagueContextBar, {
@@ -733,7 +733,7 @@ export default async function AfCorePage({
    * after the whole shell wave — a third serial stage on every /core render for a value the wave
    * never needed. Same inputs, same fallback, same place it is read.
    */
-  const chimmyPlanRead = readChimmyPlanAllowance({
+  const chimmyPlanRead = readChimmyAnswerAllowance({
     userId,
     email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
   }).catch(() => null)
