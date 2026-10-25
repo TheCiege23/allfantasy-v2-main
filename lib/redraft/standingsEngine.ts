@@ -127,14 +127,21 @@ export async function updateStandings(
   let medianInPlayoffs = false
   let playoffStartWeek: number | null = null
   let pointsOnlySeeding = false
+  let bracketExists = false
   try {
     const seasonRow = await prisma.redraftSeason.findUnique({
       where: { id: seasonId },
-      select: { medianGame: true, playoffStartWeek: true, league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } } },
+      select: {
+        medianGame: true,
+        playoffStartWeek: true,
+        playoffBracket: { select: { id: true } },
+        league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } },
+      },
     })
     medianGameOn = seasonRow?.league?.medianGame ?? seasonRow?.medianGame ?? false
     medianInPlayoffs = readMedianGameInPlayoffs(seasonRow?.league?.settings)
     playoffStartWeek = seasonRow?.playoffStartWeek ?? null
+    bracketExists = Boolean(seasonRow?.playoffBracket)
     pointsOnlySeeding = isPointsOnlySeeding(resolveConfiguredPlayoffSeedingRule(seasonRow?.league ?? {}))
   } catch {
     medianGameOn = false
@@ -192,6 +199,12 @@ export async function updateStandings(
     return a.pointsAgainst - b.pointsAgainst
   })
   const seedByRoster = new Map(ordered.map(([rosterId], index) => [rosterId, index + 1]))
+  const seedsFrozen = playoffSeedsFrozen({
+    week,
+    playoffStartWeek,
+    bracketExists,
+    roto: categorySettings?.scoring_mode === 'roto' || rotoStats.size > 0,
+  })
 
   for (const [rosterId, row] of rows.entries()) {
     const results = row.streakEvents.map((e) => e.result)
@@ -215,7 +228,7 @@ export async function updateStandings(
         pointsFor: Math.round(row.pointsFor * 100) / 100,
         pointsAgainst: Math.round(row.pointsAgainst * 100) / 100,
         streak,
-        playoffSeed: seedByRoster.get(rosterId) ?? null,
+        ...(seedsFrozen ? {} : { playoffSeed: seedByRoster.get(rosterId) ?? null }),
       },
     })
   }
@@ -234,6 +247,32 @@ export async function updateStandings(
   })
 
   return { seasonId, week, rostersUpdated: rows.size, matchupsCounted }
+}
+
+/**
+ * Whether this recompute must leave `RedraftRoster.playoffSeed` alone. W-L, points and streaks still
+ * update; only the seed column is held.
+ *
+ * 🛑 ONCE THE PLAYOFFS START THE SEEDS ARE SETTLED. The bracket generator writes each qualifier's seed
+ * (and null for everyone else), and reseeding reads those roster seeds back
+ * (lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime.ts). A recompute that rewrote them from the
+ * whole-season order would hand a seed to an eliminated team and reshuffle the field mid-bracket.
+ * Frozen when a bracket exists for the season, or when the week being recomputed is on or after
+ * `playoffStartWeek`.
+ *
+ * ⚠ ROTO KEEPS ITS RANK. A rotisserie season stores its category rank in this column all season and has
+ * no playoff weeks (its `playoffStartWeek` is past the last week), so only a bracket freezes it there —
+ * an older roto season with a real-looking start week must not stop ranking mid-season.
+ */
+export function playoffSeedsFrozen(input: {
+  week: number
+  playoffStartWeek: number | null
+  bracketExists: boolean
+  roto: boolean
+}): boolean {
+  if (input.bracketExists) return true
+  if (input.roto) return false
+  return input.playoffStartWeek != null && input.playoffStartWeek > 0 && input.week >= input.playoffStartWeek
 }
 
 /**

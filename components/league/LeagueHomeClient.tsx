@@ -15,7 +15,7 @@ import type { LeagueHomeData, LeagueTopTab } from '@/components/league/types'
 import LeagueStatusBar from '@/components/league/LeagueStatusBar'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import CommissionerControlsPanel from '@/components/league/CommissionerControlsPanel'
-import AuditLogViewer from '@/components/league/AuditLogViewer'
+import { LeagueLog } from '@/components/league-log/LeagueLog'
 import LeagueFeed from '@/components/league-feed/LeagueFeed'
 import { useLeagueLifecycleApiSync } from '@/hooks/useLeagueLifecycleApiSync'
 
@@ -88,7 +88,7 @@ export default function LeagueHomeClient({
           permissionsFromApi={lifecyclePermissions}
           onSuccessfulAction={() => setLeagueLiveRefresh((n) => n + 1)}
         />
-        <AuditLogViewer leagueId={data.league.id} refreshSignal={leagueLiveRefresh} />
+        <LeagueLog leagueId={data.league.id} refreshSignal={leagueLiveRefresh} />
         <LeagueFeed leagueId={data.league.id} refreshSignal={leagueLiveRefresh} />
         {resolvedTab === 'DRAFT' ? (
           <DraftTab

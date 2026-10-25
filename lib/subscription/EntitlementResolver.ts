@@ -87,9 +87,10 @@ export class EntitlementResolver {
   async resolveForUser(
     userId: string,
     featureId?: SubscriptionFeatureId,
-    email?: string | null
+    email?: string | null,
+    options?: { strictReads?: boolean },
   ): Promise<EntitlementResolveResult> {
-    const entitlement = await this.resolveSnapshot(userId, email)
+    const entitlement = await this.resolveSnapshot(userId, email, options)
     const hasAccess = featureId
       ? this.hasFeatureAccess(entitlement, featureId)
       : isActiveOrGraceStatus(entitlement.status)
@@ -110,7 +111,7 @@ export class EntitlementResolver {
     }
   }
 
-  async resolveSnapshot(userId: string, email?: string | null): Promise<EntitlementSnapshot> {
+  async resolveSnapshot(userId: string, email?: string | null, options?: { strictReads?: boolean }): Promise<EntitlementSnapshot> {
     if (isSubscriptionEntitlementBypassUserId(userId, email)) {
       return buildDevAdminEntitlementSnapshot()
     }
@@ -124,7 +125,7 @@ export class EntitlementResolver {
           include: { plan: { select: { code: true } } },
           orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
         })
-        .catch(() => []) as Promise<DbUserSubscriptionRow[]>,
+        .catch((error: unknown) => { if (options?.strictReads) throw error; return [] }) as Promise<DbUserSubscriptionRow[]>,
       (prisma as any).adminSubscriptionGrant
         .findMany({
           where: {
@@ -135,7 +136,7 @@ export class EntitlementResolver {
           orderBy: [{ expiresAt: "desc" }],
           select: { tier: true, expiresAt: true },
         })
-        .catch(() => []) as Promise<Array<{ tier: string; expiresAt: Date }>>,
+        .catch((error: unknown) => { if (options?.strictReads) throw error; return [] }) as Promise<Array<{ tier: string; expiresAt: Date }>>,
     ])
 
     if (!subscriptions.length && !activeGrants.length) {

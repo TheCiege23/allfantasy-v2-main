@@ -162,7 +162,10 @@ export async function runLeagueBootstrap(
     } catch { /* non-fatal */ }
   }
   let nflTePremium = false
-  if (leagueSport === 'NFL') {
+  // An imported league carried over its own rules (`importedNflScoring`); seeding the preset here
+  // would replace them, the same reason MLB skips its seed above.
+  const nflImportedScoring = asObject(settings.nfl_scoring_config).source === 'IMPORTED_MAPPED'
+  if (leagueSport === 'NFL' && !nflImportedScoring) {
     try {
       // ESPN / Sleeper presets seed that site's own rules; TE premium adds its per-catch amount.
       const { applyDefaultNflScoringOnCreate, nflScoringSeedForCreate } = await import('@/lib/nfl-scoring')
@@ -418,4 +421,8 @@ export async function runLeagueBootstrap(
     playoff: { playoffConfigApplied: playoffResult.playoffConfigApplied },
     schedule: { scheduleConfigApplied: scheduleResult.scheduleConfigApplied },
   }
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }

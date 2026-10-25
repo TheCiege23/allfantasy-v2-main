@@ -424,6 +424,11 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <p className="af-ch-setting-why" style={{ marginTop: 12 }}>
             <Link href={`/league/${encodeURIComponent(league.id)}/constitution`}>{t('League constitution and amendments →')}</Link>
           </p>
+
+          {/* The league log: every commissioner action, readable by the league unless set commish-only. */}
+          <p className="af-ch-setting-why">
+            <Link href={`/league/${encodeURIComponent(league.id)}/log`}>{t('League log: who can see your actions →')}</Link>
+          </p>
         </HubSection>
 
         {/* ── Access ────────────────────────────────────────────────── */}
