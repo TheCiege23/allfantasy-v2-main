@@ -33,7 +33,12 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('never charges tokens for a turn the plan included', () => {
-    expect(ROUTE).toMatch(/^\s*if \(!planIncluded && !tokenPreviewFailed\) \{\s*\n\s*try \{[\s\S]{0,400}?const ledger = await spendService\.spendTokensForRule\(/m)
+    expect(ROUTE).toMatch(/^\s*if \(!planIncluded\) \{\s*\n\s*try \{[\s\S]{0,400}?const ledger = await spendService\.spendTokensForRule\(/m)
+  })
+
+  it('stops before generation if a token price cannot be checked', () => {
+    expect(ROUTE).toMatch(/code: 'token_preview_unavailable' \},\s*\n\s*\{ status: 503 \}/)
+    expect(ROUTE).not.toContain('tokenPreviewFailed')
   })
 
   it('falls back to the token preflight when the last included answer went elsewhere', () => {

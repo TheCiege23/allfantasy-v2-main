@@ -2697,7 +2697,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * the outer reads to `null` for good, and every `tokenPreview.ruleCode` below becomes `never`.
    */
   let tokenPreview = null as TokenSpendPreview | null
-  let tokenPreviewFailed = false as boolean
   /** The token preflight: preview the price, and ask for consent when the rule needs it. */
   /*
    * `plan` rides the 409 so the drawer can tell a subscriber whose day's answers are used from an
@@ -2716,13 +2715,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           { status: 500 }
         )
       }
-      tokenPreviewFailed = true
       console.error(
-        '[api/chat/chimmy] Token preview failed, continuing without preflight:',
+        '[api/chat/chimmy] Token preview failed:',
         error instanceof Error ? error.message : error
       )
+      return NextResponse.json(
+        { error: 'Unable to check the token price. Please try again.', code: 'token_preview_unavailable' },
+        { status: 503 }
+      )
     }
-    if (!tokenPreviewFailed && tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
+    if (tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
       return NextResponse.json(
         {
           error: 'Token spend confirmation required before sending to Chimmy.',
@@ -2884,7 +2886,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded ? planAllowanceMeta(planIncluded, true) : exhaustedPlanMeta
 
   let spendLedger: { id: string; balanceAfter: number } | null = null
-  if (!planIncluded && !tokenPreviewFailed) {
+  if (!planIncluded) {
     try {
       const receipts = requestReceipt ? await import('@/lib/chimmy/requestReceipts') : null
       if (receipts && requestReceipt) await receipts.recordReceiptTokenIntent(requestReceipt)

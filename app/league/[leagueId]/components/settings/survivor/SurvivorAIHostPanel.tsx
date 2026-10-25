@@ -39,6 +39,6 @@ export function SurvivorAIHostPanel({
           gate it here too, so a free commissioner sees why instead of a toggle that silently fails to save. */}
       <SettingsRow label="Commissioner AI alerts" control={<div className="flex items-center gap-2"><Toggle checked={alerts} disabled={!canEdit} onChange={(value) => { if (!hasAfCommissionerSub) { subscriptionGate?.gate('commissioner_ai_tools'); return } setAlerts(value); debouncedSave({ leagueAiCommissionerAlerts: value }) }} />{!hasAfCommissionerSub && <SubscriptionGateBadge featureId="commissioner_ai_tools" onClick={() => subscriptionGate?.gate('commissioner_ai_tools')} />}</div>} />
     </SettingsSection>
-    <p className="text-xs text-white/50">Automated announcement approvals, custom story arcs and confessionals are not available in the NBA pilot yet.</p>
+    <p className="text-xs text-white/50">Automated announcement approvals, custom story arcs and confessionals are not configurable yet.</p>
   </div>
 }
