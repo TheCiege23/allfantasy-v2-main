@@ -1,7 +1,7 @@
 /**
- * Survivor AI host settings: the "Episode recaps" toggle saved a field nothing reads (the recap
- * generator is a stub), so it is gone; "Commissioner AI alerts" is refused by the server without AF
- * Commissioner, so the page gates it the same way instead of failing silently.
+ * Survivor AI host settings: "Episode recaps" and "Commissioner AI alerts" are AF Commissioner
+ * settings the server refuses without the plan, so the page gates them the same way instead of failing
+ * silently. (Episode recaps are posted by lib/survivor/episodeRecap.ts.)
  */
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -24,20 +24,33 @@ function renderPanel(hasAfCommissionerSub: boolean) {
       debouncedSave={debouncedSave}
     />,
   )
-  const alerts = screen.getAllByRole('switch')[1]!
-  return { debouncedSave, alerts }
+  const [, recaps, alerts] = screen.getAllByRole('switch')
+  return { debouncedSave, recaps: recaps!, alerts: alerts! }
 }
 
 describe('SurvivorAIHostPanel', () => {
-  it('no longer offers an episode-recap toggle that changes nothing', () => {
+  it('offers Episode recaps, explaining that votes are told as counts', () => {
     renderPanel(true)
-    expect(screen.queryByText('Episode recaps')).toBeNull()
-    expect(screen.getAllByRole('switch')).toHaveLength(2)
+    expect(screen.getByText('Episode recaps')).toBeTruthy()
+    expect(screen.getByText(/never who voted for whom/)).toBeTruthy()
+  })
+
+  it('a free commissioner cannot switch episode recaps; an AF Commissioner can', () => {
+    const free = renderPanel(false)
+    fireEvent.click(free.recaps)
+    expect(gate.gate).toHaveBeenCalledWith('commissioner_ai_recap', { highlightParam: 'ai_recap' })
+    expect(free.debouncedSave).not.toHaveBeenCalled()
+  })
+
+  it('an AF Commissioner switches episode recaps off', () => {
+    const { debouncedSave, recaps } = renderPanel(true)
+    fireEvent.click(recaps)
+    expect(debouncedSave).toHaveBeenCalledWith({ aiRecaps: false })
   })
 
   it('a free commissioner is shown the upgrade, and nothing is saved', () => {
     const { debouncedSave, alerts } = renderPanel(false)
-    expect(screen.getByTestId('gate-badge')).toBeTruthy()
+    expect(screen.getAllByTestId('gate-badge').length).toBe(2)
     fireEvent.click(alerts)
     expect(gate.gate).toHaveBeenCalledWith('commissioner_ai_tools')
     expect(debouncedSave).not.toHaveBeenCalled()

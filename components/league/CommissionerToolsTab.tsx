@@ -39,8 +39,8 @@ function SectionHeader({ icon: Icon, label, locked }: { icon: typeof Shield; lab
  *    /api/leagues/:id/integrity, which checks the plan and the commissioner itself;
  *  - lineup neglect is the lineup-integrity monitor's report;
  *  - flags are reviewed on the integrity page.
- * "Extended scoring corrections" and "suspicious trade alerts" had nothing behind them and are gone;
- * a suspicious trade is what the collusion check flags.
+ *  - suspicious trade alerts switch the commissioner's notification for a flagged trade
+ *    (lib/integrity/tradeAlerts.ts).
  */
 export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: CommissionerToolsTabProps) {
   return (
@@ -67,7 +67,7 @@ export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: Commiss
   )
 }
 
-type IntegrityState = { tankingMonitorEnabled: boolean; collusionSensitivity: IntegritySensitivity }
+type IntegrityState = { tankingMonitorEnabled: boolean; collusionSensitivity: IntegritySensitivity; tradeAlertsEnabled: boolean }
 
 function IntegrityControls({ leagueId }: { leagueId: string }) {
   const [value, setValue] = useState<IntegrityState | null>(null)
@@ -84,7 +84,11 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
           setStatus(d?.error ?? 'Could not load the integrity settings.')
           return
         }
-        setValue({ tankingMonitorEnabled: Boolean(d.settings.tankingMonitorEnabled), collusionSensitivity: normalizeSensitivity(d.settings.collusionSensitivity) })
+        setValue({
+          tankingMonitorEnabled: Boolean(d.settings.tankingMonitorEnabled),
+          collusionSensitivity: normalizeSensitivity(d.settings.collusionSensitivity),
+          tradeAlertsEnabled: d.settings.tradeAlertsEnabled !== false,
+        })
       })
       .catch(() => { if (!cancelled) setStatus('Could not load the integrity settings.') })
     return () => { cancelled = true }
@@ -119,6 +123,19 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
             onCheckedChange={(checked) => void save({ tankingMonitorEnabled: checked })}
             aria-label="Anti-tanking detection"
             data-testid="survivor-integrity-tanking"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2.5">
+          <div>
+            <span className="block text-sm text-white/80">Suspicious trade alerts</span>
+            <span className="block text-xs text-white/45">Get a notification when the collusion check flags a trade. Off: flags still show on the review page.</span>
+          </div>
+          <Switch
+            checked={value?.tradeAlertsEnabled ?? true}
+            disabled={!value}
+            onCheckedChange={(checked) => void save({ tradeAlertsEnabled: checked })}
+            aria-label="Suspicious trade alerts"
+            data-testid="survivor-integrity-trade-alerts"
           />
         </div>
         <div className="flex items-center justify-between gap-4 py-2.5">
