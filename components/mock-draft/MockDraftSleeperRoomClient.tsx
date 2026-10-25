@@ -5,6 +5,7 @@ import { mockTurnDurationMs, remainingMockSeconds } from '@/lib/mock-draft/turn-
 import { postChimmyRequest } from '@/lib/chimmy/postRequest'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { getMockDraftTeamCountOptions } from '@/lib/mock-draft/mockTeamCount'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -1037,7 +1038,9 @@ export default function MockDraftSleeperRoomClient({
     const params = new URLSearchParams({
       type,
       pool,
-      limit: nextSettings.sport === 'NBA' ? '1000' : '300',
+      // At least one player per pick plus a margin: a 20-team, 20-round room makes 400 picks.
+      // (/api/mock-draft/adp still caps a non-NBA pool at 500.)
+      limit: String(Math.max(nextSettings.sport === 'NBA' ? 1000 : 300, nextSettings.teamCount * nextSettings.rounds + 60)),
       sport: nextSettings.sport.toLowerCase(),
       leagueId: selectedLeague?.id ?? '',
       draftType: nextSettings.draftType,
@@ -1549,7 +1552,8 @@ export default function MockDraftSleeperRoomClient({
               {renderChipGroup({
                 label: 'Teams',
                 value: settings.teamCount,
-                options: [8, 10, 12, 14].map((value) => ({ value, label: String(value) })),
+                // Every size a redraft league of this sport accepts (lib/mock-draft/mockTeamCount.ts).
+                options: getMockDraftTeamCountOptions(settings.sport, 'redraft').map((value) => ({ value, label: String(value) })),
                 onChange: (value) => setSettings((current) => ({ ...current, teamCount: value })),
                 testPrefix: 'mock-draft-open-teams',
               })}

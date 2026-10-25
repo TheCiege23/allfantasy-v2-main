@@ -8,6 +8,7 @@ import { loadSportAwareDraftPlayerPool, toSyntheticAdpEntries } from '@/lib/mock
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
+import { resolveLeagueMockTeamCount, MAX_LEAGUE_MOCK_TEAMS, mockRoundOrder } from '@/lib/mock-draft/mockTeamCount'
 
 type ScenarioPreset = {
   id: string
@@ -129,10 +130,8 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-function snakeOrder(teamCount: number, round: number): number[] {
-  const arr = Array.from({ length: teamCount }, (_, i) => i)
-  return round % 2 === 1 ? arr : arr.reverse()
-}
+/** This tool models a snake draft (lib/mock-draft/mockTeamCount.ts). */
+const snakeOrder = (teamCount: number, round: number) => mockRoundOrder(teamCount, round, 'snake')
 
 type ScenarioMultipliers = {
   adpMul: number
@@ -273,9 +272,9 @@ export async function POST(req: NextRequest) {
         teams: {
           include: { performances: { orderBy: { week: 'desc' }, take: 8 } },
           orderBy: { currentRank: 'asc' },
-          take: 20,
+          take: MAX_LEAGUE_MOCK_TEAMS,
         },
-        rosters: { select: { platformUserId: true, playerData: true }, take: 20 },
+        rosters: { select: { platformUserId: true, playerData: true }, take: MAX_LEAGUE_MOCK_TEAMS },
       },
     })
 
@@ -299,7 +298,8 @@ export async function POST(req: NextRequest) {
       .filter((player) => (isNfl ? ['QB', 'RB', 'WR', 'TE'].includes(player.position) : Boolean(player.position)))
       .slice(0, 180)
 
-    const teamCount = Math.max(league.leagueSize || 0, league.teams.length || 0, 12)
+    // The league's real size: a 4- or 20-team league is not a 12-team draft.
+    const teamCount = resolveLeagueMockTeamCount(league.leagueSize, league.teams.length)
 
     const dnaCards: ManagerDNA[] = league.teams.length
       ? buildManagerDNAFromLeague(
