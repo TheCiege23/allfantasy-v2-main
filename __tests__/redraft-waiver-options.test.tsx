@@ -8,6 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 
 const patches = vi.hoisted(() => [] as Array<Record<string, unknown>>)
+const playoffRuntime = vi.hoisted(() => ({ resolve: vi.fn() }))
+vi.mock('@/lib/playoff-runtime/resolveNflRedraftPlayoffRuntime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/playoff-runtime/resolveNflRedraftPlayoffRuntime')>()),
+  resolveNflRedraftPlayoffRuntime: (...args: unknown[]) => playoffRuntime.resolve(...args),
+}))
 vi.mock('@/components/i18n/LanguageProviderClient', async () => {
   const { translations: dict } = await import('@/lib/i18n/translations')
   const t = (k: string) => dict.en[k] ?? k
@@ -18,13 +23,16 @@ vi.mock('@/hooks/useLeagueSettingsSectionAutosave', () => ({
 }))
 
 import { WaiversSection, hubWaiverControlsFor } from '@/components/league-settings/tabs/WaiversTab'
-import { parseHubWaiverOptions, isFreeAgencyOnly, readHubTiebreakRule } from '@/lib/waiver-wire/hub-waiver-options'
+import { parseHubWaiverOptions, isFreeAgencyOnly, readHubTiebreakRule, weeklyResetSurvivorRefusal } from '@/lib/waiver-wire/hub-waiver-options'
 import {
   applyWeeklyWaiverPriorityReset,
+  isRotoStandingsLeague,
+  loadLeagueStandingsBestFirst,
+  orderByStoredStandingsRank,
   planWeeklyPriorityReset,
-  reverseStandingsOrder,
   WEEKLY_PRIORITY_RESET_SETTINGS_KEY,
 } from '@/lib/waiver-wire/weekly-priority-reset'
+import { buildNflRedraftPlayoffRuntimeState } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
 import { getWaiverDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import { wizardWaiverPreviewDefaults } from '@/lib/league-creation/wizardWaiverPreview'
 import { translations } from '@/lib/i18n/translations'
@@ -74,7 +82,7 @@ describe('settings validation for the new waiver fields', () => {
 
   it('every new hub label exists in English and Spanish', () => {
     const keys = Object.keys(translations.en).filter((k) => /^lsHub\.wv\.(allowZero|minBidHint|tiebreak|tb\.|reset|faOnly)/.test(k))
-    expect(keys.length).toBe(17)
+    expect(keys.length).toBe(18)
     expect(keys.filter((k) => !translations.es[k])).toEqual([])
   })
 })
@@ -155,24 +163,16 @@ describe('the hub renders the controls each waiver type uses', () => {
 
 /* ---------------------------------------------------------------------------------------------- */
 
-const standing = (id: string, ownerId: string, wins: number, losses: number, pointsFor: number, waiverPriority = 0) =>
-  ({ id, ownerId, wins, losses, ties: 0, pointsFor, waiverPriority })
+const owner = (id: string, ownerId: string, waiverPriority = 0) => ({ id, ownerId, waiverPriority })
 
 describe('weekly priority reset', () => {
-  const standings = [
-    standing('r-top', 'u-top', 3, 0, 400),
-    standing('r-mid', 'u-mid', 1, 2, 350),
-    standing('r-low', 'u-low', 1, 2, 300),
-    standing('r-bot', 'u-bot', 0, 3, 320),
-  ]
+  const redraftRosters = [owner('r-top', 'u-top'), owner('r-mid', 'u-mid'), owner('r-low', 'u-low'), owner('r-bot', 'u-bot')]
+  const BEST_FIRST = ['r-top', 'r-mid', 'r-low', 'r-bot']
 
-  it('orders worst record first, then fewer points', () => {
-    expect(reverseStandingsOrder(standings)).toEqual(['r-bot', 'r-low', 'r-mid', 'r-top'])
-  })
-
-  it('maps league rosters by link, then by owner, unmatched last', () => {
+  it('the last-place team gets priority 1; rosters map by link, then owner, unmatched last', () => {
     const plan = planWeeklyPriorityReset({
-      standings,
+      standingsBestFirst: BEST_FIRST,
+      redraftRosters,
       leagueRosters: [
         { id: 'L-top', platformUserId: 'u-top', redraftRosterId: null, waiverPriority: 1 },
         { id: 'L-bot', platformUserId: 'x', redraftRosterId: 'r-bot', waiverPriority: 4 },
@@ -190,10 +190,22 @@ describe('weekly priority reset', () => {
     expect(plan.league.map((r) => r.id)).toEqual(['L-bot', 'L-low', 'L-mid', 'L-top', 'L-ghost'])
   })
 
-  function fakeDb() {
+  it('a team the standings did not rank goes behind the ranked ones', () => {
+    const plan = planWeeklyPriorityReset({ standingsBestFirst: ['r-top', 'r-bot'], redraftRosters, leagueRosters: [] })
+    expect(plan.redraft.map((r) => r.id)).toEqual(['r-bot', 'r-top', 'r-low', 'r-mid'])
+  })
+
+  it('the stored standings rank (updateStandings, 1 = first) reads best first', () => {
+    expect(orderByStoredStandingsRank([{ id: 'a', playoffSeed: 3 }, { id: 'b', playoffSeed: 1 }, { id: 'c', playoffSeed: 2 }, { id: 'd', playoffSeed: null }])).toEqual(['b', 'c', 'a'])
+    expect(orderByStoredStandingsRank([{ id: 'a', playoffSeed: null }])).toBeNull()
+    expect(isRotoStandingsLeague({ scoring_mode: 'roto' })).toBe(true)
+    expect(isRotoStandingsLeague({ scoring_mode: 'h2h_category' })).toBe(false)
+  })
+
+  function fakeDb(opts: { survivorMode?: boolean } = {}) {
     const state = {
       settings: {} as Record<string, unknown>,
-      redraft: new Map(standings.map((s) => [s.id, { ...s, waiverPriority: 9 }])),
+      redraft: new Map(redraftRosters.map((s) => [s.id, { ...s, waiverPriority: 9 }])),
       roster: new Map([
         ['L-top', { id: 'L-top', platformUserId: 'u-top', redraftRosterId: 'r-top', waiverPriority: 4 }],
         ['L-bot', { id: 'L-bot', platformUserId: 'u-bot', redraftRosterId: 'r-bot', waiverPriority: 1 }],
@@ -202,7 +214,7 @@ describe('weekly priority reset', () => {
     }
     const db: any = {
       league: {
-        findUnique: async () => ({ settings: state.settings }),
+        findUnique: async () => ({ settings: state.settings, survivorMode: opts.survivorMode ?? false }),
         update: async ({ data }: any) => {
           state.settings = data.settings
           state.writes++
@@ -227,10 +239,17 @@ describe('weekly priority reset', () => {
     return { db, state }
   }
   const weekly = async () => ({ waiverOrderResetPolicy: 'weekly', normalizedWaiverType: 'rolling' })
+  const deps = (db: any, extra: Record<string, unknown> = {}) => ({
+    db,
+    loadSettings: weekly,
+    isSurvivor: async () => false,
+    loadStandingsBestFirst: async () => BEST_FIRST,
+    ...extra,
+  })
 
   it('resets once per week, and a rerun is a no-op', async () => {
     const { db, state } = fakeDb()
-    const first = await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, { db, loadSettings: weekly })
+    const first = await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, deps(db))
     expect(first).toEqual({ applied: true, week: 5, rostersReset: 2 })
     expect(state.roster.get('L-bot')!.waiverPriority).toBe(1)
     expect(state.roster.get('L-top')!.waiverPriority).toBe(2)
@@ -242,26 +261,131 @@ describe('weekly priority reset', () => {
     state.roster.get('L-top')!.waiverPriority = 1
     const writes = state.writes
     // …and a rerun of the week-5 advance (or an older week) must not undo them.
-    expect(await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, { db, loadSettings: weekly })).toEqual({ applied: false, reason: 'already_applied' })
-    expect(await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 4 }, { db, loadSettings: weekly })).toEqual({ applied: false, reason: 'already_applied' })
+    expect(await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, deps(db))).toEqual({ applied: false, reason: 'already_applied' })
+    expect(await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 4 }, deps(db))).toEqual({ applied: false, reason: 'already_applied' })
     expect(state.writes).toBe(writes)
     expect(state.roster.get('L-top')!.waiverPriority).toBe(1)
 
     // The next week resets again; a new season starts its own count.
-    expect((await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 6 }, { db, loadSettings: weekly })).applied).toBe(true)
+    expect((await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 6 }, deps(db))).applied).toBe(true)
     expect(state.roster.get('L-bot')!.waiverPriority).toBe(1)
-    expect((await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's2', week: 2 }, { db, loadSettings: weekly })).applied).toBe(true)
+    expect((await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's2', week: 2 }, deps(db))).applied).toBe(true)
   })
 
   it('rolling (the default) and non-priority types never reset', async () => {
     const { db, state } = fakeDb()
     expect(
-      await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, { db, loadSettings: async () => ({ waiverOrderResetPolicy: null, normalizedWaiverType: 'rolling' }) }),
+      await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, deps(db, { loadSettings: async () => ({ waiverOrderResetPolicy: null, normalizedWaiverType: 'rolling' }) })),
     ).toEqual({ applied: false, reason: 'policy_rolling' })
     expect(
-      await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, { db, loadSettings: async () => ({ waiverOrderResetPolicy: 'weekly', normalizedWaiverType: 'faab' }) }),
+      await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, deps(db, { loadSettings: async () => ({ waiverOrderResetPolicy: 'weekly', normalizedWaiverType: 'faab' }) })),
     ).toEqual({ applied: false, reason: 'waiver_type_not_priority' })
     expect(state.writes).toBe(0)
+  })
+
+  it('🛑 a survivor league never resets, even with weekly set', async () => {
+    const { db, state } = fakeDb()
+    expect(await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, deps(db, { isSurvivor: async () => true }))).toEqual({
+      applied: false,
+      reason: 'survivor_league',
+    })
+    expect(state.writes).toBe(0)
+    // The default detector reads League.survivorMode before the survivor config lookup.
+    const flagged = fakeDb({ survivorMode: true })
+    const { isSurvivor: _ignored, ...withDefaultDetector } = deps(flagged.db)
+    expect((await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, withDefaultDetector)).applied).toBe(false)
+    expect(flagged.state.writes).toBe(0)
+    // Control: the same league, not survivor, resets.
+    expect((await applyWeeklyWaiverPriorityReset({ leagueId: 'l1', seasonId: 's1', week: 5 }, deps(db))).applied).toBe(true)
+  })
+
+  it('the server refuses weekly for a survivor league and allows rolling', () => {
+    expect(weeklyResetSurvivorRefusal({ waiverOrderResetPolicy: 'weekly' }, true)).toMatch(/Survivor/)
+    expect(weeklyResetSurvivorRefusal({ waiverOrderResetPolicy: 'rolling' }, true)).toBeNull()
+    expect(weeklyResetSurvivorRefusal({ waiverOrderResetPolicy: 'weekly' }, false)).toBeNull()
+  })
+})
+
+describe("weekly reset ranks by the league's own standings rules", () => {
+  // Two teams level on record: A scored more, B conceded less.
+  const teams = [
+    { rosterId: 'A', displayName: 'A', wins: 2, losses: 2, pointsFor: 500, pointsAgainst: 480 },
+    { rosterId: 'B', displayName: 'B', wins: 2, losses: 2, pointsFor: 450, pointsAgainst: 400 },
+    { rosterId: 'C', displayName: 'C', wins: 4, losses: 0, pointsFor: 300, pointsAgainst: 300 },
+    { rosterId: 'D', displayName: 'D', wins: 0, losses: 4, pointsFor: 600, pointsAgainst: 600 },
+  ]
+  const stateWith = (customTiebreakers: string[] | null, playoffTeams = 2, divisions = false) =>
+    buildNflRedraftPlayoffRuntimeState({
+      leagueId: 'l1',
+      seasonId: 's1',
+      season: 2026,
+      week: 5,
+      rules: {
+        general: { season: 2026, sport: 'NFL', teamCount: 4 },
+        playoffs: { teamCount: playoffTeams, customTiebreakers, seedingRules: divisions ? 'division_winners_then_standings' : 'standings' },
+        schedule: { regularSeasonLength: 14 },
+      } as never,
+      // D is alone in its division, so it wins it at 0-4.
+      teams: divisions ? teams.map((t) => ({ ...t, divisionId: t.rosterId === 'D' ? 'd2' : 'd1' })) : teams,
+    })
+  const resolvedWith = (customTiebreakers: string[] | null) => ({ ok: true, state: stateWith(customTiebreakers), regularSeasonMatchups: [] })
+
+  afterEach(() => playoffRuntime.resolve.mockReset())
+
+  it('default rules: record, then points for', async () => {
+    playoffRuntime.resolve.mockResolvedValue(resolvedWith(null))
+    expect(await loadLeagueStandingsBestFirst({ seasonId: 's1', leagueSettings: {} }, {} as never)).toEqual(['C', 'A', 'B', 'D'])
+  })
+
+  it('the commissioner tiebreaker order decides the tied pair (positive control for the test above)', async () => {
+    playoffRuntime.resolve.mockResolvedValue(resolvedWith(['points_against', 'points_for', 'head_to_head', 'all_play', 'coin_flip']))
+    expect(await loadLeagueStandingsBestFirst({ seasonId: 's1', leagueSettings: {} }, {} as never)).toEqual(['C', 'B', 'A', 'D'])
+  })
+
+  it('a 0-4 division winner is still last: every team is ranked, so qualifying cannot reorder standings', async () => {
+    const seeded = stateWith(null, 2, true)
+    // The bracket's own order puts the division winner second — the order the reset must NOT use.
+    expect(seeded.teams.map((t) => t.rosterId)).toEqual(['C', 'D', 'A', 'B'])
+    playoffRuntime.resolve.mockResolvedValue({ ok: true, state: seeded, regularSeasonMatchups: [] })
+    expect(await loadLeagueStandingsBestFirst({ seasonId: 's1', leagueSettings: {} }, {} as never)).toEqual(['C', 'A', 'B', 'D'])
+  })
+
+  it('roto: the category standings rank, never the H2H ranker', async () => {
+    const db = { redraftRoster: { findMany: async () => [{ id: 'A', playoffSeed: 2 }, { id: 'B', playoffSeed: 1 }, { id: 'C', playoffSeed: 3 }] } }
+    expect(await loadLeagueStandingsBestFirst({ seasonId: 's1', leagueSettings: { scoring_mode: 'roto' } }, db as never)).toEqual(['B', 'A', 'C'])
+    expect(playoffRuntime.resolve).not.toHaveBeenCalled()
+  })
+
+  it('a format the playoff runtime does not cover falls back to the stored standings rank', async () => {
+    playoffRuntime.resolve.mockResolvedValue({ ok: false, reason: 'not_nfl_redraft' })
+    const db = { redraftRoster: { findMany: async () => [{ id: 'A', playoffSeed: 1 }, { id: 'B', playoffSeed: 2 }] } }
+    expect(await loadLeagueStandingsBestFirst({ seasonId: 's1', leagueSettings: {} }, db as never)).toEqual(['A', 'B'])
+  })
+})
+
+/* ---- hub: survivor ----------------------------------------------------------------------------- */
+
+describe('the hub does not offer the weekly reset to survivor leagues', () => {
+  afterEach(() => {
+    cleanup()
+    patches.length = 0
+  })
+  const weeklyOption = (r: ReturnType<typeof renderHub>) =>
+    [...(r.getByTestId('league-settings-waiver-reset-policy') as HTMLSelectElement).options].find((o) => o.value === 'weekly')!
+
+  it.each([
+    ['leagueVariant survivor', { leagueVariant: 'survivor' }],
+    ['survivorMode', { survivorMode: true }],
+  ])('%s: Weekly is disabled and the note explains why', (_label, over) => {
+    const r = renderHub({ waiverType: 'rolling', ...over })
+    expect(weeklyOption(r).disabled).toBe(true)
+    expect(r.container.textContent).toContain('Survivor leagues keep a rolling order')
+  })
+
+  it('control: a non-survivor league can pick Weekly', () => {
+    const r = renderHub({ waiverType: 'rolling', leagueVariant: null, survivorMode: false })
+    expect(weeklyOption(r).disabled).toBe(false)
+    expect(r.container.textContent).not.toContain('Survivor leagues keep a rolling order')
   })
 })
 

@@ -58,7 +58,13 @@ import {
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
-import { HUB_WAIVER_OPTION_KEYS, hasHubWaiverOptions, parseHubWaiverOptions } from '@/lib/waiver-wire/hub-waiver-options'
+import {
+  HUB_WAIVER_OPTION_KEYS,
+  hasHubWaiverOptions,
+  parseHubWaiverOptions,
+  weeklyResetSurvivorRefusal,
+} from '@/lib/waiver-wire/hub-waiver-options'
+import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
 import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
@@ -324,6 +330,12 @@ export async function executeLeagueSettingsPatch(
     budget: body.waiverBudget != null ? Number(body.waiverBudget) : league.waiverBudget,
   })
   if (!hubWaiver.ok) return jsonError(hubWaiver.error, 400)
+  // Owner's decision 2026-10-25: a survivor league's priority carries survivor boosts, which a weekly
+  // reset would erase, so it stays rolling (lib/waiver-wire/weekly-priority-reset.ts).
+  if (hubWaiver.options.waiverOrderResetPolicy === 'weekly') {
+    const refusal = weeklyResetSurvivorRefusal(hubWaiver.options, league.survivorMode === true || (await isSurvivorLeague(leagueId)))
+    if (refusal) return jsonError(refusal, 400)
+  }
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)

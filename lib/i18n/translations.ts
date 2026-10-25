@@ -1166,6 +1166,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.wv.resetHint": "Rolling: a team that wins a claim moves to the back. Weekly: each new week the order resets to reverse standings.",
     "lsHub.wv.reset.rolling": "Rolling (carries over all season)",
     "lsHub.wv.reset.weekly": "Resets weekly to reverse standings",
+    "lsHub.wv.resetSurvivor": "Survivor leagues keep a rolling order, so survivor priority boosts are never reset.",
     "lsHub.wv.faOnly": "Free agency only (no waivers)",
     "lsHub.wv.faOnlyHint": "Any manager can add a dropped or unrostered player right away, first come, first served.",
     "lsHub.wv.faOnlyApply": "Use this preset",
