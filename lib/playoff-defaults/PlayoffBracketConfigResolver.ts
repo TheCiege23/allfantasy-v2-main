@@ -8,6 +8,7 @@ import type { SportType } from '@/lib/sport-defaults/types'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
 import { firstRoundByesForTeams, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
+import { readConsolationPlaysFor } from '@/lib/playoff-runtime/consolationPlaysFor'
 
 export interface PlayoffBracketConfig {
   playoff_team_count: number
@@ -129,10 +130,8 @@ export async function getBracketConfigForLeague(leagueId: string): Promise<Playo
       'championship_length',
       defaults.championship_length ?? 1
     ),
-    consolation_plays_for: fromSettings<string>(
-      'consolation_plays_for',
-      defaults.consolation_plays_for
-    ),
+    // The reader next season's draft order uses too (lib/playoff-runtime/consolationPlaysFor.ts).
+    consolation_plays_for: readConsolationPlaysFor(settings, sport, variant),
     sport,
     variant,
   }

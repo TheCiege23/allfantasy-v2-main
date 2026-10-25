@@ -32,6 +32,8 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import type { RookieOrderInput, RookieOrderTeam } from './rookieOrderEngine'
 import { playoffGamesFromRedraftMatchups, playoffGamesFromSleeperBracket } from './playoffGameAdapters'
+import { readConsolationPlaysFor, readLowerBracketDraftResult } from '@/lib/playoff-runtime/consolationPlaysFor'
+import { CONSOLATION_ROUND_OFFSET } from '@/lib/playoff-runtime/playoffRoundWeeks'
 
 export type LoadedRookieOrderInput = {
   source: 'native' | 'imported'
@@ -49,11 +51,11 @@ function asRecord(value: unknown): Record<string, unknown> {
 export async function loadRookieOrderInput(leagueId: string): Promise<LoadedRookieOrderInput | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, season: true, platform: true, platformLeagueId: true, playoffStartWeek: true, settings: true },
+    select: { id: true, season: true, platform: true, platformLeagueId: true, playoffStartWeek: true, settings: true, sport: true, leagueVariant: true },
   })
   if (!league) return null
 
-  return isNativePlatform(league.platform) ? loadNative(league.id) : loadImported(league)
+  return isNativePlatform(league.platform) ? loadNative(league.id, league) : loadImported(league)
 }
 
 const SEASON_OVER: readonly string[] = [
@@ -62,13 +64,19 @@ const SEASON_OVER: readonly string[] = [
   REDRAFT_SEASON_STATUS.COMPLETE,
 ]
 
-async function loadNative(leagueId: string): Promise<LoadedRookieOrderInput | null> {
+async function loadNative(
+  leagueId: string,
+  league: { settings: unknown; sport: string | null; leagueVariant: string | null },
+): Promise<LoadedRookieOrderInput | null> {
   // The most recent season that has started. After rollover the new season sits in `setup`, and
   // the order it needs comes from the season before it.
   const redraftSeason = await prisma.redraftSeason.findFirst({
     where: { leagueId, status: { not: REDRAFT_SEASON_STATUS.SETUP } },
     orderBy: { season: 'desc' },
-    select: { id: true, season: true, currentWeek: true, playoffStartWeek: true, status: true },
+    select: {
+      id: true, season: true, currentWeek: true, playoffStartWeek: true, status: true,
+      playoffBracket: { select: { structure: true } },
+    },
   })
   if (!redraftSeason) return null
   const season = redraftSeason.season
@@ -105,6 +113,15 @@ async function loadNative(leagueId: string): Promise<LoadedRookieOrderInput | nu
     rounds.flatMap((round) => round.matchups.map((m) => ({ ...m, roundNumber: round.roundNumber }))),
   )
 
+  // The consolation bracket / toilet bowl, when it plays for the pick (lib/playoff-runtime/consolationPlaysFor.ts).
+  const lowerResult = readLowerBracketDraftResult(
+    redraftSeason.playoffBracket?.structure,
+    rounds.some((round) => round.roundNumber >= CONSOLATION_ROUND_OFFSET && round.matchups.length > 0),
+  )
+  const lowerBracket = lowerResult
+    ? { ...lowerResult, playsForPick: readConsolationPlaysFor(league.settings, league.sport, league.leagueVariant) === 'pick' }
+    : null
+
   // Seeds are written when the bracket is generated, which is when the regular season is over.
   const regularSeasonComplete = seeds.length > 0 || SEASON_OVER.includes(redraftSeason.status)
 
@@ -117,7 +134,7 @@ async function loadNative(leagueId: string): Promise<LoadedRookieOrderInput | nu
   return {
     source: 'native',
     season,
-    input: { teams, regularSeasonComplete, playoffGames },
+    input: { teams, regularSeasonComplete, playoffGames, lowerBracket },
     rosterIdForTeam: new Map(rosters.map((r) => [r.id, rosterByRedraft.get(r.id) ?? null])),
     notes: ['True Max PF is not computed for leagues that play on AllFantasy yet; points for is used.'],
   }

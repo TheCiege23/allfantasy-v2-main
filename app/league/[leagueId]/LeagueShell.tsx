@@ -262,6 +262,8 @@ function prismaLeagueToUserLeague(
     bestBallMode: l.bestBallMode ?? undefined,
     guillotineMode: l.guillotineMode ?? undefined,
     keeperPhaseActive: l.keeperPhaseActive ?? undefined,
+    // The lower bracket the bracket is built from; the standings "Playoff format" card reads it.
+    playoffLowerBracket: l.playoffLowerBracket ?? null,
     isCommissioner: Boolean(l.isCommissioner),
   }
 }
