@@ -57,8 +57,7 @@ async function main() {
 
   const { prisma } = await import('../../lib/prisma')
   const { validateCreatePayload } = await import('../../lib/league-creation/canonical/validateCreateLeague')
-  const { runPresetEngine } = await import('../../lib/league-creation/preset-engine/runPresetEngine')
-  const { createCanonicalLeagueInTransaction } = await import('../../lib/league-creation/canonical/createCanonicalLeagueInTransaction')
+  const { executeCanonicalLeagueCreation } = await import('../../lib/league-creation/canonical/executeCanonicalLeagueCreation')
   const { startDraftSession } = await import('../../lib/live-draft-engine/DraftSessionService')
   const { processExpiredDraftPickForLeague } = await import('../../lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
   const { configureEventInfrastructure, InMemoryOutboxStore } = await import('../../lib/events')
@@ -85,8 +84,11 @@ async function main() {
   }
   const validated = validateCreatePayload(body)
   assert.ok(validated.ok, `create payload: ${JSON.stringify(validated)}`)
-  const engine = runPresetEngine({ ...validated.data, commissionerId: userIds[0] })
-  const leagueId = (await prisma.$transaction(tx => createCanonicalLeagueInTransaction(tx, userIds[0], validated.data, engine), { timeout: 120_000 })).leagueId
+  // The same entry point the create screen's API uses: the transaction AND the post-create
+  // initialization after it (the NFL roster schema is written there, not in the transaction).
+  const created = await executeCanonicalLeagueCreation({ appUserId: userIds[0], body: validated.data })
+  assert.ok(created.ok, `league create: ${JSON.stringify(created)}`)
+  const leagueId = created.response.league.id
   log(`league ${leagueId} created`)
   writeFileSync(`${LOG}.league`, JSON.stringify({ marker, leagueId, userIds }))
 
