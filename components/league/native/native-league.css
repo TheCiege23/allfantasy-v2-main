@@ -349,7 +349,7 @@
   .nl-workspace .nl-bottom-nav{justify-content:stretch;gap:2px;padding-left:4px;padding-right:4px}
   .nl-workspace .nl-bottom-nav button{position:relative;flex:1 1 0;min-width:0;padding:0 2px}
   .nl-workspace .nl-bottom-nav button>span:not(.nl-nav-count){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .nl-workspace .nl-bottom-nav .nl-nav-count{position:absolute;top:2px;left:calc(50% + 6px);margin:0;min-width:18px;padding:1px 4px;border-color:var(--accent);background:var(--accent);color:var(--bg);font-size:10px}
+  .nl-workspace .nl-bottom-nav .nl-nav-count{position:absolute;top:2px;left:calc(50% + 6px);margin:0;min-width:18px;padding:1px 4px;border-color:var(--accent);background:var(--accent);color:var(--bg);font-size:11px}
   .nl-workspace :is(button,.nl-text-link,.nl-back,.nl-nav-group>a){min-height:44px;min-width:44px;touch-action:manipulation}
   .nl-workspace :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px}
   .nl-workspace .nl-sidebar.nl-menu-open{top:calc(60px + env(safe-area-inset-top,0px));bottom:calc(60px + env(safe-area-inset-bottom,0px));overflow-y:auto;overscroll-behavior:contain;border-right:1px solid var(--line2);box-shadow:12px 0 32px #0006}
