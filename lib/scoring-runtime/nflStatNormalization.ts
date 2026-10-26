@@ -1,4 +1,4 @@
-import { NFL_EXTRA_PLAYER_STAT_KEYS, NFL_EXTRA_TEAM_STAT_KEYS } from './nflExtraStatKeys'
+import { NFL_EXTRA_PLAYER_STAT_KEYS, NFL_EXTRA_TEAM_STAT_SOURCES } from './nflExtraStatKeys'
 
 type JsonRecord = Record<string, unknown>
 
@@ -62,16 +62,16 @@ export function normalizeNflWeeklyStats(raw: unknown): Record<string, number> {
   setIfNumber(out, 'fg_50_plus', firstNumber(source, ['fg_50_plus', 'fgm_50p', 'fgm_50_plus']))
   setIfNumber(out, 'fg_miss', firstNumber(source, ['fg_miss', 'fgmiss', 'fg_missed']))
   setIfNumber(out, 'xp_made', firstNumber(source, ['xp_made', 'xpm', 'pat_made']))
-  setIfNumber(out, 'idp_solo', firstNumber(source, ['idp_solo', 'tackle_solo', 'solo_tkl']))
-  setIfNumber(out, 'idp_assist', firstNumber(source, ['idp_assist', 'tackle_ast', 'assist_tkl']))
+  setIfNumber(out, 'idp_solo', firstNumber(source, ['idp_solo', 'idp_tkl_solo', 'tackle_solo', 'solo_tkl']))
+  setIfNumber(out, 'idp_assist', firstNumber(source, ['idp_assist', 'idp_tkl_ast', 'tackle_ast', 'assist_tkl']))
   setIfNumber(out, 'idp_sack', firstNumber(source, ['idp_sack', 'sack']))
   setIfNumber(out, 'idp_int', firstNumber(source, ['idp_int', 'def_int', 'int']))
-  setIfNumber(out, 'idp_pd', firstNumber(source, ['idp_pd', 'pass_defended', 'pd']))
+  setIfNumber(out, 'idp_pd', firstNumber(source, ['idp_pd', 'idp_pass_def', 'pass_defended', 'pd']))
   setIfNumber(out, 'idp_ff', firstNumber(source, ['idp_ff', 'fum_forced', 'ff']))
-  setIfNumber(out, 'idp_fr', firstNumber(source, ['idp_fr', 'fum_rec', 'fr']))
-  setIfNumber(out, 'idp_td', firstNumber(source, ['idp_td', 'def_td']))
-  setIfNumber(out, 'idp_safety', firstNumber(source, ['idp_safety', 'safety']))
-  setIfNumber(out, 'idp_tfl', firstNumber(source, ['idp_tfl', 'tackle_loss', 'tfl']))
+  setIfNumber(out, 'idp_fr', firstNumber(source, ['idp_fr', 'idp_fum_rec', 'fum_rec', 'fr']))
+  setIfNumber(out, 'idp_td', firstNumber(source, ['idp_td', 'idp_def_td', 'def_td']))
+  setIfNumber(out, 'idp_safety', firstNumber(source, ['idp_safety', 'idp_safe', 'safety']))
+  setIfNumber(out, 'idp_tfl', firstNumber(source, ['idp_tfl', 'idp_tkl_loss', 'tackle_loss', 'tfl']))
   setIfNumber(out, 'idp_qb_hit', firstNumber(source, ['idp_qb_hit', 'qb_hit', 'qb_hits']))
   // Scored straight from the provider's own count (first downs, long plays, bonuses, special teams).
   for (const key of NFL_EXTRA_PLAYER_STAT_KEYS) setIfNumber(out, key, asNumber(source[key]))
@@ -113,7 +113,7 @@ export function normalizeNflTeamDefenseWeeklyStats(raw: unknown): Record<string,
   )
   setIfNumber(out, 'def_kr_yd', firstNumber(source, ['def_kr_yd', 'kr_yd', 'kick_return_yards', 'kr_yards']))
   setIfNumber(out, 'def_pr_yd', firstNumber(source, ['def_pr_yd', 'pr_yd', 'punt_return_yards', 'pr_yards']))
-  for (const key of NFL_EXTRA_TEAM_STAT_KEYS) setIfNumber(out, key, asNumber(source[key]))
+  for (const [key, from] of NFL_EXTRA_TEAM_STAT_SOURCES) setIfNumber(out, key, firstNumber(source, [key, from]))
 
   return out
 }

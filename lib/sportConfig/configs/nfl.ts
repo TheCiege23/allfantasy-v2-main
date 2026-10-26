@@ -124,7 +124,8 @@ const NFL_SCORING_BASE: ScoringCategory[] = [
     isToggleable: true,
     group: s.group,
     sport: 'NFL',
-    ...(s.key === 'kr_yd' || s.key === 'pr_yd' ? { unit: 'per_yard' as const } : {}),
+    ...(s.key === 'kr_yd' || s.key === 'pr_yd' || s.per === 'yard' ? { unit: 'per_yard' as const } : {}),
+    ...(s.requiresToggle ? { requiresToggle: s.requiresToggle } : {}),
   })),
 ]
 

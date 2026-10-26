@@ -73,8 +73,8 @@ describe('importedNflScoring', () => {
   })
 
   it('lists rules that award points with no AllFantasy equivalent, and stays quiet about zero ones', () => {
-    const out = importedNflScoring(scoringSettings({ ...SLEEPER_HALF_PPR, def_3_and_out: 1, bonus_rush_td_qb: 1, def_4_and_stop: 0 }))!
-    expect(out.notScored).toEqual(['bonus rush td qb', 'def 3 and out'])
+    const out = importedNflScoring(scoringSettings({ ...SLEEPER_HALF_PPR, rec_air_yd: 0.1, rush_yac: 0.1, rush_btkl: 0 }))!
+    expect(out.notScored).toEqual(['rec air yd', 'rush yac'])
   })
 
   it('the most-used Sleeper extras carry over and score (owner, 2026-10-25)', () => {

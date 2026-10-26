@@ -20,9 +20,16 @@
 export type NflExtraStat = {
   key: string
   label: string
-  group: 'passing' | 'rushing' | 'receiving' | 'kicking' | 'special' | 'team_def'
+  group: 'passing' | 'rushing' | 'receiving' | 'kicking' | 'special' | 'team_def' | 'idp'
   /** `team`: read from the team-defence row. `player`: from every other row. */
   side: 'player' | 'team'
+  /** The raw provider key, when it differs from `key` (team-defence stats are `def_`-prefixed here). */
+  from?: string
+  /** True when the normalizer already produces `key` (points / yards allowed); nothing is copied. */
+  alreadyNormalized?: true
+  per?: 'yard' | 'point'
+  /** IDP rules score only in a league with IDP on, like every other IDP rule. */
+  requiresToggle?: 'IDP'
 }
 
 export const NFL_EXTRA_STATS: readonly NflExtraStat[] = [
@@ -73,10 +80,51 @@ export const NFL_EXTRA_STATS: readonly NflExtraStat[] = [
   { key: 'st_fum_rec', label: 'Special Teams Player Fumble Recovery', group: 'special', side: 'player' },
   { key: 'kr_yd', label: 'Player Kick Return Yards', group: 'special', side: 'player' },
   { key: 'pr_yd', label: 'Player Punt Return Yards', group: 'special', side: 'player' },
+  { key: 'st_tkl_solo', label: 'Special Teams Player Solo Tackle', group: 'special', side: 'player' },
+  { key: 'kr_td', label: 'Player Kick Return TD', group: 'special', side: 'player' },
+  { key: 'pr_td', label: 'Player Punt Return TD', group: 'special', side: 'player' },
+  { key: 'bonus_rush_td_qb', label: 'Rushing TD Bonus — QB', group: 'rushing', side: 'player' },
+  { key: 'fgm', label: 'FG Made (any distance)', group: 'kicking', side: 'player' },
+  { key: 'fgm_yds', label: 'Points per FG Yard', group: 'kicking', side: 'player', per: 'yard' },
+  { key: 'fgm_yds_over_30', label: 'Points per FG Yard over 30', group: 'kicking', side: 'player', per: 'yard' },
+  // IDP (individual defensive players)
+  { key: 'idp_tkl', label: 'IDP Tackle', group: 'idp', side: 'player', requiresToggle: 'IDP' },
+  { key: 'idp_blk_kick', label: 'IDP Blocked Kick', group: 'idp', side: 'player', requiresToggle: 'IDP' },
+  { key: 'idp_int_ret_yd', label: 'IDP INT Return Yards', group: 'idp', side: 'player', per: 'yard', requiresToggle: 'IDP' },
+  { key: 'idp_fum_ret_yd', label: 'IDP Fumble Return Yards', group: 'idp', side: 'player', per: 'yard', requiresToggle: 'IDP' },
+  { key: 'idp_sack_yd', label: 'IDP Sack Yards', group: 'idp', side: 'player', per: 'yard', requiresToggle: 'IDP' },
+  { key: 'bonus_sack_2p', label: 'IDP 2+ Sack Bonus', group: 'idp', side: 'player', requiresToggle: 'IDP' },
+  { key: 'bonus_tkl_10p', label: 'IDP 10+ Tackle Bonus', group: 'idp', side: 'player', requiresToggle: 'IDP' },
+  { key: 'idp_pass_def_3p', label: 'IDP 3+ Pass Defended Bonus', group: 'idp', side: 'player', requiresToggle: 'IDP' },
+  { key: 'bonus_def_int_td_50p', label: 'IDP 50+ Yd INT Return TD Bonus', group: 'idp', side: 'player', requiresToggle: 'IDP' },
+  { key: 'bonus_def_fum_td_50p', label: 'IDP 50+ Yd Fumble Return TD Bonus', group: 'idp', side: 'player', requiresToggle: 'IDP' },
   // Team defence / special teams
   { key: 'def_st_ff', label: 'DST Special Teams Forced Fumble', group: 'team_def', side: 'team' },
   { key: 'def_st_fum_rec', label: 'DST Special Teams Fumble Recovery', group: 'team_def', side: 'team' },
+  { key: 'def_st_tkl_solo', label: 'DST Special Teams Solo Tackle', group: 'team_def', side: 'team' },
+  { key: 'def_ff', label: 'DST Forced Fumble', group: 'team_def', side: 'team', from: 'ff' },
+  { key: 'def_tkl_loss', label: 'DST Tackle For Loss', group: 'team_def', side: 'team', from: 'tkl_loss' },
+  { key: 'def_qb_hit', label: 'DST Hit on QB', group: 'team_def', side: 'team', from: 'qb_hit' },
+  { key: 'def_tkl', label: 'DST Tackle', group: 'team_def', side: 'team', from: 'tkl' },
+  { key: 'def_tkl_solo', label: 'DST Solo Tackle', group: 'team_def', side: 'team', from: 'tkl_solo' },
+  { key: 'def_tkl_ast', label: 'DST Assisted Tackle', group: 'team_def', side: 'team', from: 'tkl_ast' },
+  { key: 'def_sack_yd', label: 'DST Sack Yards', group: 'team_def', side: 'team', from: 'sack_yd', per: 'yard' },
+  { key: 'def_int_ret_yd', label: 'DST INT Return Yards', group: 'team_def', side: 'team', from: 'int_ret_yd', per: 'yard' },
+  { key: 'def_fum_ret_yd', label: 'DST Fumble Return Yards', group: 'team_def', side: 'team', from: 'fum_ret_yd', per: 'yard' },
+  { key: 'def_fg_ret_yd', label: 'DST Missed FG Return Yards', group: 'team_def', side: 'team', from: 'fg_ret_yd', per: 'yard' },
+  { key: 'def_blk_kick_ret_yd', label: 'DST Blocked Kick Return Yards', group: 'team_def', side: 'team', from: 'blk_kick_ret_yd', per: 'yard' },
+  { key: 'def_pass_def', label: 'DST Pass Defended', group: 'team_def', side: 'team' },
+  { key: 'def_forced_punts', label: 'DST Forced Punt', group: 'team_def', side: 'team' },
+  { key: 'def_3_and_out', label: 'DST 3 and Out', group: 'team_def', side: 'team' },
+  { key: 'def_4_and_stop', label: 'DST 4th Down Stop', group: 'team_def', side: 'team' },
+  { key: 'def_2pt', label: 'DST 2-Pt Conversion Return', group: 'team_def', side: 'team' },
+  { key: 'def_points_allowed', label: 'DST Points Per Point Allowed', group: 'team_def', side: 'team', alreadyNormalized: true, per: 'point' },
+  { key: 'def_yds_allowed', label: 'DST Points Per Yard Allowed', group: 'team_def', side: 'team', alreadyNormalized: true, per: 'yard' },
 ]
 
 export const NFL_EXTRA_PLAYER_STAT_KEYS: readonly string[] = NFL_EXTRA_STATS.filter((s) => s.side === 'player').map((s) => s.key)
-export const NFL_EXTRA_TEAM_STAT_KEYS: readonly string[] = NFL_EXTRA_STATS.filter((s) => s.side === 'team').map((s) => s.key)
+
+/** Team-defence stats to copy: `[engine key, raw provider key]`. */
+export const NFL_EXTRA_TEAM_STAT_SOURCES: readonly (readonly [string, string])[] = NFL_EXTRA_STATS
+  .filter((s) => s.side === 'team' && !s.alreadyNormalized)
+  .map((s) => [s.key, s.from ?? s.key] as const)
