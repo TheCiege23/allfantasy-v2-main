@@ -28,6 +28,10 @@ import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerWaiverHours, loadDroppedPlayerHolds, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
+import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
+
+/** Why a run settled nothing on purpose, leaving every pending claim pending (reported through `opts.onSkip`). */
+export type WaiverRunSkipReason = 'league_moves_locked'
 
 type ClaimRow = {
   id: string
@@ -61,7 +65,12 @@ function outcomeFromFailureMessage(msg: string): WaiverClaimOutcomeCode {
 
 export async function processWaiverClaimsForLeague(
   leagueId: string,
-  opts?: { processedByUserId?: string | null; runType?: string; idempotencyKey?: string | null }
+  opts?: {
+    processedByUserId?: string | null
+    runType?: string
+    idempotencyKey?: string | null
+    onSkip?: (reason: WaiverRunSkipReason) => void
+  }
 ): Promise<ProcessedClaimResult[]> {
   if (opts?.idempotencyKey != null) {
     logEngineInvariantOptional(assertNonEmptyIdempotencyKey(opts.idempotencyKey), 'waiver_process.idempotency_key', {
@@ -91,6 +100,16 @@ export async function processWaiverClaimsForLeague(
 
   const locked = await getLeagueWaiverState(leagueId).catch(() => null)
   if (locked?.processingLocked) return []
+
+  // 🛑 The commissioner's "Lock all roster moves" (`League.lockAllMoves`), re-read when the run executes:
+  // a claim filed before the lock went on must not settle while it is on. Nothing is touched — no run
+  // row, no claim update — so every claim stays pending and the first run after the lift settles it.
+  // A commissioner's manual run is exempt, like `commissionerOverride` in the waiver and trade runtimes.
+  if (opts?.runType !== 'manual' && (await isRedraftLeagueMovesLocked(leagueId))) {
+    console.info(`[waiver-process] league ${leagueId} skipped: the commissioner has locked all roster moves; pending claims stay pending`)
+    opts?.onSkip?.('league_moves_locked')
+    return []
+  }
 
   const [effectiveSettings, league, pendingClaims, allRosters, leagueTeams] = await Promise.all([
     getEffectiveLeagueWaiverSettings(leagueId),

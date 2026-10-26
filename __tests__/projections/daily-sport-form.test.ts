@@ -17,7 +17,10 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import {
+  blendPerGame,
   buildDailySportForm,
+  PRIOR_SEASON_BLEND_GAMES,
+  type DailySportFormBlob,
   formatPositionRank,
   isUnavailableForProjection,
   positionRanks,
@@ -209,5 +212,56 @@ describe('availability and rank groups', () => {
     expect(rankPositionFor('MLB', null, { pitchingApps: 0, starts: 0, lastGamePosition: 'PH-2B' })).toBe('2B')
     expect(rankPositionFor('MLB', null, { pitchingApps: 0, starts: 0, lastGamePosition: 'PH' })).toBeNull()
     expect(rankPositionFor('NHL', 'LW', { pitchingApps: 0, starts: 0, lastGamePosition: 'C' })).toBe('LW')
+  })
+})
+
+describe('prior-season blend', () => {
+  // A scorer that reads one stat, so the arithmetic is the blend's alone.
+  const pts = (line: Record<string, number>) => line.pts ?? 0
+  const blobOf = (season: number, players: DailySportFormBlob['players']): DailySportFormBlob => ({
+    v: 1, sport: 'NBA', season, computedAt: '2026-10-25T07:00:00.000Z', recentGames: 10, players,
+  })
+
+  it('K is a small named constant per sport, inside the 5-10 game band', () => {
+    expect(PRIOR_SEASON_BLEND_GAMES).toEqual({ NBA: 6, NHL: 8, MLB: 10 })
+  })
+
+  it('weighted = (n x this + K x last) / (n + K); no prior = this alone; no games this season = last alone', () => {
+    // 2 games at 30, K 6, last season 18: (60 + 108) / 8 = 21
+    expect(blendPerGame({ thisSeasonGames: 2, thisRate: 30, lastSeasonRate: 18, k: 6 })).toBe(21)
+    // n = K is an even split
+    expect(blendPerGame({ thisSeasonGames: 6, thisRate: 30, lastSeasonRate: 18, k: 6 })).toBe(24)
+    expect(blendPerGame({ thisSeasonGames: 2, thisRate: 30, lastSeasonRate: null, k: 6 })).toBe(30)
+    expect(blendPerGame({ thisSeasonGames: 0, thisRate: null, lastSeasonRate: 18, k: 6 })).toBe(18)
+    expect(blendPerGame({ thisSeasonGames: 0, thisRate: null, lastSeasonRate: null, k: 6 })).toBeNull()
+  })
+
+  it('scoreFormBlob blends with last season, prices a returning player from last season, ranks this season only', () => {
+    const current = blobOf(2026, {
+      few: { pos: 'C', team: 'DEN', sg: 2, ss: { pts: 60 }, rg: 2, rs: { pts: 60 }, part: null },
+      many: { pos: 'C', team: 'MIA', sg: 30, ss: { pts: 600 }, rg: 10, rs: { pts: 300 }, part: null },
+      rookie: { pos: 'C', team: 'BOS', sg: 1, ss: { pts: 12 }, rg: 1, rs: { pts: 12 }, part: null },
+    })
+    const prior = blobOf(2025, {
+      few: { pos: 'C', team: 'DEN', sg: 70, ss: { pts: 1260 }, rg: 10, rs: { pts: 0 }, part: null }, // 18 a game
+      many: { pos: 'C', team: 'MIA', sg: 60, ss: { pts: 600 }, rg: 10, rs: { pts: 0 }, part: null }, // 10 a game
+      hurt: { pos: 'C', team: 'LAL', sg: 50, ss: { pts: 1000 }, rg: 10, rs: { pts: 0 }, part: null }, // 20 a game
+    })
+    const scored = scoreFormBlob(current, pts, prior)
+    // few: (2 x 30 + 6 x 18) / 8 = 21
+    expect(scored.get('few')).toMatchObject({ perGame: 21, seasonGames: 2, priorGames: 70 })
+    // many: (30 x 30 + 6 x 10) / 36 = 26.67 — a full season barely moves
+    expect(scored.get('many')!.perGame).toBe(26.67)
+    // rookie: no prior season, one game, so the two-game floor still holds
+    expect(scored.get('rookie')!.perGame).toBeNull()
+    // hurt: no game this season, priced from last season alone, and not ranked
+    expect(scored.get('hurt')).toMatchObject({ perGame: 20, seasonGames: 0, seasonPoints: 0 })
+    const ranks = positionRanks(scored.values())
+    expect(ranks.has('hurt')).toBe(false)
+    expect(ranks.get('many')).toEqual({ position: 'C', rank: 1, of: 3 })
+    // Without a prior season, nothing changes from the recent-form rate.
+    expect(scoreFormBlob(current, pts).get('few')!.perGame).toBe(30)
+    // A "prior" from the same season is not last season.
+    expect(scoreFormBlob(current, pts, current).get('few')!.perGame).toBe(30)
   })
 })

@@ -32,7 +32,7 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import type { RookieOrderInput, RookieOrderTeam } from './rookieOrderEngine'
 import { playoffGamesFromRedraftMatchups, playoffGamesFromSleeperBracket } from './playoffGameAdapters'
-import { readConsolationPlaysFor, readLowerBracketDraftResult } from '@/lib/playoff-runtime/consolationPlaysFor'
+import { consolationPlaysForSetsDraftOrder, readLowerBracketDraftResult } from '@/lib/playoff-runtime/consolationPlaysFor'
 import { CONSOLATION_ROUND_OFFSET } from '@/lib/playoff-runtime/playoffRoundWeeks'
 
 export type LoadedRookieOrderInput = {
@@ -119,7 +119,7 @@ async function loadNative(
     rounds.some((round) => round.roundNumber >= CONSOLATION_ROUND_OFFSET && round.matchups.length > 0),
   )
   const lowerBracket = lowerResult
-    ? { ...lowerResult, playsForPick: readConsolationPlaysFor(league.settings, league.sport, league.leagueVariant) === 'pick' }
+    ? { ...lowerResult, playsForPick: consolationPlaysForSetsDraftOrder(league.settings, league.sport, league.leagueVariant) }
     : null
 
   // Seeds are written when the bracket is generated, which is when the regular season is over.

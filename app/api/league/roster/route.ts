@@ -14,7 +14,7 @@ import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/
 import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
 import { isDailyFormSport } from '@/lib/projections/dailySportForm'
-import { applyDailySportOutlook, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
+import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -258,10 +258,13 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
 
     // NBA / NHL / MLB: an AF projection for this period and a position rank, both under this
     // league's scoring, from stored game lines (lib/projections/dailySportOutlook.ts). No-op elsewhere.
+    // A daily-lineup league's period is the day the lineup screen's day picker sent (`day`), else today.
     if (isDailyFormSport(leagueSport) && unifiedRoster.length > 0) {
       try {
+        const pickedDay = searchParams?.get('day')
         const outlook = await loadDailySportOutlook(prisma, {
           league: { sport: leagueSport, season: league.season ?? null, settings: league.settings },
+          day: isDayKey(pickedDay) ? pickedDay : null,
           players: unifiedRoster.map((r) => ({ key: r.id, lookupId: r.id, team: r.team, injuryStatus: r.injuryStatus })),
         })
         unifiedRoster = applyDailySportOutlook(unifiedRoster, outlook)

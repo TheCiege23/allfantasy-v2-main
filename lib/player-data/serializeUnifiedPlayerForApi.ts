@@ -86,6 +86,12 @@ export type UnifiedPlayerWireDto = {
   positionRank?: { position: string; rank: number; of: number } | null
   /** The same rank as the screens print it: "C12", "SP34". */
   positionRankLabel?: string | null
+  /**
+   * NBA / NHL / MLB daily-lineup leagues: the opponent and venue on the day the lineup screen has
+   * selected, stamped beside the AF projection for that day. Absent elsewhere.
+   */
+  periodOpponent?: string | null
+  periodHomeAway?: 'home' | 'away' | null
 }
 
 export type { ProviderFallbackDiagnostics }
