@@ -25,6 +25,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { isImportedPlatform, isNativePlatform } from '@/lib/league/isNativeLeague'
 import { renewNativeRedraft, RedraftRenewalError } from '@/lib/redraft/offseason/renewNativeRedraft'
+import { effectiveFaabRolloverRule, storedFaabRolloverRule } from '@/lib/waiver-wire/faab-rollover'
 import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { checkAndTriggerRatingIfOffseason } from '@/lib/commissioner/CommissionerRatingTrigger'
 import { readBracketResult } from '@/lib/redraft/offseason/RedraftOffseasonService'
@@ -483,15 +484,29 @@ export async function POST(
   })
 
   // ─── 4b. REDRAFT (Sleeper-style): clear rosters for a full startup draft — keep dynasty/keeper player groups ───
+  // FAAB follows the commissioner's rollover rule (lib/waiver-wire/faab-rollover.ts). Unset, a redraft
+  // reset restores the budget (as it always did) and a keeper / dynasty renewal carries balances over.
+  const rolloverFaab = typeof league.waiverBudget === 'number' && Number.isFinite(league.waiverBudget) ? league.waiverBudget : 100
+  let storedRolloverRule: ReturnType<typeof storedFaabRolloverRule> = null
+  try {
+    const row = await prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } })
+    storedRolloverRule = storedFaabRolloverRule(row?.waiverEngineConfig)
+  } catch {
+    // Unreadable: the family default applies, which is what every renewal did before the setting.
+  }
   if (resetsRosters && !redraftRenewal) {
-    const faab = typeof league.waiverBudget === 'number' && Number.isFinite(league.waiverBudget) ? league.waiverBudget : 100
+    const resetFaab = effectiveFaabRolloverRule(storedRolloverRule, 'redraft') === 'reset'
     await prisma.roster.updateMany({
       where: { leagueId },
       data: {
         playerData: toPrismaJsonInput({}),
-        faabRemaining: faab,
+        ...(resetFaab ? { faabRemaining: rolloverFaab } : {}),
       },
     })
+    if (!resetFaab) await prisma.roster.updateMany({ where: { leagueId, faabRemaining: null }, data: { faabRemaining: rolloverFaab } })
+  } else if (!resetsRosters && storedRolloverRule === 'reset') {
+    // A keeper / dynasty league that chose "reset" starts the new season on the full budget.
+    await prisma.roster.updateMany({ where: { leagueId }, data: { faabRemaining: rolloverFaab } })
   }
 
   // ─── 5. UPDATE league type if changed ───

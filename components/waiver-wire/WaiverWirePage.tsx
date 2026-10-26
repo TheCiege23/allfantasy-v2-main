@@ -48,6 +48,7 @@ import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { confirmLineupWarning, isLineupWarningResponse } from "@/lib/waiver-wire/lineup-warning-prompt"
 import {
   claimProcessesAfterDate,
   isImmediateAddAllowedToday,
@@ -449,16 +450,27 @@ export default function WaiverWirePage({
     if (claimLoading) return
     setClaimLoading(true)
     try {
-      const res = await fetch(`/api/waiver-wire/leagues/${leagueId}/claims`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          addPlayerId: player.id,
-          dropPlayerId: opts.dropPlayerId,
-          faabBid: opts.faabBid,
-          priorityOrder: opts.priorityOrder,
-        }),
-      })
+      const send = (confirmed: boolean) =>
+        fetch(`/api/waiver-wire/leagues/${leagueId}/claims`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            addPlayerId: player.id,
+            dropPlayerId: opts.dropPlayerId,
+            faabBid: opts.faabBid,
+            priorityOrder: opts.priorityOrder,
+            ...(confirmed ? { confirmLineupWarning: true } : {}),
+          }),
+        })
+      let res = await send(false)
+      if (res.status === 409) {
+        // The drop leaves a starting slot unfillable: a warning the manager confirms, not a block.
+        const warn = await res.clone().json().catch(() => null)
+        if (isLineupWarningResponse(warn)) {
+          if (!confirmLineupWarning(warn, tInterpolate)) return
+          res = await send(true)
+        }
+      }
       if (res.ok) {
         const json = await res.json().catch(() => ({}))
         if (typeof json?.fcfsProcessWarning === "string" && json.fcfsProcessWarning.trim()) {
@@ -518,12 +530,23 @@ export default function WaiverWirePage({
         return next.includes(player.id) ? next : [...next, player.id]
       })
       try {
-        const res = await fetch(`/api/waiver-wire/leagues/${leagueId}/add-drop`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ addPlayerId: player.id, dropPlayerId }),
-        })
-        const json = await res.json().catch(() => ({}))
+        const send = (confirmed: boolean) =>
+          fetch(`/api/waiver-wire/leagues/${leagueId}/add-drop`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ addPlayerId: player.id, dropPlayerId, ...(confirmed ? { confirmLineupWarning: true } : {}) }),
+          })
+        let res = await send(false)
+        let json = await res.json().catch(() => ({}))
+        if (isLineupWarningResponse(json)) {
+          // The drop leaves a starting slot unfillable: a warning the manager confirms, not a block.
+          if (!confirmLineupWarning(json, tInterpolate)) {
+            setRosterPlayerIds(prevRosterIds)
+            return
+          }
+          res = await send(true)
+          json = await res.json().catch(() => ({}))
+        }
         if (res.ok && json?.ok) {
           setDrawerOpen(false)
           setDrawerPlayer(null)
@@ -567,7 +590,7 @@ export default function WaiverWirePage({
         setActionPlayerId(null)
       }
     },
-    [actionPlayerId, leagueId, rosterPlayerIds, refreshAfterMutation],
+    [actionPlayerId, leagueId, rosterPlayerIds, refreshAfterMutation, tInterpolate],
   )
 
   const handleAddClick = useCallback(

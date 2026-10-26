@@ -5438,6 +5438,18 @@ export const translations: Record<string, Record<string, string>> = {
     "lineupMode.err.failed": "Could not save the lineup setting. Try again.",
     "leagueSettings.lockAllRosterMoves": "Lock all roster moves",
     "leagueSettings.lockAllRosterMovesHint": "Members can't change lineups or IR, file waiver claims, add, drop or trade until you lift it. Pending waiver claims wait, unprocessed.",
+    // Waivers: Sleeper-style free agency, FAAB rollover, lineup warning (waiver-fa).
+    "waiverFa.mode": "Free agency",
+    "waiverFa.mode.standard": "Follow the waiver type",
+    "waiverFa.mode.after_run": "Waivers until each run, then free agents",
+    "waiverFa.modeHint.standard": "Free agents follow the waiver type and the waiver period.",
+    "waiverFa.modeHint.after_run": "Like Sleeper: unrostered players are on waivers until the scheduled run, then free agents, first come, first served. A player goes back on waivers when his game starts, until the next run. A dropped player still serves the waiver period.",
+    "waiverFa.modeDailyNote": "While the daily schedule is on, it decides each day.",
+    "waiverFa.rollover": "FAAB at season rollover",
+    "waiverFa.rollover.reset": "Reset to the starting budget",
+    "waiverFa.rollover.carry_over": "Carry over what each team has left",
+    "waiverFa.rolloverHint": "Applies when the league is renewed for next season. Current balances do not change.",
+    "waiverFa.lineupWarning": "After this move your lineup cannot fill every starting slot ({{slots}}). Go ahead anyway?",
   },
   es: {
     ...translationsEsParity,

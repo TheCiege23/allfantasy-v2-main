@@ -27,6 +27,10 @@ export type WaiverEngineConfigJson = {
   playoff_waiver_rules?: string
   undroppable_player_ids?: string[]
   allow_zero_faab_bid?: boolean
+  /** `standard` | `after_run` (Sleeper-style, lib/waiver-wire/after-run-free-agency.ts). */
+  free_agency_mode?: string
+  /** `reset` | `carry_over` at season rollover (lib/waiver-wire/faab-rollover.ts); unset = per-family default. */
+  faab_rollover_rule?: string
 }
 
 export function parseWaiverEngineConfig(raw: unknown): WaiverEngineConfigJson {
