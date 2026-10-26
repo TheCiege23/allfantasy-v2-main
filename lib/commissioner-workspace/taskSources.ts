@@ -19,7 +19,8 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
  *   3. It CLEARS on its own when the situation resolves, so the store can close the task and the
  *      list shrinks without anybody tidying it.
  *
- * Four detectors clear that bar today. Adding a fifth is a deliberate edit here, not a config flag.
+ * Four detectors clear that bar today, plus the native-league ones in ./operationalTasks.ts and
+ * ./commissionerFeatureTasks.ts. Adding another is a deliberate edit, not a config flag.
  *
  * 🛑 THESE ARE PURE FUNCTIONS OF READS. They decide nothing about persistence — `taskStore.ts`
  * owns that — which is what lets the whole detection layer be tested without a database.
@@ -313,7 +314,15 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     const roster = await readOrphanTeamCounts(leagueId)
     const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
     const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
-    return [...(orphans ? [orphans] : []), ...await readOperationalTasks(leagueId, now), ...await readLineupIntegrityTasks(leagueId)]
+    // The native commissioner tools (./commissionerFeatureTasks.ts): an unapplied stat correction, a
+    // trade in commissioner review, inactive teams nobody is setting lineups for.
+    const { readCommissionerFeatureTasks } = await import('./commissionerFeatureTasks')
+    return [
+      ...(orphans ? [orphans] : []),
+      ...await readOperationalTasks(leagueId, now),
+      ...await readLineupIntegrityTasks(leagueId),
+      ...await readCommissionerFeatureTasks(leagueId, now),
+    ]
   }
 
   const window = await readActivityWindow(leagueId)

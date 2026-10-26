@@ -11,6 +11,7 @@ import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { provisionSurvivorChats } from './survivorTribeChatProvisioning'
 import type { SurvivorTribeWithMembers } from './types'
 import { createSurvivorChatMessage } from './survivorChatBridge'
+import { survivorRedrawTribeCount } from './survivorTribeRedrawActions'
 
 /**
  * Check if shuffle should run: consecutive council losses or size imbalance.
@@ -23,7 +24,7 @@ export async function checkShuffleTrigger(
   const config = await getSurvivorConfig(leagueId)
   if (!config || !config.tribeShuffleEnabled) return { shouldShuffle: false }
 
-  const tribes = await getTribesWithMembers(leagueId)
+  const tribes = await getTribesWithMembers(leagueId, { activeOnly: true })
   if (tribes.length === 0) return { shouldShuffle: false }
 
   const councils = await prisma.survivorTribalCouncil.findMany({
@@ -109,20 +110,26 @@ export async function runShuffle(
     return out
   }
   const shuffled = shuffle(active)
-  const tribeCount = tribes.length
+  const tribeCount = survivorRedrawTribeCount(active.length, tribes.length)
+  if (tribeCount == null) return { ok: false, error: 'Too few managers remain for two tribes; merge instead.' }
+  // The highest slots retire when the cast no longer fills every tribe. Their huddles archive with
+  // the rest, and the row stays (inactive, empty) so history still names them.
+  const keptTribes = tribes.slice(0, tribeCount)
+  const retiredTribeIds = tribes.slice(tribeCount).map(tribe => tribe.id)
   const tribeIds = tribes.map(tribe => tribe.id)
   const now = new Date()
   const oldChannels = await db.survivorChatChannel.findMany({ where: { leagueId, channelType: 'tribe', tribeId: { in: tribeIds }, isArchived: false }, select: { id: true } })
   const beforeSnapshot = tribes.map(tribe => ({ tribeId: tribe.id, rosterIds: tribe.members.map(member => member.rosterId) }))
-  const afterSnapshot = tribes.map((tribe, slot) => ({ tribeId: tribe.id, rosterIds: shuffled.filter((_, index) => index % tribeCount === slot).map(player => player.redraftRosterId) }))
+  const afterSnapshot = keptTribes.map((tribe, slot) => ({ tribeId: tribe.id, rosterIds: shuffled.filter((_, index) => index % tribeCount === slot).map(player => player.redraftRosterId) }))
 
   // Old channels lose every member and stay archived. New groups receive new channel IDs.
   if (oldChannels.length) await db.survivorChatChannel.updateMany({ where: { id: { in: oldChannels.map(channel => channel.id) } }, data: { isArchived: true, archivedAt: now, memberUserIds: [], readOnlyUserIds: [] } })
   await db.survivorTribe.updateMany({ where: { id: { in: tribeIds } }, data: { chatChannelId: null } })
   await db.survivorTribeMember.deleteMany({ where: { tribeId: { in: tribeIds } } })
   await db.survivorTribeChatMember.deleteMany({ where: { tribeId: { in: tribeIds } } })
+  if (retiredTribeIds.length) await db.survivorTribe.updateMany({ where: { id: { in: retiredTribeIds } }, data: { isActive: false, phase: 'dissolved' } })
   for (let slot = 0; slot < tribeCount; slot++) {
-    const tribe = tribes[slot]
+    const tribe = keptTribes[slot]
     const members = shuffled.filter((_, index) => index % tribeCount === slot)
     for (let index = 0; index < members.length; index++) {
       const player = members[index]
@@ -135,11 +142,13 @@ export async function runShuffle(
   const chats = await provisionSurvivorChats(leagueId, { db, actorUserId: options.actorUserId })
   await createSurvivorChatMessage(db, { data: { leagueId, channelId: chats.leagueChannelId, channelType: 'league',
     senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
-    contentType: 'host_announcement', content: 'Tribes have been randomly redrawn. Open the Tribe Board to meet your new huddle.' } })
+    contentType: 'host_announcement', content: retiredTribeIds.length
+      ? `Tribes have been randomly redrawn into ${tribeCount} tribes. Open the Tribe Board to meet your new huddle.`
+      : 'Tribes have been randomly redrawn. Open the Tribe Board to meet your new huddle.' } })
   await db.survivorTribeSwap.create({ data: { leagueId, week: (await db.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } }))?.currentWeek ?? 0,
     swapType: 'random_shuffle', beforeSnapshot, afterSnapshot, originalTribesRetained: true } })
   await db.survivorAuditEntry.create({ data: { leagueId, category: 'tribe', action: 'tribe_shuffle', actorUserId: options.actorUserId ?? null,
-    data: { rosterCount: shuffled.length, tribeCount, seed, recommendationId: options.recommendationId ?? null, archivedHuddles: oldChannels.length },
+    data: { rosterCount: shuffled.length, tribeCount, previousTribeCount: tribes.length, retiredTribeIds, seed, recommendationId: options.recommendationId ?? null, archivedHuddles: oldChannels.length },
     isVisibleToCommissioner: true, isVisibleToPublic: true } })
   return { ok: true }
 }

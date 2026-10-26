@@ -28,7 +28,6 @@ export const SURVIVOR_AI_VALID_TYPES: readonly SurvivorAIType[] = [
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import type { TokenLedgerEntryView, TokenSpendPreview } from '@/lib/tokens/TokenSpendService'
-import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 
 /** Storyline / scroll / basic idol coaching — free surface (deterministic engine still authoritative). */
 export const SURVIVOR_AI_UNGATED_TYPES: readonly SurvivorAIType[] = ['host_intro', 'host_scroll', 'idol_help']
@@ -164,6 +163,7 @@ export async function resolveSurvivorAiAccess(input: {
     userEmail: userEmail ?? null,
     featureId,
     allowTokenFallback: true,
+    forceTokenFallback: mustMeterSubscribedUsers(ruleCode),
     confirmTokenSpend,
     tokenRuleCode: ruleCode,
     tokenSourceType: 'survivor_ai',
@@ -186,68 +186,6 @@ export async function resolveSurvivorAiAccess(input: {
     }
   }
 
-  if (gate.decision.allowed && mustMeterSubscribedUsers(ruleCode)) {
-    const svc = new TokenSpendService()
-    const balance = await svc.getBalance(userId, userEmail ?? null)
-    const preview = await svc.previewSpendWithEntitlement({
-      userId,
-      ruleCode,
-      entitlement: gate.decision.entitlement,
-      currentBalance: Number(balance.balance || 0),
-      userEmail: userEmail ?? null,
-    })
-    if (!preview.canSpend) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          {
-            error: 'Insufficient token balance',
-            code: 'insufficient_token_balance',
-            message: `This ${type} run costs ${preview.tokenCost} AF Tokens for subscribers (discounted where applicable).`,
-            preview,
-            entitlement: gate.decision.entitlement,
-            upgradePath: gate.decision.upgradePath,
-          },
-          { status: 402 }
-        ),
-      }
-    }
-    if (!confirmTokenSpend) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          {
-            error: 'Token spend confirmation required.',
-            code: 'token_confirmation_required',
-            message: `Confirm spending ${preview.tokenCost} AF Token(s) for this ${type} run.`,
-            preview,
-            entitlement: gate.decision.entitlement,
-            requiredPlan: gate.decision.requiredPlan,
-          },
-          { status: 409 }
-        ),
-      }
-    }
-
-    const spend = await svc.spendTokensForRule({
-      userId,
-      ruleCode,
-      confirmed: true,
-      sourceType: 'survivor_ai_subscriber_metered',
-      sourceId: `${leagueId}:${type}:${Date.now()}`,
-      description: `Survivor AI (subscriber metered) — ${type}`,
-      metadata: { leagueId, survivorAiType: type, ruleCode },
-      userEmail: userEmail ?? null,
-    })
-
-    return {
-      ok: true,
-      featureDecision: gate.decision,
-      tokenSpend: spend,
-      tokenPreview: preview,
-      ruleCode,
-    }
-  }
 
   return {
     ok: true,

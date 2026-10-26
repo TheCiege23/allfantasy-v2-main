@@ -1,5 +1,6 @@
 'use client'
 
+import { paidToolFetch, approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
 import { useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
@@ -14,7 +15,7 @@ export function CommissionerChimmy({ leagueId }: { leagueId: string }) {
   const [answer, setAnswer] = useState<ChatResult | null>(null)
   const [busy, setBusy] = useState(false)
   const ask = async (confirmed: boolean): Promise<ChatResult> => {
-    const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/chat`, {
+    const response = await paidToolFetch(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/chat`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: question.trim(), confirmTokenSpend: confirmed }),
     })
@@ -39,7 +40,7 @@ export function CommissionerChimmy({ leagueId }: { leagueId: string }) {
                 : `Use ${cost} tokens for this commissioner question? Current balance: ${balance}.`,
           ),
         )
-        if (!accepted) return
+        if (!accepted || !approvePaidToolQuote(result)) return
         result = await ask(true)
       }
       setAnswer(result)

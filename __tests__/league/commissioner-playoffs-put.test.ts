@@ -142,8 +142,40 @@ describe('PUT /api/commissioner/leagues/[leagueId]/playoffs — writes the colum
     expect(structure().reseed_behavior).toBe('reseed_after_round')
     expect(structure().third_place_game_enabled).toBe(true)
     expect(structure().consolation_plays_for).toBe('pick')
+    // Saving it is what opts an existing league's draft order in (lib/playoff-runtime/consolationPlaysFor.ts).
+    expect(structure().consolation_plays_for_sets_draft_order).toBe(true)
     expect(row.settings.standings_tiebreakers).toEqual(['points_for'])
     expect((await res.json()).reseed_behavior).toBe('reseed_after_round')
+  })
+
+  it('a save that does not send "plays for" leaves an existing league out of the draft-order rule', async () => {
+    const res = await put({ playoffTeamCount: 4, playoffStartWeek: 16, reseedBehavior: 'reseed_after_round' })
+    expect(res.status).toBe(200)
+    expect(structure().reseed_behavior).toBe('reseed_after_round')
+    expect(structure().consolation_plays_for).toBeUndefined()
+    expect(structure().consolation_plays_for_sets_draft_order).toBeUndefined()
+  })
+
+  it('the toilet bowl choice is stored on its own, without opting the draft order in', async () => {
+    const res = await put({ consolationPickGoesTo: 'winner' })
+    expect(res.status).toBe(200)
+    expect(structure().consolation_pick_goes_to).toBe('winner')
+    expect(structure().consolation_plays_for_sets_draft_order).toBeUndefined()
+    const both = await panelSave({ consolationPlaysFor: 'pick', consolationPickGoesTo: 'loser' })
+    expect(both.status).toBe(200)
+    expect(structure()).toMatchObject({ consolation_plays_for: 'pick', consolation_pick_goes_to: 'loser', consolation_plays_for_sets_draft_order: true })
+  })
+
+  it('an unknown toilet bowl choice is refused and writes nothing', async () => {
+    const res = await put({ consolationPickGoesTo: 'champion' })
+    expect(res.status).toBe(400)
+    expect(structure().consolation_pick_goes_to).toBeUndefined()
+  })
+
+  it('an unknown "plays for" value is refused and writes nothing', async () => {
+    const res = await put({ consolationPlaysFor: 'final_standings' })
+    expect(res.status).toBe(400)
+    expect(structure().consolation_plays_for).toBeUndefined()
   })
 
   it('runs the settings patch as the playoffs section, so its lifecycle gate applies', async () => {

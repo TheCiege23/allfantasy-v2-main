@@ -1,3 +1,8 @@
+import { quotedChimmyRequest } from '@/__tests__/helpers/quotedChimmyRequest'
+vi.mock('@/lib/chimmy/requestReceipts', async original => ({
+  ...await original<typeof import('@/lib/chimmy/requestReceipts')>(),
+  ...(await import('@/__tests__/helpers/quotedChimmyRequest')).receiptStorageFixture,
+}))
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createMockNextRequest } from "@/__tests__/helpers/createMockNextRequest"
@@ -167,11 +172,8 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
-function buildMultipartRequest(formData?: FormData) {
-  return createMockNextRequest("http://localhost/api/chat/chimmy", {
-    method: "POST",
-    body: formData ?? new FormData(),
-  })
+async function buildMultipartRequest(formData?: FormData) {
+  return quotedChimmyRequest(formData ?? new FormData(), 'user-1')
 }
 
 // This file imports app/api/chat/chimmy/route.ts — 3,102 lines that pull the orchestration,
@@ -312,7 +314,7 @@ describe("POST /api/chat/chimmy contract", () => {
     const detail='PRIVATE detailed comparison '.repeat(20)
     prepareDecisionMock.mockResolvedValueOnce({version:1,kind:'trade',decisionType:'manager.trade.evaluate',authority:'explanation_only',status:'ready',leagueId:'league-1',answer:'Keep your starter. Protect your depth. '+detail,sources:['trade_engine'],scenario:{privateReport:detail}})
     const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','preview-request');form.set('assistantMode','deep_analysis')
-    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(buildMultipartRequest(form) as any)
+    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(await buildMultipartRequest(form) as any)
     expect(res.status).toBe(409);const body=await res.json();expect(body.analysisPreview).toMatchObject({summary:'Keep your starter. Protect your depth.',tokenCost:15,access:'tokens'});expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(JSON.stringify(body)).not.toContain('privateReport')
     expect(takeAnswerAllowanceMock).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled();expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
@@ -320,7 +322,7 @@ describe("POST /api/chat/chimmy contract", () => {
     vi.stubEnv('NEXTAUTH_SECRET','unit-test-analysis-signing-key')
     readAnswerAllowanceMock.mockResolvedValue({kind:'free',planName:'Free Chimmy',used:0,remaining:2,limit:2,resetsAt:'2026-10-26T00:00:00.000Z'})
     const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','summary-request');form.set('assistantMode','fast_take')
-    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(buildMultipartRequest(form) as any)
+    const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(await buildMultipartRequest(form) as any)
     expect(res.status).toBe(409);expect(await res.json()).toMatchObject({analysisPreview:{access:'daily_answer',dailyRemaining:2,tokenCost:0},meta:{free:true,tokenSpend:null}})
     expect(previewSpendMock).not.toHaveBeenCalled();expect(takeAnswerAllowanceMock).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled();expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
@@ -331,7 +333,7 @@ describe("POST /api/chat/chimmy contract", () => {
     try {
       const file=new File(['screenshot'], 'trade.png', {type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new TextEncoder().encode('screenshot').buffer})
       const form=new FormData();form.set('message','Should I trade this player?');form.set('leagueId','league-1');form.set('analysisPreviewVersion','1');form.set('requestId','screenshot-request');form.set('assistantMode','deep_analysis');form.set('image',file)
-      const request=buildMultipartRequest();vi.spyOn(request,'formData').mockResolvedValue(form)
+      const request=await buildMultipartRequest();vi.spyOn(request,'formData').mockResolvedValue(form)
       const {POST}=await import('@/app/api/chat/chimmy/route');const res=await POST(request as any)
       expect(res.status).toBe(409);const body=await res.json();expect(body.analysisPreview.summary).toContain('has not been interpreted');expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(interpret).not.toHaveBeenCalled();expect(spendTokensForRuleMock).not.toHaveBeenCalled()
     } finally { interpret.mockRestore() }
@@ -341,7 +343,7 @@ describe("POST /api/chat/chimmy contract", () => {
     getServerSessionMock.mockResolvedValueOnce(null)
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest() as any)
+    const res = await POST(await buildMultipartRequest() as any)
 
     expect(res.status).toBe(401)
     await expect(res.json()).resolves.toEqual({ error: "Unauthorized" })
@@ -356,7 +358,7 @@ describe("POST /api/chat/chimmy contract", () => {
     )
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest() as any)
+    const res = await POST(await buildMultipartRequest() as any)
 
     expect(res.status).toBe(429)
     expect(res.headers.get("Retry-After")).toBe("60")
@@ -369,7 +371,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("messages", "{not json")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toEqual({
@@ -383,7 +385,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("week", "abc")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({
@@ -402,7 +404,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("image", new File(["hello"], "notes.txt", { type: "text/plain" }))
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toEqual({ error: "Invalid request format." })
@@ -421,11 +423,12 @@ describe("POST /api/chat/chimmy contract", () => {
       formData.append("image", new File(["fake-image"], "screenshot.png", { type: "image/png" }))
 
       const { POST } = await import("@/app/api/chat/chimmy/route")
-      const res = await POST(buildMultipartRequest(formData) as any)
+      const res = await POST(createMockNextRequest('http://localhost/api/chat/chimmy', { method: 'POST', body: formData }) as any)
 
       expect(res.status).toBe(400)
       await expect(res.json()).resolves.toEqual({ error: "Invalid request format." })
       expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+      expect(spendTokensForRuleMock).not.toHaveBeenCalled()
     } finally {
       if (originalAiIntegrationsKey == null) {
         delete process.env.AI_INTEGRATIONS_OPENAI_API_KEY
@@ -446,7 +449,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("message", "x".repeat(4001))
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({
@@ -468,7 +471,7 @@ describe("POST /api/chat/chimmy contract", () => {
     form.append("leagueId", "league-1")
     form.append("confirmTokenSpend", "true")
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(form) as any)
+    const res = await POST(await buildMultipartRequest(form) as any)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.response).toBe("Engine verdict: hold this player.")
@@ -495,7 +498,7 @@ describe("POST /api/chat/chimmy contract", () => {
     form.append("leagueId", "league-1")
     form.append("confirmTokenSpend", "true")
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const body = await (await POST(buildMultipartRequest(form) as any)).json()
+    const body = await (await POST(await buildMultipartRequest(form) as any)).json()
     expect(body.meta.decision.verdict).toEqual(verdict)
     const row = append.mock.calls.map(([r]) => r).find((r) => r.role === "assistant")
     expect(row.meta.display.verdict).toEqual(body.meta.decision.verdict)
@@ -514,7 +517,7 @@ describe("POST /api/chat/chimmy contract", () => {
     form.append("leagueId", "league-1")
     form.append("confirmTokenSpend", "true")
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    await POST(buildMultipartRequest(form) as any)
+    await POST(await buildMultipartRequest(form) as any)
     const row = append.mock.calls.map(([r]) => r).find((r) => r.role === "assistant")
     expect(row).toBeTruthy()
     expect(row.meta.display.verdict).toBeUndefined()
@@ -528,7 +531,7 @@ describe("POST /api/chat/chimmy contract", () => {
     form.append("leagueId", "league-1")
     form.append("confirmTokenSpend", "true")
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(form) as any)
+    const res = await POST(await buildMultipartRequest(form) as any)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.response).toBe("Sync your roster before asking again.")
@@ -547,7 +550,7 @@ describe("POST /api/chat/chimmy contract", () => {
     form.append('message', 'Should I trade this player?')
     form.append('leagueId', 'league-1')
     const { POST } = await import('@/app/api/chat/chimmy/route')
-    const res = await POST(buildMultipartRequest(form) as any)
+    const res = await POST(await buildMultipartRequest(form) as any)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.response).toContain('Accept the trade.')
@@ -564,7 +567,7 @@ describe("POST /api/chat/chimmy contract", () => {
     form.append('message', 'Should I trade this player?')
     form.append('leagueId', 'league-1')
     const { POST } = await import('@/app/api/chat/chimmy/route')
-    const res = await POST(buildMultipartRequest(form) as any)
+    const res = await POST(await buildMultipartRequest(form) as any)
     expect(res.status).toBe(503)
     expect(await res.json()).toMatchObject({ code: 'chimmy_allowance_unavailable' })
     expect(previewSpendMock).not.toHaveBeenCalled()
@@ -580,7 +583,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("leagueId", "league-1")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(503)
     expect(spendTokensForRuleMock).not.toHaveBeenCalled()
@@ -611,7 +614,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("leagueId", "league-1")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(412)
     const body = await res.json()
@@ -640,7 +643,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("leagueId", "league-1")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     // 503, not 412: "I could not read it" is a different claim from "you are
     // not in it", and only one of them is worth retrying.
@@ -687,7 +690,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("confirmTokenSpend", "true")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     expect(spendTokensForRuleMock).toHaveBeenCalled()
@@ -709,7 +712,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("confirmTokenSpend", "true")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     expect(refundSpendByLedgerMock).not.toHaveBeenCalled()
@@ -732,7 +735,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("leagueId", "league-1")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -765,7 +768,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("leagueId", "league-1")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     /* The push path races this report at 4s, so its scan budget must sit inside that race. */
@@ -791,7 +794,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("message", "Should I trade this player?")
     formData.append("leagueId", "league-1")
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    await POST(buildMultipartRequest(formData) as any)
+    await POST(await buildMultipartRequest(formData) as any)
     expect(buildMyRosterInjuriesMock).not.toHaveBeenCalled()
   })
 
@@ -802,7 +805,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("message", "Review my BB Dynasty League 26! Best Ball roster using Decision OS. Focus on current injuries and roster depth.")
     formData.append("leagueId", "league-1")
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const response = await POST(buildMultipartRequest(formData) as any)
+    const response = await POST(await buildMultipartRequest(formData) as any)
     expect(response.status).toBe(200)
     expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", leagueId: "league-1", scan: { budgetMs: 1_500, perItemTimeoutMs: 1_200 } })
     const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
@@ -840,7 +843,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("confirmTokenSpend", "true")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     expect(resolvePairedHalfMock).toHaveBeenCalledWith("league-1", "user-1", {
@@ -873,7 +876,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("leagueId", "league-1")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     expect(spendTokensForRuleMock).toHaveBeenCalledWith(
@@ -895,7 +898,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("assistantMode", "totally_invalid_mode")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -922,7 +925,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("leagueId", "league-1")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -936,7 +939,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("message", "Should I trade this player?")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(412)
     await expect(res.json()).resolves.toMatchObject({
@@ -962,7 +965,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("confirmTokenSpend", "true")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -1010,7 +1013,7 @@ describe("POST /api/chat/chimmy contract", () => {
     formData.append("message", "what is the draft order in kings?")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
-    const res = await POST(buildMultipartRequest(formData) as any)
+    const res = await POST(await buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(412)
     await expect(res.json()).resolves.toMatchObject({

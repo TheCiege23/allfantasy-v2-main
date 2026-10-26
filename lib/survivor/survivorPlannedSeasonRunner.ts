@@ -20,7 +20,7 @@ import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
-import { autoApplyPendingTribeRedraw } from './survivorTribeRedrawDecision'
+import { autoApplyPendingTribeRedraw, rebalanceTribesBeforeCouncil } from './survivorTribeRedrawDecision'
 import { dissolveSurpriseTribes, ensureSurpriseTribeWeek } from './survivorSurpriseTribes'
 import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
@@ -119,6 +119,8 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
       // A tribe-imbalance recommendation nobody answered gets its default, a random redraw, now:
       // the commissioner has had until this council to choose otherwise.
       await autoApplyPendingTribeRedraw(leagueId, week)
+      // A tribe left with one manager cannot vote anyone out: redraw or merge now rather than stall.
+      await rebalanceTribesBeforeCouncil(leagueId, week)
       await tryAutomaticPhaseAdvance(leagueId)
       await triggerTribalOpen(leagueId)
       return progress.nextOrdinal > 1 ? 'second_council_opened' : 'council_opened'

@@ -29,7 +29,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: async () => h.league },
     leagueWaiverSettings: { findUnique: async () => ({ waiverEngineConfig: h.engineConfig }) },
     redraftSeason: { findFirst: async () => h.season, count: async () => h.completedSeasons },
-    redraftRoster: { findMany: async () => h.redraftRosters },
+    redraftRoster: { findMany: async () => h.redraftRosters, updateMany: async () => ({ count: 1 }) },
     waiverClaim: {
       findMany: async () => h.claims,
       update: h.claimUpdate,
@@ -130,20 +130,67 @@ const winner = (results: Array<{ rosterId: string; success: boolean }>) => resul
 const failed = (results: Array<{ rosterId: string; success: boolean; message?: string }>, rosterId: string) =>
   results.find((r) => r.rosterId === rosterId && !r.success)?.message
 
-describe('claims on a dropped player follow the waiver type, and never return him to the dropper', () => {
-  it.each([
-    ['faab', 'B'], // highest bid among the others
-    ['rolling', 'C'], // best priority among the others
-    ['reverse_standings', 'B'], // worst standing among the others
-  ])('%s → %s wins; the dropping team is refused', async (type, expected) => {
-    setType(type)
+describe('claims on a dropped player wait for his waiver period, then follow the waiver type', () => {
+  // X was dropped by A at 09:00 with a 24h period: he clears 2026-10-21T09:00Z.
+  const AFTER_CLEAR = new Date('2026-10-21T09:00:01Z')
+  const claimOnX = (c: { id: string }) => h.claimUpdate.mock.calls.some(([arg]) => (arg as { where: { id: string } }).where.id === c.id)
+
+  it('a run before he clears leaves the other claims on him pending and untouched; the dropper is refused', async () => {
     claimsOnDroppedX()
     const results = await processWaiverClaimsForLeague('L')
-    expect(winner(results)).toBe(expected)
+    expect(results.map((r) => r.rosterId)).toEqual(['A'])
     expect(failed(results, 'A')).toBe(DROPPER_RECLAIM_MESSAGE)
+    // B's and C's claims are not failed, not awarded, not written at all.
+    expect(claimOnX({ id: 'c-B' })).toBe(false)
+    expect(claimOnX({ id: 'c-C' })).toBe(false)
   })
 
-  it.each(['faab', 'rolling', 'reverse_standings'])('positive control (%s): with no drop on record the dropper-to-be wins', async (type) => {
+  it('a run before he clears with only other teams claiming him processes nothing, and opens no run', async () => {
+    claimsOnDroppedX()
+    h.claims = h.claims.filter((c) => (c as { rosterId: string }).rosterId !== 'A')
+    const runCreate = vi.spyOn((await import('@/lib/prisma')).prisma.waiverRun as { create: () => Promise<unknown> }, 'create')
+    expect(await processWaiverClaimsForLeague('L')).toEqual([])
+    expect(h.claimUpdate).not.toHaveBeenCalled()
+    expect(runCreate).not.toHaveBeenCalled()
+    runCreate.mockRestore()
+  })
+
+  it('an unreadable hold processes nothing this run, rather than run a held claim early', async () => {
+    claimsOnDroppedX()
+    const { prisma } = await import('@/lib/prisma')
+    const read = vi.spyOn(prisma.waiverTransaction as { findMany: () => Promise<unknown> }, 'findMany').mockRejectedValueOnce(new Error('db down'))
+    vi.spyOn(console, 'warn').mockImplementationOnce(() => {})
+    expect(await processWaiverClaimsForLeague('L')).toEqual([])
+    expect(h.claimUpdate).not.toHaveBeenCalled()
+    read.mockRestore()
+  })
+
+  it('other claims in the same run are not held up by him', async () => {
+    claimsOnDroppedX()
+    h.claims = [claim('B', 30, 3, 'uB'), claim('C', 20, 2, 'uC', 'Y')]
+    const results = await processWaiverClaimsForLeague('L')
+    expect(results.map((r) => [r.rosterId, r.success])).toEqual([['C', true]])
+  })
+
+  it.each([
+    ['faab', 'B'], // the higher bid
+    ['rolling', 'C'], // the better priority
+    ['reverse_standings', 'B'], // the worse standing
+  ])('%s: the first run after he clears processes the claims on him, and %s wins', async (type, expected) => {
+    setType(type)
+    claimsOnDroppedX()
+    h.claims = h.claims.filter((c) => (c as { rosterId: string }).rosterId !== 'A')
+    // Before: pending.
+    expect(await processWaiverClaimsForLeague('L')).toEqual([])
+    // The first run after: both compete under the league's rules.
+    vi.setSystemTime(AFTER_CLEAR)
+    const results = await processWaiverClaimsForLeague('L')
+    expect(winner(results)).toBe(expected)
+    expect(results).toHaveLength(2)
+    expect(results.find((r) => r.rosterId !== expected)?.message).toBe('Player no longer available (awarded to another team in this run).')
+  })
+
+  it.each(['faab', 'rolling', 'reverse_standings'])('positive control (%s): with no drop on record the claims run at once', async (type) => {
     setType(type)
     claimsOnDroppedX()
     h.drops = []
@@ -159,7 +206,9 @@ describe('claims on a dropped player follow the waiver type, and never return hi
   it('an FCFS league has no waiver period, so the hold never applies', async () => {
     setType('fcfs')
     claimsOnDroppedX()
-    expect(failed(await processWaiverClaimsForLeague('L'), 'A')).toBeUndefined()
+    const results = await processWaiverClaimsForLeague('L')
+    expect(failed(results, 'A')).toBeUndefined()
+    expect(results).toHaveLength(3)
   })
 })
 
@@ -169,6 +218,8 @@ describe('createClaim', () => {
     await expect(createClaim('L', 'A', { addPlayerId: 'X' } as never)).rejects.toThrow(DROPPER_RECLAIM_MESSAGE)
     h.drops = [{ dropPlayerId: 'X', processedAt: new Date('2026-10-20T09:00:00Z'), rosterId: 'B' }]
     await expect(createClaim('L', 'A', { addPlayerId: 'X' } as never)).resolves.toEqual({ id: 'new' })
+    // Filed as an ordinary pending claim, to wait for the first run after he clears.
+    expect(h.claimCreate.mock.calls[0][0].data).toMatchObject({ leagueId: 'L', rosterId: 'A', addPlayerId: 'X', status: 'pending' })
   })
 
   it('refuses every claim in a closed offseason and in a first-come offseason', async () => {

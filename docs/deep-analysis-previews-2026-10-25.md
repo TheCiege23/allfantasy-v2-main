@@ -19,7 +19,7 @@ A reloaded multipart preview starts a fresh unconfirmed preview if the original 
 
 ## Compatibility and remaining scope
 
-The version flag keeps cached older clients compatible with their existing consent contract. This release covers the current Chimmy drawer/page and the legacy chat UI adapters. It does not change token prices or packs, subscriptions, Google Play Billing, or other paid tools. Their remaining confirmation/retry/refund audit is the next recommended work.
+Free included answers remain compatible with cached older clients. The subsequent paid-tool billing audit requires older cached pages to refresh before spending tokens, so an unquoted request cannot be charged without a durable receipt. This release covers the current Chimmy drawer/page and the legacy chat UI adapters. It does not change token prices or packs, subscriptions, Google Play Billing, or other paid tools. Their remaining confirmation/retry/refund audit is the next recommended work.
 
 No database migration or new environment variable is required. Both production deployment triggers remain enabled.
 

@@ -17,6 +17,8 @@ type PlayoffConfig = {
   toilet_bowl_enabled?: boolean
   championship_length?: number
   consolation_plays_for?: string
+  consolation_pick_goes_to?: string
+  draft_order_carries_over?: boolean
   seeding_rules?: string
   tiebreaker_rules?: string[]
   bye_rules?: string | null
@@ -43,6 +45,7 @@ type EditablePlayoffForm = {
   toiletBowlEnabled: boolean
   championshipLength: number
   consolationPlaysFor: string
+  consolationPickGoesTo: string
 }
 
 const SEEDING_RULES = [
@@ -64,13 +67,23 @@ const BYE_RULES = [
 
 /** What "Draft pick" does (lib/playoff-runtime/consolationPlaysFor.ts). Cash and Nothing leave the draft order alone. */
 const CONSOLATION_PLAYS_FOR_HELP =
-  "Draft pick: next season, the consolation winner picks first among non-playoff teams; in a toilet bowl, last place (the final's loser) picks first."
+  "Draft pick: next season, the consolation winner picks first among non-playoff teams; in a toilet bowl, the final's loser (last place) picks first, or its winner if you choose. Everyone else follows in reverse standings. Dynasty and keeper leagues only."
 
 const CONSOLATION_PLAYS_FOR = [
   { value: 'none', label: 'Nothing' },
   { value: 'pick', label: 'Draft pick' },
   { value: 'cash', label: 'Cash' },
 ] as const
+
+/** Toilet bowl only: which finalist takes pick 1 when it plays for the pick. */
+const CONSOLATION_PICK_GOES_TO = [
+  { value: 'loser', label: "Final's loser (last place)" },
+  { value: 'winner', label: "Final's winner" },
+] as const
+
+/** A redraft league starts fresh, so its lower bracket never moves the next draft order. */
+const REDRAFT_PLAYS_FOR_NOTE =
+  'Redraft league: next season starts fresh, so the lower bracket never changes the draft order. Its games and finish are still recorded.'
 
 const TIEBREAKER_OPTIONS = [
   { value: 'points_for', label: 'Points for' },
@@ -107,6 +120,7 @@ function toEditableForm(config: PlayoffConfig): EditablePlayoffForm {
     toiletBowlEnabled: Boolean(config.toilet_bowl_enabled),
     championshipLength: Math.max(0, Number(config.championship_length ?? 1)),
     consolationPlaysFor: config.consolation_plays_for ?? 'none',
+    consolationPickGoesTo: config.consolation_pick_goes_to === 'winner' ? 'winner' : 'loser',
   }
 }
 
@@ -120,6 +134,10 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<EditablePlayoffForm | null>(null)
+  // Saving "plays for" opts an existing league's draft order in (lib/playoff-runtime/consolationPlaysFor.ts),
+  // so the whole-form save sends it only once the commissioner has touched it.
+  const [playsForTouched, setPlaysForTouched] = useState(false)
+  const [pickGoesToTouched, setPickGoesToTouched] = useState(false)
 
   useEffect(() => {
     if (!leagueId) return
@@ -148,6 +166,8 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
   useEffect(() => {
     if (!config) return
     setForm(toEditableForm(config))
+    setPlaysForTouched(false)
+    setPickGoesToTouched(false)
   }, [config])
 
   async function saveOverrides() {
@@ -175,7 +195,8 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
             thirdPlaceGameEnabled: form.thirdPlaceGameEnabled,
             toiletBowlEnabled: form.toiletBowlEnabled,
             championshipLength: form.championshipLength,
-            consolationPlaysFor: form.consolationPlaysFor,
+            ...(playsForTouched ? { consolationPlaysFor: form.consolationPlaysFor } : {}),
+            ...(pickGoesToTouched ? { consolationPickGoesTo: form.consolationPickGoesTo } : {}),
           }),
         }
       )
@@ -186,6 +207,8 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
       }
       setEditing(false)
       setForm(toEditableForm(json as PlayoffConfig))
+      setPlaysForTouched(false)
+      setPickGoesToTouched(false)
       toast.success('Playoff overrides saved')
       await reload()
     } finally {
@@ -221,6 +244,8 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
   }
 
   if (!form) return null
+  // Absent on an older response: treat as carrying over, the behaviour before the redraft gate.
+  const carriesOver = config.draft_order_carries_over !== false
 
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-4">
@@ -234,6 +259,8 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
             onClick={() => {
               if (editing) {
                 setForm(toEditableForm(config))
+                setPlaysForTouched(false)
+                setPickGoesToTouched(false)
                 setEditing(false)
               } else {
                 setEditing(true)
@@ -447,17 +474,43 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
               <select
                 aria-label="Consolation plays for"
                 value={form.consolationPlaysFor}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setPlaysForTouched(true)
                   setForm((prev) => (prev ? { ...prev, consolationPlaysFor: e.target.value } : prev))
-                }
+                }}
                 className="mt-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
               >
-                {CONSOLATION_PLAYS_FOR.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                {CONSOLATION_PLAYS_FOR.filter((option) => carriesOver || option.value !== 'pick' || form.consolationPlaysFor === 'pick').map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.value === 'pick' && !carriesOver ? 'Draft pick (no effect in redraft)' : option.label}
+                  </option>
                 ))}
               </select>
-              <span className="mt-1 block text-[11px] text-white/45">{CONSOLATION_PLAYS_FOR_HELP}</span>
+              <span className="mt-1 block text-[11px] text-white/45" data-testid={carriesOver ? undefined : 'playoff-settings-redraft-plays-for-note'}>
+                {carriesOver ? CONSOLATION_PLAYS_FOR_HELP : REDRAFT_PLAYS_FOR_NOTE}
+              </span>
             </label>
+            {carriesOver && form.consolationPlaysFor === 'pick' ? (
+              <label className="text-xs text-white/70">
+                Toilet bowl: top pick goes to
+                <select
+                  aria-label="Toilet bowl: top pick goes to"
+                  value={form.consolationPickGoesTo}
+                  onChange={(e) => {
+                    setPickGoesToTouched(true)
+                    setForm((prev) => (prev ? { ...prev, consolationPickGoesTo: e.target.value } : prev))
+                  }}
+                  className="mt-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
+                >
+                  {CONSOLATION_PICK_GOES_TO.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11px] text-white/45">
+                  A consolation bracket's winner always picks first; this is for a toilet bowl.
+                </span>
+              </label>
+            ) : null}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-3">
@@ -564,6 +617,8 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
               data-testid="playoff-settings-cancel"
               onClick={() => {
                 setForm(toEditableForm(config))
+                setPlaysForTouched(false)
+                setPickGoesToTouched(false)
                 setEditing(false)
               }}
               className="rounded border border-white/20 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
@@ -622,8 +677,17 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
         </div>
         <div>
           <dt className="text-white/50">Consolation plays for</dt>
-          <dd className="text-white/90">{editing ? form.consolationPlaysFor : config.consolation_plays_for ?? '—'}</dd>
+          <dd className="text-white/90">
+            {editing ? form.consolationPlaysFor : config.consolation_plays_for ?? '—'}
+            {!carriesOver && (editing ? form.consolationPlaysFor : config.consolation_plays_for) === 'pick' ? ' (no effect in redraft)' : ''}
+          </dd>
         </div>
+        {carriesOver && (editing ? form.consolationPlaysFor : config.consolation_plays_for) === 'pick' ? (
+          <div>
+            <dt className="text-white/50">Toilet bowl top pick</dt>
+            <dd className="text-white/90">{(editing ? form.consolationPickGoesTo : config.consolation_pick_goes_to) === 'winner' ? "Final's winner" : "Final's loser"}</dd>
+          </div>
+        ) : null}
         <div>
           <dt className="text-white/50">Third-place game</dt>
           <dd className="text-white/90">{(editing ? form.thirdPlaceGameEnabled : config.third_place_game_enabled) ? 'Yes' : 'No'}</dd>

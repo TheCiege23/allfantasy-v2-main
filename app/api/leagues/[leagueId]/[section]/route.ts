@@ -88,6 +88,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'season-forecast': () => import('../season-forecast/handler'),
   'season-results': () => import('../season-results/handler'),
   'settings': () => import('../settings/handler'),
+  'side-contests': () => import('../side-contests/handler'),
   'simulation-insights': () => import('../simulation-insights/handler'),
   'sleeper-hosted-draft-history': () => import('../sleeper-hosted-draft-history/handler'),
   'snapshots': () => import('../snapshots/handler'),

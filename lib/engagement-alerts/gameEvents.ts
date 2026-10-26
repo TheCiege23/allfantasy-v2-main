@@ -270,6 +270,8 @@ type FootballKind = { kind: string; emoji: string; label: string }
 /** What kind of football play this is, read from ESPN's type label and its play text. */
 export function footballPlayKind(p: Pick<GameDetailPlay, 'type' | 'text' | 'scoring'>): FootballKind | null {
   const s = `${p.type ?? ''} ${p.text}`
+  // Wiped out by a penalty ("field goal is GOOD, NULLIFIED by Penalty … - No Play"): the play never counted.
+  if (/\bNULLIFIED\b|\bNo Play\b/i.test(p.text)) return null
   if (/extra point|\bPAT\b|two.?point|2.?pt|conversion/i.test(p.type ?? '')) return { kind: 'try', emoji: '🏈', label: /two.?point|2.?pt|conversion/i.test(s) ? 'Two-point try' : 'Extra point' }
   if (/field goal/i.test(s) && !/touchdown/i.test(s)) {
     if (/blocked/i.test(s)) return { kind: 'fg_blocked', emoji: '🚫', label: 'Field goal BLOCKED' }

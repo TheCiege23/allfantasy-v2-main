@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-transactions.css'
 
@@ -45,7 +47,9 @@ import CommissionerWaiverInsightsPanel from "@/components/waivers/CommissionerWa
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-wire/waiver-outcome-labels"
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import {
+  claimProcessesAfterDate,
   isImmediateAddAllowedToday,
   dailyModeLabel,
   onWaiversUntilLabel,
@@ -249,6 +253,7 @@ export default function WaiverWirePage({
   const isShadow = writeAuthority?.shadow === true
   const shadowSource = writeAuthority?.sourceLabel ?? "your host platform"
   const [players, setPlayers] = useState<Player[]>([])
+  const { language, tInterpolate } = useOptionalLanguage()
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<{ claims: Claim[]; transactions: Transaction[] }>({ claims: [], transactions: [] })
   const [loading, setLoading] = useState(true)
@@ -953,7 +958,7 @@ export default function WaiverWirePage({
         maxResults: 8,
       }
 
-      const response = await fetch("/api/waiver-ai/engine", {
+      const response = await paidToolFetchWithConfirm("/api/waiver-ai/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -1308,6 +1313,11 @@ export default function WaiverWirePage({
           onCancel={cancelClaimById}
           onReorder={(claimId, direction) => {
             void reorderClaim(claimId, direction)
+          }}
+          processesAfterLabel={(c) => {
+            // A claim on a player still on waivers after a drop runs at the first waiver run after he clears.
+            const until = playerWaiverHoldUntil(players.find((p) => p.id === c.addPlayerId), settings)
+            return until ? tInterpolate("waiverClaim.processesAfter", { date: claimProcessesAfterDate(until, language) }) : null
           }}
         />
       )}

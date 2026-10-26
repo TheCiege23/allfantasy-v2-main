@@ -32,7 +32,12 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import type { RookieOrderInput, RookieOrderTeam } from './rookieOrderEngine'
 import { playoffGamesFromRedraftMatchups, playoffGamesFromSleeperBracket } from './playoffGameAdapters'
-import { readConsolationPlaysFor, readLowerBracketDraftResult } from '@/lib/playoff-runtime/consolationPlaysFor'
+import {
+  consolationPlaysForSetsDraftOrder,
+  lowerBracketFinal,
+  readConsolationPickGoesTo,
+  readLowerBracketDraftResult,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
 import { CONSOLATION_ROUND_OFFSET } from '@/lib/playoff-runtime/playoffRoundWeeks'
 
 export type LoadedRookieOrderInput = {
@@ -51,7 +56,10 @@ function asRecord(value: unknown): Record<string, unknown> {
 export async function loadRookieOrderInput(leagueId: string): Promise<LoadedRookieOrderInput | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, season: true, platform: true, platformLeagueId: true, playoffStartWeek: true, settings: true, sport: true, leagueVariant: true },
+    select: {
+      id: true, season: true, platform: true, platformLeagueId: true, playoffStartWeek: true, settings: true, sport: true, leagueVariant: true,
+      leagueType: true, isDynasty: true,
+    },
   })
   if (!league) return null
 
@@ -66,7 +74,7 @@ const SEASON_OVER: readonly string[] = [
 
 async function loadNative(
   leagueId: string,
-  league: { settings: unknown; sport: string | null; leagueVariant: string | null },
+  league: { settings: unknown; sport: string | null; leagueVariant: string | null; leagueType: string | null; isDynasty: boolean },
 ): Promise<LoadedRookieOrderInput | null> {
   // The most recent season that has started. After rollover the new season sits in `setup`, and
   // the order it needs comes from the season before it.
@@ -114,12 +122,18 @@ async function loadNative(
   )
 
   // The consolation bracket / toilet bowl, when it plays for the pick (lib/playoff-runtime/consolationPlaysFor.ts).
+  // A redraft league's bracket is still read — it never plays for the pick, so the order is left alone.
   const lowerResult = readLowerBracketDraftResult(
     redraftSeason.playoffBracket?.structure,
     rounds.some((round) => round.roundNumber >= CONSOLATION_ROUND_OFFSET && round.matchups.length > 0),
   )
   const lowerBracket = lowerResult
-    ? { ...lowerResult, playsForPick: readConsolationPlaysFor(league.settings, league.sport, league.leagueVariant) === 'pick' }
+    ? {
+        ...lowerResult,
+        playsForPick: consolationPlaysForSetsDraftOrder(league.settings, league.sport, league.leagueVariant, league),
+        pickGoesTo: readConsolationPickGoesTo(league.settings),
+        final: lowerBracketFinal(rounds, CONSOLATION_ROUND_OFFSET),
+      }
     : null
 
   // Seeds are written when the bracket is generated, which is when the regular season is over.

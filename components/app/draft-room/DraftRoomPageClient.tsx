@@ -85,7 +85,8 @@ import { buildDraftSummaryForAI, buildLiveDraftBrainPayload, canAddToQueue, getD
 import { computeTeamNeeds, detectByeWeekClusters } from '@/lib/draft-room/teamNeeds'
 import type { LiveDraftBrainEnvelope } from '@/lib/live-draft-brain/schemas'
 import { IdpDraftExplainerCard } from '@/components/idp/IdpDraftExplainerCard'
-import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
+import { paidToolFetch, approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
+import { tokenConfirmationMessage } from '@/lib/tokens/clientTokenConfirm'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { computePicksUntilViewerTurn } from '@/lib/draft-room/computePicksUntilViewer'
@@ -1819,7 +1820,7 @@ export function DraftRoomPageClient({
         return null
       })()
       const requestRecommendation = async (confirmTokenSpendForFallback: boolean) => {
-        const res = await fetch('/api/draft/recommend', {
+        const res = await paidToolFetch('/api/draft/recommend', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1853,7 +1854,7 @@ export function DraftRoomPageClient({
         data?.code === 'token_confirmation_required' &&
         typeof data?.preview?.ruleCode === 'string'
       ) {
-        const confirmation = await confirmTokenSpend(data.preview.ruleCode)
+        const confirmation = { confirmed: window.confirm(tokenConfirmationMessage(data)) && approvePaidToolQuote(data) }
         if (!confirmation.confirmed) {
           setLiveBrainEnvelope(await brainPromise)
           setRecommendationError('Token confirmation cancelled. Draft AI explanation was not unlocked.')

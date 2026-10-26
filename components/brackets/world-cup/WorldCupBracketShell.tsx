@@ -1,4 +1,6 @@
 "use client"
+
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -5620,7 +5622,7 @@ function WorldCupCommunityFoundationPanel({
     setIsChatLoading(true)
     setChatError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         cache: "no-store",
       })
       const data = await res.json().catch(() => ({}))
@@ -5731,7 +5733,7 @@ function WorldCupCommunityFoundationPanel({
     setIsDmStarting(true)
     setDmError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -5809,10 +5811,10 @@ function WorldCupCommunityFoundationPanel({
     setChatError(null)
     setChatAiGate(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body, gif: selectedGif ?? undefined, image: selectedImage ?? undefined }),
+        body: JSON.stringify({ body, confirmedTokenSpend: false, gif: selectedGif ?? undefined, image: selectedImage ?? undefined }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -5946,7 +5948,7 @@ function WorldCupCommunityFoundationPanel({
     setIsPollCreating(true)
     setPollError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "create_poll", question, options }),
@@ -5972,7 +5974,7 @@ function WorldCupCommunityFoundationPanel({
     setPollVotingMessageId(messageId)
     setChatError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "poll_vote", messageId, optionId }),

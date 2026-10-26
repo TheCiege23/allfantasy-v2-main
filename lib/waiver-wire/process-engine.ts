@@ -27,6 +27,11 @@ import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterM
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerWaiverHours, loadDroppedPlayerHolds, type DroppedPlayerHold } from './dropped-player-waivers'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
+import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
+
+/** Why a run settled nothing on purpose, leaving every pending claim pending (reported through `opts.onSkip`). */
+export type WaiverRunSkipReason = 'league_moves_locked'
 
 type ClaimRow = {
   id: string
@@ -60,7 +65,12 @@ function outcomeFromFailureMessage(msg: string): WaiverClaimOutcomeCode {
 
 export async function processWaiverClaimsForLeague(
   leagueId: string,
-  opts?: { processedByUserId?: string | null; runType?: string; idempotencyKey?: string | null }
+  opts?: {
+    processedByUserId?: string | null
+    runType?: string
+    idempotencyKey?: string | null
+    onSkip?: (reason: WaiverRunSkipReason) => void
+  }
 ): Promise<ProcessedClaimResult[]> {
   if (opts?.idempotencyKey != null) {
     logEngineInvariantOptional(assertNonEmptyIdempotencyKey(opts.idempotencyKey), 'waiver_process.idempotency_key', {
@@ -90,6 +100,16 @@ export async function processWaiverClaimsForLeague(
 
   const locked = await getLeagueWaiverState(leagueId).catch(() => null)
   if (locked?.processingLocked) return []
+
+  // 🛑 The commissioner's "Lock all roster moves" (`League.lockAllMoves`), re-read when the run executes:
+  // a claim filed before the lock went on must not settle while it is on. Nothing is touched — no run
+  // row, no claim update — so every claim stays pending and the first run after the lift settles it.
+  // A commissioner's manual run is exempt, like `commissionerOverride` in the waiver and trade runtimes.
+  if (opts?.runType !== 'manual' && (await isRedraftLeagueMovesLocked(leagueId))) {
+    console.info(`[waiver-process] league ${leagueId} skipped: the commissioner has locked all roster moves; pending claims stay pending`)
+    opts?.onSkip?.('league_moves_locked')
+    return []
+  }
 
   const [effectiveSettings, league, pendingClaims, allRosters, leagueTeams] = await Promise.all([
     getEffectiveLeagueWaiverSettings(leagueId),
@@ -166,14 +186,14 @@ export async function processWaiverClaimsForLeague(
     ? (pendingClaims as Array<ClaimRow & { createdAt: Date | string }>).filter((c) => new Date(c.createdAt) < blindCutoff)
     : (pendingClaims as ClaimRow[])
 
-  const ordered = orderClaimsForProcessing(
+  const orderedAll = orderClaimsForProcessing(
     dueClaims as ClaimRow[],
     waiverType,
     rankByPlatformUserId,
     tiebreakRule,
   )
 
-  if (ordered.length === 0) {
+  if (orderedAll.length === 0) {
     return []
   }
 
@@ -182,13 +202,32 @@ export async function processWaiverClaimsForLeague(
   // with the reason. Read once per run; an unreadable phase keeps the regular season's rules.
   const phaseRefusal = await loadWaiverRunPhaseGate(leagueId).catch(() => (): string | null => null)
   // A dropped player on waivers (dropped-player-waivers.ts) cannot go back to the team that dropped
-  // him. The claims on him otherwise run in the order above, like any claim.
+  // him: that claim fails. Every other claim on him waits — it stays pending, untouched, until the
+  // first run after his hold ends, and there competes with the other claims on him in the order
+  // above, like any claim. An unreadable hold processes nothing this run rather than run a held
+  // player's claims early; they are all still pending for the next one.
+  const runAt = new Date()
   const holdHours = droppedPlayerWaiverHours({ normalizedWaiverType: configuredWaiverType, waiverHours: league.waiverHours })
-  const dropHolds: Map<string, DroppedPlayerHold> = holdHours > 0
-    ? await loadDroppedPlayerHolds(leagueId, holdHours, {
-        playerIds: Array.from(new Set(ordered.map((c) => String(c.addPlayerId)))),
-      }).catch(() => new Map<string, DroppedPlayerHold>())
-    : new Map<string, DroppedPlayerHold>()
+  let dropHolds: Map<string, DroppedPlayerHold> = new Map()
+  if (holdHours > 0) {
+    try {
+      dropHolds = await loadDroppedPlayerHolds(leagueId, holdHours, {
+        now: runAt,
+        playerIds: Array.from(new Set(orderedAll.map((c) => String(c.addPlayerId)))),
+      })
+    } catch (err) {
+      console.warn('[waiver-wire] dropped-player holds unreadable; waiver run deferred', { leagueId, err })
+      return []
+    }
+  }
+  const ordered = orderedAll.filter((c) => {
+    const hold = dropHolds.get(String(c.addPlayerId))
+    return !(hold && hold.until > runAt && hold.droppedByRosterId !== c.rosterId)
+  })
+  const deferredHeldClaimCount = orderedAll.length - ordered.length
+  if (ordered.length === 0) {
+    return []
+  }
 
   const waiverRun = await (prisma as any).waiverRun.create({
     data: {
@@ -198,6 +237,7 @@ export async function processWaiverClaimsForLeague(
       processedByUserId: opts?.processedByUserId ?? null,
       metadata: {
         claimCount: ordered.length,
+        ...(deferredHeldClaimCount > 0 ? { deferredHeldClaimCount } : {}),
         ...(opts?.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
       },
     },
@@ -429,6 +469,11 @@ export async function processWaiverClaimsForLeague(
       ...survivorGuillotineWrites,
       ...redraftMoveWrites,
     ])
+
+    // Survivor Guilly wrote faabBalance itself, above; every other native league copies it across.
+    if (faabSpent != null && league.leagueVariant !== 'survivor_guillotine') {
+      await copyGenericFaabToRedraft(prisma, [claim.rosterId])
+    }
 
     rosteredByPlayer.set(addId, claim.rosterId)
     if (dropId) rosteredByPlayer.delete(dropId)

@@ -69,7 +69,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
   const others = (teams ?? []).filter((team) => !team.managed && !team.suggested)
 
   return (
-    <section className="af-tw af-tw-panel" data-testid="inactive-manager-mode">
+    <section id="ch-inactive-managers" className="af-tw af-tw-panel" data-testid="inactive-manager-mode">
       <h2>{t('Inactive manager mode', 'Modo mánager inactivo')}</h2>
       <p>
         {t(

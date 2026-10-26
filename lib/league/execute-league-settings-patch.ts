@@ -83,6 +83,15 @@ import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommis
 import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { readThirdPlaceGameEnabled, THIRD_PLACE_GAME_SETTINGS_KEY } from '@/lib/playoff-runtime/thirdPlaceGame'
+import {
+  CONSOLATION_PICK_GOES_TO_KEY,
+  CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY,
+  CONSOLATION_PLAYS_FOR_SETTINGS_KEY,
+  parseConsolationPickGoesTo,
+  parseConsolationPlaysFor,
+  type ConsolationPickGoesTo,
+  type ConsolationPlaysFor,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
 import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import {
   keepLineupModeFields,
@@ -603,6 +612,25 @@ export async function executeLeagueSettingsPatch(
   }
 
   /*
+   * What the lower bracket plays for (lib/playoff-runtime/consolationPlaysFor.ts): 'pick' | 'cash' |
+   * 'none', stored in `settings.playoff_structure`. A save ALSO stamps the draft-order flag: the
+   * owner's rollout rule is that an existing league's next draft order follows the setting only once
+   * its commissioner saves it, so this is the one place an existing league opts in.
+   */
+  let consolationPlaysForToStore: ConsolationPlaysFor | null = null
+  if (body.consolationPlaysFor !== undefined) {
+    consolationPlaysForToStore = parseConsolationPlaysFor(body.consolationPlaysFor)
+    if (!consolationPlaysForToStore) return jsonError("consolationPlaysFor must be 'pick', 'cash' or 'none'", 400)
+  }
+  // Toilet bowl only: which finalist takes pick 1 ('loser' = last place, the default; or 'winner').
+  // Stored on its own — it does not opt a league's draft order in; only `consolationPlaysFor` does.
+  let consolationPickGoesToStore: ConsolationPickGoesTo | null = null
+  if (body.consolationPickGoesTo !== undefined) {
+    consolationPickGoesToStore = parseConsolationPickGoesTo(body.consolationPickGoesTo)
+    if (!consolationPickGoesToStore) return jsonError("consolationPickGoesTo must be 'loser' or 'winner'", 400)
+  }
+
+  /*
    * Lineups: daily or weekly (NBA/NHL/MLB; lib/redraft/lineupModeSwitch.ts). Checked here, before the
    * first write below, so a refused switch leaves the rest of the save unapplied too. Refused (400) for
    * any other sport, and (409) while a season is under way — a week is scored under one mode.
@@ -1111,6 +1139,31 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push(THIRD_PLACE_GAME_SETTINGS_KEY)
+  }
+
+  if (consolationPlaysForToStore != null || consolationPickGoesToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    const prevStructure =
+      prev.playoff_structure && typeof prev.playoff_structure === 'object' && !Array.isArray(prev.playoff_structure)
+        ? (prev.playoff_structure as Record<string, unknown>)
+        : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          playoff_structure: {
+            ...prevStructure,
+            ...(consolationPlaysForToStore != null
+              ? { [CONSOLATION_PLAYS_FOR_SETTINGS_KEY]: consolationPlaysForToStore, [CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY]: true }
+              : {}),
+            ...(consolationPickGoesToStore != null ? { [CONSOLATION_PICK_GOES_TO_KEY]: consolationPickGoesToStore } : {}),
+          },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    if (consolationPlaysForToStore != null) updatedFieldNames.push(CONSOLATION_PLAYS_FOR_SETTINGS_KEY)
+    if (consolationPickGoesToStore != null) updatedFieldNames.push(CONSOLATION_PICK_GOES_TO_KEY)
   }
 
   const derivedSyncKeys = new Set([

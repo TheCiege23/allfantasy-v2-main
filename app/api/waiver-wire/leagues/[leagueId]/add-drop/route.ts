@@ -8,6 +8,7 @@ import {
   dailyScheduleImmediateAddRefusal,
   dailyUnlockImmediateAddRefusal,
   loadDailyTransactionPolicy,
+  PENDING_CLAIM_ON_PLAYER_MESSAGE,
 } from "@/lib/waiver-wire/daily-schedule-gate"
 import { isDailyFreeAgentUnlock } from "@/lib/waiver-wire/free-agent-unlock"
 import { mapAddDropErrorCode, addDropErrorStatus, ADD_DROP_ERROR_COPY, type AddDropErrorCode } from "@/lib/waiver-wire/addDropErrors"
@@ -122,6 +123,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       if (hold) {
         return errorResponse("WAIVER_REQUIRED", DROPPED_PLAYER_ON_WAIVERS_MESSAGE, { onWaiversUntil: hold.until.toISOString() })
       }
+      // Claims placed while he was on waivers run at the first waiver run after he clears; until that
+      // run he is theirs to compete for, not a first-come add. Fails closed like the hold.
+      const pending = await prisma.waiverClaim
+        .findFirst({ where: { leagueId, addPlayerId: String(addPlayerId), status: "pending" }, select: { id: true } })
+        .catch(() => "unknown" as const)
+      if (pending === "unknown") return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
+      if (pending) return errorResponse("WAIVER_REQUIRED", PENDING_CLAIM_ON_PLAYER_MESSAGE)
     }
     if (!immediateAllowed) {
       if (!isDailyFreeAgentUnlock(settings.freeAgentUnlockBehavior)) {

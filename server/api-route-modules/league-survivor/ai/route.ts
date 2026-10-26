@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 /**
  * POST: Survivor AI — host posts and helper strategy. Deterministic context first; AI narrates/advises only.
  * PROMPT 348: No AI for elimination, vote count, idol validity, immunity, or exile return.
@@ -74,7 +75,7 @@ function toDeterministicResponse(
   }
 }
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
+async function paidToolPost(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string; email?: string | null } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -151,7 +152,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const { resultKey, inputHash } = buildAiCacheKey('survivor-ai', cacheInputs)
   const cached = await readAiResultCache(resultKey)
   if (cached?.resultJson && typeof cached.resultJson === 'object') {
-    return NextResponse.json(cached.resultJson)
+    // Cached content has no new paid generation. Never repeat old wallet metadata.
+    paidToolNotDelivered()
+    return NextResponse.json({ ...(cached.resultJson as Record<string, unknown>), tokenSpend: null })
   }
 
   const smokeProviderEnabled = isAiResultCacheSmokeProviderEnabled()
@@ -194,6 +197,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   try {
     const { narrative, model } = await generateSurvivorAI(deterministic, type, userId)
+    if (model === 'deterministic-fallback' || !narrative?.trim()) paidToolNotDelivered()
     const responsePayload = {
       deterministic: deterministicResponse,
       narrative,
@@ -245,3 +249,5 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     )
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)
