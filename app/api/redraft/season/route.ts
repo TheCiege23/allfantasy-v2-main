@@ -10,6 +10,7 @@ import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
+import { regularSeasonCapApplies, regularSeasonLengthCapRefusal } from '@/lib/redraft/regularSeasonCap'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,6 +109,12 @@ export async function POST(req: NextRequest) {
   const seasonYear = parsedSeason.value ?? league.season
   const totalWeeks = parsedTotalWeeks.value ?? cfg?.defaultSeasonWeeks ?? 17
   const playoffStartWeek = parsedPlayoffStartWeek.value ?? cfg?.defaultPlayoffStartWeek ?? 15
+  // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts): the
+  // schedule below is generated through the week before the playoffs, or the whole season without them.
+  if (regularSeasonCapApplies({ leagueType: league.leagueType, sport: sportKey })) {
+    const refusal = regularSeasonLengthCapRefusal(Math.min(totalWeeks, playoffStartWeek - 1))
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
+  }
   const medianGame = body.medianGame ?? league.medianGame ?? false
 
   const redraft = await prisma.$transaction(async (tx) => {
