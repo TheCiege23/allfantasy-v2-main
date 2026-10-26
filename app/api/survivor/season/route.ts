@@ -112,7 +112,8 @@ export async function GET(req: NextRequest) {
   })
   const challenge = await prisma.survivorChallenge.findFirst({
     where: { leagueId, status: { in: ['open', 'locked'] } },
-    orderBy: { week: 'desc' },
+    // The slate (challenge 1 or 2) first; the weekly call (3) has its own card on the challenges page.
+    orderBy: [{ week: 'desc' }, { challengeNumber: 'asc' }],
   })
   const exile = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const jury = await prisma.jurySession.findUnique({ where: { leagueId } })
@@ -149,6 +150,7 @@ export async function GET(req: NextRequest) {
     currentChallenge: access.decisions.canSeeHiddenIdolAssignments ? challenge : challenge && {
       id: challenge.id, week: challenge.week, title: challenge.title, description: challenge.description,
       instructions: challenge.instructions, scope: challenge.scope, status: challenge.status,
+      submissionMode: challenge.submissionMode, challengeType: challenge.challengeType,
       locksAt: challenge.locksAt, lockAt: challenge.lockAt, closesAt: challenge.closesAt,
       rewardType: challenge.rewardType, rewardAmount: challenge.rewardAmount,
       resultSummary: challenge.status === 'resolved' ? challenge.resultSummary : null,

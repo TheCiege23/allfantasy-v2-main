@@ -29,6 +29,8 @@ vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({ getFinaleState: vi.fn(),
 vi.mock('@/lib/survivor/juryEngine', () => ({ ensureJuryVotingOpen: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifiedSlateChallenges: vi.fn(), settleVerifiedSlateChallenges: vi.fn() }))
+const weeklyCall = vi.hoisted(() => ({ ensure: vi.fn(async () => undefined), settle: vi.fn(async () => undefined) }))
+vi.mock('@/lib/survivor/survivorWeeklyCall', () => ({ ensureWeeklyCall: weeklyCall.ensure, settleWeeklyCall: weeklyCall.settle }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
 const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn() }))
 vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard }))
@@ -143,6 +145,9 @@ describe.each(['NBA', 'NHL', 'NFL'] as const)('%s Survivor planned season tick',
     // An unanswered tribe-imbalance recommendation gets its default before each council opens.
     expect(redraw.autoApply).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
     expect(redraw.autoApply).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0])
+    // The weekly mini-game opens and settles alongside the slate.
+    expect(weeklyCall.ensure).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0], expect.objectContaining({ sport: plan.sport, season: plan.season }))
+    expect(weeklyCall.settle).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0])
     // The never-freeze guard runs before every council the runner opens.
     expect(redraw.guard).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
     expect(redraw.guard.mock.invocationCallOrder[0]).toBeLessThan(engine.triggerTribalOpen.mock.invocationCallOrder[0])
