@@ -9,6 +9,8 @@
  *
  * WHO SEES WHAT — the same as the app, never more:
  *   weekly prizes        every member (lib/side-contests checks membership itself)
+ *   payouts              every member sees the pot and place split; buy-ins collected are for
+ *                        commissioners only (lib/payouts decides, as on the standings screen)
  *   league log           whatever readLeagueLog lets this viewer read; nothing when commish-only
  *   trades in review     a commissioner sees all of them; a member sees league-vote trades (they
  *                        vote on them) and trades their own team is in
@@ -46,14 +48,15 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
       const role = await getLeagueRole(leagueId, request.userId)
       const commissioner = role === 'commissioner' || role === 'co_commissioner'
 
-      const [{ readSideContestsView }, { readLeagueLog }, { explainTradeReview }, { readManagedLineups }] = await Promise.all([
+      const [{ readSideContestsView }, { readLeagueLog }, { explainTradeReview }, { readManagedLineups }, { readPayoutsView }] = await Promise.all([
         import('@/lib/side-contests/sideContestsService'),
         import('@/lib/league-log/leagueLogService'),
         import('@/lib/redraft/tradeReviewWindow'),
         import('@/lib/inactive-manager/inactiveManagerMode'),
+        import('@/lib/payouts/payoutService'),
       ])
 
-      const [prizes, log, myRedraftTeam, myRoster, proposals] = await Promise.all([
+      const [prizes, log, myRedraftTeam, myRoster, proposals, payoutView] = await Promise.all([
         readSideContestsView(leagueId, request.userId).catch(() => null),
         readLeagueLog(leagueId, request.userId, { limit: 8 }).catch(() => null),
         prisma.redraftRoster.findFirst({ where: { leagueId, ownerId: request.userId }, select: { id: true } }),
@@ -67,7 +70,20 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
           orderBy: { expiresAt: 'asc' },
           take: 10,
         }),
+        readPayoutsView(leagueId, request.userId).catch(() => null),
       ])
+      const pr = payoutView?.ok && payoutView.native ? payoutView.result : null
+      const payouts: LeagueOfficeInput['payouts'] = pr && payoutView?.ok
+        ? {
+            final: pr.final,
+            buyInCents: pr.buyInCents,
+            teamCount: payoutView.teamCount,
+            potCents: pr.potCents,
+            weeklyReserveCents: pr.weeklyReserveCents,
+            places: pr.places.map((p) => ({ place: p.place, percent: p.percent, cents: p.cents, team: p.rosterId ? pr.names[p.rosterId] ?? null : null })),
+            collected: payoutView.collected,
+          }
+        : null
 
       const visible = proposals.filter(
         (p) => commissioner || p.vetoMode === 'league_vote' || (myRedraftTeam && [p.proposerRosterId, p.receiverRosterId].includes(myRedraftTeam.id)),
@@ -115,6 +131,7 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         inactive,
         viewerTeamManaged: Boolean(myRoster && readManagedLineups(league.settings)[myRoster.id]),
         log: log?.ok && !log.hidden ? log.entries.map((e) => ({ at: e.at, title: e.title, detail: e.detail })) : null,
+        payouts,
       })
       return done(summary ? { leagueId, viewerRole: commissioner ? 'commissioner' : 'member', summary } : null)
     } catch (err) {

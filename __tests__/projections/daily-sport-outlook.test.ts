@@ -228,6 +228,30 @@ describe('prior-season blend through the loader', () => {
     }
   })
 
+  it('a prior built from season totals is declined by a league weighting a key the totals lack', async () => {
+    const totalsPrior = {
+      ...blob,
+      season: 2025,
+      basis: 'season_totals',
+      mappedKeys: ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'threes', 'fgm', 'ftm', 'fga', 'fta'],
+      players: { 'uuid-a': { pos: 'C', team: 'DEN', sg: 70, ss: { pts: 700 }, rg: 0, rs: {}, part: null } },
+    }
+    store.prior = totalsPrior
+    const players = [{ key: 'a', lookupId: '907', team: 'DEN', injuryStatus: null }]
+    // NBA's default scoring weights double-doubles, which the totals cannot supply: this season alone.
+    const declined = await loadDailySportOutlook(db, { league: league(), players, now: NOW })
+    expect(declined.priorSeason).toBeNull()
+    expect(declined.byKey.get('a')).toMatchObject({ perGame: 20 })
+    // A league that scores neither double takes the totals rate: (3 x 20 + 6 x 10) / 9.
+    const accepted = await loadDailySportOutlook(db, {
+      league: league({ sportConfig: { categoryPoints: { pts: 1, dbl_dbl: 0, trpl_dbl: 0 } } }),
+      players,
+      now: NOW,
+    })
+    expect(accepted.priorSeason).toBe(2025)
+    expect(accepted.byKey.get('a')).toMatchObject({ perGame: 13.33 })
+  })
+
   it('no prior season stored: this season alone, unchanged', async () => {
     const out = await loadDailySportOutlook(db, { league: league(), players: [{ key: 'a', lookupId: '907', team: 'DEN', injuryStatus: null }], now: NOW })
     expect(out.priorSeason).toBeNull()

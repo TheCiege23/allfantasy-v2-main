@@ -15,7 +15,7 @@ import {
   type RosterSectionKey,
 } from '@/lib/roster/LineupTemplateValidation'
 import { BESTBALL_VARIANTS, isBestBallLeague } from '@/lib/autocoach/bestBallShared'
-import { getNotificationsQueue } from '@/lib/queues/bullmq'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { autoCoachSkipReason, parseAutoCoachUserPreferences } from '@/lib/autocoach/autoCoachPreferences'
 import { getPlayerGameLockStateForAutoCoach } from '@/lib/autocoach/playerGameLock'
@@ -124,25 +124,21 @@ async function enqueueSwapNotification(
   status: string,
   swapLogId: string
 ): Promise<void> {
-  const queue = getNotificationsQueue()
-  if (!queue) return
-
+  // Straight to the dispatcher: the BullMQ notifications queue has no worker in production
+  // (lib/integrity/runIntegrityJob.ts), so a queued swap alert never reached the manager.
   try {
-    await queue.add(
-      'autocoach_swap',
-      {
-        userIds: [userId],
-        category: 'autocoach',
-        type: 'autocoach_swap',
-        title: '⚡ AI Auto Start/Sit Protection',
-        body: `${playerOutName} (${status}) → ${playerInName} · ${leagueName}`,
-        severity: 'low',
-        actionHref: `/league/${leagueId}?tab=team`,
-        actionLabel: 'View lineup',
-        meta: { leagueId, swapLogId },
-      },
-      { removeOnComplete: true }
-    )
+    await dispatchNotification({
+      userIds: [userId],
+      category: 'autocoach',
+      type: 'autocoach_swap',
+      title: '⚡ AI Auto Start/Sit Protection',
+      body: `${playerOutName} (${status}) → ${playerInName} · ${leagueName}`,
+      severity: 'low',
+      leagueId,
+      actionHref: `/league/${leagueId}?tab=team`,
+      actionLabel: 'View lineup',
+      meta: { leagueId, swapLogId },
+    })
   } catch (e) {
     console.warn('[AutoCoachEngine] enqueueSwapNotification failed:', e)
   }
