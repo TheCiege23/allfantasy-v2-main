@@ -375,6 +375,10 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
           },
         })
         await notifyCommissionerOfFlag(row.id)
+        // Anti-tanking penalties: the manager is warned privately (lib/integrity/tankingPenaltyService.ts).
+        await import("./tankingPenaltyService")
+          .then(({ onTankingFlagOpened }) => onTankingFlagOpened(row.id))
+          .catch((err) => console.error("[tanking] manager warning failed", err))
         flags.push({ severity, confidence, summary, evidence })
       }
     }

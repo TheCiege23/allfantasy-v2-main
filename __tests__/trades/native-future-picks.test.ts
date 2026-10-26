@@ -309,3 +309,22 @@ describe('the tradeable horizon follows the league setting', () => {
     expect(rows[0]!.status).toBe('active')
   })
 })
+
+describe('a pick forfeited as a penalty (lib/integrity/tankingPenaltyService.ts)', () => {
+  const forfeitedRow: Row = { id: 'row-f', leagueId: 'L1', pickSeason: 2027, round: 1, originalRosterId: 'R-a', currentOwnerId: 'R-a', status: 'forfeited', traded: false, sourceTradeId: null }
+
+  it('is gone from the inventory — not "back with its original team"', async () => {
+    const { db } = fakeDb({ rows: [forfeitedRow] })
+    const inv = await loadNativeFuturePicks('L1', db as never)
+    expect(inv!.ownerByPickId.has('fdp:2027:1:R-a')).toBe(false)
+    expect(inv!.ownerByPickId.get('fdp:2027:2:R-a')).toBe('R-a')
+    expect(inv!.ownerByPickId.get('fdp:2027:1:R-b')).toBe('R-b')
+  })
+
+  it('cannot be traded', async () => {
+    const { db } = fakeDb({ rows: [forfeitedRow] })
+    await expect(
+      transferNativeFuturePick(db as never, { leagueId: 'L1', ref: 'fdp:2027:1:R-a', fromRosterId: 'R-a', toRosterId: 'R-b' }),
+    ).rejects.toThrow('no longer tradeable')
+  })
+})
