@@ -164,6 +164,29 @@ export async function GET(request: Request) {
     inactiveLineups = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  /*
+   * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
+   * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
+   * processed in the same run. Guarded and on its own job identity, like the sweeps above.
+   */
+  let autopilotWaivers: unknown = null
+  try {
+    const { runAutopilotWaivers } = await import('@/lib/inactive-manager/inactiveManagerService')
+    autopilotWaivers = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-waivers', trigger: 'cron' },
+      () => runAutopilotWaivers(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.claims,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot waivers failed', e)
+    autopilotWaivers = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -189,5 +212,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, autopilotWaivers, exileRollover })
 }

@@ -343,3 +343,134 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
   }
   return result
 }
+
+export const AUTOPILOT_CLAIM_ACTION = 'chimmy_autopilot.claim'
+
+export type AutopilotWaiverRunResult = {
+  leagues: number
+  teams: number
+  claims: number
+  skipped: Record<string, number>
+  failures: { leagueId: string; rosterId?: string; error: string }[]
+}
+
+/**
+ * Hourly, beside the lineups: each team on Chimmy autopilot claims a free agent for a starting slot
+ * nobody healthy on its roster can fill (./autopilotWaivers.ts), in its style. Claims go through the
+ * waiver wire's own `createClaim` — every league rule, window and limit applies — and a team that
+ * already has a claim pending on a player does not claim him again. A league whose owner no longer
+ * holds AF Commissioner is skipped, not switched off: the commissioner decides that.
+ */
+export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: number }): Promise<AutopilotWaiverRunResult> {
+  const deadline = opts?.deadline ?? Date.now() + 25_000
+  const result: AutopilotWaiverRunResult = { leagues: 0, teams: 0, claims: 0, skipped: {}, failures: [] }
+  const skip = (reason: string, n = 1) => (result.skipped[reason] = (result.skipped[reason] ?? 0) + n)
+  const ids = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM leagues
+    WHERE settings ? ${AF_MANAGED_LINEUPS_KEY} AND settings -> ${AF_MANAGED_LINEUPS_KEY} <> '{}'::jsonb
+    ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? DEFAULT_LEAGUE_LIMIT, 100))}`
+
+  const { planAutopilotWaivers } = await import('./autopilotWaivers')
+  const { createClaim, getClaimsByRoster } = await import('@/lib/waiver-wire/claim-service')
+  const { buildLineupListsFromPlayerData } = await import('@/lib/league/lineup-swap')
+  const { assertLifecycleActionAllowed } = await import('@/server/services/leagueLifecycleService')
+  const { assertRosterTransactionsAllowed } = await import('@/lib/roster-legality/rosterTransactionGates')
+
+  for (const { id: leagueId } of ids) {
+    if (Date.now() >= deadline) break
+    try {
+      const league = await prisma.league.findUnique({ where: { id: leagueId } })
+      if (!league) continue
+      const managed = readManagedLineups(league.settings)
+      const autopilot = autopilotRosterIds(managed)
+      if (autopilot.length === 0) continue
+      result.leagues += 1
+      const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
+      const reason =
+        resolveWriteAuthority(league.platform) !== 'NATIVE'
+          ? 'not_native'
+          : !['active', 'in_season'].includes(status)
+            ? 'not_in_season'
+            : league.lockAllMoves
+              ? 'moves_locked'
+              : !(await autopilotEntitled(league.userId))
+                ? 'not_entitled'
+                : null
+      if (reason) {
+        skip(reason, autopilot.length)
+        continue
+      }
+      const sport = String(league.sport ?? 'NFL')
+      const template = await getRosterTemplateForLeague(sport as never, getFormatTypeForVariant(sport, (league.leagueVariant as string | null) ?? undefined), leagueId).catch(() => null)
+      const slots = resolveLineupStarterSlots(league as never, template)
+      const benchCapacity = template ? template.slots.reduce((sum, s) => sum + (s.benchCount ?? 0), 0) || null : null
+      const pool = (await getNormalizedPlayerData({ surface: 'waivers', leagueId, limit: 300 })).map(serializeUnifiedPlayerForApi)
+      const freeAgents = pool.map((p) => ({ id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }))
+
+      for (const rosterId of autopilot) {
+        if (Date.now() >= deadline) break
+        result.teams += 1
+        try {
+          const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId } })
+          if (!roster?.platformUserId) {
+            skip('no_roster')
+            continue
+          }
+          // The claims route's own gates, minus the "can this user see the league" check an abandoned
+          // team's `orphan-…` seat cannot pass: league phase, locks, pauses and roster legality.
+          const lifecycle = await assertLifecycleActionAllowed(leagueId, 'waiver_claim_submit', roster.platformUserId, { isElevatedCommissioner: false })
+          if (!lifecycle.ok) {
+            skip('waivers_not_open')
+            continue
+          }
+          const legality = await assertRosterTransactionsAllowed({ leagueId, rosterIds: [rosterId], userId: roster.platformUserId, kind: 'waiver_claim' })
+          if (!legality.ok) {
+            skip(`roster_${legality.code.toLowerCase()}`)
+            continue
+          }
+          const lists = buildLineupListsFromPlayerData(roster.playerData, slots.length)
+          const rows = await getNormalizedPlayerData({ surface: 'roster', leagueId, userId: roster.platformUserId, limit: 200 })
+          const players: Record<string, { id: string; position: string | null; projectedPoints: number | null; injuryStatus: string | null; yearsExp: number | null }> = {}
+          for (const p of rows.map(serializeUnifiedPlayerForApi)) {
+            players[p.id] = { id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }
+          }
+          const pending = ((await getClaimsByRoster(rosterId, 'pending')) as Array<{ addPlayerId: string }>).map((c) => String(c.addPlayerId))
+          const style = managed[rosterId]!.autopilot!.style
+          const plan = planAutopilotWaivers({ style, slots, starters: lists.starters, bench: lists.bench, players, freeAgents, benchCapacity, pendingAddIds: pending })
+          if (plan.claims.length === 0) {
+            skip(plan.unfilled.length ? 'no_fitting_free_agent' : 'no_holes')
+            continue
+          }
+          for (const c of plan.claims) {
+            try {
+              await createClaim(leagueId, rosterId, {
+                addPlayerId: c.addPlayerId,
+                dropPlayerId: c.dropPlayerId,
+                faabBid: null,
+                userId: roster.platformUserId,
+                metadata: { source: 'chimmy_autopilot', style, slot: c.slot },
+              })
+              result.claims += 1
+              await logAction({
+                leagueId,
+                userId: managed[rosterId]!.autopilot!.byUserId,
+                actionType: AUTOPILOT_CLAIM_ACTION,
+                entityType: 'roster',
+                entityId: rosterId,
+                metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId },
+              })
+            } catch {
+              // A league rule said no (waivers closed, roster full, a hold on the player): normal, not a fault.
+              skip('claim_refused')
+            }
+          }
+        } catch (e) {
+          result.failures.push({ leagueId, rosterId, error: e instanceof Error ? e.message : String(e) })
+        }
+      }
+    } catch (e) {
+      result.failures.push({ leagueId, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  return result
+}
