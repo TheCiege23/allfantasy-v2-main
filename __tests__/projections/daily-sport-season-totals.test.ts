@@ -14,6 +14,7 @@ import {
   mapSeasonTotals,
   seasonTotalsBlockersForSport,
   seasonTotalsUnmappedKeys,
+  seasonTotalsWritableForSport,
 } from '@/lib/projections/dailySportSeasonTotals'
 import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
@@ -46,6 +47,12 @@ describe('which sports qualify, under their default scoring', () => {
     expect(seasonTotalsBlockersForSport('NHL')).toEqual([])
     expect(seasonTotalsBlockersForSport('NBA')).toEqual(['dbl_dbl', 'trpl_dbl'])
     expect(seasonTotalsBlockersForSport('MLB')).toEqual(['no_mapping'])
+  })
+
+  it('the writer stores a totals prior for every sport with a mapping, NBA included; never MLB', () => {
+    expect(seasonTotalsWritableForSport('NHL')).toBe(true)
+    expect(seasonTotalsWritableForSport('nba')).toBe(true)
+    expect(seasonTotalsWritableForSport('MLB')).toBe(false)
   })
 
   it('an unmapped key with weight disqualifies; the same key at 0 does not', () => {
@@ -128,5 +135,54 @@ describe('the blend reads totals ÷ games as last season\'s rate', () => {
     expect(leagueAcceptsSeasonTotals({ sport: 'NHL', settings: null }, prior)).toBe(true)
     const custom = { sportConfig: { categoryPoints: { hat_trick: 2 } } }
     expect(leagueAcceptsSeasonTotals({ sport: 'NHL', settings: custom }, prior)).toBe(false)
+  })
+})
+
+describe('NBA qualifies per league, under the league\'s own scoring', () => {
+  const prior = buildSeasonTotalsForm({
+    sport: 'NBA',
+    season: 2025,
+    rows: [{ playerId: 'id-pod', stats: NBA_2025, gamesPlayed: 82, team: 'Golden State Warriors' }],
+    identityPositions: new Map([['id-pod', 'SG']]),
+    computedAt: new Date('2026-10-25T07:00:00Z'),
+  })
+  const league = (categoryPoints?: Record<string, number>) => ({
+    sport: 'NBA',
+    settings: categoryPoints ? { sportConfig: { categoryPoints } } : null,
+  })
+
+  it('the blob carries the eleven mapped keys and neither double', () => {
+    expect(prior.basis).toBe('season_totals')
+    expect(prior.mappedKeys).toEqual(['ast', 'blk', 'fga', 'fgm', 'fta', 'ftm', 'pts', 'reb', 'stl', 'threes', 'to'])
+    expect(prior.players['id-pod']).toMatchObject({ sg: 82, ss: { pts: 1133, reb: 419 } })
+  })
+
+  it('a league weighting neither double takes the totals prior', () => {
+    expect(leagueAcceptsSeasonTotals(league({ dbl_dbl: 0, trpl_dbl: 0 }), prior)).toBe(true)
+    // Custom weights on mapped keys, shooting included, are still exact.
+    expect(leagueAcceptsSeasonTotals(league({ dbl_dbl: 0, trpl_dbl: 0, fgm: 1, fga: -0.5, pts: 0.5 }), prior)).toBe(true)
+  })
+
+  it('a league weighting either double declines it — and so does the default league', () => {
+    expect(leagueAcceptsSeasonTotals(league(), prior)).toBe(false)
+    expect(leagueAcceptsSeasonTotals(league({ dbl_dbl: 0 }), prior)).toBe(false) // trpl_dbl stays 3
+    expect(leagueAcceptsSeasonTotals(league({ trpl_dbl: 0 }), prior)).toBe(false) // dbl_dbl stays 1.5
+    expect(leagueAcceptsSeasonTotals(league({ dbl_dbl: 2, trpl_dbl: 0 }), prior)).toBe(false)
+  })
+
+  it('priced under an accepting league, the prior is that league\'s per-game score from totals', () => {
+    const settings = { sportConfig: { categoryPoints: { dbl_dbl: 0, trpl_dbl: 0 } } }
+    const scorer = buildLeagueStatScorer({ sport: 'NBA', settings })!
+    const expected = 1133 * 1 + 419 * 1.2 + 304 * 1.5 + 88 * 3 + 15 * 3 + 131 * -1 + 153 * 0.5
+    expect(scorer(prior.players['id-pod']!.ss, 'SG')).toBeCloseTo(expected, 6)
+  })
+
+  it('an NHL prior is not handed to an NBA league by mistake', () => {
+    const nhl = buildSeasonTotalsForm({
+      sport: 'NHL', season: 2025,
+      rows: [{ playerId: 'x', stats: NHL_SKATER_2025, gamesPlayed: 82, team: null }],
+      identityPositions: new Map(), computedAt: new Date('2026-10-25T07:00:00Z'),
+    })
+    expect(leagueAcceptsSeasonTotals(league({ dbl_dbl: 0, trpl_dbl: 0 }), nhl)).toBe(false)
   })
 })

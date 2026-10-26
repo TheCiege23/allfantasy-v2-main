@@ -3,7 +3,7 @@ import 'server-only'
 import type { PrismaClient } from '@prisma/client'
 
 import { getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
-import { buildSeasonTotalsForm, seasonTotalsBlockersForSport, type SeasonTotalsRow } from './dailySportSeasonTotals'
+import { buildSeasonTotalsForm, seasonTotalsWritableForSport, type SeasonTotalsRow } from './dailySportSeasonTotals'
 import {
   buildDailySportForm,
   isDailyFormSport,
@@ -109,9 +109,10 @@ export async function writeDailySportFormCache(
  * it is rebuilt at most once per PRIOR_REBUILD_MS rather than on every nightly run, and held for
  * PRIOR_TTL_MS.
  *
- * No game lines for that season: SEASON TOTALS from `player_season_stats` instead, for a sport whose
- * default scoring they map completely (dailySportSeasonTotals.ts — NHL today; NBA and MLB are blocked by
- * per-game categories). Otherwise nothing is written, and the reader falls back to this season. Game
+ * No game lines for that season: SEASON TOTALS from `player_season_stats` instead, for a sport with a
+ * totals mapping (dailySportSeasonTotals.ts — NHL skaters and NBA; MLB has none). Each league then
+ * takes or declines it under its own scoring (`leagueAcceptsSeasonTotals`), so an NBA league weighting
+ * double-doubles still prices from this season alone. Otherwise nothing is written. Game
  * lines always win: a held totals blob is rebuilt the night game lines for its season appear.
  */
 const PRIOR_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -143,7 +144,7 @@ async function writePriorSeasonForm(
   if (rows.length > 0) {
     blob = await buildBlob(db, sport, season, rows, normalizer, now)
   } else {
-    if (seasonTotalsBlockersForSport(sport).length > 0) {
+    if (!seasonTotalsWritableForSport(sport)) {
       return { season, players: 0, written: false, reason: 'no_prior_season_game_lines' }
     }
     blob = await buildSeasonTotalsBlob(db, sport, season, now)
