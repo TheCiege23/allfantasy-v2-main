@@ -21,6 +21,7 @@ import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
 import { DEFAULT_TRADE_RULES } from '@/lib/commissioner-ai-draft-manager/types'
 import { DraftImportFlow } from './DraftImportFlow'
 import { SwapManagerModal } from './SwapManagerModal'
+import { TimerPresetSelect } from '@/components/draft/TimerPresetSelect'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
@@ -117,7 +118,12 @@ export function CommissionerControlCenterModal({
   commissionerAiDraft = null,
   onSaveCommissionerAiDraft,
 }: CommissionerControlCenterModalProps) {
-  const [timerInput, setTimerInput] = useState(String(timerSeconds ?? 90))
+  // What "Set timer" will send. null = Off (0 seconds); starts from the draft's current timer.
+  const [pendingTimerSeconds, setPendingTimerSeconds] = useState<number | null>(timerSeconds && timerSeconds > 0 ? timerSeconds : null)
+  // Follow the draft's timer when it changes elsewhere (another commissioner, a settings save).
+  useEffect(() => {
+    setPendingTimerSeconds(timerSeconds && timerSeconds > 0 ? timerSeconds : null)
+  }, [timerSeconds])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionApiError, setActionApiError] = useState<string | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -249,8 +255,8 @@ export function CommissionerControlCenterModal({
   }
 
   const handleSetTimer = () => {
-    const sec = Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, parseInt(timerInput, 10) || 90))
-    setTimerInput(String(sec))
+    // The preset select hands back null for "Off"; the engine stores Off as 0 seconds.
+    const sec = Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, pendingTimerSeconds ?? 0))
     run('set_timer', () => onAction('set_timer_seconds', { seconds: sec, resetCurrentTimer: true }))
   }
 
@@ -715,17 +721,17 @@ export function CommissionerControlCenterModal({
         {(isInProgress || isPaused) && (
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Edit timer</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <Clock className="h-4 w-4 text-white/50" />
-              <input
-                type="number"
-                min={0}
-                max={86400}
-                value={timerInput}
-                onChange={(e) => setTimerInput(e.target.value)}
-                className="w-20 rounded border border-white/15 bg-black/30 px-2 py-1.5 text-sm text-white"
-              />
-              <span className="text-xs text-white/50">seconds</span>
+            {/* Sleeper-style presets + Off + "Set amount" (components/draft/TimerPresetSelect.tsx). */}
+            <div className="flex flex-wrap items-start gap-2" data-testid="timer-preset-select-active">
+              <Clock className="mt-3 h-4 w-4 text-white/50" />
+              <div className="min-w-[12rem] flex-1">
+                <TimerPresetSelect
+                  seconds={pendingTimerSeconds}
+                  onChange={setPendingTimerSeconds}
+                  disabled={loading || actionLoading !== null || !pauseControlsEnabled}
+                  testIdPrefix="draft-commissioner-timer"
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleSetTimer}
