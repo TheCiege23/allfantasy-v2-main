@@ -12,7 +12,7 @@
  * seeds) and its results from a scheduled DB-first writer — open creation in
  * the change that lands both.
  */
-export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf"
+export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
 
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
@@ -102,6 +102,9 @@ export type PlayoffRoundKey =
   | "cfp_quarterfinals"
   | "cfp_semifinals"
   | "cfp_championship"
+  | "cup_quarterfinals"
+  | "cup_semifinals"
+  | "cup_championship"
 
 export type PlayoffSeriesStatus = "scheduled" | "in_progress" | "final"
 
