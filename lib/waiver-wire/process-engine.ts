@@ -6,7 +6,7 @@ import {
   removePlayerFromRosterData,
   rosterContainsPlayer,
 } from './roster-utils'
-import { countTowardRosterLimit, leagueRosterLimit } from '@/lib/league/rosterLimit'
+import { countTowardRosterLimit, importedIrOverflow, leagueRosterLimit } from '@/lib/league/rosterLimit'
 import { onWaiverRunComplete } from './run-hooks'
 import { getSpecialtySpecByVariant } from '@/lib/specialty-league/registry'
 import { isWaiverFrozenForRoster } from '@/lib/survivor/SurvivorEffectEngine'
@@ -115,7 +115,7 @@ export async function processWaiverClaimsForLeague(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true },
+      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true, platform: true, irSlots: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -247,7 +247,10 @@ export async function processWaiverClaimsForLeague(
 
   const results: ProcessedClaimResult[] = []
   // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
-  const { limit: rosterSize, counts: rosterCounts } = leagueRosterLimit(league, 20)
+  const rosterLimit = leagueRosterLimit(league, 20)
+  const { limit: rosterSize, counts: rosterCounts } = rosterLimit
+  // An imported roster over the provider's IR spots is reported once per run, never refused.
+  const irOverflowReported = new Set<string>()
   const resultRows: Array<{
     claimId: string | null
     rosterId: string
@@ -346,6 +349,11 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
+    const irOverflow = irOverflowReported.has(claim.rosterId) ? null : importedIrOverflow(roster.playerData, rosterLimit)
+    if (irOverflow) {
+      irOverflowReported.add(claim.rosterId)
+      console.warn(`[waiver-process] league ${leagueId} roster ${claim.rosterId}: IR holds ${irOverflow.held} players against ${irOverflow.slots} imported IR spots (not enforced)`)
+    }
     const needDrop = countTowardRosterLimit(roster.playerData, rosterCounts) >= rosterSize && !dropId
     if (needDrop) {
       await pushFail('Roster full; no drop specified')
