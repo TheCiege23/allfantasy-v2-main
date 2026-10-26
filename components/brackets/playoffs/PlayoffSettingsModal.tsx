@@ -62,6 +62,8 @@ export default function PlayoffSettingsModal({
   }, [onClose])
 
   const lockRule = view.challenge.lockRule ?? view.challenge.config?.lockRule ?? "series start"
+  const sport = String(view.challenge.sport ?? "").toLowerCase()
+  const singleGameSport = sport === "ncaaf" || sport === "nba_cup"
 
   return (
     <div
@@ -105,15 +107,18 @@ export default function PlayoffSettingsModal({
             <strong>{String(view.challenge.visibility ?? "private")}</strong>
           </div>
           <p className="af-pb-note">
-            Visibility is not enforced yet — anyone with the pool link can open it. Treat the link
-            as the access control until that is wired.
+            {singleGameSport
+              ? "Shared entry links reveal picks only after each game starts. Private leagues require membership."
+              : "Visibility is not enforced yet — anyone with the pool link can open it. Treat the link as the access control until that is wired."}
           </p>
 
           <div className="af-pb-section-label">Seeding</div>
           <p className="af-pb-note" style={{ marginTop: 0 }}>
-            Seeds 1–6 in each league are filled from live standings once the regular season is
-            over. Until then the bracket shows seed slots (AL1…NL6) rather than clubs, because a
-            field taken from unfinished standings would be locked in wrong.
+            {sport === "ncaaf"
+              ? "An admin publishes the committee’s 12-team field and game times before picks open."
+              : sport === "nba_cup"
+                ? "An admin publishes the eight knockout qualifiers and game times after group play is final."
+                : "Seeds 1–6 in each league are filled from live standings once the regular season is over. Until then the bracket shows seed slots (AL1…NL6) rather than clubs."}
           </p>
           {canAdmin && onResync ? (
             <button
