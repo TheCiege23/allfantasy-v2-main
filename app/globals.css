@@ -3481,3 +3481,18 @@ html[data-ios-iap] [data-ios-purchase-alt] {
 }
 .af-lcp .af-chat-send:not(:disabled):hover { background: #22d3ee; color: #04050c; filter: brightness(1.08); }
 .af-lcp .af-chat-send svg { width: 16px; height: 16px; }
+
+/* Shared phone controls, including auth, settings and routes outside AF Core. */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  html .af-touch-button { min-height: 48px; min-width: 48px; white-space: normal; height: auto; touch-action: manipulation; }
+  html .af-touch-input, html .af-touch-select, html .af-touch-option { min-height: 48px; font-size: 16px; }
+  html .af-phone-dialog {
+    width: calc(100% - 24px);
+    max-height: calc(var(--phone-visible-height, 100dvh) - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    top: calc(var(--phone-visible-top, 0px) + var(--phone-visible-height, 100dvh) / 2);
+    overflow-y: auto; overscroll-behavior: contain; border-radius: 20px; padding: 20px;
+    scroll-padding-block: 56px 20px;
+  }
+  html .af-dialog-close { min-width: 48px; min-height: 48px; }
+  html[data-phone-keyboard] .af-mobile-bottom-tabs { display: none; }
+}
