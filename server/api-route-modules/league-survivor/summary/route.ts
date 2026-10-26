@@ -36,6 +36,8 @@ import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/lib/survivor/SurvivorSitOutEngine'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { survivorIdolExpiryRule, survivorIdolExpiryText } from '@/lib/survivor/survivorIdolExpiry'
+import { buildSurvivorWeekAdvice } from '@/lib/survivor/survivorWeekAdvice'
+import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { loadCouncilWeekPosition } from '@/lib/survivor/survivorWeekCouncilProgress'
@@ -483,9 +485,28 @@ export async function GET(
     rosterDisplayNames,
   }
 
+  // This week's strategy for the viewer, from facts already in the payload (only their own idols).
+  const openCouncil = body.council && !body.council.closedAt && !body.council.isRevealed ? body.council : null
+  const weekAdvice = buildSurvivorWeekAdvice({
+    merged: Boolean(merged),
+    inGame: Boolean(myRosterId) && !eliminatedRosterIds.has(myRosterId!),
+    myRosterId: myRosterId ?? null,
+    myTribeId: myTribeId ?? null,
+    tribeScores,
+    tribeNames: Object.fromEntries(tribes.map(tribe => [tribe.id, tribe.name])),
+    memberScores: body.memberScores,
+    rosterNames: rosterDisplayNames,
+    immuneRosterIds: body.immunityRosterIds.filter((id): id is string => typeof id === 'string'),
+    scoresFinalized: body.scoresFinalized,
+    council: openCouncil ? { attendingTribeId: openCouncil.attendingTribeId ?? null } : null,
+    myIdols: myIdols.map(idol => ({ name: idolDefinition(idol.powerType).name, playableAtCouncil: Boolean(idolDefinition(idol.powerType).action) })),
+    idolExpiryText: body.idolExpiryText,
+  })
+  const payload = { ...body, weekAdvice }
+
   if (fairPlayRedact) {
-    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(body))
+    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(payload))
   }
 
-  return NextResponse.json(body)
+  return NextResponse.json(payload)
 }

@@ -97,6 +97,11 @@
 }
 @media (prefers-reduced-motion:reduce){.svh-race span{transition:none}}
 /* Light mode: same scenes, cream page and cards; header text stays white over the dark-left veil. */
+.svh-advice ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.svh-advice-item{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;border-left:3px solid var(--svh-line);background:rgba(255,255,255,.03)}
+.svh-advice-warn{border-left-color:var(--svh-ember)}
+.svh-advice-good{border-left-color:#6fbf7a}
+.svh-advice-info{border-left-color:var(--svh-gold)}
 html[data-mode='light'] .svh{--svh-page:#f3eee3;--svh-card:rgba(255,252,245,.92);--svh-card-strong:rgba(255,250,240,.92);--svh-line:rgba(40,30,10,.10);--svh-surface:#fffaf0;background:var(--svh-page);color:#1d1a14}
 html[data-mode='light'] .svh-hero-veil{background:linear-gradient(180deg,rgba(243,238,227,0) 0%,rgba(243,238,227,.05) 45%,var(--svh-page) 100%),linear-gradient(90deg,rgba(20,16,8,.55) 0%,rgba(20,16,8,.15) 45%,transparent 70%)}
 html[data-mode='light'] .svh-card2{border-color:rgba(148,106,12,.35)}
