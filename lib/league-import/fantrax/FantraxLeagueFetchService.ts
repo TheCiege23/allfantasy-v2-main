@@ -274,15 +274,22 @@ export function splitLineup(
   sport?: string,
 ): { starters: string[]; bench: string[]; reserve: string[]; taxi?: string[] } | null {
   /*
-   * ⚠ MINORS → TAXI FOR NBA/NHL ONLY. A dynasty basketball/hockey league's
-   * minor-league stash is what our NBA/NHL catalogs call the taxi squad, and
-   * filing it as bench made a prospect look like a rostered NBA/NHL player.
-   * `MINORS` is the status this file's tests already name; it is not in a
-   * captured response (contracts/fantrax/GAPS.md), so a different spelling
-   * falls through to bench — today's behaviour, never IR. MLB and the football
-   * sports keep their split unchanged: native MLB has no taxi slots to land in.
+   * ⚠ MINORS → TAXI FOR NBA/NHL/MLB. A dynasty basketball/hockey/baseball league's
+   * minor-league stash is what our catalogs call the taxi squad, and filing it as
+   * bench made a prospect look like a rostered player and counted him against the
+   * active roster. `MINORS` is the status this file's tests already name; it is not
+   * in a captured response for any sport (contracts/fantrax/GAPS.md F-04), so a
+   * different spelling falls through to bench — the old behaviour, never IR.
+   *
+   * MLB joined 2026-10-26: it was left out because native MLB has no taxi slots, but
+   * the Team tab shows an imported roster's taxi list whatever the sport, and a taxi
+   * player is kept out of the roster limit (lib/league/rosterLimit.ts). The football
+   * sports keep their split unchanged.
    */
-  const taxiStatuses = isFantraxSplitSeasonSport(sport) ? FANTRAX_MINORS_STATUSES : null
+  const taxiStatuses =
+    isFantraxSplitSeasonSport(sport) || String(sport ?? '').trim().toLowerCase() === 'mlb'
+      ? FANTRAX_MINORS_STATUSES
+      : null
   const starters: string[] = []
   const bench: string[] = []
   const reserve: string[] = []

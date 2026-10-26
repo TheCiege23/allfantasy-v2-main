@@ -78,9 +78,22 @@ export function playerWaiverHoldUntil(
   return Number.isFinite(until.getTime()) && until > now ? until : null
 }
 
-/** "On waivers until Tue 3:00 PM" in the viewer's own time zone. */
-export function onWaiversUntilLabel(until: Date): string {
-  return `On waivers until ${until.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+/** The date in "On waivers until Tue 3:00 PM", in the viewer's own time zone and language. */
+export function onWaiversUntilDate(until: Date, locale?: string): string {
+  return until.toLocaleString(locale, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+}
+
+/**
+ * "On waivers until Tue 3:00 PM" in the viewer's own time zone. Pass the page's `tInterpolate` and
+ * language to get the translated label (`waiverClaim.onWaiversUntil`, «En reclamos hasta …» in Spanish);
+ * without them it stays English for callers that have no language context.
+ */
+export function onWaiversUntilLabel(
+  until: Date,
+  i18n?: { tInterpolate: (key: string, vars: Record<string, string>) => string; language?: string } | null,
+): string {
+  if (!i18n) return `On waivers until ${onWaiversUntilDate(until)}`
+  return i18n.tInterpolate('waiverClaim.onWaiversUntil', { date: onWaiversUntilDate(until, i18n.language) })
 }
 
 /**

@@ -85,6 +85,10 @@ taxi/IR slot counts are not imported.
 **Needed:** `getTeamRosters` + `getLeagueInfo.rosterInfo` from a public dynasty league that uses
 minors and IR slots (any sport).
 
+**2026-10-26:** MLB `MINORS` is now carried as the taxi squad too (it was filed as bench, so a
+prospect counted against the roster limit). Still synthetic only — the committed MLB capture
+(`tests/fixtures/fantrax/mlb-points-public.json`) has `ACTIVE` and `RESERVE` and nothing else.
+
 ## F-05 — Future draft picks (dynasty)
 
 `getDraftPicks.futureDraftPicks` was EMPTY in the only league measured (see `fantraxApi.ts`), so its
