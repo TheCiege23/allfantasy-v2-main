@@ -72,6 +72,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'partner-profiles': () => import('../partner-profiles/handler'),
   'payouts': () => import('../payouts/handler'),
   'power-rankings': () => import('../power-rankings/handler'),
+  'predictions': () => import('../predictions/handler'),
   'prestige-context': () => import('../prestige-context/handler'),
   'prestige-governance': () => import('../prestige-governance/handler'),
   'privacy': () => import('../privacy/handler'),
