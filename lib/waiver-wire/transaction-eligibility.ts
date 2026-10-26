@@ -12,7 +12,8 @@ import {
   removePlayerFromRosterData,
   rosterContainsPlayer,
 } from './roster-utils'
-import { countTowardRosterLimit, leagueRosterLimit } from '@/lib/league/rosterLimit'
+import { countTowardRosterLimit, importedIrOverflow, leagueRosterLimit } from '@/lib/league/rosterLimit'
+import type { RosterLegalityBlockingReason } from '@/lib/roster-legality/types'
 import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import { normalizeWaiverTypeForEngine, parseWaiverEngineConfig } from './waiver-engine-config'
 import { assertWeeklyDropLimit } from './waiver-validation'
@@ -51,6 +52,18 @@ export type WaiverClaimEligibilityInput = {
    * (lib/waiver-wire/season-phase-policy.ts): a `completed` season does not lock it.
    */
   offseasonFreeAgency?: boolean
+  /** Told what the gate let through but wants said — an imported roster's IR findings. Never a refusal. */
+  onNotice?: (message: string) => void
+}
+
+/**
+ * An IR finding the AF lineup template raises on an IMPORTED roster: a player whose IR row carries
+ * no injury status (imports store bare ids, so every one reads as ineligible) or more IR players
+ * than the template's spots. The provider owns an import's IR, and IR does not count against an
+ * import's roster limit (lib/league/rosterLimit.ts), so these are reported, not enforced.
+ */
+function isImportedIrIssue(reason: RosterLegalityBlockingReason): boolean {
+  return reason.sourceIssueCode === 'ir_ineligible_status' || (reason.sourceIssueCode === 'section_overflow' && reason.section === 'ir')
 }
 
 function sectionForPlayerId(playerData: unknown, pid: string): RosterSectionKey | null {
@@ -82,6 +95,8 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
         rosterSize: true,
         sport: true,
         settings: true,
+        platform: true,
+        irSlots: true,
         isDynasty: true,
         leagueVariant: true,
         lockAllMoves: true,
@@ -128,7 +143,14 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   }
 
   // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
-  const { limit: rosterSizeLimit, counts: rosterCounts } = leagueRosterLimit(league, 20)
+  const rosterLimit = leagueRosterLimit(league, 20)
+  const { limit: rosterSizeLimit, counts: rosterCounts } = rosterLimit
+  const imported = rosterCounts === 'imported'
+  const notices: string[] = []
+  const irOverflow = importedIrOverflow(roster.playerData, rosterLimit)
+  if (irOverflow) {
+    notices.push(`IR holds ${irOverflow.held} players; the imported league has ${irOverflow.slots} IR spots. Not enforced here — the host platform owns its IR.`)
+  }
   const dropId = dropPlayerId && String(dropPlayerId).trim() ? String(dropPlayerId).trim() : null
 
   if (dropId && !rosterContainsPlayer(roster.playerData, dropId)) {
@@ -206,9 +228,16 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
     // precisely above via `computePerPlayerKickoffLocks`. Treating the blanket weekly lock as
     // blocking here would fail every waiver add for ~2 of every 7 days, all season, regardless
     // of whether the move ever touched a starter slot.
-    const blocking = ev.result.blockingReasons.filter((r) => r.code !== 'LEAGUE_LINEUP_LOCK_ACTIVE')
+    const blocking = ev.result.blockingReasons.filter((r) => {
+      if (r.code === 'LEAGUE_LINEUP_LOCK_ACTIVE') return false
+      if (imported && isImportedIrIssue(r)) {
+        notices.push(r.message)
+        return false
+      }
+      return true
+    })
     if (blocking.length > 0) {
-      const ir = ev.result.irViolations.length
+      const ir = imported ? 0 : ev.result.irViolations.length
       const taxi = ev.result.taxiViolations.length
       const devy = ev.result.devyViolations.length
       if (ir || taxi || devy) {
@@ -218,6 +247,11 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
       }
       throw new Error(blocking[0]?.message ?? 'This transaction would leave your roster in an illegal state.')
     }
+  }
+
+  if (notices.length > 0) {
+    console.warn(`[waiver-eligibility] league ${leagueId} roster ${rosterId}: ${notices.join(' | ')}`)
+    for (const notice of notices) input.onNotice?.(notice)
   }
 }
 

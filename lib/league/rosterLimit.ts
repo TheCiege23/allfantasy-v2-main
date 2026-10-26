@@ -19,39 +19,74 @@
  * player told a dynasty team with a full taxi squad that its roster was full (2026-10-26). ⚠ MFL's
  * `rosterSize` is its starters plus taxi with no bench at all, already far below a real roster; this
  * only loosens it. Fantrax's minors limit is not captured (contracts/fantrax/GAPS.md F-04).
+ *
+ * IMPORTED leagues (lib/league/isNativeLeague.ts) also leave IR out ('imported'), owner's call
+ * 2026-10-26. Sleeper's `rosterSize` is `roster_positions.length` (lib/sleeper-sync.ts), which holds
+ * no IR spots — they are `settings.reserve_slots` — so an injured player counted against a limit that
+ * never had room for him: 191 of 200 taxi-configured Sleeper NFL leagues had a team over its own
+ * limit with taxi aside, 40 with IR aside too. A player counts by the SLOT the provider filed him in,
+ * not his injury status, so one who has recovered stays out of the count until a sync moves him.
+ * Native leagues keep 'all' / 'active' exactly as they were.
  */
-import { isReserveRosterSlot, resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { isInjuredReserveRosterSlot, isReserveRosterSlot, resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 
 export type RosterLimit = {
   limit: number
-  /** 'active': IR / taxi / devy players are not counted. 'all': every player but the taxi squad counts (legacy). */
-  counts: 'active' | 'all'
+  /**
+   * 'active': IR / taxi / devy players are not counted. 'all': every player but the taxi squad counts
+   * (native legacy). 'imported': every player but the taxi squad and IR counts.
+   */
+  counts: 'active' | 'all' | 'imported'
+  /** 'imported' only: the provider's IR spot count when the import recorded one, else null. */
+  irSlots?: number | null
 }
 
-export function leagueRosterLimit(
-  league: { sport?: string | null; settings?: unknown; rosterSize?: number | null },
-  fallback: number,
-): RosterLimit {
+type LimitLeague = {
+  sport?: string | null
+  settings?: unknown
+  rosterSize?: number | null
+  /** `League.platform`. Omitted reads as native, the stricter count — select it. */
+  platform?: string | null
+  /** `League.irSlots` — 0 by default, so only a positive value is evidence on its own. */
+  irSlots?: number | null
+}
+
+/**
+ * The provider's IR spot count, or null when the import did not record one. Sleeper's
+ * `settings.reserve_slots` is authoritative even at 0; `League.irSlots` defaults to 0 on every row,
+ * so it counts only when positive (every ESPN import reads 0 there although ESPN has IR spots).
+ */
+function importedIrSlots(league: LimitLeague): number | null {
+  const s = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : {}
+  const reserve = s.reserve_slots
+  if (reserve != null && reserve !== '' && Number.isFinite(Number(reserve))) return Math.max(0, Math.floor(Number(reserve)))
+  return league.irSlots != null && league.irSlots > 0 ? league.irSlots : null
+}
+
+export function leagueRosterLimit(league: LimitLeague, fallback: number): RosterLimit {
   const config = resolveRedraftRosterConfig(String(league.sport ?? 'NFL'), league.settings ?? null)
   if (config.source === 'commissioner') {
     return { limit: Math.max(1, config.maxRosterSize - config.irSlots - config.taxiSlots), counts: 'active' }
   }
-  return { limit: league.rosterSize ?? fallback, counts: 'all' }
+  const limit = league.rosterSize ?? fallback
+  if (isImportedPlatform(league.platform)) return { limit, counts: 'imported', irSlots: importedIrSlots(league) }
+  return { limit, counts: 'all' }
 }
 
 type Row = string | { id?: unknown; player_id?: unknown } | null | undefined
 const rowId = (row: Row): string =>
   typeof row === 'string' ? row : row && typeof row === 'object' ? String(row.id ?? row.player_id ?? '') : ''
 
-/** Players sitting in a reserve spot (IR / taxi / devy), from the lineup sections or the flat arrays. */
-export function reservePlayerIds(playerData: unknown): Set<string> {
+/** Ids in every lineup section / flat array whose key passes `keep`. */
+function idsInSlots(playerData: unknown, keep: (key: string) => boolean): Set<string> {
   const out = new Set<string>()
   if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) return out
   const data = playerData as Record<string, unknown>
   const sections = data.lineup_sections && typeof data.lineup_sections === 'object' ? (data.lineup_sections as Record<string, unknown>) : {}
   for (const [key, rows] of [...Object.entries(sections), ['reserve', data.reserve], ['taxi', data.taxi], ['ir', data.ir]] as const) {
-    if (!isReserveRosterSlot(key) || !Array.isArray(rows)) continue
+    if (!keep(key) || !Array.isArray(rows)) continue
     for (const row of rows as Row[]) {
       const id = rowId(row)
       if (id) out.add(id)
@@ -60,29 +95,46 @@ export function reservePlayerIds(playerData: unknown): Set<string> {
   return out
 }
 
+/** Players sitting in a reserve spot (IR / taxi / devy), from the lineup sections or the flat arrays. */
+export function reservePlayerIds(playerData: unknown): Set<string> {
+  return idsInSlots(playerData, isReserveRosterSlot)
+}
+
 /** Players on the taxi squad, from `lineup_sections.taxi` or the flat `taxi` array. */
 export function taxiPlayerIds(playerData: unknown): Set<string> {
-  const out = new Set<string>()
-  if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) return out
-  const data = playerData as Record<string, unknown>
-  const sections = data.lineup_sections && typeof data.lineup_sections === 'object' ? (data.lineup_sections as Record<string, unknown>) : {}
-  for (const rows of [sections.taxi, data.taxi]) {
-    if (!Array.isArray(rows)) continue
-    for (const row of rows as Row[]) {
-      const id = rowId(row)
-      if (id) out.add(id)
-    }
-  }
+  return idsInSlots(playerData, (key) => key === 'taxi')
+}
+
+/** Players on IR — `lineup_sections.ir`, the flat `reserve` / `ir` arrays — never taxi or devy. */
+export function irPlayerIds(playerData: unknown): Set<string> {
+  return idsInSlots(playerData, isInjuredReserveRosterSlot)
+}
+
+/**
+ * The roster's players that do NOT count against the limit. Every check that adds, drops or moves a
+ * player reads this one set, so a player leaving from an uncounted spot frees nothing.
+ */
+export function uncountedPlayerIds(playerData: unknown, counts: RosterLimit['counts']): Set<string> {
+  if (counts === 'active') return reservePlayerIds(playerData)
+  const out = taxiPlayerIds(playerData)
+  if (counts === 'imported') for (const id of irPlayerIds(playerData)) out.add(id)
   return out
 }
 
 /** How many of this roster's players count against `limit`. */
 export function countTowardRosterLimit(playerData: unknown, counts: RosterLimit['counts']): number {
-  const ids = getRosterPlayerIds(playerData)
-  if (counts === 'all') {
-    const taxi = taxiPlayerIds(playerData)
-    return ids.filter((id) => !taxi.has(id)).length
-  }
-  const reserve = reservePlayerIds(playerData)
-  return ids.filter((id) => !reserve.has(id)).length
+  const uncounted = uncountedPlayerIds(playerData, counts)
+  return getRosterPlayerIds(playerData).filter((id) => !uncounted.has(id)).length
+}
+
+/**
+ * An imported roster holding more IR players than the provider has IR spots. Reported, never
+ * enforced: the provider is the system of record for its own IR, and an over-full IR there is the
+ * provider's state, not a move made here. Null when the count is fine or the slot count is unknown.
+ */
+export function importedIrOverflow(playerData: unknown, rosterLimit: RosterLimit): { held: number; slots: number } | null {
+  if (rosterLimit.counts !== 'imported' || rosterLimit.irSlots == null) return null
+  const onRoster = new Set(getRosterPlayerIds(playerData))
+  const held = [...irPlayerIds(playerData)].filter((id) => onRoster.has(id)).length
+  return held > rosterLimit.irSlots ? { held, slots: rosterLimit.irSlots } : null
 }
