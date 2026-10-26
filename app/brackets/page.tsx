@@ -30,8 +30,8 @@ export const dynamic = "force-dynamic"
  * picks had been locked since the first kickoff. v3, per the owner's call:
  * the World Cup is switched off as a destination, MLB and NHL lead (pools are
  * creatable now, and picks lock per series, so mid-postseason is fine), and
- * the College Football Playoff (December) and NFL playoffs (January) are
- * shown as up next, not as links — no playoff template exists for either.
+ * the College Football Playoff and NBA Cup now link to their single-game
+ * bracket league creation flow. NFL remains up next.
  *
  * Same stage as v2 (dark-teal wash, grid overlay, trophy lockup, two-line
  * gradient title); the badge, CTAs and the up-next row are what changed.
@@ -111,10 +111,8 @@ const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB" | "NCAAF" | "NBA_CUP") =>
   `/brackets/leagues/new?sport=${sport}&challengeType=playoff_challenge`
 
 /*
- * Order is the season, as of the 2026-10-01 owner call: MLB and NHL are open
- * now; the College Football Playoff is up next in December and the NFL
- * playoffs in January (no playoff template exists for either yet, so they are
- * not links); the World Cup ended in July and is switched off as a destination.
+ * The grid lists creatable bracket leagues first. CFP and NBA Cup share the
+ * playoff challenge service but keep separate tournament formats and seeds.
  * When the calendar moves, move these — a card's status is a claim about today.
  */
 const SPORT_CARDS: SportCard[] = [
