@@ -22,7 +22,7 @@ import { loadWaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-gate"
 import {
   DROPPED_PLAYER_ON_WAIVERS_MESSAGE,
   loadDroppedPlayerHold,
-  loadDroppedPlayerWaiverHours,
+  loadDroppedPlayerHoldPolicy,
 } from "@/lib/waiver-wire/dropped-player-waivers"
 import { afterRunRefusalMessage, loadAfterRunFreeAgencyState } from "@/lib/waiver-wire/after-run-free-agency"
 import { LINEUP_WARNING_CODE, lineupWarningConfirmed, loadLineupFillWarning } from "@/lib/waiver-wire/lineup-fill-warning"
@@ -134,8 +134,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     const immediateAllowed = settings.normalizedWaiverType === "fcfs" || settings.instantFaAfterClear === true || afterRun
     if (immediateAllowed && settings.normalizedWaiverType !== "fcfs") {
       // Fails CLOSED like the daily path: an unreadable hold means a claim, never a free add.
-      const hold = await loadDroppedPlayerWaiverHours(leagueId, settings.normalizedWaiverType)
-        .then((hours) => loadDroppedPlayerHold(leagueId, String(addPlayerId), hours))
+      const hold = await loadDroppedPlayerHoldPolicy(leagueId, settings)
+        .then((policy) => loadDroppedPlayerHold(leagueId, String(addPlayerId), policy))
         .catch(() => "unknown" as const)
       if (hold === "unknown") return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
       if (hold) {

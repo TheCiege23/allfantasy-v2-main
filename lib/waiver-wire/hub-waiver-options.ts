@@ -8,6 +8,7 @@
  * validate and route the values there. Pure; the write is in
  * lib/league/execute-league-settings-patch.ts.
  */
+import { HOLD_HOURS_BY_POSITION_KEY, parseHoldHoursByPositionInput } from './hold-by-position'
 
 /** Hub patch keys. Each names "waiver" so the settings lock files it under the waivers group. */
 export const HUB_WAIVER_OPTION_KEYS = [
@@ -18,6 +19,7 @@ export const HUB_WAIVER_OPTION_KEYS = [
   'waiverPlayoffRule',
   'waiverFreeAgencyMode',
   'waiverFaabRollover',
+  'waiverHoldHoursByPosition',
 ] as const
 
 /**
@@ -133,6 +135,8 @@ export type HubWaiverOptions = {
   playoffWaiverRule?: PlayoffWaiverRule
   freeAgencyMode?: FreeAgencyMode
   faabRolloverRule?: FaabRolloverRule
+  /** Per-position after-drop periods (lib/waiver-wire/hold-by-position.ts); `{}` clears them. */
+  holdHoursByPosition?: Record<string, number>
 }
 
 /**
@@ -210,12 +214,18 @@ export function parseHubWaiverOptions(
     options.faabRolloverRule = v as FaabRolloverRule
   }
 
+  if (body.waiverHoldHoursByPosition !== undefined) {
+    const parsed = parseHoldHoursByPositionInput(body.waiverHoldHoursByPosition)
+    if (!parsed.ok) return { ok: false, error: parsed.error }
+    options.holdHoursByPosition = parsed.value
+  }
+
   return { ok: true, options }
 }
 
 /**
  * The `waiverEngineConfig` keys a hub save writes: the $0-bid flag, the season-phase rules
- * (lib/waiver-wire/season-phase-policy.ts), the free-agency mode and the FAAB rollover rule. Empty when the save names none of them.
+ * (lib/waiver-wire/season-phase-policy.ts), the free-agency mode, the FAAB rollover rule and the per-position after-drop periods. Empty when the save names none of them.
  */
 export function hubWaiverEngineConfigPatch(options: HubWaiverOptions): Record<string, unknown> {
   return {
@@ -224,6 +234,7 @@ export function hubWaiverEngineConfigPatch(options: HubWaiverOptions): Record<st
     ...(options.playoffWaiverRule !== undefined ? { playoff_waiver_rules: options.playoffWaiverRule } : {}),
     ...(options.freeAgencyMode !== undefined ? { free_agency_mode: options.freeAgencyMode } : {}),
     ...(options.faabRolloverRule !== undefined ? { faab_rollover_rule: options.faabRolloverRule } : {}),
+    ...(options.holdHoursByPosition !== undefined ? { [HOLD_HOURS_BY_POSITION_KEY]: options.holdHoursByPosition } : {}),
   }
 }
 

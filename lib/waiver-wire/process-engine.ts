@@ -26,7 +26,7 @@ import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
-import { DROPPER_RECLAIM_MESSAGE, droppedPlayerWaiverHours, loadDroppedPlayerHolds, type DroppedPlayerHold } from './dropped-player-waivers'
+import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
 
@@ -207,11 +207,16 @@ export async function processWaiverClaimsForLeague(
   // above, like any claim. An unreadable hold processes nothing this run rather than run a held
   // player's claims early; they are all still pending for the next one.
   const runAt = new Date()
-  const holdHours = droppedPlayerWaiverHours({ normalizedWaiverType: configuredWaiverType, waiverHours: league.waiverHours })
+  const holdPolicy = droppedPlayerHoldPolicy({
+    normalizedWaiverType: configuredWaiverType,
+    waiverHours: league.waiverHours,
+    waiverEngineConfig: effectiveSettings.waiverEngineConfig,
+    sport: league.sport ? String(league.sport) : null,
+  })
   let dropHolds: Map<string, DroppedPlayerHold> = new Map()
-  if (holdHours > 0) {
+  if (maxHoldHours(holdPolicy) > 0) {
     try {
-      dropHolds = await loadDroppedPlayerHolds(leagueId, holdHours, {
+      dropHolds = await loadDroppedPlayerHolds(leagueId, holdPolicy, {
         now: runAt,
         playerIds: Array.from(new Set(orderedAll.map((c) => String(c.addPlayerId)))),
       })
