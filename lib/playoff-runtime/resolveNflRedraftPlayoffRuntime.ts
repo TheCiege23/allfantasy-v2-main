@@ -16,6 +16,8 @@ import {
 } from './canonicalNflRedraftPlayoffRuntime'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 import { CONSOLATION_ROUND_OFFSET } from './playoffRoundWeeks'
+import { loadSeasonRosterDivisions, type SeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
+import { divisionRecords } from '@/lib/league/divisions/leagueDivisions'
 
 export type NflRedraftPlayoffRuntimeResolved =
   | {
@@ -258,6 +260,8 @@ export interface PlayoffRuntimeDeps {
   loadRules: (leagueId: string) => Promise<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
   /** Regular-season results, read only for the `head_to_head` seeding tiebreaker. */
   loadRegularSeasonMatchups: (seasonId: string) => Promise<NflRedraftRegularSeasonMatchupInput[]>
+  /** The commissioner's divisions (`League.settings.division_config`); null = no divisions. */
+  loadDivisions: (leagueId: string, rosters: ReadonlyArray<{ id: string; ownerId: string }>) => Promise<SeasonRosterDivisions | null>
 }
 
 /**
@@ -289,6 +293,47 @@ async function loadRegularSeasonMatchupsFromDb(seasonId: string): Promise<NflRed
 const defaultPlayoffRuntimeDeps: PlayoffRuntimeDeps = {
   loadRules: (leagueId) => resolveCanonicalLeagueRules(leagueId),
   loadRegularSeasonMatchups: loadRegularSeasonMatchupsFromDb,
+  loadDivisions: loadSeasonRosterDivisions,
+}
+
+const COUNTED_STATUSES = new Set(['final', 'completed', 'complete'])
+
+/**
+ * Each roster's division and division record, onto the team rows the runtime seeds from. Division
+ * records come from the same regular-season rows head-to-head counts.
+ */
+export function applyDivisionsToTeams(
+  teams: NflRedraftPlayoffTeamInput[],
+  divisions: SeasonRosterDivisions | null,
+  regularSeasonMatchups: NflRedraftRegularSeasonMatchupInput[],
+): NflRedraftPlayoffTeamInput[] {
+  if (!divisions || divisions.byRoster.size === 0) return teams
+  const divisionOf = (rosterId: string) => divisions.byRoster.get(rosterId)?.key ?? null
+  const records = divisionRecords(
+    regularSeasonMatchups.filter(
+      (m) => !m.isMedianMatchup && (m.type == null || String(m.type).toLowerCase() === 'regular') && COUNTED_STATUSES.has(String(m.status ?? '').toLowerCase()),
+    ),
+    divisionOf,
+  )
+  return teams.map((team) => {
+    const division = divisions.byRoster.get(team.rosterId)
+    if (!division) return team
+    const record = records.get(team.rosterId) ?? { wins: 0, losses: 0, ties: 0 }
+    return {
+      ...team,
+      divisionId: division.key,
+      divisionName: division.name,
+      divisionWins: record.wins,
+      divisionLosses: record.losses,
+      divisionTies: record.ties,
+    }
+  })
+}
+
+/** The rules, carrying the divisions rule when the league has divisions. */
+function rulesWithDivisions(rules: NflRedraftPlayoffRulesInput, divisions: SeasonRosterDivisions | null): NflRedraftPlayoffRulesInput {
+  if (!divisions || divisions.byRoster.size === 0) return rules
+  return { ...rules, playoffs: { ...rules.playoffs, divisionPlayoffRule: divisions.playoffRule } }
 }
 
 export async function resolveNflRedraftPlayoffRuntime(input: {
@@ -296,6 +341,8 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   leagueId?: string | null
   week?: number | null
   preloadedSeason?: PlayoffSeasonForRuntime | null
+  /** Generation only: read the settings as they are now, not as the existing bracket was built. */
+  ignoreStoredBracketSettings?: boolean
 }, deps: Partial<PlayoffRuntimeDeps> = {}): Promise<NflRedraftPlayoffRuntimeResolved> {
   const season = input.preloadedSeason ?? (await resolveSeason(input))
   if (!season) return { ok: false, reason: 'season_not_found' }
@@ -315,18 +362,30 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   const matchups = (season.playoffRounds ?? []).flatMap(toMatchupInput)
   const loadRegularSeasonMatchups = deps.loadRegularSeasonMatchups ?? defaultPlayoffRuntimeDeps.loadRegularSeasonMatchups
   const regularSeasonMatchups = await loadRegularSeasonMatchups(season.id)
-  const state = buildNflRedraftPlayoffRuntimeState({
+  const loadDivisions = deps.loadDivisions ?? defaultPlayoffRuntimeDeps.loadDivisions
+  const divisions = await loadDivisions(season.leagueId, season.rosters.map((r) => ({ id: r.id, ownerId: r.ownerId })))
+  const built = buildNflRedraftPlayoffRuntimeState({
     leagueId: season.leagueId,
     seasonId: season.id,
     season: season.season,
     week,
-    rules,
-    teams: season.rosters.map(toTeamInput),
+    rules: rulesWithDivisions(rules, divisions),
+    teams: applyDivisionsToTeams(season.rosters.map(toTeamInput), divisions, regularSeasonMatchups),
     matchups,
     regularSeasonMatchups,
     bracketStatus: season.playoffBracket?.status ?? null,
     bracketId: season.playoffBracket?.id ?? null,
   })
+  // A generated bracket keeps the reseed choice it was generated with: flipping the setting
+  // mid-playoffs must not re-pair half a bracket one way and half the other.
+  const storedReseed = asRecord(season.playoffBracket?.structure).reseedAfterEachRound
+  const state =
+    !input.ignoreStoredBracketSettings &&
+    built.bracket.generated &&
+    typeof storedReseed === 'boolean' &&
+    storedReseed !== built.settings.reseedAfterEachRound
+      ? { ...built, settings: { ...built.settings, reseedAfterEachRound: storedReseed || built.settings.byePlan != null } }
+      : built
 
   return {
     ok: true,
@@ -367,6 +426,11 @@ export function rulesWithPlayoffTeamOverride(
         : state.settings.divisionWinnersEnabled
           ? 'division_winners_then_standings'
           : 'standings',
+      divisionPlayoffRule: state.settings.divisionWinnersEnabled
+        ? state.settings.divisionWinnersTopSeeds
+          ? 'top_seeds'
+          : 'guaranteed'
+        : 'none',
       tiebreakerRules: state.settings.tiebreakers,
       byeRules: state.settings.firstRoundByes > 0 ? 'top_seed_byes' : null,
       reseedBehavior: state.settings.reseedAfterEachRound ? 'reseed_after_each_round' : null,
@@ -393,6 +457,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
   const resolved = await resolveNflRedraftPlayoffRuntime({
     seasonId: input.seasonId,
     preloadedSeason: input.preloadedSeason,
+    ignoreStoredBracketSettings: true,
   })
   if (!resolved.ok) throw new Error(resolved.reason)
   const state =
