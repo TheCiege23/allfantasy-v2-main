@@ -101,6 +101,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const hasServerAdminAccess = view.lockDiagnostics?.hasPoolAdminAccess === true
   const hasAdminAccess = hasClientAdminAccess || hasServerAdminAccess
   const canManagePlayoffPool = safeChallenge.ownerUserId === view?.viewerUserId || hasAdminAccess
+  const singleGameSport = ["ncaaf", "nba_cup"].includes(String(safeChallenge.sport ?? "").toLowerCase())
+  const canSyncPlayoffPool = canManagePlayoffPool && !singleGameSport
   const canUseAutofillResults = safeChallenge.isTestMode && hasAdminAccess
   const isOwner = safeChallenge.ownerUserId === view?.viewerUserId
 
@@ -219,14 +221,16 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           <span className="rounded-full bg-indigo-100 px-3 py-1 text-indigo-900">
             {participants.length} participant{participants.length !== 1 ? "s" : ""}
           </span>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{totalSeries} series</span>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{totalSeries} {singleGameSport ? "games" : "series"}</span>
           {safeChallenge.isTestMode ? <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-900">Test mode</span> : null}
         </div>
         {hasTemplateSeries ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              <span data-testid="playoff-template-warning">Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks.</span>
+              <span data-testid="playoff-template-warning">{singleGameSport
+                ? "Official teams and game times must be published by an admin before picks open."
+                : "Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks."}</span>
             </div>
           </div>
         ) : null}
@@ -288,7 +292,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 Invite
               </button>
             )}
-            {canManagePlayoffPool ? (
+            {canSyncPlayoffPool ? (
               <button
                 type="button"
                 onClick={() => syncToolsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -340,7 +344,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         )}
       </section>
 
-      {canManagePlayoffPool ? (
+      {canSyncPlayoffPool ? (
         <section
           ref={syncToolsRef}
           id="playoff-commissioner-sync-tools"
@@ -486,7 +490,9 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="playoff-dashboard-leaderboard">
         <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
         <p className="mt-1 text-xs font-semibold text-slate-500">
-          {hasScoredLeaderboard ? "Scored leaderboard from completed series results." : "Pick-count leaderboard until series results sync."}
+          {hasScoredLeaderboard
+            ? `Scored leaderboard from completed ${singleGameSport ? "games" : "series"}.`
+            : singleGameSport ? "Pick-count leaderboard until final scores are entered." : "Pick-count leaderboard until series results sync."}
         </p>
         {leaderboardRows.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No leaderboard entries yet.</p>
