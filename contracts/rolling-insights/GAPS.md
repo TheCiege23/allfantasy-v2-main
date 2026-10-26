@@ -549,26 +549,46 @@ credential-bearing query URL. Credentials must still be supplied only via env.
 
 Production has no ri.contract_probe_log table (to_regclass returned null). The committed fixture and this contract record the capture; no schema was created merely to log a probe.
 
-## 📏 MEASURED 2026-10-26 — NHL 2025 `player_season_stats`: goalie decisions and shutouts look incomplete
+## 📏 MEASURED 2026-10-26 — NHL 2025 `player_season_stats`: goalie decisions and shutouts are short IN THE VENDOR'S DATA
 
-Read-only SELECTs on our own `player_season_stats` (source `rolling_insights`, season 2025). No
-provider call was made; this describes what ingestion stored, and it is not yet known whether the
-vendor or our ingestion is short.
+Read-only SELECTs on our own tables. No provider call was made.
 
-| NHL goalie totals | 2023 | 2024 | 2025 |
-|---|---:|---:|---:|
-| wins | 1,279 | 1,299 | **651** (across 2,730 goalie games) |
-| shutouts | — | 151 | **0** |
+| NHL goalie totals (`/player-stats/{season}/NHL`, `regular_season`) | 2022 | 2023 | 2024 | 2025 | 2026 (to 10-25) |
+|---|---:|---:|---:|---:|---:|
+| goalie games | 2,782 | 2,798 | 2,764 | 2,730 | 369 |
+| wins | 1,283 | 1,279 | 1,299 | **651** | 173 |
+| losses | 899 | 913 | 933 | **446** | 128 |
+| overtime losses | 302 | 271 | 270 | **163** | 41 |
+| shutouts | 115 | 142 | 151 | **0** | **0** |
 
-Saves, shots against and goals allowed look complete for 2025, and skater totals look like a full
-season (8,068 goals against 8,085 in 2023 and 7,898 in 2024). Separately, `shootout_goals` is 0 in
-every stored season.
+Saves, shots against, goals allowed and time on ice are complete for 2025 (7,484 GA against 7,377 in
+2024), and skater totals look like a full season (8,068 goals against 8,085 in 2023 and 7,898 in 2024).
+`shootout_goals` is 0 in every stored season.
+
+**Verdict: the vendor's numbers, not our ingestion.** Settled on these points:
+
+- **Short per player, not by missing rows.** Karel Vejmelka (RI id 2558, Utah) 2025: `games_played` 64,
+  `saves` 1,457, `shots_against` 1,626 — and `win` 20, `loss` 8, `overtime_loss` 1, 29 decisions in 64
+  games. Juuse Saros (1022): 59 GP, 13-8-5. A partial sync or a dropped row would shorten saves and games
+  too; they are full.
+- **Stored verbatim.** `rollingInsightsPlayerStats.ts` passes `regular_season` through, only flattening
+  nested objects (NHL has none). `fantasy_stat_lines` keeps the same block UNFLATTENED from the same run,
+  and carries the same values (Saros 13-8-5, `shutouts: 0`).
+- **No other key.** The 2025 goalie rows carry exactly the 2022–2024 key set (`win`, `loss`,
+  `overtime_loss`, `shutouts`, `saves`, `shots_against`, `goals_allowed`, `time_on_ice`, `games_played`),
+  all numbers; nothing nested, nothing renamed.
+- **One write, not a stale one.** Every 2025 NHL row has one `updatedAt` (2026-10-22 23:26 UTC); the
+  2022–2024 backfill ran 2026-10-23 through the same code and its decisions are full.
+- **No season split.** 2026 is the 2026-27 season (369 goalie games, 342 decisions, as expected).
+- **Shutouts are 0 in `/live` too, in 2026.** Jake Oettinger, DAL vs BUF, 2026-10-08: `time_on_ice`
+  60:00, `saves` 26, `shots_against` 26, `goals_allowed` 0, `win` 1, `shutouts` 0 (`player_game_stats`,
+  source `rolling_insights_live`). Five such lines this season, all `shutouts: 0`. So
+  `dailySportStatNormalization.ts` (`g_so` <- `shutouts`) scores no NHL shutout this season either —
+  a separate, LIVE scoring consequence, not only a prior-season one.
 
 **Consequence today:** the daily-sport prior-season blend (`lib/projections/dailySportSeasonTotals.ts`)
-uses 2025 season totals for NHL skaters only. Goalies are excluded and `so_g` is left unmapped
-until this is explained.
+uses 2025 season totals for NHL skaters only. Goalies are excluded and `so_g` is left unmapped.
 
-**Still to settle (do not probe):** whether `/season-stats` for NHL reports goalie W/SO in a field
-our ingestion does not read, or the vendor's 2025 goalie decisions are incomplete. Ask the vendor,
-or capture via `scripts/probe.sh` only when adding that endpoint/sport combination, with the fixture
-committed in the same change.
+**Open — vendor question, do not probe:** why 2025 goalie W/L/OTL in `/player-stats/2025/NHL` cover about
+half the decisions, and whether `shutouts` is still populated anywhere (`/player-stats` 2025 and 2026,
+`/live` 2026). A re-sync would not help until the vendor answers: we already store what they send.
