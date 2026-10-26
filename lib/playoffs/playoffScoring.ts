@@ -35,6 +35,17 @@ export type PlayoffPickResult = {
  * always was", not "your correct pick was worth nothing".
  */
 const ROUND_POINTS_BY_SPORT: Partial<Record<PlayoffSport, Partial<Record<PlayoffRoundKey, number>>>> = {
+  ncaaf: {
+    cfp_first_round: 1,
+    cfp_quarterfinals: 2,
+    cfp_semifinals: 4,
+    cfp_championship: 8,
+  },
+  nba_cup: {
+    cup_quarterfinals: 1,
+    cup_semifinals: 2,
+    cup_championship: 4,
+  },
   mlb: {
     wild_card: 5,
     division_series: 10,
