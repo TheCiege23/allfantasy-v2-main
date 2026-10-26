@@ -273,7 +273,10 @@ const EN: BracketsDictionary = {
     "NCAA tournament bracket pool. Coming next spring.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "College Football Playoff bracket pool. Opens in December.",
+    "Pick all 11 College Football Playoff games with your league.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Pick the seven-game knockout bracket with your league.",
   "brk.hub.sports.sport.soccer": "Soccer",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros, and Copa América brackets. Coming soon.",
@@ -512,7 +515,10 @@ const ES: BracketsDictionary = {
     "Grupo bracket del torneo NCAA. Llega la próxima primavera.",
   "brk.hub.sports.sport.collegeFootball": "Fútbol americano universitario",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Grupo de bracket del Playoff de fútbol americano universitario. Abre en diciembre.",
+    "Pronostica los 11 partidos del College Football Playoff con tu grupo.",
+  "brk.hub.sports.sport.nbaCup": "Copa NBA",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Pronostica los siete partidos eliminatorios con tu grupo.",
   "brk.hub.sports.sport.soccer": "Fútbol",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Eurocopa y Copa América. Próximamente.",
@@ -753,7 +759,10 @@ const ZH: BracketsDictionary = {
     "NCAA 錦標賽對戰群組。明年春天推出。",
   "brk.hub.sports.sport.collegeFootball": "大學美式足球",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "大學美式足球季後賽對戰群組。12 月開放。",
+    "與聯盟一起預測大學美式足球季後賽的 11 場比賽。",
+  "brk.hub.sports.sport.nbaCup": "NBA 盃",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "與聯盟一起預測七場淘汰賽。",
   "brk.hub.sports.sport.soccer": "足球",
   "brk.hub.sports.sport.soccer.desc":
     "歐冠、歐錦賽與美洲盃對戰群組。即將推出。",
@@ -995,7 +1004,10 @@ const FIL: BracketsDictionary = {
     "NCAA tournament bracket pool. Darating sa susunod na tagsibol.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Bracket pool ng College Football Playoff. Magbubukas sa Disyembre.",
+    "Piliin ang mananalo sa 11 laro ng College Football Playoff kasama ang liga.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Piliin ang mananalo sa pitong knockout game kasama ang liga.",
   "brk.hub.sports.sport.soccer": "Soccer",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros, at Copa América brackets. Malapit na.",
@@ -1238,7 +1250,10 @@ const VI: BracketsDictionary = {
     "Pool bracket giải NCAA. Sẽ có vào mùa xuân năm sau.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Nhóm bracket College Football Playoff. Mở vào tháng 12.",
+    "Dự đoán 11 trận College Football Playoff cùng giải đấu của bạn.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Dự đoán bảy trận loại trực tiếp cùng giải đấu của bạn.",
   "brk.hub.sports.sport.soccer": "Bóng đá",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros và Copa América. Sắp có.",
