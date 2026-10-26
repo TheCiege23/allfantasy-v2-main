@@ -38,7 +38,7 @@ type PlayoffProjectionMode = "official" | "user_projection"
  * branch is on the sport string and nothing else, so an NBA pool renders
  * byte-identically to yesterday.
  */
-const MLB_BOARD_SPORTS = new Set(["mlb"])
+const MIRRORED_BOARD_SPORTS = new Set(["mlb", "ncaaf", "nba_cup"])
 
 export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const router = useRouter()
@@ -69,7 +69,8 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const hasTemplateSeries = series.some((item) => /^Winner\s+S\d+$/i.test(item.homeTeamName) || /^Winner\s+S\d+$/i.test(item.awayTeamName)) ||
     (view.challenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
   const hasAdminPoolAccess = hasPoolAdminAccess(session?.user) || view.lockDiagnostics?.hasPoolAdminAccess === true
-  const canSyncSeries = view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
+  const canSyncSeries = ["nba", "nhl", "mlb"].includes(String(view.challenge.sport ?? "").toLowerCase()) &&
+    (view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess)
   const canShowPickResultsToggle = activeEntry?.userId === view.viewerUserId || view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
   const canUseLatePicks = view.lockDiagnostics?.viewerCanLatePick ?? (view.challenge.ownerUserId === view.viewerUserId || view.challenge.isTestMode || hasAdminPoolAccess)
   const showLockDiagnostics = canSyncSeries || canUseLatePicks
@@ -221,7 +222,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
    * inline, and it is always the entry's own projection, which is the only
    * mode you can pick from.
    */
-  if (MLB_BOARD_SPORTS.has(String(view.challenge.sport ?? "").toLowerCase())) {
+  if (MIRRORED_BOARD_SPORTS.has(String(view.challenge.sport ?? "").toLowerCase())) {
     return (
       <>
         <MlbBracketBoard
