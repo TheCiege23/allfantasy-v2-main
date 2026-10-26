@@ -25,7 +25,7 @@ import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPla
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { buildDisplayPlayerMap, type DisplayPlayerMap, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import { buildPlayerRow, buildSwapCandidates, initOrSyncLineupLists, type RosterLineupLists } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
-import { resolveLineupMove, seatStartersInSlots, type LineupMoveContext, type LineupSpot } from '@/lib/league/native/lineupMoves'
+import { resolveLineupMove, seatStartersInSlots, startersOnBye, type LineupMoveContext, type LineupSpot } from '@/lib/league/native/lineupMoves'
 import { isIrEligibleStatus, type IrRules } from '@/lib/roster-lineup-engine/irEligibility'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { writeAuthorityCopy } from '@/lib/league/write-authority'
@@ -65,7 +65,7 @@ type DbRoster = {
   lineupLockHelp?: string | null
   /** Daily-lineup leagues only: the week day by day (`lib/redraft/dailyLineupView.ts`). */
   dailyLineups?: DailyLineupView | null
-  slotLimits?: { bench?: number | null; ir?: number | null } | null
+  slotLimits?: { bench?: number | null; ir?: number | null; taxi?: number | null } | null
   /** Per-player locks from the server's lock context (kickoff, daily-lineup schedule locks). */
   lineupLock?: { lockedPlayerIds?: string[] | null; perPlayerReasons?: Record<string, string> | null } | null
   irRules?: IrRules | null
@@ -77,6 +77,7 @@ const DRAG_PREFIX = 'player:'
 function spotFromDropId(id: string): LineupSpot | null {
   if (id === 'bench') return { kind: 'bench' }
   if (id === 'ir') return { kind: 'ir' }
+  if (id === 'taxi') return { kind: 'taxi' }
   const m = /^slot:(\d+)$/.exec(id)
   return m ? { kind: 'starter', slotIndex: Number(m[1]) } : null
 }
@@ -132,7 +133,8 @@ function gameLine(p: DisplayPlayerRecord | undefined): string {
   if (!p) return ''
   const bits: string[] = []
   if (p.team) bits.push(p.team)
-  if (p.opponent) bits.push(`${p.homeAway === 'away' ? '@' : 'vs'} ${p.opponent}`)
+  if (String(p.opponent ?? '').toUpperCase() === 'BYE') bits.push('Bye week')
+  else if (p.opponent) bits.push(`${p.homeAway === 'away' ? '@' : 'vs'} ${p.opponent}`)
   if (gameDone(p)) bits.push('Final')
   else if (p.gameClock) bits.push(p.gameClock)
   else {
@@ -275,6 +277,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   /** Bench spots the commissioner set (roster positions → BN); each unfilled one shows as an open slot. */
   const benchCapacity = data?.slotLimits?.bench ?? null
   const hasIr = (irCapacity ?? 0) > 0 || Boolean(lists?.ir.some(Boolean))
+  const taxiCapacity = data?.slotLimits?.taxi ?? null
+  /** Shown when the league has a taxi squad, or when someone already sits on one. */
+  const hasTaxi = (taxiCapacity ?? 0) > 0 || Boolean(lists?.taxi.some(Boolean))
 
   const nextLock = useMemo(() => {
     if (!lists) return null
@@ -285,6 +290,12 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     }
     return best
   }, [lists, players, now])
+
+  /** Weekly lineups only: a daily league has no bye weeks, only days without a game. */
+  const byeStarters = useMemo(
+    () => (lists && editable && !daily ? startersOnBye(lists.starters, (id) => players[id], data?.leagueWeek) : []),
+    [lists, editable, daily, players, data?.leagueWeek],
+  )
 
   const savingRef = useRef(false)
   const save = useCallback(
@@ -333,9 +344,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const moveCtx: LineupMoveContext | null = useMemo(
     () =>
       lists
-        ? { lists, slots, positionOf: (id: string) => players[id]?.position, isLocked: locked, lockReason, canIr, limits: { bench: data?.slotLimits?.bench ?? null, ir: hasIr ? irCapacity : 0 } }
+        ? { lists, slots, positionOf: (id: string) => players[id]?.position, isLocked: locked, lockReason, canIr, limits: { bench: data?.slotLimits?.bench ?? null, ir: hasIr ? irCapacity : 0, taxi: hasTaxi ? taxiCapacity : 0 } }
         : null,
-    [lists, slots, players, locked, lockReason, canIr, data?.slotLimits?.bench, hasIr, irCapacity],
+    [lists, slots, players, locked, lockReason, canIr, data?.slotLimits?.bench, hasIr, irCapacity, hasTaxi, taxiCapacity],
   )
   const tryMove = useCallback((playerId: string, target: LineupSpot) => (moveCtx ? resolveLineupMove(moveCtx, playerId, target) : null), [moveCtx])
   const doMove = useCallback(
@@ -456,7 +467,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     )
   }
 
-  type RowKind = 'starter' | 'bench' | 'ir'
+  type RowKind = 'starter' | 'bench' | 'ir' | 'taxi'
   const renderRow = (id: string, slot: { label: string; index?: number } | null, kind: RowKind, slotIndex?: number) => {
     const p = id ? players[id] : undefined
     const isLocked = id ? locked(id) : false
@@ -466,7 +477,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         ((move.kind === 'starter' && kind === 'starter' && move.slotIndex === slotIndex) ||
           (move.kind === 'bench' && kind === 'bench' && move.playerId === id)),
     )
-    const pill = kind === 'starter' ? slot?.label ?? '—' : kind === 'ir' ? 'IR' : 'BN'
+    const pill = kind === 'starter' ? slot?.label ?? '—' : kind === 'ir' ? 'IR' : kind === 'taxi' ? 'TX' : 'BN'
     const reasonId = reason ? `nls-lock-${kind}-${slotIndex ?? id}` : undefined
     const cells = (
       <>
@@ -489,7 +500,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                 <button type="button" className="nls-btn" data-size="sm" disabled aria-describedby={reasonId}>Locked</button>
                 {reason ? <small className="nls-lock-reason" id={reasonId}>{reason}</small> : null}
               </>
-            ) : kind === 'ir' ? (
+            ) : kind === 'ir' || kind === 'taxi' ? (
               <button type="button" className="nls-btn" data-size="sm" disabled={saving} aria-label={`Move ${p?.name ?? 'player'} to bench`} onClick={() => doMove(id, { kind: 'bench' })}>
                 To bench
               </button>
@@ -520,7 +531,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
             {cells}
           </div>
         )}
-        {moving && lists && kind !== 'ir' ? renderSwapper(kind, id, slotIndex) : null}
+        {moving && lists && (kind === 'starter' || kind === 'bench') ? renderSwapper(kind, id, slotIndex) : null}
       </li>
     )
   }
@@ -531,7 +542,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     const name = players[id]?.name ?? 'this player'
     const bench = kind === 'starter' ? tryMove(id, { kind: 'bench' }) : null
     const ir = hasIr && canIr(id) ? tryMove(id, { kind: 'ir' }) : null
-    if (!bench && !ir) return null
+    const taxi = hasTaxi ? tryMove(id, { kind: 'taxi' }) : null
+    if (!bench && !ir && !taxi) return null
     return (
       <div className="nls-swapper-actions">
         {bench ? (
@@ -542,6 +554,11 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         {ir ? (
           <button type="button" className="nls-btn" data-size="sm" disabled={!ir.ok || saving} title={ir.ok ? `Move ${name} to injured reserve` : ir.reason} onClick={() => doMove(id, { kind: 'ir' })}>
             Move to IR
+          </button>
+        ) : null}
+        {taxi ? (
+          <button type="button" className="nls-btn" data-size="sm" disabled={!taxi.ok || saving} title={taxi.ok ? `Move ${name} to the taxi squad` : taxi.reason} onClick={() => doMove(id, { kind: 'taxi' })}>
+            Move to taxi
           </button>
         ) : null}
       </div>
@@ -650,6 +667,13 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
             ) : tab === 'lineup' ? (
               lists && slots.length ? (
                 <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)} accessibility={{ announcements }}>
+                  {byeStarters.length ? (
+                    <p className="nls-error" role="alert" data-testid="lineup-bye-warning">
+                      {byeStarters.length === 1
+                        ? `${players[byeStarters[0]]?.name ?? 'A starter'} is on bye this week and will score 0. Swap him out before lock.`
+                        : `${byeStarters.length} starters are on bye this week and will score 0: ${byeStarters.map((id) => players[id]?.name ?? 'Unknown').join(', ')}. Swap them out before lock.`}
+                    </p>
+                  ) : null}
                   <section className="nls-card nls-card-flush" aria-label="Starters">
                     <h3 className="nls-label nls-card-head"><span>Starters</span><span>{startersProj != null ? `Proj ${fmt1(startersProj)}` : ''}</span></h3>
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
@@ -677,6 +701,17 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                         {lists.ir.filter(Boolean).map((id) => renderRow(id, null, 'ir'))}
                         {!lists.ir.some(Boolean) ? (
                           <li><div className="nls-lrow nls-lrow-empty"><PosPill label="IR" /><span>Empty — move an injured player here to free a roster spot.</span></div></li>
+                        ) : null}
+                      </ul>
+                    </DropZone>
+                  ) : null}
+                  {hasTaxi ? (
+                    <DropZone as="section" id="taxi" className="nls-card nls-card-flush nls-dropzone" label="Taxi squad" state={dropState({ kind: 'taxi' })}>
+                      <h3 className="nls-label nls-card-head"><span>Taxi squad</span><span>{taxiCapacity != null && taxiCapacity > 0 ? `${lists.taxi.filter(Boolean).length} / ${taxiCapacity}` : ''}</span></h3>
+                      <ul className="nls-rows">
+                        {lists.taxi.filter(Boolean).map((id) => renderRow(id, null, 'taxi'))}
+                        {!lists.taxi.some(Boolean) ? (
+                          <li><div className="nls-lrow nls-lrow-empty"><PosPill label="TX" /><span>Empty: stash a young player here and he stays off your active roster.</span></div></li>
                         ) : null}
                       </ul>
                     </DropZone>

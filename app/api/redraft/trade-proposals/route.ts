@@ -225,6 +225,14 @@ export async function POST(req: NextRequest) {
   if (proposer.ownerId !== userId) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
+  // Chimmy autopilot (AF Commissioner): a team nobody is running does not take trade offers.
+  const { isOwnerOnAutopilot } = await import('@/lib/inactive-manager/inactiveManagerService')
+  if (await isOwnerOnAutopilot(leagueId, receiver.ownerId).catch(() => false)) {
+    return NextResponse.json(
+      { error: 'Chimmy is running this team while its manager is away, and it is not taking trade offers.', code: 'RECEIVER_ON_AUTOPILOT' },
+      { status: 409 },
+    )
+  }
 
   const { vetoMode, vetoThreshold } = await resolveRedraftTradeGovernance(prisma, leagueId)
   const expiresHoursInput = Number(body.expiresInHours)

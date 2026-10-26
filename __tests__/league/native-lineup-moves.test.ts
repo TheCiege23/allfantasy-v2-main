@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import type { RosterLineupLists } from '@/lib/league/lineup-swap'
-import { resolveLineupMove, seatStartersInSlots, type LineupMoveContext } from '@/lib/league/native/lineupMoves'
+import { resolveLineupMove, seatStartersInSlots, startersOnBye, type LineupMoveContext } from '@/lib/league/native/lineupMoves'
 import { isIrEligibleStatus } from '@/lib/roster-lineup-engine/irEligibility'
 
 const slot = (index: number, label: string, allowedPositions: string[]): ExpandedStarterSlot =>
@@ -90,6 +90,46 @@ describe('resolveLineupMove', () => {
     const mlb = ctx({ lists: lists({ starters: ['c', 'of', 'sp'], bench: ['rp'] }), slots: MLB }, { c: 'C', of: 'OF', sp: 'SP', rp: 'RP' })
     expect(resolveLineupMove(mlb, 'rp', { kind: 'starter', slotIndex: 1 }).ok).toBe(false)
     expect(resolveLineupMove(mlb, 'rp', { kind: 'starter', slotIndex: 2 })).toEqual({ ok: true, next: lists({ starters: ['c', 'of', 'rp'], bench: ['sp'] }) })
+  })
+})
+
+describe('resolveLineupMove — taxi squad', () => {
+  const base = () => lists({ starters: ['qb', 'rb', 'wr', 'te'], bench: ['rb2'], taxi: ['wr2'] })
+
+  it('bench → taxi and taxi → bench move the player between the two lists', () => {
+    const c = ctx({ lists: base(), slots: NFL, limits: { taxi: 3 } }, nflPos)
+    expect(resolveLineupMove(c, 'rb2', { kind: 'taxi' })).toEqual({ ok: true, next: lists({ starters: ['qb', 'rb', 'wr', 'te'], taxi: ['wr2', 'rb2'] }) })
+    expect(resolveLineupMove(c, 'wr2', { kind: 'bench' })).toEqual({ ok: true, next: lists({ starters: ['qb', 'rb', 'wr', 'te'], bench: ['rb2', 'wr2'] }) })
+  })
+
+  it('a taxi player cannot go straight into a starting slot', () => {
+    const r = resolveLineupMove(ctx({ lists: base(), slots: NFL }, nflPos), 'wr2', { kind: 'starter', slotIndex: 2 })
+    expect(r).toMatchObject({ ok: false, reason: 'Move him from the taxi squad to the bench first.' })
+  })
+
+  it('refuses when the league has no taxi squad, the squad is full, or the player is not eligible', () => {
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL, limits: { taxi: 0 } }, nflPos), 'rb2', { kind: 'taxi' })).toMatchObject({ ok: false, reason: 'This league has no taxi squad.' })
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL, limits: { taxi: 1 } }, nflPos), 'rb2', { kind: 'taxi' })).toMatchObject({ ok: false, reason: 'Your taxi squad is full.' })
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL, canTaxi: () => false }, nflPos), 'rb2', { kind: 'taxi' })).toMatchObject({ ok: false, reason: 'This player is not eligible for the taxi squad.' })
+  })
+
+  it('moving a taxi player to the taxi squad again is a no-op', () => {
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL }, nflPos), 'wr2', { kind: 'taxi' })).toMatchObject({ ok: false, noop: true })
+  })
+})
+
+describe('startersOnBye', () => {
+  const players: Record<string, { byeWeek?: number | null; opponent?: string | null }> = {
+    a: { byeWeek: 7, opponent: null },
+    b: { byeWeek: 9, opponent: 'KC' },
+    c: { byeWeek: null, opponent: 'BYE' },
+    d: { byeWeek: null, opponent: null },
+  }
+  it('flags a starter whose bye is this week or whose opponent is BYE, and nobody else', () => {
+    expect(startersOnBye(['a', 'b', 'c', 'd', ''], (id) => players[id], 7)).toEqual(['a', 'c'])
+  })
+  it('does not guess when the week is unknown', () => {
+    expect(startersOnBye(['a', 'b'], (id) => players[id], null)).toEqual([])
   })
 })
 

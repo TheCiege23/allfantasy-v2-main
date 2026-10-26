@@ -121,6 +121,29 @@ absence starts to mean something for NBA; MLB's rule needs every season since ag
 
 ---
 
+## N-22 — how `/live` NHL scores a shootout, and whether it marks OT (recorded 2026-10-26, no probe)
+
+**Status: OPEN — ask the vendor; do not probe.** The NHL goalie win is now derived from the box
+(`riWinningTeam` in `lib/sports-data/rollingInsightsGameLogs.ts`, `derivedNhlWin` in
+`lib/scoring-runtime/dailySportStatNormalization.ts`) because the vendor credited no goalie with
+the win in 68 of 179 regular-season 2026 games. `fixtures/live.NHL.json` holds six regulation
+finals only, so two things are unknown:
+
+1. **Does `full_box.<side>.score` include the shootout winner's extra goal** (the NHL convention,
+   e.g. 3-2), or does it show the tie (2-2)? The derivation handles both: unequal scores decide it;
+   a tie is settled only by the box's own goalie decisions or skater `shootout_goals`, and is left
+   alone when those are absent or disagree. With the decisions missing (weeks 1–2), a shootout game
+   shown as a tie derives no win — safe, but short.
+2. **Does `quarter_scores` carry an OT or shootout key?** Without it, a regulation loss cannot be
+   told from an OT/SO loss, which is why `loss` / `overtime_loss` are NOT derived even though they
+   are short in the same games. The goalie's clock (> 60:00) is not reliable enough: the vendor
+   prints `"0"` and `59:50` for full games.
+
+**How to resolve.** Ask the vendor. Or, when a `/live` NHL date containing a shootout game is next
+captured through `scripts/probe.sh`, commit it as a second fixture in the same change.
+
+---
+
 ## Blocking — resolve before shipping that sport
 
 | ID | Gap | Status | Blocks | How to resolve |

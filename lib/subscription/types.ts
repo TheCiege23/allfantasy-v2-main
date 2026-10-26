@@ -58,6 +58,7 @@ export type SubscriptionFeatureId =
   | 'commissioner_weather_projections'
   | 'commissioner_dispersal_draft'
   | 'commissioner_integrity_monitoring'
+  | 'commissioner_chimmy_autopilot'
   | 'pro_draft_ai'
   | 'pro_waiver_ai'
   | 'pro_trade_ai'
