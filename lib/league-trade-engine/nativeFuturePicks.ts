@@ -216,6 +216,12 @@ export async function consumeNativeFuturePicksForDraft(
   tx: Db,
   args: { leagueId: string; season: number; draftSessionId: string; rounds: number; slotOrder: SlotOrderEntry[]; now?: Date },
 ): Promise<TradedPickRecord[]> {
+  // Picks forfeited as a penalty stay `forfeited`; tagging them with this draft is how the draft
+  // knows to skip them (lib/live-draft-engine/forfeitedPickSkips.ts).
+  await tx.futureDraftPick.updateMany({
+    where: { leagueId: args.leagueId, pickSeason: args.season, status: 'forfeited', usedInDraftSessionId: null },
+    data: { usedInDraftSessionId: args.draftSessionId },
+  })
   const rows = await tx.futureDraftPick.findMany({
     where: { leagueId: args.leagueId, pickSeason: args.season, status: 'active' },
     select: { id: true, round: true, originalRosterId: true, currentOwnerId: true },
