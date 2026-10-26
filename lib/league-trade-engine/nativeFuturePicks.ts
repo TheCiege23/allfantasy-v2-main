@@ -148,7 +148,16 @@ export async function loadNativeFuturePicks(leagueId: string, db: Db = prisma): 
     where: { leagueId, status: 'active', pickSeason: { in: seasons } },
     select: { pickSeason: true, round: true, originalRosterId: true, currentOwnerId: true },
   })
-  const picks = futurePickInventory({ teamIds: rosters.map((r) => r.id), seasons, rounds, stored })
+  // A pick forfeited as a penalty (lib/integrity/tankingPenaltyService.ts) is gone: not held, not
+  // tradeable. Without this, "no active row" would read as "still with its original team".
+  const forfeited = await db.futureDraftPick.findMany({
+    where: { leagueId, status: 'forfeited', pickSeason: { in: seasons } },
+    select: { pickSeason: true, round: true, originalRosterId: true },
+  })
+  const gone = new Set(forfeited.map((f) => `${f.pickSeason}:${f.round}:${f.originalRosterId}`))
+  const picks = futurePickInventory({ teamIds: rosters.map((r) => r.id), seasons, rounds, stored }).filter(
+    (p) => !gone.has(`${p.season}:${p.round}:${p.originalTeamId}`),
+  )
   const ownerByPickId = new Map(picks.map((p) => [inventoryPickId(p), p.ownerTeamId]))
   return { picks, seasons, rounds, ownerByPickId }
 }
