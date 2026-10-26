@@ -171,3 +171,58 @@ export async function loadManagerHistoryForLeague(
 
   return buildManagerHistoryByRoster({ currentRosters, identityRosters, pastSessions, picks, lookupByLeague })
 }
+
+/**
+ * One roster's manager: their picks from their most recent completed drafts in the same sport, with
+ * position and ADP — the raw material for draft-as-me (./draftAsMe.ts). Same identity and ADP rules
+ * as `loadManagerHistoryForLeague`; an orphan or AI seat has no history.
+ */
+export async function loadManagerPastPicks(
+  leagueId: string,
+  rosterId: string,
+): Promise<Array<{ overall: number; adpAtPick: number | null; position: string }>> {
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { platformUserId: true } })
+  const identity = managerIdentity(roster?.platformUserId)
+  if (!identity) return []
+  const current = await prisma.draftSession.findFirst({
+    where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true, sportType: true },
+  })
+  const identityRosters = await prisma.roster.findMany({ where: { platformUserId: identity }, select: { id: true, leagueId: true } })
+  if (identityRosters.length === 0) return []
+  const sessions = await prisma.draftSession.findMany({
+    where: {
+      leagueId: { in: [...new Set(identityRosters.map((r) => r.leagueId))] },
+      status: 'completed',
+      ...(current ? { id: { not: current.id } } : {}),
+      ...(current?.sportType ? { sportType: current.sportType } : {}),
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 40,
+    select: { id: true, leagueId: true },
+  })
+  if (sessions.length === 0) return []
+  const picks = await prisma.draftPick.findMany({
+    where: { sessionId: { in: sessions.map((s) => s.id) }, rosterId: { in: identityRosters.map((r) => r.id) }, assetType: 'player' },
+    select: { sessionId: true, overall: true, playerId: true, playerName: true, position: true, pickMetadata: true },
+  })
+  // Newest drafts the manager actually picked in, capped, so an old style does not outvote a current one.
+  const order = sessions.map((s) => s.id).filter((id) => picks.some((p) => p.sessionId === id)).slice(0, MAX_HISTORY_DRAFTS_PER_MANAGER)
+  const keep = new Set(order)
+  const kept = picks.filter((p) => keep.has(p.sessionId))
+  const sessionLeague = new Map(sessions.map((s) => [s.id, s.leagueId]))
+  const lookupByLeague = new Map<string, AdpLookup>()
+  for (const lid of new Set(kept.filter((p) => adpFromPickMetadata(p.pickMetadata) == null).map((p) => sessionLeague.get(p.sessionId)!))) {
+    const entries = await readLeaguePoolEntries(lid)
+    if (entries.length > 0) lookupByLeague.set(lid, buildAdpLookup(entries))
+  }
+  return kept.map((p) => ({
+    overall: p.overall,
+    position: p.position,
+    adpAtPick:
+      adpFromPickMetadata(p.pickMetadata) ??
+      lookupByLeague.get(sessionLeague.get(p.sessionId)!)?.({ playerId: p.playerId, playerName: p.playerName, position: p.position }) ??
+      null,
+  }))
+}
