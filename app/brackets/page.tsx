@@ -72,6 +72,7 @@ type SportCard = {
   key:
     | "worldCup"
     | "nbaPlayoffs"
+    | "nbaCup"
     | "nhlPlayoffs"
     | "nflPlayoffs"
     | "mlbPostseason"
@@ -106,7 +107,7 @@ type SportCard = {
  * see app/api/brackets/playoffs/route.ts. Anything else drops through to the
  * legacy stack, whose league page is a dead end.
  */
-const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB") =>
+const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB" | "NCAAF" | "NBA_CUP") =>
   `/brackets/leagues/new?sport=${sport}&challengeType=playoff_challenge`
 
 /*
@@ -119,7 +120,8 @@ const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB") =>
 const SPORT_CARDS: SportCard[] = [
   { key: "mlbPostseason", href: playoffPoolHref("MLB"), status: "live", Icon: Trophy },
   { key: "nhlPlayoffs", href: playoffPoolHref("NHL"), status: "live", Icon: Trophy },
-  { key: "collegeFootball", href: null, status: "soon", soonLabelKey: "brk.hub.sports.statusDecember", Icon: Trophy },
+  { key: "collegeFootball", href: playoffPoolHref("NCAAF"), status: "live", Icon: Trophy },
+  { key: "nbaCup", href: playoffPoolHref("NBA_CUP"), status: "live", Icon: Trophy },
   { key: "nflPlayoffs", href: null, status: "soon", soonLabelKey: "brk.hub.sports.statusJanuary", Icon: Trophy },
   { key: "nbaPlayoffs", href: playoffPoolHref("NBA"), status: "live", Icon: Trophy },
   { key: "marchMadness", href: null, status: "soon", Icon: Trophy },
