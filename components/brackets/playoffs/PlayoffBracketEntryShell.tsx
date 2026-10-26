@@ -122,7 +122,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const submitBlockedMessage = completion?.message ?? "Complete every series before submitting this bracket."
   const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? "Update finalized picks" : "Finalize picks" :
     completionMode === "available_picks_only" ? "Submit Available Picks" : "Submit Bracket"
-  const reviewBadge = activeEntry.isComplete
+  const reviewBadge = activeEntry?.isComplete
     ? completionMode === "available_picks_only"
       ? "Partial verification submitted"
       : "Complete"
@@ -131,7 +131,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
       : "Incomplete"
   const hasOfficialSyncedSeries = series.some((item) => item.lastSyncedAt || item.providerGamesJson || item.seriesSummary || item.winnerTeamName || isPlayoffSeriesResolved(item))
   const hasSyncedResults = series.some((item) => Boolean(item.winnerTeamName))
-  const showResultsSyncCallout = canSyncSeries && activeEntry.isComplete && completionMode === "available_picks_only" && !hasSyncedResults
+  const showResultsSyncCallout = canSyncSeries && Boolean(activeEntry?.isComplete) && completionMode === "available_picks_only" && !hasSyncedResults
 
   if (!activeEntry) {
     return null
