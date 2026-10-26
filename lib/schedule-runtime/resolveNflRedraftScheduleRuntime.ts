@@ -1,3 +1,4 @@
+import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
 import { assignExtraMatchupForWeek } from '@/lib/redraft/oddTeamExtraMatchup'
@@ -151,15 +152,22 @@ async function buildTeamsForRedraftRosters(leagueId: string, rosters: RedraftRos
       division: { select: { id: true, name: true, tierLevel: true } },
     },
   }) as LeagueTeamDivisionRow[]
+  // The commissioner's divisions (`settings.division_config`) win over the promotion tier column.
+  const commissionerDivisions = await loadSeasonRosterDivisions(leagueId, rosters)
 
   return rosters.map((roster) => {
     const team = findLeagueTeamForRoster(roster, leagueTeams)
+    const division = commissionerDivisions?.byRoster.get(roster.id)
     return {
       rosterId: roster.id,
       displayName: roster.teamName || roster.ownerName,
       ownerName: roster.ownerName,
-      divisionId: team?.divisionId ?? null,
-      divisionName: team?.division?.name ?? (team?.division ? `Division ${team.division.tierLevel}` : null),
+      divisionId: division ? division.key : commissionerDivisions ? null : team?.divisionId ?? null,
+      divisionName: division
+        ? division.name
+        : commissionerDivisions
+          ? null
+          : team?.division?.name ?? (team?.division ? `Division ${team.division.tierLevel}` : null),
     }
   })
 }

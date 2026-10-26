@@ -4114,6 +4114,16 @@ export const translations: Record<string, Record<string, string>> = {
     "division.aiName": "AI Name",
     "division.saveDivision": "Save Division Settings",
     "division.saved": "Settings saved. Changes are reflected league-wide.",
+    // Divisions: count limits, even split and the playoff rule (lib/league/divisions/leagueDivisions.ts).
+    "division.count.needTeams": "Needs {{n}}+ teams",
+    "division.split": "Even split: {{sizes}} teams",
+    "division.unevenWarn": "Uneven: {{sizes}}. Divisions must be even or within one team of each other.",
+    "division.playoffRule": "Division winners in the playoffs",
+    "division.playoffRule.help": "Used when the playoff bracket is generated. Seeds then stay locked.",
+    "division.playoffRule.top_seeds": "Top seeds: every division winner makes the playoffs and takes the top seeds",
+    "division.playoffRule.guaranteed": "Guaranteed spot: every division winner makes the playoffs, seeded by record",
+    "division.playoffRule.none": "No playoff advantage: divisions are for the standings only",
+    "division.scheduleNote": "The schedule plays division rivals first. Playing them twice is not available yet.",
 
     // Member
     "member.title": "Member Settings",
