@@ -23,6 +23,7 @@ import {
   isOfficialTeamName,
 } from "@/lib/playoffs/playoffBracketProjection"
 import PlayoffLiveViewModal from "./PlayoffLiveViewModal"
+import SingleGameMatchupModal from "./SingleGameMatchupModal"
 import PlayoffDecisionRail from "./PlayoffDecisionRail"
 
 /**
@@ -82,6 +83,7 @@ function TeamRow({
   locked,
   onPick,
   showProb,
+  openDetail = false,
 }: {
   series: PlayoffSeriesView
   side: "home" | "away"
@@ -89,6 +91,7 @@ function TeamRow({
   locked: string | null
   onPick: (teamName: string) => void
   showProb: boolean
+  openDetail?: boolean
 }) {
   const name = side === "home" ? series.homeTeamName : series.awayTeamName
   const seed = side === "home" ? series.homeSeed : series.awaySeed
@@ -99,7 +102,7 @@ function TeamRow({
   const decided = !!series.winnerTeamName
   const eliminated = decided && series.winnerTeamName !== name
   const colors = teamColors(abbreviate(name))
-  const disabled = !official || !!locked
+  const disabled = !openDetail && (!official || !!locked)
 
   return (
     <button
@@ -109,13 +112,13 @@ function TeamRow({
       data-eliminated={eliminated ? "true" : undefined}
       disabled={disabled}
       aria-pressed={isPicked}
-      aria-label={
+      aria-label={openDetail ? `Open ${series.homeTeamName} versus ${series.awayTeamName} matchup` :
         official
           ? `Pick ${name}${seed ? `, seed ${seed}` : ""}${locked ? ` — ${locked}` : ""}`
           : "Awaiting an earlier result"
       }
       title={locked ?? undefined}
-      onClick={() => official && !locked && onPick(String(name))}
+      onClick={() => openDetail ? onPick(String(name)) : official && !locked && onPick(String(name))}
     >
       <span className="af-pb-team-seed af-pb-mono">{seed > 0 ? seed : ""}</span>
       <span
@@ -149,6 +152,9 @@ export default function MlbBracketBoard({
   const [liveNode, setLiveNode] = useState<string | null>(null)
 
   const sport = String(view.challenge.sport ?? "").toLowerCase()
+  const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
+  const firstStart = view.challenge.firstGameStartsAt ? Date.parse(view.challenge.firstGameStartsAt) : null
+  const tournamentLocked = singleGame && firstStart != null && Date.now() >= firstStart
   const requiresPublishedField = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
   const waitingForField = requiresPublishedField && view.series.some((row) =>
     /^(?:CFP|EAST|WEST)\d+$/i.test(row.homeTeamName) || /^(?:CFP|EAST|WEST)\d+$/i.test(row.awayTeamName))
@@ -179,11 +185,15 @@ export default function MlbBracketBoard({
     async (series: PlayoffSeriesView, teamName: string) => {
       if (!bracketReady) {
         setError("Official teams and game times must be published before picks open.")
-        return
+        return false
+      }
+      if (tournamentLocked) {
+        setError("Brackets locked when the first game began.")
+        return false
       }
       if (!entryId) {
         setError("Create an entry before making picks.")
-        return
+        return false
       }
       setError(null)
       setSaving(series.id)
@@ -199,7 +209,7 @@ export default function MlbBracketBoard({
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
           setError(String(data?.error ?? "Could not save that pick."))
-          return
+          return false
         }
         /*
          * The route hands back the whole recomputed view, which already has
@@ -207,13 +217,15 @@ export default function MlbBracketBoard({
          * cascade in one place.
          */
         if (data?.view) onViewChange(data.view as PlayoffChallengeView)
+        return true
       } catch {
         setError("Could not reach the server. Your pick was not saved.")
+        return false
       } finally {
         setSaving(null)
       }
     },
-    [bracketReady, entryId, onViewChange, view.challenge.id],
+    [bracketReady, entryId, onViewChange, tournamentLocked, view.challenge.id],
   )
 
   const totalSeries = view.series.length
@@ -239,9 +251,9 @@ export default function MlbBracketBoard({
   }, [view.series])
 
   const lockedReasonFor = useCallback(
-    (s: PlayoffSeriesView) =>
-      getPlayoffSeriesLockedReason(s, lockRule, { hasPoolAdminAccess: canLatePick }),
-    [canLatePick, lockRule],
+    (s: PlayoffSeriesView) => tournamentLocked ? "Tournament locked at the first game" :
+      getPlayoffSeriesLockedReason(s, lockRule, { hasPoolAdminAccess: singleGame ? false : canLatePick }),
+    [canLatePick, lockRule, singleGame, tournamentLocked],
   )
 
   const renderMatch = (node: BracketNode) => {
@@ -251,21 +263,24 @@ export default function MlbBracketBoard({
     const locked = lockedReasonFor(s)
     return (
       <div className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`}>
+        {singleGame ? <button type="button" className="af-pb-game-meta" onClick={() => setLiveNode(s.id)}>{s.gameLabel || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))}<span>{s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBA"}</span></button> : null}
         <TeamRow
           series={s}
           side="home"
           picked={picksBySeries.get(s.id) ?? null}
           locked={locked}
-          onPick={(t) => savePick(s, t)}
+          onPick={(t) => singleGame ? setLiveNode(s.id) : void savePick(s, t)}
           showProb={kind !== "tbd"}
+          openDetail={singleGame}
         />
         <TeamRow
           series={s}
           side="away"
           picked={picksBySeries.get(s.id) ?? null}
           locked={locked}
-          onPick={(t) => savePick(s, t)}
+          onPick={(t) => singleGame ? setLiveNode(s.id) : void savePick(s, t)}
           showProb={kind !== "tbd"}
+          openDetail={singleGame}
         />
         {saving === s.id ? (
           <div className="af-pb-status-sub" style={{ padding: "4px 0 6px" }}>
@@ -312,7 +327,7 @@ export default function MlbBracketBoard({
       <button
         type="button"
         className="af-pb-status-cell"
-        disabled={!official}
+        disabled={!official && !singleGame}
         onClick={() => setLiveNode(s.id)}
         aria-label={`${roundLabel(sport, s.round)} series detail`}
         data-testid={`pb-status-${s.seriesNumber}`}
@@ -381,12 +396,14 @@ export default function MlbBracketBoard({
               <span className="af-pb-season af-pb-mono">{view.challenge.seasonYear}</span>
             </h1>
             <p className="af-pb-sub">
-              {sport === "nba_cup" ? 8 : 12} teams · {view.rounds.length} rounds · tap a matchup to pick a winner · tap a game for detail
+              {sport === "nba_cup" ? 8 : 12} teams · {view.rounds.length} rounds · {singleGame ? "tap any matchup for Chimmy Intelligence and your pick" : "tap a matchup to pick a winner"}
             </p>
             {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
+            {singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString()}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
+            {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">✓ Picks finalized. You can revise and finalize again before kickoff.</p> : null}
           </div>
           <div className="af-pb-status">
-            {!bracketReady ? "Field or schedule pending" : view.challenge.status === "open" ? "Picks open" : String(view.challenge.status)}
+            {!bracketReady ? "Field or schedule pending" : tournamentLocked ? "Brackets locked" : view.challenge.status === "open" ? "Picks open" : String(view.challenge.status)}
             <small>{lockRule ? `Locks: ${lockRule.replace(/_/g, " ")}` : "Pool is live"}</small>
           </div>
         </div>
@@ -410,6 +427,7 @@ export default function MlbBracketBoard({
             {error}
           </p>
         ) : null}
+        {singleGame ? <p className="af-pb-note">No prizes, gambling, betting, entry fees, or payouts are offered by AllFantasy. Paid plans only allow extra brackets.</p> : null}
       </header>
 
       <div className="af-pb-body">
@@ -458,7 +476,7 @@ export default function MlbBracketBoard({
                       <div className="af-pb-tile-name">{roundLabel(sport, t.round)}</div>
                       <div className="af-pb-tile-pts af-pb-mono">{t.points} pts</div>
                       <div className="af-pb-tile-meta">
-                        {example ? `Best of ${example.bestOf}` : ""}
+                        {example ? example.bestOf === 1 ? "Single game" : `Best of ${example.bestOf}` : ""}
                       </div>
                     </div>
                   )
@@ -512,10 +530,9 @@ export default function MlbBracketBoard({
             </div>
 
             <p className="af-pb-footnote">
-              Percentages are a seed-and-record read, not a scouting model. Seeds 1 and 2 in each
-              league hold a bye and enter at the Division round, so their opponent stays unknown
-              until the Wild Card round resolves. The bracket scrolls sideways on a phone — that is
-              deliberate, a bracket read as a list stops being a bracket.
+              {singleGame
+                ? "Chimmy estimates disclose their source. Tap a matchup for verified season stats, game details, and picks. Brackets lock at the first game. AllFantasy offers no prizes or gambling."
+                : "Percentages are a seed-and-record read, not a scouting model. Seeds 1 and 2 in each league hold a bye and enter at the Division round, so their opponent stays unknown until the Wild Card round resolves. The bracket scrolls sideways on a phone."}
             </p>
           </section>
         </div>
@@ -525,9 +542,19 @@ export default function MlbBracketBoard({
         </aside>
       </div>
 
-      {liveNode ? (
+      {liveNode ? singleGame ? (() => {
+        const modalSeries = projectedSeries.find((item) => item.id === liveNode)
+        return modalSeries ? <SingleGameMatchupModal
+          series={modalSeries} sport={sport} profiles={view.teamProfiles ?? {}}
+          picked={picksBySeries.get(liveNode) ?? null}
+          locked={!bracketReady || Boolean(lockedReasonFor(modalSeries))}
+          saving={saving === liveNode}
+          onPick={(team) => { void savePick(modalSeries, team).then((ok) => { if (ok) setLiveNode(null) }) }}
+          onClose={() => setLiveNode(null)}
+        /> : null
+      })() : (
         <PlayoffLiveViewModal
-          series={view.series.find((s) => s.id === liveNode) ?? null}
+          series={view.series.find((item) => item.id === liveNode) ?? null}
           sport={sport}
           onClose={() => setLiveNode(null)}
         />

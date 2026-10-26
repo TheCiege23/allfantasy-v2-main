@@ -2,7 +2,7 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 
 export type SingleGameSport = "ncaaf" | "nba_cup"
-export type ScheduledGame = { seriesNumber: number; startsAt: string }
+export type ScheduledGame = { seriesNumber: number; startsAt: string; label?: string; venue?: string; location?: string }
 export type SingleGameSchedule = {
   sport: SingleGameSport
   season: number
@@ -34,7 +34,13 @@ export function validateSingleGameSchedule(sport: SingleGameSport, input: unknow
     if (!timestamp || !Number.isFinite(date.getTime()) || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(timestamp)) {
       errors.push(`Game ${seriesNumber || index + 1} needs a timestamp with timezone.`)
     }
-    return { seriesNumber, startsAt: Number.isFinite(date.getTime()) ? date.toISOString() : "" }
+    const label = String(value.label ?? "").trim()
+    const venue = String(value.venue ?? "").trim()
+    const location = String(value.location ?? "").trim()
+    if (!label || label.length > 100) errors.push(`Game ${seriesNumber} needs a game or bowl name (up to 100 characters).`)
+    if (!venue || venue.length > 120) errors.push(`Game ${seriesNumber} needs a venue name (up to 120 characters).`)
+    if (!location || location.length > 120) errors.push(`Game ${seriesNumber} needs a city and location (up to 120 characters).`)
+    return { seriesNumber, startsAt: Number.isFinite(date.getTime()) ? date.toISOString() : "", label, venue, location }
   })
   if (new Set(games.map((game) => game.seriesNumber)).size !== count) {
     errors.push("Every game number must appear exactly once.")

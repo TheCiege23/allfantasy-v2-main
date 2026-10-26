@@ -114,6 +114,10 @@ export default function NewBracketLeaguePage() {
   }, [searchParams, router])
 
   useEffect(() => {
+    setMaxEntriesPerUser(isSingleGamePool ? 5 : 1)
+  }, [isSingleGamePool])
+
+  useEffect(() => {
     if (sport !== "NCAAB" && challengeType === "mens_ncaa") {
       setChallengeType("playoff_challenge")
     }
@@ -450,7 +454,7 @@ export default function NewBracketLeaguePage() {
               <option value="none">No lock / test late picks</option>
             </select>}
             <p className="mt-2 text-[11px] mode-muted">
-              {isSingleGamePool ? "Picks open after the official field and game schedule are published." : "No-lock mode is for commissioner testing and late-pick pools. Standard pools should keep series start locks."}
+              {isSingleGamePool ? "Picks open after the official field and game schedule are published. Every bracket locks when the first game starts." : "No-lock mode is for commissioner testing and late-pick pools. Standard pools should keep series start locks."}
             </p>
           </div>
 
@@ -460,7 +464,7 @@ export default function NewBracketLeaguePage() {
               <input
                 type="range"
                 min={1}
-                max={10}
+                max={isSingleGamePool ? 5 : 10}
                 value={maxEntriesPerUser}
                 onChange={(e) => setMaxEntriesPerUser(Number(e.target.value))}
                 disabled={loading}
@@ -469,6 +473,7 @@ export default function NewBracketLeaguePage() {
               />
               <span className="w-8 text-sm font-semibold mode-text">{maxEntriesPerUser}</span>
             </div>
+            {isSingleGamePool && <p className="mt-2 text-xs mode-muted">A pool can allow up to five entries per person. Each user gets one free bracket per tournament season; active AF subscriptions allow up to five total across leagues. Extra capacity is never a stake or entry fee.</p>}
           </div>
 
           <details
@@ -531,15 +536,15 @@ export default function NewBracketLeaguePage() {
               <label className="flex items-center gap-2 text-sm mode-muted">
                 <input
                   type="checkbox"
-                  checked={tiebreakerEnabled}
+                  checked={isSingleGamePool || tiebreakerEnabled}
                   onChange={(e) => setTiebreakerEnabled(e.target.checked)}
-                  disabled={loading}
+                  disabled={isSingleGamePool || loading}
                   data-testid="bracket-create-tiebreak-toggle"
                 />
                 Enable championship total points tiebreaker
               </label>
               <select
-                disabled={!tiebreakerEnabled || loading}
+                disabled={isSingleGamePool || !tiebreakerEnabled || loading}
                 value={tiebreakerType}
                 onChange={(e) => setTiebreakerType(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm mode-text" style={{ border: "1px solid var(--border)", background: "color-mix(in srgb, var(--panel2) 88%, transparent)" }}
@@ -550,7 +555,8 @@ export default function NewBracketLeaguePage() {
             </div>
           </div>
 
-          <CommissionerFanCredSetupNotice dataTestId="bracket-create-paid-boundary-copy" />
+          {isSingleGamePool && <p className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm font-bold text-amber-100">AllFantasy offers no prizes, gambling, betting, bracket entry fees, or in-app payouts. Any external commissioner arrangements are outside AllFantasy.</p>}
+          {isSingleGamePool ? <p className="rounded-xl border border-white/15 p-3 text-xs mode-muted">Commissioners may coordinate optional external arrangements independently, subject to AllFantasy terms. They must use third-party services for any funds or prizes; AllFantasy never collects, holds, tracks, or distributes them.</p> : <CommissionerFanCredSetupNotice dataTestId="bracket-create-paid-boundary-copy" />}
 
           {showAgeConfirm && (
             <div className="rounded-xl p-4 space-y-3" style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}>

@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useSession } from "next-auth/react"
 import { RefreshCw, Trophy, Plus, Link2, Clipboard, Settings2, ArrowRightCircle, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
@@ -39,7 +40,6 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   const safeChallenge = {
     id: view?.challenge?.id || "unknown-challenge",
-    sport: String(view?.challenge?.sport ?? "bracket").toLowerCase(),
     name: view?.challenge?.name || "Pool Dashboard",
     sport: view?.challenge?.sport || "nba",
     seasonYear: view?.challenge?.seasonYear ?? new Date().getUTCFullYear(),
@@ -64,7 +64,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       (safeChallenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
   const myEntries = entries.filter((entry) => entry.userId === view?.viewerUserId)
   const viewerEntryCount = myEntries.length
-  const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant
+  const tournamentLocked = singleGameSport && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
+  const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked
   const primaryEntry = useMemo(() => {
     if (myEntries.length === 0) return null
     const activeViewerEntry = view.activeEntry && view.activeEntry.userId === view?.viewerUserId
@@ -73,7 +74,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     return myEntries.find((entry) => !entry.isComplete) ?? activeViewerEntry ?? myEntries[0] ?? null
   }, [myEntries, view.activeEntry, view?.viewerUserId])
   const primaryButtonLabel = !primaryEntry
-    ? "Create Your First Bracket"
+    ? tournamentLocked ? "Bracket entry closed" : "Create Your First Bracket"
     : primaryEntry.isComplete
       ? "View/Edit Bracket"
       : "Complete Bracket"
@@ -81,24 +82,25 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     () => {
       const hasScoredResults = entries.some((entry) => (entry.resolvedPicks ?? 0) > 0 || (entry.totalScore ?? 0) > 0 || (entry.correctPicks ?? 0) > 0)
       return [...entries]
-        .sort((a, b) => {
-          if (hasScoredResults) {
-            return (b.totalScore ?? 0) - (a.totalScore ?? 0) || (b.correctPicks ?? 0) - (a.correctPicks ?? 0) || b.pickCount - a.pickCount
-          }
-          return b.pickCount - a.pickCount
-        })
+        .filter((entry) => !singleGameSport || entry.isComplete)
+        .sort((a, b) => singleGameSport
+          ? (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
+          : hasScoredResults
+            ? (b.totalScore ?? 0) - (a.totalScore ?? 0) || (b.correctPicks ?? 0) - (a.correctPicks ?? 0) || b.pickCount - a.pickCount
+            : b.pickCount - a.pickCount)
         .map((entry, index) => ({
-          rank: index + 1,
+          rank: singleGameSport ? entry.rank ?? index + 1 : index + 1,
           id: entry.id,
           name: entry.name || `Bracket ${index + 1}`,
           picks: entry.pickCount,
           totalScore: entry.totalScore ?? 0,
+          potentialTotal: entry.potentialTotal ?? 0,
           correctPicks: entry.correctPicks ?? 0,
           resolvedPicks: entry.resolvedPicks ?? 0,
           hasScoredResults,
         }))
     },
-    [entries]
+    [entries, singleGameSport]
   )
   const hasScoredLeaderboard = leaderboardRows.some((row) => row.hasScoredResults)
   const hasClientAdminAccess = hasPoolAdminAccess(session?.user)
@@ -125,7 +127,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       try {
         const nextEntryIndex = viewerEntryCount + 1
         if (nextEntryIndex > safeChallenge.maxEntriesPerParticipant) {
-          toast.error("Entry limit reached (max 5 per user)")
+          toast.error(`This pool allows ${safeChallenge.maxEntriesPerParticipant} brackets per user.`)
           return
         }
 
@@ -225,6 +227,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
             {participants.length} participant{participants.length !== 1 ? "s" : ""}
           </span>
           <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{totalSeries} {singleGameSport ? "games" : "series"}</span>
+          {singleGameSport && <span className="rounded-full bg-violet-100 px-3 py-1 text-violet-900">Finalized picks lock at the first game</span>}
           {safeChallenge.isTestMode ? <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-900">Test mode</span> : null}
         </div>
         {hasTemplateSeries ? (
@@ -266,7 +269,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 }
                 openEntry(primaryEntry.id)
               }}
-              disabled={creatingEntry}
+              disabled={creatingEntry || (tournamentLocked && !primaryEntry)}
               data-testid="playoff-fill-bracket-cta"
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -473,7 +476,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{entry.name || `Bracket ${index + 1}`}</p>
                     <p className="text-xs text-slate-600">
-                      {entry.pickCount}/{totalSeries} picks · {entry.isComplete ? "Complete" : "In progress"}
+                      {entry.pickCount}/{totalSeries} picks · {entry.isComplete ? singleGameSport ? "Finalized" : "Complete" : "Draft"}
                     </p>
                   </div>
                   <button
@@ -492,10 +495,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="playoff-dashboard-leaderboard">
         <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
+        {singleGameSport && <Link className="mt-2 inline-block text-sm font-bold text-teal-700 underline" href={`/brackets/standings?sport=${safeChallenge.sport}&season=${safeChallenge.seasonYear}`}>View universal board →</Link>}
         <p className="mt-1 text-xs font-semibold text-slate-500">
-          {hasScoredLeaderboard
-            ? `Scored leaderboard from completed ${singleGameSport ? "games" : "series"}.`
-            : singleGameSport ? "Pick-count leaderboard until final scores are entered." : "Pick-count leaderboard until series results sync."}
+          {singleGameSport ? "Finalized brackets only. Potential is the highest score still reachable from saved picks." : hasScoredLeaderboard
+            ? "Scored leaderboard from completed series." : "Pick-count leaderboard until series results sync."}
         </p>
         {leaderboardRows.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No leaderboard entries yet.</p>
@@ -505,14 +508,15 @@ export default function PlayoffBracketShell({ initialView }: Props) {
               <li key={row.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
                 <span className="font-semibold text-slate-800">#{row.rank} {row.name}</span>
                 <span className="text-slate-600">
-                  {row.hasScoredResults ? `${row.totalScore} pts · ${row.correctPicks}/${row.resolvedPicks} correct · ` : ""}
-                  {row.picks} picks
+                  {singleGameSport ? `${row.totalScore} pts · ${row.potentialTotal} potential · ${row.correctPicks} correct` :
+                    row.hasScoredResults ? `${row.totalScore} pts · ${row.correctPicks}/${row.resolvedPicks} correct · ${row.picks} picks` : `${row.picks} picks`}
                 </span>
               </li>
             ))}
           </ol>
         )}
       </section>
+      {singleGameSport && <p className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950">AllFantasy offers no prizes, gambling, betting, entry fees, or in-app payouts. Paid subscriptions only increase the number of brackets you can create. Commissioners manage any external arrangements independently under applicable AllFantasy terms.</p>}
     </div>
   )
 }

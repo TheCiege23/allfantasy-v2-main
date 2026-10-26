@@ -132,8 +132,8 @@ export default function PlayoffSettingsModal({
             </button>
           ) : null}
 
-          <div className="af-pb-section-label">Pool dues</div>
-          <CommissionerFanCredSetupNotice dataTestId="pb-fancred-disclosure" />
+          <div className="af-pb-section-label">{singleGameSport ? "Fair play" : "Pool dues"}</div>
+          {singleGameSport ? <p className="af-pb-note">AllFantasy offers no prizes, gambling, betting, entry fees, or payouts. Extra brackets are a subscription feature. Commissioners manage any external arrangements separately under AllFantasy terms.</p> : <CommissionerFanCredSetupNotice dataTestId="pb-fancred-disclosure" />}
         </div>
 
         <div className="af-pb-modal-foot">

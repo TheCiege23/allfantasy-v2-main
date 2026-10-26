@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { buildProjectedPlayoffSeries } from "@/lib/playoffs/playoffBracketProjection"
 import { getPlayoffRoundOrder } from "@/lib/playoffs/playoffTemplate"
 import { visiblePlayoffPicks } from "@/lib/playoffs/shareVisibility"
+import { readSingleGameSchedule } from "@/lib/playoffs/singleGameSchedule"
 import type { PlayoffPickView, PlayoffSeriesView, PlayoffSport } from "@/lib/playoffs/types"
 import PlayoffBracketBoard from "@/components/brackets/playoffs/PlayoffBracketBoard"
 
@@ -21,12 +22,12 @@ export default async function SharedPlayoffEntryPage(props: {
     select: {
       id: true, name: true, challengeId: true,
       challenge: {
-        select: { id: true, name: true, sport: true, ownerUserId: true, config: true },
+        select: { id: true, name: true, sport: true, seasonYear: true, ownerUserId: true, config: true },
       },
     },
   }) as {
     id: string; name: string; challengeId: string
-    challenge: { id: string; name: string; sport: string; ownerUserId: string; config: unknown }
+    challenge: { id: string; name: string; sport: string; seasonYear: number; ownerUserId: string; config: unknown }
   } | null
 
   if (!entry || entry.challengeId !== leagueId || !["ncaaf", "nba_cup"].includes(entry.challenge.sport)) {
@@ -55,7 +56,12 @@ export default async function SharedPlayoffEntryPage(props: {
     }),
     (prisma as any).playoffBracketPick.findMany({ where: { entryId } }),
   ])
+  const schedule = await readSingleGameSchedule(entry.challenge.sport as "ncaaf" | "nba_cup", entry.challenge.seasonYear)
+  const scheduleByNumber = new Map(schedule?.games.map((game) => [game.seriesNumber, game]) ?? [])
   const series = (rawSeries as Array<Record<string, unknown>>).map((row) => ({
+    gameLabel: scheduleByNumber.get(Number(row.seriesNumber))?.label || null,
+    location: scheduleByNumber.get(Number(row.seriesNumber))?.location || null,
+    venue: scheduleByNumber.get(Number(row.seriesNumber))?.venue || row.venue || null,
     ...row,
     startsAt: row.startsAt instanceof Date ? row.startsAt.toISOString() : null,
     nextGameAt: row.nextGameAt instanceof Date ? row.nextGameAt.toISOString() : null,
@@ -76,6 +82,7 @@ export default async function SharedPlayoffEntryPage(props: {
       </p>
       <PlayoffBracketBoard
         rounds={getPlayoffRoundOrder(entry.challenge.sport as PlayoffSport)}
+        sport={entry.challenge.sport}
         series={projected}
         picks={visiblePicks}
         locked

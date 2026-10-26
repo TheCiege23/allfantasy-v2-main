@@ -120,6 +120,15 @@ export type PlayoffSeriesSlot = "home" | "away"
  */
 export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "finals"
 
+export type BracketTeamProfile = {
+  won: number | null
+  lost: number | null
+  winPercentage: number | null
+  plusMinus: number | null
+  seasonReview: string
+  source: "cached_standings"
+}
+
 export type PlayoffChallengeView = {
   challenge: {
     id: string
@@ -136,6 +145,7 @@ export type PlayoffChallengeView = {
     maxParticipants?: number
     scoringStyle?: string
     lockRule?: string
+    firstGameStartsAt?: string | null
     config?: PlayoffChallengeConfig | null
     createdAt: string
     updatedAt: string
@@ -147,6 +157,10 @@ export type PlayoffChallengeView = {
     userId: string
     pickCount: number
     isComplete: boolean
+    finalizedAt?: string | null
+    tiebreakerTotalScore?: number | null
+    rank?: number | null
+    potentialTotal?: number
     totalScore?: number
     correctPicks?: number
     resolvedPicks?: number
@@ -158,12 +172,16 @@ export type PlayoffChallengeView = {
     userId: string
     pickCount: number
     isComplete: boolean
+    finalizedAt?: string | null
+    rank?: number | null
+    potentialTotal?: number
     totalScore?: number
     correctPicks?: number
     resolvedPicks?: number
     createdAt: string
   }>
   series: PlayoffSeriesView[]
+  teamProfiles?: Record<string, BracketTeamProfile>
   picks: PlayoffPickView[]
   rounds: PlayoffRoundKey[]
   lockDiagnostics?: PlayoffLockDiagnostics | null
@@ -204,6 +222,8 @@ export type PlayoffSeriesView = {
   bestOf: number
   status: PlayoffSeriesStatus
   startsAt: string | null
+  gameLabel?: string | null
+  location?: string | null
   homeTeamWins?: number
   awayTeamWins?: number
   seriesSummary?: string | null

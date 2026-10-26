@@ -9,6 +9,7 @@ import { pointsForSeries, scorePlayoffEntryPicks } from "@/lib/playoffs/playoffS
 import { nbaCupSeedMap, validateNbaCupField } from "@/lib/playoffs/nbaCupSeeds"
 import { validateSingleGameSchedule } from "@/lib/playoffs/singleGameSchedule"
 import { visiblePlayoffPicks } from "@/lib/playoffs/shareVisibility"
+import { assertBracketOpen, firstGameDeadline, rankBrackets, scoreAndPotential } from "@/lib/playoffs/playoffCompetition"
 
 describe("NBA Cup knockout bracket", () => {
   const rows = buildPlayoffTemplate({ sport: "nba_cup", seasonYear: 2026 })
@@ -84,6 +85,7 @@ describe("single-game schedule and shared pick privacy", () => {
     const games = Array.from({ length: 7 }, (_, index) => ({
       seriesNumber: index + 1,
       startsAt: `2026-12-${String(index + 4).padStart(2, "0")}T19:00:00-05:00`,
+      label: `Game ${index + 1}`, venue: "Test Arena", location: "Test City",
     }))
     const valid = validateSingleGameSchedule("nba_cup", games)
     expect(valid.ok).toBe(true)
@@ -104,5 +106,37 @@ describe("single-game schedule and shared pick privacy", () => {
       createdAt: "", updatedAt: "",
     }))
     expect(visiblePlayoffPicks(series, picks, now).map((pick) => pick.seriesId)).toEqual(["s1"])
+  })
+})
+
+
+describe("finalized tournament competition rules", () => {
+  it("uses one first-game deadline for every matchup and fails closed without a full schedule", () => {
+    const starts = [{ startsAt: "2026-12-04T19:00:00-05:00" }, { startsAt: "2026-12-05T19:00:00-05:00" }]
+    expect(firstGameDeadline(starts)).toBe(Date.parse(starts[0].startsAt))
+    expect(() => assertBracketOpen(starts, Date.parse(starts[0].startsAt) - 1)).not.toThrow()
+    expect(() => assertBracketOpen(starts, Date.parse(starts[0].startsAt))).toThrow(/first game/)
+    expect(firstGameDeadline([{ startsAt: null }, starts[1]])).toBeNull()
+    expect(() => assertBracketOpen([{ startsAt: null }])).toThrow(/schedule/)
+  })
+
+  it("removes eliminated picks from potential and keeps tied ranks tied", () => {
+    const series = [
+      { id: "a", round: "cup_quarterfinals" as const, homeTeamName: "Celtics", awayTeamName: "Magic",
+        winnerTeamName: "Magic", liveHomeScore: 80, liveAwayScore: 90 },
+      { id: "b", round: "cup_semifinals" as const, homeTeamName: "Winner S1", awayTeamName: "Knicks",
+        winnerTeamName: null, liveHomeScore: null, liveAwayScore: null },
+    ]
+    const score = scoreAndPotential(series, [
+      { seriesId: "a", pickTeamName: "Celtics" },
+      { seriesId: "b", pickTeamName: "Celtics" },
+    ], "nba_cup")
+    expect(score.totalScore).toBe(0)
+    expect(score.potentialTotal).toBe(0)
+    const rows = rankBrackets([
+      { id: "a", totalScore: 3, potentialTotal: 5, correctPicks: 2, tiebreakerTotalScore: 210 },
+      { id: "b", totalScore: 3, potentialTotal: 7, correctPicks: 2, tiebreakerTotalScore: 210 },
+    ], 200)
+    expect(rows.map((row) => row.rank)).toEqual([1, 1])
   })
 })

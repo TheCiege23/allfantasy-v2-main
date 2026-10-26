@@ -54,6 +54,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const [showPickResults, setShowPickResults] = useState(false)
   const [showUserProjection, setShowUserProjection] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [tiebreakerGuess, setTiebreakerGuess] = useState(initialView.activeEntry?.tiebreakerTotalScore?.toString() ?? "")
 
   const activeEntry = view.activeEntry
   const series = Array.isArray(view.series) ? view.series : []
@@ -73,6 +74,9 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const canSyncSeries = ["nba", "nhl", "mlb"].includes(String(view.challenge.sport ?? "").toLowerCase()) && canAdminPool
   const canShowPickResultsToggle = activeEntry?.userId === view.viewerUserId || view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
   const canShareEntry = ["ncaaf", "nba_cup"].includes(String(view.challenge.sport ?? "").toLowerCase())
+  const isLiveSingleGame = canShareEntry && !view.challenge.isTestMode
+  const firstGameStartsAt = view.challenge.firstGameStartsAt ?? null
+  const pastDeadline = isLiveSingleGame && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
   async function copyShareLink() {
     if (!activeEntry) return
     try {
@@ -112,9 +116,12 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
     [series, picks],
   )
   const completionMode = completion?.mode ?? "full_bracket_required"
-  const canSubmit = Boolean(activeEntry) && Boolean(completion?.isSubmittable ?? (totalSeries > 0 && pickCount >= totalSeries))
+  const validGuess = /^\d{1,3}$/.test(tiebreakerGuess) && Number(tiebreakerGuess) <= 500
+  const canSubmit = Boolean(activeEntry) && Boolean(completion?.isSubmittable ?? (totalSeries > 0 && pickCount >= totalSeries)) &&
+    (!isLiveSingleGame || (validGuess && !pastDeadline && Boolean(firstGameStartsAt)))
   const submitBlockedMessage = completion?.message ?? "Complete every series before submitting this bracket."
-  const submitButtonLabel = completionMode === "available_picks_only" ? "Submit Available Picks" : "Submit Bracket"
+  const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? "Update finalized picks" : "Finalize picks" :
+    completionMode === "available_picks_only" ? "Submit Available Picks" : "Submit Bracket"
   const reviewBadge = activeEntry.isComplete
     ? completionMode === "available_picks_only"
       ? "Partial verification submitted"
@@ -178,8 +185,9 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
         const result = await submitPlayoffBracketEntryClient({
           challengeId: view.challenge.id,
           entryId: activeEntry.id,
+          tiebreakerTotalScore: isLiveSingleGame ? Number(tiebreakerGuess) : undefined,
         })
-        toast.success("Bracket submitted")
+        toast.success(isLiveSingleGame ? "Picks finalized" : "Bracket submitted")
         router.push(result.redirectUrl)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to submit bracket")
@@ -247,19 +255,20 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           backLabel="Back to pool dashboard"
           actions={
             <>
+              {isLiveSingleGame ? <label className="af-pb-tiebreaker">Final game combined score <input type="number" min={0} max={500} inputMode="numeric" value={tiebreakerGuess} onChange={(e) => setTiebreakerGuess(e.target.value)} aria-label="Final game combined score tiebreaker" /></label> : null}
               {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Share bracket</button> : null}
               <button
                 type="button"
                 className="af-pb-btn af-pb-btn--accent"
                 onClick={handleSubmit}
                 disabled={!canSubmit || submitting}
-                title={canSubmit ? undefined : submitBlockedMessage}
+                title={canSubmit ? undefined : pastDeadline ? "The first game has started." : isLiveSingleGame && !validGuess ? "Enter a final game combined score." : submitBlockedMessage}
                 data-testid="pb-submit"
               >
                 {submitting
                   ? "Submitting…"
                   : dirtySinceSubmit && activeEntry.isComplete
-                    ? `Re-${submitButtonLabel}`
+                    ? isLiveSingleGame ? "Finalize updated picks" : `Re-${submitButtonLabel}`
                     : submitButtonLabel}
               </button>
               {canSyncSeries ? (

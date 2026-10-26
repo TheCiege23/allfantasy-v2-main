@@ -1,38 +1,49 @@
 # CFP and NBA Cup Bracket Leagues
 
-This feature uses the existing playoff challenge tables for pools, entries, invites, picks, and standings. Each pool is sport- and season-scoped.
+This draft builds on the existing playoff challenge tables and Railway app. It adds finalized entry state, a first-game deadline, matchup research, season-wide results, and two leaderboard levels.
 
 ## Player flow
 
-- From `/brackets`, create a College Football Playoff or NBA Cup Bracket League.
-- Invite members with the existing pool link or code.
-- After the official field and all game start times are published, create entries and pick each winner. Picks save through the existing playoff pick route and cascade when an earlier selection changes.
-- Each game locks at its published start time. The server rejects missing-field, missing-schedule, and late picks.
-- Share an entry's read-only link. The share page reveals a pick only after that pick's game has started; private leagues require membership.
-- Pool standings use the existing scorer. CFP round points are 1, 2, 4, 8; NBA Cup points are 1, 2, 4.
+1. Create or join a CFP or NBA Cup league. The admin publishes the official field and a complete schedule with each game's name, start time, venue, and location. Brackets auto-fill from that published field.
+2. Tap any matchup to open a full-screen view with the round, bowl/game name, time, venue, verified season record, win rate, point differential, and a transparently labeled Chimmy estimate. Unavailable facts show as unavailable. Chimmy's Choice picks the higher estimated team when enough data exists.
+3. Pick all winners, enter a final-game combined-score guess, and click **Finalize picks**. Editing a pick moves the bracket back to Draft. The user can revise and finalize again until the first scheduled game starts. All picks and finalization lock together at that instant.
+4. Invite friends and share a read-only entry. Opponents' picks reveal only after their games begin. Private leagues require membership to view shared entries.
+5. Watch pool and universal boards. Each finalized entry shows earned points, potential total, correct picks, and rank. Potential counts only saved picks whose teams have not been eliminated.
 
-## Tournament shapes
+## Competition rules
 
-- CFP: 12 teams, four first-round games, four quarterfinals, two semifinals, one championship. The repository's existing fixed 11-game graph is used.
-- NBA Cup: eight qualifiers, four quarterfinals, two semifinals, one championship. East and West remain separate until the final. The Cup is stored as `nba_cup`, distinct from `nba` playoff pools.
+| Tournament | Field | Round points | Maximum |
+| --- | ---: | --- | ---: |
+| CFP | 12 teams, 11 games | First round 1; quarterfinal 2; semifinal 4; title 8 | 28 |
+| NBA Cup | 8 teams, 7 games | Quarterfinal 1; semifinal 2; title 4 | 12 |
 
-## Admin launch sequence
+Ties are broken by closest predicted **combined championship score**, then more correct picks. Exact ties share a rank. Potential is shown for suspense and never breaks ties. The final-score guess stays private until the final is decided.
 
-1. For CFP, publish the 12 committee seeds at `/admin/cfp-seeding`.
-2. For NBA Cup, publish East and West four-team knockout seeds at `/admin/knockout-brackets` after group play is final.
-3. At `/admin/knockout-brackets`, publish all 11 CFP or seven NBA Cup game start times as timezone-qualified timestamps. A single schedule updates every matching pool. New pools inherit the published field and schedule.
-4. After each game is final, enter its home and away scores by pool ID and game number on the same page. Results are audited, scored on read, and advance official winners in the bracket projection. Identical repeat submissions are safe. A changed final is rejected for separate support review.
+The 2026-27 CFP bowl sites are Fiesta, Cotton, Peach, Rose, Orange, and Sugar, but a specific bracket slot's bowl assignment is entered with the official schedule; it is not guessed or hardcoded. The CFP states that the No. 1 seed chooses its quarterfinal and potential semifinal site. See [official bracket and schedule](https://collegefootballplayoff.com/sports/2026/8/9/bracket-place-holder). The NBA Cup uses four knockout qualifiers per conference and seven elimination games; see [NBA Cup format](https://www.nba.com/news/nba-cup-101).
 
-The admin result route is an intentional manual result path. The existing playoff provider sync is limited to NBA/NHL/MLB and must not be used for CFP or NBA Cup until its event mappings are verified. Automatic result ingestion is a later integration.
+## Capacity and money boundary
 
-## Verification before merge
+Confirmed cap: **one free bracket per user per tournament season**; **five total** with an active AF Pro entitlement (including Supreme, which bundles Pro). AF Commissioner alone does not increase the cap. A commissioner can set a lower per-league cap. Extra capacity is an app subscription benefit, not a contest stake, league pot, or entry fee. There is no bracket-specific checkout in this PR.
 
-- Run `npm run typecheck` and `npx vitest run __tests__/playoff-nba-cup-bracket.test.ts __tests__/playoff-cfp-template.test.ts __tests__/playoff-cfp-seeding.test.ts`.
-- In staging, create each sport's private pool before and after field publication. Verify the initial pending state, field replacement, schedule propagation, 11/7 entries, cascade, lock at game start, share privacy, scoring, and leaderboard rank.
-- Verify the admin result form against a staging database, including the no-correction response for an already final game.
-- Confirm all bracket hub cards link to the playoff create API and never fall into the legacy bracket league flow.
+AllFantasy offers **no prizes, gambling, betting, bracket entry fees, or in-app payouts**. Commissioners handle any optional external arrangements independently. The repository's existing legal copy currently names FanCred for paid league dues, so broader third-party wording needs product/legal reconciliation before public launch.
 
-## Format sources
+## Operations on Railway
 
-- [CFP confirms 12 teams for 2026-27](https://collegefootballplayoff.com/news/2026/1/23/2627-format)
-- [NBA Cup 2026 knockout format](https://www.nba.com/news/nba-cup-101)
+- The Prisma migration adds `finalized_at` and `tiebreaker_total_score` to `playoff_bracket_entries`. Run it with the repository's guarded production migration flow; never run bare `prisma migrate deploy` against production. Follow `AGENTS.md` and `CLAUDE.md`.
+- Build using the repository's Railway build/start scripts. Vercel status checks do not represent the user's deployment path.
+- Publish CFP committee seeds at `/admin/cfp-seeding` or NBA Cup qualifiers at `/admin/knockout-brackets`.
+- Publish all game start times plus names, venues, and locations at `/admin/knockout-brackets`. The server opens picks only when the field and complete schedule are available.
+- Publish each verified final once for the season at `/admin/knockout-brackets`. The new season result route rejects conflicting league matchups and updates every matching league together. Existing per-pool result entry remains available for support.
+- Automatic provider ingestion of final scores remains a separate integration. It must map official game IDs, teams, and tournament identity with confidence before writing scores. Do not label seed heuristics as a trained prediction model.
+
+## Engagement improvements
+
+1. **Friends-first home:** show “your rank vs friends,” two closest rivals, and invite progress immediately after finalization. One tap copies a league invite.
+2. **Game-day return loop:** notify users when a matchup starts, when a pick resolves, and when their potential changes. Each alert should deep-link to the matchup or board.
+3. **Chimmy explainability:** show the exact standings date and reason for a suggestion; invite the user to disagree. Later, replace heuristic estimates only when a validated model and calibration data exist.
+4. **Bracket story cards:** generate shareable, spoiler-aware images for bold picks, upset survival, and leaderboard moves. Hide unrevealed picks.
+5. **Commissioner pulse:** show finalized/draft counts, the next kickoff, missing schedule fields, and a one-click external invite; never include dues or payout tracking inside AllFantasy.
+
+## Verification
+
+Focused tests cover tournament shape, seed and schedule validation, first-game deadline, potential after elimination, and tied ranks. This draft requires TypeScript/unit CI and a Railway staging flow test before merge. The local F: project drive was unavailable to the runner, so local runtime verification was not possible in this task.

@@ -8,9 +8,8 @@ export default function KnockoutBracketAdminPage() {
   const [east, setEast] = useState<string[]>(["", "", "", ""])
   const [west, setWest] = useState<string[]>(["", "", "", ""])
   const [scheduleSport, setScheduleSport] = useState<"ncaaf" | "nba_cup">("nba_cup")
-  const [scheduleTimes, setScheduleTimes] = useState<string[]>(Array(7).fill(""))
+  const [scheduleGames, setScheduleGames] = useState<Array<{ startsAt: string; label: string; venue: string; location: string }>>(Array.from({ length: 7 }, () => ({ startsAt: "", label: "", venue: "", location: "" })))
   const [scheduleMessage, setScheduleMessage] = useState("")
-  const [challengeId, setChallengeId] = useState("")
   const [seriesNumber, setSeriesNumber] = useState(1)
   const [homeScore, setHomeScore] = useState("")
   const [awayScore, setAwayScore] = useState("")
@@ -51,7 +50,7 @@ export default function KnockoutBracketAdminPage() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) return setScheduleMessage(String(data.error ?? "Could not load schedule."))
     if (data.schedule) {
-      setScheduleTimes(data.schedule.games.map((game: { startsAt: string }) => game.startsAt))
+      setScheduleGames(data.schedule.games.map((game: { startsAt: string; label?: string; venue?: string; location?: string }) => ({ startsAt: game.startsAt, label: game.label ?? "", venue: game.venue ?? "", location: game.location ?? "" })))
       setScheduleMessage("Saved schedule loaded.")
     } else setScheduleMessage("No schedule published for this season.")
   }
@@ -64,7 +63,7 @@ export default function KnockoutBracketAdminPage() {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
           sport: scheduleSport, season,
-          games: scheduleTimes.map((startsAt, index) => ({ seriesNumber: index + 1, startsAt })),
+          games: scheduleGames.map((game, index) => ({ seriesNumber: index + 1, ...game })),
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -78,13 +77,13 @@ export default function KnockoutBracketAdminPage() {
     setBusy(true)
     setResultMessage("")
     try {
-      const res = await fetch("/api/admin/brackets/single-game-result", {
+      const res = await fetch("/api/admin/brackets/season-result", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ challengeId: challengeId.trim(), seriesNumber, homeScore, awayScore }),
+        body: JSON.stringify({ sport: scheduleSport, season, seriesNumber, homeScore, awayScore }),
       })
       const data = await res.json().catch(() => ({}))
       setResultMessage(res.ok
-        ? `Saved game ${seriesNumber}: ${data.winner} won.`
+        ? `Published game ${seriesNumber} to ${data.updatedPools ?? 0} leagues: ${data.winner} won.`
         : String(data.error ?? "Could not save result."))
     } finally { setBusy(false) }
   }
@@ -102,7 +101,7 @@ export default function KnockoutBracketAdminPage() {
         <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
           <h2 className="text-xl font-bold">NBA Cup knockout field</h2>
           <p className="mt-1 text-sm text-slate-300">Enter each conference's four qualified teams in official seed order. Publish after group play is final.</p>
-          <label className="mt-4 block text-sm" htmlFor="season">Cup season</label>
+          <label className="mt-4 block text-sm" htmlFor="season">Tournament season</label>
           <input id="season" className={inputClass} type="number" min={2024} max={2100} value={season} onChange={(e) => setSeason(Number(e.target.value))} />
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             {(["east", "west"] as const).map((side) => {
@@ -123,22 +122,28 @@ export default function KnockoutBracketAdminPage() {
         </section>
         <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
           <h2 className="text-xl font-bold">Game schedule and pick locks</h2>
-          <p className="mt-1 text-sm text-slate-300">Publish every start time before picks open. Enter ISO timestamps with a timezone, such as 2026-12-04T19:00:00-05:00.</p>
+          <p className="mt-1 text-sm text-slate-300">Publish every start time before picks open. Enter timezone-qualified times, each bowl or game name, venue, and location. All three details are required for each game so player matchup views stay complete.</p>
           <label className="mt-4 block text-sm">Tournament
             <select className={inputClass} value={scheduleSport} onChange={(e) => {
               const next = e.target.value as "ncaaf" | "nba_cup"
               setScheduleSport(next)
-              setScheduleTimes(Array(next === "ncaaf" ? 11 : 7).fill(""))
+              setScheduleGames(Array.from({ length: next === "ncaaf" ? 11 : 7 }, () => ({ startsAt: "", label: "", venue: "", location: "" })))
             }}>
               <option value="nba_cup">NBA Cup</option>
               <option value="ncaaf">College Football Playoff</option>
             </select>
           </label>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {scheduleTimes.map((value, index) => <label className="text-sm" key={index}>Game {index + 1} starts
-              <input className={inputClass} value={value} placeholder="2026-12-04T19:00:00-05:00" onChange={(e) =>
-                setScheduleTimes(scheduleTimes.map((item, i) => i === index ? e.target.value : item))} />
-            </label>)}
+            {scheduleGames.map((game, index) => <div className="rounded-xl border border-white/10 p-3" key={index}>
+              <p className="mb-2 text-sm font-bold">Game {index + 1}</p>
+              {(["startsAt", "label", "venue", "location"] as const).map((field) =>
+                <label className="mb-2 block text-xs" key={field}>
+                  {field === "startsAt" ? "Start time (ISO with timezone)" : field === "label" ? "Bowl or game name" : field === "venue" ? "Venue name" : "City and state"}
+                  <input className={inputClass} value={game[field]}
+                    placeholder={field === "startsAt" ? "2026-12-04T19:00:00-05:00" : field === "label" && scheduleSport === "ncaaf" ? "Rose Bowl" : ""}
+                    onChange={(e) => setScheduleGames(scheduleGames.map((item, i) => i === index ? { ...item, [field]: e.target.value } : item))} />
+                </label>)}
+            </div>)}
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
             <button className="rounded-xl border border-white/25 px-4 py-2" onClick={loadSchedule} disabled={busy}>Load saved schedule</button>
@@ -148,15 +153,14 @@ export default function KnockoutBracketAdminPage() {
         </section>
         <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
           <h2 className="text-xl font-bold">Record a final result</h2>
-          <p className="mt-1 text-sm text-slate-300">Use the challenge ID from the pool URL. Later rounds require prior winners. Existing finals cannot be overwritten here.</p>
+          <p className="mt-1 text-sm text-slate-300">Publish one verified final to every league for the selected tournament and season. Later rounds require prior winners; conflicting finals are rejected.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm sm:col-span-2">Challenge ID<input className={inputClass} value={challengeId} onChange={(e) => setChallengeId(e.target.value)} /></label>
             <label className="text-sm">Game number<input className={inputClass} type="number" min={1} value={seriesNumber} onChange={(e) => setSeriesNumber(Number(e.target.value))} /></label>
             <div />
             <label className="text-sm">Home score<input className={inputClass} type="number" min={0} value={homeScore} onChange={(e) => setHomeScore(e.target.value)} /></label>
             <label className="text-sm">Away score<input className={inputClass} type="number" min={0} value={awayScore} onChange={(e) => setAwayScore(e.target.value)} /></label>
           </div>
-          <button className="mt-4 rounded-xl bg-teal-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-50" onClick={saveResult} disabled={busy}>Save final</button>
+          <button className="mt-4 rounded-xl bg-teal-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-50" onClick={saveResult} disabled={busy}>Publish final to all leagues</button>
           {resultMessage && <p role="status" className="mt-3 text-sm text-teal-200">{resultMessage}</p>}
         </section>
       </div>

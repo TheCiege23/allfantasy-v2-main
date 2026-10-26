@@ -14,6 +14,7 @@ type Props = {
   rounds: PlayoffRoundKey[]
   series: PlayoffSeriesView[]
   picks: PlayoffPickView[]
+  sport?: string
   onPick?: (seriesId: string, teamName: string) => void
   locked?: boolean
   savingSeriesIds?: Set<string>
@@ -186,6 +187,7 @@ export default function PlayoffBracketBoard({
   rounds,
   series,
   picks,
+  sport,
   onPick,
   locked = false,
   savingSeriesIds,
@@ -223,7 +225,7 @@ export default function PlayoffBracketBoard({
                   const isSaving = savingSeriesIds?.has(item.id) ?? false
                   const isSaved = savedSeriesIds?.has(item.id) ?? false
                   const isNext = nextSeriesId === item.id
-                  const pickResult = getPlayoffPickResult(item, pick)
+                  const pickResult = getPlayoffPickResult(item, pick, sport)
                   const seriesCardBorderClass = getSeriesCardBorderClass(showPickResults, pickResult.status, isNext)
                   const advancedFrom = item.sourceSeriesHome || item.sourceSeriesAway
                     ? projectionMode === "user_projection"
@@ -240,11 +242,12 @@ export default function PlayoffBracketBoard({
                       className={`rounded-xl border bg-white p-3 shadow-sm ${seriesCardBorderClass}`}
                     >
                       <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <span>S{item.seriesNumber}</span>
+                        <span>{item.gameLabel || `S${item.seriesNumber}`}</span>
                         <span>
                           {isSaving ? "Saving..." : isSaved ? "Saved" : formatLabel(item.bestOf)}
                         </span>
                       </div>
+                      {item.startsAt && <p className="mb-2 text-[11px] font-semibold text-slate-500">{new Date(item.startsAt).toLocaleString()} · {item.venue || "Venue TBA"}{item.location ? ` · ${item.location}` : ""}</p>}
                       {unresolved ? (
                         <p
                           data-testid={`playoff-series-disabled-reason-${item.id}`}
