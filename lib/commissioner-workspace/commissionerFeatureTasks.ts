@@ -1,7 +1,7 @@
 /**
  * Commissioner Workspace tasks for the native commissioner tools: a stat correction nobody has
- * applied, a trade in commissioner review, and teams that look inactive with nobody setting their
- * lineup. Each meets the bar in ./taskSources.ts:
+ * applied, a trade in commissioner review, teams that look inactive with nobody setting their
+ * lineup, and weekly prizes that promise more than the payout pot holds. Each meets the bar in ./taskSources.ts:
  *
  *   measured     read from rows we hold — the stored correction review, the pending proposals, the
  *                manager-health read the Commissioner Hub already shows
@@ -110,19 +110,44 @@ export function detectInactiveTeamsToManage(leagueId: string, suggested: readonl
   }
 }
 
+/**
+ * The weekly side-contest prizes, over the regular season, add up to more than the buy-ins bring in
+ * (lib/payouts). Self-clearing: lowering a prize or raising the buy-in removes it.
+ */
+export function detectPayoutOvercommitment(
+  leagueId: string,
+  input: { potCents: number; overCommittedCents: number; season: number } | null,
+): WorkspaceTaskCandidate | null {
+  if (!input || input.overCommittedCents <= 0) return null
+  const dollars = (c: number) => `$${(c / 100).toFixed(c % 100 ? 2 : 0)}`
+  return {
+    sourceKey: `payout-overcommitted:${input.season}:v1`,
+    title: 'Weekly prizes promise more than the pot holds',
+    description:
+      `Over the regular season the weekly prizes come to ${dollars(input.overCommittedCents)} more than the ` +
+      `${dollars(input.potCents)} pot, so nothing is left for the place payouts. Lower a weekly prize or raise the buy-in.`,
+    priority: 'standard',
+    // How much money is at stake is the commissioner's call.
+    automationCandidate: false,
+    relatedLinks: [{ label: 'Standings · Payouts', moduleId: 'settings', href: `/core/standings?league=${encodeURIComponent(leagueId)}` }],
+  }
+}
+
 export async function readCommissionerFeatureTasks(leagueId: string, now: Date): Promise<WorkspaceTaskCandidate[]> {
-  const [{ prisma }, { readStatCorrections }, { readInactiveManagerView }] = await Promise.all([
+  const [{ prisma }, { readStatCorrections }, { readInactiveManagerView }, { readPayoutOvercommitment }] = await Promise.all([
     import('@/lib/prisma'),
     import('@/lib/stat-corrections/statCorrectionService'),
     import('@/lib/inactive-manager/inactiveManagerService'),
+    import('@/lib/payouts/payoutService'),
   ])
-  const [corrections, proposals, inactive] = await Promise.all([
+  const [corrections, proposals, inactive, overcommitment] = await Promise.all([
     readStatCorrections(leagueId),
     prisma.redraftTradeProposal.findMany({
       where: { leagueId, status: 'pending', vetoMode: 'commissioner', acceptedAt: { not: null }, expiresAt: { not: null } },
       select: { id: true, expiresAt: true, proposerRosterId: true, receiverRosterId: true },
     }),
     readInactiveManagerView(leagueId),
+    readPayoutOvercommitment(leagueId),
   ])
 
   const latest = corrections.latest
@@ -160,5 +185,7 @@ export async function readCommissionerFeatureTasks(leagueId: string, now: Date):
     : []
   const inactiveTask = detectInactiveTeamsToManage(leagueId, suggested)
 
-  return [...(statCorrection ? [statCorrection] : []), ...trades, ...(inactiveTask ? [inactiveTask] : [])]
+  const payoutTask = detectPayoutOvercommitment(leagueId, overcommitment)
+
+  return [...(statCorrection ? [statCorrection] : []), ...trades, ...(inactiveTask ? [inactiveTask] : []), ...(payoutTask ? [payoutTask] : [])]
 }

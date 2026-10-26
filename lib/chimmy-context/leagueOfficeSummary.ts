@@ -23,6 +23,17 @@ export type LeagueOfficeInput = {
   viewerTeamManaged: boolean
   /** The latest league-log lines the viewer may read; null when the log is hidden from them. */
   log: ReadonlyArray<{ at: string; title: string; detail: string | null }> | null
+  /** The payout calculator (lib/payouts), when the commissioner has set a place split. */
+  payouts?: {
+    final: boolean
+    buyInCents: number
+    teamCount: number
+    potCents: number
+    weeklyReserveCents: number
+    places: ReadonlyArray<{ place: number; percent: number; cents: number; team: string | null }>
+    /** Commissioners only. */
+    collected: { cents: number; paidTeams: number } | null
+  } | null
 }
 
 const LOG_LINES = 8
@@ -54,10 +65,26 @@ function prizeLines(p: NonNullable<LeagueOfficeInput['prizes']>): string[] {
   return lines
 }
 
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+
+function payoutLines(p: NonNullable<LeagueOfficeInput['payouts']>): string[] {
+  const lines = [
+    `Payouts: ${formatPrize(p.buyInCents)} buy-in × ${p.teamCount} teams = ${formatPrize(p.potCents)} pot` +
+      (p.weeklyReserveCents ? `, ${formatPrize(p.weeklyReserveCents)} of it for the weekly prizes` : '') +
+      '. AllFantasy tracks the money; it does not collect or pay it.',
+    `Place payouts (${p.final ? 'final' : 'if the season ended today'}): ` +
+      p.places.map((x) => `${ordinal(x.place)} ${formatPrize(x.cents)} (${x.percent}%${x.team ? `, ${x.team}` : ''})`).join('; ') +
+      '.',
+  ]
+  if (p.collected) lines.push(`Buy-ins collected so far: ${formatPrize(p.collected.cents)}, ${p.collected.paidTeams} of ${p.teamCount} teams paid.`)
+  return lines
+}
+
 /** Null when there is nothing in the league office worth saying. */
 export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | null {
   const lines: string[] = []
   if (input.prizes) lines.push(...prizeLines(input.prizes))
+  if (input.payouts?.places.length) lines.push(...payoutLines(input.payouts))
 
   for (const t of input.trades) lines.push(`Trade between ${t.teams}: ${t.explainer}`)
 
