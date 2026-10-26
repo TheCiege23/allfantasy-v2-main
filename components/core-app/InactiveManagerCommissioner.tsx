@@ -81,7 +81,10 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       if (!r.ok) throw new Error(body.error || '')
       setMessage(
         style
-          ? t('Chimmy is running this team. Trade offers to it are refused while it does.', 'Chimmy dirige este equipo. Se rechazan las ofertas de intercambio mientras tanto.')
+          ? t(
+              'Chimmy is running this team: the lineup, plus a waiver claim when a starter cannot play. Trade offers to it are refused while it does.',
+              'Chimmy dirige este equipo: la alineación y una reclamación de waivers cuando un titular no puede jugar. Se rechazan las ofertas de intercambio mientras tanto.',
+            )
           : t('Autopilot off. AllFantasy still sets the lineup until you stop it.', 'Piloto automático apagado. AllFantasy sigue poniendo la alineación hasta que lo detengas.'),
       )
       await load()
