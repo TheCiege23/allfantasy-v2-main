@@ -6,22 +6,27 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { db, shuffle, advance } = vi.hoisted(() => ({
+const { db, shuffle, advance, alert } = vi.hoisted(() => ({
   db: {
     survivorCommissionerAction: { findFirst: vi.fn(), create: vi.fn() },
     survivorAuditEntry: { create: vi.fn() },
     league: { findUnique: vi.fn() },
+    survivorGameState: { findUnique: vi.fn() },
+    survivorTribe: { findMany: vi.fn() },
+    survivorPlayer: { findMany: vi.fn() },
   },
   shuffle: vi.fn(),
   advance: vi.fn(),
+  alert: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_leagueId: string, work: (tx: typeof db) => Promise<unknown>) => work(db) }))
 vi.mock('@/lib/survivor/SurvivorTribeShuffleEngine', () => ({ runShuffle: shuffle }))
 vi.mock('@/lib/survivor/gameStateMachine', () => ({ advancePhase: advance }))
+vi.mock('@/lib/survivor/survivorCommissionerAlerts', () => ({ notifySurvivorCommissionerOnce: alert }))
 
-import { autoApplyPendingTribeRedraw, getPendingTribeRedraw, respondToTribeRedraw } from '@/lib/survivor/survivorTribeRedrawDecision'
+import { autoApplyPendingTribeRedraw, getPendingTribeRedraw, rebalanceTribesBeforeCouncil, respondToTribeRedraw } from '@/lib/survivor/survivorTribeRedrawDecision'
 
 const recommendation = { id: 'recommendation', week: 4, newState: { minTribeSize: 2, maxTribeSize: 5, tribeSizes: [{ tribeId: 'a', tribeName: 'Alpha', activeCount: 2 }, { tribeId: 'b', tribeName: 'Beta', activeCount: 5 }] } }
 
@@ -105,5 +110,57 @@ describe('autoApplyPendingTribeRedraw (the default when nobody answers)', () => 
     shuffle.mockResolvedValue({ ok: false, error: 'A redraw is available only between councils before the merge.' })
     expect(await autoApplyPendingTribeRedraw('league', 5)).toEqual({ applied: false, reason: 'A redraw is available only between councils before the merge.' })
     expect(db.survivorCommissionerAction.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('rebalanceTribesBeforeCouncil (never freeze on a tribe of one)', () => {
+  const cast = (sizes: number[]) => sizes.flatMap((size, slot) => Array.from({ length: size }, () => ({ tribeId: `t${slot + 1}` })))
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', mergeTriggeredAt: null, activeCouncilId: null })
+    db.survivorTribe.findMany.mockResolvedValue([{ id: 't1' }, { id: 't2' }, { id: 't3' }, { id: 't4' }])
+    db.survivorCommissionerAction.findFirst.mockResolvedValue(null)
+    shuffle.mockResolvedValue({ ok: true })
+    advance.mockResolvedValue({})
+    alert.mockResolvedValue({ sent: true })
+  })
+
+  it('leaves tribes alone while every tribe can still hold a council', async () => {
+    db.survivorPlayer.findMany.mockResolvedValue(cast([3, 3, 2, 2]))
+    expect(await rebalanceTribesBeforeCouncil('league', 8)).toEqual({ action: 'none' })
+    expect(shuffle).not.toHaveBeenCalled()
+    expect(advance).not.toHaveBeenCalled()
+  })
+
+  it('redraws as Chimmy the moment a tribe is down to one manager, and tells the commissioner once', async () => {
+    db.survivorPlayer.findMany.mockResolvedValue(cast([3, 3, 2, 1]))
+    expect(await rebalanceTribesBeforeCouncil('league', 9)).toEqual({ action: 'redrawn', tribeCount: 3 })
+    expect(shuffle).toHaveBeenCalledWith('league', { actorUserId: 'survivor-ai-host' })
+    expect(alert).toHaveBeenCalledWith('league', 'tribes_rebalanced', expect.objectContaining({ dedupeKey: '9:redrawn', body: expect.stringContaining('3 tribes') }))
+  })
+
+  it('answers a pending recommendation with the redraw instead of leaving it open', async () => {
+    db.survivorPlayer.findMany.mockResolvedValue(cast([3, 3, 2, 0]))
+    db.survivorCommissionerAction.findFirst.mockImplementation(async ({ where }) =>
+      where.actionType === 'sit_out_shuffle_recommendation' ? { ...recommendation, week: 9 } : null)
+    expect(await rebalanceTribesBeforeCouncil('league', 9)).toEqual({ action: 'redrawn', tribeCount: 2 })
+    expect(shuffle).toHaveBeenCalledWith('league', { db, actorUserId: 'survivor-ai-host', recommendationId: 'recommendation' })
+  })
+
+  it('starts the merge when no redraw can run', async () => {
+    db.survivorPlayer.findMany.mockResolvedValue(cast([3, 3, 2, 1]))
+    shuffle.mockResolvedValue({ ok: false, error: 'Current tribe assignments do not match the active cast.' })
+    expect(await rebalanceTribesBeforeCouncil('league', 9)).toEqual({ action: 'merged' })
+    expect(advance).toHaveBeenCalledWith('league', 'automatic', undefined, { toPhase: 'merge', notes: 'tribe_too_small_merge_now' })
+    expect(alert).toHaveBeenCalledWith('league', 'tribes_rebalanced', expect.objectContaining({ dedupeKey: '9:merged' }))
+  })
+
+  it('does nothing after the merge or while a council is open', async () => {
+    db.survivorPlayer.findMany.mockResolvedValue(cast([3, 3, 2, 1]))
+    db.survivorGameState.findUnique.mockResolvedValue({ phase: 'merge', mergeTriggeredAt: new Date(), activeCouncilId: null })
+    expect(await rebalanceTribesBeforeCouncil('league', 9)).toEqual({ action: 'none' })
+    db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', mergeTriggeredAt: null, activeCouncilId: 'open' })
+    expect(await rebalanceTribesBeforeCouncil('league', 9)).toEqual({ action: 'none' })
+    expect(shuffle).not.toHaveBeenCalled()
   })
 })
