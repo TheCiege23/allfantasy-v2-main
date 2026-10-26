@@ -783,12 +783,29 @@ function normalizeStatus(value: unknown): NflRedraftPlayoffMatchupStatus {
   return 'scheduled'
 }
 
+/**
+ * A game whose result is settled: a bye, or a stored winner. A `final` row with scores but no winner is
+ * NOT — the advance writes the winner, and until it has run the round is still being played.
+ *
+ * 🛑 READING `complete` HERE STRANDED EVERY SHORT LOWER BRACKET. A lower bracket shorter than the title
+ * bracket (10 teams: 3 title rounds, 2 lower) starts at championship round 2, so its first round is
+ * stored `pending`. The round scorer writes its games `final` with scores and no winner, and on the next
+ * read `normalizeMatchup` calls a `final` row complete — so the pending round derived as `completed`
+ * with no winners, the advance skipped to the empty lower final, the finalizer refused with
+ * LOWER_BRACKET_INCOMPLETE, and the season never ended. Found by the NBA/NHL full-season simulation.
+ */
+function matchupDecided(matchup: NflRedraftPlayoffMatchupState): boolean {
+  return matchup.status === 'bye' || matchup.bye || Boolean(matchup.winnerRosterId)
+}
+
 function normalizeRoundStatus(value: unknown, matchups: NflRedraftPlayoffMatchupState[]): NflRedraftPlayoffRoundStatus {
   const raw = normalizedText(value)
   if (raw === 'active') return 'active'
   if (raw === 'completed' || raw === 'complete') return 'completed'
   if (raw === 'cancelled' || raw === 'canceled') return 'cancelled'
-  if (matchups.length > 0 && matchups.every((matchup) => matchup.complete || matchup.status === 'bye')) return 'completed'
+  // Derived only from settled games: a stored-`pending` round whose games were scored `final` but never
+  // advanced (the lower-bracket generation bug above) must read as still in play, or it is skipped for good.
+  if (matchups.length > 0 && matchups.every(matchupDecided)) return 'completed'
   return 'pending'
 }
 
@@ -1169,7 +1186,7 @@ function buildThirdPlaceMatchup(input: {
 }
 
 function activeChampionshipRound(rounds: NflRedraftPlayoffRoundState[]): NflRedraftPlayoffRoundState | null {
-  return rounds.find((round) => round.status === 'active') ?? rounds.find((round) => round.matchups.some((matchup) => !matchup.complete)) ?? null
+  return rounds.find((round) => round.status === 'active') ?? rounds.find((round) => round.matchups.some((matchup) => !matchupDecided(matchup))) ?? null
 }
 
 function resolveWinner(matchup: NflRedraftPlayoffMatchupState): {

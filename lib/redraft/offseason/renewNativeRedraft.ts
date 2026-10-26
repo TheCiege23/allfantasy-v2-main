@@ -66,7 +66,11 @@ export async function renewNativeRedraft(input: Input) {
       currentRank: null, aiPowerScore: null, projectedWins: null } })
     const config = resolveRedraftRosterConfig(completed.sport, settings)
     const savedOrder = await tx.leagueSettings.findUnique({ where: { leagueId: league.id }, select: { draftOrderMethod: true } })
-    const mode = resolveRenewDraftOrderMode(input.draftOrder ?? savedOrder?.draftOrderMethod) ?? 'random'
+    // An explicit choice, else the saved method — except a saved `manual`, which carries no list through
+    // this call (the schema's and creation's default, so every league that never chose one): random, as
+    // `renewRedraftLeague` does. It used to resolve to manual with no order and refuse the renewal (400).
+    const savedMode = resolveRenewDraftOrderMode(savedOrder?.draftOrderMethod)
+    const mode = (input.draftOrder != null ? resolveRenewDraftOrderMode(input.draftOrder) : savedMode === 'manual' ? null : savedMode) ?? 'random'
     if (input.draftOrder != null && !resolveRenewDraftOrderMode(input.draftOrder)) throw new RedraftRenewalError('Invalid draft order.', 400)
     const order = buildRenewalSlotOrder({ mode, teams: league.rosters.map((r, index) => ({ rosterId: r.id,
       displayName: league.teams.find(t => t.externalId === r.id || t.platformUserId === r.platformUserId)?.teamName ?? 'Team ' + (index + 1) })),
