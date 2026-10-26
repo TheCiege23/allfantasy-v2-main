@@ -16,8 +16,12 @@ import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineup
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import {
   AF_MANAGED_LINEUPS_KEY,
+  autopilotRosterIds,
+  DEFAULT_AUTOPILOT_STYLE,
+  isAutopilotStyle,
   planBestLineup,
   readManagedLineups,
   suggestInactiveTeams,
@@ -33,6 +37,19 @@ import {
 export const ON_ACTION = 'inactive_manager_mode.on'
 export const OFF_ACTION = 'inactive_manager_mode.off'
 export const ENDED_ACTION = 'inactive_manager_mode.ended'
+export const AUTOPILOT_ON_ACTION = 'chimmy_autopilot.on'
+export const AUTOPILOT_OFF_ACTION = 'chimmy_autopilot.off'
+export const AUTOPILOT_FEATURE = 'commissioner_chimmy_autopilot' as const
+
+/** Chimmy autopilot is on the AF Commissioner plan — the LEAGUE OWNER's, as with the other commissioner tools. */
+export async function autopilotEntitled(leagueOwnerUserId: string | null | undefined): Promise<boolean> {
+  if (!leagueOwnerUserId) return false
+  try {
+    return Boolean((await new EntitlementResolver().resolveForUser(leagueOwnerUserId, AUTOPILOT_FEATURE)).hasAccess)
+  } catch {
+    return false
+  }
+}
 
 const settingsObject = (s: unknown) => (s && typeof s === 'object' && !Array.isArray(s) ? (s as Record<string, unknown>) : {})
 
@@ -63,14 +80,17 @@ export type InactiveManagerTeam = {
   suggested: boolean
 }
 
-export async function readInactiveManagerView(leagueId: string): Promise<{ native: boolean; teams: InactiveManagerTeam[] }> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, teams: [] }
+export async function readInactiveManagerView(
+  leagueId: string,
+): Promise<{ native: boolean; autopilotEntitled: boolean; teams: InactiveManagerTeam[] }> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true } })
+  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, teams: [] }
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const suggested = new Set(suggestInactiveTeams(health.rows, managed))
   return {
     native: true,
+    autopilotEntitled: await autopilotEntitled(league.userId),
     teams: health.rows.map((r) => ({
       rosterId: r.rosterId,
       teamName: r.teamName,
@@ -108,6 +128,68 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
     await logAction({ leagueId, userId, actionType: on ? ON_ACTION : OFF_ACTION, entityType: 'roster', entityId: rosterId, metadata: { rosterId } })
   }
   return { ok: true, managed: on }
+}
+
+/**
+ * Commissioner or co-commissioner, on the league owner's AF Commissioner plan: hand a team to Chimmy
+ * autopilot in a style, change the style, or (`style: null`) take autopilot off. Turning it on also
+ * turns on inactive manager mode for the team; turning it off leaves lineup management running, which
+ * is free and is switched off on its own.
+ */
+export async function setChimmyAutopilot(leagueId: string, userId: string, rosterId: unknown, style: unknown): Promise<SwitchResult & { style?: string | null }> {
+  if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
+  if (typeof rosterId !== 'string' || !rosterId) return { ok: false, status: 400, error: 'Name a team.' }
+  const nextStyle = style === null ? null : isAutopilotStyle(style) ? style : style === undefined ? DEFAULT_AUTOPILOT_STYLE : undefined
+  if (nextStyle === undefined) return { ok: false, status: 400, error: 'Choose a style: dynasty_owner, win_now or rebuild.' }
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } })
+  if (!league) return { ok: false, status: 404, error: 'League not found' }
+  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'Chimmy can only run teams in leagues AllFantasy runs.' }
+  if (nextStyle !== null && !(await autopilotEntitled(league.userId))) {
+    return { ok: false, status: 402, error: 'Chimmy autopilot is part of the AF Commissioner plan.' }
+  }
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true } })
+  if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
+
+  let changed = false
+  const now = new Date().toISOString()
+  await updateManaged(leagueId, (current) => {
+    const entry = current[rosterId]
+    if (nextStyle === null) {
+      if (!entry?.autopilot) return null
+      changed = true
+      const { autopilot: _off, ...rest } = entry
+      return { ...current, [rosterId]: rest }
+    }
+    if (entry?.autopilot?.style === nextStyle) return null
+    changed = true
+    const base = entry ?? { since: now, byUserId: userId }
+    return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId } } }
+  })
+  if (changed) {
+    await logAction({
+      leagueId,
+      userId,
+      actionType: nextStyle === null ? AUTOPILOT_OFF_ACTION : AUTOPILOT_ON_ACTION,
+      entityType: 'roster',
+      entityId: rosterId,
+      metadata: { rosterId, style: nextStyle },
+    })
+  }
+  return { ok: true, managed: true, style: nextStyle }
+}
+
+/**
+ * Whether the team owned by `ownerId` in this league is on Chimmy autopilot. Trade offers to it are
+ * refused: nobody is there to weigh them, and an unattended team is exactly the one a lopsided offer
+ * would target. Redraft rosters carry the owner's id; the managed map is keyed by `Roster.id`, so the
+ * owner is the join (an abandoned team's owner is its `orphan-…` seat id).
+ */
+export async function isOwnerOnAutopilot(leagueId: string, ownerId: string): Promise<boolean> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const ids = autopilotRosterIds(readManagedLineups(league?.settings))
+  if (ids.length === 0) return false
+  const hit = await prisma.roster.findFirst({ where: { leagueId, id: { in: ids }, platformUserId: ownerId }, select: { id: true } })
+  return Boolean(hit)
 }
 
 /**
