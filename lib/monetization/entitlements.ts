@@ -36,6 +36,16 @@ export const ENTITLEMENTS = {
     upgradeLabel: 'Unlock Competitive Edge',
     highlightParam: 'manager_psychology',
   },
+  commissioner_draft_as_me: {
+    key: 'commissioner_draft_as_me',
+    label: 'Draft As Me',
+    description:
+      'When a manager misses a pick, Chimmy drafts the way that manager drafts: their usual reach or patience and the positions they favour. Requires AF Commissioner subscription.',
+    requiredPlan: ['af_commissioner', 'af_supreme'],
+    upgradeUrl: '/commissioner-upgrade',
+    upgradeLabel: 'Get AF Commissioner',
+    highlightParam: 'draft_as_me',
+  },
   commissioner_ai_tools: {
     key: 'commissioner_ai_tools',
     label: 'Commissioner AI Tools',
@@ -362,6 +372,7 @@ export const LEAGUE_SETTINGS_AI_PANEL_FEATURE: Record<string, SubscriptionFeatur
 
 /** Maps `?highlight=` query keys to plan cards on pricing surfaces (scroll + ring). */
 export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = {
+  draft_as_me: 'af_commissioner',
   supreme: 'af_supreme',
   ai_tools: 'af_commissioner',
   ai_narration: 'af_commissioner',
