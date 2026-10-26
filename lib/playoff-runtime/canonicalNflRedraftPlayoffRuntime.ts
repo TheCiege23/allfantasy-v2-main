@@ -503,6 +503,18 @@ function normalizeTeam(input: NflRedraftPlayoffTeamInput): NflRedraftPlayoffTeam
   }
 }
 
+/**
+ * Win percentage for RANKING: unrounded. `winPct` is rounded to three places for display, and ranking
+ * on it called two different records equal — in an odd-team median league, where teams play different
+ * numbers of games, 22-23 (.48889) and 22-23-1 (.48913) both read .489 and the next key (points for)
+ * seeded the worse record first, while the standings engine (exact) ranked them the right way round.
+ * Equal records still compare equal: the same ratio divides to the same double.
+ */
+function exactWinPct(team: Pick<NflRedraftPlayoffTeamState, 'wins' | 'losses' | 'ties'>): number {
+  const games = team.wins + team.losses + team.ties
+  return games > 0 ? (team.wins + team.ties * 0.5) / games : 0
+}
+
 /** Values that need more than the team row: the all-play share and the season's coin-flip draw. */
 type TiebreakerContext = { allPlay: Map<string, number>; coinSeed: string }
 
@@ -516,7 +528,7 @@ function tiebreakerValue(team: NflRedraftPlayoffTeamState, key: string, ctx: Tie
       return coinFlipDraw(ctx.coinSeed, team.rosterId)
     case 'win_pct':
     case 'winning_percentage':
-      return team.winPct
+      return exactWinPct(team)
     case 'wins':
       return team.wins
     case 'losses':
