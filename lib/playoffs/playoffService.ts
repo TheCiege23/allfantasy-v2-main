@@ -108,7 +108,7 @@ export async function createPlayoffBracketChallenge(input: {
   const template = field?.isFinal
     ? baseTemplate.map((row) => {
         const seededName = (name: string) => {
-          const hit = /^(?:CFP|EAST|WEST)(\\d+)$/i.exec(name)
+          const hit = /^(?:CFP|EAST|WEST)(\d+)$/i.exec(name)
           return hit ? field.seeds.get(row.conference)?.get(Number(hit[1])) ?? name : name
         }
         return { ...row, homeTeamName: seededName(row.homeTeamName), awayTeamName: seededName(row.awayTeamName) }
