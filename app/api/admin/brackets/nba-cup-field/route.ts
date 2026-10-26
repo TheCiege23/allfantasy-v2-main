@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   const poolIds = pools.map((pool) => pool.id)
   if (corrections.length && poolIds.length) {
     const started = await (prisma as any).playoffBracketSeries.count({
-      where: { challengeId: { in: poolIds }, status: { in: ["in_progress", "final"] } },
+      where: { challengeId: { in: poolIds }, OR: [{ status: { in: ["in_progress", "final"] } }, { startsAt: { lte: new Date() } }] },
     })
     if (started > 0) {
       return NextResponse.json({ ok: false, error: "Knockout games have started; field corrections require audited support review." }, { status: 409 })
