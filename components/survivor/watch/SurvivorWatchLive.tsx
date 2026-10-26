@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import type { WatchPageData } from '@/lib/survivor/spectator/watchPage'
 import { watchPollMs, type WatchCouncil } from '@/lib/survivor/spectator/watchModel'
+import { FanPredictionsCard } from './FanPredictionsCard'
 
 type PublicWatch = Extract<WatchPageData, { state: 'public' }>
 
@@ -74,6 +75,7 @@ export function SurvivorWatchLive({ leagueId, initial }: { leagueId: string; ini
       <div className="svm-cols">
         <CouncilCard council={data.council} />
         <aside className="svm-aside">
+          <FanPredictionsCard leagueId={leagueId} councilKey={`${data.council?.week ?? 0}:${data.council?.state ?? 'none'}`} />
           {data.tribes.map(tribe => <div key={tribe.name} className="svk-card2" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }} data-testid="watch-tribe">
             <div className="svk-row">
               {/* eslint-disable-next-line @next/next/no-img-element */}
