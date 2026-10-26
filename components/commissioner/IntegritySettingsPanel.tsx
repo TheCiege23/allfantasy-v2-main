@@ -18,6 +18,8 @@ type IntegrityApi = {
     tradeAlertsEnabled?: boolean
     /** Hold flagged trades for commissioner review (lib/integrity/holdFlaggedTrades.ts). Absent = off. */
     holdFlaggedTrades?: boolean
+    /** False in an imported league: its trades go through on the host, so there is nothing to hold. */
+    holdFlaggedTradesSupported?: boolean
     tankingWaiverPatternCheck: boolean
   }
   stats: {
@@ -178,6 +180,12 @@ export function IntegritySettingsPanel(props: {
           </button>
         </div>
 
+        {s.holdFlaggedTradesSupported === false ? (
+          <p className="text-[11px] text-white/45" data-testid="integrity-hold-unsupported">
+            Holding flagged trades is not available in an imported league: its trades go through on the league&apos;s own
+            platform. Completed trades are still checked, and a flagged one alerts you.
+          </p>
+        ) : (
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-white/80">Hold flagged trades for my review</p>
@@ -197,6 +205,7 @@ export function IntegritySettingsPanel(props: {
             {s.holdFlaggedTrades === true ? 'On' : 'Off'}
           </button>
         </div>
+        )}
 
         <div className="border-t border-white/[0.06] pt-4">
           <div className="flex items-center justify-between gap-2">

@@ -8,6 +8,7 @@ import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
+import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
 import { HOLD_FLAGGED_TRADES_KEY, readHoldFlaggedTrades } from "@/lib/integrity/holdFlaggedTrades"
 
@@ -65,6 +66,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
       ...settings,
       tradeAlertsEnabled: readTradeAlertsEnabled(league.settings),
       holdFlaggedTrades: readHoldFlaggedTrades(league.settings),
+      // Holding needs the trade to execute in AllFantasy; an imported league's trades go through on its host.
+      holdFlaggedTradesSupported: resolveWriteAuthority(league.platform) === "NATIVE",
     },
     openFlags,
     recentDismissed,
@@ -156,11 +159,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     leagueSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
   }
 
+  const platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform ?? null
+
   return NextResponse.json({
     settings: {
       ...updated,
       tradeAlertsEnabled: readTradeAlertsEnabled(leagueSettings),
       holdFlaggedTrades: readHoldFlaggedTrades(leagueSettings),
+      holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
     },
   })
 }
