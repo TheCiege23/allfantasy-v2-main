@@ -72,6 +72,17 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const canSyncSeries = ["nba", "nhl", "mlb"].includes(String(view.challenge.sport ?? "").toLowerCase()) &&
     (view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess)
   const canShowPickResultsToggle = activeEntry?.userId === view.viewerUserId || view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
+  const canShareEntry = ["ncaaf", "nba_cup"].includes(String(view.challenge.sport ?? "").toLowerCase())
+  async function copyShareLink() {
+    if (!activeEntry) return
+    try {
+      const path = `/brackets/leagues/${view.challenge.id}/entries/${activeEntry.id}/view`
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`)
+      toast.success("Read-only bracket link copied. Picks reveal as games begin.")
+    } catch {
+      toast.error("Could not copy bracket link.")
+    }
+  }
   const canUseLatePicks = view.lockDiagnostics?.viewerCanLatePick ?? (view.challenge.ownerUserId === view.viewerUserId || view.challenge.isTestMode || hasAdminPoolAccess)
   const showLockDiagnostics = canSyncSeries || canUseLatePicks
   const completion = useMemo(
@@ -236,6 +247,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           backLabel="Back to pool dashboard"
           actions={
             <>
+              {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Share bracket</button> : null}
               <button
                 type="button"
                 className="af-pb-btn af-pb-btn--accent"
@@ -292,6 +304,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickCount}/{totalSeries} picks</span>
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">Autosave on</span>
+            {canShareEntry ? <button type="button" onClick={copyShareLink} className="rounded-full border border-teal-500 px-3 py-1 text-teal-900">Share bracket</button> : null}
             {saving ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-amber-900">
                 <Loader2 className="h-4 w-4 animate-spin" />
