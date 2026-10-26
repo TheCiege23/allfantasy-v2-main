@@ -9,10 +9,9 @@
  * checkout for subscriptions or tokens reachable in that container is the
  * classic rejection at production review, and can mean removal afterwards.
  *
- * So the purchase path is closed inside the TWA until one of these is true:
- *   - Play Billing is wired via the Digital Goods API + Payment Request API, or
- *   - the US external-billing allowance is deliberately adopted, with its own
- *     link-out compliance requirements.
+ * So inside the TWA every purchase goes through Google Play Billing (Digital
+ * Goods API + Payment Request API, lib/monetization/google-play-client.ts) and
+ * never through Stripe; see the gate in lib/monetization/checkout-client.ts.
  *
  * Nothing changes on the open web. The same page in a normal browser, on
  * desktop, or in the iOS PWA still checks out through Stripe exactly as before.

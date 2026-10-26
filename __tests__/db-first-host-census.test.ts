@@ -176,6 +176,23 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * reporting, not a fantasy data feed, so the DB-first rule does not apply.
    */
   { name: 'platform-infra', why: 'Play Console installs export for admin download counts; not a fantasy data feed', test: /^storage\.googleapis\.com$/i },
+  /*
+   * Google Play Billing. androidpublisher is fetched server-side to verify,
+   * acknowledge and consume purchase tokens (lib/google-play/playDeveloperApi.ts);
+   * it is app-store billing, not a fantasy data feed.
+   */
+  { name: 'platform-infra', why: 'Play Developer API purchase verification for Google Play Billing; not a fantasy data feed', test: /^androidpublisher\.googleapis\.com$/i },
+  /*
+   * play.google.com appears as the Payment Request method identifier
+   * ("https://play.google.com/billing") and as the Play subscriptions page we
+   * send a subscriber to. Neither is fetched by our code.
+   */
+  { name: 'share-link', why: 'Play Billing payment-method identifier and the Play subscriptions page handed to the user; never fetched', test: /^play\.google\.com$/i },
+  /*
+   * accounts.google.com is only the expected `iss` of the Pub/Sub OIDC token on
+   * the Play notifications route; the keys come from www.googleapis.com.
+   */
+  { name: 'namespace', why: 'expected issuer string of Google OIDC tokens on the Play notifications route; never fetched', test: /^accounts\.google\.com$/i },
   { name: 'platform-infra', why: 'email, push delivery, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|api\.push\.apple\.com|api\.sandbox\.push\.apple\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
    * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded

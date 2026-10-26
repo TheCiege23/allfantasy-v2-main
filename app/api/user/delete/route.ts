@@ -133,6 +133,7 @@ export async function POST(req: Request) {
     cancelledSubscriptions: billing.cancelled.length,
     // An App Store subscription is the user's to cancel; the client tells them where.
     appleSubscriptionActive: billing.hasAppleSubscription,
+    googlePlaySubscriptionActive: billing.hasGooglePlaySubscription,
   })
   if (mflSessionId) response.cookies.set("mfl_session", "", { maxAge: 0, path: "/" })
   return response

@@ -218,6 +218,9 @@ const GEO_EXEMPT_PREFIXES = [
   // against Apple's signature chain in the route, so nothing here opens it to anyone else. Not
   // under /api/webhooks because that URL is already configured in App Store Connect.
   "/api/monetization/apple/notifications",
+  // Google Play Real-time Developer Notifications, pushed by Cloud Pub/Sub from Google's servers.
+  // The route verifies Google's OIDC token on every request before reading anything.
+  "/api/monetization/google/notifications",
   "/api/community/discord/webhook",
   "/_next",
   "/favicon.ico",

@@ -9,10 +9,19 @@ import { useState } from "react"
  * Two steps (button, then confirm) because cancelling is immediate; see
  * app/api/account/cancel-subscription for the terms and why it has no geo check.
  */
-export function CancelSubscriptionPanel({ hasStripe, hasApple }: { hasStripe: boolean; hasApple: boolean }) {
+export function CancelSubscriptionPanel({
+  hasStripe,
+  hasApple,
+  hasGooglePlay = false,
+}: {
+  hasStripe: boolean
+  hasApple: boolean
+  hasGooglePlay?: boolean
+}) {
   const [step, setStep] = useState<"idle" | "confirm" | "busy" | "done" | "error">("idle")
   const [error, setError] = useState<string | null>(null)
   const [appleStillActive, setAppleStillActive] = useState(false)
+  const [googlePlayStillActive, setGooglePlayStillActive] = useState(false)
 
   const cancel = async () => {
     setStep("busy")
@@ -23,7 +32,11 @@ export function CancelSubscriptionPanel({ hasStripe, hasApple }: { hasStripe: bo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirm: true }),
       })
-      const data = (await res.json().catch(() => ({}))) as { error?: unknown; appleSubscriptionActive?: boolean }
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: unknown
+        appleSubscriptionActive?: boolean
+        googlePlaySubscriptionActive?: boolean
+      }
       if (!res.ok) {
         setError(
           typeof data.error === "string" && data.error
@@ -34,6 +47,7 @@ export function CancelSubscriptionPanel({ hasStripe, hasApple }: { hasStripe: bo
         return
       }
       setAppleStillActive(data.appleSubscriptionActive === true)
+      setGooglePlayStillActive(data.googlePlaySubscriptionActive === true)
       setStep("done")
     } catch {
       setError("Couldn't reach AllFantasy. Check your connection and try again.")
@@ -103,6 +117,13 @@ export function CancelSubscriptionPanel({ hasStripe, hasApple }: { hasStripe: bo
         <p className="mt-3 text-amber-50/80" data-testid="paid-restricted-cancel-apple">
           Subscribed in the iPhone app? Apple doesn&apos;t let us cancel that for you — open iPhone Settings → your
           name → Subscriptions → AllFantasy.
+        </p>
+      ) : null}
+
+      {hasGooglePlay || googlePlayStillActive ? (
+        <p className="mt-3 text-amber-50/80" data-testid="paid-restricted-cancel-google-play">
+          Subscribed in the Android app? Google doesn&apos;t let us cancel that for you — open the Play Store → your
+          profile → Payments &amp; subscriptions → Subscriptions → AllFantasy.
         </p>
       ) : null}
     </section>

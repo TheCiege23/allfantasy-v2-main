@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic"
 
 /** Apple's page for managing App Store subscriptions; on an iPhone it opens the Subscriptions screen. */
 const APPLE_MANAGE_SUBSCRIPTIONS_URL = "https://apps.apple.com/account/subscriptions"
+/** Google Play's subscription screen for this app; only Google can change or cancel a Play subscription. */
+const GOOGLE_PLAY_MANAGE_SUBSCRIPTIONS_URL = "https://play.google.com/store/account/subscriptions?package=ai.allfantasy.app"
 
 function appOrigin(): string {
   const fromAuth = process.env.NEXTAUTH_URL?.replace(/\/$/, "")
@@ -66,8 +68,11 @@ export async function GET(req: Request) {
       select: { source: true, stripeCustomerId: true },
     })
     const liveApple = live.some((r) => r.source === "apple")
-    const liveStripe = live.some((r) => r.source !== "apple" && Boolean(r.stripeCustomerId))
+    const liveGooglePlay = live.some((r) => r.source === "google_play")
+    const liveStripe = live.some((r) => r.source !== "apple" && r.source !== "google_play" && Boolean(r.stripeCustomerId))
     if (liveApple && !liveStripe) return NextResponse.redirect(APPLE_MANAGE_SUBSCRIPTIONS_URL)
+    // The same for a Google Play subscriber: Stripe's portal cannot touch what they pay Google for.
+    if (liveGooglePlay && !liveStripe) return NextResponse.redirect(GOOGLE_PLAY_MANAGE_SUBSCRIPTIONS_URL)
 
     const row = await prisma.userSubscription.findFirst({
       where: { userId: session.user.id, stripeCustomerId: { not: null } },

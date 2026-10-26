@@ -18,7 +18,8 @@ import type Stripe from "stripe"
  * the account while it may still be billed.
  *
  * App Store subscriptions (`source: "apple"`) cannot be cancelled by us — Apple only lets the user
- * do that — so they are reported back, not touched.
+ * do that — so they are reported back, not touched. Google Play subscriptions (`source:
+ * "google_play"`) are the same: only the user can cancel them, in the Play Store.
  */
 
 /** Stripe statuses that can still produce a charge. */
@@ -49,6 +50,8 @@ export type CancelSubscriptionsResult = {
   cancelled: string[]
   /** True when the account has an App Store subscription we cannot cancel. */
   hasAppleSubscription: boolean
+  /** True when the account has a Google Play subscription we cannot cancel. */
+  hasGooglePlaySubscription: boolean
 }
 
 export async function cancelSubscriptionsOnDelete(
@@ -64,10 +67,14 @@ export async function cancelSubscriptionsOnDelete(
     (r) => r.source === "apple" && r.status !== "canceled" && r.status !== "expired",
   )
 
+  const hasGooglePlaySubscription = rows.some(
+    (r) => r.source === "google_play" && r.status !== "canceled" && r.status !== "expired",
+  )
+
   const subscriptionIds = new Set(rows.map((r) => r.stripeSubscriptionId).filter((id): id is string => !!id))
   const customerIds = new Set(rows.map((r) => r.stripeCustomerId).filter((id): id is string => !!id))
   if (subscriptionIds.size === 0 && customerIds.size === 0) {
-    return { cancelled: [], hasAppleSubscription }
+    return { cancelled: [], hasAppleSubscription, hasGooglePlaySubscription }
   }
 
   const stripe = deps.getStripe()
@@ -95,5 +102,5 @@ export async function cancelSubscriptionsOnDelete(
     cancelled.push(id)
   }
 
-  return { cancelled, hasAppleSubscription }
+  return { cancelled, hasAppleSubscription, hasGooglePlaySubscription }
 }

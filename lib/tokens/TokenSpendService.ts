@@ -574,13 +574,46 @@ export class TokenSpendService {
 
   /** Reconcile an Apple refund once, without removing tokens already spent. */
   async reverseApplePackagePurchase(transactionId: string): Promise<void> {
-    const purchaseKey = `apple_iap:${transactionId}`
-    const reversalKey = `apple_iap_refund:${transactionId}`
+    await this.reverseStorePackagePurchase({
+      purchaseKey: `apple_iap:${transactionId}`,
+      reversalKey: `apple_iap_refund:${transactionId}`,
+      purchaseSourceType: "apple_iap",
+      reversalSourceType: "apple_iap_refund",
+      sourceId: transactionId,
+      description: "App Store token pack refund",
+    })
+  }
+
+  /**
+   * Reconcile a Google Play refund or chargeback once. `purchaseRef` is the same
+   * value the grant used after `google_play:` (the order id, or the token hash
+   * for purchases Google gave no order id).
+   */
+  async reverseGooglePlayPackagePurchase(purchaseRef: string): Promise<void> {
+    await this.reverseStorePackagePurchase({
+      purchaseKey: `google_play:${purchaseRef}`,
+      reversalKey: `google_play_refund:${purchaseRef}`,
+      purchaseSourceType: "google_play",
+      reversalSourceType: "google_play_refund",
+      sourceId: purchaseRef,
+      description: "Google Play token pack refund",
+    })
+  }
+
+  private async reverseStorePackagePurchase(input: {
+    purchaseKey: string
+    reversalKey: string
+    purchaseSourceType: string
+    reversalSourceType: string
+    sourceId: string
+    description: string
+  }): Promise<void> {
+    const { purchaseKey, reversalKey } = input
     await (prisma as any).$transaction(async (tx: any) => {
       const existing = await tx.tokenLedger.findUnique({ where: { idempotencyKey: reversalKey } })
       if (existing) return
       const purchase = await tx.tokenLedger.findUnique({ where: { idempotencyKey: purchaseKey } })
-      if (!purchase || purchase.sourceType !== "apple_iap" || purchase.entryType !== TOKEN_ENTRY_TYPES.PURCHASE) {
+      if (!purchase || purchase.sourceType !== input.purchaseSourceType || purchase.entryType !== TOKEN_ENTRY_TYPES.PURCHASE) {
         return
       }
       const rows = await tx.$queryRaw(Prisma.sql`
@@ -602,10 +635,10 @@ export class TokenSpendService {
           balanceBefore,
           balanceAfter,
           tokenPackageSku: purchase.tokenPackageSku,
-          sourceType: "apple_iap_refund",
-          sourceId: transactionId,
+          sourceType: input.reversalSourceType,
+          sourceId: input.sourceId,
           idempotencyKey: reversalKey,
-          description: "App Store token pack refund",
+          description: input.description,
           metadata: { originalTokenAmount: purchase.tokenDelta, alreadySpent: purchase.tokenDelta - reversed },
         },
       })

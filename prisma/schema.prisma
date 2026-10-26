@@ -13657,6 +13657,32 @@ model UserSubscription {
   @@map("user_subscriptions")
 }
 
+/// Google Play purchases verified server-side through the Play Developer API.
+/// Its own table, rather than columns on user_subscriptions, so the Play code
+/// can deploy before this migration is applied without breaking every existing
+/// subscription query (a missing column fails all of them; a missing table only
+/// fails the Play path, which no build reaches until billing ships).
+model GooglePlayPurchase {
+  id                 String   @id @default(uuid())
+  /// sha256 hex of the purchase token. Tokens can exceed every index-friendly width.
+  purchaseTokenHash  String   @unique @db.VarChar(64)
+  purchaseToken      String
+  userId             String
+  productId          String   @db.VarChar(64)
+  /// "subscription" or "product".
+  kind               String   @db.VarChar(16)
+  userSubscriptionId String?
+  latestOrderId      String?  @db.VarChar(128)
+  state              String?  @db.VarChar(64)
+  testPurchase       Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userSubscriptionId])
+  @@map("google_play_purchases")
+}
+
 /// Token package catalog for one-time token purchases.
 model TokenPackage {
   id            String        @id @default(uuid())

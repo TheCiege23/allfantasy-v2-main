@@ -1,6 +1,7 @@
 import type { MetaEventPayload } from "@/lib/meta-events"
 import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
 import { isAppleApp, purchaseWithApple } from "@/lib/monetization/apple-iap-client"
+import { purchaseWithGooglePlay } from "@/lib/monetization/google-play-client"
 
 export type MonetizationCheckoutProductType = "subscription" | "token_pack"
 
@@ -62,23 +63,28 @@ export async function resolveCheckoutUrl(
    * production submission rejected.
    *
    * Every purchase surface — MonetizationPurchaseSurface, PricingV4,
-   * TokenCentreV4 — reaches Stripe through this one function, so gating here
+   * TokenCentreV4 — reaches Stripe through this one function, so routing here
    * covers subscriptions and token packs together and cannot be bypassed by a
-   * surface that forgets to check. A per-component `isTrustedWebActivity()`
-   * guard would be four copies of one rule, and the fourth is the one that gets
-   * added later without it.
+   * surface that forgets to check.
+   *
+   * Inside our TWA the purchase goes to Google Play Billing
+   * (lib/monetization/google-play-client.ts), and NEVER falls through to
+   * Stripe: an install built before Play Billing gets "update the app", not a
+   * Stripe page. The message deliberately does not point at the website to pay,
+   * which Play's policy also forbids inside the app.
    *
    * ⚠ THE OPEN WEB IS UNTOUCHED. This fires only for our own package's TWA;
    * desktop, mobile browsers and the installed iOS PWA all still check out
    * through Stripe, because none of them is distributed through Play.
-   *
-   * Remove this when Play Billing is wired (Digital Goods API + Payment Request
-   * API) or the US external-billing allowance is deliberately adopted.
    */
   if (isTrustedWebActivity()) {
-    return {
-      ok: false,
-      error: "Purchases aren't available in the Android app yet. Open allfantasy.ai in your browser to subscribe or buy tokens.",
+    try {
+      const purchase = await purchaseWithGooglePlay(sku)
+      return purchase.cancelled
+        ? { ok: false, error: "Purchase cancelled." }
+        : { ok: true, completed: true }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unable to complete Google Play purchase." }
     }
   }
 

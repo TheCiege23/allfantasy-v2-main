@@ -9,8 +9,8 @@ import { prisma } from "@/lib/prisma"
  * pages: /paid-restricted and /geo-blocked. Read from our rows, never by calling Stripe on a page
  * load. Fails closed to "nothing to show".
  */
-export async function liveSubscriptions(): Promise<{ hasStripe: boolean; hasApple: boolean }> {
-  const none = { hasStripe: false, hasApple: false }
+export async function liveSubscriptions(): Promise<{ hasStripe: boolean; hasApple: boolean; hasGooglePlay: boolean }> {
+  const none = { hasStripe: false, hasApple: false, hasGooglePlay: false }
   try {
     const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
     const userId = session?.user?.id
@@ -20,8 +20,11 @@ export async function liveSubscriptions(): Promise<{ hasStripe: boolean; hasAppl
       select: { source: true, stripeSubscriptionId: true, stripeCustomerId: true },
     })
     return {
-      hasStripe: rows.some((r) => r.source !== "apple" && Boolean(r.stripeSubscriptionId || r.stripeCustomerId)),
+      hasStripe: rows.some(
+        (r) => r.source !== "apple" && r.source !== "google_play" && Boolean(r.stripeSubscriptionId || r.stripeCustomerId),
+      ),
       hasApple: rows.some((r) => r.source === "apple"),
+      hasGooglePlay: rows.some((r) => r.source === "google_play"),
     }
   } catch {
     return none

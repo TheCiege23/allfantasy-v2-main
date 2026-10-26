@@ -29,7 +29,7 @@ describe("cancelSubscriptionsOnDelete", () => {
   it("never touches Stripe for an account with no Stripe history (no key needed)", async () => {
     const { stripe } = fakeStripe({})
     const d = deps([], stripe)
-    expect(await cancelSubscriptionsOnDelete("u1", d)).toEqual({ cancelled: [], hasAppleSubscription: false })
+    expect(await cancelSubscriptionsOnDelete("u1", d)).toEqual({ cancelled: [], hasAppleSubscription: false, hasGooglePlaySubscription: false })
     expect(d.getStripe).not.toHaveBeenCalled()
   })
 
@@ -73,7 +73,20 @@ describe("cancelSubscriptionsOnDelete", () => {
   it("reports an App Store subscription instead of trying to cancel it", async () => {
     const f = fakeStripe({})
     const d = deps([{ stripeSubscriptionId: null, stripeCustomerId: null, source: "apple", status: "active" }], f.stripe)
-    expect(await cancelSubscriptionsOnDelete("u1", d)).toEqual({ cancelled: [], hasAppleSubscription: true })
+    expect(await cancelSubscriptionsOnDelete("u1", d)).toEqual({ cancelled: [], hasAppleSubscription: true, hasGooglePlaySubscription: false })
     expect(d.getStripe).not.toHaveBeenCalled()
+  })
+
+  it("reports a live Google Play subscription instead of trying to cancel it, and ignores an expired one", async () => {
+    const f = fakeStripe({})
+    const live = deps([{ stripeSubscriptionId: null, stripeCustomerId: null, source: "google_play", status: "active" }], f.stripe)
+    expect(await cancelSubscriptionsOnDelete("u1", live)).toEqual({
+      cancelled: [],
+      hasAppleSubscription: false,
+      hasGooglePlaySubscription: true,
+    })
+    expect(live.getStripe).not.toHaveBeenCalled()
+    const ended = deps([{ stripeSubscriptionId: null, stripeCustomerId: null, source: "google_play", status: "expired" }], f.stripe)
+    expect((await cancelSubscriptionsOnDelete("u1", ended)).hasGooglePlaySubscription).toBe(false)
   })
 })

@@ -45,7 +45,11 @@
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://allfantasy.ai/manifest.webmanifest",
   "fallbackType": "customtabs",
-  "features": {},
+  "features": {
+    "playBilling": {
+      "enabled": true
+    }
+  },
   "alphaDependencies": {
     "enabled": false
   },

@@ -240,3 +240,42 @@ deploy bakes the old icon into the bundle with nothing to warn you.
 
 An installed app keeps the icon from the bundle it was installed from, so phones
 show the new one only after updating to the new release.
+
+## Google Play Billing (in-app purchases)
+
+Purchases inside the Android app go through Google Play Billing, never Stripe
+(`lib/monetization/checkout-client.ts`). It needs four things, in this order:
+
+1. **A billing-enabled build.** `twa-manifest.json` carries
+   `"features": { "playBilling": { "enabled": true } }`. Copy that into your
+   build folder's manifest (do not overwrite a manifest that has already
+   shipped; edit it), raise `appVersionCode` above the last upload, update
+   Bubblewrap first (`npm i -g @bubblewrap/cli@latest`, because Play requires a
+   current Billing Library in every update), then `bubblewrap update` and
+   `bubblewrap build`, and upload to a testing track. Play Console will not let
+   you create products until a build with the BILLING permission is uploaded.
+2. **Products in Play Console** (Monetize with Play → Products). Every Play
+   product id is exactly the catalog SKU in `lib/monetization/catalog.ts`:
+   - 8 subscriptions, `af_pro_monthly` … `af_supreme_yearly`, each with ONE
+     auto-renewing base plan, marked "use for deprecated billing methods"
+     (backwards compatible). A TWA picks a subscription by product id only, so a
+     second base plan on the same product would be unreachable.
+   - 3 one-time products, `af_tokens_5`, `af_tokens_10`, `af_tokens_25`. The
+     server consumes them after granting tokens.
+3. **Server access.** In Play Console → Users and permissions, give the
+   `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` service account "View financial data,
+   orders and cancellation survey responses" and "Manage orders and
+   subscriptions". Apply the `google_play_purchases` migration before the first
+   real purchase.
+4. **Real-time Developer Notifications** (renewals, holds, refunds). Create a
+   Pub/Sub topic, grant `google-play-developer-notifications@system.gserviceaccount.com`
+   Publisher on it, set it in Play Console → Monetization setup, and add a PUSH
+   subscription to `https://allfantasy.ai/api/monetization/google/notifications`
+   with authentication enabled. Put the push audience and the push service
+   account's email in `GOOGLE_PLAY_RTDN_AUDIENCE` and
+   `GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT`. Send a test notification from Play
+   Console and check it is acknowledged.
+
+Test with a license tester account (Play Console → Settings → License testing)
+on a real phone from the testing track: buy, cancel, restore, and refund one
+purchase, and confirm each shows up in Settings → Billing.

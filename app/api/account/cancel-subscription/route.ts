@@ -56,6 +56,7 @@ export async function POST(req: Request) {
       ok: true,
       cancelledSubscriptions: result.cancelled.length,
       appleSubscriptionActive: result.hasAppleSubscription,
+      googlePlaySubscriptionActive: result.hasGooglePlaySubscription,
     })
   } catch (error) {
     console.error("[account/cancel-subscription] failed:", error instanceof Error ? error.message : error)

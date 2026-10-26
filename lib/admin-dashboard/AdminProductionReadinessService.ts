@@ -210,6 +210,14 @@ const ENV_REQUIREMENTS: EnvRequirement[] = [
     allOf: ["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "GOOGLE_PLAY_REPORTS_BUCKET"],
     note: "Shows Google Play download counts on the admin dashboard. The service account needs Play Console access to bulk reports.",
   },
+  {
+    id: "google-play-billing",
+    category: "Platform",
+    label: "Google Play Billing notifications",
+    severity: "optional",
+    allOf: ["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "GOOGLE_PLAY_RTDN_AUDIENCE", "GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT"],
+    note: "Verifies Android app purchases and receives Play renewals and refunds. Without the notification settings, Play subscribers are not renewed.",
+  },
 ]
 
 function present(name: string): boolean {

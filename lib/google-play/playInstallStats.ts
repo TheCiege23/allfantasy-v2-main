@@ -26,13 +26,16 @@
  * throws. Results are cached in-process: the export changes at most daily.
  */
 
-import { createSign } from "node:crypto"
+import {
+  fetchWithTimeout,
+  getGoogleAccessToken,
+  parseServiceAccount,
+  type ServiceAccount,
+} from "@/lib/google-play/serviceAccountAuth"
 
 const DEFAULT_PACKAGE_NAME = "ai.allfantasy.app"
-const TOKEN_URL = "https://oauth2.googleapis.com/token"
 const STORAGE_API = "https://storage.googleapis.com/storage/v1"
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
-const REQUEST_TIMEOUT_MS = 10_000
 const SUCCESS_TTL_MS = 6 * 60 * 60 * 1000
 const FAILURE_TTL_MS = 15 * 60 * 1000
 
@@ -55,8 +58,6 @@ export type PlayInstallStatsResult =
   | { status: "not_configured"; missing: string[] }
   | { status: "error"; reason: string }
 
-type ServiceAccount = { client_email: string; private_key: string }
-
 type PlayConfig = {
   serviceAccount: ServiceAccount
   bucket: string
@@ -75,32 +76,6 @@ let cache: { result: PlayInstallStatsResult; expiresAt: number } | null = null
 
 export function resetPlayInstallStatsCache(): void {
   cache = null
-}
-
-function parseServiceAccount(raw: string): ServiceAccount | null {
-  const candidates = [raw.trim()]
-  // Railway and similar dashboards mangle multi-line JSON, so base64 is accepted too.
-  if (!raw.trim().startsWith("{")) {
-    try {
-      candidates.push(Buffer.from(raw.trim(), "base64").toString("utf8"))
-    } catch {
-      // not base64
-    }
-  }
-  for (const text of candidates) {
-    try {
-      const parsed = JSON.parse(text) as Partial<ServiceAccount>
-      if (typeof parsed.client_email === "string" && typeof parsed.private_key === "string") {
-        return {
-          client_email: parsed.client_email,
-          private_key: parsed.private_key.replace(/\\n/g, "\n"),
-        }
-      }
-    } catch {
-      // try the next candidate
-    }
-  }
-  return null
 }
 
 export function readPlayConfig(
@@ -125,41 +100,6 @@ export function readPlayConfig(
       packageName: env.GOOGLE_PLAY_PACKAGE_NAME?.trim() || DEFAULT_PACKAGE_NAME,
     },
   }
-}
-
-function base64Url(input: string | Buffer): string {
-  return Buffer.from(input).toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_")
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-  try {
-    return await fetch(url, { ...init, signal: controller.signal, cache: "no-store" })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-async function getAccessToken(account: ServiceAccount): Promise<string> {
-  const now = Math.floor(Date.now() / 1000)
-  const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }))
-  const claims = base64Url(
-    JSON.stringify({ iss: account.client_email, scope: SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 }),
-  )
-  const signer = createSign("RSA-SHA256")
-  signer.update(`${header}.${claims}`)
-  const assertion = `${header}.${claims}.${base64Url(signer.sign(account.private_key))}`
-
-  const res = await fetchWithTimeout(TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }).toString(),
-  })
-  if (!res.ok) throw new Error(`Google token exchange failed (HTTP ${res.status})`)
-  const body = (await res.json()) as { access_token?: string }
-  if (!body.access_token) throw new Error("Google token exchange returned no access token")
-  return body.access_token
 }
 
 async function listOverviewReports(token: string, config: PlayConfig): Promise<string[]> {
@@ -295,7 +235,7 @@ async function loadPlayInstallStats(): Promise<PlayInstallStatsResult> {
     return { status: "not_configured", missing: cfg.missing }
   }
   const { config } = cfg
-  const token = await getAccessToken(config.serviceAccount)
+  const token = await getGoogleAccessToken(config.serviceAccount, SCOPE)
   const names = await listOverviewReports(token, config)
   if (names.length === 0) {
     return {

@@ -8,7 +8,7 @@ import { purchaseReturnPath, upgradePathForPlan } from "@/lib/monetization/upgra
 import { usePostPurchaseSync } from "@/hooks/usePostPurchaseSync";
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget";
 import { resolveCheckoutUrl } from "@/lib/monetization/checkout-client";
-import { manageAppleSubscriptions, restoreApplePurchases, useAppleIapPrices } from "@/lib/monetization/apple-iap-client";
+import { useInAppStore } from "@/lib/monetization/in-app-store-client";
 import { trackMetaBrowserEvent } from "@/lib/meta-client";
 import { MonetizationComplianceNotice } from "@/components/monetization/MonetizationComplianceNotice";
 import { LockedFeatureBanner } from "@/components/monetization/LockedFeatureBanner";
@@ -150,7 +150,15 @@ export default function MonetizationPurchaseSurface({
   conversionHero?: boolean;
 }) {
   const [payload, setPayload] = useState<CatalogPayload | null>(null);
-  const { appleApp, prices: applePrices, needsUpdate } = useAppleIapPrices();
+  const {
+    inStoreApp: storeApp,
+    prices: storePrices,
+    needsUpdate,
+    updateMessage,
+    storeLabel,
+    restore: restoreStorePurchases,
+    manage: manageStoreSubscriptions,
+  } = useInAppStore();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -319,7 +327,7 @@ export default function MonetizationPurchaseSurface({
   async function restorePurchases() {
     setCheckoutError(null);
     try {
-      await restoreApplePurchases();
+      await restoreStorePurchases();
       window.location.reload();
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Unable to restore purchases.");
@@ -419,7 +427,7 @@ export default function MonetizationPurchaseSurface({
               </h1>
               <p className="mx-auto mt-3 max-w-2xl text-base text-white/60 sm:text-lg">{subtitle}</p>
               <ul className="mx-auto mt-8 max-w-3xl space-y-3 text-left sm:mt-10">
-                {(appleApp ? PRICING_CONVERSION_BULLETS.filter((line) => !line.includes("Stripe")) : PRICING_CONVERSION_BULLETS).map((line) => (
+                {(storeApp ? PRICING_CONVERSION_BULLETS.filter((line) => !line.includes("Stripe")) : PRICING_CONVERSION_BULLETS).map((line) => (
                   <li
                     key={line}
                     className="flex gap-3 rounded-xl border border-white/[0.07] bg-[#0a1220]/80 px-4 py-3 text-sm text-white/85"
@@ -531,7 +539,7 @@ export default function MonetizationPurchaseSurface({
           <AFSupremeBundleSpotlight className="mb-4" />
         ) : null}
 
-        {!appleApp && <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />}
+        {!storeApp && <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />}
 
         <section className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="monetization-plan-explanations">
           <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/80">What each plan includes</h2>
@@ -577,7 +585,7 @@ export default function MonetizationPurchaseSurface({
         </div>
 
         {/* Sponsor / promo coupon input */}
-        {!appleApp && <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        {!storeApp && <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-white/60">
             Have a promo code?
           </p>
@@ -616,8 +624,8 @@ export default function MonetizationPurchaseSurface({
                 {checkoutError}
               </div>
             ) : null}
-            {needsUpdate && <p className="mb-4 text-sm text-amber-200">Update the AllFantasy iOS app to make purchases.</p>}
-            {!appleApp && appliedCouponCode && appliedCouponPct > 0 ? (
+            {needsUpdate && <p className="mb-4 text-sm text-amber-200">{updateMessage}</p>}
+            {!storeApp && appliedCouponCode && appliedCouponPct > 0 ? (
               <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2.5 text-xs">
                 <Check className="h-4 w-4 shrink-0 text-emerald-400" />
                 <span className="font-black text-emerald-300">{appliedCouponCode}</span>
@@ -690,7 +698,7 @@ export default function MonetizationPurchaseSurface({
                         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <div className="flex flex-wrap items-end justify-between gap-2 text-white/85">
                             <span className="text-sm font-medium">Billed monthly</span>
-                            <span className="text-lg font-bold tabular-nums text-cyan-200">{appleApp ? (applePrices[monthly.sku] ?? "Loading Apple price…") : formatUsd(monthly.amountUsd)}</span>
+                            <span className="text-lg font-bold tabular-nums text-cyan-200">{storeApp ? (storePrices[monthly.sku] ?? `Loading ${storeLabel} price…`) : formatUsd(monthly.amountUsd)}</span>
                           </div>
                           {monthly.tokenAmount != null && monthly.tokenAmount > 0 ? (
                             <p className="mt-1 text-[11px] font-medium text-cyan-100/85">
@@ -700,22 +708,22 @@ export default function MonetizationPurchaseSurface({
                           <button
                             type="button"
                             onClick={() => startCheckout("subscription", monthly.sku)}
-                            disabled={pendingSku != null || (appleApp ? !applePrices[monthly.sku] : !monthly.stripePriceConfigured) || blockPaidCommerce}
+                            disabled={pendingSku != null || (storeApp ? !storePrices[monthly.sku] : !monthly.stripePriceConfigured) || blockPaidCommerce}
                             className="mt-3 min-h-[44px] w-full rounded-lg bg-cyan-500/90 px-3 py-2.5 text-xs font-semibold text-[#041018] shadow-md shadow-cyan-500/15 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
                             data-testid={`pricing-subscription-cta-${monthly.sku}`}
                           >
-                            {appleApp ? (pendingSku === monthly.sku ? "Opening Apple purchase…" : "Subscribe with Apple") : pendingSku === monthly.sku
+                            {storeApp ? (pendingSku === monthly.sku ? `Opening ${storeLabel} purchase…` : `Subscribe with ${storeLabel}`) : pendingSku === monthly.sku
                               ? "Opening Stripe…"
                               : appliedCouponCode
                                 ? `Continue — ${appliedCouponPct}% off applied`
                                 : "Continue with Stripe — Monthly"}
                           </button>
-                          {!appleApp && !appliedCouponCode && !foundingMember && (
+                          {!storeApp && !appliedCouponCode && !foundingMember && (
                             <p className="mt-1.5 text-center text-[11px] text-white/30">
                               Use <span className="font-bold text-amber-300/60">WassupFred</span> for 20% off first purchase
                             </p>
                           )}
-                          {!appleApp && (monthly.stripePriceConfigured ? (
+                          {!storeApp && (monthly.stripePriceConfigured ? (
                             <StripePaymentHint className="mt-2" />
                           ) : (
                             <p className="mt-2 text-[11px] text-amber-200/90">
@@ -728,7 +736,7 @@ export default function MonetizationPurchaseSurface({
                         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <div className="flex flex-wrap items-end justify-between gap-2 text-white/85">
                             <span className="text-sm font-medium">Billed yearly</span>
-                            <span className="text-lg font-bold tabular-nums text-cyan-200">{appleApp ? (applePrices[yearly.sku] ?? "Loading Apple price…") : formatUsd(yearly.amountUsd)}</span>
+                            <span className="text-lg font-bold tabular-nums text-cyan-200">{storeApp ? (storePrices[yearly.sku] ?? `Loading ${storeLabel} price…`) : formatUsd(yearly.amountUsd)}</span>
                           </div>
                           {yearly.tokenAmount != null && yearly.tokenAmount > 0 ? (
                             <p className="mt-1 text-[11px] font-medium text-cyan-100/85">
@@ -738,15 +746,15 @@ export default function MonetizationPurchaseSurface({
                           <button
                             type="button"
                             onClick={() => startCheckout("subscription", yearly.sku)}
-                            disabled={pendingSku != null || (appleApp ? !applePrices[yearly.sku] : !yearly.stripePriceConfigured) || blockPaidCommerce}
+                            disabled={pendingSku != null || (storeApp ? !storePrices[yearly.sku] : !yearly.stripePriceConfigured) || blockPaidCommerce}
                             className="mt-3 min-h-[44px] w-full rounded-lg border border-cyan-400/35 bg-cyan-500/20 px-3 py-2.5 text-xs font-semibold text-cyan-50 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                             data-testid={`pricing-subscription-cta-${yearly.sku}`}
                           >
-                            {appleApp ? (pendingSku === yearly.sku ? "Opening Apple purchase…" : "Subscribe with Apple") : pendingSku === yearly.sku
+                            {storeApp ? (pendingSku === yearly.sku ? `Opening ${storeLabel} purchase…` : `Subscribe with ${storeLabel}`) : pendingSku === yearly.sku
                               ? "Opening Stripe…"
                               : "Continue with Stripe — Yearly"}
                           </button>
-                          {!appleApp && (yearly.stripePriceConfigured ? (
+                          {!storeApp && (yearly.stripePriceConfigured ? (
                             <StripePaymentHint className="mt-2" />
                           ) : (
                             <p className="mt-2 text-[11px] text-amber-200/90">
@@ -763,7 +771,7 @@ export default function MonetizationPurchaseSurface({
 
             <section className="mt-8 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 sm:p-5">
               <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/75">Token packs</h2>
-              {!appleApp && <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/55">
+              {!storeApp && <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/55">
                 Top up whenever you need more tokens. Checkout is powered by{" "}
                 <a
                   href="https://stripe.com"
@@ -790,24 +798,24 @@ export default function MonetizationPurchaseSurface({
                         {pack.tokenAmount.toLocaleString()} tokens included
                       </p>
                     ) : null}
-                    <div className="mt-3 text-xl font-bold tabular-nums text-cyan-300">{appleApp ? (applePrices[pack.sku] ?? "Loading Apple price…") : formatUsd(pack.amountUsd)}</div>
+                    <div className="mt-3 text-xl font-bold tabular-nums text-cyan-300">{storeApp ? (storePrices[pack.sku] ?? `Loading ${storeLabel} price…`) : formatUsd(pack.amountUsd)}</div>
                     <button
                       type="button"
                       onClick={() => startCheckout("token_pack", pack.sku)}
-                      disabled={pendingSku != null || (appleApp ? !applePrices[pack.sku] : !pack.stripePriceConfigured) || blockPaidCommerce}
+                      disabled={pendingSku != null || (storeApp ? !storePrices[pack.sku] : !pack.stripePriceConfigured) || blockPaidCommerce}
                       className="mt-3 min-h-[44px] w-full rounded-lg bg-cyan-500/90 px-3 py-2.5 text-xs font-semibold text-[#041018] transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
                       data-testid={`pricing-token-cta-${pack.sku}`}
                     >
-                      {appleApp ? (pendingSku === pack.sku ? "Opening Apple purchase…" : "Buy with Apple") : pendingSku === pack.sku ? "Opening Stripe…" : "Buy with Stripe"}
+                      {storeApp ? (pendingSku === pack.sku ? `Opening ${storeLabel} purchase…` : `Buy with ${storeLabel}`) : pendingSku === pack.sku ? "Opening Stripe…" : "Buy with Stripe"}
                     </button>
-                    {!appleApp && pack.stripePriceConfigured ? <StripePaymentHint className="mt-2" /> : null}
+                    {!storeApp && pack.stripePriceConfigured ? <StripePaymentHint className="mt-2" /> : null}
                   </article>
                 ))}
               </div>
             </section>
 
-            {appleApp && <button type="button" onClick={restorePurchases} className="mt-6 text-sm text-cyan-200 underline">Restore Purchases</button>}
-            {appleApp && <button type="button" onClick={() => void manageAppleSubscriptions().catch((cause) => setCheckoutError(cause instanceof Error ? cause.message : "Unable to open subscription settings."))} className="ml-4 mt-6 text-sm text-cyan-200 underline">Manage Subscriptions</button>}
+            {storeApp && <button type="button" onClick={restorePurchases} className="mt-6 text-sm text-cyan-200 underline">Restore Purchases</button>}
+            {storeApp && <button type="button" onClick={() => void manageStoreSubscriptions().catch((cause) => setCheckoutError(cause instanceof Error ? cause.message : "Unable to open subscription settings."))} className="ml-4 mt-6 text-sm text-cyan-200 underline">Manage Subscriptions</button>}
 
             <div className="mt-6">
               <MonetizationComplianceNotice fancredCopy={payload?.fancredBoundary} />
