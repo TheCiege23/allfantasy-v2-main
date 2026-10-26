@@ -2426,6 +2426,13 @@ export const translationsEsParity: Record<string, string> = {
   "lsEd.dr.live.pending": "Pendiente",
   "lsEd.dr.live.save": "Guardar ajustes del orden de novatos",
   "lsEd.dr.live.saved": "Ajustes del orden de novatos guardados",
+  "lsEd.dr.live.rn.title": "Después de cada ronda de playoffs",
+  "lsEd.dr.live.rn.notify": "Avisarme qué selecciones se fijaron",
+  "lsEd.dr.live.rn.notifyDesc": "AllFantasy revisa el orden cada hora y te envía las selecciones que decidió cada ronda.",
+  "lsEd.dr.live.rn.chat": "Publicar la actualización en el chat de la liga",
+  "lsEd.dr.live.rn.chatDesc": "Todos ven qué selecciones quedan fijadas a medida que avanzan los playoffs.",
+  "lsEd.dr.live.rn.last": "Última actualización: {{locked}} selecciones fijadas el {{date}}.",
+  "lsEd.dr.live.rn.lastFinal": "Última actualización: orden final el {{date}}.",
   "lsEd.dr.runnerUp": "Subcampeón",
   "lsEd.dr.saved": "Ajustes del draft guardados.",
   // Draft tab mobile overhaul (DraftSettingsCommissionerPanel) — 2026-10-14
