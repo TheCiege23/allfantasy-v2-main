@@ -151,7 +151,7 @@ export default function MlbBracketBoard({
   const sport = String(view.challenge.sport ?? "").toLowerCase()
   const requiresPublishedField = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
   const waitingForField = requiresPublishedField && view.series.some((row) =>
-    /^(?:CFP|EAST|WEST)\\d+$/i.test(row.homeTeamName) || /^(?:CFP|EAST|WEST)\\d+$/i.test(row.awayTeamName))
+    /^(?:CFP|EAST|WEST)\d+$/i.test(row.homeTeamName) || /^(?:CFP|EAST|WEST)\d+$/i.test(row.awayTeamName))
   const waitingForSchedule = requiresPublishedField && view.series.some((row) => !row.startsAt)
   const bracketReady = !waitingForField && !waitingForSchedule
   const projectedSeries = useMemo(
