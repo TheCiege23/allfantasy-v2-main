@@ -175,3 +175,23 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
       ].filter(Boolean).join('\n')
   }
 }
+
+export type SurvivorRulesSection = { topic: SurvivorRulesTopic; title: string; lines: string[] }
+
+/** The rulebook order: how a manager meets each part of the season. */
+export const SURVIVOR_RULEBOOK_TOPICS: readonly SurvivorRulesTopic[] = ['overview', 'immunity', 'voting', 'ties', 'idols', 'challenges', 'merge', 'exile', 'jury', 'schedule']
+
+/** One answer as a titled list: "**Title**\n• a\n• b" becomes { title, lines }. */
+export function survivorRulesSection(topic: SurvivorRulesTopic, ctx: SurvivorRulesContext): SurvivorRulesSection {
+  const [head, ...rest] = answerSurvivorRules(topic, ctx).split('\n')
+  return {
+    topic,
+    title: head.replace(/\*\*/g, '').trim(),
+    lines: rest.map(line => line.replace(/^•\s*/, '').trim()).filter(Boolean),
+  }
+}
+
+/** The whole rulebook for a league, from its current settings. Recomputed on every read. */
+export function buildSurvivorRulebook(ctx: SurvivorRulesContext): SurvivorRulesSection[] {
+  return SURVIVOR_RULEBOOK_TOPICS.map(topic => survivorRulesSection(topic, ctx))
+}

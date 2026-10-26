@@ -15,7 +15,7 @@ import { getCouncil } from './SurvivorTribalCouncilService'
 import { postIdolPlayAnnouncement } from './leagueChatPoster'
 import { IDOL_POWER_DESCRIPTIONS, EXILE_KEY_POSITION_BY_SPORT } from './constants'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
-import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
+import { loadSurvivorRulesContext } from './survivorRulesContext'
 import { answerSurvivorRules, survivorRulesTopic, type SurvivorRulesTopic } from './survivorRulesAnswers'
 
 const FORBIDDEN =
@@ -186,10 +186,6 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
 const RULES_QUESTION = /^(?:@chimmy\s+)?(?:how|when|why|explain|rules?|tell me about|what happens|what is|what are|what's|who (?:decides|wins|votes|goes))\b/
 
 async function answerRulesForLeague(leagueId: string, topic: SurvivorRulesTopic, sport: string): Promise<string> {
-  const [row, activeCount] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
-    prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }),
-  ])
-  const raw = row?.settings && typeof row.settings === 'object' && !Array.isArray(row.settings) ? row.settings as Record<string, unknown> : {}
-  return answerSurvivorRules(topic, { sport, settings: normalizeSurvivorFoundationSettings(raw), plan: readSurvivorFullSeasonPlan(raw), activeCount })
+  const ctx = await loadSurvivorRulesContext(leagueId)
+  return answerSurvivorRules(topic, ctx ?? { sport, settings: normalizeSurvivorFoundationSettings({}), plan: null })
 }

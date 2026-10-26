@@ -104,6 +104,7 @@ function SurvivorAppShellInner({
     { href: `${base}/exile`, label: 'Exile', icon: '🏚', show: showExileTab, dot: exileHot, home: false },
     { href: `${base}/jury`, label: 'Jury', icon: '⚖️', show: showJuryTab, dot: false, home: false },
     { href: `${base}/episodes`, label: 'Episodes', icon: '📜', show: true, dot: false, home: false },
+    { href: `${base}/rules`, label: 'Rules', icon: '📖', show: true, dot: false, home: false },
     {
       href: '#settings',
       label: 'Settings',
