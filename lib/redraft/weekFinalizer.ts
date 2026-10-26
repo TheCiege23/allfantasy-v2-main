@@ -663,8 +663,8 @@ export async function finalizeRedraftWeek(
     try {
       await (deps.enqueueTankingScan ?? enqueueTankingScan)(season.leagueId, params.week, season.id)
     } catch (error) {
-      // A queue outage must not undo a completed scoring week; coverage remains unscanned.
-      console.error('[weekFinalizer] Unable to queue tanking scan', { leagueId: season.leagueId, week: params.week, error })
+      // A failed scan must not undo a completed scoring week; it releases its marker and the next run retries.
+      console.error('[weekFinalizer] Tanking scan failed', { leagueId: season.leagueId, week: params.week, error })
     }
     /*
      * The result push, on the same gate: every game final, so a week this function refused (or
