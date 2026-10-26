@@ -32,6 +32,13 @@ const YAHOO_LEAGUE_LIST_URL =
 const YAHOO_BENCH_POSITIONS = new Set(['BN', 'BE'])
 const YAHOO_IR_POSITIONS = new Set(['IR', 'IL', 'NA', 'DL'])
 const YAHOO_NON_STARTING_POSITIONS = new Set([...YAHOO_BENCH_POSITIONS, ...YAHOO_IR_POSITIONS])
+/**
+ * Yahoo baseball/hockey `NA` — "not active", the minor-league stash. It is in `YAHOO_IR_POSITIONS`
+ * (it is not a starting slot), but it is not an injury: for MLB/NHL the adapter carries it as the
+ * taxi squad. No Yahoo capture exists in `contracts/` to confirm the spelling, so only the exact
+ * documented `NA` is read; anything else stays where it was.
+ */
+const YAHOO_MINORS_POSITION = 'NA'
 
 /**
  * True for Yahoo's injured-reserve family, including the suffixed spellings
@@ -418,6 +425,7 @@ function createImportTeam(
     rosterPlayerIds: roster.playerIds,
     starterPlayerIds: roster.starterIds,
     reservePlayerIds: roster.reserveIds,
+    minorsPlayerIds: roster.minorsIds ?? [],
     playerMap: roster.playerMap,
     rosterFetchStatus,
   }
@@ -832,6 +840,8 @@ function parseYahooRoster(rosterData: any): {
   playerIds: string[]
   starterIds: string[]
   reserveIds: string[]
+  /** Players in Yahoo's `NA` (not active / minor league) slot. Still in `reserveIds` too; the adapter decides. */
+  minorsIds?: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 } {
   const teamNode = rosterData?.fantasy_content?.team
@@ -841,6 +851,7 @@ function parseYahooRoster(rosterData: any): {
   const playerIds: string[] = []
   const starterIds: string[] = []
   const reserveIds: string[] = []
+  const minorsIds: string[] = []
   const playerMap: Record<string, { name: string; position: string; team: string }> = {}
 
   for (const wrapper of players) {
@@ -893,6 +904,7 @@ function parseYahooRoster(rosterData: any): {
      */
     if (isYahooReserveSlot(selectedSlot)) reserveIds.push(playerId)
     else if (isStarting) starterIds.push(playerId)
+    if (selectedSlot.toUpperCase() === YAHOO_MINORS_POSITION) minorsIds.push(playerId)
     playerMap[playerId] = {
       name: fullName,
       position,
@@ -900,7 +912,7 @@ function parseYahooRoster(rosterData: any): {
     }
   }
 
-  return { playerIds, starterIds, reserveIds, playerMap }
+  return { playerIds, starterIds, reserveIds, minorsIds, playerMap }
 }
 
 function parseYahooScoreboard(scoreboardData: any, season: number): YahooImportScheduleWeek[] {

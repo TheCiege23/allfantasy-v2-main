@@ -62,10 +62,15 @@ export async function POST(
     }
 
     const slotOrder = (proposal.session?.slotOrder as { slot: number; rosterId: string; displayName: string }[]) ?? []
-    const giveEntry = slotOrder.find((e: any) => e.slot === proposal.giveSlot)
-    const receiveEntry = slotOrder.find((e: any) => e.slot === proposal.receiveSlot)
-    const previousGive = giveEntry?.displayName ?? proposal.proposerName ?? 'Team'
-    const previousReceive = receiveEntry?.displayName ?? proposal.receiverName ?? 'Team'
+    /*
+     * 🛑 THE TWO TEAMS TRADING, BY ROSTER — NOT THE ORIGINAL OWNERS OF THE TWO SLOTS. These were read
+     * by `giveSlot`/`receiveSlot`, which is the same team only for a pick that has never moved. Once a
+     * pick had been traded, flipping it again named the new owner after its first owner: the board and
+     * the on-the-clock banner showed a third team's name against the right roster (2026-10-26).
+     */
+    const nameOf = (rosterId: string) => slotOrder.find((e: any) => e.rosterId === rosterId)?.displayName
+    const previousGive = nameOf(proposal.proposerRosterId) ?? proposal.proposerName ?? 'Team'
+    const previousReceive = nameOf(proposal.receiverRosterId) ?? proposal.receiverName ?? 'Team'
     const newTrades = [
       {
         round: proposal.giveRound,

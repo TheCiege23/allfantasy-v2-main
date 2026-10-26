@@ -23,7 +23,7 @@ import {
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
-import { resolvePickOwner } from './PickOwnershipResolver'
+import { applyTradedOwnerToCurrentPick } from './PickOwnershipResolver'
 import {
   computeTimerState,
   computeTimerStateWithPauseWindow,
@@ -439,12 +439,7 @@ export async function buildSessionSnapshot(
     thirdRoundReversal: session.thirdRoundReversal,
     slotOrder,
   })
-  if (currentPick && tradedPicks.length > 0) {
-    const resolved = resolvePickOwner(currentPick.round, currentPick.slot, slotOrder, tradedPicks)
-    if (resolved) {
-      currentPick = { ...currentPick, rosterId: resolved.rosterId, displayName: resolved.displayName }
-    }
-  }
+  currentPick = applyTradedOwnerToCurrentPick(currentPick, slotOrder, tradedPicks)
 
   const uiSettings = await getDraftUISettingsForLeague(leagueId)
   const pauseWindow = uiSettings.timerMode === 'overnight_pause' && uiSettings.slowDraftPauseWindow

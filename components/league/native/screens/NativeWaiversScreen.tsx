@@ -373,7 +373,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                               {p.team ?? 'FA'}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
                             </small>
                             {a.seasonStatsSummary.length ? <small data-stats>{a.seasonStatsSummary.join(' · ')}</small> : null}
-                            {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil)}</small> : null}
+                            {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil, { tInterpolate, language })}</small> : null}
                           </div>
                           <button type="button" className="nls-iconbtn" aria-pressed={watch.includes(p.id)} aria-label={watch.includes(p.id) ? `Remove ${p.name} from watchlist` : `Watch ${p.name}`} onClick={() => toggleWatch(p.id)} data-watch>
                             <Star size={16} aria-hidden fill={watch.includes(p.id) ? 'currentColor' : 'none'} />

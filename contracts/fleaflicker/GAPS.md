@@ -238,3 +238,19 @@ two unknowns turned out to need different sources. The accepted VALUE (`SPORTRAD
 in the vendor's Swagger enum after all, on a second read. The BEHAVIOUR could not come
 from the docs at all: they say `{ type, id }`, and the wire says `{ id }`. Reading the
 schema would have produced a reader that matches nothing. Only the probe could say so.
+
+### `G-12` — do MLB/NHL leagues carry a `TAXI` roster position the way NFL does?
+
+**Status: OPEN — no MLB/NHL capture.** Recorded 2026-10-26, without probing.
+
+`rules.NFL.json` carries `{ label: 'TAXI', group: 'TAXI', start: 3 }`, and
+`fleaflickerTaxiSlots` (lib/league-import/fleaflicker/fleaflickerScoringRules.ts) now
+reads the taxi slot count from it for every sport — `FetchLeagueRules` is one response
+shape across sports. Whether an MLB or NHL league exposes its minors/taxi squad as a
+`TAXI` group (rather than another label, or not at all) is not captured. Until it is, a
+league without a `TAXI`/`group: TAXI` position imports with no taxi slot count (null,
+not 0), and the taxi PLAYERS come only from `FetchRoster`'s `TAXI` group, as before.
+
+**Needed:** `FetchLeagueRules` + one `FetchRoster` from a public MLB or NHL dynasty league
+that uses a taxi/minors squad, via `scripts/probe.sh`, committed with the change that
+reads it.

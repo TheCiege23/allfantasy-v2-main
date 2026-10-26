@@ -12,15 +12,20 @@
  *
  * When the league has saved roster slots, the limit is the active one (starters + bench) and a
  * player sitting in IR / taxi / devy does not count against it — the same rule as the trade runtime.
- * A league with no saved slots (an import, or legacy state) keeps the old rule exactly: everyone
- * counts against `League.rosterSize`.
+ * A league with no saved slots (an import, or legacy state) keeps the old rule — everyone counts
+ * against `League.rosterSize` — with ONE exception: a taxi-squad player never counts. Sleeper's and
+ * Fleaflicker's `rosterSize` is the active roster (Fleaflicker's fixture: 8 starters + 7 bench = 15),
+ * and Yahoo MLB/NHL now leaves its `NA` minors slots — the taxi squad — out of it, so counting a taxi
+ * player told a dynasty team with a full taxi squad that its roster was full (2026-10-26). ⚠ MFL's
+ * `rosterSize` is its starters plus taxi with no bench at all, already far below a real roster; this
+ * only loosens it. Fantrax's minors limit is not captured (contracts/fantrax/GAPS.md F-04).
  */
 import { isReserveRosterSlot, resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 
 export type RosterLimit = {
   limit: number
-  /** 'active': IR / taxi / devy players are not counted. 'all': every player counts (legacy). */
+  /** 'active': IR / taxi / devy players are not counted. 'all': every player but the taxi squad counts (legacy). */
   counts: 'active' | 'all'
 }
 
@@ -55,10 +60,29 @@ export function reservePlayerIds(playerData: unknown): Set<string> {
   return out
 }
 
+/** Players on the taxi squad, from `lineup_sections.taxi` or the flat `taxi` array. */
+export function taxiPlayerIds(playerData: unknown): Set<string> {
+  const out = new Set<string>()
+  if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) return out
+  const data = playerData as Record<string, unknown>
+  const sections = data.lineup_sections && typeof data.lineup_sections === 'object' ? (data.lineup_sections as Record<string, unknown>) : {}
+  for (const rows of [sections.taxi, data.taxi]) {
+    if (!Array.isArray(rows)) continue
+    for (const row of rows as Row[]) {
+      const id = rowId(row)
+      if (id) out.add(id)
+    }
+  }
+  return out
+}
+
 /** How many of this roster's players count against `limit`. */
 export function countTowardRosterLimit(playerData: unknown, counts: RosterLimit['counts']): number {
   const ids = getRosterPlayerIds(playerData)
-  if (counts === 'all') return ids.length
+  if (counts === 'all') {
+    const taxi = taxiPlayerIds(playerData)
+    return ids.filter((id) => !taxi.has(id)).length
+  }
   const reserve = reservePlayerIds(playerData)
   return ids.filter((id) => !reserve.has(id)).length
 }

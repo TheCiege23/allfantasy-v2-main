@@ -3329,4 +3329,6 @@ export const translationsEsParity: Record<string, string> = {
   "waiverFa.rollover.carry_over": "Conservar lo que le queda a cada equipo",
   "waiverFa.rolloverHint": "Se aplica al renovar la liga para la próxima temporada. Los saldos actuales no cambian.",
   "waiverFa.lineupWarning": "Después de este movimiento tu alineación no puede cubrir todos los puestos titulares ({{slots}}). ¿Continuar de todos modos?",
+  // Waiver hold label on the waiver wire (WaiverWirePage, NativeWaiversScreen) — «reclamo», never «waiver».
+  "waiverClaim.onWaiversUntil": "En reclamos hasta el {{date}}",
 }

@@ -1230,7 +1230,7 @@ export default function WaiverWirePage({
                     sport={settings?.sport ?? null}
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
                     addMode={immediateAddAllowed && !holdUntil}
-                    waiverHoldLabel={holdUntil ? onWaiversUntilLabel(holdUntil) : null}
+                    waiverHoldLabel={holdUntil ? onWaiversUntilLabel(holdUntil, { tInterpolate, language }) : null}
                     movesClosedReason={movesClosed ? phaseReason : null}
                     actionLoading={actionPlayerId === p.id}
                     onRowClick={() => {
