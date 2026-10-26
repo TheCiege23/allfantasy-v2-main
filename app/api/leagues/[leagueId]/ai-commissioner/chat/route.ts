@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { answerAICommissionerQuestion } from '@/lib/ai-commissioner'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
+import { readCommissionerDesk } from '@/lib/ai-commissioner/commissionerDesk'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,7 +74,11 @@ async function paidToolPost(
       where: { leagueId, network: { ownerUserId: userId } },
       select: { network: { select: { name: true, members: { select: { league: { select: { id: true, name: true, userId: true } } } } } } },
     })).catch(() => null)
+    // What is waiting on this commissioner (lib/ai-commissioner/commissionerDesk.ts). A failed read
+    // answers without it rather than failing a question the commissioner has paid for.
+    const desk = await readCommissionerDesk(leagueId, userId).catch(() => null)
     const result = await answerAICommissionerQuestion({
+      desk,
       leagueId,
       question,
       sport: body.sport ?? null,

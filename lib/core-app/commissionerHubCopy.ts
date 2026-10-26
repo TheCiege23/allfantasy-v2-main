@@ -199,8 +199,14 @@ const ES: Record<string, string> = {
   // ── Chimmy ────────────────────────────────────────────────────────────
   unknown: 'desconocido',
   'Ask Chimmy about this league': 'Pregúntale a Chimmy sobre esta liga',
-  'Guidance uses the selected league’s evidence. If this league belongs to a network you own, Chimmy also knows its member names. It cannot make rulings or change settings here.':
-    'La orientación usa los datos de la liga seleccionada. Si esta liga pertenece a una red tuya, Chimmy también conoce los nombres de sus miembros. No puede tomar decisiones ni cambiar la configuración aquí.',
+  'Chimmy answers as your assistant commissioner: it sees what is waiting on you — open tasks, trades in your review, stat corrections, inactive teams, dues and payouts — and links you to the screen to act on. It cannot make rulings or change settings itself.':
+    'Chimmy responde como tu comisionado adjunto: ve lo que tienes pendiente — tareas abiertas, intercambios en tu revisión, correcciones de estadísticas, equipos inactivos, cuotas y pagos — y te lleva a la pantalla donde actuar. No puede tomar decisiones ni cambiar la configuración por sí mismo.',
+  'Suggested questions': 'Preguntas sugeridas',
+  'What needs my attention this week?': '¿Qué necesita mi atención esta semana?',
+  'Is anything waiting on me in trades?': '¿Hay algún intercambio esperando por mí?',
+  'Which teams look inactive?': '¿Qué equipos parecen inactivos?',
+  'Are dues and payouts settled?': '¿Están al día las cuotas y los pagos?',
+  'Act on it': 'Actuar',
   Question: 'Pregunta',
   'Asking…': 'Preguntando…',
   'Ask Chimmy': 'Preguntar a Chimmy',
