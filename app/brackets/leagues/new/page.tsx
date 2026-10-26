@@ -25,7 +25,8 @@ const SPORT_LABELS: Record<string, string> = {
   NHL: "NHL",
   NBA: "NBA",
   MLB: "MLB",
-  NCAAF: "NCAA Football",
+  NCAAF: "College Football Playoff",
+  NBA_CUP: "NBA Cup",
   NCAAB: "NCAA Basketball",
   SOCCER: "Soccer",
 }
@@ -80,7 +81,7 @@ export default function NewBracketLeaguePage() {
    * app/api/brackets/playoffs/route.ts — they are the same decision written
    * twice, and only the API one is enforced.
    */
-  const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB"]
+  const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB", "NCAAF", "NBA_CUP"]
   const isPlayoffPool = challengeType === "playoff_challenge" && PLAYOFF_POOL_SPORTS.includes(sport)
   // The real AF Commissioner plan (the same feature the server checks at create), plus AllFantasy's
   // own test accounts. The allowlist alone locked these options for every paying commissioner.
@@ -92,7 +93,9 @@ export default function NewBracketLeaguePage() {
     const requestedType = searchParams?.get("challengeType")
 
     if (requestedSport) {
-      const normalized = normalizeToSupportedSport(requestedSport)
+      const normalized = requestedSport.toUpperCase() === "NBA_CUP"
+        ? "NBA_CUP"
+        : normalizeToSupportedSport(requestedSport)
       if (normalized === "SOCCER") {
         // Soccer pools live in the World Cup product, not the legacy BracketLeague stack.
         router.replace("/brackets/world-cup/create")
@@ -148,7 +151,7 @@ export default function NewBracketLeaguePage() {
 
     try {
       if (isPlayoffPool) {
-        const playoffSport = sport.toLowerCase() as "nba" | "nhl" | "mlb"
+        const playoffSport = sport.toLowerCase() as "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
         const config = sanitizePlayoffChallengeConfig(
           defaultPlayoffChallengeConfig({
             visibility: isPublic ? "public" : "private",
@@ -265,7 +268,7 @@ export default function NewBracketLeaguePage() {
               Sport
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {SUPPORTED_SPORTS.map((sportOption) => {
+              {[...SUPPORTED_SPORTS, "NBA_CUP"].map((sportOption) => {
                 const active = sport === sportOption
                 return (
                   <button
