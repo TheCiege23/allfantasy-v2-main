@@ -14,7 +14,9 @@ import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
 import { getCouncil } from './SurvivorTribalCouncilService'
 import { postIdolPlayAnnouncement } from './leagueChatPoster'
 import { IDOL_POWER_DESCRIPTIONS, EXILE_KEY_POSITION_BY_SPORT } from './constants'
-import { getSportSchedule } from './sportScheduleEngine'
+import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
+import { answerSurvivorRules, survivorRulesTopic, type SurvivorRulesTopic } from './survivorRulesAnswers'
 
 const FORBIDDEN =
   "I can't share that — information is currency out here."
@@ -50,12 +52,20 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
     return FORBIDDEN
   }
 
+  // ===== RULES QUESTIONS =====
+  // A question is answered, never acted on: "how do I play my idol?" must not play it. Built from
+  // this league's settings and plan, so anyone in the league (out of the game or not) can ask.
+  const topic = survivorRulesTopic(message)
+  if (topic && RULES_QUESTION.test(lower.trim())) return answerRulesForLeague(leagueId, topic, league?.sport ?? 'NFL')
+
   // ===== IDOL PLAY REQUEST =====
   // Matches: "use my idol", "play my idol", "i want to use my idol", "activate idol"
   if (
     (lower.includes('use') || lower.includes('play') || lower.includes('activate')) &&
     lower.includes('idol')
   ) {
+    // "Can I play my idol now?" asks; it does not play.
+    if (lower.trim().endsWith('?')) return 'To play an idol, message me "use my idol" while Tribal Council is open, before votes are read. If it needs a target, tap Play Idol on the open council instead.'
     if (!player) return 'You are not registered as a Survivor player in this league.'
     if (player.playerState === 'eliminated') return 'Your journey has ended — you can no longer play idols.'
 
@@ -142,61 +152,13 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
     return 'Your journey on the main island has ended — thanks for playing.'
   }
 
-  if (lower.includes('immunity') && league?.survivorPhase) {
-    return `Phase: ${league.survivorPhase}. Public immunity is announced in league chat when results are official.`
-  }
-
-  if (lower.includes('deadline') || lower.includes('when')) {
-    const sport = league?.sport ?? 'NFL'
-    const sched = getSportSchedule(sport)
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    return `Elimination Council: ${days[sched.tribalCouncilDay]} at ${sched.tribalCouncilHourUtc}:00 UTC\nVote deadline: ${days[sched.voteDeadlineDay]} at ${sched.voteDeadlineHourUtc}:00 UTC\nChallenge posted: ${days[sched.challengePostDay]}\nScoring finalizes: ${days[sched.scoringFinalizeDay]}`
-  }
-
-  // ===== SETTINGS-AWARE RULE ANSWERS =====
-  const fullLeague = await (prisma as any).league.findUnique({
-    where: { id: leagueId },
-    select: {
-      sport: true, survivorPlayerCount: true, survivorTribeCount: true,
-      survivorMergeTrigger: true, survivorMergeWeek: true, survivorMergeAtCount: true,
-      survivorJuryStart: true, survivorIdolsEnabled: true, survivorIdolCount: true,
-      survivorIdolExpiryWeek: true, survivorExileEnabled: true,
-      survivorSelfVoteAllowed: true, survivorRocksEnabled: true, survivorTieRule: true,
-      survivorTokenEnabled: true, survivorBossResetEnabled: true,
-    },
-  })
-
-  if (lower.includes('rule') || lower.includes('how does') || lower.includes('how do') || lower.includes('explain')) {
-    if (lower.includes('voting') || lower.includes('vote') || lower.includes('tribal')) {
-      return `**Voting Rules:**\n• Vote privately by messaging me\n• Self-voting: ${fullLeague?.survivorSelfVoteAllowed ? 'Allowed' : 'Not allowed'}\n• Tie resolution: ${(fullLeague?.survivorTieRule ?? 'rocks').replace(/_/g, ' ')}\n• Go to Rocks: ${fullLeague?.survivorRocksEnabled !== false ? 'Enabled' : 'Disabled'}\n• Votes MUST be in before the deadline. Late votes don't count.`
-    }
-    if (lower.includes('idol') || lower.includes('power')) {
-      return `**Idol Rules:**\n• ${fullLeague?.survivorIdolCount ?? 9} idols in the pool, ~30-35% of players receive one\n• Each idol is unique\n• Must be played BEFORE votes are counted — message me "I want to use my idol"\n• Idols are attached to PLAYERS (not you) — if you trade the player, the idol goes with them\n• ${fullLeague?.survivorIdolExpiryWeek ? `Idols expire after Week ${fullLeague.survivorIdolExpiryWeek}` : 'Idols expire at Final 5'}`
-    }
-    if (lower.includes('merge')) {
-      return `**Merge Rules:**\n• Trigger: ${fullLeague?.survivorMergeTrigger === 'week' ? `Week ${fullLeague?.survivorMergeWeek}` : `${fullLeague?.survivorMergeAtCount ?? 10} players remaining`}\n• After merge: individual immunity (highest scorer wins)\n• Pre-merge idols may expire at merge`
-    }
-    if (lower.includes('exile') || lower.includes('island')) {
-      const keyPos = EXILE_KEY_POSITION_BY_SPORT[fullLeague?.sport ?? 'NFL'] ?? 'QB'
-      return `**Exile Island:**\n• Voted-out players go to Exile\n• NO draft on Exile — waiver claims only!\n• Claim the ${keyPos} (key position) to win the entire team\n• Team with most points earns 1 token\n• ${fullLeague?.survivorBossResetEnabled !== false ? 'Boss wins = ALL tokens reset to 0' : 'No boss reset'}\n• Random mini-games for bonus tokens\n• Most tokens at return week = back to main island`
-    }
-    if (lower.includes('jury') || lower.includes('finale') || lower.includes('final')) {
-      return `**Jury & Finale:**\n• Jury starts: ${(fullLeague?.survivorJuryStart ?? 'after merge').replace(/_/g, ' ')}\n• Eliminated post-jury-start players become Jurors\n• Final 3 face Jury questions + closing statements\n• Jury votes privately for the season winner`
-    }
-    if (lower.includes('challenge') || lower.includes('mini')) {
-      const sched = getSportSchedule(fullLeague?.sport ?? 'NFL')
-      return `**Challenges:**\n• ${sched.minigamesPerWeek} mini-game(s) per scoring period on Main Island\n• Exile mini-games are random (not every week) for bonus tokens\n• Challenges reward: immunity, FAAB, tokens, or idols`
-    }
-    return `Ask me about: voting, idols, merge, exile, jury, challenges, or deadlines. I know all the rules for this league!`
-  }
-
   // ===== EXILE-SPECIFIC QUESTIONS =====
   if (player.playerState === 'exile' || player.canAccessExileChat) {
+    const keyPos = EXILE_KEY_POSITION_BY_SPORT[league?.sport ?? 'NFL'] ?? 'QB'
     if (lower.includes('token') || lower.includes('how many')) {
       return `Check the Token Pool screen for your current balance and history. I can't reveal other players' token counts.`
     }
     if (lower.includes('team') || lower.includes('available') || lower.includes('claim')) {
-      const keyPos = EXILE_KEY_POSITION_BY_SPORT[fullLeague?.sport ?? 'NFL'] ?? 'QB'
       return `To claim a team on Exile: submit a waiver claim for any player. If you claim the **${keyPos}** (key position), you win the entire team! Use the Exile Team Draft screen to see available teams and submit claims.`
     }
     if (lower.includes('return') || lower.includes('go back') || lower.includes('main island')) {
@@ -218,4 +180,16 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
   }
 
   return `I'm here, ${player.displayName}. Ask about rules, deadlines, voting, idols, exile, merge, jury — or play an idol: "I want to use my idol".`
+}
+
+/** Asking how something works, as opposed to asking about (or for) your own idols. */
+const RULES_QUESTION = /^(?:@chimmy\s+)?(?:how|when|why|explain|rules?|tell me about|what happens|what is|what are|what's|who (?:decides|wins|votes|goes))\b/
+
+async function answerRulesForLeague(leagueId: string, topic: SurvivorRulesTopic, sport: string): Promise<string> {
+  const [row, activeCount] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+    prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }),
+  ])
+  const raw = row?.settings && typeof row.settings === 'object' && !Array.isArray(row.settings) ? row.settings as Record<string, unknown> : {}
+  return answerSurvivorRules(topic, { sport, settings: normalizeSurvivorFoundationSettings(raw), plan: readSurvivorFullSeasonPlan(raw), activeCount })
 }
