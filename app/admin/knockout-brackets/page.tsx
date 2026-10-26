@@ -7,6 +7,9 @@ export default function KnockoutBracketAdminPage() {
   const [season, setSeason] = useState(new Date().getUTCFullYear())
   const [east, setEast] = useState<string[]>(["", "", "", ""])
   const [west, setWest] = useState<string[]>(["", "", "", ""])
+  const [scheduleSport, setScheduleSport] = useState<"ncaaf" | "nba_cup">("nba_cup")
+  const [scheduleTimes, setScheduleTimes] = useState<string[]>(Array(7).fill(""))
+  const [scheduleMessage, setScheduleMessage] = useState("")
   const [challengeId, setChallengeId] = useState("")
   const [seriesNumber, setSeriesNumber] = useState(1)
   const [homeScore, setHomeScore] = useState("")
@@ -39,6 +42,35 @@ export default function KnockoutBracketAdminPage() {
       setFieldMessage(res.ok
         ? `Published field and seeded ${data.sweep?.challengesSeeded ?? 0} pools.`
         : String(data.errors?.join(" ") ?? data.error ?? "Could not save field."))
+    } finally { setBusy(false) }
+  }
+
+  async function loadSchedule() {
+    setScheduleMessage("")
+    const res = await fetch(`/api/admin/brackets/single-game-schedule?sport=${scheduleSport}&season=${season}`, { cache: "no-store" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return setScheduleMessage(String(data.error ?? "Could not load schedule."))
+    if (data.schedule) {
+      setScheduleTimes(data.schedule.games.map((game: { startsAt: string }) => game.startsAt))
+      setScheduleMessage("Saved schedule loaded.")
+    } else setScheduleMessage("No schedule published for this season.")
+  }
+
+  async function saveSchedule() {
+    setBusy(true)
+    setScheduleMessage("")
+    try {
+      const res = await fetch("/api/admin/brackets/single-game-schedule", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sport: scheduleSport, season,
+          games: scheduleTimes.map((startsAt, index) => ({ seriesNumber: index + 1, startsAt })),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      setScheduleMessage(res.ok
+        ? `Published start times for ${data.pools ?? 0} pools.`
+        : String(data.errors?.join(" ") ?? data.error ?? "Could not save schedule."))
     } finally { setBusy(false) }
   }
 
@@ -88,6 +120,31 @@ export default function KnockoutBracketAdminPage() {
             <button className="rounded-xl bg-teal-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-50" onClick={saveField} disabled={busy}>Publish field</button>
           </div>
           {fieldMessage && <p role="status" className="mt-3 text-sm text-teal-200">{fieldMessage}</p>}
+        </section>
+        <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
+          <h2 className="text-xl font-bold">Game schedule and pick locks</h2>
+          <p className="mt-1 text-sm text-slate-300">Publish every start time before picks open. Enter ISO timestamps with a timezone, such as 2026-12-04T19:00:00-05:00.</p>
+          <label className="mt-4 block text-sm">Tournament
+            <select className={inputClass} value={scheduleSport} onChange={(e) => {
+              const next = e.target.value as "ncaaf" | "nba_cup"
+              setScheduleSport(next)
+              setScheduleTimes(Array(next === "ncaaf" ? 11 : 7).fill(""))
+            }}>
+              <option value="nba_cup">NBA Cup</option>
+              <option value="ncaaf">College Football Playoff</option>
+            </select>
+          </label>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {scheduleTimes.map((value, index) => <label className="text-sm" key={index}>Game {index + 1} starts
+              <input className={inputClass} value={value} placeholder="2026-12-04T19:00:00-05:00" onChange={(e) =>
+                setScheduleTimes(scheduleTimes.map((item, i) => i === index ? e.target.value : item))} />
+            </label>)}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button className="rounded-xl border border-white/25 px-4 py-2" onClick={loadSchedule} disabled={busy}>Load saved schedule</button>
+            <button className="rounded-xl bg-teal-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-50" onClick={saveSchedule} disabled={busy}>Publish schedule</button>
+          </div>
+          {scheduleMessage && <p role="status" className="mt-3 text-sm text-teal-200">{scheduleMessage}</p>}
         </section>
         <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
           <h2 className="text-xl font-bold">Record a final result</h2>
