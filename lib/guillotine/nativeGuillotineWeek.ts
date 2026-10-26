@@ -151,6 +151,29 @@ export async function runNativeGuillotineWeek(
       return { ...base, outcome: 'chopped', week, choppedRedraftRosterIds: repairedIds, reason: 'recovered previously selected chop' }
     }
 
+    /*
+     * ⚠ THE CORRECTION WINDOW WAITED FOR NOTHING. The chop is held until the stat-correction cutoff so
+     * a late correction can still decide who goes — but score-sync only pulls the CURRENT week, so the
+     * sealed week's stats were never fetched again and every chop ran on the numbers as they stood at
+     * the seal. Pull the week once more now, past the cutoff, and re-seal it from the corrected stats.
+     * The stat sync writes `isFinalized: false`, so the re-seal is what makes the week chop-ready again;
+     * a re-seal that refuses (a refresh that came back short) waits rather than chop on half a week.
+     * A refresh that throws chops on the sealed stats, exactly as before, rather than stall the season.
+     */
+    if (config.correctionWindow !== 'immediate' && deps.syncWeekStats) {
+      let refreshed = false
+      try {
+        await deps.syncWeekStats({ seasonId: season.id, week })
+        refreshed = true
+      } catch (error) {
+        console.error('[native-guillotine] pre-chop stat refresh failed; chopping on the sealed stats', { seasonId: season.id, week, error })
+      }
+      if (refreshed) {
+        const resealed = await finalizeRedraftWeek({ seasonId: season.id, week })
+        if (resealed.refusal) return { ...base, outcome: 'waiting', week, reason: `pre_chop_refresh:${resealed.refusal}` }
+      }
+    }
+
     // Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
     const points = new Map<string, number>()
     const benchPoints = new Map<string, number>()
