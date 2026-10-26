@@ -46,7 +46,9 @@ import {
   AUTOPILOT_OFF_ACTION,
   AUTOPILOT_ON_ACTION,
   isOwnerOnAutopilot,
+  DRAFT_AS_ME_ACTION,
   setChimmyAutopilot,
+  setDraftAsMe,
   setInactiveManagerMode,
 } from '@/lib/inactive-manager/inactiveManagerService'
 import { autopilotRosterIds, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
@@ -133,5 +135,34 @@ describe('isOwnerOnAutopilot (the trade guard)', () => {
     m.state.settings = { af_managed_lineups: { r1: { since: 's', byUserId: 'c' } } }
     expect(await isOwnerOnAutopilot('L', 'someone')).toBe(false)
     expect(m.prisma.roster.findFirst).not.toHaveBeenCalled()
+  })
+})
+
+describe('setDraftAsMe (the commissioner switch)', () => {
+  const tx = () => m.tx
+  beforeEach(() => {
+    m.prisma.$transaction.mockImplementation(async (fn: (t: unknown) => unknown) => fn({ ...tx(), league: { ...tx().league, findUnique: vi.fn(async () => ({ settings: m.state.settings })) } }))
+  })
+
+  it('turns it off without needing the plan, keeps other settings, and logs it', async () => {
+    m.state.ownerHasPlan = false
+    expect(await setDraftAsMe('L', 'commish', false)).toEqual({ ok: true, on: false })
+    expect(m.state.settings).toMatchObject({ other: 1, draft_as_me: false })
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: DRAFT_AS_ME_ACTION, metadata: { on: false } }))
+  })
+
+  it('turning it on needs the league owner\'s AF Commissioner plan', async () => {
+    m.state.settings = { draft_as_me: false }
+    m.state.ownerHasPlan = false
+    expect(await setDraftAsMe('L', 'commish', true)).toMatchObject({ ok: false, status: 402 })
+    m.state.ownerHasPlan = true
+    expect(await setDraftAsMe('L', 'commish', true)).toEqual({ ok: true, on: true })
+    expect(m.state.settings).toMatchObject({ draft_as_me: true })
+  })
+
+  it('is commissioner-only and needs a yes or no', async () => {
+    m.elevated.mockResolvedValueOnce(false)
+    expect(await setDraftAsMe('L', 'member', false)).toMatchObject({ ok: false, status: 403 })
+    expect(await setDraftAsMe('L', 'commish', 'yes')).toMatchObject({ ok: false, status: 400 })
   })
 })

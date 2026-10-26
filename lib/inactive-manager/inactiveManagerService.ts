@@ -17,6 +17,7 @@ import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerDa
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { DRAFT_AS_ME_FEATURE, DRAFT_AS_ME_SETTING } from '@/lib/draft-room/draftAsMeAutopick'
 import {
   AF_MANAGED_LINEUPS_KEY,
   autopilotRosterIds,
@@ -82,15 +83,16 @@ export type InactiveManagerTeam = {
 
 export async function readInactiveManagerView(
   leagueId: string,
-): Promise<{ native: boolean; autopilotEntitled: boolean; teams: InactiveManagerTeam[] }> {
+): Promise<{ native: boolean; autopilotEntitled: boolean; draftAsMe: boolean; teams: InactiveManagerTeam[] }> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true } })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, teams: [] }
+  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, draftAsMe: false, teams: [] }
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const suggested = new Set(suggestInactiveTeams(health.rows, managed))
   return {
     native: true,
     autopilotEntitled: await autopilotEntitled(league.userId),
+    draftAsMe: settingsObject(league.settings)[DRAFT_AS_ME_SETTING] !== false,
     teams: health.rows.map((r) => ({
       rosterId: r.rosterId,
       teamName: r.teamName,
@@ -176,6 +178,40 @@ export async function setChimmyAutopilot(leagueId: string, userId: string, roste
     })
   }
   return { ok: true, managed: true, style: nextStyle }
+}
+
+export const DRAFT_AS_ME_ACTION = 'draft_as_me.set'
+
+/**
+ * Commissioner or co-commissioner: switch draft as me (lib/draft-room/draftAsMe.ts) on or off for the
+ * league. It is on by default for a league on AF Commissioner; switching it ON needs that plan,
+ * switching it off never does. Stored as `League.settings.draft_as_me`.
+ */
+export async function setDraftAsMe(leagueId: string, userId: string, on: unknown): Promise<{ ok: true; on: boolean } | { ok: false; status: number; error: string }> {
+  if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
+  if (typeof on !== 'boolean') return { ok: false, status: 400, error: 'Say whether to turn it on.' }
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
+  if (!league) return { ok: false, status: 404, error: 'League not found' }
+  if (on) {
+    let entitled = false
+    try {
+      entitled = Boolean((await new EntitlementResolver().resolveForUser(league.userId, DRAFT_AS_ME_FEATURE)).hasAccess)
+    } catch {
+      entitled = false
+    }
+    if (!entitled) return { ok: false, status: 402, error: 'Draft as me is part of the AF Commissioner plan.' }
+  }
+  let changed = false
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
+    const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const settings = settingsObject(row?.settings)
+    if ((settings[DRAFT_AS_ME_SETTING] !== false) === on) return
+    changed = true
+    await tx.league.update({ where: { id: leagueId }, data: { settings: { ...settings, [DRAFT_AS_ME_SETTING]: on } as Prisma.InputJsonValue } })
+  })
+  if (changed) await logAction({ leagueId, userId, actionType: DRAFT_AS_ME_ACTION, entityType: 'league', entityId: leagueId, metadata: { on } })
+  return { ok: true, on }
 }
 
 /**

@@ -26,6 +26,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
   const [teams, setTeams] = useState<Team[] | null>(null)
   const [native, setNative] = useState(true)
   const [entitled, setEntitled] = useState(false)
+  const [draftAsMe, setDraftAsMeState] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
@@ -33,9 +34,10 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
     try {
       const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) throw new Error(String(r.status))
-      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; teams: Team[] }
+      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; teams: Team[] }
       setNative(body.native)
       setEntitled(Boolean(body.autopilotEntitled))
+      setDraftAsMeState(body.draftAsMe !== false)
       setTeams(body.teams)
     } catch {
       setMessage(t('Commissioner permission or a connection is required.', 'Se requiere permiso del comisionado o conexión.'))
@@ -91,6 +93,27 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       setBusy(null)
     }
   }
+  /** Draft as me (AF Commissioner): a missed draft pick is made the way that manager drafts. */
+  const toggleDraftAsMe = async (on: boolean) => {
+    setBusy('draft-as-me')
+    setMessage('')
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draftAsMe: on }) })
+      const body = (await r.json().catch(() => ({}))) as { error?: string }
+      if (!r.ok) throw new Error(body.error || '')
+      setDraftAsMeState(on)
+      setMessage(
+        on
+          ? t('On. A missed draft pick is made the way that manager usually drafts.', 'Activado. Una selección perdida se hace como suele elegir ese mánager.')
+          : t('Off. A missed draft pick uses the standard autopick.', 'Desactivado. Una selección perdida usa la selección automática estándar.'),
+      )
+    } catch (e) {
+      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const styleLabel = (style: AutopilotStyle) =>
     style === 'dynasty_owner'
       ? t('Play like a dynasty owner', 'Jugar como dueño dinastía')
@@ -110,6 +133,21 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
         {t(
           "Hand an away manager's lineup to AllFantasy: it sets the projected-best lineup every week, from players whose games have not started. It stops by itself the moment the manager saves a lineup, and the league log shows every change. With AF Commissioner, Chimmy can run the whole team on autopilot, playing like a dynasty owner by default.",
           'Deja la alineación de un mánager ausente a AllFantasy: pone la mejor alineación proyectada cada semana, con jugadores cuyos partidos no han empezado. Se detiene sola cuando el mánager guarda una alineación, y el registro de la liga muestra cada cambio. Con AF Commissioner, Chimmy puede dirigir todo el equipo en piloto automático, jugando como dueño dinastía por defecto.',
+        )}
+      </p>
+      <p data-testid="draft-as-me-toggle">
+        {entitled ? (
+          <label>
+            <input type="checkbox" checked={draftAsMe} disabled={busy !== null} onChange={(e) => void toggleDraftAsMe(e.target.checked)} />{' '}
+            {t(
+              'Draft as me: when a manager misses a pick, Chimmy drafts the way they usually draft instead of taking the best available player.',
+              'Draft as me: cuando un mánager pierde una selección, Chimmy elige como suele elegir ese mánager en vez de tomar al mejor jugador disponible.',
+            )}
+          </label>
+        ) : (
+          <a href="/commissioner-upgrade?highlight=draft_as_me">
+            {t('Draft as me: missed picks made the way each manager drafts (AF Commissioner)', 'Draft as me: selecciones perdidas hechas como elige cada mánager (AF Commissioner)')}
+          </a>
         )}
       </p>
       {teams === null ? <p role="status">{t('Loading teams…', 'Cargando equipos…')}</p> : null}
