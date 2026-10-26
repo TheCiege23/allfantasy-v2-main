@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
   log: vi.fn(),
   corrections: vi.fn(),
   inactive: vi.fn(),
+  payouts: vi.fn(),
   prisma: {
     league: { findUnique: vi.fn() },
     redraftRoster: { findFirst: vi.fn(), findMany: vi.fn() },
@@ -25,6 +26,7 @@ vi.mock('@/lib/side-contests/sideContestsService', () => ({ readSideContestsView
 vi.mock('@/lib/league-log/leagueLogService', () => ({ readLeagueLog: m.log }))
 vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({ readStatCorrections: m.corrections }))
 vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ readInactiveManagerView: m.inactive }))
+vi.mock('@/lib/payouts/payoutService', () => ({ readPayoutsView: m.payouts }))
 
 import { buildLeagueOfficeSummary, type LeagueOfficeInput } from '@/lib/chimmy-context/leagueOfficeSummary'
 import { LeagueOfficeContextProvider } from '@/lib/chimmy-context/providers/LeagueOfficeContextProvider'
@@ -43,7 +45,28 @@ const PRIZES = {
 }
 const base: LeagueOfficeInput = { viewerRole: 'member', prizes: null, trades: [], correction: null, inactive: null, viewerTeamManaged: false, log: null }
 
+const PAYOUTS = {
+  final: false,
+  buyInCents: 10_000,
+  teamCount: 10,
+  potCents: 100_000,
+  weeklyReserveCents: 26_000,
+  places: [{ place: 1, percent: 60, cents: 44_400, team: 'Aces' }, { place: 2, percent: 40, cents: 29_600, team: null }],
+  collected: null,
+}
+
 describe('buildLeagueOfficeSummary', () => {
+  it('payouts: the pot, the weekly set-aside and the places, never as money AllFantasy holds', () => {
+    expect(buildLeagueOfficeSummary({ ...base, payouts: PAYOUTS })).toBe(
+      'Payouts: $100 buy-in × 10 teams = $1000 pot, $260 of it for the weekly prizes. AllFantasy tracks the money; it does not collect or pay it.\n' +
+        'Place payouts (if the season ended today): 1st $444 (60%, Aces); 2nd $296 (40%).',
+    )
+    expect(buildLeagueOfficeSummary({ ...base, payouts: { ...PAYOUTS, final: true, collected: { cents: 70_000, paidTeams: 7 } } })).toMatch(
+      /\(final\).*\nBuy-ins collected so far: \$700, 7 of 10 teams paid\.$/s,
+    )
+    expect(buildLeagueOfficeSummary({ ...base, payouts: { ...PAYOUTS, places: [] } })).toBeNull()
+  })
+
   it('says nothing when nothing is in use', () => {
     expect(buildLeagueOfficeSummary(base)).toBeNull()
     expect(buildLeagueOfficeSummary({ ...base, prizes: { ...PRIZES, config: { high_score: { enabled: false, prizeCents: 0 }, closest_loss: { enabled: false, prizeCents: 0 } } } })).toBeNull()
@@ -116,6 +139,35 @@ describe('LeagueOfficeContextProvider', () => {
     ])
     m.corrections.mockResolvedValue({ covered: true, latest: { week: 7, changes: [{}], matchups: [{ fullyApplied: false, resultFlipped: true }] } })
     m.inactive.mockResolvedValue({ native: true, teams: [{ teamName: 'Cats', managerName: 'c', managed: null, suggested: true }] })
+    m.payouts.mockImplementation(async () => {
+      const commissioner = (await m.role()) === 'commissioner'
+      return {
+        ok: true,
+        native: true,
+        teamCount: 4,
+        collected: commissioner ? { cents: 20_000, paidTeams: 2 } : null,
+        result: {
+          final: false, buyInCents: 10_000, potCents: 40_000, weeklyReserveCents: 0,
+          places: [{ place: 1, percent: 100, cents: 40_000, rosterId: 'rr-c' }], names: { 'rr-c': 'Cats' },
+        },
+      }
+    })
+  })
+
+  it('payouts reach the slice; buy-ins collected only for the commissioner, as on the screen', async () => {
+    const member = (await load()).data!.summary
+    expect(member).toMatch(/Place payouts \(if the season ended today\): 1st \$400 \(100%, Cats\)\./)
+    expect(member).not.toMatch(/collected/)
+    m.role.mockResolvedValue('commissioner')
+    expect((await load()).data!.summary).toMatch(/Buy-ins collected so far: \$200, 2 of 4 teams paid\./)
+  })
+
+  it('a failed payout read leaves the rest of the slice standing', async () => {
+    m.payouts.mockRejectedValue(new Error('payouts down'))
+    const r = await load()
+    expect(r.ok).toBe(true)
+    expect(r.data!.summary).toMatch(/Weekly prizes:/)
+    expect(r.data!.summary).not.toMatch(/Payouts:/)
   })
 
   it('a member: prizes, the log, their own trade and league-vote trades — never another team’s commissioner review', async () => {

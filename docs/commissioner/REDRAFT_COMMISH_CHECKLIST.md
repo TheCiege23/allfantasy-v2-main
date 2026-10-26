@@ -69,7 +69,7 @@ _Last updated: 2026-10-26 — rows re-checked against `main`: league log and und
 | ✅ | Next season's draft order rule (reverse standings / max PF / lottery / toilet bowl) | no gate | Worst-to-first, reverse max PF and the weighted lottery were already in the rookie-order engine; the consolation / toilet bowl "plays for: Draft pick" rule landed in #2716, #2730 and #2735 (another session): new leagues and commissioner saves only, toilet bowl pick 1 to the loser (default) or the winner, and **dynasty and keeper only** by owner ruling — a redraft league starts each season fresh. No entitlement check in code, so the tier is still to be decided. |
 | ⬜ | Rule-change simulator (re-score last season before a vote) | Plan | |
 | ⬜ | Season rollover wizard | Plan | |
-| ⬜ | Payout calculator | Free to track | |
+| ✅ | Payout calculator | Free to track | Standings → **Payouts**: the commissioner sets a buy-in (or uses the league entry fee) and a percent per finishing place. Pot = buy-in × teams; the weekly side-contest prizes for the whole regular season come out first; the places split the rest, to the cent. Every member sees each place's amount and each team's take (place + weekly prizes won): final once the bracket completes, "if the season ended today" before that. Commissioners also see buy-ins collected. Commish OS files a task when the weekly prizes promise more than the pot holds, and Chimmy can say what each place pays. AllFantasy tracks the money; it does not collect or pay it. Saved through the settings patch under the co-commissioner money scope. `lib/payouts/` |
 | ⬜ | Ask Chimmy as commissioner | Plan | |
 
 ## Not redraft (parked for later formats)
