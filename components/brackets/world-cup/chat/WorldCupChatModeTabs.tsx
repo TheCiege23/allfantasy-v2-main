@@ -60,6 +60,13 @@ export function WorldCupChatModeTabs({
         const label = labelMap[tabMode]
         const showPoolBadge = tabMode === "pool" && poolUnread > 0
         const showAiBadge = tabMode === "ai" && aiAvailable
+        // The badges are visual; the tab's name says the same thing, spaced, so a screen reader hears
+        // "Pool Chat (2 unread)" rather than the badge text run into the label ("Pool Chat2 unread").
+        const accessibleName = [
+          label,
+          showPoolBadge ? `(${poolUnread} unread)` : null,
+          showAiBadge && !isActive ? "(available)" : null,
+        ].filter(Boolean).join(" ")
 
         return (
           <button
@@ -67,6 +74,7 @@ export function WorldCupChatModeTabs({
             type="button"
             role="tab"
             aria-selected={isActive}
+            aria-label={accessibleName}
             data-testid={`wc-chat-tab-${tabMode}`}
             onClick={() => onModeChange(tabMode)}
             className={[
@@ -85,22 +93,15 @@ export function WorldCupChatModeTabs({
             <span className="truncate">{label}</span>
             {/* Unread / available indicators */}
             {showPoolBadge ? (
-              <>
-                {/* The badge is visual; the spaced sr-only text keeps the tab's name "Pool Chat (2 unread)", not "Pool Chat2 unread". */}
-                <span
-                  aria-hidden
-                  className="absolute right-1 top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-400 px-0.5 text-[11px] font-black text-slate-950"
-                >
-                  {poolUnread > 9 ? "9+" : poolUnread}
-                </span>
-                <span className="sr-only"> ({poolUnread} unread)</span>
-              </>
+              <span
+                aria-hidden
+                className="absolute right-1 top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-400 px-0.5 text-[11px] font-black text-slate-950"
+              >
+                {poolUnread > 9 ? "9+" : poolUnread}
+              </span>
             ) : null}
             {showAiBadge && !isActive ? (
-              <>
-                <span aria-hidden className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-cyan-400" />
-                <span className="sr-only"> (available)</span>
-              </>
+              <span aria-hidden className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-cyan-400" />
             ) : null}
           </button>
         )
