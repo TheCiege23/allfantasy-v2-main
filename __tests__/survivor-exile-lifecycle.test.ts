@@ -13,7 +13,7 @@ const m = vi.hoisted(() => {
     survivorTribe: { findFirst: vi.fn() }, survivorTribeMember: { upsert: vi.fn(), deleteMany: vi.fn() },
     survivorJuryMember: { deleteMany: vi.fn(), upsert: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     survivorChatMessage: { create: vi.fn() }, survivorNotification: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
-    survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn() },
+    survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
     survivorWeeklyScore: { findMany: vi.fn() },
   }
   return { db, transaction: vi.fn() }
@@ -58,10 +58,26 @@ describe('Exile scheduled return', () => {
     m.db.survivorGameState.findUnique.mockResolvedValue({ phase: 'merge', activeCouncilId: 'open' })
     expect(await resolveScheduledExileReturn('league', 10)).toBeNull()
   })
-  it('waits for finalized Exile results, even when the main island is ready', async () => {
+  it('waits for finalized Exile results when someone on Exile entered a roster that week', async () => {
     m.db.survivorAuditEntry.findFirst.mockResolvedValue(null)
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island' })
+    m.db.exileWeeklyEntry.count.mockResolvedValue(1)
     expect(await resolveScheduledExileReturn('league', 10)).toBeNull()
     expect(m.db.survivorPlayer.update).not.toHaveBeenCalled()
+    expect(m.db.survivorAuditEntry.create).not.toHaveBeenCalled()
+  })
+  it('does not stall when nobody on Exile entered a roster: today\'s balances are the deadline snapshot', async () => {
+    // Found by the staging season rehearsal: no entries meant no exile_week_scored, forever.
+    m.db.survivorAuditEntry.findFirst.mockResolvedValue(null)
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island' })
+    m.db.exileWeeklyEntry.count.mockResolvedValue(0)
+    m.db.survivorAuditEntry.create.mockImplementation(async ({ data }) => ({ id: 'snap', data: data.data }))
+    expect(await resolveScheduledExileReturn('league', 10)).toBe('b')
+    expect(m.db.exileWeeklyEntry.count).toHaveBeenCalledWith({ where: { exileId: 'island', week: 10 } })
+    expect(m.db.survivorAuditEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      action: 'exile_week_scored', week: 10, data: expect.objectContaining({ entryCount: 0, noEntries: true, balances: players }),
+    }) }))
+    expect(m.db.survivorAuditEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'scheduled_exile_return_resolved', targetUserId: 'b' }) }))
   })
   it('reactivates the actual season roster and consumes the token cost together', async () => {
     expect(await resolveScheduledExileReturn('league', 10)).toBe('b')
