@@ -112,6 +112,7 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       finalistCount: late.finalistCount,
       shareCardsEnabled: foundation.shareCardsEnabled,
       publicMomentPages: foundation.publicMomentPages,
+      spectatorPageEnabled: foundation.spectatorPageEnabled,
     },
     context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek },
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
@@ -179,6 +180,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('mergeActivePlayerCount')) foundationPatch.mergeActivePlayerCount = next.mergeActivePlayerCount
     if (has('shareCardsEnabled')) foundationPatch.shareCardsEnabled = next.shareCardsEnabled
     if (has('publicMomentPages')) foundationPatch.publicMomentPages = next.publicMomentPages
+    if (has('spectatorPageEnabled')) foundationPatch.spectatorPageEnabled = next.spectatorPageEnabled
     if (has('tribeCount')) {
       // Same reset the tribe panel does on a count change: default identities and capacities.
       foundationPatch.tribeCount = next.tribeCount

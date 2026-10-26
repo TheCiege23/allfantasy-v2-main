@@ -114,7 +114,7 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   if (settings.defaultTeamCount !== previousSettings.defaultTeamCount) return NextResponse.json({ error: 'Choose league size during creation. Changing it here would leave draft seats and rosters inconsistent.' }, { status: 409 })
   if (settings.tribeCount !== previousSettings.tribeCount || JSON.stringify(settings.survivorTribeSlots) !== JSON.stringify(previousSettings.survivorTribeSlots)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
   const exileChanged = settings.exileIslandEnabled !== previousSettings.exileIslandEnabled || settings.exileReturnWeek !== previousSettings.exileReturnWeek || settings.exileReturnTokens !== previousSettings.exileReturnTokens
-  const mutableAfterDraft = new Set(['tribalCouncilDay', 'tribalCouncilTime', 'voteOpenOffset', 'voteCloseOffset', 'shareCardsEnabled', 'publicMomentPages'])
+  const mutableAfterDraft = new Set(['tribalCouncilDay', 'tribalCouncilTime', 'voteOpenOffset', 'voteCloseOffset', 'shareCardsEnabled', 'publicMomentPages', 'spectatorPageEnabled'])
   const lockedRuleChanged = Object.keys(settings).some(key => !mutableAfterDraft.has(key) &&
     JSON.stringify(settings[key as keyof typeof settings]) !== JSON.stringify(previousSettings[key as keyof typeof previousSettings]))
   if (lockedRuleChanged && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {

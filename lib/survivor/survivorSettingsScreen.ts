@@ -42,6 +42,8 @@ export interface SurvivorSettingsForm {
   finalistCount: 2 | 3
   shareCardsEnabled: boolean
   publicMomentPages: boolean
+  /** The public watch page for fans of the show (off by default). */
+  spectatorPageEnabled: boolean
 }
 
 export type SurvivorSettingsKey = keyof SurvivorSettingsForm
@@ -49,6 +51,7 @@ export type SurvivorSettingsKey = keyof SurvivorSettingsForm
 /** Everything else locks when the draft starts. */
 export const SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON: readonly SurvivorSettingsKey[] = [
   'voteDay', 'voteTime', 'exileBossMode', 'exileBossFixedScore', 'exileBossTopN', 'shareCardsEnabled', 'publicMomentPages',
+  'spectatorPageEnabled',
 ]
 
 export const SURVIVOR_VOTE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
@@ -227,6 +230,8 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     finalistCount: finalist,
     shareCardsEnabled: bools[4]!,
     publicMomentPages: bools[5]!,
+    // Added later than the others, so a form without it reads as off rather than invalid.
+    spectatorPageEnabled: bool('spectatorPageEnabled') ?? false,
   }
   const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount']
   if (numeric.some(k => Number.isNaN(form[k] as number)) || Number.isNaN(fixed as number)) return null

@@ -92,6 +92,11 @@ export interface SurvivorFoundationSettings {
    * instead of the moment. Share cards still work inside the league.
    */
   publicMomentPages: boolean
+  /**
+   * The public watch page (/l/<league>/watch): anyone with the link can follow the season, with
+   * display names only. Off by default; the commissioner opts in.
+   */
+  spectatorPageEnabled: boolean
 }
 
 type SettingsRecord = Record<string, unknown>
@@ -159,6 +164,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   conductPolicy: 'game_deception_allowed_platform_abuse_banned',
   shareCardsEnabled: true,
   publicMomentPages: true,
+  spectatorPageEnabled: false,
 }
 
 function readNumber(input: SettingsRecord, keys: string[], fallback: number): number {
@@ -354,6 +360,7 @@ export function normalizeSurvivorFoundationSettings(
     conductPolicy: readString(s, ['conductPolicy'], base.conductPolicy) as SurvivorConductPolicy,
     shareCardsEnabled: readBoolean(s, ['shareCardsEnabled'], base.shareCardsEnabled),
     publicMomentPages: readBoolean(s, ['publicMomentPages'], base.publicMomentPages),
+    spectatorPageEnabled: readBoolean(s, ['spectatorPageEnabled'], base.spectatorPageEnabled),
   }
 }
 
