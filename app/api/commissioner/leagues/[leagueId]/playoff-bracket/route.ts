@@ -2,6 +2,8 @@
  * GET: The playoff bracket format — team count, the valid bye plans for it (natural first), the
  *      saved plan and whether the season has room for each. `?teams=N` lists the plans for another
  *      count without saving.
+ *      It also offers a play-in for the last one or two spots (lib/playoff-brackets/playIn.ts), sized
+ *      for `teams` playoff teams — or, when the saved bracket already is a play-in, for its qualifiers.
  * PUT: Save `{ playoffTeams, byePlan }`. Any team count (odd included) with the natural byes is
  *      free; commissioner-granted byes are AF Commissioner (`advanced_playoff_setup`). Goes through
  *      `executeLeagueSettingsPatch`, which enforces that gate for every caller.
@@ -25,6 +27,7 @@ import {
   validByePlans,
 } from '@/lib/playoff-brackets/byePlan'
 import { normalizeWeeksPerRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { detectPlayIn, playInOptions } from '@/lib/playoff-brackets/playIn'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,6 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   const weeksPerRound = normalizeWeeksPerRound(league.playoffWeeksPerRound)
   const lastWeek = LAST_PLAYOFF_WEEK[String(league.sport).toUpperCase()] ?? null
 
+  const fits = (finalWeek: number) => lastWeek == null || finalWeek <= lastWeek
   const options = validByePlans(teams).map((plan) => {
     const check = checkByePlan(teams, plan)
     const roundCount = check.ok ? check.roundCount : 0
@@ -85,8 +89,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
     }
   })
 
+  // A saved play-in is offered against its own qualifiers, so its card reads "6 teams + play-in".
+  const savedPlayIn = savedPlan ? detectPlayIn(teams, savedPlan) : null
+  const playIn = playInOptions(savedPlayIn ? savedPlayIn.qualifiers : teams).map((p) => {
+    const check = checkByePlan(p.seeds, p.plan)
+    const roundCount = check.ok ? check.roundCount : 0
+    const finalWeek = startWeek + roundCount * weeksPerRound - 1
+    return { ...p, rounds: check.ok ? check.rounds : [], roundCount, finalWeek, fitsSeason: fits(finalWeek) }
+  })
+
   const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'advanced_playoff_setup').catch(() => null)
   return NextResponse.json({
+    playIn,
+    savedPlayIn: savedPlayIn ? { qualifiers: savedPlayIn.qualifiers, spots: savedPlayIn.spots } : null,
     playoffTeams: teams,
     savedPlayoffTeams: savedTeams,
     maxTeams,
