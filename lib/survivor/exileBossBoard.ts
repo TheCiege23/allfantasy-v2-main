@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { buildExileBoard, canViewExileBoard, computeExileBossScore, type ExileBoardFinalStatus, type ExileBoardRow } from './exileBoss'
 import { readExileRoster } from './exileRosterRules'
-import { describeExileBossMode, readSurvivorLateSeasonSettings, type SurvivorExileBossMode } from './lateSeasonSettings'
+import { describeExileBossMode, effectiveExileBossMode, readSurvivorLateSeasonSettings, type SurvivorExileBossMode } from './lateSeasonSettings'
 import { parseSurvivorFairPlayFromLeagueSettings } from './survivorFairPlay'
 
 export interface ExileBossBoardView {
@@ -74,7 +74,9 @@ export async function getExileBossBoard(leagueId: string, viewerUserId: string, 
   }
   if (!island?.isActive) return { ok: true, board: null }
 
-  const late = readSurvivorLateSeasonSettings(settings)
+  const stored = readSurvivorLateSeasonSettings(settings)
+  // The board shows the boss the week is actually settled against (exileEngine uses the same rule).
+  const late = { ...stored, exileBossMode: effectiveExileBossMode(stored.exileBossMode, league.sport) }
   const latest = await prisma.exileWeeklyEntry.findFirst({ where: { exileId: island.id }, orderBy: { week: 'desc' }, select: { week: true } })
   const week = opts?.week && Number.isInteger(opts.week) && opts.week > 0 ? opts.week : latest?.week ?? island.currentWeek
   const [entries, scored, players] = await Promise.all([

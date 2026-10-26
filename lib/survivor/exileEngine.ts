@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { postHostMessage } from './hostEngine'
 import { logSurvivorAuditEntry } from './auditEntry'
 import { computeExileBossScore, settleExileBossWeek } from './exileBoss'
-import { readSurvivorLateSeasonSettings, type SurvivorLateSeasonSettings } from './lateSeasonSettings'
+import { effectiveExileBossMode, readSurvivorLateSeasonSettings, type SurvivorLateSeasonSettings } from './lateSeasonSettings'
 
 /** Default conversion: 1 token → $5 FAAB on main league roster (Int field). */
 const TOKEN_TO_FAAB = 5
@@ -164,8 +164,9 @@ export async function scoreExileWeek(leagueId: string, week: number): Promise<bo
     const finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_results_finalized' }, select: { id: true, data: true } })
     if (!finalized) return false
     const proof = finalized.data as { source?: string; userIds?: string[] } | null
-    const leagueRow = await tx.league.findUnique({ where: { id: leagueId }, select: { survivorTokenCap: true, settings: true } })
-    const late = readSurvivorLateSeasonSettings(leagueRow?.settings)
+    const leagueRow = await tx.league.findUnique({ where: { id: leagueId }, select: { survivorTokenCap: true, settings: true, sport: true } })
+    const stored = readSurvivorLateSeasonSettings(leagueRow?.settings)
+    const late = { ...stored, exileBossMode: effectiveExileBossMode(stored.exileBossMode, leagueRow?.sport) }
     if (island.bossWinsEnabled && late.exileBossMode !== 'chimmy_roster') {
       return settleScoreBossWeek(tx, { leagueId, week, islandId: island.id, islandWeek: island.currentWeek, wipeOnLoss: island.bossTokenResetOnWin,
         tokenCap: leagueRow?.survivorTokenCap ?? null, proof, late })
