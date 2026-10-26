@@ -7,6 +7,8 @@ import { buildPlayoffTemplate, getPlayoffRoundOrder } from "@/lib/playoffs/playo
 import { buildProjectedPlayoffSeries } from "@/lib/playoffs/playoffBracketProjection"
 import { pointsForSeries, scorePlayoffEntryPicks } from "@/lib/playoffs/playoffScoring"
 import { nbaCupSeedMap, validateNbaCupField } from "@/lib/playoffs/nbaCupSeeds"
+import { validateSingleGameSchedule } from "@/lib/playoffs/singleGameSchedule"
+import { visiblePlayoffPicks } from "@/lib/playoffs/shareVisibility"
 
 describe("NBA Cup knockout bracket", () => {
   const rows = buildPlayoffTemplate({ sport: "nba_cup", seasonYear: 2026 })
@@ -74,5 +76,33 @@ describe("new CFP scoring", () => {
     expect([1, 2, 3, 4].map((index) =>
       pointsForSeries(rows.find((row) => row.roundIndex === index)!, "ncaaf"),
     )).toEqual([1, 2, 4, 8])
+  })
+})
+
+describe("single-game schedule and shared pick privacy", () => {
+  it("requires every game and explicit timezone start times", () => {
+    const games = Array.from({ length: 7 }, (_, index) => ({
+      seriesNumber: index + 1,
+      startsAt: `2026-12-${String(index + 4).padStart(2, "0")}T19:00:00-05:00`,
+    }))
+    const valid = validateSingleGameSchedule("nba_cup", games)
+    expect(valid.ok).toBe(true)
+    expect(validateSingleGameSchedule("nba_cup", games.slice(1)).ok).toBe(false)
+    expect(validateSingleGameSchedule("nba_cup", [
+      { ...games[0], startsAt: "2026-12-04T19:00:00" }, ...games.slice(1),
+    ]).ok).toBe(false)
+  })
+
+  it("reveals only locked games when someone opens a shared entry", () => {
+    const now = Date.parse("2026-12-05T00:00:00Z")
+    const series = [
+      { id: "s1", status: "scheduled" as const, startsAt: "2026-12-04T23:00:00Z" },
+      { id: "s2", status: "scheduled" as const, startsAt: "2026-12-06T23:00:00Z" },
+    ]
+    const picks = ["s1", "s2"].map((seriesId) => ({
+      id: seriesId, entryId: "e1", seriesId, pickTeamName: "Team",
+      createdAt: "", updatedAt: "",
+    }))
+    expect(visiblePlayoffPicks(series, picks, now).map((pick) => pick.seriesId)).toEqual(["s1"])
   })
 })
