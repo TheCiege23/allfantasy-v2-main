@@ -23,6 +23,7 @@ export function isImmediateAddAllowedToday(
         waiverType?: string | null
         instantFaAfterClear?: boolean | null
         freeAgentUnlockBehavior?: string | null
+        freeAgencyMode?: string | null
         dailyPolicy?: DailyPolicySnapshot | null
         phasePolicy?: WaiverPhasePolicy | null
       }
@@ -35,10 +36,13 @@ export function isImmediateAddAllowedToday(
   if (settings?.dailyPolicy) return settings.dailyPolicy.immediateAddsAllowed
   // 'daily' unlock (NBA/MLB/NHL default): non-waiver players are first-come; the server refuses a
   // player still on waivers with WAIVER_REQUIRED and the page falls back to the claim form.
+  // 'after_run' (Sleeper-style, after-run-free-agency.ts): an unclaimed player is an instant add once
+  // a run has cleared; before it, or after his game starts, the server answers WAIVER_REQUIRED.
   return (
     settings?.waiverType === 'fcfs' ||
     settings?.instantFaAfterClear === true ||
-    settings?.freeAgentUnlockBehavior === 'daily'
+    settings?.freeAgentUnlockBehavior === 'daily' ||
+    settings?.freeAgencyMode === 'after_run'
   )
 }
 

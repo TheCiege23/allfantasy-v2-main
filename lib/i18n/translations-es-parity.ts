@@ -3309,4 +3309,16 @@ export const translationsEsParity: Record<string, string> = {
   "leagueSettings.lockAllRosterMoves": "Bloquear todos los movimientos de plantilla",
   "leagueSettings.lockAllRosterMovesHint":
     "Los miembros no pueden cambiar alineaciones ni la IR, ni hacer altas, bajas, reclamos o trades hasta que lo levantes. Los reclamos pendientes esperan sin procesarse.",
+  // Reclamos: agencia libre tipo Sleeper, FAAB al renovar, aviso de alineación (waiver-fa).
+  "waiverFa.mode": "Agencia libre",
+  "waiverFa.mode.standard": "Según el tipo de reclamos",
+  "waiverFa.mode.after_run": "Reclamos hasta cada procesamiento, luego agentes libres",
+  "waiverFa.modeHint.standard": "Los agentes libres siguen el tipo de reclamos y el período de reclamos.",
+  "waiverFa.modeHint.after_run": "Como en Sleeper: los jugadores sin equipo están en reclamos hasta el procesamiento de reclamos programado y después son agentes libres, por orden de llegada. Un jugador vuelve a reclamos cuando empieza su partido, hasta el siguiente procesamiento. Un jugador soltado sigue cumpliendo el período de reclamos.",
+  "waiverFa.modeDailyNote": "Mientras el calendario diario esté activado, decide cada día.",
+  "waiverFa.rollover": "FAAB al renovar la temporada",
+  "waiverFa.rollover.reset": "Volver al presupuesto inicial",
+  "waiverFa.rollover.carry_over": "Conservar lo que le queda a cada equipo",
+  "waiverFa.rolloverHint": "Se aplica al renovar la liga para la próxima temporada. Los saldos actuales no cambian.",
+  "waiverFa.lineupWarning": "Después de este movimiento tu alineación no puede cubrir todos los puestos titulares ({{slots}}). ¿Continuar de todos modos?",
 }

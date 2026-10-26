@@ -10,6 +10,13 @@ import {
   controlClass,
   controlClassSm,
 } from './settings-ui'
+import {
+  readFaabRolloverRule,
+  readFreeAgencyMode,
+  type FaabRolloverRule,
+  type FreeAgencyMode,
+} from '@/lib/waiver-wire/hub-waiver-options'
+import { effectiveFaabRolloverRule } from '@/lib/waiver-wire/faab-rollover'
 
 const WAIVER_TYPES = [
   { value: 'faab', label: 'FAAB bidding' },
@@ -17,6 +24,16 @@ const WAIVER_TYPES = [
   { value: 'reverse_standings', label: 'Reverse standings' },
   { value: 'fcfs', label: 'Continual / free-for-all (FCFS)' },
   { value: 'standard', label: 'Standard (scheduled batch)' },
+]
+
+const FREE_AGENCY_MODES: Array<{ value: FreeAgencyMode; label: string }> = [
+  { value: 'standard', label: "League's waiver rules" },
+  { value: 'after_run', label: 'Waivers until each run, then free agents (Sleeper-style)' },
+]
+
+const FAAB_ROLLOVER: Array<{ value: FaabRolloverRule; label: string }> = [
+  { value: 'reset', label: 'Reset to the starting budget' },
+  { value: 'carry_over', label: 'Carry over what each team has left' },
 ]
 
 const TIME_PRESETS = ['00:00', '01:00', '02:00', '03:00', '08:00', '10:00', '12:00', '18:00', '22:00']
@@ -40,6 +57,26 @@ export function WaiverLeagueSettingsPanel({
   const [hours, setHours] = useState(initialData.waiverHours ?? 24)
   const [customDaily, setCustomDaily] = useState(Boolean(initialData.customDailyWaivers))
   const [processTime, setProcessTime] = useState(initialData.waiverProcessTime ?? '03:00')
+  // These two live in the waiver-settings row's engine config, read from the effective settings.
+  const [freeAgencyMode, setFreeAgencyMode] = useState<FreeAgencyMode>('standard')
+  const [faabRollover, setFaabRollover] = useState<FaabRolloverRule | null>(null)
+  // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over.
+  const rolloverDefault = effectiveFaabRolloverRule(null, initialData.isDynasty ? 'carry_rosters' : 'redraft')
+
+  useEffect(() => {
+    let live = true
+    void fetch(`/api/waiver-wire/leagues/${encodeURIComponent(leagueId)}/settings`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((eff: { freeAgencyMode?: string | null; faabRolloverRule?: string | null } | null) => {
+        if (!live || !eff) return
+        setFreeAgencyMode(readFreeAgencyMode(eff.freeAgencyMode))
+        setFaabRollover(readFaabRolloverRule(eff.faabRolloverRule))
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [leagueId])
 
   useEffect(() => {
     setWaiverType(initialData.waiverType ?? 'faab')
@@ -111,6 +148,58 @@ export function WaiverLeagueSettingsPanel({
           />
         </div>
       </div>
+
+      {waiverType !== 'fcfs' ? (
+        <div>
+          <SettingsSectionLabel>Free agency</SettingsSectionLabel>
+          <select
+            className={controlClass}
+            disabled={disabled}
+            value={freeAgencyMode}
+            onChange={(e) => {
+              const v = e.target.value as FreeAgencyMode
+              setFreeAgencyMode(v)
+              debouncedSave({ waiverFreeAgencyMode: v })
+            }}
+            data-testid="settings-waiver-free-agency-mode"
+          >
+            {FREE_AGENCY_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <SettingsHelper>
+            {freeAgencyMode === 'after_run'
+              ? 'Unrostered players are on waivers until the scheduled run, then free agents (first come, first served). A player goes back on waivers once his game starts, until the next run. Dropped players still serve the waiver period.'
+              : 'Free agents follow the waiver type above.'}
+          </SettingsHelper>
+        </div>
+      ) : null}
+
+      {waiverType === 'faab' ? (
+        <div>
+          <SettingsSectionLabel>FAAB at season rollover</SettingsSectionLabel>
+          <select
+            className={controlClass}
+            disabled={disabled}
+            value={faabRollover ?? rolloverDefault}
+            onChange={(e) => {
+              const v = e.target.value as FaabRolloverRule
+              setFaabRollover(v)
+              debouncedSave({ waiverFaabRollover: v })
+            }}
+            data-testid="settings-faab-rollover"
+          >
+            {FAAB_ROLLOVER.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <SettingsHelper>Applies when the league is renewed for next season. Current balances are not changed.</SettingsHelper>
+        </div>
+      ) : null}
 
       <SettingsToggleRow
         label="After games waivers clear"
