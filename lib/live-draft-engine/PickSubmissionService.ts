@@ -740,5 +740,12 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
       code: DRAFT_PICK_RACE_RETRY,
     }
   }
+  // A pick forfeited as a penalty is skipped the moment the board reaches it (./forfeitedPickSkips.ts).
+  // Not after a forfeit skip itself: the helper loops on its own.
+  if (lockResult.value.success && (input.pickMetadata as { forfeited?: unknown } | null | undefined)?.forfeited !== true) {
+    await import('./forfeitedPickSkips')
+      .then(({ skipForfeitedPicksOnClock }) => skipForfeitedPicksOnClock(input.leagueId, submitPick))
+      .catch((err) => console.error('[draft] forfeited pick skip failed', err))
+  }
   return lockResult.value
 }
