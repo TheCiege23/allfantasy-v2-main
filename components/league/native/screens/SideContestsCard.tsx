@@ -9,12 +9,14 @@ import {
   type SideContestsConfig,
   type SideContestsView,
 } from '@/lib/side-contests/sideContests'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { Card } from './NativeScreenParts'
 
 /**
  * Weekly side contests (lib/side-contests) on the standings screen: each finished week's high score
  * and closest loss, and the season's prize money per team. Every member sees it once the commissioner
  * turns a contest on; the commissioner sets them up here. Hidden for everyone else until then.
+ * English and Spanish. A message the server sends back (a refused save) is shown as it comes.
  */
 type Draft = Record<ContestKind, { enabled: boolean; prize: string }>
 
@@ -26,6 +28,11 @@ const toDraft = (c: SideContestsConfig): Draft => ({
 const fmt = (n: number) => n.toFixed(2)
 
 export function SideContestsCard({ leagueId }: { leagueId: string }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const t = (en: string, esText: string) => (es ? esText : en)
+  const label = (k: ContestKind) => (es ? CONTEST_LABELS[k].es : CONTEST_LABELS[k].en)
+  const help = (k: ContestKind) => (es ? CONTEST_LABELS[k].helpEs : CONTEST_LABELS[k].helpEn)
   const url = `/api/leagues/${encodeURIComponent(leagueId)}/side-contests`
   const [view, setView] = useState<SideContestsView | null>(null)
   const [editing, setEditing] = useState(false)
@@ -64,14 +71,14 @@ export function SideContestsCard({ leagueId }: { leagueId: string }) {
       })
       const body = (await r.json().catch(() => ({}))) as { error?: string }
       if (!r.ok) {
-        setMessage({ ok: false, text: body.error || 'Could not save. Try again.' })
+        setMessage({ ok: false, text: body.error || t('Could not save. Try again.', 'No se pudo guardar. Inténtalo de nuevo.') })
         return
       }
       setEditing(false)
-      setMessage({ ok: true, text: 'Saved.' })
+      setMessage({ ok: true, text: t('Saved.', 'Guardado.') })
       await load()
     } catch {
-      setMessage({ ok: false, text: 'Could not reach the server. Try again.' })
+      setMessage({ ok: false, text: t('Could not reach the server. Try again.', 'No se pudo conectar con el servidor. Inténtalo de nuevo.') })
     } finally {
       setSaving(false)
     }
@@ -83,16 +90,18 @@ export function SideContestsCard({ leagueId }: { leagueId: string }) {
   const weekLines = (w: SideContestsView['weeks'][number]) =>
     CONTEST_KINDS.filter((k) => w.contests[k]?.length).map((k) => {
       const winners = w.contests[k]!
-      const names = winners.map((x) => x.teamName).join(' and ')
+      const names = winners.map((x) => x.teamName).join(t(' and ', ' y '))
       const what =
         k === 'high_score'
-          ? `${fmt(winners[0].value)} points`
-          : `lost by ${fmt(winners[0].value)}${winners.length === 1 && winners[0].opponentName ? ` to ${winners[0].opponentName}` : ''}`
-      const prize = winners[0].prizeCents > 0 ? ` · ${formatPrize(Math.round(winners[0].prizeCents))}${winners.length > 1 ? ' each' : ''}` : ''
+          ? t(`${fmt(winners[0].value)} points`, `${fmt(winners[0].value)} puntos`)
+          : t('lost by ', 'perdió por ') +
+            fmt(winners[0].value) +
+            (winners.length === 1 && winners[0].opponentName ? t(` to ${winners[0].opponentName}`, ` ante ${winners[0].opponentName}`) : '')
+      const prize = winners[0].prizeCents > 0 ? ` · ${formatPrize(Math.round(winners[0].prizeCents))}${winners.length > 1 ? t(' each', ' cada uno') : ''}` : ''
       return (
         <li key={k} data-testid={`side-contest-${k}`}>
-          <strong>{CONTEST_LABELS[k].en}:</strong> {names}, {what}
-          {winners.length > 1 ? ' (tie)' : ''}
+          <strong>{label(k)}:</strong> {names}, {what}
+          {winners.length > 1 ? t(' (tie)', ' (empate)') : ''}
           {prize}
         </li>
       )
@@ -100,10 +109,10 @@ export function SideContestsCard({ leagueId }: { leagueId: string }) {
 
   return (
     <Card
-      label="Weekly prizes"
+      label={t('Weekly prizes', 'Premios semanales')}
       right={view.canEdit && !editing ? (
         <button type="button" className="nl-text-link" onClick={() => { setDraft(toDraft(view.config)); setEditing(true); setMessage(null) }}>
-          {anyOn ? 'Edit' : 'Set up'}
+          {anyOn ? t('Edit', 'Editar') : t('Set up', 'Configurar')}
         </button>
       ) : null}
     >
@@ -119,18 +128,18 @@ export function SideContestsCard({ leagueId }: { leagueId: string }) {
                     onChange={(e) => setDraft({ ...draft, [k]: { ...draft[k], enabled: e.target.checked } })}
                     data-testid={`side-contest-toggle-${k}`}
                   />
-                  <span>{CONTEST_LABELS[k].en}</span>
+                  <span>{label(k)}</span>
                 </label>
-                <p className="nls-muted">{CONTEST_LABELS[k].helpEn}</p>
+                <p className="nls-muted">{help(k)}</p>
                 {draft[k].enabled ? (
                   <label className="flex items-center gap-2">
-                    <span>Prize per week $</span>
+                    <span>{t('Prize per week $', 'Premio por semana $')}</span>
                     <input
                       inputMode="decimal"
                       className="w-24"
                       placeholder="0"
                       value={draft[k].prize}
-                      aria-label={`${CONTEST_LABELS[k].en} prize per week, in dollars`}
+                      aria-label={t(`${label(k)} prize per week, in dollars`, `Premio por semana de ${label(k).toLowerCase()}, en dólares`)}
                       onChange={(e) => setDraft({ ...draft, [k]: { ...draft[k], prize: e.target.value } })}
                       data-testid={`side-contest-prize-${k}`}
                     />
@@ -139,29 +148,36 @@ export function SideContestsCard({ leagueId }: { leagueId: string }) {
               </fieldset>
             ))}
             <p className="nls-muted">
-              Regular-season weeks only, decided once every game is final. A tie splits the prize. AllFantasy tracks the money; it
-              does not collect or pay it.
+              {t(
+                'Regular-season weeks only, decided once every game is final. A tie splits the prize. AllFantasy tracks the money; it does not collect or pay it.',
+                'Solo semanas de temporada regular, decididas cuando todos los partidos terminan. Un empate reparte el premio. AllFantasy lleva la cuenta del dinero; no lo cobra ni lo paga.',
+              )}
             </p>
             <div className="flex gap-2">
               <button type="button" className="nls-btn" data-variant="primary" disabled={saving} onClick={() => void save()}>
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? t('Saving…', 'Guardando…') : t('Save', 'Guardar')}
               </button>
               <button type="button" className="nls-btn" disabled={saving} onClick={() => setEditing(false)}>
-                Cancel
+                {t('Cancel', 'Cancelar')}
               </button>
             </div>
           </div>
         ) : !anyOn ? (
-          <p className="nls-muted">Award a weekly high score and a closest loss, with a prize for each if your league plays for one.</p>
+          <p className="nls-muted">
+            {t(
+              'Award a weekly high score and a closest loss, with a prize for each if your league plays for one.',
+              'Premia la puntuación más alta de la semana y la derrota más ajustada, con un premio para cada una si tu liga juega por dinero.',
+            )}
+          </p>
         ) : !latest ? (
-          <p className="nls-muted">Winners appear here once the first week is final.</p>
+          <p className="nls-muted">{t('Winners appear here once the first week is final.', 'Los ganadores aparecen aquí cuando termine la primera semana.')}</p>
         ) : (
           <>
-            <p className="nls-label">Week {latest.week}</p>
+            <p className="nls-label">{t('Week', 'Semana')} {latest.week}</p>
             <ul className="space-y-1">{weekLines(latest)}</ul>
             {hasPrizes && view.totals.some((t) => t.prizeCents > 0) ? (
               <>
-                <p className="nls-label pt-2">Season prize money</p>
+                <p className="nls-label pt-2">{t('Season prize money', 'Premios de la temporada')}</p>
                 <dl className="nls-dl" data-testid="side-contest-totals">
                   {view.totals.filter((t) => t.prizeCents > 0).map((t) => (
                     <div key={t.rosterId}>
@@ -174,10 +190,10 @@ export function SideContestsCard({ leagueId }: { leagueId: string }) {
             ) : null}
             {earlier.length ? (
               <details>
-                <summary>Earlier weeks</summary>
+                <summary>{t('Earlier weeks', 'Semanas anteriores')}</summary>
                 {earlier.map((w) => (
                   <div key={w.week} className="pt-2">
-                    <p className="nls-label">Week {w.week}</p>
+                    <p className="nls-label">{t('Week', 'Semana')} {w.week}</p>
                     <ul className="space-y-1">{weekLines(w)}</ul>
                   </div>
                 ))}

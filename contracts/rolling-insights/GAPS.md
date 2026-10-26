@@ -525,3 +525,27 @@ withholds curl errors and non-200 bodies so a failed request cannot print the
 credential-bearing query URL. Credentials must still be supplied only via env.
 
 Production has no ri.contract_probe_log table (to_regclass returned null). The committed fixture and this contract record the capture; no schema was created merely to log a probe.
+
+## 📏 MEASURED 2026-10-26 — NHL 2025 `player_season_stats`: goalie decisions and shutouts look incomplete
+
+Read-only SELECTs on our own `player_season_stats` (source `rolling_insights`, season 2025). No
+provider call was made; this describes what ingestion stored, and it is not yet known whether the
+vendor or our ingestion is short.
+
+| NHL goalie totals | 2023 | 2024 | 2025 |
+|---|---:|---:|---:|
+| wins | 1,279 | 1,299 | **651** (across 2,730 goalie games) |
+| shutouts | — | 151 | **0** |
+
+Saves, shots against and goals allowed look complete for 2025, and skater totals look like a full
+season (8,068 goals against 8,085 in 2023 and 7,898 in 2024). Separately, `shootout_goals` is 0 in
+every stored season.
+
+**Consequence today:** the daily-sport prior-season blend (`lib/projections/dailySportSeasonTotals.ts`)
+uses 2025 season totals for NHL skaters only. Goalies are excluded and `so_g` is left unmapped
+until this is explained.
+
+**Still to settle (do not probe):** whether `/season-stats` for NHL reports goalie W/SO in a field
+our ingestion does not read, or the vendor's 2025 goalie decisions are incomplete. Ask the vendor,
+or capture via `scripts/probe.sh` only when adding that endpoint/sport combination, with the fixture
+committed in the same change.
