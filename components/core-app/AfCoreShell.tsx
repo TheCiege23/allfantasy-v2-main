@@ -928,6 +928,41 @@ const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyp
   { href: '/leaderboards', label: 'Leaderboards', glyph: '▲' },
 ]
 
+function CoreBracketEntryCard({ language }: { language: string }) {
+  const es = language === 'es'
+  return (
+    <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry">
+      <div className="af-core-bracket-promo-copy">
+        <p className="af-core-bracket-promo-kicker">{es ? 'BRACKETS · CFP Y NBA CUP' : 'BRACKETS · CFP + NBA CUP'}</p>
+        <h2 id="af-core-bracket-promo-title">
+          {es ? 'Crea tu liga de brackets' : 'Start a bracket league'}
+        </h2>
+        <p>
+          {es
+            ? 'Elige ganadores, consulta a Chimmy, invita a tus amigos y compite en las clasificaciones.'
+            : 'Make your picks, check Chimmy’s matchup view, invite friends, and climb the standings.'}
+        </p>
+        <p className="af-core-bracket-promo-note">
+          {es
+            ? 'Una bracket gratis por torneo · hasta cinco con AF Pro. AllFantasy no ofrece premios, apuestas ni cuotas de inscripción.'
+            : 'One free bracket per tournament · up to five with AF Pro. AllFantasy offers no prizes, betting, or entry fees.'}
+        </p>
+      </div>
+      <div className="af-core-bracket-promo-actions">
+        <Link href="/brackets/leagues/new?sport=ncaaf&challengeType=playoff_challenge" className="af-core-bracket-promo-button" data-testid="core-create-cfp-bracket">
+          {es ? 'Crear liga CFP' : 'Create CFP league'}
+        </Link>
+        <Link href="/brackets/leagues/new?sport=nba_cup&challengeType=playoff_challenge" className="af-core-bracket-promo-button" data-testid="core-create-nba-cup-bracket">
+          {es ? 'Crear liga NBA Cup' : 'Create NBA Cup league'}
+        </Link>
+        <Link href="/brackets" className="af-core-bracket-promo-browse">
+          {es ? 'Explorar brackets →' : 'Browse brackets →'}
+        </Link>
+      </div>
+    </section>
+  )
+}
+
 type PlayerSearchHit = {
   kind: 'player'
   id: string
@@ -2183,6 +2218,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           {active === 'home' ? <GameDayAlertsBanner /> : null}
           {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
           {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
+          {active === 'home' ? <CoreBracketEntryCard language={language} /> : null}
           {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*

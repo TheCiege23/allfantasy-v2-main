@@ -3669,3 +3669,79 @@ html[data-mode='light'] .af-core {
   .af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile { padding: 12px; }
   .af-core input, .af-core textarea, .af-core select { font-size: 16px; }
 }
+
+/* CFP and NBA Cup entry point on every Core home, including league-first homes. */
+.af-core .af-core-bracket-promo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 16px;
+  background: linear-gradient(115deg, var(--accent-soft, transparent), transparent 72%), var(--surface);
+  box-shadow: 0 8px 24px rgba(2, 8, 23, .06);
+}
+.af-core .af-core-bracket-promo-copy { flex: 1 1 330px; min-width: 0; }
+.af-core .af-core-bracket-promo-kicker {
+  margin: 0;
+  color: var(--accent);
+  font: 800 11px/1.2 'JetBrains Mono', monospace;
+  letter-spacing: .14em;
+}
+.af-core .af-core-bracket-promo h2 {
+  margin: 7px 0 5px;
+  color: var(--text);
+  font: 800 clamp(18px, 2vw, 24px)/1.2 'Archivo', system-ui, sans-serif;
+  letter-spacing: -.025em;
+}
+.af-core .af-core-bracket-promo-copy > p:not(.af-core-bracket-promo-kicker):not(.af-core-bracket-promo-note) {
+  margin: 0;
+  color: var(--muted);
+  font: 400 13px/1.5 'Archivo', system-ui, sans-serif;
+}
+.af-core .af-core-bracket-promo-copy > .af-core-bracket-promo-note {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font: 400 11px/1.45 'Archivo', system-ui, sans-serif;
+}
+.af-core .af-core-bracket-promo-actions {
+  display: flex;
+  flex: 0 1 410px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.af-core .af-core-bracket-promo-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 13px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink, #04121a);
+  font: 750 12px/1.2 'Archivo', system-ui, sans-serif;
+  text-align: center;
+  text-decoration: none;
+}
+.af-core .af-core-bracket-promo-button:hover { filter: brightness(1.08); }
+.af-core .af-core-bracket-promo-browse {
+  padding: 8px 2px;
+  color: var(--accent);
+  font: 700 12px/1.2 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af-core .af-core-bracket-promo-browse:hover { text-decoration: underline; }
+.af-core .af-core-bracket-promo a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@media (max-width: 720px) {
+  .af-core .af-core-bracket-promo { padding: 16px; }
+  .af-core .af-core-bracket-promo-actions { flex: 1 1 100%; justify-content: flex-start; }
+  .af-core .af-core-bracket-promo-button { flex: 1 1 145px; }
+}
