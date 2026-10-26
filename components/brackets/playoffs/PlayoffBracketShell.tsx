@@ -57,8 +57,11 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const entries = Array.isArray(view?.entries) ? view.entries : []
   const series = Array.isArray(view?.series) ? view.series : []
   const totalSeries = series.length
-  const hasTemplateSeries = series.some((item) => /^Winner\s+S\d+$/i.test(item.homeTeamName) || /^Winner\s+S\d+$/i.test(item.awayTeamName)) ||
-    (safeChallenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
+  const singleGameSport = ["ncaaf", "nba_cup"].includes(String(safeChallenge.sport ?? "").toLowerCase())
+  const hasTemplateSeries = singleGameSport
+    ? !safeChallenge.isTestMode && series.some((item) => !item.startsAt || /^(?:CFP|EAST|WEST)\d+$/i.test(item.homeTeamName) || /^(?:CFP|EAST|WEST)\d+$/i.test(item.awayTeamName))
+    : series.some((item) => /^Winner\s+S\d+$/i.test(item.homeTeamName) || /^Winner\s+S\d+$/i.test(item.awayTeamName)) ||
+      (safeChallenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
   const myEntries = entries.filter((entry) => entry.userId === view?.viewerUserId)
   const viewerEntryCount = myEntries.length
   const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant
@@ -102,7 +105,6 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const hasServerAdminAccess = view.lockDiagnostics?.hasPoolAdminAccess === true
   const hasAdminAccess = hasClientAdminAccess || hasServerAdminAccess
   const canManagePlayoffPool = safeChallenge.ownerUserId === view?.viewerUserId || hasAdminAccess
-  const singleGameSport = ["ncaaf", "nba_cup"].includes(String(safeChallenge.sport ?? "").toLowerCase())
   const canSyncPlayoffPool = canManagePlayoffPool && !singleGameSport
   const canUseAutofillResults = safeChallenge.isTestMode && hasAdminAccess
   const isOwner = safeChallenge.ownerUserId === view?.viewerUserId
