@@ -366,6 +366,28 @@ export function derivedNhlShutout(stats: Record<string, number>, raw: JsonRecord
   return (stats.g_toi ?? 0) >= NHL_SHUTOUT_FULL_GAME_MINUTES ? 1 : 0
 }
 
+/**
+ * A goalie's WIN, derived from the box, because the vendor leaves it out: 68 of 179 regular-season
+ * 2026 games had no goalie credited with one by 2026-10-26 (31 of 43 in week 1, 35 of 46 in week 2).
+ *
+ * Credited only when all of it is in hand from the ingest (`normalizedStatMapFor`):
+ *   - the vendor called the game final (`gameFinal`);
+ *   - his team won (`teamWon`, from the box's scores, or for a tie on the board the box's own
+ *     decisions / shootout goals — `riWinningTeam`), which is absent when the box cannot say;
+ *   - he was the ONLY goalie his team used (`teamGoaliesUsed === 1`) and he played.
+ * When the winners used two goalies the win belongs to whoever was in net for the winning goal,
+ * which only play-by-play can say, so nothing is derived. A row without that context (written
+ * before it was stored, or a game still running) derives nothing either: a goalie's own line
+ * cannot show that his team won. A line the vendor already gave a loss is left alone.
+ */
+export function derivedNhlWin(stats: Record<string, number>, raw: JsonRecord): 0 | 1 {
+  if (raw.gameFinal !== true || raw.teamWon !== true) return 0
+  if (asNumber(raw.teamGoaliesUsed) !== 1) return 0
+  if ((stats.g_loss ?? 0) > 0 || (stats.g_otl ?? 0) > 0) return 0
+  const played = (stats.g_toi ?? 0) > 0 || (stats.g_sa ?? 0) > 0 || (stats.g_sv ?? 0) > 0 || (stats.g_win ?? 0) > 0
+  return played ? 1 : 0
+}
+
 /** Regulation length. The fallback in {@link derivedNhlShutout} requires the goalie's clock to reach it. */
 export const NHL_SHUTOUT_FULL_GAME_MINUTES = 60
 
@@ -391,6 +413,9 @@ export function normalizeNhlGameStats(raw: unknown): NormalizedGameStats {
   }
 
   if (isRecord(raw) && raw.group === 'goalies') {
+    // max(vendor, derived), clamped: a vendor fix later can never make one game two wins.
+    if (derivedNhlWin(stats, raw) === 1) stats.g_win = 1
+    else if (stats.g_win !== undefined) stats.g_win = Math.min(1, Math.max(0, stats.g_win))
     // max(vendor, derived), clamped: a vendor fix later can never make one game two shutouts.
     if (derivedNhlShutout(stats, raw) === 1) stats.g_so = 1
     else if (stats.g_so !== undefined) stats.g_so = Math.min(1, Math.max(0, stats.g_so))

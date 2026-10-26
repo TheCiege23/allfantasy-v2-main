@@ -21,7 +21,12 @@ import { normalizeNhlGameStats } from '@/lib/scoring-runtime/dailySportStatNorma
 import { normalizeRiGameBox, normalizedStatMapFor } from '@/lib/sports-data/rollingInsightsGameLogs'
 
 type Raw = Record<string, unknown>
-type Game = { game_ID: string; status: string; player_box: Record<string, { goalies: Record<string, Raw> }> }
+type Game = {
+  game_ID: string
+  status: string
+  full_box: Record<string, { abbrv: string; score: number | null }>
+  player_box: Record<string, { goalies: Record<string, Raw>; skaters: Record<string, Raw> }>
+}
 
 function fixtureGame(): Game {
   const path = join(process.cwd(), 'contracts/rolling-insights/fixtures/live.NHL.json')
@@ -121,5 +126,109 @@ describe('NHL shutout derived from the box score', () => {
     const game = fixtureGame()
     game.player_box.home_team.goalies = { '2263': { ...OETTINGER, win: 0, overtime_loss: 1, time_on_ice: '65:00' } }
     expect(homeShutouts(game)['Jake Oettinger']).toBe(1)
+  })
+})
+
+/** g_win for every goalie line of the game, keyed by `TEAM name`, through the stored map. */
+function wins(game: Game, opts: { contextless?: boolean } = {}): Record<string, number | undefined> {
+  const box = normalizeRiGameBox(game)!
+  const out: Record<string, number | undefined> = {}
+  for (const line of box.lines) {
+    if (line.group !== 'goalies') continue
+    const stored = normalizedStatMapFor(line, box)
+    if (opts.contextless) {
+      delete stored.teamGoaliesUsed
+      delete stored.gameFinal
+      delete stored.teamWon
+    }
+    out[`${line.team} ${line.playerName}`] = normalizeNhlGameStats(stored).stats.g_win
+  }
+  return out
+}
+
+/** The fixture game (FLA 2 at SEA 6) with both decisions taken out, as the vendor sent weeks 1–2. */
+function undecidedGame(): Game {
+  const game = fixtureGame()
+  for (const side of ['home_team', 'away_team']) {
+    for (const g of Object.values(game.player_box[side].goalies)) Object.assign(g, { win: 0, loss: 0, overtime_loss: 0 })
+  }
+  return game
+}
+
+describe('NHL goalie win derived from the box score', () => {
+  it('the sole goalie of the winning team gets the win the vendor left out; the loser gets none', () => {
+    expect(wins(undecidedGame())).toEqual({ 'SEA Joey Daccord': 1, 'FLA Daniil Tarasov': 0 })
+  })
+
+  it('the dressed backup on the winning side is not "used", so the starter is still the sole goalie', () => {
+    const game = undecidedGame()
+    game.player_box.home_team.goalies['9001'] = BACKUP
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 1, 'SEA Backup': 0, 'FLA Daniil Tarasov': 0 })
+  })
+
+  it('when the winners used two goalies, neither is credited and the vendor value is kept', () => {
+    const game = undecidedGame()
+    game.player_box.home_team.goalies['9001'] = { ...BACKUP, player: 'Reliever', saves: 6, shots_against: 6, time_on_ice: '20:00' }
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 0, 'SEA Reliever': 0, 'FLA Daniil Tarasov': 0 })
+    // ...and a vendor win in that split survives.
+    game.player_box.home_team.goalies['9001'].win = 1
+    expect(wins(game)['SEA Reliever']).toBe(1)
+  })
+
+  it('a row without team context keeps the vendor value — no fallback from the goalie’s own line', () => {
+    expect(wins(undecidedGame(), { contextless: true })).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 0 })
+    expect(wins(fixtureGame(), { contextless: true })).toEqual({ 'SEA Joey Daccord': 1, 'FLA Daniil Tarasov': 0 })
+  })
+
+  it('a game still running credits nobody, whatever the score', () => {
+    const game = undecidedGame()
+    game.status = 'inprogress'
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 0 })
+  })
+
+  it('goalies on the losing side never get the win, even as the sole goalie', () => {
+    const game = undecidedGame()
+    game.full_box.away_team.score = 7 // FLA now wins 7-6
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 1 })
+  })
+
+  it('a shootout win counts, whether the board carries the deciding goal or shows a tie', () => {
+    // NHL convention: the shootout winner gets one goal on the final score.
+    const game = undecidedGame()
+    game.full_box.away_team.score = 3
+    game.full_box.home_team.score = 2
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 1 })
+
+    // A tie on the board is settled by the box's own evidence: the loser's OT/SO decision...
+    game.full_box.away_team.score = 2
+    game.player_box.home_team.goalies[Object.keys(game.player_box.home_team.goalies)[0]].overtime_loss = 1
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 1 })
+
+    // ...or the skaters' shootout goals.
+    const so = undecidedGame()
+    so.full_box.away_team.score = 2
+    so.full_box.home_team.score = 2
+    Object.values(so.player_box.away_team.skaters)[0].shootout_goals = 1
+    expect(wins(so)).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 1 })
+  })
+
+  it('a tie with no evidence, or evidence that disagrees, credits nobody', () => {
+    const game = undecidedGame()
+    game.full_box.away_team.score = 2
+    game.full_box.home_team.score = 2
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 0 })
+    Object.values(game.player_box.away_team.skaters)[0].shootout_goals = 1
+    Object.values(game.player_box.home_team.skaters)[0].shootout_goals = 2
+    Object.values(game.player_box.home_team.skaters)[1].shootout_goals = 0
+    game.player_box.home_team.goalies[Object.keys(game.player_box.home_team.goalies)[0]].overtime_loss = 1
+    // shootout goals say SEA, the OT loss says FLA
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 0, 'FLA Daniil Tarasov': 0 })
+  })
+
+  it('keeps the vendor’s 1, and never makes one game worth two wins', () => {
+    const game = fixtureGame() // the vendor credited Daccord
+    expect(wins(game)).toEqual({ 'SEA Joey Daccord': 1, 'FLA Daniil Tarasov': 0 })
+    game.player_box.home_team.goalies[Object.keys(game.player_box.home_team.goalies)[0]].win = 2
+    expect(wins(game)['SEA Joey Daccord']).toBe(1)
   })
 })

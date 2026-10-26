@@ -115,6 +115,11 @@ export interface RiGameBox {
   seasonType: RiSeasonType | null
   /** The vendor's own `season_type`, verbatim, so an unrecognised label is still inspectable. */
   seasonTypeLabel: string | null
+  /**
+   * The team code that won, from the box itself (see {@link riWinningTeam}), or null when the box
+   * cannot say — a game still tied, a missing score, or evidence that disagrees. NHL only reads it.
+   */
+  winningTeam: string | null
   lines: RiBoxLine[]
 }
 
@@ -165,6 +170,7 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
   ]
 
   const lines: RiBoxLine[] = []
+  const scores: Array<{ team: string | null; score: number | null }> = []
   for (const side of sides) {
     const teamNode = asRecord(fullBox?.[side.key])
     const otherNode = asRecord(fullBox?.[side.other])
@@ -175,6 +181,8 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
       teamCode(teamNode?.abbrv ?? teamNode?.abbreviation) ?? teamCode(g[`${side.key}_name`])
     const opponent =
       teamCode(otherNode?.abbrv ?? otherNode?.abbreviation) ?? teamCode(g[`${side.other}_name`])
+
+    scores.push({ team, score: num(teamNode?.score) })
 
     const sideBox = asRecord(playerBox?.[side.key]) ?? asRecord(teamNode?.player_box)
     if (!sideBox) continue
@@ -280,8 +288,43 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
     // this is how 619 NHL preseason rows landed in season 2026 unmarked — see riSeasonType.ts.
     seasonType: classifyRiSeasonType(g.season_type ?? g.seasonType),
     seasonTypeLabel: str(g.season_type ?? g.seasonType),
+    winningTeam: riWinningTeam(scores, lines),
     lines,
   }
+}
+
+/**
+ * Which team won, read off the box alone.
+ *
+ * 1. The two `full_box.<side>.score` values, when both are present and differ.
+ * 2. A tie on the board (how the vendor scores a shootout is not captured — GAPS.md N-22) is
+ *    settled only by the box's own evidence: a vendor goalie decision (`win` for the side,
+ *    `loss`/`overtime_loss` for the other) or the sides' skater `shootout_goals`. All of it must
+ *    point at ONE team, or the answer is null.
+ *
+ * Null means "do not derive anything from the result", never "nobody won".
+ */
+function riWinningTeam(scores: Array<{ team: string | null; score: number | null }>, lines: RiBoxLine[]): string | null {
+  if (scores.length !== 2) return null
+  const [a, b] = scores
+  if (!a.team || !b.team || a.team === b.team) return null
+  if (a.score != null && b.score != null && a.score !== b.score) return a.score > b.score ? a.team : b.team
+
+  const evidence = new Set<string>()
+  const shootoutGoals = new Map<string, number>([[a.team, 0], [b.team, 0]])
+  for (const line of lines) {
+    if (line.team !== a.team && line.team !== b.team) continue
+    const other = line.team === a.team ? b.team : a.team
+    if (line.group === 'goalies') {
+      if ((num(line.raw.win) ?? 0) > 0) evidence.add(line.team)
+      if ((num(line.raw.loss) ?? 0) > 0 || (num(line.raw.overtime_loss) ?? 0) > 0) evidence.add(other)
+    } else {
+      shootoutGoals.set(line.team, shootoutGoals.get(line.team)! + (num(line.raw.shootout_goals) ?? 0))
+    }
+  }
+  const soA = shootoutGoals.get(a.team)!, soB = shootoutGoals.get(b.team)!
+  if (soA !== soB) evidence.add(soA > soB ? a.team : b.team)
+  return evidence.size === 1 ? [...evidence][0] : null
 }
 
 /** A "mm:ss" time-on-ice clock as decimal minutes, or null when it is not one. */
@@ -310,7 +353,7 @@ function isFinalRiStatus(status: string | null | undefined): boolean {
 /** Flatten the recognised numeric fields; everything else stays in `statPayload` verbatim. */
 export function normalizedStatMapFor(
   line: RiBoxLine,
-  box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'> & Partial<Pick<RiGameBox, 'gameDate' | 'lines' | 'status'>>,
+  box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'> & Partial<Pick<RiGameBox, 'gameDate' | 'lines' | 'status' | 'winningTeam'>>,
 ): Record<string, unknown> {
   const stats: Record<string, number> = {}
   for (const [key, value] of Object.entries(line.raw)) {
@@ -327,11 +370,14 @@ export function normalizedStatMapFor(
   // the ONLY goalie his team used, which one line cannot say — so the game's other goalie lines
   // are counted here, while the whole box is in hand, and `normalizeNhlGameStats` derives it.
   // A line with no team cannot be told from the other side's goalies, so it carries no count.
+  // The vendor also leaves out the WIN (68 of 179 regular-season games by 2026-10-26), so the
+  // game's result rides along too; `teamWon` is absent when the box cannot say who won.
   const goalieContext =
     line.group === 'goalies' && line.team && box.lines
       ? {
           teamGoaliesUsed: box.lines.filter((l) => l.group === 'goalies' && l.team === line.team && goalieLinePlayed(l.raw)).length,
           gameFinal: isFinalRiStatus(box.status),
+          ...(box.winningTeam ? { teamWon: box.winningTeam === line.team } : {}),
         }
       : {}
   return {
