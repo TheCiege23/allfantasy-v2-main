@@ -69,8 +69,8 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const hasTemplateSeries = series.some((item) => /^Winner\s+S\d+$/i.test(item.homeTeamName) || /^Winner\s+S\d+$/i.test(item.awayTeamName)) ||
     (view.challenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
   const hasAdminPoolAccess = hasPoolAdminAccess(session?.user) || view.lockDiagnostics?.hasPoolAdminAccess === true
-  const canSyncSeries = ["nba", "nhl", "mlb"].includes(String(view.challenge.sport ?? "").toLowerCase()) &&
-    (view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess)
+  const canAdminPool = view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
+  const canSyncSeries = ["nba", "nhl", "mlb"].includes(String(view.challenge.sport ?? "").toLowerCase()) && canAdminPool
   const canShowPickResultsToggle = activeEntry?.userId === view.viewerUserId || view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
   const canShareEntry = ["ncaaf", "nba_cup"].includes(String(view.challenge.sport ?? "").toLowerCase())
   async function copyShareLink() {
@@ -84,7 +84,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
     }
   }
   const canUseLatePicks = view.lockDiagnostics?.viewerCanLatePick ?? (view.challenge.ownerUserId === view.viewerUserId || view.challenge.isTestMode || hasAdminPoolAccess)
-  const showLockDiagnostics = canSyncSeries || canUseLatePicks
+  const showLockDiagnostics = canAdminPool || canUseLatePicks
   const completion = useMemo(
     () => view.completion ?? getPlayoffCompletionSummary(myProjectedSeries, picks, {
       lockRule,
@@ -279,7 +279,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
         {settingsOpen ? (
           <PlayoffSettingsModal
             view={view}
-            canAdmin={canSyncSeries}
+            canAdmin={canAdminPool}
             onClose={() => setSettingsOpen(false)}
             onResync={handleSyncSeries}
             resyncing={syncingSeries}
