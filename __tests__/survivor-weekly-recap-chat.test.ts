@@ -31,3 +31,13 @@ it('posts weekly recaps through a retry-safe message id', async () => {
     }),
   }))
 })
+
+it('an episode recap posts as the episode, under the same retry-safe id', async () => {
+  db.survivorChatMessage.upsert.mockClear()
+  const { postWeeklyRecap } = await import('@/lib/survivor/leagueChatPoster')
+  await postWeeklyRecap('league-1', 5, { episode: { week: 5, title: 'Deadlock', scenes: [{ label: 'Tribal Council', text: 'The vote deadlocked.' }] }, topScorer: 'Manager' })
+  expect(db.survivorChatMessage.upsert).toHaveBeenCalledWith(expect.objectContaining({
+    where: { id: 'survivor-weekly-recap:league-1:5' },
+    create: expect.objectContaining({ content: '**Episode 5: Deadlock**\n**Tribal Council:** The vote deadlocked.' }),
+  }))
+})

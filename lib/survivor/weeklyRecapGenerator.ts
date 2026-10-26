@@ -6,6 +6,7 @@
 import { prisma } from '@/lib/prisma'
 import { postWeeklyRecap } from './leagueChatPoster'
 import { isCouncilReadComplete } from './survivorRevealGate'
+import { buildSurvivorEpisode } from './survivorEpisode'
 
 export async function generateAndPostWeeklyRecap(
   leagueId: string,
@@ -77,7 +78,43 @@ export async function generateAndPostWeeklyRecap(
     ? (c.idolsPlayed as Array<{ powerLabel?: string }>).map((i) => i.powerLabel ?? 'Hidden Power')
     : [])
 
+  // The episode: tribe totals for the scores scene, and where the season stands after this week.
+  const [gameState, weekScores, remaining, earlierEliminations] = await Promise.all([
+    prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true, mergeTriggeredAt: true } }),
+    prisma.survivorWeeklyScore.findMany({
+      where: { leagueId, week, isFinalized: true, countedTowardTribeTotal: true, tribeId: { not: null } },
+      select: { tribeId: true, finalScore: true },
+    }),
+    prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }),
+    // Earlier weeks only: this week's count comes from the councils whose read has finished.
+    prisma.survivorTribalCouncil.count({ where: { leagueId, week: { lt: week }, isRevealed: true, eliminatedRosterId: { not: null } } }),
+  ])
+  const merged = Boolean(gameState?.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gameState?.phase ?? '')
+  const totalsByTribe = new Map<string, number>()
+  for (const row of weekScores ?? []) if (row.tribeId) totalsByTribe.set(row.tribeId, (totalsByTribe.get(row.tribeId) ?? 0) + row.finalScore)
+  const scoredTribes = totalsByTribe.size
+    ? await prisma.survivorTribe.findMany({ where: { id: { in: [...totalsByTribe.keys()] } }, select: { id: true, name: true } })
+    : []
+  const episode = buildSurvivorEpisode({
+    week,
+    merged,
+    tribeTotals: scoredTribes.map(tribe => ({ name: tribe.name, total: totalsByTribe.get(tribe.id) ?? 0 })),
+    attendingTribes: attendingTribeIds.map(id => attendingTribes.find(t => t.id === id)?.name).filter((n): n is string => Boolean(n)),
+    challengeTitle: challenge?.title ?? null,
+    challengeWinner: challengeWinner ?? null,
+    immunityHolder: immunePlayer?.displayName ?? null,
+    topScorer: topScorerName ?? null,
+    topScore: topScore?.finalScore ?? null,
+    eliminated: councils.map(c => c.eliminatedName).filter((n): n is string => Boolean(n)),
+    idolsPlayed,
+    tie: councils.some(c => c.isTie),
+    twist: twist?.description ?? null,
+    remaining: typeof remaining === 'number' ? remaining : null,
+    votedOutSoFar: typeof earlierEliminations === 'number' ? earlierEliminations + councils.length : null,
+  })
+
   const recap = {
+    episode,
     challengeWinner,
     tribalLoser,
     eliminatedPlayer: joinNames(councils.map(c => c.eliminatedName).filter((n): n is string => Boolean(n))),
@@ -98,11 +135,12 @@ export async function generateAndPostWeeklyRecap(
       week,
       category: 'automation',
       action: 'weekly_recap_posted',
-      data: { posted: true },
+      data: { posted: true, episode },
       isVisibleToCommissioner: true,
       isVisibleToPublic: true,
     },
-    update: {},
+    // A rerun after a late read keeps the stored episode current; the chat post itself is idempotent.
+    update: { data: { posted: true, episode } },
   })
 }
 
