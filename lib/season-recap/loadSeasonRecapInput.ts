@@ -24,7 +24,7 @@ import { CONSOLATION_ROUND_OFFSET } from '@/lib/playoff-runtime/playoffRoundWeek
 import { lowerBracketFinal } from '@/lib/playoff-runtime/consolationPlaysFor'
 import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
 import { nflWeekForDate } from '@/lib/import-os/season'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import type { RecapPickup, RecapTrade, SeasonRecapInput } from './computeSeasonRecap'
 
 type Db = PrismaClient
@@ -160,7 +160,7 @@ export async function loadSeasonRecapInput(
     })
     if (af.length > 0) {
       const [snapshots, genericRosters] = await Promise.all([
-        db.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: af.map((t) => t.id) } } }),
+        db.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: af.map((t) => t.id) } }, select: PUBLIC_RECEIPT_SELECT }),
         db.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
       ])
       const redraftByOwner = new Map(season.rosters.map((r) => [r.ownerId, r.id]))
