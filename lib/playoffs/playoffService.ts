@@ -2,6 +2,7 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import { buildPlayoffTemplate, getPlayoffRoundOrder } from "./playoffTemplate"
+import { resolvePlayoffSeedField } from "./playoffSeeding"
 import type { PlayoffChallengeConfig, PlayoffChallengeListItem, PlayoffChallengeView, PlayoffCreateResponse, PlayoffSport } from "./types"
 import { getDependentPlayoffSeriesIds, isOfficialTeamName } from "./playoffBracketProjection"
 import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
@@ -93,11 +94,26 @@ export async function createPlayoffBracketChallenge(input: {
     afCommissionerEnabled: await hasAfCommissionerPlan(input.user),
   })
 
-  const template = buildPlayoffTemplate({
+  const seasonYear = input.seasonYear ?? new Date().getUTCFullYear()
+  const baseTemplate = buildPlayoffTemplate({
     sport: input.sport,
-    seasonYear: input.seasonYear ?? new Date().getUTCFullYear(),
+    seasonYear,
     isTestMode: input.isTestMode,
   })
+  // A pool created after the official field is published must begin with real
+  // teams. Earlier pools are migrated when the admin publishes the field.
+  const field = !input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup")
+    ? await resolvePlayoffSeedField(input.sport, seasonYear)
+    : null
+  const template = field?.isFinal
+    ? baseTemplate.map((row) => {
+        const seededName = (name: string) => {
+          const hit = /^(?:CFP|EAST|WEST)(\\d+)$/i.exec(name)
+          return hit ? field.seeds.get(row.conference)?.get(Number(hit[1])) ?? name : name
+        }
+        return { ...row, homeTeamName: seededName(row.homeTeamName), awayTeamName: seededName(row.awayTeamName) }
+      })
+    : baseTemplate
 
   const result = await prisma.$transaction(async (tx) => {
     const challengeData: Record<string, unknown> = {
