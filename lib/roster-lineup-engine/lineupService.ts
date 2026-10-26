@@ -6,7 +6,8 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
-import { validateCanonicalRosterPayload } from './rosterValidationService'
+import { taxiPlayerIds, validateCanonicalRosterPayload } from './rosterValidationService'
+import { loadKnownYearsExp } from './playerYearsExp'
 import { syncAfRosterLineupAssignments } from './lineupAssignmentSync'
 import { syncRedraftSlotTypesForLineup } from './redraftSlotSync'
 import { isDailyLineupScoringEnabled, writeDailyLineupForSave } from '@/lib/redraft/dailyLineups'
@@ -168,6 +169,7 @@ export async function persistRosterLineupWithEngine(
       template,
     ),
     previousPlayerData: roster.playerData,
+    taxiYearsExpById: await loadNewTaxiYearsExp(league, roster.playerData, input.nextPlayerData),
   }
 
   const validation = validateCanonicalRosterPayload(input.nextPlayerData, ctx)
@@ -352,4 +354,21 @@ export async function persistRosterLineupWithEngine(
   }
 
   return { ok: true }
+}
+
+/**
+ * Experience on file for players this save moves onto the taxi squad, when the league has a rule it
+ * can be judged against. Skipped entirely (no query) for the common save that leaves taxi alone.
+ */
+async function loadNewTaxiYearsExp(
+  league: { sport: unknown; taxiSlots: number | null; taxiAllowNonRookies: boolean | null; taxiYearsLimit: number | null },
+  previous: unknown,
+  next: unknown,
+): Promise<Map<string, number> | undefined> {
+  if ((league.taxiSlots ?? 0) <= 0) return undefined
+  if (league.taxiAllowNonRookies === true && !((league.taxiYearsLimit ?? 0) > 0)) return undefined
+  const already = new Set(taxiPlayerIds(previous))
+  const added = [...new Set(taxiPlayerIds(next).filter((id) => !already.has(id)))]
+  if (added.length === 0) return undefined
+  return loadKnownYearsExp([String(league.sport ?? 'NFL')], added)
 }
