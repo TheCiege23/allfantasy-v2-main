@@ -121,6 +121,7 @@ export interface MatchupSlotComparisonRow {
 }
 
 export interface MatchupProviderInsights {
+  aiUsed?: boolean
   deepseek: string
   grok: string
   openai: string

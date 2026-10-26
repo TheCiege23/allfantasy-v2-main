@@ -46,6 +46,7 @@ type LedgerRow = {
 
 export type TokenBalanceSnapshot = {
   balance: number
+  spendableBalance?: number
   lifetimePurchased: number
   lifetimeSpent: number
   lifetimeRefunded: number
@@ -125,6 +126,10 @@ export class TokenSpendPriceChangedError extends Error {
     super('The token price changed. Review the new price before continuing.')
     this.name = 'TokenSpendPriceChangedError'
   }
+}
+
+export class TokenSpendIdempotencyConflictError extends Error {
+  constructor() { super('This billing key belongs to a different operation'); this.name = 'TokenSpendIdempotencyConflictError' }
 }
 
 export class TokenInsufficientBalanceError extends Error {
@@ -311,6 +316,7 @@ export class TokenSpendService {
       create: { userId },
       select: {
         balance: true,
+        reservedBalance: true,
         lifetimePurchased: true,
         lifetimeSpent: true,
         lifetimeRefunded: true,
@@ -320,6 +326,7 @@ export class TokenSpendService {
 
     return {
       balance: Number(balance.balance || 0),
+      spendableBalance: Math.max(0, Number(balance.balance || 0) - Number(balance.reservedBalance || 0)),
       lifetimePurchased: Number(balance.lifetimePurchased || 0),
       lifetimeSpent: Number(balance.lifetimeSpent || 0),
       lifetimeRefunded: Number(balance.lifetimeRefunded || 0),
@@ -410,7 +417,7 @@ export class TokenSpendService {
     return this.buildPreviewFromContext({
       rule,
       entitlement,
-      currentBalance: Number(balance.balance || 0),
+      currentBalance: Number(balance.spendableBalance ?? balance.balance ?? 0),
     })
   }
 
@@ -430,7 +437,7 @@ export class TokenSpendService {
     const currentBalance =
       typeof input.currentBalance === "number"
         ? Number(input.currentBalance)
-        : Number((await this.getBalance(input.userId, input.userEmail)).balance || 0)
+        : await this.getBalance(input.userId, input.userEmail).then(balance => Number(balance.spendableBalance ?? balance.balance ?? 0))
 
     return this.buildPreviewFromContext({
       rule,
@@ -719,11 +726,21 @@ export class TokenSpendService {
     return (prisma as any).$transaction(async (tx: any) => {
       await input.assertWithinTransaction?.(tx)
       if (idempotencyKey) {
+        // Serialize identical keys before inspecting the ledger. The unique constraint remains a final backstop.
+        await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))::text`)
         const existing = await tx.tokenLedger.findUnique({
           where: { idempotencyKey },
           include: { spendRule: { select: { featureLabel: true } } },
         })
-        if (existing) return toLedgerView(existing as LedgerRow)
+        if (existing) {
+          if (existing.userId !== input.userId || existing.entryType !== TOKEN_ENTRY_TYPES.SPEND ||
+              existing.spendRuleCode !== String(input.ruleCode) || existing.sourceType !== input.sourceType ||
+              existing.sourceId !== (input.sourceId ?? null)) throw new TokenSpendIdempotencyConflictError()
+          const refunded = await tx.tokenLedger.findFirst({ where: { userId: input.userId,
+            entryType: TOKEN_ENTRY_TYPES.REFUND, sourceId: existing.id }, select: { id: true } })
+          if (refunded) throw new TokenRefundNotAllowedError('This charge was refunded. Start a new request.')
+          return toLedgerView(existing as LedgerRow)
+        }
       }
 
       const rule = await tx.tokenSpendRule.findUnique({
@@ -853,15 +870,22 @@ export class TokenSpendService {
     }
 
     await syncSeedDataIfNeeded()
-    const idempotencyKey = input.idempotencyKey?.trim() || null
+    // A failed action has one refund identity, regardless of which failure handler calls us.
+    const idempotencyKey = `refund:spend:${input.spendLedgerId}`
 
     return (prisma as any).$transaction(async (tx: any) => {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "token_ledger"
+        WHERE "id" = ${input.spendLedgerId} AND "userId" = ${input.userId} FOR UPDATE`)
       if (idempotencyKey) {
         const existing = await tx.tokenLedger.findUnique({
           where: { idempotencyKey },
           include: { spendRule: { select: { featureLabel: true } } },
         })
-        if (existing) return toLedgerView(existing as LedgerRow)
+        if (existing) {
+          if (existing.userId !== input.userId || existing.entryType !== TOKEN_ENTRY_TYPES.REFUND ||
+              existing.sourceId !== input.spendLedgerId) throw new TokenRefundNotAllowedError('Refund identity does not match this spend')
+          return toLedgerView(existing as LedgerRow)
+        }
       }
 
       const refundRule = await tx.tokenRefundRule.findUnique({
@@ -894,7 +918,6 @@ export class TokenSpendService {
         where: {
           userId: input.userId,
           entryType: TOKEN_ENTRY_TYPES.REFUND,
-          sourceType: "refund_for_spend",
           sourceId: originalSpend.id,
         },
         select: { id: true },
@@ -949,11 +972,11 @@ export class TokenSpendService {
           balanceBefore,
           balanceAfter,
           refundRuleCode: String(refundRule.code),
-          sourceType: input.sourceType ?? "refund_for_spend",
-          sourceId: input.sourceId ?? originalSpend.id,
+          sourceType: "refund_for_spend",
+          sourceId: originalSpend.id,
           idempotencyKey,
           description: input.description ?? null,
-          metadata: input.metadata ?? null,
+          metadata: { ...(input.metadata ?? {}), refundSurface: input.sourceType ?? null, originalSourceId: input.sourceId ?? null },
         },
         include: {
           spendRule: {

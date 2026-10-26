@@ -1,6 +1,16 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react"
 
+
+/** Fetch doubles preserve native clone/header semantics used by billing retry transport. */
+function asHttpFetch(implementation: typeof fetch): typeof fetch {
+  return vi.fn(async (...args: Parameters<typeof fetch>) => {
+    const response = await implementation(...args)
+    if (typeof response.clone === 'function') return response
+    return Response.json(await response.json(), { status: response.status ?? (response.ok ? 200 : 400) })
+  })
+}
+
 const clientApiMocks = vi.hoisted(() => ({
   listEntries: vi.fn(),
   getEntry: vi.fn(),
@@ -234,7 +244,7 @@ describe("World Cup commissioner UI modules", () => {
         json: async () => ({ lines: body.lines, posted: true }),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupCommissionerBrainPanel = (await import("@/components/brackets/world-cup/WorldCupCommissionerBrainPanel")).default
     render(<WorldCupCommissionerBrainPanel challengeId="c1" />)
 
@@ -294,7 +304,7 @@ describe("World Cup commissioner UI modules", () => {
         bracketBrainEnabled: true,
       }),
     } as Response))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupCommissionerBrainPanel = (await import("@/components/brackets/world-cup/WorldCupCommissionerBrainPanel")).default
     render(<WorldCupCommissionerBrainPanel challengeId="c1" />)
 
@@ -312,7 +322,7 @@ describe("World Cup commissioner UI modules", () => {
       ok: false,
       json: async () => ({ error: "Commissioner snapshot unavailable" }),
     } as Response))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupCommissionerBrainPanel = (await import("@/components/brackets/world-cup/WorldCupCommissionerBrainPanel")).default
     render(<WorldCupCommissionerBrainPanel challengeId="c1" />)
 
@@ -375,7 +385,7 @@ describe("WorldCupBracketSettingsPanel", () => {
           earlyPublicPicksAllowed: false,
         }),
       })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketSettingsPanel = (await import("@/components/brackets/world-cup/WorldCupBracketSettingsPanel"))
       .default
     render(<WorldCupBracketSettingsPanel challengeId="ch1" />)
@@ -432,7 +442,7 @@ describe("WorldCupBracketSettingsPanel", () => {
           earlyPublicPicksAllowed: false,
         }),
       })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketSettingsPanel = (await import("@/components/brackets/world-cup/WorldCupBracketSettingsPanel"))
       .default
     render(<WorldCupBracketSettingsPanel challengeId="ch1" />)
@@ -480,7 +490,7 @@ describe("WorldCupBracketSettingsPanel", () => {
           earlyPublicPicksAllowed: false,
         }),
       })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketSettingsPanel = (await import("@/components/brackets/world-cup/WorldCupBracketSettingsPanel"))
       .default
     render(<WorldCupBracketSettingsPanel challengeId="ch1" />)
@@ -1157,7 +1167,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         warnings: [],
       },
     })
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal("fetch", asHttpFetch(vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes("/api/brackets/world-cup/admin/readiness")) {
         return {
@@ -1191,7 +1201,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         ok: true,
         json: async () => ({}),
       }
-  }))
+  })))
   })
 
   it("renders the cinematic World Cup background and dismissible entry video once per session", async () => {
@@ -1849,7 +1859,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -1898,7 +1908,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2041,7 +2051,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2057,7 +2067,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         expect.stringContaining("/api/brackets/world-cup/c1/chat"),
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ body: "Let us go" }),
+          body: JSON.stringify({ body: "Let us go", confirmedTokenSpend: false }),
         })
       )
     })
@@ -2083,7 +2093,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2165,7 +2175,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2257,7 +2267,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2344,7 +2354,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2468,7 +2478,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2584,7 +2594,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false, hasBracketBrainAi: true }) as any} defaultTab="home" />)
 
@@ -2641,7 +2651,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
       }
       return { ok: true, json: async () => ({}) } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupInviteJoinPanel = (await import("@/components/brackets/world-cup/WorldCupInviteJoinPanel")).default
     render(<WorldCupInviteJoinPanel />)
 
@@ -2689,7 +2699,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
       }
       return { ok: true, json: async () => ({}) } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupInviteJoinPanel = (await import("@/components/brackets/world-cup/WorldCupInviteJoinPanel")).default
     render(<WorldCupInviteJoinPanel />)
 
@@ -2862,7 +2872,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         },
       }),
     }))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: true }) as any} />)
 
@@ -2904,7 +2914,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
       ok: true,
       json: async () => makeReadinessResponse(),
     }))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: true }) as any} />)
 

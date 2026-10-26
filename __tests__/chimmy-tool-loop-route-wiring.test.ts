@@ -221,10 +221,11 @@ describe('live search fallback charges for what it costs', () => {
     expect(BLOCK).toContain('ledgerId')
   })
 
-  it('withholds the locked result when a versioned unlock debit fails', () => {
+  it('withholds the locked result when any quoted unlock debit fails', () => {
     // Cached older clients retain their existing fallback; the preview contract
     // must stop before any full searched text or citations enter the response.
-    expect(BLOCK).toContain('searchChargeFailed = analysisContract')
+    expect(BLOCK).toContain('searchChargeFailed = Boolean(analysisContract || requestReceipt)')
+    expect(BLOCK).toContain('requireQuotedChimmyReceipt(requestReceipt, searchQuotedCost)')
     const debit = BLOCK.indexOf('spendTokensForRule')
     const failure = BLOCK.indexOf('if (searchChargeFailed)')
     const fullResponse = BLOCK.indexOf('const sourceLines =')

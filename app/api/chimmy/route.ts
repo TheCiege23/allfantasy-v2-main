@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 /**
  * Chimmy route alias. Accepts the legacy JSON contract and maps it into the dedicated handler.
  *
@@ -507,7 +508,7 @@ function buildForwardedRequest(
   })
 }
 
-export async function POST(req: NextRequest) {
+async function paidToolPost(req: NextRequest) {
   if (!shouldTreatAsJson(req)) {
     return postChatChimmy(req)
   }
@@ -876,3 +877,5 @@ export async function POST(req: NextRequest) {
 }
 
 export const dynamic = 'force-dynamic'
+
+export const POST = withPaidToolBilling(paidToolPost)

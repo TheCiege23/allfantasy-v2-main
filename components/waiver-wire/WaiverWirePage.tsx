@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-transactions.css'
 
@@ -956,7 +958,7 @@ export default function WaiverWirePage({
         maxResults: 8,
       }
 
-      const response = await fetch("/api/waiver-ai/engine", {
+      const response = await paidToolFetchWithConfirm("/api/waiver-ai/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

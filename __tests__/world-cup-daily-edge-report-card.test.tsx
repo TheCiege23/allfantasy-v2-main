@@ -142,19 +142,11 @@ const COACHING_RESPONSE_CACHED = {
 }
 
 function okResponse(body: unknown) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    json: () => Promise.resolve(body),
-  } as Response)
+  return Promise.resolve(Response.json(body))
 }
 
 function errorResponse(status: number, body: unknown) {
-  return Promise.resolve({
-    ok: false,
-    status,
-    json: () => Promise.resolve(body),
-  } as Response)
+  return Promise.resolve(Response.json(body, { status }))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

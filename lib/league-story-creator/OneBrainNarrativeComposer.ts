@@ -117,6 +117,8 @@ Generate a ${context.storyType} league story. Return JSON only.`
   if (!res.ok) return fallback
   const json = parseJsonContentFromChatCompletion(res.json)
   if (!json || typeof json !== "object") return fallback
+  if (typeof json.whatHappened !== 'string' || !json.whatHappened.trim() ||
+      typeof json.whyItMatters !== 'string' || !json.whyItMatters.trim()) return fallback
 
   const headline = typeof json.headline === "string" ? json.headline.trim() : fallback.headline
   const whatHappened =
@@ -149,6 +151,7 @@ Generate a ${context.storyType} league story. Return JSON only.`
       : buildLongVersion(headline, whatHappened, whyItMatters, whoItAffects, nextStorylineToWatch)
 
   return {
+    source: 'ai',
     headline: headline.slice(0, 200),
     whatHappened: whatHappened.slice(0, 1500),
     whyItMatters: whyItMatters.slice(0, 800),
@@ -187,6 +190,7 @@ export function buildDeterministicStoryFallback(
     : `Watch whether this trend strengthens in the next slate, especially around rivalry intensity and new drama events.`
 
   return {
+    source: 'template',
     headline: headline.slice(0, 200),
     whatHappened: whatHappened.slice(0, 1500),
     whyItMatters: whyItMatters.slice(0, 800),

@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -9,7 +10,7 @@ import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(
+async function paidToolPost(
   req: Request,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -83,6 +84,7 @@ export async function POST(
       } : null,
     })
 
+    if (result.source !== 'ai') paidToolNotDelivered()
     return NextResponse.json({
       ...result,
       tokenSpend: gate.tokenSpend
@@ -114,3 +116,5 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to reach AI Commissioner' }, { status: 500 })
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

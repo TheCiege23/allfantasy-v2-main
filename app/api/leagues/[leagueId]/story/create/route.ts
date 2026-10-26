@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 /**
  * POST /api/leagues/[leagueId]/story/create
  * Body: { storyType: StoryType, sport?: string, season?: number, style?: StoryStyle }
@@ -28,7 +29,7 @@ const STORY_TYPES: StoryType[] = [
 export const dynamic = "force-dynamic"
 const STORY_STYLES: StoryStyle[] = ["announcer", "recap", "neutral"]
 
-export async function POST(
+async function paidToolPost(
   req: Request,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -112,6 +113,7 @@ export async function POST(
       )
     }
 
+    if (result.story?.source !== 'ai') paidToolNotDelivered()
     const variants = result.story
       ? {
           short: getStoryVariant(result.story, "short"),
@@ -164,3 +166,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

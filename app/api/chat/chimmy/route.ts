@@ -1,3 +1,4 @@
+import { requireQuotedChimmyReceipt } from '@/lib/chimmy/quotedReceiptGuard'
 import { asksForFreeSummary, gateAnalysisAccess, usesAnalysisPreview } from '@/lib/chimmy/analysisAccess'
 import { analysisSummaryFromAnswer, buildFreeAnalysisSummary } from '@/lib/chimmy/deepAnalysisPreview'
 import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/privateScreenshot'
@@ -1773,24 +1774,32 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         if (blocked) return blocked
       } else {
         preview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail).catch(() => null)
+        if (preview?.tokenCost === 0) searchQuotedCost = 0
+        else if (requestReceipt) {
+          const blocked = await searchAccess()
+          if (blocked) return blocked
+        }
       }
       const mayCharge = Boolean(confirmTokenSpend && preview?.canSpend)
       const searchIncluded = planCoversSearch && searchPlan
         ? await takeChimmyPlanAllowance({ userId, state: searchPlan, requestReceipt })
         : null
-      if (analysisContract && planCoversSearch && !searchIncluded) {
+      if ((analysisContract || requestReceipt) && planCoversSearch && !searchIncluded) {
         const blocked = await searchAccess(true, true)
         if (blocked) return blocked
       }
 
+      if (mayCharge && !searchIncluded) {
+        const blocked = requireQuotedChimmyReceipt(requestReceipt, searchQuotedCost)
+        if (blocked) return blocked
+      }
       if (mayCharge || searchIncluded) {
         const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
         const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
 
         if (searched) {
-        /* Cached older clients keep their existing fallback. Versioned clients
-         * receive extra detail only after the quoted debit succeeds. A failed
-         * or ambiguous debit is reconciled by the durable receipt wrapper. */
+        /* Paid search requires a durable receipt and verified quote. Failed or
+         * ambiguous debits are reconciled before extra detail is released. */
         let searchChargeFailed = false
         let searchPriceChanged = false
         const ledger = searchIncluded || !mayCharge
@@ -1814,7 +1823,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                   assertWithinTransaction: async tx => receipts.assertReceiptTokenSpend(tx, requestReceipt),
                 } : {}),
               })
-              .catch(error => { searchChargeFailed = analysisContract; searchPriceChanged = error instanceof Error && error.name === 'TokenSpendPriceChangedError'; return null })
+              .catch(error => { searchChargeFailed = Boolean(analysisContract || requestReceipt); searchPriceChanged = error instanceof Error && error.name === 'TokenSpendPriceChangedError'; return null })
             })()
         if (searchChargeFailed) {
           // No paid answer crosses the boundary when its debit failed; the receipt releases any ambiguous charge.
@@ -2751,16 +2760,19 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    */
   const runTokenGate = async (plan: ChimmyPlanAllowanceMeta | null, forcePreview = false, notice?: string): Promise<NextResponse | null> => {
     try {
-      if (analysisContract) {
+      if (!analysisContract) {
+        tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
+        if (tokenPreview.tokenCost === 0) { quotedTokenCost = 0; return null }
+      }
+      if (analysisContract || requestReceipt) {
         const gate = await gateAnalysisAccess({ userId, form: formData, mode: selectedAssistantMode, plan,
           summary: buildFreeAnalysisSummary({ question: message, leagueName: leagueSnapshot?.name, engineAnswer: previewEngineAnswer }),
-          previewSpend: () => spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail), forcePreview, notice, hasReceipt: Boolean(requestReceipt) })
+          previewSpend: () => !analysisContract && tokenPreview ? Promise.resolve(tokenPreview) : spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail), forcePreview, notice, hasReceipt: Boolean(requestReceipt) })
         if (!gate.allowed) return NextResponse.json(gate.payload, { status: gate.status, headers: { 'Cache-Control': 'private, no-store' } })
         tokenPreview = gate.tokenPreview
         quotedTokenCost = gate.expectedTokenCost
         return null
       }
-      tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
     } catch (error) {
       if (error instanceof TokenSpendRuleNotFoundError) {
         return NextResponse.json(
@@ -2950,6 +2962,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
 
   let spendLedger: { id: string; balanceAfter: number } | null = null
   if (!planIncluded) {
+    const blocked = requireQuotedChimmyReceipt(requestReceipt, quotedTokenCost)
+    if (blocked) return blocked
     try {
       const receipts = requestReceipt ? await import('@/lib/chimmy/requestReceipts') : null
       if (receipts && requestReceipt) await receipts.recordReceiptTokenIntent(requestReceipt)

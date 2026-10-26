@@ -133,7 +133,7 @@ export async function reconcileRequestCharge(context: ReceiptContext): Promise<v
     await new TokenSpendService().refundSpendByLedger({userId:context.userId, spendLedgerId:ledger.id,
       refundRuleCode:'feature_execution_failed', idempotencyKey:`refund:chimmy_chat:${ledger.id}`,
       recoveryReceiptId:context.id,
-      sourceType:'chimmy_chat_refund', sourceId:ledger.id, description:'Recover undelivered Chimmy answer'})
+      sourceType:'chimmy_chat_refund', sourceId:ledger.id, description:'Recover undelivered paid request'})
   }
   await prisma.$executeRaw`UPDATE "chimmy_request_receipts" SET "bill_state"='released', "updated_at"=NOW()
     WHERE "id"=${context.id} AND "user_id"=${context.userId} AND "owner_token"=${context.ownerToken}`
