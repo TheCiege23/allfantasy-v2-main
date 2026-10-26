@@ -85,18 +85,22 @@ export function WorldCupChatModeTabs({
             <span className="truncate">{label}</span>
             {/* Unread / available indicators */}
             {showPoolBadge ? (
-              <span
-                aria-label={`${poolUnread} unread`}
-                className="absolute right-1 top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-400 px-0.5 text-[11px] font-black text-slate-950"
-              >
-                {poolUnread > 9 ? "9+" : poolUnread}
-              </span>
+              <>
+                {/* The badge is visual; the spaced sr-only text keeps the tab's name "Pool Chat (2 unread)", not "Pool Chat2 unread". */}
+                <span
+                  aria-hidden
+                  className="absolute right-1 top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-400 px-0.5 text-[11px] font-black text-slate-950"
+                >
+                  {poolUnread > 9 ? "9+" : poolUnread}
+                </span>
+                <span className="sr-only"> ({poolUnread} unread)</span>
+              </>
             ) : null}
             {showAiBadge && !isActive ? (
-              <span
-                aria-label="available"
-                className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-cyan-400"
-              />
+              <>
+                <span aria-hidden className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-cyan-400" />
+                <span className="sr-only"> (available)</span>
+              </>
             ) : null}
           </button>
         )

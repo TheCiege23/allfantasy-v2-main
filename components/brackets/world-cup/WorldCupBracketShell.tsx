@@ -80,8 +80,8 @@ import {
   sanitizeWorldCupChatMessage,
   type WorldCupChatColor,
   type WorldCupChatFont,
-  type WorldCupChatRichTextSegment,
 } from "@/lib/world-cup/worldCupChatRichText"
+import { WorldCupChatRichTextSegments } from "./chat/WorldCupChatRichText"
 import {
   EMOJI_CATEGORIES,
   EMOJI_BY_CATEGORY,
@@ -6743,54 +6743,6 @@ function ComposerFormatButton({
       {label}
     </button>
   )
-}
-
-function getWorldCupRichTextClassName(segment: WorldCupChatRichTextSegment) {
-  const colorClass: Record<WorldCupChatColor, string> = {
-    default: "",
-    "af-blue": "text-white/85",
-    red: "text-white/85",
-    amber: "text-white/75",
-    green: "text-white/85",
-    purple: "text-purple-200",
-  }
-  const fontClass: Record<WorldCupChatFont, string> = {
-    default: "",
-    clean: "font-sans tracking-normal",
-    sport: "font-black uppercase tracking-wide",
-    mono: "font-mono",
-  }
-
-  return [
-    segment.marks.bold ? "font-black" : "",
-    segment.marks.italic ? "italic" : "",
-    segment.marks.underline ? "underline underline-offset-2" : "",
-    segment.marks.strike ? "line-through" : "",
-    colorClass[segment.marks.color ?? "default"],
-    fontClass[segment.marks.font ?? "default"],
-  ].filter(Boolean).join(" ")
-}
-
-function WorldCupChatRichTextSegments({
-  segments,
-  className,
-}: {
-  segments: WorldCupChatRichTextSegment[]
-  className?: string
-}) {
-  return (
-    <p className={className} dir="auto">
-      {segments.map((segment, index) => (
-        <span key={`${segment.text}-${index}`} className={getWorldCupRichTextClassName(segment)}>
-          {segment.text}
-        </span>
-      ))}
-    </p>
-  )
-}
-
-function WorldCupChatRichTextRenderer({ text, className }: { text: string; className?: string }) {
-  return <WorldCupChatRichTextSegments segments={parseWorldCupChatRichText(text)} className={className} />
 }
 
 function WorldCupGifPreview({
