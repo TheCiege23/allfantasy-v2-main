@@ -2,9 +2,10 @@ import { beforeEach, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
   survivorChallenge: { findFirst: vi.fn() },
-  survivorTribalCouncil: { findMany: vi.fn() },
-  survivorWeeklyScore: { findFirst: vi.fn() },
-  survivorPlayer: { findFirst: vi.fn() },
+  survivorTribalCouncil: { findMany: vi.fn(), count: vi.fn() },
+  survivorWeeklyScore: { findFirst: vi.fn(), findMany: vi.fn() },
+  survivorPlayer: { findFirst: vi.fn(), count: vi.fn() },
+  survivorGameState: { findUnique: vi.fn() },
   survivorTribe: { findUnique: vi.fn(), findMany: vi.fn() },
   survivorTwistEvent: { findFirst: vi.fn() },
   survivorAuditEntry: { upsert: vi.fn() },
@@ -28,6 +29,10 @@ beforeEach(() => {
   db.survivorTribe.findUnique.mockResolvedValue({ name: 'Winning Tribe' })
   db.survivorTribe.findMany.mockResolvedValue([{ id: 'tribe-2', name: 'Losing Tribe' }, { id: 'tribe-3', name: 'Other Tribe' }])
   db.survivorTwistEvent.findFirst.mockResolvedValue(null)
+  db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', mergeTriggeredAt: null })
+  db.survivorWeeklyScore.findMany.mockResolvedValue([])
+  db.survivorPlayer.count.mockResolvedValue(11)
+  db.survivorTribalCouncil.count.mockResolvedValue(4)
 })
 
 it('publishes only revealed council results and records the week once by stable audit key', async () => {
@@ -85,4 +90,23 @@ it('names only the first manager while the second council of the week is still b
   const sent = JSON.stringify(poster.postWeeklyRecap.mock.calls)
   expect(sent).toContain('First Out')
   expect(sent).not.toContain('Second Out')
+})
+
+it('posts the week as an episode and stores it for the Episodes page', async () => {
+  db.survivorWeeklyScore.findMany.mockResolvedValue([
+    { tribeId: 'tribe-1', finalScore: 210 }, { tribeId: 'tribe-1', finalScore: 200.5 },
+    { tribeId: 'tribe-2', finalScore: 190 }, { tribeId: 'tribe-2', finalScore: 170.1 },
+  ])
+  db.survivorTribe.findMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
+    [{ id: 'tribe-1', name: 'Tala' }, { id: 'tribe-2', name: 'Losing Tribe' }].filter(t => where.id.in.includes(t.id)))
+  const { generateAndPostWeeklyRecap } = await import('@/lib/survivor/weeklyRecapGenerator')
+  await generateAndPostWeeklyRecap('league-1', 5)
+  const episode = poster.postWeeklyRecap.mock.calls[0][2].episode
+  expect(episode.title).toBe('The Tribe Has Spoken')
+  expect(episode.scenes).toContainEqual({ label: 'The scores', text: 'Tala led the week with 410.5. Losing Tribe finished last with 360.1 and headed to Tribal Council.' })
+  expect(episode.scenes).toContainEqual({ label: 'Tribal Council', text: 'Out Manager was voted out, the 5th manager to leave the island.' })
+  expect(episode.scenes).toContainEqual({ label: 'Next time', text: '11 managers remain. The merge is getting closer.' })
+  expect(db.survivorAuditEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ data: { posted: true, episode } }), update: { data: { posted: true, episode } } }))
+  // Earlier weeks only: a council still being read this week is never counted ahead of its read.
+  expect(db.survivorTribalCouncil.count).toHaveBeenCalledWith({ where: expect.objectContaining({ week: { lt: 5 } }) })
 })
