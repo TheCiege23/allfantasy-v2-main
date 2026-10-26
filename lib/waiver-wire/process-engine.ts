@@ -27,6 +27,7 @@ import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterM
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerWaiverHours, loadDroppedPlayerHolds, type DroppedPlayerHold } from './dropped-player-waivers'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 type ClaimRow = {
   id: string
@@ -449,6 +450,11 @@ export async function processWaiverClaimsForLeague(
       ...survivorGuillotineWrites,
       ...redraftMoveWrites,
     ])
+
+    // Survivor Guilly wrote faabBalance itself, above; every other native league copies it across.
+    if (faabSpent != null && league.leagueVariant !== 'survivor_guillotine') {
+      await copyGenericFaabToRedraft(prisma, [claim.rosterId])
+    }
 
     rosteredByPlayer.set(addId, claim.rosterId)
     if (dropId) rosteredByPlayer.delete(dropId)

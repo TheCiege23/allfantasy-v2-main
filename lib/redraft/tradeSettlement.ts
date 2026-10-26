@@ -23,6 +23,7 @@ import type { Prisma } from '@prisma/client'
 import { applyRedraftFaabDeltasInTransaction } from './faabTransfer'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 import { transferNbaSurvivorRosterPlayer } from '@/lib/survivor/transferNbaSurvivorRosterPlayer'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
 
 export type TradeSettlementTx = Prisma.TransactionClient
 
@@ -123,6 +124,7 @@ export async function settleRedraftTradeAssets(
   // Apply net FAAB transfers as conditional in-database arithmetic, so two trades settling at once from the
   // same roster cannot both spend the same balance. See ./faabTransfer.ts.
   const faabTransferred = await applyRedraftFaabDeltasInTransaction(tx, faabDelta)
+  await copyRedraftFaabToGeneric(tx, [...faabDelta].filter(([, delta]) => delta !== 0).map(([id]) => id))
 
   return { playersMoved, faabTransferred, picksRecorded }
 }

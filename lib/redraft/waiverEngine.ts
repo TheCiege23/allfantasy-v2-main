@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -300,6 +301,7 @@ export async function processWaiverWindow(
             where: { id: claim.rosterId },
             data: { faabBalance: Math.max(0, roster.faabBalance - bid) },
           })
+          await copyRedraftFaabToGeneric(tx, [claim.rosterId])
         }
       })
     } catch (err) {
