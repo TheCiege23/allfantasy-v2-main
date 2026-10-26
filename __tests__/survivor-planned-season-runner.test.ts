@@ -30,8 +30,8 @@ vi.mock('@/lib/survivor/juryEngine', () => ({ ensureJuryVotingOpen: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifiedSlateChallenges: vi.fn(), settleVerifiedSlateChallenges: vi.fn() }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
-const redraw = vi.hoisted(() => ({ autoApply: vi.fn() }))
-vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply }))
+const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn() }))
+vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard }))
 const surprise = vi.hoisted(() => ({ ensure: vi.fn(), dissolve: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWeek: surprise.ensure, dissolveSurpriseTribes: surprise.dissolve }))
 
@@ -143,6 +143,9 @@ describe.each(['NBA', 'NHL', 'NFL'] as const)('%s Survivor planned season tick',
     // An unanswered tribe-imbalance recommendation gets its default before each council opens.
     expect(redraw.autoApply).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
     expect(redraw.autoApply).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0])
+    // The never-freeze guard runs before every council the runner opens.
+    expect(redraw.guard).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
+    expect(redraw.guard.mock.invocationCallOrder[0]).toBeLessThan(engine.triggerTribalOpen.mock.invocationCallOrder[0])
     // Surprise tribes dissolve before every week flip, and are never drawn while the rule is off.
     expect(surprise.dissolve).toHaveBeenCalledTimes(engine.advanceWeek.mock.calls.length)
     expect(surprise.ensure).not.toHaveBeenCalled()
