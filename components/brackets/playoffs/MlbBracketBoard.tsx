@@ -149,6 +149,11 @@ export default function MlbBracketBoard({
   const [liveNode, setLiveNode] = useState<string | null>(null)
 
   const sport = String(view.challenge.sport ?? "").toLowerCase()
+  const requiresPublishedField = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
+  const waitingForField = requiresPublishedField && view.series.some((row) =>
+    /^(?:CFP|EAST|WEST)\\d+$/i.test(row.homeTeamName) || /^(?:CFP|EAST|WEST)\\d+$/i.test(row.awayTeamName))
+  const waitingForSchedule = requiresPublishedField && view.series.some((row) => !row.startsAt)
+  const bracketReady = !waitingForField && !waitingForSchedule
   const projectedSeries = useMemo(
     () => buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: true }),
     [view.series, view.picks],
@@ -172,6 +177,10 @@ export default function MlbBracketBoard({
 
   const savePick = useCallback(
     async (series: PlayoffSeriesView, teamName: string) => {
+      if (!bracketReady) {
+        setError("Official teams and game times must be published before picks open.")
+        return
+      }
       if (!entryId) {
         setError("Create an entry before making picks.")
         return
@@ -204,7 +213,7 @@ export default function MlbBracketBoard({
         setSaving(null)
       }
     },
-    [entryId, onViewChange, view.challenge.id],
+    [bracketReady, entryId, onViewChange, view.challenge.id],
   )
 
   const totalSeries = view.series.length
@@ -374,9 +383,10 @@ export default function MlbBracketBoard({
             <p className="af-pb-sub">
               {sport === "nba_cup" ? 8 : 12} teams · {view.rounds.length} rounds · tap a matchup to pick a winner · tap a game for detail
             </p>
+            {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
           </div>
           <div className="af-pb-status">
-            {view.challenge.status === "open" ? "Picks open" : String(view.challenge.status)}
+            {!bracketReady ? "Field or schedule pending" : view.challenge.status === "open" ? "Picks open" : String(view.challenge.status)}
             <small>{lockRule ? `Locks: ${lockRule.replace(/_/g, " ")}` : "Pool is live"}</small>
           </div>
         </div>
