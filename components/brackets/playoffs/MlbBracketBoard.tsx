@@ -372,7 +372,7 @@ export default function MlbBracketBoard({
               <span className="af-pb-season af-pb-mono">{view.challenge.seasonYear}</span>
             </h1>
             <p className="af-pb-sub">
-              12 teams · 4 rounds · tap a matchup to pick a winner · tap a series line for detail
+              {sport === "nba_cup" ? 8 : 12} teams · {view.rounds.length} rounds · tap a matchup to pick a winner · tap a game for detail
             </p>
           </div>
           <div className="af-pb-status">
@@ -415,7 +415,7 @@ export default function MlbBracketBoard({
                     <span className="af-pb-seed-league af-pb-mono" title={label}>
                       {String(conf).toUpperCase()}
                     </span>
-                    {Array.from({ length: 6 }, (_, i) => i + 1).map((seed) => {
+                    {Array.from(seeds.keys()).sort((a, b) => a - b).map((seed) => {
                       const name = seeds.get(seed)
                       const c = teamColors(abbreviate(name))
                       return (
