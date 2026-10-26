@@ -284,7 +284,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
             </Card>
             <Card label="Playoff format">
               <dl className="nls-dl">
-                <div><dt>Teams</dt><dd className="nls-mono">{format.teams != null ? `${format.teams}${format.byes ? ` · ${format.byes} byes` : ''}` : 'League default'}</dd></div>
+                <div><dt>Teams</dt><dd className="nls-mono">{format.playIn ? `${format.playIn.qualifiers} + play-in · ${format.playIn.games.map(([a, b]) => `#${a} v #${b}`).join(', ')}` : format.teams != null ? `${format.teams}${format.byes ? ` · ${format.byes} byes` : ''}` : 'League default'}</dd></div>
                 <div><dt>Weeks</dt><dd className="nls-mono">{format.startWeek != null ? (format.weeks ? `${format.startWeek} – ${format.startWeek + format.weeks - 1}` : `From ${format.startWeek}`) : 'League default'}</dd></div>
                 <div><dt>Consolation</dt><dd>{format.consolation === 'toilet_bowl' ? 'Toilet bowl' : format.consolation === 'consolation' ? 'Consolation bracket' : format.consolation === 'none' ? 'None' : 'League default'}</dd></div>
               </dl>

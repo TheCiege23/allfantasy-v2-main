@@ -1,5 +1,6 @@
 import { isPointsOnlySeeding } from '@/lib/playoff-defaults/seedingRule'
 import { checkByePlan, isNaturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
+import { detectPlayIn } from '@/lib/playoff-brackets/playIn'
 import { allPlayShares, coinFlipDraw, parseTiebreakerOrder } from '@/lib/standings/tiebreakerOrder'
 import type {
   CanonicalLeagueRuntimeEvent,
@@ -992,8 +993,15 @@ function buildByePlanRounds(input: {
 }): NflRedraftPlayoffRoundState[] {
   const plan = checkByePlan(input.byePlan.length, input.byePlan)
   if (!plan.ok) return []
+  // A play-in (lib/playoff-brackets/playIn.ts): round 1 is the play-in week, and the rounds after it
+  // keep the names of the normal bracket it leads into.
+  const playIn = detectPlayIn(input.byePlan.length, input.byePlan)
   return plan.rounds.map((planRound) => {
-    const roundName = roundNameFor(planRound.round, plan.roundCount)
+    const roundName = playIn
+      ? planRound.round === 1
+        ? 'Play-in'
+        : roundNameFor(planRound.round - 1, plan.roundCount - 1)
+      : roundNameFor(planRound.round, plan.roundCount)
     const firstPairs = planRound.round === 1 ? pairBestVsWorst(planRound.entering) : []
     const matchups: NflRedraftPlayoffMatchupState[] = Array.from({ length: planRound.games }, (_, index) => {
       const [homeSeed, awaySeed] = firstPairs[index] ?? [null, null]
