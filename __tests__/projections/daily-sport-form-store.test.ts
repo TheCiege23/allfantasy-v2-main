@@ -107,3 +107,71 @@ describe('writeDailySportFormCache / readDailySportForm', () => {
     expect(t.findMany.mock.calls.length - reads).toBe(1)
   })
 })
+
+describe('last season from season totals, when it has no game lines', () => {
+  const skater = (goals: number) => ({
+    playerId: 'ri-29',
+    gamesPlayed: 80,
+    team: 'Montreal Canadiens',
+    stats: {
+      goals, assists: 0, plus_minus: 0, shots_on_goal: 0, power_play_goals: 0, power_play_assists: 0,
+      short_handed_goals: 0, short_handed_assists: 0, blocks: 0, hits: 0, penalty_minutes: 0,
+      faceoffs_won: 0, faceoffs_lost: 0, takeaways: 0, giveaways: 0, games_played: 80,
+    },
+  })
+  const nhlLine = (id: string, day: string, goals: number, season: number) => ({
+    ...line(id, 'p1', day, 0, season),
+    team: 'MTL',
+    normalizedStatMap: { seasonType: 'regular', group: 'skaters', stats: { goals } },
+  })
+
+  function nhlDb(lines: ReturnType<typeof line>[]) {
+    const t = makeDb(lines)
+    const seasonFindMany = vi.fn(async () => [skater(40)])
+    const db = t.db as unknown as Record<string, unknown>
+    db.playerSeasonStats = { findMany: seasonFindMany }
+    db.playerIdentityMap = {
+      findMany: vi.fn(async (a: { where: { rollingInsightsId?: unknown } }) =>
+        a.where.rollingInsightsId ? [{ id: 'p1', position: 'C', rollingInsightsId: 'ri-29' }] : [{ id: 'p1', position: 'C' }],
+      ),
+    }
+    return { ...t, seasonFindMany }
+  }
+
+  it('NHL: writes a totals blob keyed on the identity id, and the reader serves it', async () => {
+    const t = nhlDb([nhlLine('1', '2026-10-21', 1, 2026)])
+    const now = new Date('2026-10-25T07:00:00Z')
+    const r = await writeDailySportFormCache(t.db, 'NHL', { now })
+    expect(r.prior).toEqual({ season: 2025, players: 1, written: true, basis: 'season_totals' })
+    expect(t.seasonFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sport: 'NHL', season: '2025', seasonType: 'regular', source: 'rolling_insights' } }),
+    )
+    const prior = await readPriorDailySportForm(t.db, 'NHL', 2026, now)
+    expect(prior).toMatchObject({ season: 2025, basis: 'season_totals', players: { p1: { sg: 80, ss: { g: 40, pts: 40 }, rg: 0 } } })
+  })
+
+  it('game lines win over totals when both exist, and a held totals blob is rebuilt once they appear', async () => {
+    const lines = [nhlLine('1', '2026-10-21', 1, 2026)]
+    const t = nhlDb(lines)
+    await writeDailySportFormCache(t.db, 'NHL', { now: new Date('2026-10-25T07:00:00Z') })
+    expect(t.seasonFindMany).toHaveBeenCalledTimes(1)
+
+    // 2025 game lines land the next day: the totals blob is not "fresh" any more, and is replaced.
+    lines.push(nhlLine('a', '2026-01-10', 2, 2025), nhlLine('b', '2026-01-12', 0, 2025))
+    const next = new Date('2026-10-26T07:00:00Z')
+    const r = await writeDailySportFormCache(t.db, 'NHL', { now: next })
+    expect(r.prior).toEqual({ season: 2025, players: 1, written: true })
+    expect(t.seasonFindMany).toHaveBeenCalledTimes(1)
+    clearDailySportFormMemo()
+    const prior = await readPriorDailySportForm(t.db, 'NHL', 2026, next)
+    expect(prior?.basis).toBeUndefined()
+    expect(prior?.players.p1).toMatchObject({ sg: 2, ss: { g: 2 } })
+  })
+
+  it('NBA does not qualify, so its season totals are never read', async () => {
+    const t = nhlDb([line('1', 'p1', '2026-10-21', 20)])
+    const r = await writeDailySportFormCache(t.db, 'NBA', { now: new Date('2026-10-25T07:00:00Z') })
+    expect(r.prior).toEqual({ season: 2025, players: 0, written: false, reason: 'no_prior_season_game_lines' })
+    expect(t.seasonFindMany).not.toHaveBeenCalled()
+  })
+})

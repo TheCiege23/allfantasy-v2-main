@@ -3,6 +3,7 @@ import 'server-only'
 import type { PrismaClient } from '@prisma/client'
 
 import { getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { buildSeasonTotalsForm, seasonTotalsBlockersForSport, type SeasonTotalsRow } from './dailySportSeasonTotals'
 import {
   buildDailySportForm,
   isDailyFormSport,
@@ -21,7 +22,7 @@ import {
  * for request paths. Neither side calls a provider.
  */
 
-type Db = Pick<PrismaClient, 'playerGameStat' | 'playerIdentityMap' | 'sportsDataCache'>
+type Db = Pick<PrismaClient, 'playerGameStat' | 'playerIdentityMap' | 'playerSeasonStats' | 'sportsDataCache'>
 
 const KEY_PREFIX = 'af-daily-form:v1'
 export const dailyFormKey = (sport: string, season: number) => `${KEY_PREFIX}:${sport.toUpperCase()}:${season}`
@@ -46,7 +47,14 @@ export type WriteDailyFormResult = {
   prior?: PriorFormResult
 }
 
-export type PriorFormResult = { season: number; players: number; written: boolean; reason?: string }
+export type PriorFormResult = {
+  season: number
+  players: number
+  written: boolean
+  reason?: string
+  /** Set when last season came from `player_season_stats` totals rather than game lines. */
+  basis?: 'season_totals'
+}
 
 export async function writeDailySportFormCache(
   db: Db,
@@ -99,7 +107,12 @@ export async function writeDailySportFormCache(
  * LAST season's lines, for the prior-season blend (PRIOR_SEASON_BLEND_GAMES in dailySportForm.ts).
  * Read from the same `player_game_stats` rows, keyed by season. A finished season does not change, so
  * it is rebuilt at most once per PRIOR_REBUILD_MS rather than on every nightly run, and held for
- * PRIOR_TTL_MS. No rows for that season = nothing written, and the reader falls back to this season.
+ * PRIOR_TTL_MS.
+ *
+ * No game lines for that season: SEASON TOTALS from `player_season_stats` instead, for a sport whose
+ * default scoring they map completely (dailySportSeasonTotals.ts — NHL today; NBA and MLB are blocked by
+ * per-game categories). Otherwise nothing is written, and the reader falls back to this season. Game
+ * lines always win: a held totals blob is rebuilt the night game lines for its season appear.
  */
 const PRIOR_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const PRIOR_REBUILD_MS = TTL_MS
@@ -114,15 +127,33 @@ async function writePriorSeasonForm(
 ): Promise<PriorFormResult> {
   const held = await db.sportsDataCache.findUnique({ where: { cacheKey: dailyFormKey(sport, season) } })
   const heldAt = Date.parse(String((held?.data as { computedAt?: unknown } | null)?.computedAt ?? ''))
-  if (held && held.expiresAt > now && Number.isFinite(heldAt) && now.getTime() - heldAt < PRIOR_REBUILD_MS) {
-    return { season, players: Object.keys((held.data as { players?: object }).players ?? {}).length, written: false, reason: 'fresh' }
+  const heldTotals = (held?.data as { basis?: unknown } | null)?.basis === 'season_totals'
+  const fresh = held && held.expiresAt > now && Number.isFinite(heldAt) && now.getTime() - heldAt < PRIOR_REBUILD_MS
+  if (fresh && !(heldTotals && (await hasGameLines(db, sport, season)))) {
+    return {
+      season,
+      players: Object.keys((held.data as { players?: object }).players ?? {}).length,
+      written: false,
+      reason: 'fresh',
+      ...(heldTotals ? { basis: 'season_totals' as const } : {}),
+    }
   }
   const rows = await readSeasonRows(db, sport, season)
-  if (rows.length === 0) return { season, players: 0, written: false, reason: 'no_prior_season_game_lines' }
-  const blob = await buildBlob(db, sport, season, rows, normalizer, now)
+  let blob: DailySportFormBlob
+  if (rows.length > 0) {
+    blob = await buildBlob(db, sport, season, rows, normalizer, now)
+  } else {
+    if (seasonTotalsBlockersForSport(sport).length > 0) {
+      return { season, players: 0, written: false, reason: 'no_prior_season_game_lines' }
+    }
+    blob = await buildSeasonTotalsBlob(db, sport, season, now)
+  }
+  const basis = blob.basis === 'season_totals' ? { basis: 'season_totals' as const } : {}
   const players = Object.keys(blob.players).length
-  if (players === 0) return { season, players: 0, written: false, reason: 'no_regular_season_games' }
-  if (dryRun) return { season, players, written: false, reason: 'dry_run' }
+  if (players === 0) {
+    return { season, players: 0, written: false, reason: basis.basis ? 'no_prior_season_totals' : 'no_regular_season_games', ...basis }
+  }
+  if (dryRun) return { season, players, written: false, reason: 'dry_run', ...basis }
   const expiresAt = new Date(now.getTime() + PRIOR_TTL_MS)
   const data = blob as unknown as object
   await db.sportsDataCache.upsert({
@@ -130,7 +161,47 @@ async function writePriorSeasonForm(
     create: { cacheKey: dailyFormKey(sport, season), data, expiresAt },
     update: { data, expiresAt },
   })
-  return { season, players, written: true }
+  return { season, players, written: true, ...basis }
+}
+
+async function hasGameLines(db: Db, sport: string, season: number): Promise<boolean> {
+  return Boolean(await db.playerGameStat.findFirst({ where: { sportType: sport, season }, select: { season: true } }))
+}
+
+/**
+ * Last season from Rolling Insights' regular-season totals, the only source `player_season_stats`
+ * holds for these sports with games played. Its rows are keyed on RI's player id; the game lines, and
+ * so the blob, on the identity id — translated through `PlayerIdentityMap.rollingInsightsId`. An RI id
+ * that maps to two identity rows is left out rather than credited to either.
+ */
+async function buildSeasonTotalsBlob(db: Db, sport: string, season: number, now: Date): Promise<DailySportFormBlob> {
+  const raw = await db.playerSeasonStats.findMany({
+    where: { sport, season: String(season), seasonType: 'regular', source: 'rolling_insights' },
+    select: { playerId: true, stats: true, gamesPlayed: true, team: true },
+  })
+  const riIds = [...new Set(raw.map((r) => r.playerId))]
+  const byRi = new Map<string, Array<{ id: string; position: string | null }>>()
+  for (let i = 0; i < riIds.length; i += ID_BATCH) {
+    const found = await db.playerIdentityMap.findMany({
+      where: { sport, rollingInsightsId: { in: riIds.slice(i, i + ID_BATCH) } },
+      select: { id: true, position: true, rollingInsightsId: true },
+    })
+    for (const f of found) {
+      if (!f.rollingInsightsId) continue
+      const list = byRi.get(f.rollingInsightsId) ?? []
+      list.push({ id: f.id, position: f.position ?? null })
+      byRi.set(f.rollingInsightsId, list)
+    }
+  }
+  const rows: SeasonTotalsRow[] = []
+  const identityPositions = new Map<string, string | null>()
+  for (const r of raw) {
+    const ids = byRi.get(r.playerId)
+    if (!ids || ids.length !== 1) continue
+    rows.push({ playerId: ids[0]!.id, stats: r.stats, gamesPlayed: r.gamesPlayed, team: r.team })
+    identityPositions.set(ids[0]!.id, ids[0]!.position)
+  }
+  return buildSeasonTotalsForm({ sport, season, rows, identityPositions, computedAt: now })
 }
 
 type Normalizer = NonNullable<ReturnType<typeof getDailySportNormalizer>>
