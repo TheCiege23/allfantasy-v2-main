@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { generateNflRedraftPlayoffRuntimeBracket } from '@/lib/playoff-runtime'
 import {
   buildCanonicalScheduleRuntimeState,
@@ -218,6 +219,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     include: {
       rosters: { orderBy: { id: 'asc' } },
       schedule: { orderBy: [{ week: 'asc' }, { id: 'asc' }] },
+      league: { select: { medianGame: true, settings: true } },
     },
   })
   if (!season) return { ok: false, reason: 'season_not_found' }
@@ -245,6 +247,9 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     playoffStartWeek: imported?.playoffStartWeek ?? season.playoffStartWeek,
     regularSeasonWeeks: imported?.regularSeasonWeeks,
     now: input.now,
+    // The same flags `updateStandings` reads: the league's current median setting over the season's copy.
+    medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
+    medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
   })
 
   return {
