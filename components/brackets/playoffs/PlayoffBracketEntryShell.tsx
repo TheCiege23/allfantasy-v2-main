@@ -281,7 +281,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
             view={view}
             canAdmin={canAdminPool}
             onClose={() => setSettingsOpen(false)}
-            onResync={handleSyncSeries}
+            onResync={canSyncSeries ? handleSyncSeries : undefined}
             resyncing={syncingSeries}
           />
         ) : null}
