@@ -30,6 +30,7 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound, readChampionshipLength } from './playoffRoundWeeks'
 import { maxPlayoffTeamsThatFit, playoffRoundsForTeams } from './playoffFit'
 
@@ -56,6 +57,8 @@ type LeagueForFit = {
   playoffWeeksPerRound?: number | null
   playoffStartWeek?: number | null
   dynastyConfig?: { regularSeasonWeeks: number } | null
+  /** A redraft or keeper league's season follows the 24-week regular-season cap (regularSeasonCap.ts). */
+  leagueType?: string | null
   bestBallMode?: boolean | null
   bbContestId?: string | null
 }
@@ -142,9 +145,12 @@ export async function playoffFitOverflow(
       },
       cfg?.defaultSeasonWeeks ?? 17,
     )
+    const startCap = league.leagueType !== undefined ? maxPlayoffStartWeekFor(league) : null
     const startFor = (raw: unknown) => {
       const n = Number(raw)
-      return Number.isInteger(n) && n >= 2 && n <= seasonWeeks ? n : cfg?.defaultPlayoffStartWeek ?? 15
+      return Number.isInteger(n) && n >= 2 && n <= seasonWeeks && (startCap == null || n <= startCap)
+        ? n
+        : Math.min(cfg?.defaultPlayoffStartWeek ?? 15, startCap ?? Infinity)
     }
     currentStart = startFor(league.playoffStartWeek)
     nextStart = startFor(pick(change.playoffStartWeek, league.playoffStartWeek))

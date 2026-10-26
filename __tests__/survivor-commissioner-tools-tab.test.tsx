@@ -74,6 +74,16 @@ describe('Survivor commissioner tools', () => {
     expect(JSON.parse(String((puts()[0]![1] as RequestInit).body))).toEqual({ tradeAlertsEnabled: false })
   })
 
+  it('hold flagged trades loads as off and a tap switches it on', async () => {
+    render(<CommissionerToolsTab leagueId="L1" hasAfCommissionerSub />)
+    const toggle = screen.getByTestId('survivor-integrity-hold-trades')
+    await waitFor(() => expect(toggle.hasAttribute('disabled')).toBe(false))
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+    await waitFor(() => expect(puts()).toHaveLength(1))
+    expect(JSON.parse(String((puts()[0]![1] as RequestInit).body))).toEqual({ holdFlaggedTrades: true })
+  })
+
   it('shows the lineup-neglect report and links to the integrity review page', () => {
     render(<CommissionerToolsTab leagueId="L1" hasAfCommissionerSub />)
     expect(screen.getByTestId('lineup-integrity').textContent).toBe('L1')

@@ -218,8 +218,11 @@ export async function updateStandings(
     // rank this way, so the stored seed now agrees with them.
     const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
     if (pct(a) !== pct(b)) return pct(b)-pct(a)
-    if (b.wins !== a.wins) return b.wins - a.wins
-    if (a.losses !== b.losses) return a.losses - b.losses
+    // Then points for, as every sport's default tiebreakers and the bracket seeding have it
+    // (DEFAULT_TIEBREAKERS, canonicalNflRedraftPlayoffRuntime `normalizeTiebreakers`).
+    // 🛑 WINS, THEN LOSSES, USED TO COME FIRST, which brought back the rule the comment above retires:
+    // at an equal win % the team that had played more ranked ahead. 8-9 sat above 7-8-2 with more
+    // points (a league-median tie, or an odd-team bye), while the bracket seeded the other way.
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor
     return a.pointsAgainst - b.pointsAgainst
   })

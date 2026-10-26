@@ -677,7 +677,8 @@ export function LeagueConversation({
             text: t,
             votes: [] as string[],
           })),
-          closeAt: payload.poll.closeAt.toISOString(),
+          ...(payload.poll.closeAt ? { closeAt: payload.poll.closeAt.toISOString() } : {}),
+          ...(payload.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
           allowMultiple: payload.poll.allowMultiple,
           anonymous: Boolean(payload.poll.anonymous),
         }
@@ -988,6 +989,8 @@ export function LeagueConversation({
         commissionerLeagues={commissionerLeagues}
         dropZoneRef={convoRef}
         onTypingChange={signalTyping}
+        /* A prediction poll is posted by the server from the matchup row, then shows up on reload. */
+        predictions={!tribe && leagueId ? { leagueId, onPosted: () => void load(true) } : null}
       />
     </div>
   )

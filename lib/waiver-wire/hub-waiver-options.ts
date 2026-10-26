@@ -16,6 +16,8 @@ export const HUB_WAIVER_OPTION_KEYS = [
   'waiverOrderResetPolicy',
   'waiverOffseasonRule',
   'waiverPlayoffRule',
+  'waiverFreeAgencyMode',
+  'waiverFaabRollover',
 ] as const
 
 /**
@@ -92,12 +94,45 @@ export function readPlayoffWaiverRule(stored: unknown): PlayoffWaiverRule {
   return v === 'alive_only' || v === 'locked' ? v : 'all_teams'
 }
 
+/**
+ * Free agency (`waiverEngineConfig.free_agency_mode`, lib/waiver-wire/after-run-free-agency.ts).
+ * `standard` (the default, also null and any legacy value) keeps the league's existing rules.
+ * `after_run` is Sleeper's: a player nobody rosters is on waivers until the league's scheduled run,
+ * a free agent (instant, first come first served) after it, and back on waivers from his game's
+ * start until the next run. A dropped player still serves the league's waiver period. It changes
+ * nothing in an FCFS league (no waiver run to clear) or while a per-day schedule is on (the schedule
+ * decides each day, lib/waivers/dailyWaiverSchedule.ts).
+ */
+export const FREE_AGENCY_MODES = ['standard', 'after_run'] as const
+export type FreeAgencyMode = (typeof FREE_AGENCY_MODES)[number]
+
+export function readFreeAgencyMode(stored: unknown): FreeAgencyMode {
+  return String(stored ?? '').trim().toLowerCase() === 'after_run' ? 'after_run' : 'standard'
+}
+
+/**
+ * FAAB at season rollover (`waiverEngineConfig.faab_rollover_rule`, lib/waiver-wire/faab-rollover.ts).
+ * `reset` gives every team the starting budget again; `carry_over` keeps what each team has left.
+ * Unset, a redraft renewal resets (what it always did) and a dynasty / keeper season carries over
+ * (nothing ever touched its FAAB). Read by the renewal only, so a change never moves a balance now.
+ */
+export const FAAB_ROLLOVER_RULES = ['reset', 'carry_over'] as const
+export type FaabRolloverRule = (typeof FAAB_ROLLOVER_RULES)[number]
+
+/** The stored rule, or null when the commissioner never chose one. */
+export function readFaabRolloverRule(stored: unknown): FaabRolloverRule | null {
+  const v = String(stored ?? '').trim().toLowerCase()
+  return v === 'reset' || v === 'carry_over' ? v : null
+}
+
 export type HubWaiverOptions = {
   allowZeroFaabBid?: boolean
   tiebreakRule?: HubTiebreakRule
   waiverOrderResetPolicy?: WaiverOrderResetPolicy
   offseasonWaiverRule?: OffseasonWaiverRule
   playoffWaiverRule?: PlayoffWaiverRule
+  freeAgencyMode?: FreeAgencyMode
+  faabRolloverRule?: FaabRolloverRule
 }
 
 /**
@@ -159,18 +194,36 @@ export function parseHubWaiverOptions(
     options.playoffWaiverRule = v as PlayoffWaiverRule
   }
 
+  if (body.waiverFreeAgencyMode !== undefined) {
+    const v = body.waiverFreeAgencyMode
+    if (typeof v !== 'string' || !(FREE_AGENCY_MODES as readonly string[]).includes(v)) {
+      return { ok: false, error: 'Invalid waiverFreeAgencyMode' }
+    }
+    options.freeAgencyMode = v as FreeAgencyMode
+  }
+
+  if (body.waiverFaabRollover !== undefined) {
+    const v = body.waiverFaabRollover
+    if (typeof v !== 'string' || !(FAAB_ROLLOVER_RULES as readonly string[]).includes(v)) {
+      return { ok: false, error: 'Invalid waiverFaabRollover' }
+    }
+    options.faabRolloverRule = v as FaabRolloverRule
+  }
+
   return { ok: true, options }
 }
 
 /**
- * The `waiverEngineConfig` keys a hub save writes: the $0-bid flag and the season-phase rules
- * (lib/waiver-wire/season-phase-policy.ts). Empty when the save names none of them.
+ * The `waiverEngineConfig` keys a hub save writes: the $0-bid flag, the season-phase rules
+ * (lib/waiver-wire/season-phase-policy.ts), the free-agency mode and the FAAB rollover rule. Empty when the save names none of them.
  */
 export function hubWaiverEngineConfigPatch(options: HubWaiverOptions): Record<string, unknown> {
   return {
     ...(options.allowZeroFaabBid !== undefined ? { allow_zero_faab_bid: options.allowZeroFaabBid } : {}),
     ...(options.offseasonWaiverRule !== undefined ? { offseason_waiver_rules: options.offseasonWaiverRule } : {}),
     ...(options.playoffWaiverRule !== undefined ? { playoff_waiver_rules: options.playoffWaiverRule } : {}),
+    ...(options.freeAgencyMode !== undefined ? { free_agency_mode: options.freeAgencyMode } : {}),
+    ...(options.faabRolloverRule !== undefined ? { faab_rollover_rule: options.faabRolloverRule } : {}),
   }
 }
 

@@ -159,6 +159,8 @@ export type WeekFinalizerDeps = {
    * Loaded on first use by default: the dispatcher's import graph is not this module's to carry.
    */
   notifyResults?: (args: { prisma: PrismaClient; seasonId: string; week: number }) => Promise<unknown>
+  /** Settles the league chat's prediction polls once the week is final. Loaded on first use. */
+  resolvePredictions?: (args: { prisma: PrismaClient; leagueId: string }) => Promise<unknown>
   prisma?: PrismaClient
   now?: () => Date
   recalculateMatchups?: typeof recalculateMatchupsForSeasonWeek
@@ -677,6 +679,22 @@ export async function finalizeRedraftWeek(
       await notify({ prisma, seasonId: season.id, week: params.week })
     } catch (error) {
       console.error('[weekFinalizer] Unable to send result push', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    /*
+     * Settle the league chat's prediction polls on this week's matchups (lib/league-chat/
+     * predictionPolls.ts). Idempotent and never throws; the leaderboard read re-runs it anyway.
+     */
+    try {
+      const resolve =
+        deps.resolvePredictions ??
+        (await import('@/lib/league-chat/predictionPolls')).resolvePredictionPollsForLeague
+      await resolve({ prisma, leagueId: season.leagueId })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to resolve prediction polls', {
         leagueId: season.leagueId,
         week: params.week,
         error: error instanceof Error ? error.message : String(error),

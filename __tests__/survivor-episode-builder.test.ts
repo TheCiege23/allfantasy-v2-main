@@ -51,3 +51,10 @@ describe('buildSurvivorEpisode', () => {
     expect(readSurvivorEpisode({ week: 'x' })).toBeNull()
   })
 })
+
+describe('the confessional scene', () => {
+  it('quotes each manager voted out who recorded one', () => {
+    const ep = buildSurvivorEpisode({ ...base, confessionals: [{ name: 'Ben', text: 'Moto is cooked.' }] })
+    expect(ep.scenes).toContainEqual({ label: 'Confessional', text: 'Ben, before the vote: “Moto is cooked.”' })
+  })
+})

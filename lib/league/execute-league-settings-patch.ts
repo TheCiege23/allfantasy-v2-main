@@ -78,6 +78,7 @@ import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
 import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
+import { playoffStartWeekCapRefusal, regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
@@ -529,6 +530,21 @@ export async function executeLeagueSettingsPatch(
     byePlan: (league.settings as Record<string, unknown> | null)?.playoff_bye_plan,
   })
   if (bracketRefusal) return jsonError(bracketRefusal.message, bracketRefusal.status)
+
+  /*
+   * A redraft or keeper league's regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts):
+   * the playoff start week, and the settings-JSON copies of it and of the season length a
+   * `settingsMerge` can write. Refused only when the value CHANGES past the cap, so re-saving a league
+   * as it stands never fails.
+   */
+  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: body.sport ?? league.sport })) {
+    if (body.playoffStartWeek != null && Number(body.playoffStartWeek) !== league.playoffStartWeek) {
+      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek)
+      if (refusal) return jsonError(refusal, 400)
+    }
+    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings)
+    if (mergeRefusal) return jsonError(mergeRefusal, 400)
+  }
 
   // The extra matchup an odd-team league can play instead of the bye (lib/redraft/oddTeamExtraMatchupRules.ts)
   // is an AF Commissioner setting. Checked only when it is turned on or changed while on, so turning

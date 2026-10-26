@@ -43,13 +43,40 @@ export type AgentSuggestion = {
   basis: string
 }
 
-/** Why a league gets no suggestions, or null when it is one the agent works in. */
-export function agentLeagueRefusal(args: { sport: string | null | undefined; leagueType: string; concept?: string | null }): string | null {
+/**
+ * Why a league gets no suggestions, or null when it is one the agent works in.
+ *
+ * `tradeBan` is `tradeBanReason` from `@/lib/league-rules/tradeLegality`: the concept catalog, not the
+ * concept's name, decides whether a format trades. Survivor trades (only Survivor All-Stars Guillotine
+ * forbids them), and a Survivor season is priced like a redraft one. Guillotine trades too, but its
+ * value falls with the weeks a roster has left, which this grade does not price, so it waits.
+ */
+export function agentLeagueRefusal(args: { sport: string | null | undefined; leagueType: string; concept?: string | null; tradeBan?: string | null }): string | null {
   if (String(args.sport ?? '').trim().toUpperCase() !== 'NFL') return 'the agent covers NFL leagues only'
+  if (args.tradeBan) return 'this league does not allow trades'
   const concept = String(args.concept ?? '').toLowerCase()
-  if (concept === 'guillotine' || concept === 'survivor') return 'this league does not allow trades'
+  if (concept === 'guillotine') return 'the agent does not suggest guillotine trades yet'
+  if (concept === 'survivor') return null
   if (!AGENT_LEAGUE_TYPES.has(String(args.leagueType).toLowerCase())) return `the agent does not suggest trades in ${args.leagueType} leagues yet`
   return null
+}
+
+export type SurvivorTradeSeat = { userId: string; playerState: string; tribeId: string | null }
+
+/**
+ * Who may trade with whom in a Survivor league, as a group per manager: only managers still in the
+ * game, and before the merge only tribemates (a deal that strengthens another tribe works against you
+ * at Tribal Council). After the merge every manager still playing is one group. A manager with no
+ * group gets no suggestions and is nobody's partner.
+ */
+export function survivorTradeGroups(seats: readonly SurvivorTradeSeat[], merged: boolean): Map<string, string> {
+  const groups = new Map<string, string>()
+  for (const seat of seats) {
+    if (seat.playerState !== 'active') continue
+    if (merged) groups.set(seat.userId, 'merged')
+    else if (seat.tribeId) groups.set(seat.userId, seat.tribeId)
+  }
+  return groups
 }
 
 /** The same deal, however its sides were listed: sorted ids per side. */

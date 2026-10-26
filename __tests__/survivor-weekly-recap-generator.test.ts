@@ -14,6 +14,8 @@ const db = vi.hoisted(() => ({
 const poster = vi.hoisted(() => ({ postWeeklyRecap: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/survivor/leagueChatPoster', () => poster)
+const confessionals = vi.hoisted(() => ({ latest: vi.fn(async () => null as string | null) }))
+vi.mock('@/lib/survivor/survivorConfessionals', () => ({ latestConfessional: confessionals.latest }))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -109,4 +111,24 @@ it('posts the week as an episode and stores it for the Episodes page', async () 
   expect(db.survivorAuditEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ data: { posted: true, episode } }), update: { data: { posted: true, episode } } }))
   // Earlier weeks only: a council still being read this week is never counted ahead of its read.
   expect(db.survivorTribalCouncil.count).toHaveBeenCalledWith({ where: expect.objectContaining({ week: { lt: 5 } }) })
+})
+
+it('gives the manager voted out the last word: their latest confessional, quoted in the episode', async () => {
+  db.survivorTribalCouncil.findMany.mockResolvedValue([{ eliminatedName: 'Out Manager', eliminatedUserId: 'u-out', attendingTribeId: 'tribe-2', idolsPlayed: [], isTie: false, isRevealed: true }])
+  confessionals.latest.mockResolvedValueOnce('I never trusted Ava.')
+  const { generateAndPostWeeklyRecap } = await import('@/lib/survivor/weeklyRecapGenerator')
+  await generateAndPostWeeklyRecap('league-1', 7)
+  expect(confessionals.latest).toHaveBeenCalledWith('league-1', 'u-out')
+  expect(poster.postWeeklyRecap.mock.calls.at(-1)![2].episode.scenes).toContainEqual({ label: 'Confessional', text: 'Out Manager, before the vote: “I never trusted Ava.”' })
+})
+
+it('never reads a confessional for a council still being read', async () => {
+  db.survivorTribalCouncil.findMany.mockResolvedValue([{
+    eliminatedName: 'Out Manager', eliminatedUserId: 'u-out', attendingTribeId: 'tribe-2', idolsPlayed: [], isTie: false, isRevealed: true,
+    revealStartsAt: new Date(Date.now() - 1000), revealStep: 0,
+    revealSequence: [{ targetName: 'Out Manager', status: 'counts' }, { targetName: 'Other', status: 'counts' }, { targetName: 'Out Manager', status: 'counts' }],
+  }])
+  const { generateAndPostWeeklyRecap } = await import('@/lib/survivor/weeklyRecapGenerator')
+  await generateAndPostWeeklyRecap('league-1', 7)
+  expect(confessionals.latest).not.toHaveBeenCalled()
 })

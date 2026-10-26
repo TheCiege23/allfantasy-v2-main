@@ -2,6 +2,8 @@ import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPla
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
 import { readChampionshipLength, weeksForPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { playoffBracketWeeks } from '@/lib/playoff-runtime/playoffFit'
+import { cappedSeasonWeeks, regularSeasonCapApplies } from './regularSeasonCap'
 /** Respect a dynasty commissioner's regular season length when materializing the first season. */
 export function resolveCreatedSeasonWeeks(league: {
   bestBallMode?: boolean | null
@@ -10,6 +12,9 @@ export function resolveCreatedSeasonWeeks(league: {
   dynastyConfig?: { regularSeasonWeeks: number } | null
   playoffTeams?: number | null
   playoffWeeksPerRound?: number | null
+  /** With `sport`: a redraft or keeper league's regular season is capped at 24 weeks (regularSeasonCap.ts). */
+  leagueType?: string | null
+  sport?: unknown
 }, sportDefaultWeeks: number): number {
   const survivorPlan = readSurvivorFullSeasonPlan(league.settings)
   if (survivorPlan) return survivorPlan.endWeek
@@ -21,7 +26,19 @@ export function resolveCreatedSeasonWeeks(league: {
     if (settings) return tournamentRoundEnds(settings).at(-1)!
   }
   const regularWeeks = league.dynastyConfig?.regularSeasonWeeks
-  if (!Number.isInteger(regularWeeks) || Number(regularWeeks) < 1) return sportDefaultWeeks
+  if (!Number.isInteger(regularWeeks) || Number(regularWeeks) < 1) {
+    // A capped league whose 24 regular weeks plus its bracket end before the sport's last week (an NHL
+    // bracket under six teams) ends its season with the final, as creation's shape placed it.
+    const roto = (league.settings as { scoring_mode?: unknown } | null)?.scoring_mode === 'roto'
+    if (league.leagueType !== undefined && league.sport !== undefined && !roto && regularSeasonCapApplies(league)) {
+      return cappedSeasonWeeks(sportDefaultWeeks, playoffBracketWeeks({
+        teams: league.playoffTeams,
+        weeksPerRound: league.playoffWeeksPerRound,
+        championshipLength: readChampionshipLength(league.settings),
+      }))
+    }
+    return sportDefaultWeeks
+  }
   const teams = league.playoffTeams ?? 0
   const rounds = teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
   const perRound = Math.max(1, league.playoffWeeksPerRound ?? 1)

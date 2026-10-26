@@ -75,7 +75,7 @@ beforeEach(() => {
   m.tx.league.findUnique.mockReset().mockImplementation(async () => ({ settings: storedSettings() }))
   m.tx.league.update.mockReset()
   m.tx.survivorCommissionerAction.create.mockReset()
-  m.db.league.findUnique.mockReset().mockImplementation(async () => ({ name: 'Blah Survivor', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
+  m.db.league.findUnique.mockReset().mockImplementation(async () => ({ name: 'Blah Survivor', sport: 'NBA', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
   m.db.survivorTribeMember.count.mockReset().mockResolvedValue(0)
   m.db.$transaction.mockReset().mockImplementation(async (fn: (tx: typeof m.tx) => unknown) => fn(m.tx))
 })

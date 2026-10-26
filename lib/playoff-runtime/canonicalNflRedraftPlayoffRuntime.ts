@@ -1,5 +1,6 @@
 import { isPointsOnlySeeding } from '@/lib/playoff-defaults/seedingRule'
 import { checkByePlan, isNaturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
+import { detectPlayIn } from '@/lib/playoff-brackets/playIn'
 import { allPlayShares, coinFlipDraw, parseTiebreakerOrder } from '@/lib/standings/tiebreakerOrder'
 import type {
   CanonicalLeagueRuntimeEvent,
@@ -783,12 +784,29 @@ function normalizeStatus(value: unknown): NflRedraftPlayoffMatchupStatus {
   return 'scheduled'
 }
 
+/**
+ * A game whose result is settled: a bye, or a stored winner. A `final` row with scores but no winner is
+ * NOT — the advance writes the winner, and until it has run the round is still being played.
+ *
+ * 🛑 READING `complete` HERE STRANDED EVERY SHORT LOWER BRACKET. A lower bracket shorter than the title
+ * bracket (10 teams: 3 title rounds, 2 lower) starts at championship round 2, so its first round is
+ * stored `pending`. The round scorer writes its games `final` with scores and no winner, and on the next
+ * read `normalizeMatchup` calls a `final` row complete — so the pending round derived as `completed`
+ * with no winners, the advance skipped to the empty lower final, the finalizer refused with
+ * LOWER_BRACKET_INCOMPLETE, and the season never ended. Found by the NBA/NHL full-season simulation.
+ */
+function matchupDecided(matchup: NflRedraftPlayoffMatchupState): boolean {
+  return matchup.status === 'bye' || matchup.bye || Boolean(matchup.winnerRosterId)
+}
+
 function normalizeRoundStatus(value: unknown, matchups: NflRedraftPlayoffMatchupState[]): NflRedraftPlayoffRoundStatus {
   const raw = normalizedText(value)
   if (raw === 'active') return 'active'
   if (raw === 'completed' || raw === 'complete') return 'completed'
   if (raw === 'cancelled' || raw === 'canceled') return 'cancelled'
-  if (matchups.length > 0 && matchups.every((matchup) => matchup.complete || matchup.status === 'bye')) return 'completed'
+  // Derived only from settled games: a stored-`pending` round whose games were scored `final` but never
+  // advanced (the lower-bracket generation bug above) must read as still in play, or it is skipped for good.
+  if (matchups.length > 0 && matchups.every(matchupDecided)) return 'completed'
   return 'pending'
 }
 
@@ -992,8 +1010,15 @@ function buildByePlanRounds(input: {
 }): NflRedraftPlayoffRoundState[] {
   const plan = checkByePlan(input.byePlan.length, input.byePlan)
   if (!plan.ok) return []
+  // A play-in (lib/playoff-brackets/playIn.ts): round 1 is the play-in week, and the rounds after it
+  // keep the names of the normal bracket it leads into.
+  const playIn = detectPlayIn(input.byePlan.length, input.byePlan)
   return plan.rounds.map((planRound) => {
-    const roundName = roundNameFor(planRound.round, plan.roundCount)
+    const roundName = playIn
+      ? planRound.round === 1
+        ? 'Play-in'
+        : roundNameFor(planRound.round - 1, plan.roundCount - 1)
+      : roundNameFor(planRound.round, plan.roundCount)
     const firstPairs = planRound.round === 1 ? pairBestVsWorst(planRound.entering) : []
     const matchups: NflRedraftPlayoffMatchupState[] = Array.from({ length: planRound.games }, (_, index) => {
       const [homeSeed, awaySeed] = firstPairs[index] ?? [null, null]
@@ -1169,7 +1194,7 @@ function buildThirdPlaceMatchup(input: {
 }
 
 function activeChampionshipRound(rounds: NflRedraftPlayoffRoundState[]): NflRedraftPlayoffRoundState | null {
-  return rounds.find((round) => round.status === 'active') ?? rounds.find((round) => round.matchups.some((matchup) => !matchup.complete)) ?? null
+  return rounds.find((round) => round.status === 'active') ?? rounds.find((round) => round.matchups.some((matchup) => !matchupDecided(matchup))) ?? null
 }
 
 function resolveWinner(matchup: NflRedraftPlayoffMatchupState): {

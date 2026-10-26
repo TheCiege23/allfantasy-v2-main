@@ -26,6 +26,8 @@ export type SurvivorEpisodeFacts = {
   remaining?: number | null
   /** Everyone voted out so far this season, including this week. */
   votedOutSoFar?: number | null
+  /** The latest confessional of each manager voted out this week, when they recorded one. */
+  confessionals?: Array<{ name: string; text: string }>
 }
 
 export type SurvivorEpisodeScene = { label: string; text: string }
@@ -86,6 +88,9 @@ export function buildSurvivorEpisode(facts: SurvivorEpisodeFacts): SurvivorEpiso
     scenes.push({ label: 'Tribal Council', text: 'Nobody went home this week.' })
   }
 
+  for (const confessional of facts.confessionals ?? []) {
+    scenes.push({ label: 'Confessional', text: `${confessional.name}, before the vote: “${confessional.text}”` })
+  }
   if (facts.twist) scenes.push({ label: 'Twist', text: facts.twist })
   if (facts.remaining != null && facts.remaining > 0) {
     scenes.push({ label: 'Next time', text: `${facts.remaining} managers remain${facts.merged ? '' : '. The merge is getting closer'}.` })

@@ -123,7 +123,7 @@ export async function GET(request: Request) {
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */
-  let tradeReviews: TradeReviewSweepResult & { error?: string } = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [] }
+  let tradeReviews: TradeReviewSweepResult & { error?: string } = { due: 0, processed: 0, waitingOnLock: 0, held: 0, skipped: 0, closed: 0, failures: [] }
   try {
     tradeReviews = await withSyncJobRun(
       { jobName: 'cron-redraft-trade-review-window', trigger: 'cron' },
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
     console.error('[redraft/waiver-process] trade review window sweep failed', e)
-    tradeReviews = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [], error }
+    tradeReviews = { due: 0, processed: 0, waitingOnLock: 0, held: 0, skipped: 0, closed: 0, failures: [], error }
   }
 
   /*
@@ -162,6 +162,29 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error('[redraft/waiver-process] inactive manager lineups failed', e)
     inactiveLineups = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
+   * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
+   * processed in the same run. Guarded and on its own job identity, like the sweeps above.
+   */
+  let autopilotWaivers: unknown = null
+  try {
+    const { runAutopilotWaivers } = await import('@/lib/inactive-manager/inactiveManagerService')
+    autopilotWaivers = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-waivers', trigger: 'cron' },
+      () => runAutopilotWaivers(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.claims,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot waivers failed', e)
+    autopilotWaivers = { error: e instanceof Error ? e.message : String(e) }
   }
 
   const out = await withSyncJobRun(
@@ -189,5 +212,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, autopilotWaivers, exileRollover })
 }

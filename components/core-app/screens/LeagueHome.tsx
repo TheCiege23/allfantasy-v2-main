@@ -19,6 +19,8 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
+import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -1111,6 +1113,9 @@ export function LeagueHome({
           </StatePanel>
         </aside>
       </div>
+
+      {/* The league chat's prediction polls, scored over the season. AF-hosted leagues only. */}
+      {isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}
 
       {/*
         ── All leagues ──────────────────────────────────────────────────

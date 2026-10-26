@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   rosterUpdateMany: vi.fn(),
   renew: vi.fn(),
   nativeRenew: vi.fn(),
+  waiverSettingsFindUnique: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: m.getServerSession }))
@@ -30,6 +31,7 @@ vi.mock('@/lib/prisma', () => ({
     redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
     leagueTeam: { updateMany: m.leagueTeamUpdateMany, count: m.leagueTeamCount },
     roster: { updateMany: m.rosterUpdateMany },
+    leagueWaiverSettings: { findUnique: m.waiverSettingsFindUnique },
     findLeagueListing: { upsert: vi.fn() },
     legacyTournamentLeague: { findFirst: vi.fn().mockResolvedValue(null) },
   },
@@ -85,6 +87,7 @@ beforeEach(() => {
   m.rosterUpdateMany.mockResolvedValue({ count: 0 })
   m.leagueUpdate.mockResolvedValue({})
   m.leagueFindUnique.mockResolvedValue(redraftLeague())
+  m.waiverSettingsFindUnique.mockResolvedValue(null)
   m.nativeRenew.mockResolvedValue({ ok: true, completedSeason: 2026, nextSeason: 2027, seasonId: 'nba-season-2', draftSessionId: 'nba-draft-2',
     draft: { sessionId: 'nba-draft-2', orderMode: 'manual', slotOrder: [{ slot: 1, rosterId: 'R-1', displayName: 'One' }] }, alreadyRenewed: false })
   m.renew.mockResolvedValue({
@@ -231,5 +234,32 @@ describe('POST renew — redraft', () => {
     const res = await post({})
     expect(res.status).toBe(200)
     expect(m.renew).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST renew — FAAB at rollover (lib/waiver-wire/faab-rollover.ts)', () => {
+  const dynasty = () => redraftLeague({ leagueVariant: 'dynasty', isDynasty: true, waiverBudget: 200 })
+
+  it('a dynasty league with no rule keeps every balance, as before', async () => {
+    m.leagueFindUnique.mockResolvedValue(dynasty())
+    const res = await post({})
+    expect(res.status).toBe(200)
+    expect(m.renew).not.toHaveBeenCalled()
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it("a dynasty league that chose 'reset' starts the season on the full budget", async () => {
+    m.leagueFindUnique.mockResolvedValue(dynasty())
+    m.waiverSettingsFindUnique.mockResolvedValue({ waiverEngineConfig: { faab_rollover_rule: 'reset' } })
+    const res = await post({})
+    expect(res.status).toBe(200)
+    expect(m.rosterUpdateMany).toHaveBeenCalledWith({ where: { leagueId: 'L1' }, data: { faabRemaining: 200 } })
+  })
+
+  it('an unreadable rule falls back to the family default rather than failing the renewal', async () => {
+    m.leagueFindUnique.mockResolvedValue(dynasty())
+    m.waiverSettingsFindUnique.mockRejectedValue(new Error('db down'))
+    expect((await post({})).status).toBe(200)
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
   })
 })

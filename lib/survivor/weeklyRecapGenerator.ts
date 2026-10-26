@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { postWeeklyRecap } from './leagueChatPoster'
 import { isCouncilReadComplete } from './survivorRevealGate'
 import { buildSurvivorEpisode } from './survivorEpisode'
+import { latestConfessional } from './survivorConfessionals'
 
 export async function generateAndPostWeeklyRecap(
   leagueId: string,
@@ -22,7 +23,7 @@ export async function generateAndPostWeeklyRecap(
   const found = await prisma.survivorTribalCouncil.findMany({
     where: { leagueId, week, isRevealed: true, eliminatedRosterId: { not: null } },
     orderBy: { councilNumber: 'asc' },
-    select: { eliminatedName: true, attendingTribeId: true, idolsPlayed: true, isTie: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true },
+    select: { eliminatedName: true, eliminatedUserId: true, attendingTribeId: true, idolsPlayed: true, isTie: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true },
   })
   // A recap never names a voted-out manager before the council read has finished.
   const league = found.length ? await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } }) : null
@@ -95,6 +96,12 @@ export async function generateAndPostWeeklyRecap(
   const scoredTribes = totalsByTribe.size
     ? await prisma.survivorTribe.findMany({ where: { id: { in: [...totalsByTribe.keys()] } }, select: { id: true, name: true } })
     : []
+  // A manager voted out this week gets the last word: their latest confessional, if any.
+  const confessionals = (await Promise.all(councils.map(async council => {
+    if (!council.eliminatedUserId || !council.eliminatedName) return null
+    const text = await latestConfessional(leagueId, council.eliminatedUserId).catch(() => null)
+    return text ? { name: council.eliminatedName, text } : null
+  }))).filter((row): row is { name: string; text: string } => Boolean(row))
   const episode = buildSurvivorEpisode({
     week,
     merged,
@@ -111,6 +118,7 @@ export async function generateAndPostWeeklyRecap(
     twist: twist?.description ?? null,
     remaining: typeof remaining === 'number' ? remaining : null,
     votedOutSoFar: typeof earlierEliminations === 'number' ? earlierEliminations + councils.length : null,
+    confessionals,
   })
 
   const recap = {

@@ -17,6 +17,7 @@ import { nextTorchCeremonyDeadline } from './survivorCeremonySchedule'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRosterService'
 import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
+import { ensureWeeklyCall, settleWeeklyCall } from './survivorWeeklyCall'
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
@@ -64,6 +65,8 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (participation === 'blocked') return 'awaiting_tribe_rebalance'
   if (participation === 'awaiting_schedule' || participation === 'before_deadline') return 'awaiting_tribe_sit_out_lock'
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
+  // The weekly mini-game is bragging rights only: a failure here never holds up the season.
+  await ensureWeeklyCall(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(() => {})
 
   // Finalized player rows only exist after the common NBA/NHL slate, window,
   // grace and coverage checks. A missing or late feed simply keeps this pending.
@@ -87,6 +90,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     return 'scores_finalized'
   }
   await settleVerifiedSlateChallenges(leagueId, week)
+  await settleWeeklyCall(leagueId, week).catch(() => {})
 
   if (kind === 'elimination') {
     if (game.activeCouncilId) {

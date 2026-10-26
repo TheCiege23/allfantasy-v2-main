@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   lockAllMoves: false,
   voteCreate: vi.fn(),
   reviewHours: null as number | null,
+  hold: vi.fn(async () => false),
 }))
 
 /** Any model method not named below resolves to an empty answer, so settlement's bookkeeping can run. */
@@ -105,6 +106,7 @@ vi.mock('@/lib/ai-learning-system/recordEvent', () => ({ recordAfLearningEvent: 
 vi.mock('@/lib/ai-learning-system/recordTradeParticipants', () => ({ recordTradeOutcomeForBothManagers: vi.fn(async () => undefined) }))
 vi.mock('@/lib/ai-learning-system/resolveLeagueSport', () => ({ resolveLeagueSport: vi.fn(async () => 'NFL') }))
 vi.mock('@/lib/chat-notifications/tradeOfferDm', () => ({ queueTradeStatusInDm: vi.fn() }))
+vi.mock('@/lib/integrity/holdFlaggedTrades', () => ({ shouldHoldAcceptedTrade: h.hold }))
 
 function pending(over: Record<string, unknown> = {}) {
   h.proposal = {
@@ -179,6 +181,25 @@ describe('after the window ends with no veto', () => {
     ended({ __actor: 'commish' })
     const res = await post({ proposalId: 'p-1', action: 'commissioner_approve' })
     expect(res.status).toBe(200)
+    expect(h.settle).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('"hold flagged trades" (lib/integrity/holdFlaggedTrades.ts)', () => {
+  it('a flagged no-veto trade becomes a commissioner-review trade and does not settle', async () => {
+    h.hold.mockResolvedValueOnce(true)
+    pending({ vetoMode: 'no_veto' })
+    const res = await post({ proposalId: 'p-1', action: 'accept' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ resolved: false, awaitingReview: 'commissioner' })
+    expect(h.settle).not.toHaveBeenCalled()
+    expect(h.acceptClaim).toHaveBeenCalledWith(expect.objectContaining({ data: { vetoMode: 'commissioner' } }))
+    expect(h.hold).toHaveBeenCalledWith(expect.objectContaining({ ref: { kind: 'redraft', proposalId: 'p-1' } }))
+  })
+
+  it('an unflagged no-veto trade settles as before', async () => {
+    pending({ vetoMode: 'no_veto' })
+    await post({ proposalId: 'p-1', action: 'accept' })
     expect(h.settle).toHaveBeenCalledTimes(1)
   })
 })
