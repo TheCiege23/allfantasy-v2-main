@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -104,7 +105,7 @@ function buildDeterministicFallback(playersList: string[], summaryLines: string[
   return `${header}. ${lead} ${second}`.trim()
 }
 
-export async function POST(req: Request) {
+async function paidToolPost(req: Request) {
   let userId: string | null = null
   let tokenFallbackLedgerId: string | null = null
   try {
@@ -227,6 +228,8 @@ export async function POST(req: Request) {
       openaiSummary = openai.ok ? openai.text.trim() : null
     }
 
+    if (!openaiSummary && !deepseekAnalysis && !grokNarrative) paidToolNotDelivered()
+
     const finalRecommendation =
       openaiSummary ??
       deepseekAnalysis ??
@@ -270,3 +273,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Insight generation failed' }, { status: 500 })
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

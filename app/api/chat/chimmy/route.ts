@@ -1,3 +1,4 @@
+import { requireQuotedChimmyReceipt } from '@/lib/chimmy/quotedReceiptGuard'
 import { asksForFreeSummary, gateAnalysisAccess, usesAnalysisPreview } from '@/lib/chimmy/analysisAccess'
 import { analysisSummaryFromAnswer, buildFreeAnalysisSummary } from '@/lib/chimmy/deepAnalysisPreview'
 import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/privateScreenshot'
@@ -1783,14 +1784,17 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         if (blocked) return blocked
       }
 
+      if (mayCharge && !searchIncluded) {
+        const blocked = requireQuotedChimmyReceipt(requestReceipt, searchQuotedCost)
+        if (blocked) return blocked
+      }
       if (mayCharge || searchIncluded) {
         const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
         const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
 
         if (searched) {
-        /* Cached older clients keep their existing fallback. Versioned clients
-         * receive extra detail only after the quoted debit succeeds. A failed
-         * or ambiguous debit is reconciled by the durable receipt wrapper. */
+        /* Paid search requires a durable receipt and verified quote. Failed or
+         * ambiguous debits are reconciled before extra detail is released. */
         let searchChargeFailed = false
         let searchPriceChanged = false
         const ledger = searchIncluded || !mayCharge
@@ -2950,6 +2954,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
 
   let spendLedger: { id: string; balanceAfter: number } | null = null
   if (!planIncluded) {
+    const blocked = requireQuotedChimmyReceipt(requestReceipt, quotedTokenCost)
+    if (blocked) return blocked
     try {
       const receipts = requestReceipt ? await import('@/lib/chimmy/requestReceipts') : null
       if (receipts && requestReceipt) await receipts.recordReceiptTokenIntent(requestReceipt)
