@@ -398,12 +398,13 @@ describe('5.3 — a killed feed is SAID, not merely stopped', () => {
     expect(loadDevy).toHaveBeenCalled()
   })
 
-  it('killing the context feed names all eight, rather than dropping them', async () => {
+  it('killing the context feed names all nine, rather than dropping them', async () => {
     killFeeds('contextFacts')
     const p = await buildDecisionOsGroundingPacket(ARGS)
     expect(p.contextFacts).not.toBeNull()
     const disabled = p.gaps.filter((g) => g.reason === 'disabled')
-    expect(disabled).toHaveLength(8)
+    // Nine since the league office (LeagueOfficeContextProvider) joined the eight.
+    expect(disabled.map((g) => g.slice).sort()).toEqual(['devy', 'importedHistory', 'leagueDifficulty', 'leagueOffice', 'matchup', 'rankings', 'replayInsights', 'roster', 'standings'])
     expect(loadContext).not.toHaveBeenCalled()
   })
 
@@ -763,5 +764,36 @@ describe('R1.5 · a devy-variant league gets the board without being NCAAF', () 
 
     expect(loadDevy).not.toHaveBeenCalled()
     expect(p.devyValues.present).toBe(false)
+  })
+})
+
+describe('the league office (LeagueOfficeContextProvider) through the packet', () => {
+  const office = { leagueId: 'lg1', viewerRole: 'member', summary: 'Weekly prizes: weekly high score ($20 a week).\nWeek 7: high score Aces with 141.20 points.' }
+  const withOffice = (leagueOffice: unknown, error: string | null = null) => {
+    const b = bundle({ leagueOffice })
+    return { ...b, meta: { providers: [...b.meta.providers, { name: 'leagueOffice', cached: false, error, durationMs: 7 }] } }
+  }
+
+  it('a league using the tools: the summary reaches the prompt word for word', async () => {
+    loadContext.mockResolvedValue(withOffice(office))
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.contextFacts!.leagueOffice.present).toBe(true)
+    const text = serializeDecisionOsGroundingForPrompt(p, NOW)
+    expect(text).toMatch(/- League office: available/)
+    expect(text).toContain('    Week 7: high score Aces with 141.20 points.')
+  })
+
+  it('a league using none of them is not a gap: nothing about it under WHAT IS MISSING', async () => {
+    loadContext.mockResolvedValue(withOffice(null))
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.contextFacts!.leagueOffice.present).toBe(false)
+    expect(p.gaps.some((g) => g.slice === 'leagueOffice')).toBe(false)
+    expect(serializeDecisionOsGroundingForPrompt(p, NOW)).not.toMatch(/League office|leagueOffice/)
+  })
+
+  it('a provider that FAILED is still a named gap', async () => {
+    loadContext.mockResolvedValue(withOffice(null, 'db down'))
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.gaps.find((g) => g.slice === 'leagueOffice')?.detail).toBe('The leagueOffice provider failed: db down')
   })
 })
