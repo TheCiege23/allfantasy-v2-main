@@ -32,10 +32,10 @@ type Props = {
 type PlayoffProjectionMode = "official" | "user_projection"
 
 /**
- * ⚠ MLB GETS A DIFFERENT BOARD, AND ONLY MLB. The 2026 design handoff is a
+ * MLB, CFP and NBA Cup use the mirrored board. The 2026 design handoff is a
  * mirrored tree with a centre champion, which the NBA/NHL board is not; wiring
  * every sport onto it would restyle 26 live pools nobody asked to change. The
- * branch is on the sport string and nothing else, so an NBA pool renders
+ * branch is on the sport string and nothing else, so an NBA playoff pool renders
  * byte-identically to yesterday.
  */
 const MIRRORED_BOARD_SPORTS = new Set(["mlb", "ncaaf", "nba_cup"])
