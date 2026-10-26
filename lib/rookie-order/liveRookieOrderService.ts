@@ -27,7 +27,7 @@ import {
   type RookieOrderResult,
   type WithinRoundOrder,
 } from './rookieOrderEngine'
-import { loadRookieOrderInput } from './loadRookieOrderInput'
+import { loadRookieOrderInput, type MaxPfInfo } from './loadRookieOrderInput'
 
 export const LIVE_ROOKIE_ORDER_FEATURE = 'commissioner_automation' as const
 
@@ -107,6 +107,8 @@ export type LiveRookieOrderView = {
   platform: string | null
   result: RookieOrderResult
   notes: string[]
+  /** Native leagues: where Max PF came from (lib/rookie-order/loadRookieOrderInput.ts). */
+  maxPfInfo?: MaxPfInfo
   settings: LiveRookieOrderSettings
   /** Automation can run: entitled now, or switched on while entitled for this season. */
   automationActive: boolean
@@ -158,6 +160,7 @@ export async function refreshLiveRookieOrder(
     platform: league.platform ?? null,
     result,
     notes: loaded.notes,
+    ...(loaded.maxPfInfo ? { maxPfInfo: loaded.maxPfInfo } : {}),
     settings: saved,
     automationActive,
   }

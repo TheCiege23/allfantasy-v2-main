@@ -51,6 +51,31 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('LiveRookieOrderPanel — where Max PF came from', () => {
+  const computed = {
+    kind: 'computed',
+    weeks: 13,
+    estimated: 2,
+    note: "Max PF is each team's best possible lineup in each of the 13 finished regular-season weeks, scored by the league's own rules. 2 team-weeks have no lineup saved for that week, so the team's previous lineup (or its current roster) stands in.",
+  }
+
+  it('says it in the viewer language, once — the English twin is not shown beside it', async () => {
+    lang.language = 'es'
+    fetchMock.mockReturnValueOnce(json(liveView({ source: 'native', platform: 'allfantasy', notes: [computed.note], maxPfInfo: computed })))
+    render(<LiveRookieOrderPanel leagueId="L1" />)
+    await screen.findByText('Gridiron Ghosts')
+    expect(screen.getByText(/mejor alineación posible de cada equipo en cada una de las 13 semanas.*2 semanas de equipo no tienen alineación guardada/)).toBeTruthy()
+    expect(screen.queryByText(/best possible lineup/)).toBeNull()
+  })
+
+  it('a league whose Max PF is not computed says why', async () => {
+    const info = { kind: 'unsupported', reason: 'daily_lineups', note: 'Max PF is not computed for daily-lineup leagues yet; points for is used.' }
+    fetchMock.mockReturnValueOnce(json(liveView({ source: 'native', notes: [info.note], maxPfInfo: info })))
+    render(<LiveRookieOrderPanel leagueId="L1" />)
+    expect(await screen.findByText(info.note)).toBeTruthy()
+  })
+})
+
 describe('LiveRookieOrderPanel', () => {
   it('shows each slot with its pick, reason, and locked or pending state', async () => {
     fetchMock.mockReturnValueOnce(json(liveView()))
