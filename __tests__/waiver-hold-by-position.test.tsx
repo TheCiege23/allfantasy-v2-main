@@ -85,6 +85,16 @@ describe('the policy', () => {
     expect(maxHoldHours(policy({ QB: 6 }, 0))).toBe(6)
   })
 
+  it('IDP groups come from the canonical position service, and only in football leagues', () => {
+    const p = policy({ LB: 6, DB: 3 })
+    expect(holdHoursForPosition(p, 'OLB')).toBe(6)
+    expect(holdHoursForPosition(p, 'FS')).toBe(3)
+    expect(holdHoursForPosition(p, 'EDGE')).toBe(24)
+    // An NBA "C" is not a football centre, and no football group applies outside football.
+    const nba = { hours: 24, byPosition: { DB: 1 }, sport: 'NBA' }
+    expect(holdHoursForPosition(nba, 'CB')).toBe(24)
+  })
+
   it('a multi-position player reads as his first position', () => {
     expect(normalizeHoldPosition('SF/PF')).toBe('SF')
     expect(normalizeHoldPosition('rb, wr')).toBe('RB')

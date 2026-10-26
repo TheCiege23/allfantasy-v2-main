@@ -5,6 +5,13 @@
  * K and DEF clear in 0 hours while everyone else waits 24, or a QB waits 48. Pure, so the hub, the
  * settings validator and the waiver engine all read it the same way.
  */
+import {
+  REFERENCE_NFL_BUCKETS,
+  deriveFantasyEligibility,
+  isSupportedPositionSport,
+  normalizeProviderPosition,
+  type CanonicalSport,
+} from '@/lib/sports-data-gateway/canonical/canonicalPosition'
 
 /** The league's after-drop waiver period in hours, or 0 when it has none (FCFS, or 0 hours). */
 export function droppedPlayerWaiverHours(input: {
@@ -22,9 +29,14 @@ export const MAX_HOLD_HOURS = 168
 /** `waiverEngineConfig` key holding the per-position periods, `{ [position]: hours }`. */
 export const HOLD_HOURS_BY_POSITION_KEY = 'dropped_player_hold_hours_by_position'
 
-/** Spellings of one position, and the group keys that cover several. */
+/** Spellings of one position. */
 const POSITION_ALIASES: Record<string, string> = { DST: 'DEF', 'D/ST': 'DEF', PK: 'K' }
-const POSITION_GROUPS: Record<string, string> = { DE: 'DL', DT: 'DL', CB: 'DB', S: 'DB', SS: 'DB', FS: 'DB' }
+
+/**
+ * The IDP group keys a commissioner may set (DL, LB, DB). Which detailed positions each covers is not
+ * decided here: it comes from the governed canonical position service, football only.
+ */
+const HOLD_GROUP_KEYS = new Set(['DL', 'LB', 'DB'])
 
 /** One position token, upper-cased and de-aliased; the first of a multi-position string. */
 export function normalizeHoldPosition(raw: unknown): string {
@@ -105,12 +117,19 @@ export function droppedPlayerHoldPolicy(input: {
   }
 }
 
-/** The period for a player of `position`: its own, else its group's, else the league's. */
+/**
+ * The period for a player of `position`: its own, else its IDP group's (football leagues only, the
+ * groups from lib/sports-data-gateway/canonical/canonicalPosition.ts), else the league's.
+ */
 export function holdHoursForPosition(policy: DroppedPlayerHoldPolicy, position: string | null | undefined): number {
   const pos = normalizeHoldPosition(position)
   if (pos && policy.byPosition[pos] !== undefined) return policy.byPosition[pos]
-  const group = POSITION_GROUPS[pos]
-  if (group && policy.byPosition[group] !== undefined) return policy.byPosition[group]
+  if (pos && isSupportedPositionSport(policy.sport)) {
+    const canonical = normalizeProviderPosition(pos, String(policy.sport).toUpperCase() as CanonicalSport).canonicalPrimaryPosition
+    for (const bucket of deriveFantasyEligibility(canonical, REFERENCE_NFL_BUCKETS)) {
+      if (HOLD_GROUP_KEYS.has(bucket) && policy.byPosition[bucket] !== undefined) return policy.byPosition[bucket]
+    }
+  }
   return policy.hours
 }
 

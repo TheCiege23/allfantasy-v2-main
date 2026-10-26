@@ -21,8 +21,9 @@
  * PER PLAYER TYPE. A commissioner can give a position its own period
  * (`waiverEngineConfig.dropped_player_hold_hours_by_position`, the hub's "Waiver period by
  * position"), e.g. kickers and defenses clear in 0 hours while everyone else waits 24. A position
- * not listed uses the league period; a position can be longer than it as well as shorter. A group
- * key covers its members (DL: DE and DT; DB: CB, S, SS, FS), and DST / D/ST read as DEF and PK as K.
+ * not listed uses the league period; a position can be longer than it as well as shorter. In football
+ * leagues an IDP group key (DL, LB, DB) covers the detailed positions the canonical position service
+ * puts in it, and DST / D/ST read as DEF and PK as K.
  * The position is read from the player tables; a player whose position cannot be found takes the
  * league period. FCFS still has no hold for anyone.
  */
