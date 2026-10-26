@@ -6,6 +6,7 @@ import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPla
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
 import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
+import { maxPlayoffStartWeekFor } from './regularSeasonCap'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
@@ -173,6 +174,7 @@ export async function ensureRedraftSeason(leagueId: string) {
       playoffStartWeek: true,
       playoffTeams: true,
       playoffWeeksPerRound: true,
+      leagueType: true,
       dynastyConfig: { select: { regularSeasonWeeks: true } },
       bbContestId: true,
       bestBallMode: true,
@@ -197,10 +199,13 @@ export async function ensureRedraftSeason(leagueId: string) {
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
+  const playoffStartCap = maxPlayoffStartWeekFor(league)
   const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
-    Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
+    Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
+    // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
+    (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)
       ? leaguePlayoffStart
-      : cfg?.defaultPlayoffStartWeek ?? 15
+      : Math.min(cfg?.defaultPlayoffStartWeek ?? 15, playoffStartCap ?? Infinity)
 
   const season = await prisma.redraftSeason.create({
     data: {

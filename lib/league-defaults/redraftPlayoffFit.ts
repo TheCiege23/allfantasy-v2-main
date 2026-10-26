@@ -31,6 +31,7 @@ import {
   playoffBracketWeeks,
   playoffRoundsForTeams,
 } from '@/lib/playoff-runtime/playoffFit'
+import { MAX_PLAYOFF_START_WEEK, cappedSeasonWeeks } from '@/lib/redraft/regularSeasonCap'
 
 export const REDRAFT_PLAYOFF_FIT_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB'])
 /** League types whose default bracket is fitted to the season. */
@@ -93,17 +94,23 @@ export function redraftPlayoffShapeFor(input: {
   const championshipLength =
     input.championshipLength ?? resolveDefaultPlayoffConfig(sport as SportType).championship_length ?? null
   const shape = { teams: playoffTeams, weeksPerRound: input.weeksPerRound, championshipLength }
-  const playoffStartWeek = fittedPlayoffStartWeek({ ...shape, seasonWeeks })
-  if (playoffStartWeek == null) return null
+  const fitted = fittedPlayoffStartWeek({ ...shape, seasonWeeks })
+  if (fitted == null) return null
+  // At most a 24-week regular season (lib/redraft/regularSeasonCap.ts). Only an NHL bracket smaller than
+  // six teams, or an MLB two-team final, reaches past it; its season then ends with its final rather
+  // than at the sport's last week.
+  const playoffStartWeek = Math.min(fitted, MAX_PLAYOFF_START_WEEK)
+  const playoffWeeks = playoffBracketWeeks(shape)
+  const leagueSeasonWeeks = cappedSeasonWeeks(seasonWeeks, playoffWeeks)
   return {
     playoffTeams,
     firstRoundByes: firstRoundByesForTeams(playoffTeams),
     totalRounds: playoffRoundsForTeams(playoffTeams),
     playoffStartWeek,
     regularSeasonEndWeek: playoffStartWeek - 1,
-    championshipWeek: seasonWeeks,
-    playoffWeeks: playoffBracketWeeks(shape),
-    seasonWeeks,
+    championshipWeek: leagueSeasonWeeks,
+    playoffWeeks,
+    seasonWeeks: leagueSeasonWeeks,
   }
 }
 
