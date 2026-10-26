@@ -154,6 +154,23 @@ describe.runIf(enabled)('normal accounts and billing against real isolated Postg
     expect(await wallet(p.userId)).toMatchObject({ balance: 250, reservedBalance: 3 })
   })
 
+  it('an expiry sweep cannot release a hold renewed after its stale candidate snapshot', async () => {
+    const p = purchase((await user()).id), key = randomUUID()
+    await service.grantTokensFromPackagePurchase(p)
+    await reservations.reserve({ userId: p.userId, amount: 3, idempotencyKey: key })
+    await prisma.tokenReservation.update({ where: { idempotencyKey: key }, data: { expiresAt: new Date(Date.now() - 60_000) } })
+    const sweeping = new TokenReservationService({ tokenReservation: prisma.tokenReservation,
+      $transaction: async (callback: any) => {
+        // renew between the sweep's candidate read and its per-wallet transaction
+        await reservations.reserve({ userId: p.userId, amount: 7, idempotencyKey: key })
+        return prisma.$transaction(callback)
+      } } as any)
+    expect(await sweeping.recoverExpired()).toEqual({ released: 0 })
+    expect(await wallet(p.userId)).toMatchObject({ balance: 250, reservedBalance: 7 })
+    await reservations.finalize({ userId: p.userId, idempotencyKey: key })
+    expect(await wallet(p.userId)).toMatchObject({ balance: 243, reservedBalance: 0 })
+  })
+
   it('historical Apple refund identities prevent a second clawback', async () => {
     const u = await user(), id = randomUUID()
     const p = { userId: u.id, packageSku: 'af_tokens_5', sourceType: 'apple_iap', sourceId: id, idempotencyKey: `apple_iap:${id}` }

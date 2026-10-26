@@ -299,7 +299,8 @@ export class TokenReservationService {
       await this.db.$transaction(async (tx) => {
         await lockTokenWallet(tx, r.userId)
         const upd = await tx.tokenReservation.updateMany({
-          where: { id: r.id, status: 'reserved' },
+          // The snapshot predates this wallet lock: a retry may have renewed the same row.
+          where: { id: r.id, status: 'reserved', expiresAt: { lt: now }, amount: r.amount },
           data: { status: 'released', releasedAt: now, reason: 'expired_sweep' },
         })
         if (upd.count === 1) {
