@@ -26,7 +26,7 @@ import PlayoffLiveViewModal from "./PlayoffLiveViewModal"
 import PlayoffDecisionRail from "./PlayoffDecisionRail"
 
 /**
- * The MLB postseason bracket.
+ * Shared mirrored bracket for MLB, CFP and NBA Cup.
  *
  * ⚠ THE TREE IS DERIVED, NOT DECLARED. Columns, edges and the centre final all
  * come from `buildBracketGraph`, which reads the series rows' own
