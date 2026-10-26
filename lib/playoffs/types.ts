@@ -5,12 +5,9 @@
  * advance it, so opening creation first would ship a bracket that can never
  * resolve. Widen the API in the same change that lands those two, not before.
  *
- * ⚠ `ncaaf` (the College Football Playoff) IS IN THE SAME STATE, ON PURPOSE.
- * Its template, round keys and single-game wording are modelled; the create
- * API does not accept it yet. Its seeds come from an ADMIN entry after
- * Selection Sunday (owner call, 2026-10-01: no feed carries the committee's
- * seeds) and its results from a scheduled DB-first writer — open creation in
- * the change that lands both.
+ * CFP and NBA Cup pools use admin-published fields and game times. Single-game
+ * finals are entered through the audited result route until verified provider
+ * ingestion is available. Both sports have their own persisted round keys.
  */
 export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
 
