@@ -43,6 +43,7 @@ import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
+import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -791,6 +792,15 @@ export async function executeLeagueSettingsPatch(
     const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
     if (!parsed.ok) return jsonError(parsed.error, 400)
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
+
+  // Lineup minimums for eliminated teams (lib/eliminated-lineups) — an AF Commissioner rule. Stored only
+  // in the shape the reader knows, so a malformed value can never read as "on"; switching it off is free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && ELIMINATED_LINEUP_RULE_KEY in merge) {
+    const parsed = parseEliminatedLineupRule((merge as Record<string, unknown>)[ELIMINATED_LINEUP_RULE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Lineup minimums for eliminated teams are part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[ELIMINATED_LINEUP_RULE_KEY] = parsed.value
   }
 
   // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would

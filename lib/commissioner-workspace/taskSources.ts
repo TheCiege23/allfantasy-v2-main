@@ -317,11 +317,15 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     // The native commissioner tools (./commissionerFeatureTasks.ts): an unapplied stat correction, a
     // trade in commissioner review, inactive teams nobody is setting lineups for.
     const { readCommissionerFeatureTasks } = await import('./commissionerFeatureTasks')
+    // Eliminated teams short of the league's lineup minimum (lib/eliminated-lineups); nothing unless
+    // the AF Commissioner rule is on.
+    const { readEliminatedLineupTasks } = await import('@/lib/eliminated-lineups/eliminatedLineupService')
     return [
       ...(orphans ? [orphans] : []),
       ...await readOperationalTasks(leagueId, now),
       ...await readLineupIntegrityTasks(leagueId),
       ...await readCommissionerFeatureTasks(leagueId, now),
+      ...await readEliminatedLineupTasks(leagueId),
     ]
   }
 

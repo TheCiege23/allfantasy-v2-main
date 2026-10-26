@@ -48,6 +48,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'dynasty-projections': () => import('../dynasty-projections/handler'),
   'dynasty-settings': () => import('../dynasty-settings/handler'),
   'dynasty-war-room': () => import('../dynasty-war-room/handler'),
+  'eliminated-lineups': () => import('../eliminated-lineups/handler'),
   'fill-empty-slots': () => import('../fill-empty-slots/handler'),
   'forecast-summary': () => import('../forecast-summary/handler'),
   'graph-insight': () => import('../graph-insight/handler'),

@@ -11,6 +11,7 @@ import {
 } from '@/lib/redraft/tradeProposalExpiry'
 import { processDueTradeReviews, type TradeReviewSweepResult } from '@/lib/redraft/tradeReviewWindowSweep'
 import type { InactiveLineupRunResult } from '@/lib/inactive-manager/inactiveManagerService'
+import type { EliminatedLineupRunResult } from '@/lib/eliminated-lineups/eliminatedLineupService'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -187,6 +188,29 @@ export async function GET(request: Request) {
     autopilotWaivers = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  /*
+   * Lineup minimums for eliminated teams (lib/eliminated-lineups): an AF Commissioner rule. Fills only
+   * the short slots of a team out of the race, from its bench, and tells its manager once a week what is
+   * still short. Hourly for the same reason as inactive manager mode; guarded and on its own job identity.
+   */
+  let eliminatedLineups: EliminatedLineupRunResult | { error: string } | null = null
+  try {
+    const { runEliminatedLineupMinimums } = await import('@/lib/eliminated-lineups/eliminatedLineupService')
+    eliminatedLineups = await withSyncJobRun(
+      { jobName: 'cron-eliminated-lineup-minimums', trigger: 'cron' },
+      () => runEliminatedLineupMinimums(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.filled + r.notified,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, filled: r.filled, notified: r.notified, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] eliminated lineup minimums failed', e)
+    eliminatedLineups = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -212,5 +236,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, autopilotWaivers, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, exileRollover })
 }
