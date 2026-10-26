@@ -94,6 +94,11 @@ export async function createPlayoffBracketChallenge(input: {
   const config = sanitizePlayoffChallengeConfig(input.config, {
     afCommissionerEnabled: await hasAfCommissionerPlan(input.user),
   })
+  // Live single-game pools use one fair lock and scoring rule, even for direct API requests.
+  if (!input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup")) {
+    config.lockRule = "series_start"
+    config.scoringStyle = "round_points"
+  }
 
   const seasonYear = input.seasonYear ?? new Date().getUTCFullYear()
   const baseTemplate = buildPlayoffTemplate({
@@ -703,14 +708,18 @@ export async function savePlayoffBracketPick(input: {
   }
 
   // lockRule is on the base config, not an AF Commissioner option, so no plan check is needed.
-  const lockRule = sanitizePlayoffChallengeConfig(series.challenge?.config ?? null).lockRule
+  const singleGameLivePool = !series.challenge?.isTestMode &&
+    (series.challenge?.sport === "ncaaf" || series.challenge?.sport === "nba_cup")
+  const lockRule = singleGameLivePool
+    ? "series_start"
+    : sanitizePlayoffChallengeConfig(series.challenge?.config ?? null).lockRule
   const lockedReason = getPlayoffSeriesLockedReason({
     status: series.status,
     startsAt: toIso(series.startsAt),
   }, lockRule, {
-    isPoolOwner: series.challenge?.ownerUserId === input.userId,
+    isPoolOwner: !singleGameLivePool && series.challenge?.ownerUserId === input.userId,
     isTestMode: series.challenge?.isTestMode === true,
-    hasPoolAdminAccess: hasPoolAdminAccess(input.user),
+    hasPoolAdminAccess: !singleGameLivePool && hasPoolAdminAccess(input.user),
   })
   if (lockedReason) {
     throw new Error(lockedReason)
