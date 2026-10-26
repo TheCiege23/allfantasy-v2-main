@@ -67,8 +67,9 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    *
    * NBA and NHL (2026-10-19): detected the same way, against `getPlayerIds?sport=NBA|NHL`; seasons
    * keyed by the year they begin; lineup slots mapped onto lib/nba-roster / lib/nhl-roster; minors
-   * carried as taxi. ⚠ PROVEN AGAINST SYNTHETIC FIXTURES ONLY — no NBA/NHL Fantrax league has been
-   * captured or imported live. contracts/fantrax/GAPS.md lists what a real capture must confirm.
+   * carried as taxi. Verified 2026-10-26 against real public pre-draft NBA and NHL leagues
+   * (tests/fixtures/fantrax/*-public-2026.json); rosters, minors and IR remain unproven because
+   * those leagues had not drafted — contracts/fantrax/GAPS.md F-04.
    */
   { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL'] },
   /*

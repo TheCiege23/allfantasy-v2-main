@@ -136,7 +136,17 @@ export function mapFantraxRosterSlots(
     }
     counts.set(key, (counts.get(key) ?? 0) + count)
   }
-  const bench = info.maxTotalReservePlayers
-  if (counts.size > 0 && typeof bench === 'number' && Number.isSafeInteger(bench) && bench > 0) counts.set('BN', bench)
+  /*
+   * The captured NBA league sends no `maxTotalReservePlayers` at all — only 14 total and 10 active —
+   * so its 4 bench seats were dropped. Total minus active is the same remainder the MLB capture
+   * states outright (22 + 8 = 30), so it stands in when the reserve count is absent.
+   */
+  const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
+  const bench = isCount(info.maxTotalReservePlayers)
+    ? info.maxTotalReservePlayers
+    : isCount(info.maxTotalPlayers) && isCount(info.maxTotalActivePlayers)
+      ? info.maxTotalPlayers - info.maxTotalActivePlayers
+      : null
+  if (counts.size > 0 && bench != null && bench > 0) counts.set('BN', bench)
   return { slots: Array.from(counts, ([position, count]) => ({ position, count })), gaps }
 }
