@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/adminAuth"
 import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { prisma } from "@/lib/prisma"
 import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
+import { readCfpSeeds } from "@/lib/playoffs/cfpSeeds"
+import { readNbaCupField } from "@/lib/playoffs/nbaCupSeeds"
 
 export const dynamic = "force-dynamic"
 
@@ -49,6 +51,12 @@ export async function POST(request: Request) {
   }) as { id: string; sport: string; seasonYear: number; series: Row[] } | null
   if (!challenge || !["ncaaf", "nba_cup"].includes(challenge.sport)) {
     return NextResponse.json({ ok: false, error: "Single-game bracket pool not found." }, { status: 404 })
+  }
+  const field = challenge.sport === "ncaaf"
+    ? await readCfpSeeds(challenge.seasonYear)
+    : await readNbaCupField(challenge.seasonYear)
+  if (!field) {
+    return NextResponse.json({ ok: false, error: "Official tournament field has not been published." }, { status: 409 })
   }
   const byNumber = new Map(challenge.series.map((row) => [row.seriesNumber, row]))
   const game = byNumber.get(seriesNumber)
