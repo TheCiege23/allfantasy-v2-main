@@ -39,6 +39,8 @@ import { filterMessagesByBlocked } from '@/lib/moderation/SafetyVisibilityResolv
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
 import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
+import { handleChimmyPrivateMessage } from '@/lib/survivor/chimmyHandler'
+import { isSurvivorChimmyAsk } from '@/lib/survivor/survivorRulesAnswers'
 import { messageInLeagueChannel, parseLeagueChatChannel, withLeagueChannel } from '@/lib/league-chat/leagueChatChannels'
 
 function toStringValue(value: unknown, fallback = '') {
@@ -424,11 +426,16 @@ export async function POST(req: NextRequest) {
       try { sgReply = (await activateSGLivePower(leagueId, userId, message))?.reply ?? null }
       catch (error) { sgReply = error instanceof Error ? error.message : 'Power activation failed.' }
     }
+    // In a Survivor league, rules questions and questions about your own game go to the Survivor
+    // host, which answers from this league's settings; everything else stays with general Chimmy.
+    const survivorAsk = !sgReply && !voteResult?.handled && isSurvivorChimmyAsk(message) && await isSurvivorLeague(leagueId)
     const replyText = sgReply ?? (voteResult?.handled
       ? voteResult.ok
         ? voteResult.message ?? 'Your vote was recorded privately.'
         : `${voteResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`
-      : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } }))
+      : survivorAsk
+        ? await handleChimmyPrivateMessage(leagueId, userId, message)
+        : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } }))
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },
