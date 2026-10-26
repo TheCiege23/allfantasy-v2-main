@@ -41,6 +41,7 @@ import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAu
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
+import { RolloverWizard } from '@/components/core-app/commissioner/RolloverWizard'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { DisputeDesk } from '@/components/disputes/DisputeDesk'
@@ -251,6 +252,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
 
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
+      {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />

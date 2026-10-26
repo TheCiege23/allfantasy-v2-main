@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   corrections: vi.fn(),
   inactive: vi.fn(),
   payouts: vi.fn(),
+  rollover: vi.fn(),
   prisma: { redraftTradeProposal: { findMany: vi.fn() }, redraftRoster: { findMany: vi.fn() } },
 }))
 
@@ -16,10 +17,12 @@ vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({ readStatCorrections: m.corrections }))
 vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ readInactiveManagerView: m.inactive }))
 vi.mock('@/lib/payouts/payoutService', () => ({ readPayoutOvercommitment: m.payouts }))
+vi.mock('@/lib/season-rollover/rolloverService', () => ({ readRolloverDue: m.rollover }))
 
 import {
   detectInactiveTeamsToManage,
   detectPayoutOvercommitment,
+  detectRolloverDue,
   detectTradesInReview,
   detectUnappliedStatCorrection,
   readCommissionerFeatureTasks,
@@ -106,10 +109,22 @@ describe('detectPayoutOvercommitment', () => {
   })
 })
 
+describe('detectRolloverDue', () => {
+  it('fires once the season is over and unrenewed, and links to the wizard', () => {
+    const t = detectRolloverDue('L 1', { season: 2026 })!
+    expect(t.sourceKey).toBe('season-rollover:2026:v1')
+    expect(t.title).toBe('Set up the 2027 season')
+    expect(t.relatedLinks[0].href).toBe('/core/commissioner?league=L%201#ch-rollover')
+    expect(t.automationCandidate).toBe(false)
+    expect(detectRolloverDue('L', null)).toBeNull()
+  })
+})
+
 describe('readCommissionerFeatureTasks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     m.payouts.mockResolvedValue(null)
+    m.rollover.mockResolvedValue(null)
     m.corrections.mockResolvedValue({
       covered: true,
       extended: { enabled: false, available: false, refusal: null, windowDays: 6 },
@@ -161,6 +176,11 @@ describe('readCommissionerFeatureTasks', () => {
   it('files the payout task when the weekly prizes outrun the pot', async () => {
     m.payouts.mockResolvedValueOnce({ potCents: 10_000, overCommittedCents: 2_000, season: 2026 })
     expect((await readCommissionerFeatureTasks('L', NOW)).map((t) => t.sourceKey)).toContain('payout-overcommitted:2026:v1')
+  })
+
+  it('files the rollover task when the season is over and unrenewed', async () => {
+    m.rollover.mockResolvedValueOnce({ season: 2026 })
+    expect((await readCommissionerFeatureTasks('L', NOW)).map((t) => t.sourceKey)).toContain('season-rollover:2026:v1')
   })
 
   it('a failed payout read throws too', async () => {
