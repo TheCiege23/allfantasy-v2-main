@@ -24,7 +24,7 @@ export function SurvivorStatusCard({ card }: { card: Card }) {
         <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {card.facts.map(fact => (
             <div key={fact.label} className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <dt className="text-[10px] uppercase tracking-wider text-white/45">{fact.label}</dt>
+              <dt className="text-[11px] uppercase tracking-wider text-white/45">{fact.label}</dt>
               <dd className="mt-0.5 text-[13px] font-semibold text-white">{fact.value}</dd>
             </div>
           ))}
