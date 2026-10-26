@@ -47,6 +47,7 @@ export function getPlayoffSportTitle(sport: PlayoffSport | "fifa"): string {
    */
   if (sport === "mlb") return "MLB Postseason Pool"
   if (sport === "ncaaf") return "College Football Playoff Pool"
+  if (sport === "nba_cup") return "NBA Cup Bracket League"
   return "FIFA World Cup Pool"
 }
 
