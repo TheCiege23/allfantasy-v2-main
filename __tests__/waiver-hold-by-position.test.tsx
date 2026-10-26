@@ -151,6 +151,19 @@ describe('the holds', () => {
     expect(holds.get('qb')!.until.toISOString()).toBe(new Date(ago(30).getTime() + 48 * HOUR).toISOString())
   })
 
+  it('🛑 never takes a position from a bare provider externalId: that is a different person', async () => {
+    m.prisma.waiverTransaction.findMany.mockResolvedValue([{ dropPlayerId: '9228', processedAt: ago(1), rosterId: 'r1' }])
+    // A Rolling Insights row whose own number happens to be 9228 — an offensive tackle, not Sleeper 9228.
+    m.prisma.sportsPlayer.findMany.mockImplementation(async ({ where }: { where: { OR: Array<Record<string, { in: string[] }>> } }) => {
+      const asked = JSON.stringify(where)
+      expect(asked).not.toMatch(/"externalId":\{"in":\["9228"\]/)
+      return [{ id: 'ri-row', externalId: '9228', sleeperId: null, position: 'K' }]
+    })
+    const holds = await loadDroppedPlayerHolds('L', policy({ K: 0 }), { now: NOW })
+    // The impostor's K is not used: the player keeps the league's 24-hour hold.
+    expect([...holds.keys()]).toEqual(['9228'])
+  })
+
   it('reads drops as far back as the longest period, and positions by every id a roster stores', async () => {
     m.prisma.waiverTransaction.findMany.mockResolvedValue([
       { dropPlayerId: 'sp-uuid', processedAt: ago(1), rosterId: 'r1' },
@@ -160,14 +173,14 @@ describe('the holds', () => {
     ])
     m.prisma.sportsPlayer.findMany.mockResolvedValue([
       { id: 'sp-uuid', externalId: 'x', sleeperId: null, position: 'K' },
-      { id: 'other', externalId: '4046', sleeperId: null, position: 'QB' },
+      { id: 'other', externalId: 'sleeper:4046', sleeperId: null, position: 'QB' },
     ])
     m.prisma.player.findMany.mockResolvedValue([{ id: 'ply-1', position: 'DST' }])
     const holds = await loadDroppedPlayerHolds('L', policy({ K: 0, DEF: 0, QB: 48 }), { now: NOW })
     const where = m.prisma.waiverTransaction.findMany.mock.calls[0][0].where
     expect(where.processedAt.gte.toISOString()).toBe(ago(48).toISOString())
     expect(m.prisma.sportsPlayer.findMany.mock.calls[0][0].where.sport).toBe('NFL')
-    // K and DEF (by its DST spelling) cleared at once; the QB found by external id waits 48; a player
+    // K and DEF (by its DST spelling) cleared at once; the QB found by its Sleeper id waits 48; a player
     // with no position on file takes the league's 24.
     expect([...holds.keys()].sort()).toEqual(['4046', 'nobody'])
   })

@@ -28,6 +28,7 @@
  * league period. FCFS still has no hold for anyone.
  */
 import { prisma } from '@/lib/prisma'
+import { ourIdOrSleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { droppedPlayerHoldPolicy, holdHoursForPosition, maxHoldHours, type DroppedPlayerHoldPolicy } from './hold-by-position'
 
 export {
@@ -104,23 +105,30 @@ export async function loadDroppedPlayerHoldPolicy(
 }
 
 /**
- * The positions of dropped players, by the id the drop recorded. A roster stores whichever id the
- * player was added by, so it is matched as a SportsPlayer id, external id or Sleeper id, then as a
- * Player id. Ids not found are absent (they take the league period). A failed read throws.
+ * The positions of dropped players, by the id the drop recorded: our SportsPlayer row id or a Sleeper
+ * id (the two spellings a native league's player ids come in), then a Player id. Ids not found are
+ * absent (they take the league period). A failed read throws.
+ *
+ * ⚠ NEVER A BARE ID AGAINST `externalId`: there it is a Rolling Insights / CFBD number that collides
+ * with a Sleeper id for a different person (lib/player-identity/externalIdNamespace.ts), and the hold
+ * would take that person's position. `ourIdOrSleeperIdWhere` matches Sleeper ids by `sleeperId` or
+ * `sleeper:<id>` only.
  */
 export async function loadDroppedPlayerPositions(ids: readonly string[], sport: string | null | undefined): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   if (ids.length === 0) return out
   const list = [...ids]
-  const sportWhere = sport ? { sport: String(sport).toUpperCase() } : {}
   const sportsRows = (await prisma.sportsPlayer.findMany({
-    where: { ...sportWhere, OR: [{ id: { in: list } }, { externalId: { in: list } }, { sleeperId: { in: list } }] },
+    where: ourIdOrSleeperIdWhere(list, sport ?? undefined),
     select: { id: true, externalId: true, sleeperId: true, position: true },
   })) as Array<{ id: string; externalId: string | null; sleeperId: string | null; position: string | null }>
   const wanted = new Set(list)
   for (const r of sportsRows) {
     if (!r.position) continue
-    for (const key of [r.id, r.externalId, r.sleeperId]) {
+    // Keyed by the row's own id and its Sleeper id (`sleeper:<id>` read as that id) — never a bare
+    // provider externalId.
+    const sleeper = r.sleeperId ?? (r.externalId?.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null)
+    for (const key of [r.id, sleeper]) {
       if (key && wanted.has(key) && !out.has(key)) out.set(key, r.position)
     }
   }
