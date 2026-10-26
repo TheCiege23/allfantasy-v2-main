@@ -140,3 +140,60 @@ function extractCandidateEntities(text: string): string[] {
     )
   )
 }
+
+/* ─── Storyline Studio hook rewrites (lib/storyline-studio) ────────────────────────────────── */
+
+/**
+ * Trash talk is about fantasy teams and play. These are the shapes that turn it into a personal
+ * attack on the manager — their intelligence, looks, family, job — and a rewrite carrying one is
+ * refused outright, whatever tone was asked for.
+ */
+const PERSONAL_ATTACK_PATTERNS = [
+  /\byou(?:'re| are)\s+(?:a\s+)?(?:stupid|dumb|an?\s+idiot|ugly|fat|worthless|pathetic|a\s+loser|trash|garbage)\b/i,
+  /\b(?:your|his|her|their)\s+(?:wife|husband|girlfriend|boyfriend|mom|mother|dad|father|kids?|family|job|face|weight)\b/i,
+  /\b(?:kill|die|suicide|retard(?:ed)?)\b/i,
+]
+
+export type HookRewriteFact = { key: string; value: string | number }
+
+/**
+ * Is an AI rewrite of a hook still the same facts? Every number in it must be one of the hook's
+ * fact values (names stripped first, since a team called "Gridiron 99" carries a number), it may
+ * not drop a team or player name the facts carry, and it must clear the invented-claim and
+ * personal-attack patterns. `hasProfanity` is the chat's own whole-word filter.
+ */
+export function validateHookRewrite(
+  text: string,
+  facts: readonly HookRewriteFact[],
+  opts: { hasProfanity?: (t: string) => boolean } = {},
+): StoryFactGuardResult {
+  const errors: string[] = []
+  const trimmed = text.trim()
+  if (!trimmed) errors.push('Rewrite is empty.')
+  for (const p of INVENTED_PATTERNS) if (p.test(trimmed)) errors.push('Rewrite contains an invented or certain-outcome claim.')
+  for (const p of PERSONAL_ATTACK_PATTERNS) if (p.test(trimmed)) errors.push('Rewrite attacks a person rather than a team.')
+  if (opts.hasProfanity?.(trimmed)) errors.push('Rewrite contains profanity.')
+
+  const strings = facts
+    .map((f) => (typeof f.value === 'string' ? f.value.trim() : ''))
+    .filter((s) => s.length > 0)
+  let rest = trimmed
+  for (const s of [...strings].sort((a, b) => b.length - a.length)) rest = rest.split(s).join(' ')
+  const allowed = new Set(
+    facts.flatMap((f) => {
+      if (typeof f.value === 'number') {
+        const r = Math.round(f.value * 10) / 10
+        return [Number.isInteger(r) ? String(r) : r.toFixed(1), String(f.value)]
+      }
+      return f.value.match(/\d+(?:\.\d+)?/g) ?? []
+    }),
+  )
+  const unknown = (rest.match(/\d+(?:\.\d+)?/g) ?? []).filter((n) => !allowed.has(n))
+  if (unknown.length > 0) errors.push(`Rewrite has numbers that are not in its facts: ${unknown.join(', ')}`)
+
+  // Names the hook is about must survive — a rewrite that swaps a team is a different claim.
+  const names = facts.filter((f) => /Team$|^team[AB]?$|^player$/.test(f.key) && typeof f.value === 'string').map((f) => String(f.value))
+  for (const n of names) if (!trimmed.includes(n)) errors.push(`Rewrite dropped "${n}".`)
+
+  return { passed: errors.length === 0, errors, warnings: [] }
+}
