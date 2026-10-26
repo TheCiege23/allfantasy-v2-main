@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
@@ -148,7 +149,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
       const next = { ...((row?.settings as Record<string, unknown> | null) ?? {}), ...settingsPatch }
-      await tx.league.update({ where: { id: leagueId }, data: { settings: next } })
+      await tx.league.update({ where: { id: leagueId }, data: { settings: next as Prisma.InputJsonValue } })
       return next
     })
   } else {
