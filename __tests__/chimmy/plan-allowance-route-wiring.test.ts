@@ -34,7 +34,7 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('never charges tokens for a turn the plan included', () => {
-    expect(ROUTE).toMatch(/^\s*if \(!planIncluded\) \{\s*\n\s*try \{[\s\S]{0,400}?const ledger = await spendService\.spendTokensForRule\(/m)
+    expect(ROUTE).toMatch(/^\s*if \(!planIncluded\) \{\s*\n\s*const blocked = requireQuotedChimmyReceipt\(requestReceipt, quotedTokenCost\)\s*\n\s*if \(blocked\) return blocked\s*\n\s*try \{[\s\S]{0,400}?const ledger = await spendService\.spendTokensForRule\(/m)
   })
 
   it('stops before generation if a token price cannot be checked', () => {

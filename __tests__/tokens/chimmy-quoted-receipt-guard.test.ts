@@ -10,4 +10,5 @@ it('refuses a paid request without both the verified quote price and durable rec
 })
 it('accepts exact quoted prices, including a server-authorized zero-cost admin action',()=>{
  expect(requireQuotedChimmyReceipt(receipt,3)).toBeNull();expect(requireQuotedChimmyReceipt(receipt,0)).toBeNull()
+ expect(requireQuotedChimmyReceipt(undefined,0)).toBeNull()
 })
