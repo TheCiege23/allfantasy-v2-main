@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   claim: vi.fn(),
   applyAssets: vi.fn(),
   createAfLeagueTrade: vi.fn(),
+  hold: vi.fn(async () => false),
 }))
 
 vi.mock('@/lib/prisma', () => {
@@ -69,6 +70,7 @@ vi.mock('@/lib/league-trade-engine/tradeAudit', () => ({
   logAfTradeAudit: vi.fn(),
 }))
 vi.mock('@/lib/integrity/enqueueCollusionScan', () => ({ enqueueCollusionScan: vi.fn() }))
+vi.mock('@/lib/integrity/holdFlaggedTrades', () => ({ shouldHoldAcceptedTrade: h.hold }))
 vi.mock('@/lib/roster-legality/rosterTransactionGates', () => ({ assertRosterTransactionsAllowed: vi.fn().mockResolvedValue({ ok: true }) }))
 vi.mock('@/lib/analytics/recordAnalyticsEvent', () => ({ recordProductEvent: vi.fn() }))
 vi.mock('@/lib/league-events/publisher', () => ({ publishLeagueFanoutEvent: vi.fn().mockResolvedValue(undefined) }))
@@ -212,6 +214,23 @@ describe('accept: the deadline binds at acceptance', () => {
     setWeek(17, 'complete')
     h.tradeFindFirst.mockResolvedValue(pendingTrade())
     await expect(acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })).resolves.toEqual({ status: 'awaiting_commissioner' })
+  })
+})
+
+describe('accept: "hold flagged trades" (lib/integrity/holdFlaggedTrades.ts)', () => {
+  it('a flagged instant trade is held for commissioner review and does not settle', async () => {
+    h.hold.mockResolvedValueOnce(true)
+    h.tradeFindFirst.mockResolvedValue(pendingTrade({ reviewType: 'instant' }))
+    await expect(acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })).resolves.toEqual({ status: 'awaiting_commissioner' })
+    expect(h.hold).toHaveBeenCalledWith(expect.objectContaining({ leagueId: L, ref: { kind: 'af', tradeId: 't1' } }))
+    expect(h.applyAssets).not.toHaveBeenCalled()
+    expect(h.tradeUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'awaiting_commissioner' }) }))
+  })
+
+  it('a trade already going to the commissioner is not scanned twice', async () => {
+    h.tradeFindFirst.mockResolvedValue(pendingTrade({ reviewType: 'commissioner' }))
+    await acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })
+    expect(h.hold).not.toHaveBeenCalled()
   })
 })
 
