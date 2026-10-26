@@ -19,6 +19,8 @@ import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
@@ -415,6 +417,13 @@ export type TradesData = {
   grades: SectionState<GradedTrade[]>
   deadline: SectionState<TradeDeadline>
   /**
+   * The deadline the ENGINE enforces (lib/trade-deadline), worded as a countdown. `deadline` above is
+   * the import snapshot's week, which native leagues never carry; this is the verdict every trade path
+   * checks, so the chip can never call trades open when a proposal would be refused. Null when it could
+   * not be read — the chip then falls back to `deadline`.
+   */
+  deadlineCountdown?: TradeDeadlineCountdown | null
+  /**
    * The nightly trade agent's ideas for this manager (design step 9): deals the one grade reads C for
    * both sides, on which both rosters gain. Suggest only — nothing is sent, and the partner is not told.
    * ABSENT until `trade_agent_suggestions` exists, so the screen shows nothing before the migration.
@@ -757,6 +766,7 @@ export async function getTradesData(
     ...pendingOffers,
     grades,
     deadline: resolveDeadline(league.settings),
+    deadlineCountdown: await loadTradeDeadlineCountdown(league.id).catch(() => null),
     ...agentIdeas,
   }
 

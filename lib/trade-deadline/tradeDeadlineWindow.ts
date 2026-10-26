@@ -49,6 +49,8 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { deadlinePassed, deadlinePassedMessage, readDeadlineAt } from './tradeDeadlineTime'
+import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { tradeDeadlineCountdown, type TradeDeadlineCountdown } from './tradeDeadlineCountdown'
 
 export type TradeDeadlineLeague = {
   id: string
@@ -199,4 +201,42 @@ export async function evaluateRedraftTradeDeadline(
 /** The refusal text, naming whichever limit closed trades. */
 export function tradeDeadlinePassedMessage(verdict: Pick<TradeDeadlineVerdict, 'by' | 'deadlineWeek' | 'deadlineAt' | 'timezone'>): string {
   return deadlinePassedMessage(verdict)
+}
+
+/**
+ * The deadline for a league by id, read exactly as the AF league engine reads it at acceptance —
+ * `resolveLeagueTradeSettings(league).tradeDeadlineWeek`, which prefers the commissioner settings'
+ * week over the column. For a path that has only a league id and must refuse what the engine would
+ * refuse: the draft-room pick trades and the scheduled deadline sweep.
+ */
+export async function evaluateLeagueTradeDeadline(
+  leagueId: string,
+  deps: TradeDeadlineDeps & { leagueDb?: Pick<PrismaClient, 'league'> } = {},
+): Promise<TradeDeadlineVerdict> {
+  const league = await (deps.leagueDb ?? defaultPrisma).league.findUnique({ where: { id: leagueId } })
+  if (!league) return verdictFor({ id: leagueId }, null, null, deps)
+  return resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek, deps)
+}
+
+/**
+ * The countdown a trades screen shows. Reads the window even when only a week is set, so a week-only
+ * deadline can say how many weeks are left. Null when the league does not exist.
+ */
+export async function loadTradeDeadlineCountdown(
+  leagueId: string,
+  deps: TradeDeadlineDeps & { leagueDb?: Pick<PrismaClient, 'league'> } = {},
+): Promise<TradeDeadlineCountdown | null> {
+  const league = await (deps.leagueDb ?? defaultPrisma).league.findUnique({ where: { id: leagueId } })
+  if (!league) return null
+  const verdict = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek, deps)
+  return tradeDeadlineCountdown(verdict, (deps.now ?? (() => new Date()))())
+}
+
+/** The refusal text when the league's deadline has passed, or null while trades are open. */
+export async function tradeDeadlineRefusal(
+  leagueId: string,
+  deps: TradeDeadlineDeps & { leagueDb?: Pick<PrismaClient, 'league'> } = {},
+): Promise<string | null> {
+  const verdict = await evaluateLeagueTradeDeadline(leagueId, deps)
+  return verdict.passed ? tradeDeadlinePassedMessage(verdict) : null
 }

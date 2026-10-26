@@ -121,6 +121,29 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Pending offers expire once a league's trade deadline passes, on both trade engines, and both sides are
+   * told (lib/trade-deadline/expireOffersAtDeadline.ts). Hourly is the deadline's granularity here; the
+   * engines refuse acceptance from the deadline itself, so nothing can complete in the gap.
+   */
+  let deadlineExpiry: unknown = null
+  try {
+    const { expirePendingOffersAtDeadline } = await import('@/lib/trade-deadline/expireOffersAtDeadline')
+    deadlineExpiry = await withSyncJobRun(
+      { jobName: 'cron-trade-deadline-expiry', trigger: 'cron' },
+      () => expirePendingOffersAtDeadline(),
+      (r) => ({
+        rowsRead: r.leaguesChecked,
+        rowsWritten: r.expiredAf + r.expiredRedraft,
+        errors: r.failures.map((f) => `${f.id}: ${f.error}`),
+        metadata: { leaguesPastDeadline: r.leaguesPastDeadline, expiredAf: r.expiredAf, expiredRedraft: r.expiredRedraft },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] trade deadline expiry sweep failed', e)
+    deadlineExpiry = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */
@@ -236,5 +259,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, exileRollover })
 }

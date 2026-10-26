@@ -73,6 +73,8 @@ import type { ProposalCardInput } from '@/lib/share/proposalCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
+import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
@@ -549,6 +551,8 @@ export function TradeCenter(props: {
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
   deadlineLabel?: string | null
+  /** The enforced deadline as a countdown ("Trade deadline in 3d 4h" / "Trades closed"). Wins over `deadlineLabel`. */
+  deadlineCountdown?: TradeDeadlineCountdown | null
   /** Source platform id (sleeper, espn, …) — drives the platform marks. */
   platform?: string | null
   /** Resolved league type key (redraft, dynasty, keeper, …) — scopes the asset legend. */
@@ -1671,7 +1675,9 @@ export function TradeCenter(props: {
           </span>
           <span className="af-tc-spacer" />
           {props.opponentLabel ? <span className="af-tc-chip">{props.opponentLabel}</span> : null}
-          {props.deadlineLabel ? (
+          {props.deadlineCountdown && props.deadlineCountdown.state !== 'none' ? (
+            <TradeDeadlineCountdownChip countdown={props.deadlineCountdown} className="af-tc-chip af-tc-chip--deadline" />
+          ) : props.deadlineLabel ? (
             <span className="af-tc-chip af-tc-chip--deadline">{props.deadlineLabel}</span>
           ) : null}
         </div>
