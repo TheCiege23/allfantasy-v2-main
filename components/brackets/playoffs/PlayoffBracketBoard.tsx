@@ -44,6 +44,9 @@ const ROUND_LABELS: Record<PlayoffRoundKey, string> = {
   cfp_quarterfinals: "Quarterfinals",
   cfp_semifinals: "Semifinals",
   cfp_championship: "National Championship",
+  cup_quarterfinals: "NBA Cup Quarterfinals",
+  cup_semifinals: "NBA Cup Semifinals",
+  cup_championship: "NBA Cup Championship",
 }
 
 /**
@@ -64,6 +67,7 @@ function conferenceLabel(series: PlayoffSeriesView): string {
   if (series.conference === "finals") {
     if (series.round === "world_series") return "World Series"
     if (series.round === "cfp_championship") return "National Championship"
+    if (series.round === "cup_championship") return "NBA Cup Championship"
     return "Cup Finals"
   }
   return `${series.conference.toUpperCase()} Conference`
