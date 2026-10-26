@@ -156,6 +156,22 @@ describe('PUT /api/commissioner/leagues/[leagueId]/playoffs — writes the colum
     expect(structure().consolation_plays_for_sets_draft_order).toBeUndefined()
   })
 
+  it('the toilet bowl choice is stored on its own, without opting the draft order in', async () => {
+    const res = await put({ consolationPickGoesTo: 'winner' })
+    expect(res.status).toBe(200)
+    expect(structure().consolation_pick_goes_to).toBe('winner')
+    expect(structure().consolation_plays_for_sets_draft_order).toBeUndefined()
+    const both = await panelSave({ consolationPlaysFor: 'pick', consolationPickGoesTo: 'loser' })
+    expect(both.status).toBe(200)
+    expect(structure()).toMatchObject({ consolation_plays_for: 'pick', consolation_pick_goes_to: 'loser', consolation_plays_for_sets_draft_order: true })
+  })
+
+  it('an unknown toilet bowl choice is refused and writes nothing', async () => {
+    const res = await put({ consolationPickGoesTo: 'champion' })
+    expect(res.status).toBe(400)
+    expect(structure().consolation_pick_goes_to).toBeUndefined()
+  })
+
   it('an unknown "plays for" value is refused and writes nothing', async () => {
     const res = await put({ consolationPlaysFor: 'final_standings' })
     expect(res.status).toBe(400)

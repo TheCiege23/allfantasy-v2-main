@@ -120,6 +120,7 @@ export function commissionerPlayoffsPatch(body: PlayoffsPanelBody, league: Commi
 
   // Validated and stored (with the draft-order flag) by the canonical patch.
   if (hasOwn(body, 'consolationPlaysFor')) patch.consolationPlaysFor = body.consolationPlaysFor
+  if (hasOwn(body, 'consolationPickGoesTo')) patch.consolationPickGoesTo = body.consolationPickGoesTo
 
   const settingsMerge: Record<string, unknown> = {}
   const structureChanges: Record<string, unknown> = {}

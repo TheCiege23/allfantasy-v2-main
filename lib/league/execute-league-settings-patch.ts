@@ -84,9 +84,12 @@ import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchup
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { readThirdPlaceGameEnabled, THIRD_PLACE_GAME_SETTINGS_KEY } from '@/lib/playoff-runtime/thirdPlaceGame'
 import {
+  CONSOLATION_PICK_GOES_TO_KEY,
   CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY,
   CONSOLATION_PLAYS_FOR_SETTINGS_KEY,
+  parseConsolationPickGoesTo,
   parseConsolationPlaysFor,
+  type ConsolationPickGoesTo,
   type ConsolationPlaysFor,
 } from '@/lib/playoff-runtime/consolationPlaysFor'
 import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
@@ -619,6 +622,13 @@ export async function executeLeagueSettingsPatch(
     consolationPlaysForToStore = parseConsolationPlaysFor(body.consolationPlaysFor)
     if (!consolationPlaysForToStore) return jsonError("consolationPlaysFor must be 'pick', 'cash' or 'none'", 400)
   }
+  // Toilet bowl only: which finalist takes pick 1 ('loser' = last place, the default; or 'winner').
+  // Stored on its own — it does not opt a league's draft order in; only `consolationPlaysFor` does.
+  let consolationPickGoesToStore: ConsolationPickGoesTo | null = null
+  if (body.consolationPickGoesTo !== undefined) {
+    consolationPickGoesToStore = parseConsolationPickGoesTo(body.consolationPickGoesTo)
+    if (!consolationPickGoesToStore) return jsonError("consolationPickGoesTo must be 'loser' or 'winner'", 400)
+  }
 
   /*
    * Lineups: daily or weekly (NBA/NHL/MLB; lib/redraft/lineupModeSwitch.ts). Checked here, before the
@@ -1131,7 +1141,7 @@ export async function executeLeagueSettingsPatch(
     updatedFieldNames.push(THIRD_PLACE_GAME_SETTINGS_KEY)
   }
 
-  if (consolationPlaysForToStore != null) {
+  if (consolationPlaysForToStore != null || consolationPickGoesToStore != null) {
     const prev = await readCurrentLeagueSettings(leagueId)
     const prevStructure =
       prev.playoff_structure && typeof prev.playoff_structure === 'object' && !Array.isArray(prev.playoff_structure)
@@ -1144,13 +1154,16 @@ export async function executeLeagueSettingsPatch(
           ...prev,
           playoff_structure: {
             ...prevStructure,
-            [CONSOLATION_PLAYS_FOR_SETTINGS_KEY]: consolationPlaysForToStore,
-            [CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY]: true,
+            ...(consolationPlaysForToStore != null
+              ? { [CONSOLATION_PLAYS_FOR_SETTINGS_KEY]: consolationPlaysForToStore, [CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY]: true }
+              : {}),
+            ...(consolationPickGoesToStore != null ? { [CONSOLATION_PICK_GOES_TO_KEY]: consolationPickGoesToStore } : {}),
           },
         } as Prisma.InputJsonValue,
       },
     })
-    updatedFieldNames.push(CONSOLATION_PLAYS_FOR_SETTINGS_KEY)
+    if (consolationPlaysForToStore != null) updatedFieldNames.push(CONSOLATION_PLAYS_FOR_SETTINGS_KEY)
+    if (consolationPickGoesToStore != null) updatedFieldNames.push(CONSOLATION_PICK_GOES_TO_KEY)
   }
 
   const derivedSyncKeys = new Set([

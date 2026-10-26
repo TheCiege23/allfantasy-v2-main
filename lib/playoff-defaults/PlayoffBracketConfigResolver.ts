@@ -8,7 +8,11 @@ import type { SportType } from '@/lib/sport-defaults/types'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
 import { firstRoundByesForTeams, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
-import { readConsolationPlaysFor } from '@/lib/playoff-runtime/consolationPlaysFor'
+import {
+  leagueDraftOrderCarriesOver,
+  readConsolationPickGoesTo,
+  readConsolationPlaysFor,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
 
 export interface PlayoffBracketConfig {
   playoff_team_count: number
@@ -24,6 +28,10 @@ export interface PlayoffBracketConfig {
   toilet_bowl_enabled: boolean
   championship_length: number
   consolation_plays_for: string
+  /** Toilet bowl: which finalist takes pick 1 when it plays for the pick ('loser' | 'winner'). */
+  consolation_pick_goes_to: string
+  /** False for a redraft league: its lower bracket never moves next season's draft order. */
+  draft_order_carries_over: boolean
   sport: string
   variant: string | null
 }
@@ -43,6 +51,8 @@ export async function getBracketConfigForLeague(leagueId: string): Promise<Playo
       playoffWeeksPerRound: true,
       playoffSeedingRule: true,
       playoffLowerBracket: true,
+      leagueType: true,
+      isDynasty: true,
     },
   })
   if (!league) return null
@@ -132,6 +142,8 @@ export async function getBracketConfigForLeague(leagueId: string): Promise<Playo
     ),
     // The reader next season's draft order uses too (lib/playoff-runtime/consolationPlaysFor.ts).
     consolation_plays_for: readConsolationPlaysFor(settings, sport, variant),
+    consolation_pick_goes_to: readConsolationPickGoesTo(settings),
+    draft_order_carries_over: leagueDraftOrderCarriesOver({ leagueType: league.leagueType, isDynasty: league.isDynasty }),
     sport,
     variant,
   }

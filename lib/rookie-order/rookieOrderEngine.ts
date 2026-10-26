@@ -24,7 +24,7 @@
  *
  * With `consolation_plays_for = 'pick'` (`lowerBracket.playsForPick`), the non-playoff teams are
  * seated with the lower bracket's result FIRST: a consolation bracket's winner (a toilet bowl's final
- * loser — last place) takes pick 1, and every other non-playoff team follows by `nonPlayoff`, the
+ * loser — last place — or, with `pickGoesTo: 'winner'`, that final's winner) takes pick 1, and every other non-playoff team follows by `nonPlayoff`, the
  * reverse-standings order they get without the setting. The playoff teams are unchanged. Until the
  * bracket is decided those slots are provisional and the order is never `final`, so automation does
  * not save an order the lower bracket can still change. `cash` / `none` change nothing.
@@ -92,6 +92,10 @@ export type RookieOrderLowerBracket = {
   playsForPick: boolean
   /** Non-playoff teams, best finish first, once the lower bracket is decided; null while it is played. */
   finishOrder: readonly string[] | null
+  /** Toilet bowl only: which finalist picks first. Absent is `loser` (last place). */
+  pickGoesTo?: 'loser' | 'winner'
+  /** The lower bracket's final, when the caller can read it; else the finish order is used. */
+  final?: { winner: string; loser: string } | null
 }
 
 export type RookieOrderInput = {
@@ -375,7 +379,8 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
 
 /**
  * Non-playoff slots when the lower bracket plays for the pick: the team it decided picks FIRST — a
- * consolation bracket's winner, or a toilet bowl's final loser (last place) — and every other
+ * consolation bracket's winner, or a toilet bowl's final loser (last place; its winner with
+ * `pickGoesTo: 'winner'`) — and every other
  * non-playoff team follows in `nonPlayoff`, the same reverse-standings order they get without the
  * setting. Only slot 1 is the bracket's; the rest of its finish order is not used. A result that does
  * not name a non-playoff team (it cannot happen for a native bracket) leaves the standings order alone.
@@ -395,12 +400,23 @@ function lowerBracketSlots(nonPlayoff: RookieOrderTeam[], lower: RookieOrderLowe
     return nonPlayoff.map((t, i) => ({
       ...standings(t, i),
       status: 'provisional',
-      reason: `Waiting on the ${label} — its winner picks first`,
+      reason:
+        lower.mode === 'toilet_bowl'
+          ? `Waiting on the ${label} — its final's ${lower.pickGoesTo === 'winner' ? 'winner' : 'loser'} picks first`
+          : `Waiting on the ${label} — its winner picks first`,
     }))
   }
   const ids = new Set(nonPlayoff.map((t) => t.teamId))
   const named = lower.finishOrder.filter((id) => ids.has(id))
-  const firstId = lower.mode === 'toilet_bowl' ? named.at(-1) : named[0]
+  // A toilet bowl's final loser finishes last and its winner second to last; the final itself is
+  // preferred when the caller read it, so a finish-order tie can never pick the wrong team.
+  const toiletWinner = lower.mode === 'toilet_bowl' && lower.pickGoesTo === 'winner'
+  const firstId =
+    lower.mode !== 'toilet_bowl'
+      ? named[0]
+      : toiletWinner
+        ? (lower.final?.winner ?? (named.length >= 2 ? named.at(-2) : undefined))
+        : (lower.final?.loser ?? named.at(-1))
   const first = nonPlayoff.find((t) => t.teamId === firstId)
   if (!first) return nonPlayoff.map(standings)
   const rest = nonPlayoff.filter((t) => t !== first)
@@ -411,11 +427,13 @@ function lowerBracketSlots(nonPlayoff: RookieOrderTeam[], lower: RookieOrderLowe
       name: first.name,
       group: 'non_playoff',
       status: 'locked',
-      finish: lower.mode === 'toilet_bowl' ? 'Toilet bowl loser' : 'Consolation winner',
+      finish: lower.mode !== 'toilet_bowl' ? 'Consolation winner' : toiletWinner ? 'Toilet bowl winner' : 'Toilet bowl loser',
       reason:
-        lower.mode === 'toilet_bowl'
-          ? 'Lost the toilet bowl final (last place) — picks first'
-          : 'Won the consolation bracket — picks first',
+        lower.mode !== 'toilet_bowl'
+          ? 'Won the consolation bracket — picks first'
+          : toiletWinner
+            ? 'Won the toilet bowl final — picks first'
+            : 'Lost the toilet bowl final (last place) — picks first',
     },
     ...rest.map((t, i) => ({ ...standings(t, i + 1), reason: nonPlayoffReason(method, t, i + 1, rest.length, ctx) })),
   ]
