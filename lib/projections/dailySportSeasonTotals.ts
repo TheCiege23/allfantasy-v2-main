@@ -10,11 +10,13 @@
  * the totals cannot supply scores 0 here and its real value on a game line, so the prior would be biased
  * low for every player who earns it — silently. Hence two gates, both on MAPPED KEYS, never a guess:
  *
- *   1. per SPORT, under the default scoring (`seasonTotalsBlockersForSport` empty): only then does the
- *      writer store a totals prior at all;
- *   2. per LEAGUE, under its own scoring (`leagueAcceptsSeasonTotals`): a commissioner who weights an
- *      unmapped key (an NHL hat-trick bonus) gets no totals prior, and prices from this season alone —
- *      today's behaviour.
+ *   1. per SPORT (`seasonTotalsWritableForSport`): the sport has a mapping table, so the writer stores a
+ *      totals prior at all. It does NOT require the default scoring to map — NBA's default weights the
+ *      doubles, yet a league that zeroes them is exactly priced by its totals;
+ *   2. per LEAGUE, under its own scoring (`leagueAcceptsSeasonTotals`): a league that weights any
+ *      unmapped key (an NHL hat-trick bonus, NBA's default double-double) gets no totals prior, and
+ *      prices from this season alone — today's behaviour. This is the gate that decides; a league on a
+ *      sport's defaults passes it only when `seasonTotalsBlockersForSport` is empty.
  *
  * The per-game derived categories are the ones totals can never supply: NBA double / triple doubles, the
  * MLB quality start, the NHL single-game thresholds and rate bonuses. They are resolved per game by
@@ -29,11 +31,19 @@
  *        goalie games where 2023 had 1,279 and 2024 1,299 — and shutouts are 0 (151 in 2024), while
  *        saves, shots and goals allowed look complete. The keys map; the numbers do not, so goalie rows
  *        carry no group and keep today's behaviour. `shootout_goals` is 0 in every stored season, so
- *        `so_g` is left unmapped too.
- *   NBA  DOES NOT. `dbl_dbl` (1.5) and `trpl_dbl` (3) are default-weighted and per-game derived. The
- *        other categories map — the table is kept so the gate, not a missing entry, says why.
- *   MLB  DOES NOT. `qs` (3) is default-weighted and per-game derived; `pitching.IP` is stored as a
- *        string in baseball notation. No table: there is nothing to gate.
+ *        `so_g` is left unmapped too. It is the VENDOR'S number, not our ingestion's: the raw
+ *        `regular_season` block kept verbatim in `fantasy_stat_lines` carries the same values (Vejmelka
+ *        64 GP, 20-8-1), there is no other key or nesting, and `/live` sends `shutouts: 0` on 2026
+ *        shutouts too (contracts/rolling-insights/GAPS.md, "NHL 2025 `player_season_stats`").
+ *   NBA  PER LEAGUE. `dbl_dbl` (1.5) and `trpl_dbl` (3) are default-weighted and per-game derived, so a
+ *        league on the defaults declines; one that weights neither takes the prior. Every other NBA
+ *        category maps, and all 591 2025 rows carry all eleven keys as numbers (league totals 284,482
+ *        points against 280,002 in 2024, so a full season).
+ *   MLB  OFF. The default weights `qs` (4, per-game derived) AND `era` (-1): a game line scores that
+ *        game's ERA, and no season total says what the per-game ERAs averaged. A league zeroing both could
+ *        in principle qualify, but a row's one `games_played` covers batting and pitching appearances
+ *        together (a two-way player, a position player who pitched), and `pitching.IP` is a baseball-
+ *        notation string ("55.1" = 55⅓). Not mapped until those are settled; no table, nothing to gate.
  *
  * The vendor spellings are the ones the game-line normalizer measured against fixtures/live.{NBA,NHL}
  * .json; the season rows use the same names (read from the stored rows, not probed).
@@ -134,9 +144,9 @@ export function seasonTotalsUnmappedKeys(
 }
 
 /**
- * Gate 1: the sport's DEFAULT scoring is fully mapped. Only then is a totals prior stored at all.
- * Returns the blocking keys (empty = qualifies); a sport without a mapping or a config is blocked by
- * `['no_mapping']`.
+ * The keys that keep a league on the sport's DEFAULT scoring from taking the totals prior (empty = a
+ * default league takes it). A sport without a mapping or a config is blocked by `['no_mapping']`.
+ * Informational for the writer since per-league qualification: see `seasonTotalsWritableForSport`.
  */
 export function seasonTotalsBlockersForSport(sport: string): string[] {
   const s = sport.toUpperCase()
@@ -144,6 +154,15 @@ export function seasonTotalsBlockersForSport(sport: string): string[] {
   const rules = resolveLeagueScoringRules({ sport: s, settings: null })
   if (!rules) return ['no_mapping']
   return seasonTotalsUnmappedKeys(s, rules)
+}
+
+/**
+ * Gate 1: the sport has a totals mapping (and a scoring config), so the writer stores a totals prior.
+ * Whether any LEAGUE uses it is gate 2's call, per league.
+ */
+export function seasonTotalsWritableForSport(sport: string): boolean {
+  const s = sport.toUpperCase()
+  return Boolean(SEASON_TOTALS_GROUPS[s]) && resolveLeagueScoringRules({ sport: s, settings: null }) != null
 }
 
 /** Gate 2: this league's own scoring weights nothing the stored totals blob cannot supply. */

@@ -39,6 +39,7 @@ function makeDb(rows: ReturnType<typeof line>[]) {
     db: {
       playerGameStat: { findFirst: vi.fn(async () => (rows.length ? { season: Math.max(...rows.map((r) => r.season)) } : null)), findMany },
       playerIdentityMap: { findMany: vi.fn(async () => [{ id: 'p1', position: 'C' }]) },
+      playerSeasonStats: { findMany: vi.fn(async () => []) },
       sportsDataCache: {
         upsert: vi.fn(async (a: { where: { cacheKey: string }; create: { data: unknown; expiresAt: Date } }) => {
           cache.set(a.where.cacheKey, { data: a.create.data, expiresAt: a.create.expiresAt })
@@ -57,8 +58,8 @@ describe('writeDailySportFormCache / readDailySportForm', () => {
     const now = new Date('2026-10-25T07:00:00Z')
     const r = await writeDailySportFormCache(t.db, 'NBA', { now })
     expect(r).toMatchObject({ sport: 'NBA', season: 2026, rowsRead: 2, players: 1, written: true })
-    // No 2025 rows: nothing is written for last season, and the run says so.
-    expect(r.prior).toEqual({ season: 2025, players: 0, written: false, reason: 'no_prior_season_game_lines' })
+    // No 2025 game lines and no 2025 totals: nothing is written for last season, and the run says so.
+    expect(r.prior).toEqual({ season: 2025, players: 0, written: false, reason: 'no_prior_season_totals', basis: 'season_totals' })
     expect([...t.cache.keys()].sort()).toEqual([dailyFormKey('NBA', 2026), dailyFormPointerKey('NBA')].sort())
     expect(await readPriorDailySportForm(t.db, 'NBA', 2026, now)).toBeNull()
     const blob = await readDailySportForm(t.db, 'NBA', now)
@@ -168,9 +169,40 @@ describe('last season from season totals, when it has no game lines', () => {
     expect(prior?.players.p1).toMatchObject({ sg: 2, ss: { g: 2 } })
   })
 
-  it('NBA does not qualify, so its season totals are never read', async () => {
-    const t = nhlDb([line('1', 'p1', '2026-10-21', 20)])
-    const r = await writeDailySportFormCache(t.db, 'NBA', { now: new Date('2026-10-25T07:00:00Z') })
+  it('NBA: the totals prior is written too; each league decides whether to use it', async () => {
+    const t = makeDb([line('1', 'p1', '2026-10-21', 20)])
+    const nba = {
+      playerId: 'ri-907', gamesPlayed: 70, team: 'Denver Nuggets',
+      stats: {
+        points: 700, total_rebounds: 140, assists: 70, steals: 7, blocks: 7, turnovers: 14,
+        three_points_made: 35, field_goals_made: 250, field_goals_attempted: 500,
+        free_throws_made: 165, free_throws_attempted: 200, games_played: 70,
+      },
+    }
+    const seasonFindMany = vi.fn(async () => [nba])
+    const db = t.db as unknown as Record<string, unknown>
+    db.playerSeasonStats = { findMany: seasonFindMany }
+    db.playerIdentityMap = {
+      findMany: vi.fn(async (a: { where: { rollingInsightsId?: unknown } }) =>
+        a.where.rollingInsightsId ? [{ id: 'p1', position: 'C', rollingInsightsId: 'ri-907' }] : [{ id: 'p1', position: 'C' }],
+      ),
+    }
+    const now = new Date('2026-10-25T07:00:00Z')
+    const r = await writeDailySportFormCache(t.db, 'NBA', { now })
+    expect(r.prior).toEqual({ season: 2025, players: 1, written: true, basis: 'season_totals' })
+    expect(seasonFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sport: 'NBA', season: '2025', seasonType: 'regular', source: 'rolling_insights' } }),
+    )
+    const prior = await readPriorDailySportForm(t.db, 'NBA', 2026, now)
+    expect(prior).toMatchObject({ season: 2025, basis: 'season_totals', players: { p1: { sg: 70, ss: { pts: 700, reb: 140 } } } })
+    expect(prior?.mappedKeys).not.toContain('dbl_dbl')
+  })
+
+  it('MLB has no mapping, so its season totals are never read', async () => {
+    const mlb = { ...line('1', 'p1', '2026-10-21', 0), normalizedStatMap: { seasonType: 'regular', group: 'batting', stats: { HR: 1 } } } as unknown as ReturnType<typeof line>
+    const t = nhlDb([mlb])
+    const r = await writeDailySportFormCache(t.db, 'MLB', { now: new Date('2026-10-25T07:00:00Z') })
+    expect(r.written).toBe(true)
     expect(r.prior).toEqual({ season: 2025, players: 0, written: false, reason: 'no_prior_season_game_lines' })
     expect(t.seasonFindMany).not.toHaveBeenCalled()
   })
