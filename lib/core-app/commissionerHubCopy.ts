@@ -16,6 +16,8 @@
  */
 
 const ES: Record<string, string> = {
+  // ── Storyline Studio (components/core-app/commissioner/StorylineStudio.tsx keeps its own strings) ──
+  'Storyline Studio': 'Estudio de historias',
   // ── Header, gate, footer ──────────────────────────────────────────────
   '← All leagues you run': '← Todas las ligas que diriges',
   'Core · Commissioner': 'Core · Comisionado',

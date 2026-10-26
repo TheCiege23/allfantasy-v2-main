@@ -39,6 +39,7 @@ import { AutomationRecipes } from '@/components/core-app/commissioner/Automation
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
+import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
@@ -538,6 +539,15 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       */}
       <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
         <DeadlineAutopilot leagueId={league.id} />
+      </HubSection>
+
+      {/*
+        Storyline Studio — outside the depth gate: the card reads the AF Commissioner plan itself and
+        shows the upsell without it (the route enforces the plan). Every league: an AllFantasy league
+        can post and auto-post; an imported one gets Copy, shaped for its own platform's chat.
+      */}
+      <HubSection id="ch-storylines" title={t('Storyline Studio')}>
+        <StorylineStudio leagueId={league.id} />
       </HubSection>
 
       {/*

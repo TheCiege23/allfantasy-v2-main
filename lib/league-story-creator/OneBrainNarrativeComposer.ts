@@ -256,3 +256,52 @@ function buildLongVersion(
     .trim()
     .slice(0, 800)
 }
+
+/* ─── Storyline Studio: re-voice one hook (lib/storyline-studio) ───────────────────────────── */
+
+export type HookTone = "announcer" | "trash_talk" | "neutral"
+
+const TONE_BRIEF: Record<HookTone, string> = {
+  announcer: "a big-game TV announcer: energetic, dramatic, one or two sentences",
+  trash_talk:
+    "playful league trash talk aimed at the TEAMS and how they play — never at the managers as people (no looks, intelligence, family, job)",
+  neutral: "a clean, neutral one- or two-sentence summary",
+}
+
+/**
+ * Rewrite one Storyline Studio hook in a tone. The hook's facts are the ONLY material: same teams,
+ * same players, same numbers. The caller must run the result through `validateHookRewrite`
+ * (./StoryFactGuard.ts) and fall back to the template text when it fails — this returns the model's
+ * text, or null when the model gave nothing usable.
+ */
+export async function rewriteHookInTone(input: {
+  text: string
+  facts: Array<{ key: string; value: string | number }>
+  tone: HookTone
+  language: "en" | "es"
+}): Promise<string | null> {
+  const systemPrompt = `You rewrite one fantasy football league chat line in a requested tone.
+RULES:
+- Use ONLY the facts given. Keep every team name and player name exactly as written.
+- Do not add any number that is not in the facts. Do not change any number.
+- Do not invent results, injuries, quotes or predictions. No guarantees.
+- Talk about fantasy teams and their play, never insult a manager as a person.
+- No profanity. Under 280 characters.
+- Write in ${input.language === "es" ? "Spanish (use «reclamo», never «waiver», for waiver concepts)" : "English"}.
+- Output JSON only: {"text": "..."}`
+  const userPrompt = `Tone: ${TONE_BRIEF[input.tone]}
+Facts (JSON): ${JSON.stringify(input.facts)}
+Original line: ${input.text}`
+  const res = await openaiChatJson({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: input.tone === "neutral" ? 0.2 : 0.7,
+    maxTokens: 220,
+  })
+  if (!res.ok) return null
+  const json = parseJsonContentFromChatCompletion(res.json)
+  const text = json && typeof json === "object" && typeof (json as { text?: unknown }).text === "string" ? (json as { text: string }).text.trim() : ""
+  return text ? text.slice(0, 400) : null
+}

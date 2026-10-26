@@ -97,6 +97,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'sleeper-hosted-draft-history': () => import('../sleeper-hosted-draft-history/handler'),
   'snapshots': () => import('../snapshots/handler'),
   'standings': () => import('../standings/handler'),
+  'storylines': () => import('../storylines/handler'),
   'survivor': () => import('../survivor/handler'),
   'tournament-context': () => import('../tournament-context/handler'),
   'trades': () => import('../trades/handler'),
