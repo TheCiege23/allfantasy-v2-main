@@ -29,7 +29,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: async () => h.league },
     leagueWaiverSettings: { findUnique: async () => ({ waiverEngineConfig: h.engineConfig }) },
     redraftSeason: { findFirst: async () => h.season, count: async () => h.completedSeasons },
-    redraftRoster: { findMany: async () => h.redraftRosters },
+    redraftRoster: { findMany: async () => h.redraftRosters, updateMany: async () => ({ count: 1 }) },
     waiverClaim: {
       findMany: async () => h.claims,
       update: h.claimUpdate,

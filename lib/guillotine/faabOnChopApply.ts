@@ -3,6 +3,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { splitChoppedFaab } from './faabOnChop'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 export type FaabRedistribution = { pool: number; perTeam: number; survivors: number; shares: Map<string, number> }
 
@@ -45,6 +46,7 @@ export async function redistributeChoppedFaab(input: {
     for (const [rosterId, amount] of split.shares) {
       if (amount > 0) await tx.roster.update({ where: { id: rosterId }, data: { faabRemaining: { increment: amount } } })
     }
+    await copyGenericFaabToRedraft(tx, [...input.choppedRosterIds, ...split.shares.keys()])
     return { pool: split.pool, perTeam: Math.floor(split.pool / survivors.length), survivors: survivors.length, shares: split.shares }
   })
 }
