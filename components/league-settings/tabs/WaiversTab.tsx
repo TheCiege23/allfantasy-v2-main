@@ -41,6 +41,8 @@ import {
 } from '@/lib/waiver-wire/hub-waiver-options'
 import { effectiveFaabRolloverRule, renewalFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
 import { isSurvivorSettingsLeague } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+import { HOLD_HOURS_BY_POSITION_KEY, readHoldHoursByPosition } from '@/lib/waiver-wire/hold-by-position'
+import { WaiverHoldByPosition } from '@/components/league-settings/WaiverHoldByPosition'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 /**
@@ -196,6 +198,9 @@ export function WaiversSection({
       rolloverFamily,
     ),
   )
+  const [holdByPosition, setHoldByPosition] = useState<Record<string, number>>(() =>
+    readHoldHoursByPosition(savedOr<unknown>(leagueId, 'waiverHoldHoursByPosition', null)),
+  )
   const touchedRef = useRef(new Set<string>())
   useEffect(() => {
     let live = true
@@ -211,6 +216,7 @@ export function WaiversSection({
           playoffWaiverRule?: string | null
           freeAgencyMode?: string | null
           faabRolloverRule?: string | null
+          waiverEngineConfig?: Record<string, unknown> | null
         }
         if (!live) return
         if (!touchedRef.current.has('zero') && typeof eff.allowZeroFaabBid === 'boolean') setAllowZeroBid(eff.allowZeroFaabBid)
@@ -221,6 +227,9 @@ export function WaiversSection({
         if (!touchedRef.current.has('faMode')) setFreeAgencyMode(readFreeAgencyMode(eff.freeAgencyMode))
         if (!touchedRef.current.has('rollover')) {
           setFaabRollover(effectiveFaabRolloverRule(readFaabRolloverRule(eff.faabRolloverRule), rolloverFamily))
+        }
+        if (!touchedRef.current.has('holdByPosition')) {
+          setHoldByPosition(readHoldHoursByPosition(eff.waiverEngineConfig?.[HOLD_HOURS_BY_POSITION_KEY]))
         }
       } catch {
         // The defaults stay; a save still writes what the commissioner picks.
@@ -553,6 +562,20 @@ export function WaiversSection({
           />
           <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.periodHint')}</span>
         </label>
+
+        <WaiverHoldByPosition
+          sport={ctx.league.sport ?? null}
+          value={holdByPosition}
+          disabled={!canEdit}
+          fcfs={waiverType === 'fcfs'}
+          inputClassName={SETTINGS_INPUT_CLASS}
+          labelClassName={SETTINGS_LABEL_CLASS}
+          onChange={(next) => {
+            touchedRef.current.add('holdByPosition')
+            setHoldByPosition(next)
+            queuePatch({ waiverHoldHoursByPosition: next })
+          }}
+        />
 
         <div className="border-t border-white/[0.06] pt-4">
           <div className="flex items-center gap-3">
