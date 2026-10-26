@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { buildProjectedPlayoffSeries } from "@/lib/playoffs/playoffBracketProjection"
 import { getPlayoffRoundOrder } from "@/lib/playoffs/playoffTemplate"
+import { visiblePlayoffPicks } from "@/lib/playoffs/shareVisibility"
 import type { PlayoffPickView, PlayoffSeriesView, PlayoffSport } from "@/lib/playoffs/types"
 import PlayoffBracketBoard from "@/components/brackets/playoffs/PlayoffBracketBoard"
 
@@ -54,22 +55,13 @@ export default async function SharedPlayoffEntryPage(props: {
     }),
     (prisma as any).playoffBracketPick.findMany({ where: { entryId } }),
   ])
-  const now = Date.now()
-  // Reveal a pick only after its own game locks. Later-round picks remain private.
-  const allowedSeriesIds = new Set(
-    (rawSeries as Array<{ id: string; startsAt: Date | null; status: string }>)
-      .filter((row) => row.status === "in_progress" || row.status === "final" ||
-        (row.startsAt && new Date(row.startsAt).getTime() <= now))
-      .map((row) => row.id),
-  )
-  const visiblePicks = (rawPicks as PlayoffPickView[])
-    .filter((pick) => allowedSeriesIds.has(pick.seriesId))
   const series = (rawSeries as Array<Record<string, unknown>>).map((row) => ({
     ...row,
     startsAt: row.startsAt instanceof Date ? row.startsAt.toISOString() : null,
     nextGameAt: row.nextGameAt instanceof Date ? row.nextGameAt.toISOString() : null,
     lastSyncedAt: row.lastSyncedAt instanceof Date ? row.lastSyncedAt.toISOString() : null,
   })) as PlayoffSeriesView[]
+  const visiblePicks = visiblePlayoffPicks(series, rawPicks as PlayoffPickView[])
   const projected = buildProjectedPlayoffSeries(series, visiblePicks)
   const hidden = rawPicks.length - visiblePicks.length
 
