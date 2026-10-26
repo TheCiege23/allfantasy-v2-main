@@ -57,8 +57,13 @@ describe('the settings hub', () => {
     fireEvent.change(sel, { target: { value: 'carry_over' } })
     expect(patches).toEqual([{ waiverFaabRollover: 'carry_over' }])
     cleanup()
-    const dyn = renderHub({ isDynasty: true })
+    const dyn = renderHub({ leagueVariant: 'dynasty', isDynasty: true })
     expect((dyn.getByTestId('league-settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over')
+  })
+
+  it('a keeper league not flagged isDynasty shows "carry over" — the classifier the renewal uses', () => {
+    const r = renderHub({ leagueVariant: 'keeper', isDynasty: false })
+    expect((r.getByTestId('league-settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over')
   })
 
   it('FAAB rollover is hidden without FAAB', () => {
@@ -106,6 +111,12 @@ describe('the in-league commissioner settings', () => {
     fireEvent.change(roll, { target: { value: 'carry_over' } })
     expect(save).toHaveBeenCalledWith({ waiverFreeAgencyMode: 'after_run' })
     expect(save).toHaveBeenCalledWith({ waiverFaabRollover: 'carry_over' })
+  })
+
+  it('a keeper league not flagged isDynasty shows the server\'s "carry over" default', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ freeAgencyMode: 'standard', faabRolloverRule: null, faabRolloverDefault: 'carry_over' }) })))
+    const { r } = panel({ waiverType: 'faab', isDynasty: false, leagueType: 'keeper' })
+    await vi.waitFor(() => expect((r.getByTestId('settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over'))
   })
 
   it('reads the stored mode', async () => {

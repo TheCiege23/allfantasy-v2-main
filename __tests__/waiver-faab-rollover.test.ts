@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   effectiveFaabRolloverRule,
   faabBalanceAfterRollover,
+  renewalFamilyForLeague,
   storedFaabRolloverRule,
 } from '@/lib/waiver-wire/faab-rollover'
 import { hubWaiverEngineConfigPatch, parseHubWaiverOptions, readFaabRolloverRule } from '@/lib/waiver-wire/hub-waiver-options'
@@ -35,6 +36,23 @@ describe('the rule a renewal applies', () => {
     expect(storedFaabRolloverRule({ faab_rollover_rule: 'refund' })).toBeNull()
     expect(storedFaabRolloverRule(null)).toBeNull()
     expect(readFaabRolloverRule(undefined)).toBeNull()
+  })
+})
+
+describe('renewalFamilyForLeague: the renew route\'s own classifier', () => {
+  it('a keeper league NOT flagged isDynasty carries rosters (and so carries FAAB by default)', () => {
+    expect(renewalFamilyForLeague({ leagueVariant: 'keeper', isDynasty: false })).toBe('carry_rosters')
+    expect(renewalFamilyForLeague({ leagueVariant: null, settings: { league_type: 'keeper' }, isDynasty: false })).toBe('carry_rosters')
+    expect(effectiveFaabRolloverRule(null, renewalFamilyForLeague({ leagueVariant: 'keeper', isDynasty: false }))).toBe('carry_over')
+  })
+
+  it('the dynasty family carries; a plain redraft resets', () => {
+    expect(renewalFamilyForLeague({ leagueVariant: 'devy', isDynasty: false })).toBe('carry_rosters')
+    expect(renewalFamilyForLeague({ leagueVariant: 'dynasty', isDynasty: true })).toBe('carry_rosters')
+    // As the renew route reads it: an explicit `redraft` variant renews as a redraft even with the flag.
+    expect(renewalFamilyForLeague({ leagueVariant: 'redraft', isDynasty: true })).toBe('redraft')
+    expect(renewalFamilyForLeague({ leagueVariant: 'redraft', isDynasty: false })).toBe('redraft')
+    expect(renewalFamilyForLeague({})).toBe('redraft')
   })
 })
 

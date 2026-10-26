@@ -16,7 +16,7 @@ import {
   type FaabRolloverRule,
   type FreeAgencyMode,
 } from '@/lib/waiver-wire/hub-waiver-options'
-import { effectiveFaabRolloverRule } from '@/lib/waiver-wire/faab-rollover'
+import { effectiveFaabRolloverRule, renewalFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
 
 const WAIVER_TYPES = [
   { value: 'faab', label: 'FAAB bidding' },
@@ -60,17 +60,23 @@ export function WaiverLeagueSettingsPanel({
   // These two live in the waiver-settings row's engine config, read from the effective settings.
   const [freeAgencyMode, setFreeAgencyMode] = useState<FreeAgencyMode>('standard')
   const [faabRollover, setFaabRollover] = useState<FaabRolloverRule | null>(null)
-  // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over.
-  const rolloverDefault = effectiveFaabRolloverRule(null, initialData.isDynasty ? 'carry_rosters' : 'redraft')
+  // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over. The server sends
+  // `faabRolloverDefault` from the renew route's own classifier (renewalFamilyForLeague); this form
+  // has no league variant, so that answer replaces the isDynasty-only first guess as soon as it lands.
+  const [rolloverDefault, setRolloverDefault] = useState<FaabRolloverRule>(() =>
+    effectiveFaabRolloverRule(null, renewalFamilyForLeague({ isDynasty: initialData.isDynasty ?? null })),
+  )
 
   useEffect(() => {
     let live = true
     void fetch(`/api/waiver-wire/leagues/${encodeURIComponent(leagueId)}/settings`, { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
-      .then((eff: { freeAgencyMode?: string | null; faabRolloverRule?: string | null } | null) => {
+      .then((eff: { freeAgencyMode?: string | null; faabRolloverRule?: string | null; faabRolloverDefault?: string | null } | null) => {
         if (!live || !eff) return
         setFreeAgencyMode(readFreeAgencyMode(eff.freeAgencyMode))
         setFaabRollover(readFaabRolloverRule(eff.faabRolloverRule))
+        const fallback = readFaabRolloverRule(eff.faabRolloverDefault)
+        if (fallback) setRolloverDefault(fallback)
       })
       .catch(() => {})
     return () => {
