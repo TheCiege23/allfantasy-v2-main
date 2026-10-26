@@ -64,10 +64,10 @@ describe('readStatCorrections', () => {
     expect((await readStatCorrections('L')).latest).toBeNull()
   })
 
-  it('says an imported or non-NFL league is not covered, without reading reviews', async () => {
+  it('says an imported league, or a sport the check does not cover, is not covered, without reading reviews', async () => {
     m.prisma.league.findUnique.mockResolvedValue({ sport: 'NFL', platform: 'sleeper' })
     expect(await readStatCorrections('L')).toEqual({ covered: false, latest: null })
-    m.prisma.league.findUnique.mockResolvedValue({ sport: 'NBA', platform: 'allfantasy' })
+    m.prisma.league.findUnique.mockResolvedValue({ sport: 'NHL', platform: 'allfantasy' })
     expect(await readStatCorrections('L')).toEqual({ covered: false, latest: null })
     expect(m.prisma.sportsDataCache.findMany).not.toHaveBeenCalled()
   })

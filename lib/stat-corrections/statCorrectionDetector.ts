@@ -11,10 +11,14 @@
  * read by the commissioner card), and a `stat_correction_detected` league-log row the first time
  * each distinct set of corrections is seen.
  *
- * Scope, deliberately narrow: native NFL points leagues with ordinary weekly lineups. Best ball, devy,
- * C2C, category, games-count and imported leagues score differently or are scored by their platform,
- * and team defenses are scored from game results rather than this stat line — all are reported as
- * not covered rather than guessed at.
+ * Scope, deliberately narrow: native NFL and NBA points leagues with ordinary weekly lineups. Best ball,
+ * devy, C2C, category, games-count, daily-lineup and imported leagues score differently or are scored by
+ * their platform, and team defenses are scored from game results rather than this stat line — all are
+ * reported as not covered rather than guessed at.
+ *
+ * Where the fresh stats come from differs by sport. NFL: a provider pull (corrections never reach a
+ * table on their own). NBA: the week re-summed from `player_game_stats`, which the scheduled import
+ * re-sweeps for recent days (./dailyWeekStats.ts) — DB-first, and summed by the sync's own rules.
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -37,6 +41,11 @@ import {
   readExtendedCorrections,
 } from './extendedCorrections'
 import { applyStatCorrections, ownerHasAfCommissionerPlan } from './applyStatCorrections'
+import { loadDailyWeekStats, type DailyWeekStatsFetcher } from './dailyWeekStats'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+
+/** Sports whose weekly-lineup points leagues are checked. NBA's fresh stats come from the game table. */
+export const STAT_CORRECTION_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA'])
 
 /** How long after a week's seal it is still re-checked (free leagues). Corrections land within the week. */
 export const STAT_CORRECTION_WINDOW_MS = FREE_CORRECTION_WINDOW_DAYS * 24 * 60 * 60 * 1000
@@ -106,6 +115,7 @@ export async function checkStatCorrectionsForSeason(
   deps: {
     now?: number
     fetchStats?: NflWeekStatsFetcher
+    fetchDailyStats?: DailyWeekStatsFetcher
     ownerHasPlan?: (userId: string | null) => Promise<boolean>
     applyCorrections?: typeof applyStatCorrections
   } = {},
@@ -124,9 +134,12 @@ export async function checkStatCorrectionsForSeason(
   })
   const league = season?.league
   if (!season || !league) return 'not_supported'
-  if (String(season.sport ?? league.sport ?? '').toUpperCase() !== 'NFL') return 'not_supported'
+  const sport = String(season.sport ?? league.sport ?? '').toUpperCase()
+  if (!STAT_CORRECTION_SPORTS.has(sport)) return 'not_supported'
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_supported'
-  if (leagueIsBestBall(league) || gamesCountActive(league.settings, 'NFL')) return 'not_supported'
+  if (leagueIsBestBall(league) || gamesCountActive(league.settings, sport)) return 'not_supported'
+  // A daily-lineup league is scored day by day on that day's starters; a weekly re-sum cannot match it.
+  if (sport !== 'NFL' && isDailyLineupScoringEnabled(league.settings, sport)) return 'not_supported'
 
   // Extended scoring corrections (./extendedCorrections.ts): AF Commissioner leagues that switched it
   // on re-check the last two finished weeks for 14 days and APPLY what they find. Everyone else: the
@@ -189,14 +202,22 @@ export async function checkStatCorrectionsForSeason(
   const playerIds = [...new Set(starters.map((p) => p.playerId))]
 
   const stored = await prisma.playerWeeklyScore.findMany({
-    where: { playerId: { in: playerIds }, week, season: season.season, sport: 'NFL' },
+    where: { playerId: { in: playerIds }, week, season: season.season, sport },
     select: { playerId: true, stats: true },
   })
   const storedBy = new Map(stored.map((r) => [r.playerId, asStats(r.stats)]))
 
   let fresh: Map<string, Record<string, number>>
   try {
-    fresh = await (deps.fetchStats ?? defaultFetch)({ season: season.season, week, playerIds })
+    fresh =
+      sport === 'NFL'
+        ? await (deps.fetchStats ?? defaultFetch)({ season: season.season, week, playerIds })
+        : await (deps.fetchDailyStats ?? loadDailyWeekStats)({
+            sport,
+            season: season.season,
+            week,
+            players: playerIds.map((id) => ({ playerId: id, playerName: starters.find((p) => p.playerId === id)?.playerName ?? null })),
+          })
   } catch {
     fresh = new Map()
   }
@@ -226,7 +247,7 @@ export async function checkStatCorrectionsForSeason(
     return 'provider_empty'
   }
 
-  const scorer = buildLeagueStatScorer({ sport: 'NFL', settings: league.settings })
+  const scorer = buildLeagueStatScorer({ sport, settings: league.settings })
   if (!scorer) return 'not_supported'
   const review = reviewStatCorrections({
     starters: starters.map((p) => ({
