@@ -78,7 +78,7 @@ export type BestAvailableAutopickResolved = {
   playerId: string | null
   byeWeek: number | null
   reason: string
-  strategy: 'need-based' | 'bpa'
+  strategy: 'need-based' | 'bpa' | 'draft-as-me'
 }
 
 function normalizeName(value: string): string {
@@ -390,6 +390,24 @@ export async function resolveBestAvailableAutopickCandidate(
   } = ctx
 
   let selected: BestAvailableAutopickResolved | null = null
+
+  // Draft as me (AF Commissioner): a live draft's missed pick is made the way this manager drafts.
+  // Any miss — no plan, no history, no board — falls through to the ordinary autopick below.
+  if (draftSession.sessionKind !== 'mock') {
+    const { tryDraftAsMePick } = await import('@/lib/draft-room/draftAsMeAutopick')
+    const mine = await tryDraftAsMePick({
+      leagueId,
+      rosterId: rid,
+      overall: ctx.overallPick,
+      board: fallbackPool,
+      ownPositions: draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position),
+      eligible: draftEligiblePositions,
+      aiAdpByKey,
+    }).catch(() => null)
+    if (mine) {
+      return { playerName: mine.playerName, position: mine.position, team: mine.team, playerId: mine.playerId, byeWeek: mine.byeWeek, reason: mine.reason, strategy: 'draft-as-me' }
+    }
+  }
 
   const rosterSlots = await getRosterSlotLabelsForLeagueDraft(leagueId, sport)
 
