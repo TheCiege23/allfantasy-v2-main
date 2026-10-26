@@ -123,7 +123,7 @@ export async function GET(request: Request) {
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */
-  let tradeReviews: TradeReviewSweepResult & { error?: string } = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [] }
+  let tradeReviews: TradeReviewSweepResult & { error?: string } = { due: 0, processed: 0, waitingOnLock: 0, held: 0, skipped: 0, closed: 0, failures: [] }
   try {
     tradeReviews = await withSyncJobRun(
       { jobName: 'cron-redraft-trade-review-window', trigger: 'cron' },
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
     console.error('[redraft/waiver-process] trade review window sweep failed', e)
-    tradeReviews = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [], error }
+    tradeReviews = { due: 0, processed: 0, waitingOnLock: 0, held: 0, skipped: 0, closed: 0, failures: [], error }
   }
 
   /*

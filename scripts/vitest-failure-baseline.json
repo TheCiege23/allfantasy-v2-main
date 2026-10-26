@@ -1,12 +1,10 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 2,
+  "count": 1,
   "failingFiles": [
-    "__tests__/commissioner-control-center-timer-ui.test.tsx",
     "__tests__/world-cup-components.test.tsx"
   ],
   "reasons": {
-    "__tests__/commissioner-control-center-timer-ui.test.tsx": "Specifies a timer-preset / undo-reset UI (Slice B.1) that was never implemented: its testids exist only in this test since 25db02263. Lives in components/app/draft-room (owned by another session). Build the feature or delete the spec.",
     "__tests__/world-cup-components.test.tsx": "4 of 108 tests target a World Cup chat drawer that has since been restructured (mode tabs, formatting, image upload, private-Chimmy count). Tournament is over; needs an owner to decide whether to keep or retire WC chat coverage."
   }
 }

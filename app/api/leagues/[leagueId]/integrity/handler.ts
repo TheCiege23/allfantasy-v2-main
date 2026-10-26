@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
@@ -8,6 +9,7 @@ import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
+import { HOLD_FLAGGED_TRADES_KEY, readHoldFlaggedTrades } from "@/lib/integrity/holdFlaggedTrades"
 
 export const dynamic = "force-dynamic"
 
@@ -59,7 +61,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   return NextResponse.json({
     // `tradeAlertsEnabled` lives in League.settings (lib/integrity/tradeAlerts.ts), shown beside these.
-    settings: { ...settings, tradeAlertsEnabled: readTradeAlertsEnabled(league.settings) },
+    settings: {
+      ...settings,
+      tradeAlertsEnabled: readTradeAlertsEnabled(league.settings),
+      holdFlaggedTrades: readHoldFlaggedTrades(league.settings),
+    },
     openFlags,
     recentDismissed,
     canReview: league.userId === userId,
@@ -132,20 +138,29 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     },
   })
 
-  // Suspicious-trade alerts: a League.settings key, merged inside a row lock like other settings writes.
-  let tradeAlertsEnabled: boolean | undefined
-  if (typeof body.tradeAlertsEnabled === "boolean") {
-    tradeAlertsEnabled = body.tradeAlertsEnabled
-    await prisma.$transaction(async (tx) => {
+  // Suspicious-trade alerts and "hold flagged trades": League.settings keys, merged inside a row lock
+  // like other settings writes (lib/integrity/tradeAlerts.ts, lib/integrity/holdFlaggedTrades.ts).
+  const settingsPatch: Record<string, boolean> = {}
+  if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
+  if (typeof body.holdFlaggedTrades === "boolean") settingsPatch[HOLD_FLAGGED_TRADES_KEY] = body.holdFlaggedTrades
+  let leagueSettings: unknown
+  if (Object.keys(settingsPatch).length > 0) {
+    leagueSettings = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-      const current = (row?.settings as Record<string, unknown> | null) ?? {}
-      await tx.league.update({ where: { id: leagueId }, data: { settings: { ...current, [TRADE_ALERTS_KEY]: tradeAlertsEnabled } } })
+      const next = { ...((row?.settings as Record<string, unknown> | null) ?? {}), ...settingsPatch }
+      await tx.league.update({ where: { id: leagueId }, data: { settings: next as Prisma.InputJsonValue } })
+      return next
     })
   } else {
-    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-    tradeAlertsEnabled = readTradeAlertsEnabled(row?.settings)
+    leagueSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
   }
 
-  return NextResponse.json({ settings: { ...updated, tradeAlertsEnabled } })
+  return NextResponse.json({
+    settings: {
+      ...updated,
+      tradeAlertsEnabled: readTradeAlertsEnabled(leagueSettings),
+      holdFlaggedTrades: readHoldFlaggedTrades(leagueSettings),
+    },
+  })
 }

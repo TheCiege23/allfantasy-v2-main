@@ -28,6 +28,7 @@ import {
   type ProposalWithAssets,
 } from '@/lib/redraft/finalizeRedraftTrade'
 import { reviewWindowEndsAt, reviewWindowEnded, tradeReviewWindowHours } from '@/lib/redraft/tradeReviewWindow'
+import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 
 export const dynamic = 'force-dynamic'
 
@@ -332,6 +333,25 @@ export async function POST(req: NextRequest) {
         )
       }
 
+      /*
+       * "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): checked now, before anything
+       * settles. A flagged trade becomes a commissioner-review trade whatever the league's mode, and
+       * the review sweep will not auto-pass it while its flag is open — the commissioner decides.
+       */
+      const holdLeague = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { settings: true } })
+      const held = await shouldHoldAcceptedTrade({
+        leagueId: proposal.leagueId,
+        settings: holdLeague?.settings,
+        ref: { kind: 'redraft', proposalId: proposal.id },
+      })
+      if (held && proposal.vetoMode !== 'commissioner') {
+        await prisma.redraftTradeProposal.updateMany({
+          where: { id: proposal.id, status: 'pending', acceptedAt: null },
+          data: { vetoMode: 'commissioner' },
+        })
+        proposal.vetoMode = 'commissioner'
+      }
+
       if (proposal.vetoMode === 'no_veto') {
         return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'proposal_accepted')
       }
@@ -378,8 +398,9 @@ export async function POST(req: NextRequest) {
         tradeId: proposal.id,
         status: 'accepted',
         actorUserId: userId,
-        detail:
-          proposal.vetoMode === 'league_vote'
+        detail: held
+          ? 'The league integrity check flagged it, so it is held until the commissioner approves or vetoes it.'
+          : proposal.vetoMode === 'league_vote'
             ? 'It goes to a league vote, and goes through when the review window ends unless the league vetoes it.'
             : 'It goes to commissioner review, and goes through when the review window ends unless the commissioner vetoes it.',
       })

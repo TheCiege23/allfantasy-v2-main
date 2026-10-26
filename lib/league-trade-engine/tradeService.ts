@@ -42,6 +42,7 @@ import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTra
 import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/receiptStore'
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -891,7 +892,12 @@ export async function acceptAfLeagueTrade(input: {
   if (!life.ok) throw lifecycleGateThrowable(life.err)
 
   const settings = resolveLeagueTradeSettings(league)
-  const reviewType = trade.reviewType
+  // "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): a trade the collusion check flags now,
+  // before it executes, goes to commissioner review whatever the league's review mode.
+  const held =
+    trade.reviewType !== 'commissioner' &&
+    (await shouldHoldAcceptedTrade({ leagueId: input.leagueId, settings: league.settings, ref: { kind: 'af', tradeId: trade.id } }))
+  const reviewType = held ? 'commissioner' : trade.reviewType
 
   if (reviewType === 'instant') {
     await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, deadlineChecked: true })
@@ -932,15 +938,24 @@ export async function acceptAfLeagueTrade(input: {
       proposerUserId: trade.proposedByUserId,
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
-      body: 'It now goes to commissioner review before processing.',
+      body: held
+        ? 'The league integrity check flagged it, so it is held for commissioner review before processing.'
+        : 'It now goes to commissioner review before processing.',
     })
     announceTradeStatusInDm({
       tradeId: trade.id,
       status: 'accepted',
       actorUserId: input.userId,
-      detail: 'It goes to commissioner review before it processes.',
+      detail: held
+        ? 'The league integrity check flagged it, so it is held for commissioner review.'
+        : 'It goes to commissioner review before it processes.',
     })
-    announceTradeInLeagueChat(trade.id, 'Accepted. It goes to commissioner review before it processes.')
+    announceTradeInLeagueChat(
+      trade.id,
+      held
+        ? 'Accepted. Held for commissioner review by the league integrity check.'
+        : 'Accepted. It goes to commissioner review before it processes.',
+    )
     return { status: 'awaiting_commissioner' }
   }
 

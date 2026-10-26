@@ -16,6 +16,8 @@ type IntegrityApi = {
     tankingBenchPatternCheck: boolean
     /** Suspicious-trade alerts (League.settings, lib/integrity/tradeAlerts.ts). Absent = on. */
     tradeAlertsEnabled?: boolean
+    /** Hold flagged trades for commissioner review (lib/integrity/holdFlaggedTrades.ts). Absent = off. */
+    holdFlaggedTrades?: boolean
     tankingWaiverPatternCheck: boolean
   }
   stats: {
@@ -73,6 +75,7 @@ export function IntegritySettingsPanel(props: {
           tankingBenchPatternCheck: data.settings.tankingBenchPatternCheck,
           tankingWaiverPatternCheck: data.settings.tankingWaiverPatternCheck,
           tradeAlertsEnabled: data.settings.tradeAlertsEnabled !== false,
+          holdFlaggedTrades: data.settings.holdFlaggedTrades === true,
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { settings?: IntegrityApi['settings']; error?: string }
@@ -172,6 +175,26 @@ export function IntegritySettingsPanel(props: {
             }`}
           >
             {s.tradeAlertsEnabled !== false ? 'On' : 'Off'}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-white/80">Hold flagged trades for my review</p>
+            <p className="text-[11px] text-white/45">A flagged trade waits for you to approve or veto it instead of going through.</p>
+          </div>
+          <button
+            type="button"
+            aria-pressed={s.holdFlaggedTrades === true}
+            aria-label="Hold flagged trades"
+            onClick={() =>
+              setData((d) => (d ? { ...d, settings: { ...d.settings, holdFlaggedTrades: d.settings.holdFlaggedTrades !== true } } : d))
+            }
+            className={`rounded-lg border px-2 py-1 text-[11px] ${
+              s.holdFlaggedTrades === true ? 'border-emerald-400/40 bg-emerald-500/15' : 'border-white/15'
+            }`}
+          >
+            {s.holdFlaggedTrades === true ? 'On' : 'Off'}
           </button>
         </div>
 
