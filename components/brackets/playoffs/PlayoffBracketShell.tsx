@@ -41,6 +41,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     id: view?.challenge?.id || "unknown-challenge",
     sport: String(view?.challenge?.sport ?? "bracket").toLowerCase(),
     name: view?.challenge?.name || "Pool Dashboard",
+    sport: view?.challenge?.sport || "nba",
     seasonYear: view?.challenge?.seasonYear ?? new Date().getUTCFullYear(),
     maxEntriesPerParticipant: Number(view?.challenge?.maxEntriesPerParticipant ?? 5),
     inviteUrl: view?.challenge?.inviteUrl || "/brackets",
