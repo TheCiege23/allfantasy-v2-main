@@ -13,6 +13,7 @@ export default function SurvivorEpisodesPage() {
   const ctx = useSurvivorUi()
   const [episodes, setEpisodes] = useState<SurvivorEpisode[] | null>(null)
   const [failed, setFailed] = useState(false)
+  const [revealed, setRevealed] = useState<Array<{ id: string; author: string; text: string; createdAt: string }> | null>(null)
 
   useEffect(() => {
     if (!leagueId) return
@@ -21,6 +22,11 @@ export default function SurvivorEpisodesPage() {
       .then(res => (res.ok ? res.json() : Promise.reject(new Error('episodes'))))
       .then((json: { episodes?: SurvivorEpisode[] }) => { if (live) setEpisodes(Array.isArray(json.episodes) ? json.episodes : []) })
       .catch(() => { if (live) setFailed(true) })
+    // After the finale every confessional is revealed; before it, this stays null.
+    fetch(`/api/survivor/confessionals?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include', cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then((json: { revealed?: Array<{ id: string; author: string; text: string; createdAt: string }> | null } | null) => { if (live) setRevealed(json?.revealed ?? null) })
+      .catch(() => {})
     return () => { live = false }
   }, [leagueId])
 
@@ -41,6 +47,22 @@ export default function SurvivorEpisodesPage() {
         <p className="mt-6 rounded-xl border border-white/10 bg-black/30 p-4 text-[13px] text-white/60">
           The first episode posts after the first week&apos;s scores are final and Tribal Council has been read.
         </p>
+      ) : null}
+
+      {revealed && revealed.length ? (
+        <section className="survivor-panel mt-6 rounded-2xl p-5" data-testid="confessional-reveal">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200">The confessional reveal</p>
+          <h2 className="mt-1 text-lg font-bold text-white">What everyone was really thinking</h2>
+          <ul className="mt-3 space-y-2">
+            {revealed.map(row => (
+              <li key={row.id} className="rounded-lg border border-white/10 bg-black/25 p-3 text-[13px] text-white/80">
+                <span className="font-semibold text-amber-100">{row.author}</span>
+                <time className="ml-2 text-[11px] text-white/40" dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleDateString()}</time>
+                <p className="mt-1">“{row.text}”</p>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <div className="mt-6 space-y-4">
