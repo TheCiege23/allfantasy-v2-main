@@ -26,9 +26,20 @@
  * in, never beside one already stored), a save in `execute-league-settings-patch` (`consolationPlaysFor`,
  * which `commissionerPlayoffsPatch` forwards). A league without the flag keeps the order it always had.
  * No backfill: nothing writes the flag onto an existing league except its commissioner's save.
+ *
+ * 🛑 AND ONLY A LEAGUE WHOSE ROSTERS CARRY OVER. Owner's rule (2026-10-26): "the point to redraft
+ * leagues is that the history is recorded but the next season starts fresh". Dynasty, devy, C2C,
+ * keeper and salary-cap leagues follow the setting; a redraft league NEVER lets its lower bracket move
+ * next season's draft order, whatever is stored. Its bracket is still played and its finish still
+ * recorded — only the draft-order effect is gated. The classifier is `isRedraftPickLeague`
+ * (lib/league/keeper-policy.ts), the one redraft draft-pick trading uses.
+ *
+ * Toilet bowl only: `consolation_pick_goes_to` (`loser` | `winner`, default `loser`) says which of
+ * the toilet bowl final's two teams takes pick 1. A consolation bracket's winner always does.
  */
 import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoffConfigResolver'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
+import { isRedraftPickLeague } from '@/lib/league/keeper-policy'
 
 export type ConsolationPlaysFor = 'pick' | 'cash' | 'none'
 
@@ -38,6 +49,16 @@ export const CONSOLATION_PLAYS_FOR_SETTINGS_KEY = 'consolation_plays_for'
 export const CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY = 'consolation_plays_for_sets_draft_order'
 
 export const CONSOLATION_PLAYS_FOR_VALUES: readonly ConsolationPlaysFor[] = ['pick', 'cash', 'none']
+
+/** Which toilet bowl finalist takes pick 1: the final's loser (last place) or its winner. */
+export type ConsolationPickGoesTo = 'loser' | 'winner'
+
+export const CONSOLATION_PICK_GOES_TO_KEY = 'consolation_pick_goes_to'
+
+export const CONSOLATION_PICK_GOES_TO_VALUES: readonly ConsolationPickGoesTo[] = ['loser', 'winner']
+
+/** The league fields that say whether its rosters, and so its draft order, carry into next season. */
+export type DraftOrderCarryoverLeague = { leagueType?: string | null; isDynasty?: boolean | null }
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -62,9 +83,36 @@ export function consolationPlaysForAppliesToDraftOrder(settings: unknown): boole
   return record(record(settings).playoff_structure)[CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY] === true
 }
 
-/** Whether next season's draft order seats the lower bracket's result first. */
-export function consolationPlaysForSetsDraftOrder(settings: unknown, sport: string | null | undefined, variant?: string | null): boolean {
-  return consolationPlaysForAppliesToDraftOrder(settings) && readConsolationPlaysFor(settings, sport, variant) === 'pick'
+/** Dynasty-family, keeper and salary-cap leagues: last season can shape next season's draft order. */
+export function leagueDraftOrderCarriesOver(league: DraftOrderCarryoverLeague): boolean {
+  return !isRedraftPickLeague(league)
+}
+
+/** Whether next season's draft order seats the lower bracket's result first. Never in a redraft league. */
+export function consolationPlaysForSetsDraftOrder(
+  settings: unknown,
+  sport: string | null | undefined,
+  variant: string | null | undefined,
+  league: DraftOrderCarryoverLeague,
+): boolean {
+  return (
+    leagueDraftOrderCarriesOver(league) &&
+    consolationPlaysForAppliesToDraftOrder(settings) &&
+    readConsolationPlaysFor(settings, sport, variant) === 'pick'
+  )
+}
+
+/** The stored toilet bowl choice; anything else, or nothing, is `loser` (last place picks first). */
+export function readConsolationPickGoesTo(settings: unknown): ConsolationPickGoesTo {
+  const s = record(settings)
+  const raw = record(s.playoff_structure)[CONSOLATION_PICK_GOES_TO_KEY] ?? s[CONSOLATION_PICK_GOES_TO_KEY]
+  return parseConsolationPickGoesTo(raw) ?? 'loser'
+}
+
+/** A value a save may store, or null. */
+export function parseConsolationPickGoesTo(value: unknown): ConsolationPickGoesTo | null {
+  const v = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  return v === 'loser' || v === 'winner' ? v : null
 }
 
 /** A value a save may store, or null. */
@@ -76,6 +124,25 @@ export type LowerBracketDraftResult = {
   mode: 'consolation' | 'toilet_bowl'
   /** The non-playoff teams, best finish first, once the season's bracket is finalized; else null. */
   finishOrder: string[] | null
+}
+
+/**
+ * The lower bracket's final, from its played rounds (`roundNumber >= CONSOLATION_ROUND_OFFSET`): the
+ * last round, when it is one decided game between two teams. Null otherwise — a caller then falls back
+ * to the finish order, where a toilet bowl's final winner sits second to last.
+ */
+export function lowerBracketFinal(
+  rounds: ReadonlyArray<{ roundNumber: number; matchups: ReadonlyArray<{ homeRosterId: string | null; awayRosterId: string | null; winnerRosterId: string | null }> }>,
+  offset: number,
+): { winner: string; loser: string } | null {
+  const lower = rounds.filter((r) => r.roundNumber >= offset && r.matchups.length > 0)
+  if (lower.length === 0) return null
+  const last = lower.reduce((a, b) => (b.roundNumber > a.roundNumber ? b : a))
+  if (last.matchups.length !== 1) return null
+  const m = last.matchups[0]
+  if (!m.homeRosterId || !m.awayRosterId || !m.winnerRosterId) return null
+  if (m.winnerRosterId !== m.homeRosterId && m.winnerRosterId !== m.awayRosterId) return null
+  return { winner: m.winnerRosterId, loser: m.winnerRosterId === m.homeRosterId ? m.awayRosterId : m.homeRosterId }
 }
 
 /**
