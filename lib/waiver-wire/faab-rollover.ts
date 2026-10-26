@@ -16,8 +16,38 @@
  */
 import { readFaabRolloverRule, type FaabRolloverRule } from './hub-waiver-options'
 import { parseWaiverEngineConfig } from './waiver-engine-config'
+import {
+  normalizeRenewalModalType,
+  renewalKindFromSelection,
+  resolveLeagueVariantKey,
+  shouldResetRostersForRenewal,
+} from '@/lib/leagues/renewalPolicy'
 
 export type RenewalFamily = 'redraft' | 'carry_rosters'
+
+/**
+ * Which family a league renews as, by the SAME classifier the renew route uses
+ * (lib/leagues/renewalPolicy.ts, with no format change chosen in the modal): `redraft_reset` resets
+ * rosters, every other kind (keeper, dynasty, …) carries them. The settings screens read their
+ * displayed default from this, so a keeper league not flagged `isDynasty` shows "carry over".
+ */
+export function renewalFamilyForLeague(league: {
+  leagueVariant?: string | null
+  settings?: unknown
+  isDynasty?: boolean | null
+}): RenewalFamily {
+  const settings =
+    league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+      ? (league.settings as Record<string, unknown>)
+      : {}
+  const kind = renewalKindFromSelection({
+    leagueVariant: league.leagueVariant ?? null,
+    settings,
+    selectedType: normalizeRenewalModalType(resolveLeagueVariantKey(league.leagueVariant ?? null, settings)),
+    isDynasty: league.isDynasty === true,
+  })
+  return shouldResetRostersForRenewal(kind) ? 'redraft' : 'carry_rosters'
+}
 
 /** The rule a renewal applies: the commissioner's, else the family's historical behaviour. */
 export function effectiveFaabRolloverRule(stored: FaabRolloverRule | null | undefined, family: RenewalFamily): FaabRolloverRule {

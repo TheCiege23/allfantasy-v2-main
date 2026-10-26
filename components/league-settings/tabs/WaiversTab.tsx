@@ -39,7 +39,7 @@ import {
   type PlayoffWaiverRule,
   type WaiverOrderResetPolicy,
 } from '@/lib/waiver-wire/hub-waiver-options'
-import { effectiveFaabRolloverRule } from '@/lib/waiver-wire/faab-rollover'
+import { effectiveFaabRolloverRule, renewalFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
 import { isSurvivorSettingsLeague } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
@@ -184,12 +184,16 @@ export function WaiversSection({
     readFreeAgencyMode(savedOr<string | null>(leagueId, 'waiverFreeAgencyMode', null)),
   )
   // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over; that is what shows.
-  const carriesRosters = Boolean((ctx.league as { isDynasty?: boolean | null }).isDynasty) ||
-    /keeper|dynasty|devy|c2c/i.test(String(ctx.league.leagueVariant ?? ''))
+  // The renew route's own classifier (renewalFamilyForLeague), so the default shown is the one applied.
+  const rolloverFamily = renewalFamilyForLeague({
+    leagueVariant: ctx.league.leagueVariant ?? null,
+    settings: ctx.league.settings,
+    isDynasty: (ctx.league as { isDynasty?: boolean | null }).isDynasty ?? null,
+  })
   const [faabRollover, setFaabRollover] = useState<FaabRolloverRule>(() =>
     effectiveFaabRolloverRule(
       readFaabRolloverRule(savedOr<string | null>(leagueId, 'waiverFaabRollover', null)),
-      carriesRosters ? 'carry_rosters' : 'redraft',
+      rolloverFamily,
     ),
   )
   const touchedRef = useRef(new Set<string>())
@@ -216,7 +220,7 @@ export function WaiversSection({
         if (!touchedRef.current.has('playoffs')) setPlayoffRule(readPlayoffWaiverRule(eff.playoffWaiverRule))
         if (!touchedRef.current.has('faMode')) setFreeAgencyMode(readFreeAgencyMode(eff.freeAgencyMode))
         if (!touchedRef.current.has('rollover')) {
-          setFaabRollover(effectiveFaabRolloverRule(readFaabRolloverRule(eff.faabRolloverRule), carriesRosters ? 'carry_rosters' : 'redraft'))
+          setFaabRollover(effectiveFaabRolloverRule(readFaabRolloverRule(eff.faabRolloverRule), rolloverFamily))
         }
       } catch {
         // The defaults stay; a save still writes what the commissioner picks.
