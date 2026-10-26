@@ -17,6 +17,7 @@ type Row = {
   awayTeamName: string
   winnerTeamName: string | null
   status: string
+  startsAt: Date | null
   liveHomeScore: number | null
   liveAwayScore: number | null
 }
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       select: {
         id: true, seriesNumber: true, sourceSeriesHome: true, sourceSeriesAway: true,
         homeTeamName: true, awayTeamName: true, winnerTeamName: true,
-        status: true, liveHomeScore: true, liveAwayScore: true,
+        status: true, startsAt: true, liveHomeScore: true, liveAwayScore: true,
       },
     } },
   }) as { id: string; sport: string; seasonYear: number; series: Row[] } | null
@@ -61,6 +62,9 @@ export async function POST(request: Request) {
   const byNumber = new Map(challenge.series.map((row) => [row.seriesNumber, row]))
   const game = byNumber.get(seriesNumber)
   if (!game) return NextResponse.json({ ok: false, error: "Game not found." }, { status: 404 })
+  if (!game.startsAt || new Date(game.startsAt).getTime() > Date.now()) {
+    return NextResponse.json({ ok: false, error: "The scheduled game has not started." }, { status: 409 })
+  }
 
   const fromSource = (source: number | null, fallback: string): string =>
     source == null ? fallback : byNumber.get(source)?.winnerTeamName?.trim() || ""
