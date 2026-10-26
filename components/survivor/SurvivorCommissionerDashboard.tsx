@@ -32,6 +32,7 @@ import {
 import { TournamentSubscriptionTokensPanel } from '@/components/tournament/TournamentSubscriptionTokensPanel'
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
 import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
+import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
   SURVIVOR_TRIBE_ICON_CHOICES,
@@ -450,6 +451,17 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   <Link href={`/league/${leagueId}?tab=trades`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Review trades</Link>
                   <Link href={`${base}/exile`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Exile status</Link>
                 </div>
+              </WarRoomPanel>
+              <WarRoomPanel title="Fix a problem" subtitle="Score corrections, a manager who quit, or an early merge.">
+                <SurvivorSeasonFixPanel
+                  leagueId={leagueId}
+                  week={data.gameState?.currentWeek ?? data.week}
+                  merged={data.merged}
+                  managers={[...new Map(data.tribes.flatMap(tribe => tribe.members)
+                    .filter(member => member.userId)
+                    .map(member => [member.userId as string, { userId: member.userId as string, name: member.displayName || 'Manager' }])).values()]
+                    .sort((a, b) => a.name.localeCompare(b.name))}
+                />
               </WarRoomPanel>
               {data.privacy?.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
                 <WarRoomPanel title="Private idol oversight" subtitle="Visible only to a non-playing host. Managers see only their own idols.">
