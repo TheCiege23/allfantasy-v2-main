@@ -38,18 +38,16 @@ export async function POST(request: Request) {
   const checked = validateSingleGameSchedule(sport, body?.games)
   if (!checked.ok) return NextResponse.json({ ok: false, errors: checked.errors }, { status: 400 })
   const previous = await readSingleGameSchedule(sport, season)
-  if (previous && JSON.stringify(previous.games) === JSON.stringify(checked.games)) {
-    return NextResponse.json({ ok: true, unchanged: true, schedule: previous })
-  }
+  const unchanged = Boolean(previous && JSON.stringify(previous.games) === JSON.stringify(checked.games))
   const now = Date.now()
-  if (checked.games.some((game) => new Date(game.startsAt).getTime() <= now)) {
+  if (!unchanged && checked.games.some((game) => new Date(game.startsAt).getTime() <= now)) {
     return NextResponse.json({ ok: false, error: "All published start times must still be in the future." }, { status: 409 })
   }
   const challenges = await (prisma as any).playoffBracketChallenge.findMany({
     where: { sport, seasonYear: season }, select: { id: true },
   }) as Array<{ id: string }>
   const ids = challenges.map((challenge) => challenge.id)
-  if (ids.length) {
+  if (ids.length && !unchanged) {
     const started = await (prisma as any).playoffBracketSeries.count({
       where: {
         challengeId: { in: ids },
@@ -59,19 +57,21 @@ export async function POST(request: Request) {
     if (started) return NextResponse.json({ ok: false, error: "At least one game has started; this schedule cannot be replaced." }, { status: 409 })
   }
   const actor = resolveAdminAuditActor(gate.user)
-  const schedule = await writeSingleGameSchedule({ sport, season, games: checked.games, userId: actor })
+  const schedule = unchanged && previous
+    ? previous
+    : await writeSingleGameSchedule({ sport, season, games: checked.games, userId: actor })
   let rowsUpdated = 0
   for (const game of checked.games) {
     const result = await (prisma as any).playoffBracketSeries.updateMany({
-      where: { challengeId: { in: ids }, seriesNumber: game.seriesNumber },
+      where: { challengeId: { in: ids }, seriesNumber: game.seriesNumber, ...(unchanged ? { startsAt: null } : {}) },
       data: { startsAt: new Date(game.startsAt) },
     })
     rowsUpdated += result.count ?? 0
   }
-  await logAdminAudit({
+  if (!unchanged || rowsUpdated > 0) await logAdminAudit({
     adminUserId: actor, action: "single_game_bracket_schedule.save",
     targetType: "bracket_season", targetId: `${sport}:${season}`,
     details: { previous: previous?.games ?? null, games: checked.games, pools: ids.length, rowsUpdated },
   })
-  return NextResponse.json({ ok: true, schedule, pools: ids.length, rowsUpdated })
+  return NextResponse.json({ ok: true, unchanged, schedule, pools: ids.length, rowsUpdated })
 }
