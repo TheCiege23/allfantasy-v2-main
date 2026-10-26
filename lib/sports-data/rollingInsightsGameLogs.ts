@@ -284,8 +284,34 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
   }
 }
 
+/** A "mm:ss" time-on-ice clock as decimal minutes, or null when it is not one. */
+function toiMinutes(raw: Record<string, unknown>): number | null {
+  const toi = /^(\d{1,3}):([0-5]\d)$/.exec(String(raw.time_on_ice ?? '').trim())
+  return toi ? Number(toi[1]) + Number(toi[2]) / 60 : null
+}
+
+/**
+ * Did this NHL goalie line actually play? The vendor lists the dressed backup too, at "0:00" and
+ * all zeros — and also prints "0" for the clock of a goalie who DID play (measured on production
+ * 2026-10: Kochetkov 24 saves on 24 shots and the win, `time_on_ice: "0"`). So the clock alone
+ * cannot decide it; any minute, shot, save, goal or decision can.
+ */
+function goalieLinePlayed(raw: Record<string, unknown>): boolean {
+  if ((toiMinutes(raw) ?? 0) > 0) return true
+  return ['shots_against', 'saves', 'goals_allowed', 'win', 'loss', 'overtime_loss'].some((k) => (num(raw[k]) ?? 0) > 0)
+}
+
+/** RI's `status` vocabulary (ENDPOINTS.yaml): only these two mean the box is settled. */
+function isFinalRiStatus(status: string | null | undefined): boolean {
+  const s = String(status ?? '').trim().toLowerCase()
+  return s === 'final' || s === 'completed'
+}
+
 /** Flatten the recognised numeric fields; everything else stays in `statPayload` verbatim. */
-export function normalizedStatMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'> & Partial<Pick<RiGameBox, 'gameDate'>>): Record<string, unknown> {
+export function normalizedStatMapFor(
+  line: RiBoxLine,
+  box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'> & Partial<Pick<RiGameBox, 'gameDate' | 'lines' | 'status'>>,
+): Record<string, unknown> {
   const stats: Record<string, number> = {}
   for (const [key, value] of Object.entries(line.raw)) {
     const n = num(value)
@@ -294,9 +320,22 @@ export function normalizedStatMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seas
   // NHL sends time on ice as a "mm:ss" clock (fixtures/live.NHL.json: goalies "58:05", skaters
   // "15:26"), which `num` cannot read, so it never reached `stats` and the goalie minutes-played
   // row could not score. Stored as decimal minutes; an unreadable clock is left out, never guessed.
-  const toi = /^(\d{1,3}):([0-5]\d)$/.exec(String(line.raw.time_on_ice ?? '').trim())
-  if (toi) stats.time_on_ice_minutes = Number(toi[1]) + Number(toi[2]) / 60
+  const minutes = toiMinutes(line.raw)
+  if (minutes != null) stats.time_on_ice_minutes = minutes
+  // ⚠ The vendor's NHL `shutouts` is 0 even for a goalie who played the whole game and allowed
+  // nothing (GAPS.md; Oettinger 2026-10-08, 26 of 26). The NHL rule needs to know whether he was
+  // the ONLY goalie his team used, which one line cannot say — so the game's other goalie lines
+  // are counted here, while the whole box is in hand, and `normalizeNhlGameStats` derives it.
+  // A line with no team cannot be told from the other side's goalies, so it carries no count.
+  const goalieContext =
+    line.group === 'goalies' && line.team && box.lines
+      ? {
+          teamGoaliesUsed: box.lines.filter((l) => l.group === 'goalies' && l.team === line.team && goalieLinePlayed(l.raw)).length,
+          gameFinal: isFinalRiStatus(box.status),
+        }
+      : {}
   return {
+    ...goalieContext,
     group: line.group,
     gameStartTimeUtc: box.gameDate?.toISOString() ?? null,
     timeOnIce: str(line.raw.time_on_ice) ?? null,
