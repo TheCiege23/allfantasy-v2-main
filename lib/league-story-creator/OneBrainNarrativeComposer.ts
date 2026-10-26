@@ -287,7 +287,7 @@ RULES:
 - Do not invent results, injuries, quotes or predictions. No guarantees.
 - Talk about fantasy teams and their play, never insult a manager as a person.
 - No profanity. Under 280 characters.
-- Write in ${input.language === "es" ? "Spanish (use «reclamo», never «waiver», for waiver concepts)" : "English"}.
+- Write in ${input.language === "es" ? "Spanish (call player claims and pickups «reclamos»; keep that word, never an English loanword)" : "English"}.
 - Output JSON only: {"text": "..."}`
   const userPrompt = `Tone: ${TONE_BRIEF[input.tone]}
 Facts (JSON): ${JSON.stringify(input.facts)}
