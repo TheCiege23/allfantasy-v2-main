@@ -5,6 +5,7 @@
  * On submit, translates into `POST /api/leagues` (canonical) or `POST /api/tournament/create`.
  */
 
+import { SURVIVOR_TWIST_PRESET_DEFAULT, type SurvivorTwistPresetId } from '@/lib/survivor/survivorTwistPresets'
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import {
@@ -160,6 +161,8 @@ export interface CreateLeagueV2State {
   survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
   /** Survivor-only: a LABEL. Dues are collected off the app; AllFantasy takes no payments. */
   survivorEntryFeeMode: 'free' | 'paid'
+  /** Survivor-only: how many twists (idols, Exile, surprise tribes). See lib/survivor/survivorTwistPresets. */
+  survivorTwistPreset: SurvivorTwistPresetId
   /** Survivor-only: optional dues per manager as typed (USD), shown in League Dues. */
   survivorDuesUsd: string
   draftType: WizardDraftType
@@ -354,6 +357,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   survivorTribeCount: 4,
   survivorCommissionerParticipationMode: 'non_participating_host',
   survivorEntryFeeMode: 'free',
+  survivorTwistPreset: SURVIVOR_TWIST_PRESET_DEFAULT,
   survivorDuesUsd: '',
   draftType: 'snake',
   thirdRoundReversal: false,

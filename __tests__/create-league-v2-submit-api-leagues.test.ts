@@ -168,6 +168,13 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     expect(lastFetchBody().conceptSetup).not.toHaveProperty('survivorEntryFeeAmountCents')
   })
 
+  it("sends the Survivor twist preset: Classic by default, or the commissioner's choice", async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4 }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorTwistPreset: 'classic' })
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4, survivorTwistPreset: 'simple' }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorTwistPreset: 'simple' })
+  })
+
   it('a Guilly league never carries a median game, even one ticked before switching concept', async () => {
     await submitCreateLeagueV2(state({ leagueType: 'guillotine', medianGame: true }))
     const body = lastFetchBody()
