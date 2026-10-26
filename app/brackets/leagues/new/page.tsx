@@ -83,6 +83,7 @@ export default function NewBracketLeaguePage() {
    */
   const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB", "NCAAF", "NBA_CUP"]
   const isPlayoffPool = challengeType === "playoff_challenge" && PLAYOFF_POOL_SPORTS.includes(sport)
+  const isSingleGamePool = isPlayoffPool && (sport === "NCAAF" || sport === "NBA_CUP")
   // The real AF Commissioner plan (the same feature the server checks at create), plus AllFantasy's
   // own test accounts. The allowlist alone locked these options for every paying commissioner.
   const commissionerPlan = useEntitlement("commissioner_ai_tools")
@@ -120,8 +121,11 @@ export default function NewBracketLeaguePage() {
 
   const sportLabel = useMemo(() => SPORT_LABELS[sport] ?? sport, [sport])
   const scoringSummary = useMemo(
-    () => getRoundPointsSummary(challengeType === "playoff_challenge" ? { 1: 1, 2: 2, 3: 4, 4: 8, 5: 16, 6: 32 } : undefined),
-    [challengeType],
+    () => isSingleGamePool
+      ? sport === "NCAAF" ? "First round 1 · Quarterfinals 2 · Semifinals 4 · Championship 8"
+        : "Quarterfinals 1 · Semifinals 2 · Championship 4"
+      : getRoundPointsSummary(challengeType === "playoff_challenge" ? { 1: 1, 2: 2, 3: 4, 4: 8, 5: 16, 6: 32 } : undefined),
+    [challengeType, isSingleGamePool, sport],
   )
 
   async function handleConfirmAge() {
@@ -157,8 +161,8 @@ export default function NewBracketLeaguePage() {
             visibility: isPublic ? "public" : "private",
             maxParticipants: maxUsers,
             maxEntriesPerParticipant: maxEntriesPerUser,
-            scoringStyle: scoringMode,
-            lockRule,
+            scoringStyle: isSingleGamePool ? "round_points" : scoringMode,
+            lockRule: isSingleGamePool ? "series_start" : lockRule,
           }),
           { afCommissionerEnabled: isAfCommissioner },
         )
@@ -170,8 +174,8 @@ export default function NewBracketLeaguePage() {
           visibility: isPublic ? "public" : "private",
           maxUsers,
           bracketsPerUser: maxEntriesPerUser,
-          scoringStyle: scoringMode,
-          lockRule,
+          scoringStyle: isSingleGamePool ? "round_points" : scoringMode,
+          lockRule: isSingleGamePool ? "series_start" : lockRule,
           config,
         })
         router.push(result.redirectUrl)
@@ -352,7 +356,7 @@ export default function NewBracketLeaguePage() {
 
             <div>
               <label className="text-xs font-semibold" style={{ color: "var(--accent)" }}>Scoring System</label>
-              <select
+              {isSingleGamePool ? <p className="mt-2 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--border)", color: "var(--text)" }}>Round points · fixed for this tournament</p> : <select
                 className="mt-2 w-full rounded-lg px-3 py-2 text-sm"
                 style={{ border: "1px solid var(--border)", background: "color-mix(in srgb, var(--panel2) 88%, transparent)", color: "var(--text)" }}
                 value={scoringMode}
@@ -365,7 +369,7 @@ export default function NewBracketLeaguePage() {
                     {opt.label}
                   </option>
                 ))}
-              </select>
+              </select>}
             </div>
           </div>
 
@@ -433,7 +437,7 @@ export default function NewBracketLeaguePage() {
 
           <div className="mode-panel-soft rounded-xl p-3.5">
             <label className="text-xs font-semibold" style={{ color: "var(--accent)" }}>Lock Rule</label>
-            <select
+            {isSingleGamePool ? <p className="mt-2 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--border)", color: "var(--text)" }}>Lock each game at its published start time</p> : <select
               className="mt-2 w-full rounded-lg px-3 py-2 text-sm"
               style={{ border: "1px solid var(--border)", background: "color-mix(in srgb, var(--panel2) 88%, transparent)", color: "var(--text)" }}
               value={lockRule}
@@ -444,9 +448,9 @@ export default function NewBracketLeaguePage() {
               <option value="series_start">Lock each series at start</option>
               <option value="pool_start">Lock all picks at pool start</option>
               <option value="none">No lock / test late picks</option>
-            </select>
+            </select>}
             <p className="mt-2 text-[11px] mode-muted">
-              No-lock mode is for commissioner testing and late-pick pools. Standard pools should keep series start locks.
+              {isSingleGamePool ? "Picks open after the official field and game schedule are published." : "No-lock mode is for commissioner testing and late-pick pools. Standard pools should keep series start locks."}
             </p>
           </div>
 
