@@ -34,6 +34,8 @@ import { sendPushToUser } from '@/lib/push-notifications'
 import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
 import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick } from '@/lib/survivor/survivorNbaWeeklyScoring'
 import { createSurvivorChatMessage } from '@/lib/survivor/survivorChatBridge'
+import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
+import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_SETTING, survivorTwistFoundationPatch, survivorTwistIdolConfig } from '@/lib/survivor/survivorTwistPresets'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -259,6 +261,25 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       }, userId)
     }
     return updateFoundationSettings(leagueId, body, userId)
+  }
+
+  if (action === 'apply-twist-preset') {
+    if (!access.decisions.canUpdateSettings) {
+      return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
+    }
+    const preset = body.preset
+    if (!isSurvivorTwistPresetId(preset)) return NextResponse.json({ error: 'Choose Simple, Classic or Full twists.' }, { status: 400 })
+    if (await isSurvivorDraftStarted(leagueId)) return NextResponse.json({ error: 'Twists lock when the draft starts.' }, { status: 409 })
+    const tribeCount = access.settings.tribeCount
+    // Idols first: if the idol setup refuses, nothing else has changed.
+    const currentIdol = (await getSurvivorIdolSetupView(leagueId, { isCommissioner: true })).config
+    const idol = await saveSurvivorIdolConfig(leagueId, { ...currentIdol, ...survivorTwistIdolConfig(preset, tribeCount) })
+    if (!idol.ok && idol.code !== 'not_migrated') return NextResponse.json({ error: idol.error }, { status: idol.status })
+    const saved = await updateFoundationSettings(leagueId, { settings: survivorTwistFoundationPatch(preset, tribeCount) }, userId)
+    if (!saved.ok) return saved
+    const after = await readLeagueSettings(leagueId)
+    await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...(after ?? {}), [SURVIVOR_TWIST_PRESET_SETTING]: preset } as Prisma.InputJsonValue } })
+    return NextResponse.json({ ok: true, preset })
   }
 
   if (action === 'audit-log') {

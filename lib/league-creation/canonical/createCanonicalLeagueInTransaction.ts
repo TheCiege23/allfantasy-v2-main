@@ -2,6 +2,7 @@ import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from 
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_DEFAULT, SURVIVOR_TWIST_PRESET_SETTING, survivorTwistFoundationPatch } from '@/lib/survivor/survivorTwistPresets'
 import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { readSurvivorEntryFee, survivorDuesTrackerSeed } from '@/lib/survivor/survivorCreationAvailability'
 import { buildScoringFromPresetId, isNativeCategoryScoringPreset, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
@@ -451,9 +452,12 @@ export async function createCanonicalLeagueInTransaction(
 
   if (formatId === 'survivor') {
     const setup = body.conceptSetup ?? {}
-    const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup, defaultTeamCount: managerCount,
-      tribeCount: setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount })
+    const tribeCount = setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount
+    // The twist preset sets the twist switches; anything the payload names itself still wins.
+    const preset = isSurvivorTwistPresetId(setup.survivorTwistPreset) ? setup.survivorTwistPreset : SURVIVOR_TWIST_PRESET_DEFAULT
+    const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...survivorTwistFoundationPatch(preset, Number(tribeCount)), ...setup, defaultTeamCount: managerCount, tribeCount })
     Object.assign(mergedSettings, buildSurvivorSettingsSnapshotPatch({ ...settings }))
+    mergedSettings[SURVIVOR_TWIST_PRESET_SETTING] = preset
     // Free/paid is a label; validateCreatePayload already refused a bad amount. A paid league
     // starts with League Dues on so the commissioner can mark managers paid (dues are off-app).
     const fee = readSurvivorEntryFee(setup.survivorEntryFeeMode ?? setup.survivor_entry_fee_mode,
