@@ -125,6 +125,7 @@ export async function finalizeSeasonAndEnterOffseason(input: {
 
     if (offseasonEntered && archivedSeason != null) {
       await runSeasonHistoryEngines(input.leagueId, archivedSeason, leagueScoring?.sport ?? null)
+      await publishRecap(input.leagueId, archivedSeason, !alreadyFinalized)
     }
 
     if (offseasonEntered && !alreadyFinalized) {
@@ -224,6 +225,22 @@ async function runSeasonHistoryEngines(leagueId: string, seasonYear: number, spo
     await runAwardsEngine(leagueId, season, { sport })
   } catch (error) {
     console.warn('[finalize-season] awards engine failed', { leagueId, season, error })
+  }
+}
+
+/**
+ * The season recap (lib/season-recap): stored with the season's history and announced to the league.
+ * After the archive and the history engines, because it reads the same rows they settle. BEST-EFFORT
+ * and awaited, like the engines above: the champion is already committed, so a failure is logged and
+ * a re-finalize repairs it — recomputing the stored recap, but notifying only on the first finalize.
+ */
+async function publishRecap(leagueId: string, seasonYear: number, notify: boolean): Promise<void> {
+  try {
+    const { publishSeasonRecap } = await import('@/lib/season-recap/seasonRecapService')
+    const out = await publishSeasonRecap(leagueId, seasonYear, { notify })
+    if (!out.ok) console.warn('[finalize-season] season recap skipped', { leagueId, season: seasonYear, reason: out.reason })
+  } catch (error) {
+    console.warn('[finalize-season] season recap failed', { leagueId, season: seasonYear, error })
   }
 }
 

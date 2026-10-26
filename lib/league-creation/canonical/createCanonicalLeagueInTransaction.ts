@@ -40,6 +40,7 @@ import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
+import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
 
 type Tx = Prisma.TransactionClient
 
@@ -664,6 +665,13 @@ export async function createCanonicalLeagueInTransaction(
           ? 1
           : playoffWeeksPerRoundDefault,
       playoffLowerBracket: playoffLowerBracketDefault,
+      /*
+       * A redraft or keeper league starts with a trade deadline three weeks before its own playoffs
+       * (lib/trade-deadline/tradeDeadlineDefaults.ts). Every native league was created with NULL here —
+       * no deadline at all — while the sport configs carried defaults nothing read. The commissioner
+       * changes or clears it in settings; roto and other formats keep no default.
+       */
+      ...(redraftShape ? { tradeDeadlineWeek: defaultTradeDeadlineWeek(redraftShape.playoffStartWeek) } : {}),
       // `keeperCount` defaults to 3 in the schema, so a league that says nothing reads as a
       // three-keeper league to every consumer that trusts the column. A league created here
       // without keepers has decided: none.

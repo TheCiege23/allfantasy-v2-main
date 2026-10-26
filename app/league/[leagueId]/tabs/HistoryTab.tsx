@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { History } from 'lucide-react'
 import {
   Bar,
@@ -16,6 +17,9 @@ import type { UserLeague } from '@/app/dashboard/types'
 import type { ManagerAllTime } from '@/lib/league/history-aggregates'
 import type { LeagueSeason } from '@prisma/client'
 import { SeasonDetailView } from '@/components/league/SeasonDetailView'
+import { SeasonRecapView } from '@/components/league/SeasonRecapView'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export type HistoryTabProps = {
   league: UserLeague
@@ -60,6 +64,15 @@ export function HistoryTab({ league }: HistoryTabProps) {
   const [syncing, setSyncing] = useState(false)
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [detailExpanded, setDetailExpanded] = useState<Record<number, boolean>>({})
+  // The season recap (lib/season-recap) — native leagues only; an import's season was not played here.
+  // `?recap=<season>` is the "recap is ready" notice's deep link and opens that season's recap.
+  const searchParams = useSearchParams()
+  const recapParam = Number.parseInt(searchParams?.get('recap') ?? '', 10)
+  const [recapExpanded, setRecapExpanded] = useState<Record<number, boolean>>(
+    Number.isFinite(recapParam) ? { [recapParam]: true } : {},
+  )
+  const showRecap = isNativePlatform(league.platform)
+  const { tInterpolate } = useOptionalLanguage()
   const historicalBackfillStatus =
     league.settings && typeof league.settings === 'object'
       ? String((league.settings as Record<string, unknown>).historicalBackfillStatus ?? '')
@@ -359,6 +372,17 @@ export function HistoryTab({ league }: HistoryTabProps) {
                     {detailExpanded[s.season] ? 'Hide Details ▲' : 'Full Details ▼'}
                   </button>
                 </div>
+                {showRecap ? (
+                  <button
+                    type="button"
+                    onClick={() => setRecapExpanded((prev) => ({ ...prev, [s.season]: !(prev[s.season] ?? false) }))}
+                    className="mt-2 text-[11px] font-semibold text-amber-200/80 hover:text-amber-100"
+                    aria-expanded={recapExpanded[s.season] ?? false}
+                  >
+                    {tInterpolate('seasonRecap.open')} {recapExpanded[s.season] ? '▲' : '▼'}
+                  </button>
+                ) : null}
+                {showRecap && recapExpanded[s.season] ? <SeasonRecapView leagueId={league.id} season={s.season} /> : null}
                 {detailExpanded[s.season] ? (
                   <SeasonDetailView leagueId={league.id} season={s.season} />
                 ) : null}

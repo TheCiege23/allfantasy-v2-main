@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import { tradeDeadlineRefusal } from '@/lib/trade-deadline/tradeDeadlineWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +53,9 @@ export async function POST(
   const action = (body.action ?? body.response ?? 'reject').toLowerCase()
 
   if (action === 'accept') {
+    // Acceptance is where the deadline binds a trade (lib/trade-deadline/tradeDeadlineWindow.ts).
+    const deadlineRefusal = await tradeDeadlineRefusal(leagueId)
+    if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
     const draftPickTradingAllowed = await isDraftPickTradingAllowedForLeague(leagueId)
     if (!draftPickTradingAllowed) {
       return NextResponse.json({ error: 'Draft pick trading is disabled in Tournament Mode leagues.' }, { status: 403 })

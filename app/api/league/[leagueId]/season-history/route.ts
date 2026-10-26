@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { loadNativeSeasonHistory } from '@/lib/redraft/offseason/nativeSeasonHistory'
+import { getSeasonRecap } from '@/lib/season-recap/seasonRecapService'
 import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 type JsonRecord = Record<string, unknown>
@@ -279,6 +280,16 @@ export async function GET(
 
     const access = await resolveLeagueAccess(id, userId)
     if (!access?.isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    /*
+     * `?view=recap` — the season recap and awards (lib/season-recap). Served from this route rather than
+     * a new one: it is the same season's history, behind the same member gate, and the app sits close
+     * to the platform's route ceiling. The stored recap when there is one; otherwise computed from the
+     * stored season without writing anything.
+     */
+    if (url.searchParams.get('view') === 'recap') {
+      const out = await getSeasonRecap(id, season)
+      return out ? NextResponse.json(out) : NextResponse.json({ error: 'No recap for this season' }, { status: 404 })
+    }
     const league = await prisma.league.findUnique({ where: { id }, select: { platform: true } })
     if (league && isNativePlatform(league.platform)) {
       const history = await loadNativeSeasonHistory(id, season)

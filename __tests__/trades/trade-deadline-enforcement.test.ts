@@ -199,14 +199,14 @@ describe('accept: the deadline binds at acceptance', () => {
   it('🛑 after the deadline, acceptance is refused and nothing is written', async () => {
     setWeek(12)
     h.tradeFindFirst.mockResolvedValue(pendingTrade())
-    await expect(acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })).rejects.toThrow('Trade deadline has passed.')
+    await expect(acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })).rejects.toThrow('Trade deadline passed after Week 11.')
     expect(h.tradeUpdate).not.toHaveBeenCalled()
   })
 
   it('🛑 an instant-review acceptance after the deadline does not settle', async () => {
     setWeek(12)
     h.tradeFindFirst.mockResolvedValue(pendingTrade({ reviewType: 'instant' }))
-    await expect(acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })).rejects.toThrow('Trade deadline has passed.')
+    await expect(acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })).rejects.toThrow('Trade deadline passed after Week 11.')
     expect(h.applyAssets).not.toHaveBeenCalled()
   })
 
@@ -262,8 +262,21 @@ describe('execution: a trade ACCEPTED before the deadline still finishes its rev
   it('🛑 a commissioner processing a still-PENDING offer after the deadline is refused (nobody accepted it in time)', async () => {
     setWeek(12)
     h.tradeFindUniqueOrThrow.mockResolvedValue(pendingTrade())
-    await expect(finalizeAfLeagueTradeProcessing({ tradeId: 't1', actorUserId: 'commish' })).rejects.toThrow('Trade deadline has passed.')
+    await expect(finalizeAfLeagueTradeProcessing({ tradeId: 't1', actorUserId: 'commish' })).rejects.toThrow('Trade deadline passed after Week 11.')
     expect(h.applyAssets).not.toHaveBeenCalled()
+  })
+
+  it('the commissioner override (process route, `commissionerOverride: true`) forces that offer through', async () => {
+    setWeek(12)
+    h.tradeFindUniqueOrThrow.mockResolvedValue(pendingTrade())
+    await finalizeAfLeagueTradeProcessing({ tradeId: 't1', actorUserId: 'commish', commissionerOverride: true })
+    expect(h.applyAssets).toHaveBeenCalledTimes(1)
+  })
+
+  it('a close time in settings refuses acceptance from that moment, and names it', async () => {
+    h.league = leagueWith({ tradeDeadlineWeek: null, settings: { trade_deadline_at: '2020-01-01T00:00:00.000Z' }, timezone: 'America/New_York' })
+    h.tradeFindFirst.mockResolvedValue(pendingTrade())
+    await expect(acceptAfLeagueTrade({ tradeId: 't1', userId: 'uB', leagueId: L })).rejects.toThrow(/The trade deadline passed on /)
   })
 
   it('the same pending offer processed before the deadline goes through', async () => {
