@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { runShuffle } from './SurvivorTribeShuffleEngine'
+import { notifySurvivorCommissionerOnce } from './survivorCommissionerAlerts'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import {
   SURVIVOR_HOST_USER_ID,
@@ -11,6 +12,7 @@ import {
   TRIBE_REDRAW_RECOMMENDATION_ACTION,
   TRIBE_REDRAW_RESPONSE_ACTION,
   TRIBE_REDRAW_RESPONSE_ACTIONS,
+  survivorRedrawTribeCount,
   type TribeRedrawDecision,
 } from './survivorTribeRedrawActions'
 
@@ -149,4 +151,63 @@ export async function autoApplyPendingTribeRedraw(leagueId: string, week: number
   if (pending.week != null && pending.week >= week) return { applied: false, reason: 'commissioner_window_open' }
   const result = await respondToTribeRedraw(leagueId, SURVIVOR_HOST_USER_ID, pending.id, TRIBE_REDRAW_DEFAULT_DECISION, { automatic: true })
   return result.ok ? { applied: true } : { applied: false, reason: result.error }
+}
+
+/** A tribe below this many active managers cannot hold a council: nobody is left to vote. */
+export const SURVIVOR_COUNCIL_MIN_TRIBE_SIZE = 2
+
+export type CouncilTribeGuardResult = { action: 'none' | 'redrawn' | 'merged'; reason?: string; tribeCount?: number }
+
+/**
+ * Never freeze. Called by the season runner just before it opens a pre-merge council: when any
+ * tribe is down to one manager (or none), the council cannot run, so the commissioner's window is
+ * over and Chimmy acts now. The default is a random redraw into as many tribes as the cast can
+ * fill; when no fair redraw is possible, the merge starts early. Either way the commissioner hears
+ * about it once and the season carries on.
+ */
+export async function rebalanceTribesBeforeCouncil(leagueId: string, week: number): Promise<CouncilTribeGuardResult> {
+  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true, mergeTriggeredAt: true, activeCouncilId: true } })
+  if (!game || game.mergeTriggeredAt || game.activeCouncilId || !['pre_merge', 'active', 'tribe', 'post_swap'].includes(game.phase)) return { action: 'none' }
+  const tribes = await prisma.survivorTribe.findMany({ where: { leagueId, isActive: true, isMerged: false }, select: { id: true } })
+  if (tribes.length < 2) return { action: 'none' }
+  const players = await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { tribeId: true } })
+  const sizes = tribes.map(tribe => players.filter(player => player.tribeId === tribe.id).length)
+  const smallest = Math.min(...sizes)
+  if (smallest >= SURVIVOR_COUNCIL_MIN_TRIBE_SIZE) return { action: 'none' }
+
+  const pending = await getPendingTribeRedraw(leagueId)
+  const tribeCount = survivorRedrawTribeCount(players.length, tribes.length)
+  let action: CouncilTribeGuardResult['action'] = 'none'
+  let reason: string | undefined
+  if (tribeCount != null) {
+    const redraw = pending
+      ? await respondToTribeRedraw(leagueId, SURVIVOR_HOST_USER_ID, pending.id, 'approve', { automatic: true })
+      : await runShuffle(leagueId, { actorUserId: SURVIVOR_HOST_USER_ID })
+    if (redraw.ok) action = 'redrawn'
+    else reason = redraw.error
+  }
+  if (action === 'none') {
+    if (pending && (await getPendingTribeRedraw(leagueId))?.id === pending.id) {
+      const merged = await respondToTribeRedraw(leagueId, SURVIVOR_HOST_USER_ID, pending.id, 'merge', { automatic: true })
+      if (merged.ok) action = 'merged'
+      else reason = merged.error
+    } else {
+      const { advancePhase } = await import('./gameStateMachine')
+      await advancePhase(leagueId, 'automatic', undefined, { toPhase: 'merge', notes: 'tribe_too_small_merge_now' })
+      action = 'merged'
+    }
+  }
+  if (action === 'none') return { action, reason }
+
+  await notifySurvivorCommissionerOnce(leagueId, 'tribes_rebalanced', {
+    dedupeKey: `${week}:${action}`,
+    week,
+    urgency: 'medium',
+    title: action === 'redrawn' ? 'Tribes redrawn so the season keeps moving' : 'The merge started early so the season keeps moving',
+    body: action === 'redrawn'
+      ? `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'}, too few for Tribal Council. Chimmy redrew the cast into ${tribeCount} tribes before this week's council. Nothing for you to do.`
+      : `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'} and the cast was too small to redraw fairly, so Chimmy started the merge before this week's council. Nothing for you to do.`,
+    deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`,
+  }).catch(() => {})
+  return { action, ...(action === 'redrawn' && tribeCount != null ? { tribeCount } : {}) }
 }

@@ -20,6 +20,7 @@ export type SurvivorCommissionerAlertKind =
   | 'tie_unresolved'
   | 'jury_overdue'
   | 'exile_setup_failed'
+  | 'tribes_rebalanced'
 
 export const SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION = 'commissioner_alert_sent'
 
