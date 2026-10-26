@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import { buildPlayoffTemplate, getPlayoffRoundOrder } from "./playoffTemplate"
 import { resolvePlayoffSeedField } from "./playoffSeeding"
+import { readSingleGameSchedule } from "./singleGameSchedule"
 import type { PlayoffChallengeConfig, PlayoffChallengeListItem, PlayoffChallengeView, PlayoffCreateResponse, PlayoffSport } from "./types"
 import { getDependentPlayoffSeriesIds, isOfficialTeamName } from "./playoffBracketProjection"
 import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
@@ -105,15 +106,22 @@ export async function createPlayoffBracketChallenge(input: {
   const field = !input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup")
     ? await resolvePlayoffSeedField(input.sport, seasonYear)
     : null
+  const schedule = !input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup")
+    ? await readSingleGameSchedule(input.sport, seasonYear)
+    : null
+  const scheduledTemplate = baseTemplate.map((row) => ({
+    ...row,
+    startsAt: schedule?.games.find((game) => game.seriesNumber === row.seriesNumber)?.startsAt ?? row.startsAt,
+  }))
   const template = field?.isFinal
-    ? baseTemplate.map((row) => {
+    ? scheduledTemplate.map((row) => {
         const seededName = (name: string) => {
           const hit = /^(?:CFP|EAST|WEST)(\d+)$/i.exec(name)
           return hit ? field.seeds.get(row.conference)?.get(Number(hit[1])) ?? name : name
         }
         return { ...row, homeTeamName: seededName(row.homeTeamName), awayTeamName: seededName(row.awayTeamName) }
       })
-    : baseTemplate
+    : scheduledTemplate
 
   const result = await prisma.$transaction(async (tx) => {
     const challengeData: Record<string, unknown> = {
@@ -676,6 +684,8 @@ export async function savePlayoffBracketPick(input: {
           config: true,
           isTestMode: true,
           ownerUserId: true,
+          sport: true,
+          seasonYear: true,
         },
       },
     },
@@ -683,6 +693,13 @@ export async function savePlayoffBracketPick(input: {
 
   if (!series || series.challengeId !== input.challengeId) {
     throw new Error("Series not found")
+  }
+
+  if (!series.challenge?.isTestMode &&
+      (series.challenge?.sport === "ncaaf" || series.challenge?.sport === "nba_cup")) {
+    const field = await resolvePlayoffSeedField(series.challenge.sport, series.challenge.seasonYear)
+    if (!field.isFinal) throw new Error("Official tournament field is pending.")
+    if (!series.startsAt) throw new Error("Official game schedule is pending.")
   }
 
   // lockRule is on the base config, not an AF Commissioner option, so no plan check is needed.
