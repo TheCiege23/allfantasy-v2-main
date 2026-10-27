@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   resolutionUpdate: vi.fn(),
   announcementUpsert: vi.fn(),
   chatUpsert: vi.fn(),
+  payoutCount: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   redraftMatchup: { findMany: h.matchupFindMany },
@@ -44,6 +45,7 @@ beforeEach(() => {
   h.rules.mockResolvedValue(rules)
   h.resolutionUpdate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ ...previous, ...data }))
   h.announcementUpsert.mockResolvedValue({ id: 'announcement-1' })
+  h.payoutCount.mockResolvedValue(0)
   h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback({
     zombieWeeklyResolution: { findUnique: vi.fn(async () => previous), update: h.resolutionUpdate },
     redraftMatchup: { findMany: vi.fn(async () => [current]) },
@@ -51,6 +53,7 @@ beforeEach(() => {
       { id: 'a', platformUserId: 'user-a' }, { id: 'b', platformUserId: 'user-b' },
     ]) },
     zombieInfectionEvent: { findMany: vi.fn(async () => []) },
+    zombieExternalWeeklyPayout: { count: h.payoutCount },
     zombieWeeklyWinnings: {
       upsert: h.ledgerUpsert,
       findMany: vi.fn(async () => [{ rosterId: 'a', amount: 91 }, { rosterId: 'b', amount: 85 }]),
@@ -79,6 +82,17 @@ describe('transactional Zombie score correction', () => {
     expect(h.chatUpsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ zombieWeeklyAnnouncementId: 'announcement-1' }),
     }))
+  })
+
+  it('holds score-only correction after an external prize is recorded', async () => {
+    h.payoutCount.mockResolvedValue(1)
+    const result = await reconcileScoreOnlyCorrection({
+      zombieLeagueId: 'z1', leagueId: 'L1', seasonId: 's1', season: 2026,
+      sport: 'NFL', week: 1, ownerUserId: 'owner', previous,
+    })
+    expect(result).toBeNull()
+    expect(h.ledgerUpsert).not.toHaveBeenCalled()
+    expect(h.teamUpdateMany).not.toHaveBeenCalled()
   })
 
   it('does not enter the transaction when an award threshold changes', async () => {
