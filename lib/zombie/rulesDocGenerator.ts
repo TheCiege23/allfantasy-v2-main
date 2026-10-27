@@ -347,7 +347,7 @@ export async function generateZombieRulesDocumentHtml(fantasyLeagueId: string, s
     where: { leagueId: z.id },
     orderBy: { version: 'desc' },
   })
-  if (latest) return getRulesDocAsHtml(latest)
+  if (latest && latest.sectionSerums.includes('Serums to revive:')) return getRulesDocAsHtml(latest)
 
   const doc = await generateRulesDocument(z.id)
   return getRulesDocAsHtml(doc)
