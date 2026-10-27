@@ -55,6 +55,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'experienceMode must be simple or enhanced.' }, { status: 400 })
   }
 
+  const whispererCount = body.whispererCount === undefined ? 1 : body.whispererCount
+  if (whispererCount !== 1 && whispererCount !== 2) {
+    return NextResponse.json({ error: 'whispererCount must be 1 or 2.' }, { status: 400 })
+  }
+  if (whispererCount === 2 && (sport === 'NFL' || body.experienceMode === 'simple')) {
+    return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
+  }
+
   const teamCountRaw = typeof body.teamCount === 'number' ? body.teamCount : null
   if (teamCountRaw == null || !(ZOMBIE_ALLOWED_TEAM_COUNTS as readonly number[]).includes(teamCountRaw)) {
     return NextResponse.json(
@@ -135,6 +143,7 @@ export async function POST(req: Request) {
       namingMode: typeof body.namingMode === 'string' ? body.namingMode : 'hybrid',
       backgroundTheme: getRandomZombieTheme(),
       experienceMode: isZombieExperienceMode(body.experienceMode) ? body.experienceMode : 'enhanced',
+      whispererCount,
     },
     universeId ?? null,
     tierId ?? null,
