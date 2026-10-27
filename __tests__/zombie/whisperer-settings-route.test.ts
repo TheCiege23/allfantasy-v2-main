@@ -106,4 +106,22 @@ describe('PATCH /api/zombie/settings Whisperer selection', () => {
     expect(response.status).toBe(403)
     expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
   })
+  it('rejects ambush caps larger than a season grant', async () => {
+    h.zombieLeagueFindUnique.mockResolvedValue({
+      id: 'zombie-1', leagueId: 'league-1', status: 'setup', whispererAmbushCount: 3,
+    })
+    h.zombieLeagueConfigFindUnique.mockResolvedValue({ ambushCountPerWeek: 1 })
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    const response = await PATCH(patch({ whispererAmbushCount: 0 }))
+    expect(response.status).toBe(400)
+    expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects an impossible serum revival cost', async () => {
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    const response = await PATCH(patch({ serumReviveCount: 0 }))
+    expect(response.status).toBe(400)
+    expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
+  })
+
 })
