@@ -218,3 +218,40 @@ export async function rebalanceTribesBeforeCouncil(leagueId: string, week: numbe
   }).catch(() => {})
   return { action, ...(action === 'redrawn' && tribeCount != null ? { tribeCount } : {}) }
 }
+
+/** Audit action for the once-a-week redraw that unblocks NBA sit-outs. */
+export const SIT_OUT_BALANCE_REDRAW_ACTION = 'tribe_redraw_sit_out_balance'
+
+/**
+ * NBA tribes stay fair by benching managers on the bigger tribes each week, and nobody sits out
+ * two weeks running. Once the tribes drift far enough apart no rotation satisfies both, and
+ * `settleNbaTribeSitOutDeadline` reports `blocked`. The season used to wait there for the
+ * commissioner indefinitely; measured in the full-season rehearsal (NBA 20, 2026-10-27), it stalled
+ * at week 7 with 17 managers left. Chimmy now redraws the tribes, once per week, as the council
+ * guard above already does, and tells the commissioner afterwards. Pre-merge only, never while a
+ * council is open; a redraw that cannot run is left for the commissioner.
+ */
+export async function redrawTribesForSitOutBalance(leagueId: string, week: number): Promise<{ redrawn: boolean; reason?: string }> {
+  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true, mergeTriggeredAt: true, activeCouncilId: true } })
+  if (!game || game.mergeTriggeredAt || game.activeCouncilId || !['pre_merge', 'active', 'tribe', 'post_swap'].includes(game.phase)) return { redrawn: false, reason: 'not_pre_merge' }
+  const done = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, week, action: SIT_OUT_BALANCE_REDRAW_ACTION }, select: { id: true } })
+  if (done) return { redrawn: false, reason: 'already_redrawn_this_week' }
+  const pending = await getPendingTribeRedraw(leagueId)
+  const redraw = pending
+    ? await respondToTribeRedraw(leagueId, SURVIVOR_HOST_USER_ID, pending.id, 'approve', { automatic: true })
+    : await runShuffle(leagueId, { actorUserId: SURVIVOR_HOST_USER_ID })
+  if (!redraw.ok) return { redrawn: false, reason: redraw.error }
+  await prisma.survivorAuditEntry.create({ data: {
+    leagueId, week, category: 'automation', action: SIT_OUT_BALANCE_REDRAW_ACTION, actorUserId: SURVIVOR_HOST_USER_ID,
+    data: { reason: 'no_fair_sit_out_rotation' }, isVisibleToCommissioner: true, isVisibleToPublic: true,
+  } })
+  await notifySurvivorCommissionerOnce(leagueId, 'tribes_rebalanced', {
+    dedupeKey: `${week}:sit_out_redraw`,
+    week,
+    urgency: 'medium',
+    title: 'Tribes redrawn so NBA sit-outs stay fair',
+    body: `No sit-out rotation could even out this week's tribe totals without someone sitting out twice in a row, so Chimmy redrew the tribes before the first tipoff. Nothing for you to do.`,
+    deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`,
+  }).catch(() => {})
+  return { redrawn: true }
+}
