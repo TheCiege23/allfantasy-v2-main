@@ -65,13 +65,18 @@ export async function runScheduleImporter(options?: {
     })
     const sourceGames = Array.isArray(response.data) && response.data.length > 0 ? response.data : legacyGames
 
-    const rows = sourceGames.map((game: any) => {
+    const rows = sourceGames.flatMap((game: any) => {
       const homeTeam = normalizeTeamAbbrev(game.homeTeamAbbrev ?? game.homeTeam) ?? game.homeTeamAbbrev ?? game.homeTeam ?? 'TBD'
       const awayTeam = normalizeTeamAbbrev(game.awayTeamAbbrev ?? game.awayTeam) ?? game.awayTeamAbbrev ?? game.awayTeam ?? 'TBD'
-      const gameDate = game.date ? new Date(game.date) : game.startTime ?? new Date()
+      const rawStart = game.startTime ?? game.date
+      if (!rawStart) return []
+      const dateOnly = typeof rawStart === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(rawStart)
+      const gameDate = new Date(dateOnly ? `${rawStart}T12:00:00.000Z` : rawStart)
+      if (Number.isNaN(gameDate.getTime())) return []
       const legacy = legacyMap.get(`${homeTeam}:${awayTeam}:${gameDate.toISOString().slice(0, 10)}`)
+      const exactStart = dateOnly ? (legacy?.startTime ?? null) : gameDate
 
-      return {
+      return [{
         sportType: sport,
         season,
         weekOrRound: resolveImportedGameWeek(sport, season, gameDate, game.weekOrRound ?? game.week, legacy?.week),
@@ -80,13 +85,13 @@ export async function runScheduleImporter(options?: {
         awayTeamId: typeof game.awayTeamId === 'string' ? game.awayTeamId : legacy?.awayTeamId ?? null,
         homeTeam,
         awayTeam,
-        startTime: gameDate,
+        startTime: exactStart,
         venue: game.venue ?? legacy?.venue ?? null,
         weather: undefined,
         status: String(game.status ?? legacy?.status ?? 'scheduled').toLowerCase(),
         homeScore: typeof legacy?.homeScore === 'number' ? legacy.homeScore : null,
         awayScore: typeof legacy?.awayScore === 'number' ? legacy.awayScore : null,
-      }
+      }]
     })
 
     for (const batch of chunk(rows, UPSERT_BATCH_SIZE)) {
