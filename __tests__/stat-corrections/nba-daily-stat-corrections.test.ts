@@ -46,10 +46,11 @@ const day = (d: string) => new Date(`${d}T00:00:00Z`)
 const LINE = { pts: 30, reb: 10, ast: 5 }
 const LINE_MINUS_2_REB = { pts: 30, reb: 8, ast: 5 }
 
-function seed(over: { settings?: Record<string, unknown>; players?: unknown[]; dailyRows?: unknown[] } = {}) {
+function seed(over: { settings?: Record<string, unknown>; players?: unknown[]; dailyRows?: unknown[]; sport?: string; lines?: [Record<string, number>, Record<string, number>] } = {}) {
+  const sport = over.sport ?? 'NBA'
   m.prisma.redraftSeason.findUnique.mockResolvedValue({
-    id: 'S', leagueId: 'L', season: 2026, sport: 'NBA',
-    league: { platform: 'allfantasy', sport: 'NBA', settings: over.settings ?? DAILY, bestBallMode: false, leagueVariant: null, leagueType: null },
+    id: 'S', leagueId: 'L', season: 2026, sport,
+    league: { platform: 'allfantasy', sport, settings: over.settings ?? DAILY, bestBallMode: false, leagueVariant: null, leagueType: null },
   })
   m.prisma.redraftMatchup.findFirst.mockResolvedValue({ week: 3 })
   // A 2-point game: one day's two rebounds decide it.
@@ -58,7 +59,7 @@ function seed(over: { settings?: Record<string, unknown>; players?: unknown[]; d
   ])
   m.prisma.redraftRosterPlayer.findMany.mockResolvedValue(
     over.players ?? [
-      { rosterId: 'A', playerId: 'g1', playerName: 'Guard One', position: 'PG', slotType: 'PG', sport: 'NBA', addedAt: day('2026-10-01'), droppedAt: null },
+      { rosterId: 'A', playerId: 'g1', playerName: 'Guard One', position: 'PG', slotType: 'PG', sport, addedAt: day('2026-10-01'), droppedAt: null },
     ],
   )
   // Started Monday, benched from Wednesday on.
@@ -70,8 +71,8 @@ function seed(over: { settings?: Record<string, unknown>; players?: unknown[]; d
   )
   // He played Tuesday (started) and Wednesday (benched).
   m.prisma.playerDailyScore.findMany.mockResolvedValue([
-    { playerId: 'g1', scoringDay: day('2026-11-03'), stats: LINE, isFinalized: true },
-    { playerId: 'g1', scoringDay: day('2026-11-04'), stats: LINE, isFinalized: true },
+    { playerId: 'g1', scoringDay: day('2026-11-03'), stats: over.lines?.[0] ?? LINE, isFinalized: true },
+    { playerId: 'g1', scoringDay: day('2026-11-04'), stats: over.lines?.[1] ?? LINE, isFinalized: true },
   ])
   m.prisma.sportsDataCache.findUnique.mockResolvedValue(null)
 }
@@ -142,5 +143,22 @@ describe('NBA daily-lineup stat corrections', () => {
     expect(await run()).toBe('no_change')
     expect(fetchDailyDayStats).not.toHaveBeenCalled()
     expect(m.prisma.redraftDailyLineup.findMany).not.toHaveBeenCalled()
+  })
+
+  // MLB and NHL daily-lineup leagues: the same day-by-day check, scored by each sport's real defaults.
+  it.each([
+    ['NHL', { g: 1, a: 1 }, { g: 1, a: 0 }, -2], // an assist taken away
+    ['MLB', { r: 1, hr: 1, rbi: 1 }, { r: 1, hr: 0, rbi: 1 }, -4], // a home run re-scored
+  ])('%s: a started-day correction is logged; the same correction on a benched day is not', async (sport, line, corrected, delta) => {
+    seed({ sport, lines: [line, line] })
+    fetchDailyDayStats.mockResolvedValue(fresh({ '2026-11-03': corrected, '2026-11-04': line }))
+    expect(await run()).toBe('changes_logged')
+    expect(fetchDailyDayStats).toHaveBeenCalledWith(expect.objectContaining({ sport, week: 3 }))
+    expect(m.prisma.leagueAuditLog.create.mock.calls[0]![0].data.afterState.changes[0].delta).toBe(delta)
+
+    vi.clearAllMocks()
+    seed({ sport, lines: [line, line] })
+    fetchDailyDayStats.mockResolvedValue(fresh({ '2026-11-03': line, '2026-11-04': corrected }))
+    expect(await run()).toBe('no_change')
   })
 })

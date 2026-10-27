@@ -211,7 +211,7 @@ export async function commissionerApplyStatCorrections(leagueId: string, userId:
 }
 
 export const APPLY_STAT_CORRECTION_ERROR_TEXT: Record<ApplyStatCorrectionsError, string> = {
-  not_covered: 'Stat-correction review covers AllFantasy NFL and NBA leagues only.',
+  not_covered: 'Stat-correction review covers AllFantasy NFL, NBA, MLB and NHL leagues only.',
   no_review: 'There is no stat-correction review to apply.',
   not_in_review: 'That matchup has no correction in the latest review.',
   elimination_format: 'In an elimination league a week can already have cost a team its season, so corrections are shown, never applied.',

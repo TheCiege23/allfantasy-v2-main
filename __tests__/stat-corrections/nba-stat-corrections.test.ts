@@ -79,7 +79,21 @@ describe('NBA stat corrections', () => {
   })
 
   it('other daily sports stay out until they are checked', async () => {
-    seed({ sport: 'NHL' })
+    seed({ sport: 'NCAAB' })
     expect(await run()).toBe('not_supported')
+  })
+
+  // MLB and NHL weekly leagues: the same re-sum from the game table, scored by each sport's real defaults.
+  it.each([
+    ['NHL', { g: 1, a: 1, sog: 4 }, { g: 1, a: 0, sog: 4 }, -2], // an assist taken away (2 points)
+    ['MLB', { r: 1, hr: 1, rbi: 2 }, { r: 1, hr: 0, rbi: 2 }, -4], // a home run re-scored (4 points)
+  ])('%s: a correction is re-summed from the game table, scored by the league\'s rules, and logged', async (sport, stored, fresh, delta) => {
+    seed({ sport })
+    m.prisma.playerWeeklyScore.findMany.mockResolvedValue([{ playerId: 'g1', stats: stored }])
+    fetchDailyStats.mockResolvedValue(new Map([['g1', fresh]]))
+    expect(await run()).toBe('changes_logged')
+    expect(fetchDailyStats).toHaveBeenCalledWith(expect.objectContaining({ sport, week: 3 }))
+    const change = m.prisma.leagueAuditLog.create.mock.calls[0]![0].data.afterState.changes[0]
+    expect(change.delta).toBe(delta)
   })
 })

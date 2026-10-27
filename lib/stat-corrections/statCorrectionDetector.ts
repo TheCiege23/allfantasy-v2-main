@@ -11,8 +11,8 @@
  * read by the commissioner card), and a `stat_correction_detected` league-log row the first time
  * each distinct set of corrections is seen.
  *
- * Scope, deliberately narrow: native NFL and NBA points leagues, with weekly lineups or — NBA only —
- * daily lineups. Best ball, devy, C2C, category, games-count, games-limits and imported leagues score
+ * Scope, deliberately narrow: native NFL, NBA, MLB and NHL points leagues, with weekly lineups or — the
+ * daily sports only — daily lineups. Best ball, devy, C2C, category, games-count, games-limits and imported leagues score
  * differently or are scored by their platform, and team defenses are scored from game results rather
  * than this stat line — all are reported as not covered rather than guessed at.
  *
@@ -23,7 +23,7 @@
  * lineup) and the same roster days (`daysOnRoster`, a player dropped mid-week included).
  *
  * Where the fresh stats come from differs by sport. NFL: a provider pull (corrections never reach a
- * table on their own). NBA: the week re-summed from `player_game_stats`, which the scheduled import
+ * table on their own). NBA, MLB, NHL: the week re-summed from `player_game_stats`, which the scheduled import
  * re-sweeps for recent days (./dailyWeekStats.ts) — DB-first, and summed by the sync's own rules.
  */
 import type { Prisma } from '@prisma/client'
@@ -63,8 +63,11 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import type { StarterStatLine } from './statCorrectionReview'
 
-/** Sports whose points leagues are checked. NBA's fresh stats come from the game table. */
-export const STAT_CORRECTION_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA'])
+/**
+ * Sports whose points leagues are checked. The daily sports' fresh stats come from the game table, which
+ * the scheduled multi-sport import re-sweeps for MLB, NBA and NHL alike.
+ */
+export const STAT_CORRECTION_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'MLB', 'NHL'])
 
 /** How long after a week's seal it is still re-checked (free leagues). Corrections land within the week. */
 export const STAT_CORRECTION_WINDOW_MS = FREE_CORRECTION_WINDOW_DAYS * 24 * 60 * 60 * 1000

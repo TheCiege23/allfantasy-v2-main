@@ -1,5 +1,5 @@
 /**
- * A daily sport's (NBA) week of stats, re-read from `player_game_stats` for the stat-correction check.
+ * A daily sport's (NBA, MLB, NHL) week of stats, re-read from `player_game_stats` for the stat-correction check.
  *
  * DB-first on purpose: the scheduled game-stats import (`/api/cron/import-player-game-stats?multiSport=1`)
  * re-sweeps the last few days on every run, so a correction to a recent game lands in that table. The
