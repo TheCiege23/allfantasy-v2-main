@@ -16,6 +16,7 @@ import {
   selectEligibleTeams,
   buildEligibleTeamsWithOdds,
 } from './standingsForLottery'
+import { activeLotteryOddsPenalties, applyLotteryOddsPenalties, readLotteryOddsPenalties } from '@/lib/integrity/tankingPenalties'
 
 const DEFAULT_PLAYOFF_TEAM_COUNT = 6
 
@@ -124,6 +125,23 @@ async function getPlayoffTeamCount(leagueId: string): Promise<number> {
 }
 
 /**
+ * Anti-tanking lottery penalties (lib/integrity/tankingPenalties.ts) not yet spent: each cuts a team's
+ * weight, and the odds are re-shared over what is left. Both the preview and the draw go through
+ * this, so the odds a manager is shown are the odds the draw uses.
+ */
+async function withTankingPenalties(leagueId: string, eligible: LotteryEligibleTeam[]): Promise<LotteryEligibleTeam[]> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const penalties = readLotteryOddsPenalties(league?.settings)
+  if (penalties.length === 0) return eligible
+  const completed = await prisma.draftSession.findMany({ where: { leagueId, status: 'completed' }, select: { createdAt: true } })
+  const active = activeLotteryOddsPenalties(penalties, completed)
+  if (active.length === 0) return eligible
+  const cut = applyLotteryOddsPenalties(eligible, active)
+  const total = cut.reduce((s, t) => s + t.weight, 0)
+  return cut.map((t) => ({ ...t, oddsPercent: total > 0 ? (t.weight / total) * 100 : 0 }))
+}
+
+/**
  * Build full slot order: lottery picks first, then remaining teams in fallback order.
  */
 function buildFullSlotOrder(
@@ -172,7 +190,7 @@ export async function previewLotteryOdds(
     config.lotteryTeamCount,
     playoffTeamCount
   )
-  const eligible = buildEligibleTeamsWithOdds(eligibleRows, config.weightingMode)
+  const eligible = await withTankingPenalties(leagueId, buildEligibleTeamsWithOdds(eligibleRows, config.weightingMode))
 
   return {
     eligible,
@@ -204,7 +222,7 @@ export async function runWeightedLottery(
     config.lotteryTeamCount,
     playoffTeamCount
   )
-  const eligible = buildEligibleTeamsWithOdds(eligibleRows, config.weightingMode)
+  const eligible = await withTankingPenalties(leagueId, buildEligibleTeamsWithOdds(eligibleRows, config.weightingMode))
   if (eligible.length === 0) return null
 
   const lotteryPickCount = Math.min(config.lotteryPickCount, eligible.length)

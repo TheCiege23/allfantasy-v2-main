@@ -5,11 +5,17 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { logAction } from '@/server/services/auditService'
 import { loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import {
   choosePickToForfeit,
+  describePenalty,
   describePick,
+  faabPenaltyAmount,
+  readLotteryOddsPenalties,
   readTankingPenaltyPolicy,
   tankingStepForStrike,
+  TANKING_LOTTERY_PENALTIES_KEY,
+  type TankingPenaltyPolicy,
   type TankingStep,
 } from './tankingPenalties'
 
@@ -22,6 +28,8 @@ import {
 export const TANKING_WARNING_ACTION = 'integrity.tanking_warning'
 export const TANKING_STRIKE_ACTION = 'integrity.tanking_strike'
 export const TANKING_PICK_FORFEITED_ACTION = 'integrity.tanking_pick_forfeited'
+export const TANKING_LOTTERY_ODDS_ACTION = 'integrity.tanking_lottery_odds_cut'
+export const TANKING_FAAB_ACTION = 'integrity.tanking_faab_taken'
 
 /**
  * Penalties are for leagues run on AllFantasy. An imported league's draft picks and its managers live
@@ -79,7 +87,7 @@ export async function onTankingFlagOpened(flagId: string): Promise<void> {
       rosterId,
       'Your lineup was flagged for review',
       `The league's integrity monitor flagged your lineup as possible tanking: starters who could not play, or a much stronger bench. Your commissioner will review it. ${
-        left <= 1 ? 'If it is confirmed, your team loses a draft pick.' : `Confirmed cases count as strikes; ${left} more costs your team a draft pick.`
+        left <= 1 ? `If it is confirmed, your team loses ${describePenalty(policy)}.` : `Confirmed cases count as strikes; ${left} more costs your team ${describePenalty(policy)}.`
       }`,
     )
     await logAction({ leagueId: flag.leagueId, userId: null, actionType: TANKING_WARNING_ACTION, entityType: 'roster', entityId: rosterId, metadata: { flagId, confirmedStrikes: confirmed } })
@@ -103,12 +111,16 @@ export async function countConfirmedStrikes(leagueId: string, rosterId: string):
 export type TankingConfirmationResult = {
   rosterId: string
   step: TankingStep
+  /** `forfeit_pick`: the pick taken, or null when the team holds none. */
   forfeited?: { season: number; round: number; label: string } | null
+  /** `lottery_odds` / `faab`: what was taken, in words, or null when there was nothing to take. */
+  penalty?: { label: string } | null
 }
 
 /**
  * The commissioner confirmed a tanking flag: each team on it takes a strike, and at the league's
- * threshold loses a pick (the commissioner is told when the team holds none to lose).
+ * threshold pays the league's penalty — a pick, lottery odds or FAAB (the commissioner is told when
+ * there is nothing to take).
  */
 export async function onTankingFlagConfirmed(flagId: string, commissionerUserId: string): Promise<TankingConfirmationResult[]> {
   const flag = await prisma.integrityFlag.findUnique({
@@ -137,6 +149,22 @@ export async function onTankingFlagConfirmed(flagId: string, commissionerUserId:
         }`,
       )
       out.push({ rosterId, step })
+      continue
+    }
+    if (step.kind === 'lottery_odds' || step.kind === 'faab') {
+      const taken =
+        step.kind === 'lottery_odds'
+          ? await cutLotteryOddsForTanking(flag.leagueId, rosterId, policy, flagId, commissionerUserId)
+          : await takeFaabForTanking(flag.leagueId, rosterId, policy, flagId, commissionerUserId)
+      await tellManager(
+        flag.leagueId,
+        rosterId,
+        taken ? 'Tanking penalty applied' : 'Tanking strike confirmed',
+        taken
+          ? `Your commissioner confirmed another tanking case (strike ${strikes}). Your team loses ${taken.label}.`
+          : `Your commissioner confirmed another tanking case (strike ${strikes}). There is no FAAB to take from your team, so the commissioner will decide the penalty.`,
+      )
+      out.push({ rosterId, step, penalty: taken })
       continue
     }
     const forfeited = await forfeitPickForTanking(flag.leagueId, rosterId, policy.pickRound, flagId, commissionerUserId)
@@ -187,4 +215,66 @@ export async function forfeitPickForTanking(
     metadata: { flagId, season: pick.season, round: pick.round, originalRosterId: pick.originalTeamId },
   })
   return { season: pick.season, round: pick.round, label: describePick(pick) }
+}
+
+/**
+ * Cut the team's odds in the next rookie-draft lottery: the cut is recorded on the league and the
+ * lottery engine applies it to the preview and the draw until that draft is complete
+ * (`activeLotteryOddsPenalties`). Two cuts compound.
+ */
+export async function cutLotteryOddsForTanking(
+  leagueId: string,
+  rosterId: string,
+  policy: TankingPenaltyPolicy,
+  flagId: string,
+  commissionerUserId: string,
+): Promise<{ label: string }> {
+  const at = new Date().toISOString()
+  await prisma.$transaction(async (tx) => {
+    const league = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const settings = league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : {}
+    const list = [...readLotteryOddsPenalties(settings), { rosterId, cutPct: policy.lotteryOddsCutPct, at, flagId }]
+    await tx.league.update({ where: { id: leagueId }, data: { settings: { ...settings, [TANKING_LOTTERY_PENALTIES_KEY]: list } as never } })
+  })
+  await logAction({
+    leagueId,
+    userId: commissionerUserId,
+    actionType: TANKING_LOTTERY_ODDS_ACTION,
+    entityType: 'roster',
+    entityId: rosterId,
+    metadata: { flagId, cutPct: policy.lotteryOddsCutPct },
+  })
+  return { label: describePenalty(policy) }
+}
+
+/**
+ * Take a share of the season FAAB budget from what the team has left (never below zero). Null when
+ * the league does not use FAAB or the team has none left: the commissioner is told instead.
+ */
+export async function takeFaabForTanking(
+  leagueId: string,
+  rosterId: string,
+  policy: TankingPenaltyPolicy,
+  flagId: string,
+  commissionerUserId: string,
+): Promise<{ label: string } | null> {
+  const waivers = await getEffectiveLeagueWaiverSettings(leagueId).catch(() => null)
+  if (!waivers || waivers.normalizedWaiverType !== 'faab') return null
+  const taken = await prisma.$transaction(async (tx) => {
+    const roster = await tx.roster.findUnique({ where: { id: rosterId }, select: { faabRemaining: true } })
+    const amount = faabPenaltyAmount(waivers.faabBudget, roster?.faabRemaining, policy.faabPercent)
+    if (amount <= 0) return null
+    await tx.roster.update({ where: { id: rosterId }, data: { faabRemaining: { decrement: amount } } })
+    return { amount, before: roster!.faabRemaining! }
+  })
+  if (!taken) return null
+  await logAction({
+    leagueId,
+    userId: commissionerUserId,
+    actionType: TANKING_FAAB_ACTION,
+    entityType: 'roster',
+    entityId: rosterId,
+    metadata: { flagId, amount: taken.amount, faabBefore: taken.before, faabAfter: taken.before - taken.amount },
+  })
+  return { label: `$${taken.amount} of FAAB` }
 }
