@@ -120,7 +120,7 @@ export function ZombieWhispererPanel({
           disabled={!editable}
           className="min-h-[44px] rounded-lg bg-red-700/30 px-5 py-2 font-semibold text-red-100 disabled:opacity-40"
         >
-          {saving ? 'Saving…' : 'Save selection'}
+          {saving ? 'Saving…' : 'Save Whisperer settings'}
         </button>
         {loading && <span className="text-white/55">Loading settings…</span>}
         {message && <span role="status" className="text-white/70">{message}</span>}
