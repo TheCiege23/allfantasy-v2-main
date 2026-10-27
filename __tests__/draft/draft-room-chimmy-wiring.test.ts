@@ -52,3 +52,18 @@ describe('draft room ↔ commissioner control center', () => {
     )
   })
 })
+
+describe('draft room ↔ Chimmy AI manager slot', () => {
+  it('asks for a Chimmy-managed team’s pick after the shared delay, naming the pick it means', () => {
+    expect(src).toMatch(/import \{ CHIMMY_PICK_DELAY_MS \} from '@\/lib\/commissioner-ai-draft-manager\/chimmyPickTiming'/)
+    expect(src).toMatch(/chimmyManagedRosterIds\.includes\(currentPick\.rosterId\)/)
+    expect(src).toMatch(/\/draft\/chimmy-manager-pick`/)
+    expect(src).toMatch(/body: JSON\.stringify\(\{ expectedOverall: chimmyOnClockOverall \}\)/)
+    expect(src).toMatch(/setTimeout\(\(\) => void requestPick\(0\), CHIMMY_PICK_DELAY_MS/)
+  })
+
+  it('reads the managed teams for every member, and tells the top bar Chimmy is picking', () => {
+    expect(src).toMatch(/setChimmyManagedRosterIds\(/)
+    expect(src).toMatch(/chimmyManagerOnClock=\{chimmyOnClock\}/)
+  })
+})
