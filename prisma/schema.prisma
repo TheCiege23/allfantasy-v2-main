@@ -10262,7 +10262,7 @@ model WhispererRecord {
 /// Optional second Whisperer seat for NBA, NHL, and MLB. Primary record remains intact.
 model ZombieCoWhisperer {
   id                  String       @id @default(cuid())
-  zombieLeagueId      String
+  zombieLeagueId      String       @unique
   userId              String
   displayName         String
   selectionMode       String
