@@ -41,6 +41,7 @@ export async function selectWhisperer(
   zombieLeagueId: string,
   mode: string,
   manualUserId?: string,
+  preserveOtherWhisperers = false,
 ): Promise<{ whispererRecordId: string; rosterId: string }> {
   const z = await prisma.zombieLeague.findUniqueOrThrow({
     where: { id: zombieLeagueId },
@@ -92,7 +93,7 @@ export async function selectWhisperer(
   })
   const uid = user?.platformUserId ?? 'unknown'
 
-  await setWhisperer(leagueId, pickRosterId)
+  if (!preserveOtherWhisperers) await setWhisperer(leagueId, pickRosterId)
 
   // The person's name, else their team's, else the role — never the user id this used to fall back to
   // (`AppUser.displayName` is usually null, so the record carried a uuid shown as the Whisperer's name).
@@ -123,7 +124,7 @@ export async function selectWhisperer(
     },
   })
 
-  await prisma.zombieLeagueTeam.updateMany({
+  if (!preserveOtherWhisperers) await prisma.zombieLeagueTeam.updateMany({
     where: { leagueId },
     data: { isWhisperer: false },
   })
@@ -294,7 +295,7 @@ export async function handleWhispererDefeat(
   if (rule === 'new_whisperer_emerges') {
     const carry = Math.max(1, Math.floor((rec.ambushesRemaining ?? 0) / 2))
     await demoteOldToZombie()
-    await selectWhisperer(zombieLeagueId, 'horde_only')
+    await selectWhisperer(zombieLeagueId, 'horde_only', undefined, true)
     const newRec = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId } })
     if (newRec) {
       await prisma.whispererRecord.update({
