@@ -143,7 +143,7 @@ function buildSections(
     '@CHIMMY ACTIONS',
     'You can interact with @Chimmy for timed actions, status checks, inventory, and rules questions.',
     '@Chimmy will not reveal another player\'s private information.',
-    '@Chimmy can help with: status check, inventory, serum revives, and rules lookups.',
+    '@Chimmy can help with: status, inventory, serum protection/revival, defensive weapons, Whisperer matchup swaps, and rules.'
   ].join('\n')
 
   const sectionWeeklyTiming = [
