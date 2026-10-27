@@ -99,8 +99,10 @@ beforeEach(() => {
     usedAtWeek: null, activatesAtWeek: null,
   }])
   h.db.zombieLeagueTeam.findMany.mockResolvedValue([
-    { id: 'tz', rosterId: 'z', fantasyTeamName: 'Zombies', displayName: null },
-    { id: 'th', rosterId: 'h', fantasyTeamName: 'Humans', displayName: null },
+    { id: 'tz', rosterId: 'z', fantasyTeamName: 'Zombies', displayName: null,
+      status: 'Zombie', weekBecameZombie: 1, killedByRosterId: null },
+    { id: 'th', rosterId: 'h', fantasyTeamName: 'Humans', displayName: null,
+      status: 'Survivor', weekBecameZombie: null, killedByRosterId: null },
   ])
   h.db.zombieInfectionLog.findMany.mockResolvedValue([])
   h.db.zombieInfectionEvent.findMany.mockResolvedValue([])
@@ -141,6 +143,18 @@ describe('outcome-changing correction transaction', () => {
     h.db.zombieExternalWeeklyPayout.count.mockResolvedValue(1)
     expect(await reconcileOutcomeChangingCorrection(input)).toBeNull()
     expect(h.db.zombieTeamItem.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it('holds a correction when a team status changed after settlement', async () => {
+    h.db.zombieLeagueTeam.findMany.mockResolvedValue([
+      { id: 'tz', rosterId: 'z', fantasyTeamName: 'Zombies', displayName: null,
+        status: 'Zombie', weekBecameZombie: 1, killedByRosterId: null },
+      { id: 'th', rosterId: 'h', fantasyTeamName: 'Humans', displayName: null,
+        status: 'Zombie', weekBecameZombie: 3, killedByRosterId: 'z' },
+    ])
+    expect(await reconcileOutcomeChangingCorrection(input)).toBeNull()
+    expect(h.db.zombieTeamItem.deleteMany).not.toHaveBeenCalled()
+    expect(h.db.zombieLeagueTeam.update).not.toHaveBeenCalled()
   })
 
   it('declines replay if an unexpected infection event was recorded', async () => {
