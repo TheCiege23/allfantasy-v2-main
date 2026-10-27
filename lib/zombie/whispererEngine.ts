@@ -121,6 +121,9 @@ export async function selectWhisperer(
       ambushesGranted: amb,
       ambushesRemaining: amb,
       ambushesUsed: 0,
+      wasDefeated: false,
+      defeatedAtWeek: null,
+      defeatedByUserId: null,
     },
   })
 
