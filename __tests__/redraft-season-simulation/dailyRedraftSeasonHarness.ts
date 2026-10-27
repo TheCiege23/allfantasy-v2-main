@@ -261,6 +261,21 @@ function expectedRecordsFrom(
       for (const [id, score] of weekScores) tally(id, score, median, false)
     }
   }
+  // A plain bye (no extra matchup) earns the week's median head-to-head score as points for, once
+  // every game of that regular-season week is final; no result, no points against.
+  for (const week of new Set(matchups.map((m) => m.week))) {
+    if (week >= opts.playoffStartWeek) continue
+    const weekRows = matchups.filter((m) => m.week === week && !m.isMedianMatchup)
+    const games = weekRows.filter((m) => m.awayRosterId)
+    if (!games.length || !games.every((m) => m.status === 'final' || m.status === 'completed')) continue
+    const sorted = games.flatMap((g) => [g.homeScore, g.awayScore]).sort((a, b) => a - b)
+    const mid = sorted.length / 2
+    const median = sorted.length % 2 ? sorted[Math.floor(mid)]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+    for (const bye of weekRows.filter((m) => !m.awayRosterId && !m.lineupSnapshots?.extraMatchup)) {
+      const row = rec.get(bye.homeRosterId)
+      if (row) row.pointsFor += Math.round(median * 100) / 100
+    }
+  }
   return rec
 }
 
