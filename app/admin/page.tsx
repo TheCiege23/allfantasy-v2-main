@@ -12,6 +12,7 @@ import {
 import { AdminCommandCenterOverview } from "@/components/admin/AdminCommandCenterOverview"
 import { GrowthSeriesPanel } from "@/components/admin/GrowthSeriesPanel"
 import { AdminLiveRefresh } from "@/components/admin/AdminLiveRefresh"
+import { AdminWorkspace } from "@/components/admin/AdminWorkspace"
 // This file is a Server Component, so `ssr: false` isn't allowed here (Next.js
 // restricts that option to Client Components) — plain dynamic() still splits
 // the recharts-heavy panel into its own chunk instead of the main page bundle.
@@ -67,7 +68,7 @@ export const metadata = { robots: { index: false, follow: false } }
 
 function MetricCard({ item }: { item: AdminMetric }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_18px_60px_-46px_rgba(34,211,238,0.75)]">
+    <div className="af-cc-stat rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_18px_60px_-46px_rgba(34,211,238,0.75)]">
       <div className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100/55">
         {item.label}
       </div>
@@ -95,7 +96,7 @@ function AccordionSection({
   return (
     <details
       id={id}
-      className="group rounded-3xl border border-cyan-300/15 bg-white/[0.035] p-4 shadow-[0_24px_80px_-58px_rgba(34,211,238,0.75)] backdrop-blur-xl sm:p-5"
+      className="af-cc-report group rounded-3xl border border-cyan-300/15 bg-white/[0.035] p-4 shadow-[0_24px_80px_-58px_rgba(34,211,238,0.75)] backdrop-blur-xl sm:p-5"
       open={defaultOpen}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
@@ -1757,14 +1758,7 @@ export default async function AdminPage(
   return (
     <main className="af-cc min-h-dvh">
       <div className="relative mx-auto flex w-full max-w-[1320px] flex-col gap-8 px-4 py-6 sm:px-6">
-        {/*
-          29a's frame: a 56px bar carrying identity, the ADMIN chip, section
-          tabs and the refresh stamp. The tabs are anchors into sections that
-          already exist further down the page — the handoff shows a tabbed
-          frame, but this surface stays a single scroll, so they scroll rather
-          than swap panels. An anchor that points at nothing is the one failure
-          mode worth avoiding here, so each href matches a rendered id.
-        */}
+        {/* Identity, access, exit, and refresh stay visible above the focused workspace. */}
         <header className="af-cc-frame">
           <div className="af-cc-bar">
             <svg
@@ -1806,33 +1800,9 @@ export default async function AdminPage(
             <div className="af-cc-admin-chip">Admin</div>
             <DeploymentMarker />
             <div className="af-cc-spacer" />
-            <nav className="af-cc-tabs" aria-label="Command Center sections">
-              <a className="af-cc-tab af-cc-tab--on" href="#overview">
-                Overview
-              </a>
-              <a className="af-cc-tab" href="#pipeline-freshness">
-                Freshness
-              </a>
-              <a className="af-cc-tab" href="#providers">
-                Providers
-              </a>
-              <a className="af-cc-tab" href="#production-readiness">
-                Readiness
-              </a>
-              <a className="af-cc-tab" href="#user-search">
-                Users
-              </a>
-              <a className="af-cc-tab" href="#email-center">
-                Email
-              </a>
-              {/*
-                A page, not a section anchor. Its only other link sits in the Fast Paths card,
-                below the verdict, freshness, growth and traffic panels: present, but nobody found it.
-              */}
-              <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
-                Social newsroom
-              </a>
-            </nav>
+            <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
+              Social newsroom
+            </a>
             {/*
               `/core`, not `/dashboard`. The latter was retired on 2026-08-24 (`99e408317`);
               `middleware.ts` 307s it to `/core` and `app/dashboard/page.tsx` is a stub that
@@ -1846,23 +1816,18 @@ export default async function AdminPage(
           </div>
         </header>
 
-        {/*
-          29a — the verdict leads. It is rendered BEFORE the overview deck and
-          before any metric section on purpose: the handoff's core fix is that
-          /admin answers "is anything wrong?" before it shows a number. Moving
-          this below anything undoes the fix.
-        */}
+        <AdminWorkspace initialView={q.trim() ? "audience" : "overview"}>
+        {/* The overview leads with current status and keeps the full metric inventory collapsed. */}
+        <div data-admin-pane="overview" className="af-cc-pane">
         <AdminCommandCenterOverview metrics={data} />
 
+        </div>
+        <div data-admin-pane="data" className="af-cc-pane">
         <PipelineFreshnessPanel data={pipelineFreshness} />
 
-        {/*
-          Growth sits directly under the verdict and the metric groups: those
-          answer "is anything wrong" and "what are the totals", and the next
-          question an operator actually asks is "which way is it moving".
-          Signups, entries, pools, active users and paid conversions, switchable
-          day / week / month without a reload.
-        */}
+        {/* Growth and traffic belong with people, invitations, and email. */}
+        </div>
+        <div data-admin-pane="audience" className="af-cc-pane">
         <div id="growth">{growth ? <GrowthSeriesPanel series={growth} /> : null}</div>
 
         {/*
@@ -1879,6 +1844,11 @@ export default async function AdminPage(
           </AccordionSection>
         </div>
 
+        </div>
+        <div data-admin-pane="overview" className="af-cc-pane">
+          <details className="af-cc-archive">
+            <summary>More metrics and historical reports</summary>
+            <div className="af-cc-pane">
         <AdminOverviewDeck data={data} accessSource={gate.source} />
 
         <Section id="morning-dashboard" title="Morning Dashboard" items={data.morning} />
@@ -1901,16 +1871,20 @@ export default async function AdminPage(
             <p className="text-sm text-white/50">No imported leagues yet.</p>
           )}
         </AccordionSection>
-        <Section title="Payments & Subscriptions" items={data.subscriptions} />
-        <Section title="Tokens & AI" items={[...data.tokens, ...data.ai]} />
         <Section title="World Cup" items={data.worldCup} />
         <Section title="System Health" items={data.health} />
         {/* #crons and #env are the anchors the verdict strip links into. */}
+            </div>
+          </details>
+        </div>
+        <div data-admin-pane="data" className="af-cc-pane">
         <div id="production-readiness">
           <span id="crons" />
           <span id="env" />
           <ProductionReadinessPanel data={data.productionReadiness} />
         </div>
+        </div>
+        <div data-admin-pane="audience" className="af-cc-pane">
         <TrafficGeoPanel data={data.productionReadiness} metrics={data.traffic} />
         <div id="highlight-analytics">
           <AccordionSection title="Highlight Engagement" eyebrow="availability & returns">
@@ -1935,9 +1909,16 @@ export default async function AdminPage(
         <div id="email-center">
           <EmailCenterPanel status={data.emailStatus} />
         </div>
+        </div>
+        <div data-admin-pane="operations" className="af-cc-pane">
         <div id="sports-os">
           <SportsOperatingSystemPanel audit={data.sportsOperatingSystem} />
         </div>
+        </div>
+        <div data-admin-pane="data" className="af-cc-pane">
+          <details className="af-cc-archive" id="data-diagnostics">
+            <summary>Detailed sports data diagnostics</summary>
+            <div className="af-cc-pane">
         <SportsIdentityHealthPanel snapshot={data.sportsIdentityHealth} />
         <ProviderTeamReconciliationPanel data={data.providerTeamReconciliation} />
         <Section title="Integrity / Fraud Signals" items={data.integrity} />
@@ -1958,6 +1939,10 @@ export default async function AdminPage(
         <AccordionSection title="Provider Sync Controls" eyebrow="admin manual imports" defaultOpen={false}>
           <AdminSportsSyncControlsPanel />
         </AccordionSection>
+            </div>
+          </details>
+        </div>
+        <div data-admin-pane="operations" className="af-cc-pane">
         <div id="ai-panels" className="grid gap-4 xl:grid-cols-2">
           <AccordionSection title="AI Provider Health" eyebrow="interaction stats + WC provider" defaultOpen={false}>
             <AiProviderHealthPanel />
@@ -1975,6 +1960,8 @@ export default async function AdminPage(
           <PlatformOsOperatorPanel />
         </AccordionSection>
 
+        </div>
+        <div data-admin-pane="audience" className="af-cc-pane af-cc-pane--people">
         <section id="user-search" className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.75fr)]">
           {/*
             29a §5 — "Find a user". The handoff draws the search as a compact
@@ -2306,6 +2293,10 @@ export default async function AdminPage(
           </div>
         </section>
 
+        </div>
+        <div data-admin-pane="revenue" className="af-cc-pane">
+        <Section title="Payments & Subscriptions" items={data.subscriptions} />
+        <Section title="Tokens & AI" items={[...data.tokens, ...data.ai]} />
         <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 [&>div]:min-w-0">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
             <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Payments</h2>
@@ -2394,6 +2385,8 @@ export default async function AdminPage(
             </div>
           </div>
         </section>
+        </div>
+        </AdminWorkspace>
       </div>
     </main>
   )
