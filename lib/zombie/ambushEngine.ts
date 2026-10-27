@@ -36,6 +36,19 @@ export async function validatePreScoringWindow(
   if (!matchups.length || matchups.some((m) => m.status !== 'scheduled' || m.homeScore !== 0 || m.awayScore !== 0)) {
     return { valid: false, reason: 'Week scoring has started or the schedule is not ready.' }
   }
+  // GameSchedule is populated by the provider schedule ingestion pipeline. If a period has no
+  // dated games, we cannot establish a fair deadline and must keep pre-score powers closed.
+  const games = await prisma.gameSchedule.findMany({
+    where: { sportType: z.sport.toUpperCase(), season: seasonYear, weekOrRound: week },
+    select: { startTime: true },
+  })
+  if (!games.length || games.some((game) => !game.startTime)) {
+    return { valid: false, reason: 'Provider game times for this scoring week are unavailable.' }
+  }
+  const firstLock = Math.min(...games.map((game) => game.startTime!.getTime()))
+  if (Date.now() >= firstLock) {
+    return { valid: false, reason: 'The first game of this scoring week has locked.' }
+  }
   const resolution = await prisma.zombieWeeklyResolution.findUnique({
     where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
     select: { status: true },
