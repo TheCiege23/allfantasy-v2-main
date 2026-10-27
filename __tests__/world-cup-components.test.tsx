@@ -1806,17 +1806,19 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(drawer).getByRole("button", { name: /Mention/i })).toBeInTheDocument()
     expect(within(drawer).getByRole("button", { name: /Hashtag/i })).toBeInTheDocument()
 
+    // The mode tabs are a tablist above the drawer (components/brackets/world-cup/chat/WorldCupChatModeTabs.tsx).
     // Tab label is "Chimmy" (brand voice — was "Chimmy AI").
-    fireEvent.click(within(drawer).getByRole("button", { name: /^Chimmy\b/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /^Chimmy\b/i }))
     expect(screen.getByPlaceholderText(/Ask Chimmy about the bracket/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /Ask Chimmy/i })).toBeDisabled()
+    // The send button (aria-label), not the "Ask Chimmy" call-to-action above the prompts.
+    expect(screen.getByLabelText("Ask Chimmy")).toBeDisabled()
 
-    fireEvent.click(within(drawer).getByRole("button", { name: /DM Chat/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /DM Chat/i }))
     expect(within(drawer).getByTestId("wc-dm-panel")).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Message this private chat/i)).toBeDisabled()
     expect(within(drawer).getByText(/No private chats yet/i)).toBeInTheDocument()
 
-    fireEvent.click(within(drawer).getByRole("button", { name: /Pool Chat/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /Pool Chat/i }))
     expect(screen.getByPlaceholderText(/Message the pool or ask Chimmy/i)).toBeInTheDocument()
   })
 
@@ -2380,7 +2382,10 @@ describe("WorldCupBracketShell fixture readiness", () => {
         })
       )
     })
-    expect(await screen.findAllByAltText(/Uploaded World Cup chat image/i)).toHaveLength(1)
+    // Sent: the composer's preview clears and the message bubble shows it (alt "Shared image",
+    // components/brackets/world-cup/chat/WorldCupChatMessageBubble.tsx).
+    expect(await screen.findAllByAltText(/^Shared image$/i)).toHaveLength(1)
+    expect(screen.queryByAltText(/Uploaded World Cup chat image/i)).toBeNull()
   })
 
   it("creates and votes on World Cup chat polls", async () => {

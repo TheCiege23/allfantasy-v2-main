@@ -149,7 +149,7 @@ describe('checkStatCorrectionsForSeason', () => {
 
   it.each([
     ['an imported league', { platform: 'sleeper' }],
-    ['a non-NFL league', { sport: 'NBA' }],
+    ['a sport it does not check', { sport: 'NHL' }],
     ['a best ball league', { bestBallMode: true }],
     ['a category league', { settings: { scoring_mode: 'h2h_category' } }],
   ])('does not cover %s', async (_label, over) => {
