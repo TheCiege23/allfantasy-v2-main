@@ -38,6 +38,11 @@ type LiveView = {
   platform?: string | null
   result: { phase: 'regular_season' | 'playoffs' | 'final'; maxPfSource: 'max_pf' | 'points_for'; slots: Slot[]; warnings: string[] }
   notes: string[]
+  /** Native leagues: where Max PF came from (lib/rookie-order/loadRookieOrderInput.ts). */
+  maxPfInfo?:
+    | { kind: 'computed'; weeks: number; estimated: number; note: string }
+    | { kind: 'best_ball'; note: string }
+    | { kind: 'unsupported'; reason: string; note: string }
   settings: { enabled: boolean; config: Config; finalOrder: { basedOnSeason: number; savedAt: string } | null }
   automationActive: boolean
   canAutomate: boolean
@@ -50,6 +55,18 @@ const fill = (s: string, vars: Record<string, string | number>) =>
 const NON_PLAYOFF = ['reverse_max_pf', 'reverse_points_for', 'reverse_record'] as const
 const PLAYOFF = ['finish_then_seed', 'reverse_record', 'reverse_max_pf'] as const
 const WITHIN = ['worse_seed', 'reverse_max_pf', 'reverse_points_for'] as const
+
+/** The Max PF line in the viewer's language; its English twin is dropped from `notes`. */
+function maxPfLine(info: NonNullable<LiveView['maxPfInfo']>, t: (k: string) => string): string {
+  if (info.kind === 'best_ball') return t('lsEd.dr.live.mpf.bestBall')
+  if (info.kind === 'unsupported') {
+    const key = `lsEd.dr.live.mpf.no.${info.reason}`
+    const text = t(key)
+    return text === key ? info.note : text
+  }
+  const base = fill(t('lsEd.dr.live.mpf.computed'), { weeks: info.weeks })
+  return info.estimated > 0 ? `${base} ${fill(t('lsEd.dr.live.mpf.estimated'), { count: info.estimated })}` : base
+}
 
 function pickLabel(round: number, slot: number) {
   return `${round}.${String(slot).padStart(2, '0')}`
@@ -217,7 +234,11 @@ export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
           )}
           {playoff.map((s) => <SlotRow key={s.teamId} slot={s} t={t} />)}
         </ol>
-        {[...result.warnings, ...view.notes].map((w) => (
+        {[
+          ...result.warnings,
+          ...(view.maxPfInfo ? [maxPfLine(view.maxPfInfo, t)] : []),
+          ...view.notes.filter((n) => n !== view.maxPfInfo?.note),
+        ].map((w) => (
           <p key={w} className="text-[11px] text-amber-300/70">{w}</p>
         ))}
       </div>
