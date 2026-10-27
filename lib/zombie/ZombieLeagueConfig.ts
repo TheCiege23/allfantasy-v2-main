@@ -81,7 +81,7 @@ export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLea
     }
   }
 
-  if (league.leagueVariant !== ZOMBIE_VARIANT) return null
+  if (league.leagueVariant !== ZOMBIE_VARIANT && !(await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true } }))) return null
 
   return {
     leagueId: league.id,
