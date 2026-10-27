@@ -4653,6 +4653,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   : null
               }
               deadlineCountdown={trades.deadlineCountdown ?? null}
+              pickTradeDeadline={trades.pickTradeDeadline ?? null}
               platform={trades.league.platform}
               sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}

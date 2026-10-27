@@ -16,6 +16,8 @@
  *
  * WHICH DEADLINE. Each engine's own reading, so the sweep can never expire an offer its engine would
  * still accept: the AF engine reads `resolveLeagueTradeSettings`, the redraft path `League.tradeDeadlineWeek`.
+ * On the AF engine that is per OFFER: a picks-only offer in a league whose pick trades have their own
+ * deadline (./pickTradeDeadline.ts) expires when that one passes, not the trade deadline.
  *
  * ⚠ BOUNDED AND CLAIMED. The host cron has a 60s budget, so leagues are capped per run (oldest offer
  * first); each expiry is a conditional claim, so a manager acting at the same instant wins or loses
@@ -29,6 +31,7 @@ import {
   tradeDeadlinePassedMessage,
   type TradeDeadlineDeps,
 } from './tradeDeadlineWindow'
+import { isPicksOnlyTrade } from './pickTradeDeadline'
 
 export const DEFAULT_DEADLINE_EXPIRY_LEAGUE_LIMIT = 40
 
@@ -112,14 +115,20 @@ export async function expirePendingOffersAtDeadline(
     let pastDeadline = false
     try {
       if (afLeagues.has(leagueId)) {
-        const verdict = await evaluateLeagueTradeDeadline(leagueId, deps)
-        if (verdict.passed) {
-          pastDeadline = true
-          const reason = tradeDeadlinePassedMessage(verdict)
-          const pending = await db.afLeagueTrade.findMany({ where: { leagueId, status: 'pending' }, select: { id: true } })
+        const trades = await evaluateLeagueTradeDeadline(leagueId, deps)
+        // `scope: 'trades'` back means pick trades follow the trade deadline: one verdict for every offer.
+        const picks = await evaluateLeagueTradeDeadline(leagueId, deps, { picksOnly: true })
+        if (trades.passed || (picks.scope === 'picks' && picks.passed)) {
+          const pending = await db.afLeagueTrade.findMany({
+            where: { leagueId, status: 'pending' },
+            select: { id: true, items: { select: { itemType: true } } },
+          })
           for (const t of pending) {
+            const verdict = picks.scope === 'picks' && isPicksOnlyTrade(t.items ?? []) ? picks : trades
+            if (!verdict.passed) continue
+            pastDeadline = true
             try {
-              if (await (deps.expireAf ?? defaultExpireAf)({ tradeId: t.id, leagueId, reason })) result.expiredAf += 1
+              if (await (deps.expireAf ?? defaultExpireAf)({ tradeId: t.id, leagueId, reason: tradeDeadlinePassedMessage(verdict) })) result.expiredAf += 1
             } catch (e) {
               result.failures.push({ id: t.id, error: e instanceof Error ? e.message : String(e) })
             }

@@ -42,6 +42,8 @@ import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { parsePickTradeDeadline, PICK_TRADE_DEADLINE_KEY } from '@/lib/trade-deadline/pickTradeDeadline'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
 import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
@@ -852,6 +854,15 @@ export async function executeLeagueSettingsPatch(
     const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
     if (!parsed.ok) return jsonError(parsed.error, 400)
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
+
+  // A separate deadline for pick trades (lib/trade-deadline/pickTradeDeadline.ts) — dynasty-family
+  // leagues only, where the trade gates read it; anywhere else a stored value would do nothing. Free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TRADE_DEADLINE_KEY in merge) {
+    const parsed = parsePickTradeDeadline((merge as Record<string, unknown>)[PICK_TRADE_DEADLINE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (!isDynastyFamilyLeague(league)) return jsonError('A separate pick trade deadline is for dynasty leagues.', 400)
+    ;(merge as Record<string, unknown>)[PICK_TRADE_DEADLINE_KEY] = parsed.value
   }
 
   // The orphan auction (lib/orphan-auction) is state, not a setting: its assets, bids and result are
