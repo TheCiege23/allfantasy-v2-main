@@ -30,7 +30,7 @@ export function validateBracketEventMaps(sport: SingleGameSport, input: unknown)
       continue
     }
     seenSlots.add(seriesNumber)
-    if (!/^\\d{7,12}$/.test(eventId)) {
+    if (!/^\d{7,12}$/.test(eventId)) {
       errors.push(`Game ${seriesNumber} needs a numeric ESPN event ID (7–12 digits).`)
       continue
     }
