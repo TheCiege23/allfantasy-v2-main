@@ -83,8 +83,12 @@ export async function processAmbushFromChimmy(
   })
   if (z.experienceMode === 'simple') return reject('Ambushes are available in Enhanced Zombie only.', 'simple_mode')
   if (!label) return reject('Use @Chimmy ambush swap <exact Survivor team name>. Other ambush effects are not active.', 'unsupported_ambush')
-  const rec = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
-  if (!rec || rec.userId !== whispererUserId) return reject('Only the Whisperer may invoke an ambush.', 'not_whisperer')
+  const primary = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
+  const isPrimary = primary?.userId === whispererUserId
+  const rec = isPrimary ? primary : await prisma.zombieCoWhisperer.findUnique({
+    where: { zombieLeagueId_userId: { zombieLeagueId: z.id, userId: whispererUserId } },
+  })
+  if (!rec) return reject('Only the Whisperer may invoke an ambush.', 'not_whisperer')
   if (rec.ambushesRemaining < 1) return reject('No ambushes remaining.', 'no_ambushes')
   const config = await getZombieLeagueConfig(leagueId)
   if (!config?.ambushRemapMatchup) return reject('Matchup remaps are disabled in this league.', 'ambush_disabled')
@@ -140,10 +144,15 @@ export async function processAmbushFromChimmy(
         where: { zombieLeagueId: z.id, week, whispererUserId, status: 'executed' },
       })
       if (usedInTransaction >= config.ambushCountPerWeek) throw new Error('Weekly ambush limit reached')
-      const debit = await tx.whispererRecord.updateMany({
-        where: { id: rec.id, ambushesRemaining: { gte: 1 } },
-        data: { ambushesRemaining: { decrement: 1 }, ambushesUsed: { increment: 1 } },
-      })
+      const debit = isPrimary
+        ? await tx.whispererRecord.updateMany({
+            where: { id: rec.id, ambushesRemaining: { gte: 1 } },
+            data: { ambushesRemaining: { decrement: 1 }, ambushesUsed: { increment: 1 } },
+          })
+        : await tx.zombieCoWhisperer.updateMany({
+            where: { id: rec.id, ambushesRemaining: { gte: 1 } },
+            data: { ambushesRemaining: { decrement: 1 }, ambushesUsed: { increment: 1 } },
+          })
       if (debit.count !== 1) throw new Error('Ambush balance changed')
       const first = await tx.redraftMatchup.updateMany({
         where: { id: whispererMatchup.id, status: 'scheduled', homeScore: 0, awayScore: 0 },
