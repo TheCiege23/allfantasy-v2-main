@@ -114,7 +114,8 @@ export async function processRevive(leagueId: string, userId: string, week: numb
   const available = await prisma.zombieTeamItem.count({
     where: { teamStatusId: team.id, itemType: { contains: 'serum' }, isUsed: false, isExpired: false, activationState: 'ready' },
   })
-  if (available >= cost) {
+  const spentNativeItems = available >= cost
+  if (spentNativeItems) {
     await prisma.$transaction(async (tx) => {
       const items = await tx.zombieTeamItem.findMany({
         where: { teamStatusId: team.id, itemType: { contains: 'serum' }, isUsed: false, isExpired: false, activationState: 'ready' },
@@ -144,7 +145,7 @@ export async function processRevive(leagueId: string, userId: string, week: numb
   await notifyCommissioner(leagueId, 'revive_occurred', 'Zombie revived', `Week ${week} — player returned as revived survivor.`, {
     urgency: 'high', week, relatedUserId: userId,
   })
-  await appendZombieAudit({
+  if (spentNativeItems) await appendZombieAudit({
     leagueId, zombieLeagueId: z.id, universeId: z.universeId,
     eventType: 'revive', metadata: { userId, week, serumCount: cost },
   })
