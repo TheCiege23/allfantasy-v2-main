@@ -10,6 +10,7 @@ import { loadTaxiEnforcement } from '@/lib/taxi/taxiRulesService'
 import { describeTaxiMoveRules } from '@/lib/taxi/taxiMoveRules'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { readPickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
+import { readPickTermsForChimmy } from '@/lib/league-trade-engine/pickTermsService'
 import { readTaxiStealingForChimmy } from '@/lib/taxi/taxiStealingService'
 
 export async function buildDynastyContextForChimmy(
@@ -60,6 +61,9 @@ export async function buildDynastyContextForChimmy(
         ? `Pick trades: a trade made only of draft picks closes after week ${pickRule.week}, whatever the trade deadline; a trade with any player or FAAB follows the trade deadline${league.tradeDeadlineWeek ? ` (week ${league.tradeDeadlineWeek})` : ''} (enforced).`
         : 'Pick trades close with the trade deadline, like player trades. The commissioner can give them their own deadline in Trade settings.',
   )
+  // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts): the rule and every pick's terms.
+  const pickTerms = await readPickTermsForChimmy(leagueId).catch(() => null)
+  if (pickTerms) parts.push(pickTerms)
   // Taxi stealing (lib/taxi/taxiStealing.ts): the rule and any open claim, when the rule is running.
   const stealing = await readTaxiStealingForChimmy(leagueId).catch(() => null)
   if (stealing) parts.push(stealing)

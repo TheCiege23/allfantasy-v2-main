@@ -11,6 +11,7 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { PICK_TRADE_DEADLINE_KEY, readPickTradeDeadline, type PickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { PickTermsPanel } from '@/components/league-settings/PickTermsPanel'
 
 export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
@@ -214,6 +215,8 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           <p className="mt-1 text-[11px] text-white/45">{t('lsHub.tr.pickDeadline.hint')}</p>
         </div>
       ) : null}
+      {/* Renders nothing outside dynasty leagues that play on AllFantasy. */}
+      <PickTermsPanel leagueId={leagueId} />
     </div>
   )
 }
