@@ -34,7 +34,10 @@ AllFantasy offers **no prizes, gambling, betting, bracket entry fees, or in-app 
 - Publish CFP committee seeds at `/admin/cfp-seeding` or NBA Cup qualifiers at `/admin/knockout-brackets`.
 - Publish all game start times plus names, venues, and locations at `/admin/knockout-brackets`. The server opens picks only when the field and complete schedule are available.
 - Publish each verified final once for the season at `/admin/knockout-brackets`. The new season result route rejects conflicting league matchups and updates every matching league together. Existing per-pool result entry remains available for support.
-- Automatic provider ingestion of final scores remains a separate integration. It must map official game IDs, teams, and tournament identity with confidence before writing scores. Do not label seed heuristics as a trained prediction model.
+- Admins can map each bracket game to a numeric ESPN event ID at `/admin/knockout-brackets`. IDs may be added as later round teams are known; a final game's mapping is locked. Unmapped games remain manual.
+- `POST /api/cron/season-bracket-results` accepts `{ "sport": "ncaaf" | "nba_cup", "season": 2026, "apply": true }` with `CRON_SECRET`. It dry-runs unless Railway also sets `BRACKET_AUTO_RESULT_SYNC_ENABLED=true`. Schedule the endpoint from a Railway cron service only after staging verification.
+- The worker fetches ESPN's date scoreboard by mapped event ID. It requires exactly one matching event, both bracket teams (including safe ESPN display/location aliases), a kickoff within two hours of the published schedule, final status, unequal integer scores, and the correct CFP postseason or NBA Cup calendar season. It handles ESPN's neutral-site home/away reversal before publishing through the same cross-league guard as the admin route. Mismatches are reported and need manual review.
+- Do not label seed heuristics as a trained prediction model.
 
 ## Engagement improvements
 
