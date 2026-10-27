@@ -68,8 +68,10 @@ const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'history', label: 'History' },
 ]
 
+/** Soccer (EPL, MLS) carries the same Draft tab as the basketball-like sports — see above. */
 const SOCCER_TABS: TabDef[] = [
   { id: 'squad', label: 'Squad' },
+  { id: 'draft', label: 'Draft' },
   { id: 'redraft', label: 'Redraft' },
   { id: 'team', label: 'My Team' },
   { id: 'league', label: 'League' },
