@@ -1,7 +1,7 @@
 /** Bundled Spanish for keys that only existed in en. Regenerate EN inventory: npx tsx scripts/generate-es-parity.ts — then replace values with Spanish. */
 export const translationsEsParity: Record<string, string> = {
   "orphanAuction.title": "Subasta de equipo huérfano",
-  "orphanAuction.intro": "Vende los jugadores y las selecciones futuras de un equipo abandonado al resto de la liga por FAAB, en una sola ronda de ofertas secretas. Cada equipo hace sus ofertas desde la página de waivers y nadie ve las ofertas de otro equipo hasta el cierre. La oferta más alta gana cada jugador o selección, un empate lo gana la mejor prioridad de waivers, y cada equipo paga solo lo que gana. Los jugadores sin ofertas pasan a agencia libre, las selecciones sin ofertas se quedan con el equipo huérfano, y el FAAB del equipo huérfano queda en 0.",
+  "orphanAuction.intro": "Vende los jugadores y las selecciones futuras de un equipo abandonado al resto de la liga por FAAB, en una sola ronda de ofertas secretas. Cada equipo hace sus ofertas desde la página de agentes libres y nadie ve las ofertas de otro equipo hasta el cierre. La oferta más alta gana cada jugador o selección, un empate lo gana la mejor prioridad de reclamo, y cada equipo paga solo lo que gana. Los jugadores sin ofertas pasan a agencia libre, las selecciones sin ofertas se quedan con el equipo huérfano, y el FAAB del equipo huérfano queda en 0.",
   "orphanAuction.loading": "Cargando…",
   "orphanAuction.loadFailed": "Se requiere permiso del comisionado o conexión.",
   "orphanAuction.saveFailed": "No se pudo guardar. Actualiza e inténtalo de nuevo.",
@@ -36,7 +36,7 @@ export const translationsEsParity: Record<string, string> = {
   "orphanAuction.youWon": "Ganaste {{count}} por ${{paid}} de FAAB.",
   "orphanAuction.youWonNone": "No ganaste nada, así que no gastaste FAAB.",
   "orphanAuction.bidIntro": "Los jugadores y las selecciones de {{teams}} reciben ofertas FAAB secretas hasta {{when}}.",
-  "orphanAuction.bidRules": "Oferta dólares enteros por lo que quieras (mínimo ${{min}}); deja una casilla vacía para no ofertar. La oferta más alta gana cada uno, un empate lo gana la prioridad de waivers, y pagas solo lo que ganas. Los jugadores llegan a tu banca, así que quizá tengas que soltar a alguien.",
+  "orphanAuction.bidRules": "Oferta dólares enteros por lo que quieras (mínimo ${{min}}); deja una casilla vacía para no ofertar. La oferta más alta gana cada uno, un empate lo gana la prioridad de reclamo, y pagas solo lo que ganas. Los jugadores llegan a tu banca, así que quizá tengas que soltar a alguien.",
   "orphanAuction.budget": "Tus ofertas: ${{total}} de ${{budget}} de FAAB",
   "orphanAuction.from": "de {{team}}",
   "orphanAuction.bidFor": "Tu oferta por {{asset}}",

@@ -213,7 +213,7 @@ export function resultNotice(input: { won: readonly { label: string; amount: num
       title: { en: `Orphan auction closed in ${input.leagueName}`, es: `Cerró la subasta de equipo huérfano en ${input.leagueName}` },
       body: {
         en: 'You were outbid on everything you bid for, so no FAAB was spent. See every winning bid on the Waivers page.',
-        es: 'Otras ofertas superaron todas las tuyas, así que no gastaste FAAB. Puedes ver cada oferta ganadora en la página de waivers.',
+        es: 'Otras ofertas superaron todas las tuyas, así que no gastaste FAAB. Puedes ver cada oferta ganadora en la página de agentes libres.',
       },
     }
   }
