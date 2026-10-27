@@ -122,6 +122,10 @@ export async function processAmbushFromChimmy(
 
   try {
     const action = await prisma.$transaction(async (tx) => {
+      const usedInTransaction = await tx.zombieAmbushAction.count({
+        where: { zombieLeagueId: z.id, week, whispererUserId, status: 'executed' },
+      })
+      if (usedInTransaction >= config.ambushCountPerWeek) throw new Error('Weekly ambush limit reached')
       const debit = await tx.whispererRecord.updateMany({
         where: { id: rec.id, ambushesRemaining: { gte: 1 } },
         data: { ambushesRemaining: { decrement: 1 }, ambushesUsed: { increment: 1 } },
@@ -129,11 +133,15 @@ export async function processAmbushFromChimmy(
       if (debit.count !== 1) throw new Error('Ambush balance changed')
       const first = await tx.redraftMatchup.updateMany({
         where: { id: whispererMatchup.id, status: 'scheduled', homeScore: 0, awayScore: 0 },
-        data: { [whispererField]: targetSeason.id },
+        data: whispererField === 'awayRosterId'
+          ? { awayRosterId: targetSeason.id }
+          : { homeRosterId: targetSeason.id },
       })
       const second = await tx.redraftMatchup.updateMany({
         where: { id: targetMatchup.id, status: 'scheduled', homeScore: 0, awayScore: 0 },
-        data: { [targetField]: oldOpponentId },
+        data: targetField === 'awayRosterId'
+          ? { awayRosterId: oldOpponentId }
+          : { homeRosterId: oldOpponentId },
       })
       if (first.count !== 1 || second.count !== 1) throw new Error('Matchup changed before ambush')
       return tx.zombieAmbushAction.create({
