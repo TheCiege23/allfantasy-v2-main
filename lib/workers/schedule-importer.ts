@@ -122,6 +122,16 @@ export async function runScheduleImporter(options?: {
           })
         )
       )
+      // Older imports stored daily-sport games in week 0 (or NHL's placeholder 500).
+      // They have no dependent rows; remove only ids we have just placed into a real week.
+      if (['NBA', 'NHL', 'MLB'].includes(sport)) {
+        const mappedIds = batch.filter((row) => row.weekOrRound > 0).map((row) => row.externalId)
+        if (mappedIds.length) {
+          await prisma.gameSchedule.deleteMany({
+            where: { sportType: sport, season, externalId: { in: mappedIds }, weekOrRound: { in: [0, 500] } },
+          })
+        }
+      }
       imported += batch.length
     }
   }
