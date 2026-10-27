@@ -2,6 +2,7 @@
 
 import { RosterSettingsEditor } from '@/components/league-settings/RosterSettingsEditor'
 import { TaxiRulesPanel } from '@/components/league-settings/TaxiRulesPanel'
+import { TaxiStealingPanel } from '@/components/league-settings/TaxiStealingPanel'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 export function RostersTab({ ctx }: LeagueSettingsTabProps) {
@@ -10,6 +11,7 @@ export function RostersTab({ ctx }: LeagueSettingsTabProps) {
       <RosterSettingsEditor leagueId={ctx.league.id} sport={ctx.league.sport} />
       {/* Renders nothing outside dynasty leagues that play on AllFantasy. */}
       <TaxiRulesPanel leagueId={ctx.league.id} />
+      <TaxiStealingPanel leagueId={ctx.league.id} />
     </div>
   )
 }

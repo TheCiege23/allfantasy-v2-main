@@ -13,7 +13,8 @@ import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { loadNativeLineupCards, type LineupCard } from "./nativeLineupCards"
-import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS } from "./sensitivity"
+import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS, TANKING_IDLE_STARTS_PER_WEEK } from "./sensitivity"
+import { loadDailySportIdleStarts } from "./dailySportTankingScan"
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 export type TankingEvidence = {
@@ -29,6 +30,8 @@ export type TankingEvidence = {
     benchedBetterOption?: string
     benchedBetterOptionProjection?: number
     startedPlayerProjection?: number
+    /** NBA / NHL / MLB daily lineups: the Eastern day of an idle start (`YYYY-MM-DD`). */
+    day?: string
   }[]
   consecutiveWeeksWithSuspiciousLineup: number
   winsBelowExpected: number
@@ -213,7 +216,8 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
   if (typeof settings.tankingStartWeek === "number" && weekNumber < settings.tankingStartWeek) {
     return { leagueId, weekNumber, flags: [], scannedAt }
   }
-  const benchGapPoints = TANKING_BENCH_GAP_POINTS[normalizeSensitivity(settings.tankingSensitivity)]
+  const sensitivity = normalizeSensitivity(settings.tankingSensitivity)
+  const benchGapPoints = TANKING_BENCH_GAP_POINTS[sensitivity]
   const checkIllegalLineups = settings.tankingIllegalLineupCheck !== false
   const checkBenchPattern = settings.tankingBenchPatternCheck !== false
 
@@ -228,7 +232,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { playoffStartWeek: true, sport: true, platform: true },
+    select: { playoffStartWeek: true, sport: true, platform: true, settings: true },
   })
   // A foreign platform's player ids collide with Sleeper's; a stranger's name in an accusation is
   // worse than the bare id, so those are left unresolved (the same rule as nativeLineupScan).
@@ -247,6 +251,26 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
     seasonYear != null && rosterIds.length > 0
       ? await loadNativeLineupCards(prisma, { redraftRosterIds: rosterIds, season: seasonYear, week: weekNumber })
       : new Map<string, LineupCard>()
+
+  /*
+   * NBA / NHL / MLB: idle starters, which the bye-week test below cannot see (these sports have no bye).
+   * Daily lineups count idle starts against the sensitivity's weekly threshold (a bench-pattern rule);
+   * weekly lineups treat a starter whose team plays no game all week as football's bye (an illegal
+   * lineup). Null when the sport is another or the week's schedule cannot be read: no claim then.
+   */
+  const idleStarts =
+    seasonYear != null && rosterIds.length > 0 && (checkIllegalLineups || checkBenchPattern)
+      ? await loadDailySportIdleStarts(prisma, {
+          sport: String(league?.sport ?? ""),
+          leagueSettings: league?.settings ?? null,
+          season: seasonYear,
+          week: weekNumber,
+          redraftRosterIds: rosterIds,
+        }).catch((error) => {
+          console.warn("[tanking] idle-start read failed; no idle-start claims this week", { leagueId, weekNumber, error: String(error) })
+          return null
+        })
+      : null
 
   const flags: TankingScanResult["flags"] = []
 
@@ -272,7 +296,8 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
        * claim made about it.
        */
       const block = parsed.find((p) => p.rosterId === roster.id) ?? cards.get(roster.id)
-      if (!block) continue
+      const idle = idleStarts?.byRoster.get(roster.id) ?? []
+      if (!block && idle.length === 0) continue
       const suspicious: TankingEvidence["illegalOrSuspiciousStarters"] = []
       let pointsLeft = 0
       if (block) {
@@ -310,19 +335,45 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
         }
       }
 
+      if (idleStarts?.mode === "weekly" && checkIllegalLineups) {
+        for (const start of idle) {
+          if (suspicious.some((x) => x.startedPlayerId === start.playerId)) continue
+          suspicious.push({
+            slotPosition: start.slot,
+            startedPlayerId: start.playerId,
+            startedPlayerName: start.playerId,
+            startedPlayerStatus: "NO GAMES THIS WEEK",
+          })
+        }
+      }
+      if (idleStarts?.mode === "daily" && checkBenchPattern && idle.length >= TANKING_IDLE_STARTS_PER_WEEK[sensitivity]) {
+        for (const start of idle) {
+          suspicious.push({
+            slotPosition: start.slot,
+            startedPlayerId: start.playerId,
+            startedPlayerName: start.playerId,
+            startedPlayerStatus: "NO GAME THAT DAY",
+            benchedBetterOption: start.benchPlayerId ?? undefined,
+            ...(start.day ? { day: start.day } : {}),
+          })
+        }
+      }
+
       if (suspicious.length === 0) continue
 
       // Resolve ids to names before the evidence is persisted, so the stored
       // payload is readable rather than needing a second lookup at render time.
       const nameById = resolvableIds
         ? await resolvePlayerNames(
-            suspicious.map((x) => x.startedPlayerName),
+            suspicious.flatMap((x) => (x.day ? [x.startedPlayerName, x.benchedBetterOption ?? ""] : [x.startedPlayerName])),
             String(league?.sport ?? "NFL"),
           )
         : new Map<string, string>()
       for (const row of suspicious) {
         const resolved = nameById.get(row.startedPlayerName)
         if (resolved) row.startedPlayerName = resolved
+        const bench = row.day && row.benchedBetterOption ? nameById.get(row.benchedBetterOption) : undefined
+        if (bench) row.benchedBetterOption = bench
       }
 
       const eliminated = roster.isEliminated === true
@@ -347,7 +398,12 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
       if (ai?.redFlags?.length) evidence.redFlags = ai.redFlags
 
       if (verdict === "suspicious" || verdict === "likely_tanking") {
-        const summary = ai?.summary ?? "Lineup card shows starters in worse health or projection than bench alternatives."
+        const idleOnly = suspicious.every((x) => x.startedPlayerStatus.startsWith("NO GAME"))
+        const summary =
+          ai?.summary ??
+          (idleOnly
+            ? "Started players whose teams had no game, while a bench player who could fill the spot did play."
+            : "Lineup card shows starters in worse health or projection than bench alternatives.")
         /*
          * ⚠ ONE OPEN TANKING CASE PER MANAGER. The collusion engine already
          * refuses to re-flag a trade that has an open flag; this path had no such

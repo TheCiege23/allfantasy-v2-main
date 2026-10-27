@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ROOKIE_DRAFT_AUTO_OPEN_DEFAULT,
   ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY,
+  ROOKIE_DRAFT_PLAN_DEFAULT_FROM,
   defaultRookieDraftWindow,
   describeRookieDraftWindow,
   normalizeCustomOpenDate,
   readRookieDraftCalendarSettings,
+  resolveRookieDraftAutoOpen,
   resolveRookieDraftWindow,
 } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { DYNASTY_SPORT_CONFIGS } from '@/lib/dynasty-core/dynastySportConfig'
@@ -133,5 +135,36 @@ describe('pick valuation reads the same calendar', () => {
     vi.setSystemTime(new Date('2027-01-10T12:00:00Z'))
     // January 2027: the 2027 class was drafted in November, so no bump (it was 1.06 when MLB said January).
     expect(getPickValue(2027, 1, true, undefined, undefined, 'MLB')).toBe(6000)
+  })
+})
+
+describe('resolveRookieDraftAutoOpen', () => {
+  const after = new Date('2027-01-12T05:00:00Z')
+  const before = new Date('2026-10-04T05:00:00Z')
+  const set = (autoOpen: boolean) => ({ [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { autoOpen } })
+
+  it('the commissioner\'s own switch always wins', () => {
+    for (const commissionerPlan of [true, false]) {
+      for (const offseasonStartedAt of [before, after]) {
+        expect(resolveRookieDraftAutoOpen({ settings: set(false), commissionerPlan, offseasonStartedAt })).toEqual({ autoOpen: false, source: 'commissioner' })
+        expect(resolveRookieDraftAutoOpen({ settings: set(true), commissionerPlan, offseasonStartedAt })).toEqual({ autoOpen: true, source: 'commissioner' })
+      }
+    }
+  })
+
+  it('unset: on for AF Commissioner, off for free', () => {
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: true, offseasonStartedAt: after })).toEqual({ autoOpen: true, source: 'plan_default' })
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: false, offseasonStartedAt: after })).toEqual({ autoOpen: false, source: 'free_default' })
+  })
+
+  it('unset, AF Commissioner, offseason under way before the default shipped: off', () => {
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: true, offseasonStartedAt: before })).toEqual({ autoOpen: false, source: 'plan_default_predates' })
+    // The boundary instant itself counts as after.
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: true, offseasonStartedAt: ROOKIE_DRAFT_PLAN_DEFAULT_FROM }).source).toBe('plan_default')
+  })
+
+  it('a custom date alone is not a switch', () => {
+    const dateOnly = { [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { customOpenDate: '2027-06-01' } }
+    expect(resolveRookieDraftAutoOpen({ settings: dateOnly, commissionerPlan: true, offseasonStartedAt: after }).source).toBe('plan_default')
   })
 })

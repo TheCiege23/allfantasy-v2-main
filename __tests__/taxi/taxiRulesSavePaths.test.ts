@@ -105,6 +105,13 @@ describe('the lineup screen save', () => {
     expect(await engineSave()).toEqual({ ok: true })
     expect(t.log).toHaveBeenCalledWith(h.tx, expect.objectContaining({ leagueId: 'L', redraftRosterId: 'rr-1', week: 11, check: OK }))
   })
+  it('passes a taxi steal protection through to the check', async () => {
+    await persistRosterLineupWithEngine({
+      leagueId: 'L', rosterId: 'af-1', season: 2026, week: 11, taxiProtection: ['p1'],
+      nextPlayerData: { lineup_sections: { starters: [{ id: 'p1', name: 'P1' }] } }, actorUserId: 'user-1', source: 'user_save', skipLockCheck: true,
+    } as never)
+    expect(t.check).toHaveBeenCalledWith(expect.objectContaining({ protectedPromotions: ['p1'] }))
+  })
   it('a commissioner override is never checked', async () => {
     t.check.mockResolvedValue(REFUSED)
     expect(await engineSave('commissioner_override')).toEqual({ ok: true })

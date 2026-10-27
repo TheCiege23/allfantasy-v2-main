@@ -10,6 +10,7 @@ import { loadTaxiEnforcement } from '@/lib/taxi/taxiRulesService'
 import { describeTaxiMoveRules } from '@/lib/taxi/taxiMoveRules'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { readPickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
+import { readTaxiStealingForChimmy } from '@/lib/taxi/taxiStealingService'
 
 export async function buildDynastyContextForChimmy(
   leagueId: string,
@@ -59,6 +60,9 @@ export async function buildDynastyContextForChimmy(
         ? `Pick trades: a trade made only of draft picks closes after week ${pickRule.week}, whatever the trade deadline; a trade with any player or FAAB follows the trade deadline${league.tradeDeadlineWeek ? ` (week ${league.tradeDeadlineWeek})` : ''} (enforced).`
         : 'Pick trades close with the trade deadline, like player trades. The commissioner can give them their own deadline in Trade settings.',
   )
+  // Taxi stealing (lib/taxi/taxiStealing.ts): the rule and any open claim, when the rule is running.
+  const stealing = await readTaxiStealingForChimmy(leagueId).catch(() => null)
+  if (stealing) parts.push(stealing)
   parts.push(
     'When the user asks: what playoff format should I use, should this league be SF or 1QB, how many taxi slots, difference between taxi and devy, how should rookie draft order work, what does reverse Max PF mean — explain using this context and league settings. Do not enforce or change settings.'
   )
