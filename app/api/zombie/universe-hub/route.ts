@@ -79,3 +79,48 @@ export async function GET(req: Request) {
   })
 }
 
+
+/** Universe-wide movement rules are owned by the universe commissioner. */
+export async function PATCH(req: Request) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const universeId = typeof body.universeId === 'string' ? body.universeId : null
+  if (!universeId) return NextResponse.json({ error: 'universeId required' }, { status: 400 })
+
+  const universe = await prisma.zombieUniverse.findUnique({
+    where: { id: universeId },
+    select: {
+      commissionedByUserId: true,
+      leagues: { select: { status: true } },
+    },
+  })
+  if (!universe) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (universe.commissionedByUserId !== session.user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (universe.leagues.some((league) => !['setup', 'registering'].includes(league.status))) {
+    return NextResponse.json({ error: 'Promotion and relegation rules lock when a league starts.' }, { status: 409 })
+  }
+
+  const data: { promotionCount?: number; relegationCount?: number } = {}
+  for (const key of ['promotionCount', 'relegationCount'] as const) {
+    const value = body[key]
+    if (value === undefined) continue
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 5) {
+      return NextResponse.json({ error: `${key} must be an integer between 0 and 5.` }, { status: 400 })
+    }
+    data[key] = value
+  }
+  if (!Object.keys(data).length) return NextResponse.json({ error: 'No supported settings supplied.' }, { status: 400 })
+
+  const updated = await prisma.zombieUniverse.update({ where: { id: universeId }, data })
+  return NextResponse.json({
+    universe: {
+      id: updated.id,
+      promotionCount: updated.promotionCount,
+      relegationCount: updated.relegationCount,
+    },
+  })
+}
