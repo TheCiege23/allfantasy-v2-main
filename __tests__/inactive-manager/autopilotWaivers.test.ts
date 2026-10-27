@@ -1,7 +1,7 @@
 /** Chimmy autopilot waivers: fill holes only, in the team's style, never dropping what it protects. */
 import { describe, expect, it } from 'vitest'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
-import { planAutopilotWaivers, unfillableSlots, type AutopilotPlayer } from '@/lib/inactive-manager/autopilotWaivers'
+import { AUTOPILOT_FAAB_SHARE, autopilotFaabBid, planAutopilotWaivers, unfillableSlots, type AutopilotPlayer } from '@/lib/inactive-manager/autopilotWaivers'
 
 const slot = (index: number, label: string, allowedPositions: string[]): ExpandedStarterSlot =>
   ({ index, label, allowedPositions, isFlexible: allowedPositions.length > 1 }) as ExpandedStarterSlot
@@ -73,5 +73,30 @@ describe('planAutopilotWaivers', () => {
     const plan = planAutopilotWaivers({ ...base, players: hurt, benchCapacity: 9, style: 'win_now', freeAgents: [...FA, P('qb2', 'QB', 15)], maxClaims: 1 })
     expect(plan.claims).toHaveLength(1)
     expect(plan.unfilled).toHaveLength(1)
+  })
+})
+
+describe('autopilotFaabBid', () => {
+  const base = { style: 'dynasty_owner' as const, faab: true, budget: 100, remaining: 100, minBid: null, allowZero: true }
+
+  it('bids the style’s modest share of the budget', () => {
+    expect(autopilotFaabBid(base)).toBe(Math.round(100 * AUTOPILOT_FAAB_SHARE.dynasty_owner))
+    expect(autopilotFaabBid({ ...base, style: 'win_now' })).toBe(8)
+    expect(autopilotFaabBid({ ...base, style: 'rebuild' })).toBe(2)
+  })
+
+  it('never bids below the league minimum, or $0 where the league refuses it', () => {
+    expect(autopilotFaabBid({ ...base, style: 'rebuild', minBid: 5 })).toBe(5)
+    expect(autopilotFaabBid({ ...base, budget: 10, style: 'rebuild', allowZero: false })).toBe(1)
+  })
+
+  it('never bids more than the team has left, and makes no claim it cannot afford', () => {
+    expect(autopilotFaabBid({ ...base, style: 'win_now', remaining: 3 })).toBe(3)
+    expect(autopilotFaabBid({ ...base, remaining: 2, minBid: 5 })).toBe('unaffordable')
+    expect(autopilotFaabBid({ ...base, remaining: 0, allowZero: false })).toBe('unaffordable')
+  })
+
+  it('has no bid outside a FAAB league', () => {
+    expect(autopilotFaabBid({ ...base, faab: false })).toBeNull()
   })
 })

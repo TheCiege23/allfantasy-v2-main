@@ -416,7 +416,8 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
     WHERE settings ? ${AF_MANAGED_LINEUPS_KEY} AND settings -> ${AF_MANAGED_LINEUPS_KEY} <> '{}'::jsonb
     ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? DEFAULT_LEAGUE_LIMIT, 100))}`
 
-  const { planAutopilotWaivers } = await import('./autopilotWaivers')
+  const { planAutopilotWaivers, autopilotFaabBid } = await import('./autopilotWaivers')
+  const { getEffectiveLeagueWaiverSettings } = await import('@/lib/waiver-wire/settings-service')
   const { createClaim, getClaimsByRoster } = await import('@/lib/waiver-wire/claim-service')
   const { buildLineupListsFromPlayerData } = await import('@/lib/league/lineup-swap')
   const { assertLifecycleActionAllowed } = await import('@/server/services/leagueLifecycleService')
@@ -453,6 +454,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       const pool = (await getNormalizedPlayerData({ surface: 'waivers', leagueId, limit: 300 })).map(serializeUnifiedPlayerForApi)
       const freeAgents = pool.map((p) => ({ id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }))
       const playerNames = new Map(pool.map((p) => [p.id, p.name]))
+      const waiverSettings = await getEffectiveLeagueWaiverSettings(leagueId)
 
       for (const rosterId of autopilot) {
         if (Date.now() >= deadline) break
@@ -489,16 +491,31 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
             skip(plan.unfilled.length ? 'no_fitting_free_agent' : 'no_holes')
             continue
           }
+          // FAAB left for this run's claims: each bid comes out of it, so two claims cannot overspend.
+          let faabLeft = roster.faabRemaining ?? null
           for (const c of plan.claims) {
+            const bid = autopilotFaabBid({
+              style,
+              faab: waiverSettings.normalizedWaiverType === 'faab',
+              budget: waiverSettings.faabBudget,
+              remaining: faabLeft,
+              minBid: waiverSettings.faabMinBid,
+              allowZero: waiverSettings.allowZeroFaabBid,
+            })
+            if (bid === 'unaffordable') {
+              skip('faab_unaffordable')
+              continue
+            }
             try {
               await createClaim(leagueId, rosterId, {
                 addPlayerId: c.addPlayerId,
                 dropPlayerId: c.dropPlayerId,
-                faabBid: null,
+                faabBid: bid,
                 userId: roster.platformUserId,
                 metadata: { source: 'chimmy_autopilot', style, slot: c.slot },
               })
               result.claims += 1
+              if (bid != null && faabLeft != null) faabLeft -= bid
               const addPlayerName = playerNames.get(c.addPlayerId) ?? null
               const dropPlayerName = c.dropPlayerId ? playerNames.get(c.dropPlayerId) ?? null : null
               await logAction({
@@ -509,7 +526,8 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
                 entityId: rosterId,
                 metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId, addPlayerName, dropPlayerName },
               })
-              // The commissioner who handed the team to Chimmy hears about each move it makes.
+              // The commissioner who handed the team to Chimmy hears about each move it makes. Never the
+              // bid: bids are sealed, and the commissioner usually manages a team in this league too.
               await dispatchNotification({
                 userIds: [managed[rosterId]!.autopilot!.byUserId],
                 category: 'commissioner_alerts',
