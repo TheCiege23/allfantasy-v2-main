@@ -69,7 +69,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
       holdFlaggedTrades: readHoldFlaggedTrades(league.settings),
       // Holding needs the trade to execute in AllFantasy; an imported league's trades go through on its host.
       holdFlaggedTradesSupported: resolveWriteAuthority(league.platform) === "NATIVE",
-      tankingPenalties: readTankingPenaltyPolicy(league.settings),
+      // Penalties take an AllFantasy draft pick; an imported league's picks live on its host, so the
+      // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
+      ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
     },
     openFlags,
     recentDismissed,
@@ -180,7 +182,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
       tradeAlertsEnabled: readTradeAlertsEnabled(leagueSettings),
       holdFlaggedTrades: readHoldFlaggedTrades(leagueSettings),
       holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
-      tankingPenalties: readTankingPenaltyPolicy(leagueSettings),
+      ...(resolveWriteAuthority(platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
     },
   })
 }
