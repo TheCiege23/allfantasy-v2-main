@@ -23,6 +23,7 @@ export type ZombieWeeklyUpdateDraft = {
     prevHordeSize: number
     week: number
     leagueName: string
+    experienceMode?: 'simple' | 'enhanced'
   }
 }
 
@@ -324,6 +325,12 @@ function footerSchedule(z: { weeklyUpdateDay: number | null; weeklyUpdateHour: n
 }
 
 export function composeWeeklyUpdateBody(d: ZombieWeeklyUpdateDraft): string {
+  if (d.meta.experienceMode === 'simple') {
+    return [
+      d.header, d.sectionWhisperer, d.sectionNewInfections, d.sectionRevivals,
+      d.sectionInventory, d.sectionMoney, d.sectionDangerMatchups, d.footer,
+    ].filter(Boolean).join('\n\n')
+  }
   const parts = [
     d.header,
     d.sectionWhisperer,
