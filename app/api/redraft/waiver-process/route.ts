@@ -15,6 +15,7 @@ import type { EliminatedLineupRunResult } from '@/lib/eliminated-lineups/elimina
 import type { RookieOrderRoundNoticeRun } from '@/lib/rookie-order/roundNoticeService'
 import type { IrAutoMoveRunResult } from '@/lib/ir-activation/irAutoMoveService'
 import type { OrphanAuctionRunResult } from '@/lib/orphan-auction/orphanAuctionService'
+import type { TaxiStealRunResult } from '@/lib/taxi/taxiStealingService'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -307,6 +308,29 @@ export async function GET(request: Request) {
     orphanAuctions = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  /*
+   * Taxi stealing (lib/taxi/taxiStealing.ts): AF Commissioner. Every claim whose protection window has
+   * closed is resolved — the player moves to the claiming team, or the claim ends if they left the
+   * taxi squad. Hourly, so a steal lands within the hour of its deadline; on its own job identity.
+   */
+  let taxiSteals: TaxiStealRunResult | { error: string } | null = null
+  try {
+    const { runTaxiStealResolution } = await import('@/lib/taxi/taxiStealingService')
+    taxiSteals = await withSyncJobRun(
+      { jobName: 'cron-taxi-steal-resolve', trigger: 'cron' },
+      () => runTaxiStealResolution(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.stolen + r.voided,
+        errors: r.failures.map((f) => `${f.leagueId}${f.claimId ? `/${f.claimId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, stolen: r.stolen, voided: r.voided },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] taxi steal resolution failed', e)
+    taxiSteals = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -332,5 +356,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

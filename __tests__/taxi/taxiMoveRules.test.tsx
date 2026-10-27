@@ -145,6 +145,16 @@ describe('the save check', () => {
     expect(m.prisma.league.findUnique).not.toHaveBeenCalled()
   })
 
+  it('a promotion that answers a taxi steal claim skips the promotion windows, and is still logged', async () => {
+    // Week 12 is past the promotion deadline: a's promotion is refused unless it protects a claim.
+    expect((await save({ week: 12 })).issues.map((i) => i.code)).toEqual(['TAXI_NO_RETURN', 'TAXI_PROMOTION_CLOSED'])
+    const check = await save({ week: 12, protectedPromotions: ['a'] })
+    expect(check.issues.map((i) => i.code)).toEqual(['TAXI_NO_RETURN'])
+    expect(check.promotions).toEqual(['a'])
+    // It only covers promotions: naming the arriving player does not lift "cannot return".
+    expect((await save({ week: 12, protectedPromotions: ['a', 'b'] })).issues.map((i) => i.code)).toEqual(['TAXI_NO_RETURN'])
+  })
+
   it('the promotion log is one move-history row, inside the save', async () => {
     const tx = { redraftRosterMoveHistory: { create: vi.fn() } }
     await logTaxiPromotions(tx as never, { leagueId: 'L', redraftRosterId: 'r1', week: 8, actorUserId: 'u1', check: await save({ afterTaxi: [] }) })
