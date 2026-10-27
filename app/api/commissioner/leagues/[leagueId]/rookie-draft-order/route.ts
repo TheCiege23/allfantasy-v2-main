@@ -1,13 +1,20 @@
 /**
- * GET: Compute and return rookie draft order preview.
- * PUT: Save rookie draft order mode config (commissioner only).
+ * GET: Compute and return rookie draft order preview. FREE: any member can see either order.
+ * PUT: Save rookie draft order mode config (league owner only). Turning automatic ordering ON is
+ *      AF COMMISSIONER; turning it off, or saving a mode with it off, is free.
  * Only for dynasty/C2C/devy leagues, future seasons (not first season).
  *
- * ⚠ FREE, NOT AF COMMISSIONER. Both modes (worst-to-first, reverse max PF) are a
- * deterministic sort of last season's results — nothing here is AI — yet saving was
- * gated on `commissioner_ai_tools`, so a free dynasty league could never turn
- * auto-ordering on and every rookie draft needed a hand-set order. Setting the order
- * a league's own draft runs in is running the league.
+ * ⚠ THE SAME RULE AS THE LIVE ORDER (./live/route.ts), WHICH THIS ROUTE PREDATES. Calculating an
+ * order is free; having the system seat the next rookie draft with it is the Commissioner plan's
+ * automation (docs/commissioner/DYNASTY_COMMISH_CHECKLIST.md, "Legacy rookie-order route"). This
+ * header used to say the route was free on purpose, because saving had been gated on the unrelated
+ * `commissioner_ai_tools` — a wrong gate, not proof that none belongs here. Two routes that seat the
+ * same draft must not disagree about who may automate it, and before this the free one let any
+ * league switch on what the live route sells.
+ *
+ * Nothing a free league needs is behind it: without an enabled config the draft keeps its default
+ * order, and the preview stays free. A config already saved enabled keeps seating drafts after a
+ * plan lapses, like the live order's automation.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -20,6 +27,7 @@ import {
   type RookieDraftOrderMode,
 } from '@/lib/league/rookieDraftOrder'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import { isLeagueEntitledToLiveRookieOrder } from '@/lib/rookie-order/liveRookieOrderService'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,7 +62,10 @@ export async function GET(
   }
 
   const isCommissioner = league.userId === session.user.id
-  const savedConfig = await getRookieDraftOrderConfig(leagueId)
+  const [savedConfig, canAutomate] = await Promise.all([
+    getRookieDraftOrderConfig(leagueId),
+    isCommissioner ? isLeagueEntitledToLiveRookieOrder(league.userId) : Promise.resolve(false),
+  ])
   const mode: RookieDraftOrderMode = savedConfig?.mode ?? 'worst_to_first'
 
   // Compute the order preview
@@ -68,6 +79,8 @@ export async function GET(
     savedMode: savedConfig?.mode ?? null,
     enabled: savedConfig?.enabled ?? false,
     isCommissioner,
+    /** The league owner holds AF Commissioner, so automatic ordering can be switched on. */
+    canAutomate,
   })
 }
 
@@ -93,6 +106,16 @@ export async function PUT(
   const body = await req.json().catch(() => ({}))
   const mode = body.mode === 'reverse_max_pf' ? 'reverse_max_pf' : 'worst_to_first'
   const enabled = body.enabled !== false
+  if (enabled && !(await isLeagueEntitledToLiveRookieOrder(league.userId))) {
+    return NextResponse.json(
+      {
+        error: 'AF Commissioner is required to automate the rookie draft order.',
+        errorCode: 'AF_COMMISSIONER_REQUIRED',
+        upgradePath: '/upgrade?plan=commissioner',
+      },
+      { status: 402 },
+    )
+  }
 
   const oldConfig = await getRookieDraftOrderConfig(leagueId)
   await saveRookieDraftOrderConfig(leagueId, { mode, enabled, userId: session.user.id })
