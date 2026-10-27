@@ -26,6 +26,7 @@ import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScori
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
 import { runNbaTribeSitOutDeadlineBatch } from '@/lib/survivor/SurvivorSitOutEngine'
 import { processDueSurvivorNotifications } from '@/lib/survivor/notificationEngine'
+import { reportSurvivorAutomationError } from '@/lib/survivor/survivorAutomationReporting'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -535,14 +536,23 @@ export async function GET(request: Request) {
       // Plan progression uses only scores already sealed by a prior reconciliation.
       // Run its bounded batch before the large redraft sweep so a long provider
       // pass cannot starve Survivor for the entire season.
-      const survivorSeason = await runPlannedSurvivorSeasonBatch().catch(error => ({
-        considered: 0, failed: 1,
-        outcomes: { batch_error: 1 },
-        error: error instanceof Error ? error.message : String(error),
-      }))
-      const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(() => ({ considered: 0, failed: 1, outcomes: { batch_error: 1 } }))
+      const survivorSeason = await runPlannedSurvivorSeasonBatch().catch(error => {
+        reportSurvivorAutomationError(error, { job: 'season_batch' })
+        return {
+          considered: 0, failed: 1,
+          outcomes: { batch_error: 1 },
+          error: error instanceof Error ? error.message : String(error),
+        }
+      })
+      const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(error => {
+        reportSurvivorAutomationError(error, { job: 'sit_out_batch' })
+        return { considered: 0, failed: 1, outcomes: { batch_error: 1 } }
+      })
       // After the season step, so councils it just opened send their notices this tick.
-      const survivorNotifications = await processDueSurvivorNotifications().catch(() => ({ leagues: 0, sent: 0, failed: 1 }))
+      const survivorNotifications = await processDueSurvivorNotifications().catch(error => {
+        reportSurvivorAutomationError(error, { job: 'notifications' })
+        return { leagues: 0, sent: 0, failed: 1 }
+      })
       const redraft = await runRedraftReconciliation()
       return { ...legacy, redraft, survivorSeason, survivorSitOuts, survivorNotifications, updated: redraft.reconciled }
     },

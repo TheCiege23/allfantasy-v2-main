@@ -27,6 +27,7 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { processExpiredDraftPicks } from '@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks'
 import { mirrorActiveSleeperDrafts } from '@/lib/draft/mirrorActiveSleeperDrafts'
 import { startScheduledSurvivorDrafts } from '@/lib/survivor/startScheduledSurvivorDrafts'
+import { reportSurvivorAutomationError } from '@/lib/survivor/survivorAutomationReporting'
 import { startScheduledRedraftDrafts } from '@/lib/draft/startScheduledRedraftDrafts'
 import { fillAutoDraftBoards, type FillAutoDraftBoardsSummary } from '@/lib/live-draft-engine/autoDraftFill'
 
@@ -102,10 +103,13 @@ export async function GET(request: NextRequest) {
 
         // A scheduled Survivor draft is an explicit league setting. Start it on
         // the server even when browser-driven autopick is disabled.
-        const survivorStarts = await startScheduledSurvivorDrafts().catch((error) => ({
-          scanned: 0, started: 0, skipped: 0,
-          errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
-        }))
+        const survivorStarts = await startScheduledSurvivorDrafts().catch((error) => {
+          reportSurvivorAutomationError(error, { job: 'draft_start' })
+          return {
+            scanned: 0, started: 0, skipped: 0,
+            errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
+          }
+        })
 
         // Same for a redraft league (NFL/NBA/NHL/MLB) whose commissioner turned on Autostart Draft:
         // the scheduled time is the commissioner's instruction, not a pick made on anyone's behalf.
