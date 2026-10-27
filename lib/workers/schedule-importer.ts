@@ -5,6 +5,7 @@ import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
 import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 
 const UPSERT_BATCH_SIZE = 100
 
@@ -52,6 +53,10 @@ export async function runScheduleImporter(options?: {
         row,
       ])
     )
+
+    if (['NBA', 'NHL', 'MLB'].includes(sport)) {
+      await ensureDailySportSeasonStart(sport, season, { db: prisma }).catch(() => null)
+    }
 
     const response = await apiChain.fetch({
       sport,
