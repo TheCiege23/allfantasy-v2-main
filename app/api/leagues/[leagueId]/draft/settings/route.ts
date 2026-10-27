@@ -162,6 +162,24 @@ export async function GET(
 
     let orphanStatus: { orphanRosterIds: string[]; recentActions: Array<{ action: string; createdAt: string; reason: string | null }> } | null = null
     let commissionerAiDraft: ReturnType<typeof buildApiResponse> | null = null
+    /*
+     * Which teams Chimmy manages, for every member's room — not only the commissioner's. Each open
+     * room asks for a Chimmy-managed team's pick when it comes on the clock
+     * (`/draft/chimmy-manager-pick`), so it needs to know which teams those are. Roster ids only:
+     * the styles and trade rules stay commissioner-only, below.
+     */
+    const chimmyManagedRosterIds = await prisma.draftSession
+      .findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { commissionerAiManagers: true },
+      })
+      .then((row) =>
+        parseCommissionerAiManagers(row?.commissionerAiManagers)
+          .assignments.filter((a) => a.active)
+          .map((a) => a.rosterId),
+      )
+      .catch(() => [] as string[])
     if (commissioner) {
       const [orphanRosterIds, recentLogs, dsAi] = await Promise.all([
         getOrphanRosterIdsForLeague(leagueId),
@@ -197,6 +215,7 @@ export async function GET(
       sessionVariant: variant.sessionVariant ?? null,
       sessionPreDraft: variant.sessionPreDraft ?? false,
       orphanStatus,
+      chimmyManagedRosterIds,
       orphanAiProviderAvailable: providerStatus.anyAi,
       orphanDrafterEffectiveMode:
         variant.draftUISettings.orphanDrafterMode === 'ai' && !providerStatus.anyAi

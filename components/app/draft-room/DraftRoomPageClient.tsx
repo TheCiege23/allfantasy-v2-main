@@ -38,6 +38,7 @@ import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
 import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
 import { DraftRightDockTabs, type DraftRightDockTab } from '@/components/app/draft-room/DraftRightDockTabs'
+import { CHIMMY_PICK_DELAY_MS } from '@/lib/commissioner-ai-draft-manager/chimmyPickTiming'
 import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
   ResultsRosterPanel,
@@ -357,6 +358,8 @@ export function DraftRoomPageClient({
       acceptConfidenceMin: number
     }
   } | null>(null)
+  /** Teams a commissioner handed to Chimmy (active AI manager assignments), for every member's room. */
+  const [chimmyManagedRosterIds, setChimmyManagedRosterIds] = useState<string[]>([])
   /** Prisma AI opponent assignments — draft roster ids (see `/api/league/ai-opponents/summary`). */
   const [aiOpponentRosterIds, setAiOpponentRosterIds] = useState<string[]>([])
   /** Draft roster id → AI archetype label for manager strip badges. */
@@ -1275,6 +1278,11 @@ export function DraftRoomPageClient({
         } else {
           setCommissionerAiDraft(null)
         }
+        setChimmyManagedRosterIds(
+          Array.isArray(data.chimmyManagedRosterIds)
+            ? data.chimmyManagedRosterIds.filter((id: unknown): id is string => typeof id === 'string')
+            : [],
+        )
         // Phase 3b — perf: ai-opponents/summary takes ~70s on cold load
         // (calls AI provider). DON'T await it — fire-and-forget and let the
         // panel re-render when it lands. Initialize to empty so consumers
@@ -3234,6 +3242,53 @@ export function DraftRoomPageClient({
   const isOrphanOnClock = Boolean(
     currentPick?.rosterId && Array.isArray(orphanRosterIds) && orphanRosterIds.includes(currentPick.rosterId) && aiManagerEnabled
   )
+  /*
+   * Chimmy AI manager slot on the clock. Every open room asks the server for Chimmy's pick after
+   * CHIMMY_PICK_DELAY_MS; the server re-checks the assignment and the pick number, so exactly one
+   * request lands and the rest come back as stale. Before this, a Chimmy-managed team only picked
+   * when the commissioner pressed "Run AI pick" or its whole timer ran out.
+   */
+  const chimmyOnClock = Boolean(
+    isOrphanOnClock &&
+      session?.status === 'in_progress' &&
+      currentPick?.rosterId &&
+      chimmyManagedRosterIds.includes(currentPick.rosterId),
+  )
+  const chimmyOnClockOverall = chimmyOnClock ? currentPick?.overall ?? null : null
+  useEffect(() => {
+    if (chimmyOnClockOverall == null) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const requestPick = async (attempt: number) => {
+      if (cancelled) return
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/chimmy-manager-pick`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedOverall: chimmyOnClockOverall }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (res.ok && data.session) {
+          setSession((prev) => mergeDraftSessionSnapshot(prev, data.session as DraftSessionSnapshot))
+          void fetchDraftPool()
+        } else if (data?.retry && attempt < 2) {
+          // This room's clock ran ahead of the server's; ask again shortly.
+          timer = setTimeout(() => void requestPick(attempt + 1), 1500)
+        }
+        // Any other refusal (another room's request won, or Chimmy no longer manages the team) is
+        // expected; the board updates through the normal session refresh.
+      } catch {
+        /* network blip — the pick timer remains the backstop */
+      }
+    }
+    // A little jitter so a full room does not hit the server in the same millisecond.
+    timer = setTimeout(() => void requestPick(0), CHIMMY_PICK_DELAY_MS + Math.floor(Math.random() * 600))
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [chimmyOnClockOverall, leagueId, fetchDraftPool])
   const autoPickEnabled = draftUISettings?.autoPickEnabled ?? false
   const chimmyHeadlineSummary = (draftAssistantContext?.headlines ?? [])
     .slice(0, 2)
@@ -5286,6 +5341,7 @@ export function DraftRoomPageClient({
             commissionerLoading={commissionerLoading}
             isReconnecting={connectionDegraded}
             isOrphanOnClock={isOrphanOnClock}
+            chimmyManagerOnClock={chimmyOnClock}
             orphanDrafterMode={effectiveOrphanDrafterMode}
             orphanDrafterRequestedMode={requestedOrphanDrafterMode}
             orphanFallbackActive={orphanDrafterFallbackActive}
@@ -5623,6 +5679,9 @@ export function DraftRoomPageClient({
             loading={commissionerLoading}
             commissionerAiDraft={commissionerAiDraft ?? undefined}
             onSaveCommissionerAiDraft={handleSaveCommissionerAiDraft}
+            teamNameByRosterId={Object.fromEntries(
+              (session?.slotOrder ?? []).map((entry) => [entry.rosterId, `${entry.displayName} (slot ${entry.slot})`]),
+            )}
           />
         </div>
       </div>
