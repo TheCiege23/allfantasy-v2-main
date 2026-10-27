@@ -1808,6 +1808,8 @@ export const translationsEsParity: Record<string, string> = {
   "draft.reverseMaxPFDesc": "Equipos sin playoffs ordenados por menores Puntos a Favor (última semana de temporada regular). Equipos de playoffs por clasificación. El campeón elige último, el subcampeón elige penúltimo.",
   "draft.autoSetOrder": "Establecer Orden Automáticamente",
   "draft.autoSetOrderDesc": "El sistema calcula automáticamente el orden cada temporada",
+  "lsEd.dr.rookieAutoPlan": "Fijar automáticamente el orden del draft de novatos es parte del plan AF Commissioner del dueño de la liga. Aún puedes ver aquí cualquiera de los dos órdenes.",
+  "lsEd.dr.rookieAutoUpgrade": "Mejorar a AF Commissioner",
   "draft.saveRookieSettings": "Guardar Ajustes del Draft de Rookies",
   "draft.nonPlayoff": "Sin Playoffs",
   "draft.playoffTeams": "Equipos de Playoffs",

@@ -4419,6 +4419,8 @@ export const translations: Record<string, Record<string, string>> = {
     "draft.reverseMaxPF": "Reverse Max PF",
     "draft.autoSetOrder": "Auto-Set Draft Order",
     "draft.autoSetOrderDesc": "System automatically calculates order each season",
+    "lsEd.dr.rookieAutoPlan": "Setting the rookie draft order automatically is part of the league owner’s AF Commissioner plan. You can still preview either order here.",
+    "lsEd.dr.rookieAutoUpgrade": "Upgrade to AF Commissioner",
     "draft.saveRookieSettings": "Save Rookie Draft Settings",
     "draft.nonPlayoff": "Non-Playoff",
     "draft.playoffTeams": "Playoff Teams",
