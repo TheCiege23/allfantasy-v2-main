@@ -407,3 +407,65 @@ export async function activateWhispererPower(
     },
   })
 }
+
+/** Fill the independent second seat only after the primary seat exists. */
+export async function selectSecondWhisperer(zombieLeagueId: string, mode: string): Promise<{ whispererRecordId: string; rosterId: string }> {
+  const z = await prisma.zombieLeague.findUniqueOrThrow({ where: { id: zombieLeagueId } })
+  if (z.whispererCount !== 2 || z.experienceMode === 'simple' || !['NBA', 'NHL', 'MLB'].includes(z.sport.toUpperCase())) {
+    throw new Error('This league does not allow a second Whisperer.')
+  }
+  const primary = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId } })
+  if (!primary) throw new Error('Select the first Whisperer before filling the second seat.')
+  const existing = await prisma.zombieCoWhisperer.findFirst({ where: { zombieLeagueId } })
+  if (existing) {
+    const roster = await prisma.roster.findFirst({ where: { leagueId: z.leagueId, platformUserId: existing.userId } })
+    if (!roster) throw new Error('Second Whisperer roster is missing.')
+    return { whispererRecordId: existing.id, rosterId: roster.id }
+  }
+  const [teams, rosters] = await Promise.all([
+    prisma.zombieLeagueTeam.findMany({ where: { leagueId: z.leagueId, status: 'Survivor' } }),
+    prisma.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true } }),
+  ])
+  const managed = teams.filter((team) => {
+    const owner = rosters.find((roster) => roster.id === team.rosterId)?.platformUserId
+    return owner && !/^(open-slot-|orphan-)/.test(owner) && owner !== primary.userId
+  })
+  if (!managed.length) throw new Error('No eligible manager for the second Whisperer seat.')
+  const veterans = managed.filter((team) => team.isVeteran)
+  const pool = mode === 'veteran_priority' && veterans.length ? veterans : managed
+  const picked = shuffle(pool)[0]
+  const userId = rosters.find((roster) => roster.id === picked.rosterId)?.platformUserId
+  if (!userId) throw new Error('Second Whisperer manager is missing.')
+  const displayName = (await resolveManagerName(userId)) ??
+    (await loadZombieNames(z.leagueId).then((names) => names.get(picked.rosterId)?.teamName ?? null).catch(() => null)) ??
+    'The Whisperer'
+  const ambushes = z.whispererAmbushCount
+  const record = await prisma.$transaction(async (tx) => {
+    const rec = await tx.zombieCoWhisperer.create({
+      data: {
+        zombieLeagueId, userId, displayName, selectionMode: mode,
+        ambushesGranted: ambushes, ambushesRemaining: ambushes,
+        isPubliclyRevealed: z.whispererIsPublic,
+      },
+    })
+    await tx.zombieLeagueTeam.update({
+      where: { leagueId_rosterId: { leagueId: z.leagueId, rosterId: picked.rosterId } },
+      data: { status: 'Whisperer', isWhisperer: true, ambushesRemaining: ambushes },
+    })
+    return rec
+  })
+  await prisma.zombieAnnouncement.create({
+    data: {
+      zombieLeagueId, universeId: z.universeId, type: 'whisperer_reveal',
+      title: z.whispererIsPublic ? 'A second Whisperer has been chosen' : 'Another Whisperer exists',
+      content: z.whispererIsPublic ? 'A second Whisperer has joined the Horde.' : 'Another Whisperer exists. Stay alert.',
+      isPublic: z.whispererIsPublic,
+    },
+  })
+  await notifyZombiePlayer(userId, 'whisperer_selected', "You're a Whisperer", {
+    severity: 'high',
+    body: 'You are the second Whisperer. Your ambush balance is independent, and you can never trade players.',
+    meta: { leagueId: z.leagueId },
+  }).catch(() => {})
+  return { whispererRecordId: record.id, rosterId: picked.rosterId }
+}
