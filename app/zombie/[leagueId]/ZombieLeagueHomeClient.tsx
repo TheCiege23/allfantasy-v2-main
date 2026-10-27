@@ -83,6 +83,7 @@ type Pack = {
     teams: TeamRow[]
     coWhisperers?: Array<{ userId?: string | null; displayName: string | null; ambushesRemaining: number; isPubliclyRevealed: boolean }>
     whispererRecord: {
+      userId?: string | null
       displayName: string
       ambushesRemaining: number
       isPubliclyRevealed: boolean
@@ -209,7 +210,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
   const z = data.league
   const my = data.myTeam
   const displayName = teamName(my)
-  const whispererRevealed = z.whispererIsPublic && (z.whispererRecord?.isPubliclyRevealed ?? true)
+  const whispererRevealed = (z.whispererIsPublic && (z.whispererRecord?.isPubliclyRevealed ?? true)) || z.whispererRecord?.userId === userId
   const lastUpdate = z.announcements.find((a) => a.type === 'weekly_update' || a.type === 'weekly_recap')
   const hordeCount = z.counts?.horde ?? data.hordeSize
   const survivorCount = z.counts?.alive ?? data.survivorCount
