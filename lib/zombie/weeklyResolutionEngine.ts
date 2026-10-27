@@ -17,6 +17,7 @@ import { settleWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 import { syncZombieTeamNames } from '@/lib/zombie/zombieTeamNames'
 import { reconcileScoreOnlyCorrection } from '@/lib/zombie/statCorrectionReconciler'
 import { captureZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
+import { reconcileOutcomeChangingCorrection } from '@/lib/zombie/outcomeCorrectionReconciler'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -86,6 +87,15 @@ export async function runWeeklyResolution(
         sport: z.sport, week, ownerUserId: z.league.userId, previous: existing,
       }).catch(() => null)
       if (reconciled) return { resolution: reconciled }
+      const replayed = await reconcileOutcomeChangingCorrection({
+        zombieLeagueId, leagueId: z.leagueId, seasonId: season.id, season: z.season,
+        week, ownerUserId: z.league.userId, experienceMode: z.experienceMode,
+        previous: existing,
+      }).catch(() => null)
+      if (replayed) {
+        if (z.universeId) await syncUniverseStats(z.universeId, week).catch(() => null)
+        return { resolution: replayed }
+      }
     }
     const marked = await prisma.zombieWeeklyResolution.updateMany({
       where: { zombieLeagueId, week, status: 'complete', requiresStatCorrection: false },
