@@ -39,6 +39,7 @@ export type ZombieLeagueSetupConfig = {
   slug?: string
   backgroundTheme?: string | null
   experienceMode?: ZombieExperienceMode
+  whispererCount?: 1 | 2
 }
 
 /**
@@ -276,6 +277,7 @@ export async function createZombieLeague(
       season: config.season ?? new Date().getFullYear(),
       experienceMode,
       whispererAmbushCount: experienceMode === 'simple' ? 0 : 3,
+      whispererCount: experienceMode === 'simple' ? 1 : (config.whispererCount ?? 1),
       isSingleLeague: config.isSingleLeague ?? !universeId,
       isPaid: config.isPaid ?? false,
       status: 'setup',
