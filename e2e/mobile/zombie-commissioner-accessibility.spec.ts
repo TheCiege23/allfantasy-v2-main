@@ -9,7 +9,7 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
     await page.goto(`/zombie/${leagueId}`)
     await expect(page.getByRole('main').getByRole('heading', { name: 'E2E Zombie League' })).toBeVisible({ timeout: 30_000 })
 
-    const opener = page.getByTestId('zombie-nav-commissioner')
+    const opener = page.getByTestId('zombie-mobile-ops')
     await opener.click()
     const dialog = page.getByRole('dialog', { name: 'Commissioner Settings' })
     await expect(dialog).toBeVisible()
