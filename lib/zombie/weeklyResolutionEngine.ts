@@ -68,12 +68,27 @@ export async function runWeeklyResolution(
           old.awayUserId === matchup.awayRosterId &&
           old.homeScore === matchup.homeScore && old.awayScore === matchup.awayScore
       }))
-    if (same) return { resolution: existing }
-    await notifyCommissioner(z.leagueId, 'commissioner_override_required',
-      `Week ${week} score correction needs reconciliation`,
-      'A finalized matchup changed. Review roles, items, and winnings before this week is replayed.',
-      { urgency: 'critical', requiresAction: true, week }).catch(() => {})
-    return { resolution: existing, skipped: true, reason: 'stat_correction_reconciliation_required' }
+    if (same) {
+      if (existing.requiresStatCorrection) {
+        const cleared = await prisma.zombieWeeklyResolution.update({
+          where: { zombieLeagueId_week: { zombieLeagueId, week } },
+          data: { requiresStatCorrection: false },
+        })
+        return { resolution: cleared }
+      }
+      return { resolution: existing }
+    }
+    const marked = await prisma.zombieWeeklyResolution.updateMany({
+      where: { zombieLeagueId, week, status: 'complete', requiresStatCorrection: false },
+      data: { requiresStatCorrection: true },
+    })
+    if (marked.count > 0) {
+      await notifyCommissioner(z.leagueId, 'commissioner_override_required',
+        `Week ${week} score correction needs reconciliation`,
+        'A finalized matchup changed. Review roles, items, and winnings before this week is replayed.',
+        { urgency: 'critical', requiresAction: true, week }).catch(() => {})
+    }
+    return { resolution: { ...existing, requiresStatCorrection: true }, skipped: true, reason: 'stat_correction_reconciliation_required' }
   }
 
   /*
