@@ -6,6 +6,8 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { leagueSettingsHomeHref } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { RolloverStepKey, RolloverStepState } from '@/lib/season-rollover/rolloverWizard'
 import type { RolloverView } from '@/lib/season-rollover/rolloverService'
+import type { DynastyRolloverView } from '@/lib/season-rollover/dynastyRolloverService'
+import { DynastyRolloverWizard } from './DynastyRolloverWizard'
 
 /**
  * The season rollover wizard (lib/season-rollover) on the Commissioner Hub: the steps from the
@@ -13,6 +15,7 @@ import type { RolloverView } from '@/lib/season-rollover/rolloverService'
  * (POST /api/commissioner/leagues/[id]/renew — the same renew the league banner runs). Shown to the
  * head commissioner from the playoffs on. AF Commissioner adds a drafted announcement and carrying
  * the dues into next season's payout buy-in. English and Spanish; a server message is shown as is.
+ * A dynasty league gets its own steps from the same route (./DynastyRolloverWizard.tsx).
  */
 type Order = 'standings' | 'reverse_standings' | 'random'
 
@@ -33,6 +36,7 @@ export function RolloverWizard({ leagueId }: { leagueId: string }) {
   const ord = (n: number) => (es ? `${n}.º` : `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`)
   const url = `/api/leagues/${encodeURIComponent(leagueId)}/rollover`
   const [view, setView] = useState<(RolloverView & { applies: true }) | null>(null)
+  const [dynasty, setDynasty] = useState<DynastyRolloverView | null>(null)
   const [dues, setDues] = useState('')
   const [order, setOrder] = useState<Order>('standings')
   const [confirmed, setConfirmed] = useState(false)
@@ -44,8 +48,12 @@ export function RolloverWizard({ leagueId }: { leagueId: string }) {
     try {
       const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) return
-      const body = (await r.json()) as RolloverView | { applies: false }
+      const body = (await r.json()) as RolloverView | DynastyRolloverView | { applies: false }
       if (!body.applies) return
+      if (body.kind === 'dynasty') {
+        setDynasty(body)
+        return
+      }
       setView(body)
       setDues(body.input.dues.amountDollars != null ? String(body.input.dues.amountDollars) : '')
       setOrder(body.input.draftOrder === 'manual' ? 'standings' : body.input.draftOrder)
@@ -58,6 +66,7 @@ export function RolloverWizard({ leagueId }: { leagueId: string }) {
     void load()
   }, [load])
 
+  if (dynasty) return dynasty.show ? <DynastyRolloverWizard leagueId={leagueId} view={dynasty} reload={load} /> : null
   if (!view || !view.show) return null
   const { input, plan } = view
   const stateOf = (key: RolloverStepKey) => plan.steps.find((s) => s.key === key)!.state

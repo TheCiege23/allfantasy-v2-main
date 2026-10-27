@@ -52,8 +52,12 @@ type IntegrityPayload = {
 
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
 
-function coverageText(status: IntegrityScanStatus, lastScannedAt: string | null): string {
-  if (status === 'unsupported') return 'Unavailable for imported leagues or leagues without a native redraft season.'
+function coverageText(kind: 'collusion' | 'tanking', status: IntegrityScanStatus, lastScannedAt: string | null): string {
+  if (status === 'unsupported') {
+    return kind === 'collusion'
+      ? 'Unavailable for this league. Trades are scanned in leagues run on AllFantasy and in leagues imported from Sleeper.'
+      : 'Unavailable for this league. Lineups are scanned only in leagues run on AllFantasy, not in imported leagues.'
+  }
   if (status === 'disabled') return 'Monitoring is off.'
   if (status === 'never_scanned') return 'Enabled; no completed scan recorded yet.'
   return `Last scan: ${lastScannedAt ? new Date(lastScannedAt).toLocaleString() : 'time unavailable'}. This does not prove every event was checked.`
@@ -234,8 +238,8 @@ export default function CommissionerIntegrityPage() {
             {payload?.coverage && (
               <div className="af-cm-disclosure" data-testid="integrity-coverage" style={{ display: 'block' }}>
                 <strong>Detection coverage</strong>
-                <p>Collusion: {coverageText(payload.coverage.collusion.status, payload.coverage.collusion.lastScannedAt)}</p>
-                <p>Tanking: {coverageText(payload.coverage.tanking.status, payload.coverage.tanking.lastScannedAt)}</p>
+                <p>Collusion: {coverageText('collusion', payload.coverage.collusion.status, payload.coverage.collusion.lastScannedAt)}</p>
+                <p>Tanking: {coverageText('tanking', payload.coverage.tanking.status, payload.coverage.tanking.lastScannedAt)}</p>
                 {payload.canReview === false && <p>Co-commissioners can view flags and settings. The league owner reviews flags and changes settings.</p>}
               </div>
             )}

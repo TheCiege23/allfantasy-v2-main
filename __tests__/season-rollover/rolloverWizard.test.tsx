@@ -10,6 +10,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 const m = vi.hoisted(() => ({
   plan: vi.fn(),
   payouts: vi.fn(),
+  dynasty: vi.fn(),
+  dynastyDue: vi.fn(),
   patch: vi.fn(),
   modal: vi.fn(),
   prisma: {
@@ -29,6 +31,11 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/entitlements/afCommissionerPlan', () => ({ hasAfCommissionerPlan: m.plan }))
 vi.mock('@/lib/payouts/payoutService', () => ({ readPayoutsView: m.payouts }))
+vi.mock('@/lib/season-rollover/dynastyRolloverService', () => ({
+  readDynastyRolloverView: m.dynasty,
+  readDynastyRolloverDue: m.dynastyDue,
+  setDynastyNextSeasonDues: vi.fn(),
+}))
 vi.mock('@/lib/league/execute-league-settings-patch', () => ({ executeLeagueSettingsPatch: m.patch }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'boss' } }) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -175,12 +182,19 @@ describe('the league read', () => {
     expect(r.view.extras!.payoutCarry).toEqual({ fromCents: 10_000, toCents: 12_000 })
   })
 
-  it('only the head commissioner; never outside native redraft leagues', async () => {
+  it('only the head commissioner; native leagues only, and a dynasty league reads its own steps', async () => {
     expect(await readRolloverView('L', 'someone')).toEqual({ ok: false, status: 403 })
     expect(await readRolloverView('L', null)).toEqual({ ok: false, status: 401 })
     m.prisma.league.findUnique.mockResolvedValueOnce(league({ platform: 'sleeper' }))
     expect(await readRolloverView('L', 'boss')).toEqual({ ok: true, view: { applies: false, reason: 'not_native' } })
     m.prisma.league.findUnique.mockResolvedValueOnce(league({ leagueVariant: 'dynasty', isDynasty: true }))
+    m.dynasty.mockResolvedValueOnce(null)
+    expect(await readRolloverView('L', 'boss')).toEqual({ ok: true, view: { applies: false, reason: 'no_season' } })
+    expect(m.dynasty).toHaveBeenCalledWith('L', 'boss')
+    m.prisma.league.findUnique.mockResolvedValueOnce(league({ leagueVariant: 'dynasty', isDynasty: true }))
+    m.dynasty.mockResolvedValueOnce({ applies: true, kind: 'dynasty', show: true })
+    expect(await readRolloverView('L', 'boss')).toEqual({ ok: true, view: { applies: true, kind: 'dynasty', show: true } })
+    m.prisma.league.findUnique.mockResolvedValueOnce(league({ leagueVariant: 'tournament', settings: { league_type: 'tournament' } }))
     expect(await readRolloverView('L', 'boss')).toEqual({ ok: true, view: { applies: false, reason: 'not_redraft' } })
   })
 
@@ -206,7 +220,10 @@ describe('the league read', () => {
   })
 
   it('the workspace check: a finished, unrenewed season', async () => {
-    expect(await readRolloverDue('L')).toEqual({ season: 2026 })
+    expect(await readRolloverDue('L')).toEqual({ season: 2026, kind: 'redraft' })
+    m.prisma.league.findUnique.mockResolvedValueOnce(league({ leagueVariant: 'dynasty', isDynasty: true }))
+    m.dynastyDue.mockResolvedValueOnce({ season: 2026 })
+    expect(await readRolloverDue('L')).toEqual({ season: 2026, kind: 'dynasty' })
     m.prisma.league.findUnique.mockResolvedValueOnce(league({ status: 'in_season', lifecycleState: 'in_season' }))
     expect(await readRolloverDue('L')).toBeNull()
     m.prisma.league.findUnique.mockResolvedValueOnce(

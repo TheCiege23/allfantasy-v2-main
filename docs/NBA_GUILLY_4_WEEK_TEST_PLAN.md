@@ -110,8 +110,11 @@ repo; that is enough to find the right logs and code.
 
 ### Known limits (not bugs)
 
-- Automatic stat-correction adjustments for **head-to-head** leagues are NFL-only. NBA
-  head-to-head leagues are not re-checked yet; NBA Guilly is covered by the pre-chop
-  refresh above.
-- Collusion and tanking scans only run in leagues created in AllFantasy, not imported
-  ones.
+- Stat corrections in NBA **head-to-head** leagues are reviewed and applied the same way
+  as NFL ones. NBA leagues with daily lineups are not re-checked yet; NBA Guilly is covered
+  by the pre-chop refresh above.
+- Imported leagues: completed trades in leagues imported from **Sleeper** get the
+  collusion check (within about 15 minutes of the trade going through on Sleeper), and a
+  flagged trade alerts the commissioner. "Hold flagged trades" is not available there,
+  because the trade goes through on Sleeper. Tanking checks, and every check in leagues
+  imported from other platforms, run only in leagues created in AllFantasy.

@@ -14,6 +14,7 @@ const db = vi.hoisted(() => ({
   flagCreate: vi.fn(),
   afFind: vi.fn(),
   proposalFind: vi.fn(),
+  offerFind: vi.fn(async () => [] as Array<{ providerTradeId: string }>),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -22,6 +23,7 @@ vi.mock('@/lib/prisma', () => ({
     integrityFlag: { findFirst: db.flagFind, create: db.flagCreate },
     afLeagueTrade: { findMany: db.afFind },
     redraftTradeProposal: { findMany: db.proposalFind },
+    providerTradeOffer: { findMany: db.offerFind },
   },
 }))
 vi.mock('@/lib/decision-os/trade/tradeReviewContext', () => ({ reviewStoredTrade: vi.fn() }))
@@ -186,6 +188,21 @@ describe('fullLeagueCollusionScan', () => {
     expect((d.review as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].ref)).toEqual([
       { kind: 'af', tradeId: 'af1' },
       { kind: 'redraft', proposalId: 'rp1' },
+    ])
+  })
+
+  it("includes an imported Sleeper league's completed trades from the trade ledger", async () => {
+    db.afFind.mockResolvedValue([])
+    db.proposalFind.mockResolvedValue([])
+    db.offerFind.mockResolvedValueOnce([{ providerTradeId: 'sl1' }])
+    db.flagFind.mockResolvedValue(null)
+    const d = deps(reviewed([]))
+    await fullLeagueCollusionScan('L1', d)
+    expect(db.offerFind).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ leagueId: 'L1', provider: 'sleeper', status: 'accepted' }) }),
+    )
+    expect((d.review as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].ref)).toEqual([
+      { kind: 'provider', provider: 'sleeper', providerTradeId: 'sl1' },
     ])
   })
 })

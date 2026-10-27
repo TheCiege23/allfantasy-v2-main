@@ -18,6 +18,8 @@
  *   inactive managers    commissioners see which teams are managed or suggested; a member is told
  *                        only that their own lineup is being set
  *   eliminated lineups   every member: the league's lineup rule for teams out of the race
+ *   dynasty offseason    every member: the rookie draft, taxi moves and next season's dues; the
+ *                        commissioner is also told what is left in the rollover wizard
  *
  * Leagues AllFantasy runs only — the tools exist nowhere else. DB-first; never throws.
  */
@@ -44,7 +46,10 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         import('@/lib/league/write-authority'),
         import('@/lib/league/permissions'),
       ])
-      const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
+      const league = await prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { platform: true, settings: true, leagueVariant: true, isDynasty: true },
+      })
       if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return done(null)
       const role = await getLeagueRole(leagueId, request.userId)
       const commissioner = role === 'commissioner' || role === 'co_commissioner'
@@ -75,6 +80,7 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         }),
         readPayoutsView(leagueId, request.userId).catch(() => null),
       ])
+      const offseason = await this.dynastyOffseason(leagueId, request.userId, league, commissioner)
       const pr = payoutView?.ok && payoutView.native ? payoutView.result : null
       const payouts: LeagueOfficeInput['payouts'] = pr && payoutView?.ok
         ? {
@@ -144,10 +150,35 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         }),
         log: log?.ok && !log.hidden ? log.entries.map((e) => ({ at: e.at, title: e.title, detail: e.detail })) : null,
         payouts,
+        offseason,
       })
       return done(summary ? { leagueId, viewerRole: commissioner ? 'commissioner' : 'member', summary } : null)
     } catch (err) {
       return { ok: false, data: null, error: err instanceof Error ? err.message.slice(0, 160) : 'league office read failed', fetchedAt, durationMs: Date.now() - startedAt }
     }
+  }
+
+  /** A dynasty league between seasons, in words; null for any other league or time of year. */
+  private async dynastyOffseason(
+    leagueId: string,
+    userId: string,
+    league: { settings: unknown; leagueVariant: string | null; isDynasty: boolean },
+    commissioner: boolean,
+  ): Promise<string[] | null> {
+    const { renewalKindFromSelection, resolveLeagueVariantKey } = await import('@/lib/leagues/renewalPolicy')
+    const settings = (league.settings as Record<string, unknown> | null) ?? {}
+    const kind = renewalKindFromSelection({
+      leagueVariant: league.leagueVariant,
+      settings,
+      selectedType: resolveLeagueVariantKey(league.leagueVariant, settings),
+      isDynasty: league.isDynasty,
+    })
+    if (kind !== 'dynasty_family') return null
+    const [{ readDynastyRolloverView }, { describeDynastyOffseason }] = await Promise.all([
+      import('@/lib/season-rollover/dynastyRolloverService'),
+      import('@/lib/season-rollover/dynastyRolloverWizard'),
+    ])
+    const view = await readDynastyRolloverView(leagueId, userId).catch(() => null)
+    return view ? describeDynastyOffseason(view.input, commissioner ? 'commissioner' : 'member') : null
   }
 }

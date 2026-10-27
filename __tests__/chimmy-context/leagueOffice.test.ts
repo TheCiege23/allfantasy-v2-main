@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   corrections: vi.fn(),
   inactive: vi.fn(),
   payouts: vi.fn(),
+  dynasty: vi.fn(),
   prisma: {
     league: { findUnique: vi.fn() },
     redraftRoster: { findFirst: vi.fn(), findMany: vi.fn() },
@@ -27,6 +28,7 @@ vi.mock('@/lib/league-log/leagueLogService', () => ({ readLeagueLog: m.log }))
 vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({ readStatCorrections: m.corrections }))
 vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ readInactiveManagerView: m.inactive }))
 vi.mock('@/lib/payouts/payoutService', () => ({ readPayoutsView: m.payouts }))
+vi.mock('@/lib/season-rollover/dynastyRolloverService', () => ({ readDynastyRolloverView: m.dynasty }))
 
 import { buildLeagueOfficeSummary, type LeagueOfficeInput } from '@/lib/chimmy-context/leagueOfficeSummary'
 import { LeagueOfficeContextProvider } from '@/lib/chimmy-context/providers/LeagueOfficeContextProvider'
@@ -166,6 +168,29 @@ describe('LeagueOfficeContextProvider', () => {
     expect(member).not.toMatch(/collected/)
     m.role.mockResolvedValue('commissioner')
     expect((await load()).data!.summary).toMatch(/Buy-ins collected so far: \$200, 2 of 4 teams paid\./)
+  })
+
+  it('a dynasty league between seasons: the rollover, worded for the viewer; never for a redraft league', async () => {
+    const { buildDynastyRolloverPlan } = await import('@/lib/season-rollover/dynastyRolloverWizard')
+    const input = {
+      season: 2026, nextSeason: 2027, seasonOver: true, started: false, champion: 'Cats', rookieDraft: 'none' as const,
+      draftOrder: { source: 'standings' as const, finalOrderSaved: false },
+      taxi: { slots: 3, yearsLimit: null, allowNonRookies: false, toBench: 1, unverified: 0 },
+      contracts: null, dues: { enabled: false, amountDollars: null, unpaidTeams: 0, setForNextSeason: false },
+      schedule: { matchups: 0, weeks: 0 }, overLimitTeams: 0,
+    }
+    m.dynasty.mockResolvedValue({ input, plan: buildDynastyRolloverPlan(input) })
+    m.prisma.league.findUnique.mockResolvedValue({ platform: 'allfantasy', settings: {}, leagueVariant: 'dynasty', isDynasty: true })
+    const member = (await load()).data!.summary
+    expect(member).toContain('The 2027 rookie draft has not been created yet; it will be ordered by worst record first.')
+    expect(member).toContain('1 taxi player no longer meets the league’s taxi rules and moves to the bench')
+    expect(member).not.toContain('Commissioner:')
+    m.role.mockResolvedValue('commissioner')
+    expect((await load()).data!.summary).toContain('Commissioner: still to do in the rollover wizard')
+    m.dynasty.mockClear()
+    m.prisma.league.findUnique.mockResolvedValue({ platform: 'allfantasy', settings: {}, leagueVariant: 'redraft', isDynasty: false })
+    expect((await load()).data!.summary).not.toContain('rookie draft')
+    expect(m.dynasty).not.toHaveBeenCalled()
   })
 
   it('a failed payout read leaves the rest of the slice standing', async () => {
