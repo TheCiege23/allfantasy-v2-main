@@ -212,8 +212,8 @@ function buildSections(
     ].filter(Boolean).join(', ') || 'disabled'}.`,
     sectionWeapons: [
       `Weapons are earned automatically each week: a Knife for ${knifeScore}+ points, a Bow for ${bowScore}+,`,
-      `an Axe for winning by ${weapons.axeWinMargin}+, a Gun after surviving 3 Zombie attacks, and a Bomb after 5 straight wins.`,
-      'A Survivor can arm one Knife, Bow, Axe, or Gun before weekly scoring. It blocks a Zombie or Whisperer infection and is spent only when it does. Bomb effects remain inactive.',
+      `and an Axe for winning by ${weapons.axeWinMargin}+. Guns and Bombs are not awarded automatically.`,
+      'A Survivor can arm one held Knife, Bow, Axe, or Gun before weekly scoring. It blocks an eligible infection and is spent only when it does. Bomb effects remain inactive.',
     ].join(' '),
     sectionWinnings,
     sectionUniverseMovement: 'Universe promotion/relegation follows universe commissioner settings when enabled.',
