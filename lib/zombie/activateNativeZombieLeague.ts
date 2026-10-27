@@ -15,7 +15,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { ensureLeagueTeamRows } from '@/lib/zombie/ZombieOwnerStatusService'
-import { selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { selectSecondWhisperer, selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { getFirstScheduledWeek, getLastScheduledWeek } from '@/lib/zombie/matchupCompletion'
 
@@ -31,7 +31,7 @@ export async function ensureZombieSeasonActivated(input: {
 }): Promise<ZombieActivationResult> {
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId: input.leagueId },
-    select: { id: true, status: true, experienceMode: true, whispererAmbushCount: true, whispererSelectionMode: true },
+    select: { id: true, status: true, experienceMode: true, whispererAmbushCount: true, whispererSelectionMode: true, whispererCount: true },
   })
   if (!z) return { ok: false, reason: 'NOT_ZOMBIE' }
   if (!STARTABLE.includes(z.status)) return { ok: false, reason: 'NOT_STARTABLE' }
@@ -61,6 +61,14 @@ export async function ensureZombieSeasonActivated(input: {
     whispererPicked = true
   }
 
+  if (z.whispererCount === 2) {
+    const co = await prisma.zombieCoWhisperer.findFirst({ where: { zombieLeagueId: z.id }, select: { id: true } })
+    if (!co) {
+      await selectSecondWhisperer(z.id, cfg?.whispererSelection === 'veteran_priority' ? 'veteran_priority' : 'random')
+      whispererPicked = true
+    }
+  }
+
   // The resolver matches matchups by season YEAR, so the zombie league must carry the draft's.
   const flipped = await prisma.zombieLeague.updateMany({
     where: { id: z.id, status: { in: STARTABLE } },
@@ -69,7 +77,7 @@ export async function ensureZombieSeasonActivated(input: {
       rulesSnapshot: {
         version: 1,
         experienceMode: z.experienceMode,
-        whispererCount: 1,
+        whispererCount: z.whispererCount,
         whispererSelectionMode: z.whispererSelectionMode,
         whispererAmbushCount: z.whispererAmbushCount,
         serumReviveCount: cfg?.serumReviveCount ?? 2,
