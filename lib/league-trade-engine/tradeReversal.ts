@@ -21,6 +21,7 @@
  * `reverseGenericTrade` refuses anything whose snapshot is not `af_league_generic`.
  */
 
+import { clearPickTermsForTrade } from '@/lib/league-trade-engine/pickTermsService'
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -304,6 +305,8 @@ export async function reverseGenericTrade(
           tradeId: trade.id,
         })
       }
+      // The pick terms this trade gave (./pickTerms.ts) go back with the picks.
+      if (nativePickItems(trade.items).length) await clearPickTermsForTrade(tx, { leagueId: trade.leagueId, tradeId: trade.id })
       for (const p of redraftPickItems(trade.items)) {
         await transferRedraftDraftPick(tx, {
           leagueId: trade.leagueId,
