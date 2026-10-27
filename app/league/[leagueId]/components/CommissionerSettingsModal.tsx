@@ -532,11 +532,11 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'zombie_setup' ? (
             <ZombieSetupPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_whisperer' ? (
-            <ZombieWhispererPanel canEdit={canEdit} />
+            <ZombieWhispererPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_combat' ? (
             <ZombieCombatPanel canEdit={canEdit} />
           ) : activeTab === 'zombie_items' ? (
-            <ZombieItemsPanel canEdit={canEdit} />
+            <ZombieItemsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_paid' ? (
             <ZombiePaidPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_universe' ? (
