@@ -51,6 +51,19 @@ export function expectedRecords(sim: FullSeasonSimResult, rows: Row[], week: num
     tally(bye.homeRosterId, bye.homeScore, theirs)
     if (pick.scoring === 'both') tally(pick.opponentRosterId, theirs, bye.homeScore, false)
   }
+  // A plain bye (no extra matchup) earns the week's median head-to-head score as points for, once every
+  // game of that regular-season week is final; no result, no points against.
+  for (let w = 1; w <= Math.min(week, sim.regularSeasonWeeks); w++) {
+    const weekRows = upTo.filter((r) => r.week === w && !r.isMedianMatchup)
+    const games = weekRows.filter((r) => r.awayRosterId)
+    if (!games.length || !games.every(final)) continue
+    const sorted = games.flatMap((g) => [g.homeScore, g.awayScore]).sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    const median = sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+    for (const bye of weekRows.filter((r) => !r.awayRosterId && !readExtraMatchupRecord(r.lineupSnapshots))) {
+      out.get(bye.homeRosterId)!.pointsFor += round2(median)
+    }
+  }
   if (sim.input.medianGame) {
     for (let w = 1; w <= Math.min(week, sim.regularSeasonWeeks); w++) {
       const weekRows = upTo.filter((r) => r.week === w)
