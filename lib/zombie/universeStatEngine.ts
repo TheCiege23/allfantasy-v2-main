@@ -139,8 +139,7 @@ export async function buildUniverseWeeklyDigest(universeId: string, week: number
       if (s.includes('zombie')) { zomb++; totalZombies++ }
       else if (s.includes('survivor') || s.includes('revived')) { surv++; totalSurvivors++ }
     }
-    if (z.whispererRecord) totalWhisperers++
-    totalWhisperers += z.coWhisperers.length
+    totalWhisperers += z.teams.filter((team) => team.status === 'Whisperer').length
     const tier = z.level?.tierLabel ?? z.level?.name ?? ''
     leagueSummaries.push(
       `${z.name ?? z.leagueId}${tier ? ` (${tier})` : ''}: ${surv} survivors, ${zomb} zombies`,
