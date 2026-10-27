@@ -283,7 +283,8 @@ export async function GET(req: Request) {
     viewer.canSee ? t : redactZombieTeam(t, viewer.identity)
   const event = <T extends object>(e: T): T => (viewer.canSee ? e : redactZombieEvent(e, viewer.identity))
 
-  const winCards = (Array.isArray(latestResolution?.matchupResults) ? latestResolution.matchupResults : [])
+  const rawWinResults: unknown[] = Array.isArray(latestResolution?.matchupResults) ? latestResolution.matchupResults : []
+  const winCards = rawWinResults
     .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
     .filter((entry) => entry.winnerStatus === 'Whisperer' || entry.winnerStatus === 'Zombie')
     .slice(0, 8)
