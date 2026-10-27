@@ -73,7 +73,7 @@ export async function assertRosterTransactionsAllowed(params: {
       return {
         ok: false,
         error: restriction === 'whisperer_trade_blocked'
-          ? 'The Whisperer cannot trade after the first infection.'
+          ? 'Whisperers cannot trade in this league.'
           : 'Zombies cannot trade in this league.',
         code: 'ZOMBIE_TRADE_BLOCKED',
       }
