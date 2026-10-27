@@ -43,13 +43,37 @@ export async function runWeeklyResolution(
   })
   if (!z) throw new Error('Zombie league not found')
 
-  if (!opts?.force) {
-    const existing = await prisma.zombieWeeklyResolution.findUnique({
-      where: { zombieLeagueId_week: { zombieLeagueId, week } },
+  const existing = await prisma.zombieWeeklyResolution.findUnique({
+    where: { zombieLeagueId_week: { zombieLeagueId, week } },
+  })
+  if (existing?.status === 'complete' && existing.resolvedAt) {
+    if (!opts?.force) return { resolution: existing }
+    // A completed week has already moved roles, items and winnings. Running the ordinary
+    // settlement again would duplicate those effects. Until reversal is transactional, place
+    // a changed score in the commissioner exception queue instead of silently replaying it.
+    const season = await prisma.redraftSeason.findFirst({
+      where: { leagueId: z.leagueId, season: z.season }, select: { id: true },
     })
-    if (existing?.status === 'complete' && existing.resolvedAt) {
-      return { resolution: existing }
-    }
+    const current = season ? await prisma.redraftMatchup.findMany({
+      where: { seasonId: season.id, week }, select: {
+        homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true,
+      },
+    }) : []
+    const previous: unknown[] = Array.isArray(existing.matchupResults) ? existing.matchupResults : []
+    const same = current.length === previous.length && current.every((matchup) =>
+      previous.some((raw) => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
+        const old = raw as Record<string, unknown>
+        return old.homeUserId === matchup.homeRosterId &&
+          old.awayUserId === matchup.awayRosterId &&
+          old.homeScore === matchup.homeScore && old.awayScore === matchup.awayScore
+      }))
+    if (same) return { resolution: existing }
+    await notifyCommissioner(z.leagueId, 'commissioner_override_required',
+      `Week ${week} score correction needs reconciliation`,
+      'A finalized matchup changed. Review roles, items, and winnings before this week is replayed.',
+      { urgency: 'critical', requiresAction: true, week }).catch(() => {})
+    return { resolution: existing, skipped: true, reason: 'stat_correction_reconciliation_required' }
   }
 
   /*
