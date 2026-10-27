@@ -8092,6 +8092,7 @@ model LeagueChatMessage {
   discordMessageId  String?  @db.VarChar(64)
   sourceDiscord     Boolean  @default(false)
   globalBroadcastId String?  @db.VarChar(64)
+  zombieWeeklyAnnouncementId String? @unique @db.VarChar(64)
   /// @chimmy private thread â€” only `visibleToUserId` should see the row when true.
   isPrivate         Boolean  @default(false)
   mentionedUserIds  String[] @default([])
@@ -10216,6 +10217,7 @@ model ZombieLeague {
   resources                ZombieResourceLedger[]
   rulesDocuments           ZombieRulesDocument[]
   weeklyResolutions        ZombieWeeklyResolution[]
+  externalWeeklyPayouts    ZombieExternalWeeklyPayout[]
   winnings                 ZombieWeeklyWinnings[]
   whispererRecord          WhispererRecord?
 
@@ -10402,6 +10404,7 @@ model ZombieAnnouncement {
   createdAt      DateTime     @default(now())
   /// When set, post only after this time (cron queue).
   scheduledFor   DateTime?
+  idempotencyKey String?      @unique @db.VarChar(128)
   league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
   @@index([zombieLeagueId, type])
@@ -10423,6 +10426,26 @@ model ZombieNameRecord {
 
   @@index([universeId])
   @@map("zombie_name_records")
+}
+
+/// Commissioner-recorded amount won on an external fantasy payout platform. No money moves here.
+model ZombieExternalWeeklyPayout {
+  id             String        @id @default(cuid())
+  zombieLeagueId String
+  week           Int
+  winnerRosterId String        @db.VarChar(64)
+  amountCents    Int
+  providerName   String        @db.VarChar(80)
+  status         String        @default("recorded") @db.VarChar(24)
+  reference      String?       @db.VarChar(160)
+  recordedById   String        @db.VarChar(64)
+  recordedAt     DateTime      @default(now())
+  confirmedAt    DateTime?
+  league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, week])
+  @@index([winnerRosterId])
+  @@map("zombie_external_weekly_payouts")
 }
 
 model ZombiePaidConfig {
@@ -11789,6 +11812,7 @@ model ZombieTeamItem {
   activatesAtWeek Int?
   /// ready | pending_activation â€” serum registers before kickoff, resolves at score finalization.
   activationState String           @default("ready")
+  acquiredAtWeek  Int?
   team            ZombieLeagueTeam @relation(fields: [teamStatusId], references: [id], onDelete: Cascade)
 
   @@index([teamStatusId])
