@@ -30,6 +30,46 @@ export async function PATCH(req: Request) {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
 
+  if (['status', 'currentWeek', 'universeId'].some((key) => body[key] !== undefined)) {
+    return NextResponse.json({ error: 'League lifecycle and universe membership use dedicated commissioner actions.' }, { status: 400 })
+  }
+
+  const moneyAmounts = ['buyInAmount', 'commissionerFeeCap', 'totalPot', 'weeklyPayoutPool']
+  const moneyRates = ['commissionerFeeRate', 'weeklyPayoutRate', 'seasonPayoutRate', 'survivorBonusRate']
+  for (const key of moneyAmounts) {
+    if (body[key] !== undefined && (typeof body[key] !== 'number' || !Number.isFinite(body[key]) || body[key] < 0)) {
+      return NextResponse.json({ error: `${key} must be a nonnegative amount.` }, { status: 400 })
+    }
+  }
+  for (const key of moneyRates) {
+    if (body[key] !== undefined && (typeof body[key] !== 'number' || !Number.isFinite(body[key]) || body[key] < 0 || body[key] > 1)) {
+      return NextResponse.json({ error: `${key} must be between 0 and 1.` }, { status: 400 })
+    }
+  }
+  const nextPaid = typeof body.isPaid === 'boolean' ? body.isPaid : z.isPaid
+  const nextBuyIn = typeof body.buyInAmount === 'number' ? body.buyInAmount : z.buyInAmount
+  if (nextPaid && (!nextBuyIn || nextBuyIn <= 0)) {
+    return NextResponse.json({ error: 'Paid Zombie leagues require a buy-in greater than zero.' }, { status: 400 })
+  }
+  if (body.commissionerUiPrefs !== undefined) {
+    const prefs = body.commissionerUiPrefs
+    if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+      return NextResponse.json({ error: 'Invalid commissioner preferences.' }, { status: 400 })
+    }
+    for (const key of ['leaguesafeUrl', 'fancredUrl']) {
+      const value = (prefs as Record<string, unknown>)[key]
+      if (value === undefined || value === '') continue
+      if (typeof value !== 'string' || value.length > 500) {
+        return NextResponse.json({ error: `${key} must be a valid HTTPS URL.` }, { status: 400 })
+      }
+      try {
+        if (new URL(value).protocol !== 'https:') throw new Error('Insecure URL')
+      } catch {
+        return NextResponse.json({ error: `${key} must be a valid HTTPS URL.` }, { status: 400 })
+      }
+    }
+  }
+
   const competitiveKeys = [
     'experienceMode', 'whispererCount', 'whispererSelectionMode', 'whispererSelection',
     'whispererAmbushCount', 'ambushCountPerWeek', 'ambushRemapMatchup',
@@ -156,11 +196,9 @@ export async function PATCH(req: Request) {
 
   const leaguePatch = {
     ...(str('name') !== undefined ? { name: str('name') } : {}),
-    ...(str('status') !== undefined ? { status: str('status') } : {}),
     ...(teamCountPatch !== undefined ? { teamCount: teamCountPatch } : {}),
     ...(experienceModePatch !== undefined ? { experienceMode: experienceModePatch } : {}),
     ...(whispererCountPatch !== undefined ? { whispererCount: whispererCountPatch } : {}),
-    ...(num('currentWeek') !== undefined ? { currentWeek: num('currentWeek') } : {}),
     ...(num('buyInAmount') !== undefined ? { buyInAmount: num('buyInAmount') } : {}),
     ...(bool('isPaid') !== undefined ? { isPaid: bool('isPaid') } : {}),
     ...(str('namingMode') !== undefined ? { namingMode: str('namingMode') } : {}),
@@ -205,7 +243,6 @@ export async function PATCH(req: Request) {
   }
 
   const configPatch = {
-    ...(str('universeId') !== undefined ? { universeId: str('universeId') || null } : {}),
     ...(requestedSelection !== undefined ? { whispererSelection: requestedSelection } : {}),
     ...(bool('infectionLossToWhisperer') !== undefined
       ? { infectionLossToWhisperer: bool('infectionLossToWhisperer') }
