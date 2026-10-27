@@ -445,7 +445,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     tokenRuleCode: "survivor_ai_host_fairness_report",
     lockedReason: "Host and commissioner Survivor automation requires AF Commissioner (or AF Supreme). Heavy scans burn AF Tokens.",
     backendEnforcement: "requireFeatureEntitlement(survivor_host_ai) with token preflight on host routes.",
-    frontendGateBehavior: "Host command-center tiles (coming next) + upgrade CTA; tile locks enforced by GET survivor/premium.",
+    frontendGateBehavior: "Host command-center tiles (mini-game planner, risk alerts, fairness radar) + upgrade CTA; tile locks enforced by GET survivor/premium.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/survivor/[leagueId]/commissioner"],

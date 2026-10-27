@@ -61,6 +61,15 @@ describe('the settings hub', () => {
     expect((dyn.getByTestId('league-settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over')
   })
 
+  it('an IDP keeper league (variant idp) shows "carry over"; a stored choice still shows as stored', async () => {
+    const r = renderHub({ leagueType: 'keeper', leagueVariant: 'idp', settings: { league_type: 'keeper' }, isDynasty: false })
+    expect((r.getByTestId('league-settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over')
+    cleanup()
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ faabRolloverRule: 'reset' }) })))
+    const stored = renderHub({ leagueType: 'keeper', isDynasty: false })
+    await vi.waitFor(() => expect((stored.getByTestId('league-settings-faab-rollover') as HTMLSelectElement).value).toBe('reset'))
+  })
+
   it('a keeper league not flagged isDynasty shows "carry over" — the classifier the renewal uses', () => {
     const r = renderHub({ leagueVariant: 'keeper', isDynasty: false })
     expect((r.getByTestId('league-settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over')
@@ -117,6 +126,18 @@ describe('the in-league commissioner settings', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ freeAgencyMode: 'standard', faabRolloverRule: null, faabRolloverDefault: 'carry_over' }) })))
     const { r } = panel({ waiverType: 'faab', isDynasty: false, leagueType: 'keeper' })
     await vi.waitFor(() => expect((r.getByTestId('settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over'))
+  })
+
+  it('before the server answers: a keeper or dynasty league already reads "carry over", a redraft "reset"', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    const keeper = panel({ waiverType: 'faab', isDynasty: false, leagueType: 'keeper' })
+    expect((keeper.r.getByTestId('settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over')
+    cleanup()
+    const dynasty = panel({ waiverType: 'faab', isDynasty: true, leagueType: 'redraft' })
+    expect((dynasty.r.getByTestId('settings-faab-rollover') as HTMLSelectElement).value).toBe('carry_over')
+    cleanup()
+    const redraft = panel({ waiverType: 'faab', isDynasty: false, leagueType: 'redraft' })
+    expect((redraft.r.getByTestId('settings-faab-rollover') as HTMLSelectElement).value).toBe('reset')
   })
 
   it('reads the stored mode', async () => {

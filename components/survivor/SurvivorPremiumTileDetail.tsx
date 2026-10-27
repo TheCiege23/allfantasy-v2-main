@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { SurvivorPremiumTilePayload, ThreatMapTile, SocialPulseTile, ChallengeOutlookTile, JuryProjectionTile, ExileStatusTile } from '@/lib/survivor/premium/survivorPremiumTiles'
+import type { FairnessRadarTile, MinigamePlannerTile, RiskAlertsTile } from '@/lib/survivor/premium/survivorHostTiles'
 
 const muted = 'text-xs text-white/55'
 const you = (isYou: boolean) => (isYou ? <span className="ml-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-200">you</span> : null)
@@ -106,6 +107,97 @@ function ExileStatus({ data }: { data: ExileStatusTile }) {
   )
 }
 
+function MinigamePlanner({ data }: { data: MinigamePlannerTile }) {
+  const label = { scheduled: 'Scheduled', open: 'Open', locked: 'Locked', settled: 'Settled' }
+  return (
+    <div className="space-y-3">
+      <p className={muted}>{data.systemRun ? 'Chimmy runs the weekly challenges and settles them from final scores. Nothing for you to schedule.' : 'You run the challenges in this league.'}</p>
+      {data.weeks.length === 0 ? <p className={muted}>No challenge weeks yet.</p> : (
+        <ul className="space-y-2">
+          {data.weeks.map(week => (
+            <li key={week.week} className={`rounded-lg border px-3 py-2 ${week.isCurrent ? 'border-emerald-400/30 bg-emerald-500/[0.06]' : 'border-white/[0.06] bg-black/25'}`}>
+              <p className="text-sm font-semibold text-white">Week {week.week}{week.isCurrent ? ' · this week' : ''}</p>
+              {week.challenges.length ? (
+                <ul className="mt-1 space-y-0.5 text-xs text-white/65">
+                  {week.challenges.map((c, i) => <li key={`${c.title}-${i}`}>{c.title} ({c.scope}) · {label[c.status]}{c.winner ? ` · won by ${c.winner}` : ''}</li>)}
+                </ul>
+              ) : <p className="mt-1 text-xs text-white/45">{week.week > data.currentWeek ? 'Posts when the week starts.' : 'No challenge this week.'}</p>}
+              {week.weeklyCall ? <p className="mt-1 text-xs text-white/50">Weekly call: {week.weeklyCall.posted ? `${week.weeklyCall.answers} answer${week.weeklyCall.answers === 1 ? '' : 's'}` : 'not posted'}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      {data.winsByTribe.length ? <p className={muted}>Tribe challenge wins: {data.winsByTribe.map(t => `${t.name} ${t.wins}`).join(' · ')}</p> : null}
+    </div>
+  )
+}
+
+function RiskAlerts({ data }: { data: RiskAlertsTile }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h4 className="text-xs font-bold uppercase tracking-wide text-white/50">Open integrity flags</h4>
+        {data.flags.length ? (
+          <ul className="mt-1 space-y-1.5">
+            {data.flags.map((f, i) => (
+              <li key={i} className="rounded-lg border border-amber-400/25 bg-amber-500/[0.06] px-3 py-2 text-sm">
+                <span className="font-semibold text-amber-100">{f.kind === 'other' ? 'Flag' : f.kind === 'collusion' ? 'Collusion' : 'Tanking'} · {f.severity}</span>
+                <p className="mt-0.5 text-xs text-white/70">{f.summary}{f.teams.length ? ` (${f.teams.join(', ')})` : ''}</p>
+                <p className="mt-0.5 text-[11px] text-white/45">Raised {when(f.raisedAt)}</p>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-1 text-sm text-white/70">None open.</p>}
+      </div>
+      <div>
+        <h4 className="text-xs font-bold uppercase tracking-wide text-white/50">Gone quiet</h4>
+        <p className={muted}>{data.showsMissedBallots ? `No message in ${data.quietDays} days, or ballots Chimmy had to cast for them.` : `No message in ${data.quietDays} days. You also play, so missed ballots stay sealed.`}</p>
+        {data.quiet.length ? (
+          <ul className="mt-1 space-y-1.5">
+            {data.quiet.map(row => (
+              <li key={row.name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/25 px-3 py-2 text-sm">
+                <span className="font-semibold text-white">{row.name}</span>
+                <span className="text-xs text-white/60">{row.lastMessageAt ? `last message ${when(row.lastMessageAt)}` : 'never posted'}{row.missedBallots ? ` · ${row.missedBallots} missed ballot${row.missedBallots === 1 ? '' : 's'}` : ''}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-1 text-sm text-white/70">Everyone is active.</p>}
+      </div>
+    </div>
+  )
+}
+
+function FairnessRadar({ data }: { data: FairnessRadarTile }) {
+  const stat = (label: string, value: string | number) => (
+    <li className="rounded-lg border border-white/[0.06] bg-black/25 px-3 py-2"><p className="text-[11px] uppercase tracking-wide text-white/45">{label}</p><p className="text-sm font-semibold text-white">{value}</p></li>
+  )
+  return (
+    <div className="space-y-3">
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {stat('Councils', data.councils)}
+        {stat('Ties', data.ties.total ? `${data.ties.total} (${data.ties.settledByCommissioner} by you)` : 0)}
+        {stat('Automatic ballots', data.autoCastBallots)}
+        {stat('Late ballots', data.lateBallots)}
+        {stat('Score corrections', data.scoreCorrections)}
+        {stat('Chimmy actions', data.automaticActions)}
+      </ul>
+      <div>
+        <h4 className="text-xs font-bold uppercase tracking-wide text-white/50">Your overrides</h4>
+        {data.overrides.length ? (
+          <ul className="mt-1 space-y-1.5">
+            {data.overrides.map((o, i) => (
+              <li key={i} className="rounded-lg border border-white/[0.06] bg-black/25 px-3 py-2 text-xs text-white/70">
+                <span className="font-semibold capitalize text-white">{o.action}</span>{o.week != null ? ` · week ${o.week}` : ''} · {when(o.at)}
+                <p className="mt-0.5">{o.description}</p>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-1 text-sm text-white/70">None. Chimmy has run everything.</p>}
+      </div>
+    </div>
+  )
+}
+
 function render(payload: SurvivorPremiumTilePayload) {
   switch (payload.tileId) {
     case 'threat_map': return <ThreatMap data={payload.data} />
@@ -113,6 +205,9 @@ function render(payload: SurvivorPremiumTilePayload) {
     case 'challenge_outlook': return <ChallengeOutlook data={payload.data} />
     case 'jury_projection': return <JuryProjection data={payload.data} />
     case 'exile_status': return <ExileStatus data={payload.data} />
+    case 'minigame_planner': return <MinigamePlanner data={payload.data} />
+    case 'risk_alerts': return <RiskAlerts data={payload.data} />
+    case 'host_fairness_radar': return <FairnessRadar data={payload.data} />
   }
 }
 

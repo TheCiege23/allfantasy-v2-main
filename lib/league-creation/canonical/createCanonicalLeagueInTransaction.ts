@@ -41,6 +41,7 @@ import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constant
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 type Tx = Prisma.TransactionClient
@@ -577,8 +578,14 @@ export async function createCanonicalLeagueInTransaction(
   }
   const playoffTeamsDefault = readNumber(playoffSettings, 'playoffTeams', isGuillotine ? 1 : 6)
   const playoffStartWeekRaw = playoffSettings.playoffStartWeek
-  const playoffStartWeekDefault =
+  const playoffStartWeekParsed =
     playoffStartWeekRaw == null ? null : Number.isFinite(Number(playoffStartWeekRaw)) ? Number(playoffStartWeekRaw) : null
+  // A redraft or keeper regular season is capped (lib/redraft/regularSeasonCap.ts). The fitted sports'
+  // shape already respects it; soccer's playoff default (week 36) would start past its 34-week cap.
+  const playoffStartWeekCap =
+    (formatId === 'redraft' || formatId === 'keeper') && scoringMode !== 'roto' ? maxPlayoffStartWeekFor({ leagueType: formatId, sport }) : null
+  const playoffStartWeekDefault =
+    playoffStartWeekParsed != null && playoffStartWeekCap != null ? Math.min(playoffStartWeekParsed, playoffStartWeekCap) : playoffStartWeekParsed
   /*
    * 🛑 THE COLUMN IS WHAT THE RESOLVER READS FIRST, SO EVERY JSON COPY IS WRITTEN FROM IT
    * (lib/playoff-settings/playoffStartWeekCopies.ts). Per format:

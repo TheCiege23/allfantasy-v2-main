@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { readStoredTitleGame, storedBracketGames } from '@/lib/league-import/sleeper/bracketPlacements'
+import { NATIVE_PLAYER_SCORE_SOURCE, nativeSeatMap } from '@/lib/redraft/nativePlayerWeeklyScores'
 import type {
   StoryData,
   StoryDraftPick,
@@ -34,10 +35,12 @@ import type {
  *
  * NATIVE (AllFantasy-hosted)
  *   - fixtures, playoffs, standings: `redraft_matchups`, `redraft_playoff_matchups`, `redraft_rosters`.
- *   - ⚠ NO PLAYER-LEVEL HOOKS YET. A native league's per-player FANTASY points are computed by the
- *     scoring engine and not stored per roster-week (`lineupSnapshots` holds team totals only), so the
- *     revenge game, the draft steal and the one-man army have nothing honest to read. They are left
- *     empty rather than recomputed here — two scoring implementations is the bug, not the fix.
+ *   - player weeks: `league_player_weekly_scores` with source 'allfantasy', which the scoring engine
+ *                   writes as it scores each native matchup (lib/redraft/nativePlayerWeeklyScores.ts):
+ *                   keyed on OUR League.id, `rosterId` a seat hashed from the redraft roster id. Only
+ *                   FINALIZED rows are read — a live week is not a fact yet. They are read, never
+ *                   recomputed here: two scoring implementations is the bug, not the fix.
+ *   - draft picks:  none yet, so the draft steal stays empty for native leagues.
  *
  * ⚠ AMBIGUOUS ROSTER MAPS ARE DROPPED, NOT GUESSED. Older stored seasons can map two historical roster
  * ids onto one of today's teams (bracketPlacements.ts `storedHistoricalRosterId`). A season whose map
@@ -58,7 +61,7 @@ const SOURCES_IMPORTED = {
 const SOURCES_NATIVE = {
   fixtures: 'redraft_matchups',
   playoffs: 'redraft_playoff_matchups',
-  playerWeeks: 'none (native per-player points are not stored)',
+  playerWeeks: 'league_player_weekly_scores (allfantasy)',
   draftPicks: 'none',
   standings: 'redraft_rosters',
 } as const
@@ -387,6 +390,43 @@ async function loadNative(prisma: Db, league: LoadedLeague): Promise<StoryData |
     .filter((r) => r.seasonId === current.id)
     .map((r) => ({ team: nativeIdentity(r), wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: r.pointsFor }))
 
+  /*
+   * Player weeks — this season and last, finalized rows only. A row's seat is resolved against THAT
+   * season's rosters; a seat no roster of the season hashes to (or two do) is dropped, not guessed.
+   */
+  const recent = seasons.filter((s) => s.season === current.season || s.season === current.season - 1)
+  const scoreRows = recent.length
+    ? await prisma.leaguePlayerWeeklyScore.findMany({
+        where: {
+          leagueId: league.id,
+          source: NATIVE_PLAYER_SCORE_SOURCE,
+          seasonYear: { in: recent.map((s) => s.season) },
+          isFinalized: true,
+        },
+        select: { seasonYear: true, week: true, playerId: true, rosterId: true, points: true, isStarter: true },
+      })
+    : []
+  const seatsBySeason = new Map<number, Map<number, string>>()
+  for (const s of recent) seatsBySeason.set(s.season, nativeSeatMap(rosters.filter((r) => r.seasonId === s.id).map((r) => r.id)))
+  const playerWeeks: StoryPlayerWeek[] = []
+  for (const r of scoreRows) {
+    const rosterId = r.rosterId == null ? undefined : seatsBySeason.get(r.seasonYear)?.get(r.rosterId)
+    const team = rosterId ? keyOfRoster.get(rosterId) : undefined
+    if (!team) continue
+    playerWeeks.push({ season: r.seasonYear, week: r.week, team, playerId: r.playerId, points: r.points, starter: r.isStarter })
+  }
+
+  /* Names from the league's own roster rows — the name the manager saw on his roster. */
+  const playerNames = new Map<string, string>()
+  const ids = [...new Set(playerWeeks.map((w) => w.playerId))]
+  if (ids.length > 0) {
+    const named = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosters.map((r) => r.id) }, playerId: { in: ids } },
+      select: { playerId: true, playerName: true },
+    })
+    for (const n of named) if (n.playerName?.trim() && !playerNames.has(n.playerId)) playerNames.set(n.playerId, n.playerName.trim())
+  }
+
   return {
     leagueId: league.id,
     sport: String(current.sport ?? league.sport ?? 'NFL'),
@@ -396,10 +436,10 @@ async function loadNative(prisma: Db, league: LoadedLeague): Promise<StoryData |
     matchups: weekMatchups,
     fixtures,
     playoffs,
-    playerWeeks: [],
+    playerWeeks,
     draftPicks: [],
     standings,
-    playerNames: new Map(),
+    playerNames,
     sources: { ...SOURCES_NATIVE },
   }
 }

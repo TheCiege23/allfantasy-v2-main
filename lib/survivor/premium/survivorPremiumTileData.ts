@@ -23,6 +23,8 @@ import {
   type PremiumReadCouncil,
   type SurvivorPremiumTilePayload,
 } from './survivorPremiumTiles'
+import { buildFairnessRadarTile, buildMinigamePlannerTile, buildRiskAlertsTile } from './survivorHostTiles'
+import { WEEKLY_CALL_TYPE } from '@/lib/survivor/survivorWeeklyCall'
 
 /**
  * Loads one premium tile for one viewer. The plan is resolved HERE from the viewer's entitlement,
@@ -91,7 +93,7 @@ export async function loadSurvivorPremiumTile(input: {
       where: { leagueId },
       // Deliberately no votes relation and no voter columns.
       select: {
-        week: true, councilNumber: true, status: true, closedAt: true, voteDeadlineAt: true, attendingTribeId: true,
+        id: true, week: true, councilNumber: true, status: true, closedAt: true, voteDeadlineAt: true, attendingTribeId: true,
         eliminatedUserId: true, eliminatedName: true, isTie: true, tiePhase: true,
         isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true,
       },
@@ -175,6 +177,100 @@ export async function loadSurvivorPremiumTile(input: {
             currentWeek: week,
             exileCount: players.filter(p => p.playerState === 'exile' && !pendingOut.has(p.userId)).length,
             viewer: { onExile, tokens: own?.tokenBalance ?? 0 },
+          }),
+        },
+      }
+    }
+    // ── Commissioner lens: access already required a commissioner on AF Commissioner. ──
+    case 'minigame_planner': {
+      const plan = readSurvivorFullSeasonPlan(league.settings)
+      const [config, challenges] = await Promise.all([
+        prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { challengesSystemRun: true } }),
+        prisma.survivorChallenge.findMany({
+          where: { leagueId, status: { not: 'cancelled' } },
+          select: { id: true, week: true, title: true, challengeType: true, scope: true, status: true, locksAt: true, closesAt: true, winnerTribeId: true, winnerUserIds: true, _count: { select: { submissions: true } } },
+        }),
+      ])
+      const calls = challenges.filter(c => c.challengeType === WEEKLY_CALL_TYPE)
+      return {
+        ok: true,
+        payload: {
+          tileId: 'minigame_planner',
+          data: buildMinigamePlannerTile({
+            currentWeek: week,
+            systemRun: config?.challengesSystemRun !== false,
+            seasonWeeks: plan ? Array.from({ length: plan.endWeek - plan.startWeek + 1 }, (_, i) => plan.startWeek + i) : [],
+            now,
+            tribeNames: Object.fromEntries((await prisma.survivorTribe.findMany({ where: { leagueId }, select: { id: true, name: true } })).map(t => [t.id, stripLeadingTribeIcon(t.name) || t.name])),
+            playerNames: Object.fromEntries(players.map(p => [p.userId, p.displayName])),
+            challenges: challenges.filter(c => c.challengeType !== WEEKLY_CALL_TYPE),
+            weeklyCalls: calls.map(c => ({ week: c.week, answers: c._count.submissions })),
+          }),
+        },
+      }
+    }
+    case 'risk_alerts': {
+      const blind = access.isParticipatingCommissioner
+      const activeCast = cast.filter(c => c.inGame).map(c => ({ userId: c.userId, displayName: c.displayName }))
+      const [flags, lastMessages, autoCast] = await Promise.all([
+        prisma.integrityFlag.findMany({
+          where: { leagueId, status: 'open' },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { flagType: true, severity: true, summary: true, affectedTeamNames: true, createdAt: true },
+        }),
+        // When each manager last spoke anywhere on the island. Never what they said.
+        prisma.survivorChatMessage.groupBy({
+          by: ['senderUserId'],
+          where: { leagueId, isDeleted: false, isSystemMessage: false, senderIsHost: false, senderUserId: { in: activeCast.map(c => c.userId) } },
+          _max: { createdAt: true },
+        }),
+        blind
+          ? Promise.resolve([] as Array<{ targetUserId: string | null }>)
+          : prisma.survivorAuditEntry.findMany({ where: { leagueId, action: 'non_voter_auto_cast' }, select: { targetUserId: true } }),
+      ])
+      const autoCastCount = new Map<string, number>()
+      for (const row of autoCast) if (row.targetUserId) autoCastCount.set(row.targetUserId, (autoCastCount.get(row.targetUserId) ?? 0) + 1)
+      return {
+        ok: true,
+        payload: {
+          tileId: 'risk_alerts',
+          data: buildRiskAlertsTile({
+            now,
+            blind,
+            flags,
+            activeCast,
+            lastMessageAt: new Map(lastMessages.flatMap(row => (row._max.createdAt ? [[row.senderUserId, row._max.createdAt] as const] : []))),
+            autoCastCount,
+          }),
+        },
+      }
+    }
+    case 'host_fairness_radar': {
+      // Counts only. Late ballots are counted at councils already read out to everyone.
+      const completeIds = councils.filter(c => isCouncilReadComplete(c, league.survivorRevealMode, now)).map(c => c.id)
+      const [autoCastBallots, lateBallots, scoreCorrections, actions] = await Promise.all([
+        prisma.survivorAuditEntry.count({ where: { leagueId, action: 'non_voter_auto_cast' } }),
+        completeIds.length ? prisma.survivorVote.count({ where: { councilId: { in: completeIds }, isLateVote: true } }) : Promise.resolve(0),
+        prisma.survivorWeeklyScore.count({ where: { leagueId, correctionApplied: true } }),
+        prisma.survivorCommissionerAction.findMany({
+          where: { leagueId },
+          orderBy: { executedAt: 'desc' },
+          take: 200,
+          select: { week: true, actionType: true, description: true, commissionerId: true, executedAt: true },
+        }),
+      ])
+      return {
+        ok: true,
+        payload: {
+          tileId: 'host_fairness_radar',
+          data: buildFairnessRadarTile({
+            councils,
+            tieDecisions: actions.filter(a => a.actionType === 'exact_tie_commissioner_decision').length,
+            autoCastBallots,
+            lateBallots,
+            scoreCorrections,
+            actions,
           }),
         },
       }

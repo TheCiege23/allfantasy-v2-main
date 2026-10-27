@@ -18,6 +18,11 @@ const m = vi.hoisted(() => ({
     survivorChatMessage: { findMany: vi.fn() },
     survivorChallenge: { findMany: vi.fn() },
     survivorChallengeSubmission: { findMany: vi.fn() },
+    survivorLeagueConfig: { findUnique: vi.fn() },
+    integrityFlag: { findMany: vi.fn() },
+    survivorAuditEntry: { findMany: vi.fn(), count: vi.fn() },
+    survivorVote: { count: vi.fn() },
+    survivorCommissionerAction: { findMany: vi.fn() },
   },
 }))
 vi.mock('server-only', () => ({}))
@@ -27,6 +32,7 @@ vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: m.role }))
 vi.mock('@/lib/subscription/EntitlementResolver', () => ({ EntitlementResolver: class { resolveSnapshot = m.snapshot } }))
 vi.mock('@/lib/tournament/resolve-af-plan-from-subscription', async (importOriginal) => ({ ...(await importOriginal<object>()), resolveAfPlanFromEntitlement: m.plan }))
 vi.mock('@/lib/survivor/SurvivorTimelineResolver', () => ({ resolveSurvivorCurrentWeek: m.week }))
+vi.mock('@/lib/survivor/survivorWeeklyCall', () => ({ WEEKLY_CALL_TYPE: 'weekly_call' }))
 
 import { loadSurvivorPremiumIndex, loadSurvivorPremiumTile } from '@/lib/survivor/premium/survivorPremiumTileData'
 import { SURVIVOR_DEFAULT_FOUNDATION_SETTINGS } from '@/lib/survivor/survivorSettings'
@@ -71,7 +77,7 @@ describe('loadSurvivorPremiumTile', () => {
   it('refuses an unbuilt tile even on the top plan, and a non-member gets a 404', async () => {
     m.plan.mockReturnValue('af_supreme')
     m.role.mockResolvedValue('commissioner')
-    expect(await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'u-bo', email: null, tileId: 'risk_alerts', now: NOW })).toMatchObject({ ok: false, status: 403, access: { reason: 'coming_next' } })
+    expect(await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'u-bo', email: null, tileId: 'story_mode_controls', now: NOW })).toMatchObject({ ok: false, status: 403, access: { reason: 'coming_next' } })
     m.access.mockResolvedValue({ isLeagueMember: false })
     expect(await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'stranger', email: null, tileId: 'threat_map', now: NOW })).toMatchObject({ ok: false, status: 404 })
     expect(m.prisma.survivorPlayer.findMany).not.toHaveBeenCalled()
@@ -103,6 +109,55 @@ describe('loadSurvivorPremiumTile', () => {
     // Ed's move to Exile has not been read yet, so nobody is shown there and Bo is not on Exile.
     expect(result).toMatchObject({ ok: true, payload: { data: { enabled: true, returnWeek: 9, weeksUntilReturn: 4, tokensNeeded: 4, onExile: 0, you: { onExile: false } } } })
     expect(m.prisma.survivorPlayer.findUnique).not.toHaveBeenCalled()
+  })
+})
+
+describe('host tiles', () => {
+  const host = () => {
+    m.role.mockResolvedValue('commissioner')
+    m.plan.mockReturnValue('af_commissioner')
+    ;(m.prisma.survivorChatMessage as any).groupBy = vi.fn().mockResolvedValue([{ senderUserId: 'u-bo', _max: { createdAt: NOW } }])
+    m.prisma.integrityFlag.findMany.mockResolvedValue([])
+    m.prisma.survivorAuditEntry.findMany.mockResolvedValue([{ targetUserId: 'u-cy' }])
+  }
+
+  it('a manager who is not the commissioner is refused, whatever their plan', async () => {
+    m.plan.mockReturnValue('af_supreme')
+    expect(await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'u-bo', email: null, tileId: 'risk_alerts', now: NOW })).toMatchObject({ ok: false, status: 403, access: { reason: 'commissioner_only' } })
+    expect(m.prisma.integrityFlag.findMany).not.toHaveBeenCalled()
+  })
+
+  it('risk alerts for a non-playing host include missed ballots, read from the commissioner-visible audit', async () => {
+    host()
+    m.access.mockResolvedValue({ isLeagueMember: true, isParticipatingCommissioner: false, settings: { ...SURVIVOR_DEFAULT_FOUNDATION_SETTINGS }, canAccessTribeChat: false, rosterId: null })
+    const result = await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'owner', email: null, tileId: 'risk_alerts', now: NOW })
+    expect(m.prisma.integrityFlag.findMany.mock.calls[0][0].where).toEqual({ leagueId: 'lg', status: 'open' })
+    expect(m.prisma.survivorAuditEntry.findMany.mock.calls[0][0]).toEqual({ where: { leagueId: 'lg', action: 'non_voter_auto_cast' }, select: { targetUserId: true } })
+    expect(result).toMatchObject({ ok: true, payload: { tileId: 'risk_alerts', data: { showsMissedBallots: true } } })
+    if (!result.ok || result.payload.tileId !== 'risk_alerts') return
+    expect(result.payload.data.quiet.find(q => q.name === 'Cy')).toMatchObject({ missedBallots: 1 })
+  })
+
+  it('a commissioner who also plays never has missed ballots read at all', async () => {
+    host()
+    m.access.mockResolvedValue({ isLeagueMember: true, isParticipatingCommissioner: true, settings: { ...SURVIVOR_DEFAULT_FOUNDATION_SETTINGS }, canAccessTribeChat: true, rosterId: 'r-owner' })
+    const result = await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'owner', email: null, tileId: 'risk_alerts', now: NOW })
+    expect(m.prisma.survivorAuditEntry.findMany).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ ok: true, payload: { data: { showsMissedBallots: false } } })
+  })
+
+  it('fairness radar counts late ballots only at councils already read out', async () => {
+    host()
+    m.prisma.survivorAuditEntry.count.mockResolvedValue(3)
+    m.prisma.survivorVote.count.mockResolvedValue(1)
+    m.prisma.survivorWeeklyScore.count = vi.fn().mockResolvedValue(0)
+    m.prisma.survivorCommissionerAction.findMany.mockResolvedValue([])
+    const councils = await m.prisma.survivorTribalCouncil.findMany()
+    m.prisma.survivorTribalCouncil.findMany.mockResolvedValue(councils.map((c: any, i: number) => ({ ...c, id: `c${i + 4}` })))
+    const result = await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'owner', email: null, tileId: 'host_fairness_radar', now: NOW })
+    // Week 4 is read (c4); week 5 has not started its read (c5).
+    expect(m.prisma.survivorVote.count.mock.calls[0][0]).toEqual({ where: { councilId: { in: ['c4'] }, isLateVote: true } })
+    expect(result).toMatchObject({ ok: true, payload: { data: { councils: 2, autoCastBallots: 3, lateBallots: 1 } } })
   })
 })
 

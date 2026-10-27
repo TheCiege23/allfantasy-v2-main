@@ -29,6 +29,7 @@ export const AF_PLANS: Record<
       'Anti-collusion & anti-tanking signals',
       'League health & fairness alerts',
       'Tournament automation & commissioner recommendations',
+      'Survivor: mini-game planner, risk alerts, fairness radar',
       'Survivor: challenge, merge, Tribal Council and jury narration (token metered)',
     ],
   },
