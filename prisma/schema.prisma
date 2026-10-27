@@ -10716,6 +10716,7 @@ model ZombieLeagueConfig {
   infectionLossToWhisperer  Boolean  @default(true)
   infectionLossToZombie     Boolean  @default(true)
   serumReviveCount          Int      @default(2)
+  autoSerumRevive           Boolean  @default(false)
   serumAwardHighScore       Boolean  @default(true)
   serumAwardOnBashMaul      Boolean  @default(true)
   serumUseBeforeLastStarter Boolean  @default(true)
