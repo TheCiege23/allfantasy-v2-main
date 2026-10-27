@@ -37,12 +37,14 @@ export async function PATCH(req: Request) {
   const moneyAmounts = ['buyInAmount', 'commissionerFeeCap', 'totalPot', 'weeklyPayoutPool']
   const moneyRates = ['commissionerFeeRate', 'weeklyPayoutRate', 'seasonPayoutRate', 'survivorBonusRate']
   for (const key of moneyAmounts) {
-    if (body[key] !== undefined && (typeof body[key] !== 'number' || !Number.isFinite(body[key]) || body[key] < 0)) {
+    const value = body[key]
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
       return NextResponse.json({ error: `${key} must be a nonnegative amount.` }, { status: 400 })
     }
   }
   for (const key of moneyRates) {
-    if (body[key] !== undefined && (typeof body[key] !== 'number' || !Number.isFinite(body[key]) || body[key] < 0 || body[key] > 1)) {
+    const value = body[key]
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)) {
       return NextResponse.json({ error: `${key} must be between 0 and 1.` }, { status: 400 })
     }
   }
