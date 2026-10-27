@@ -671,6 +671,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               leagueId={leagueId}
               plan={data.monetization.afPlan ?? null}
               tokensRemaining={data.monetization.afTokensRemaining ?? null}
+              isCommissioner
             />
           )}
 
