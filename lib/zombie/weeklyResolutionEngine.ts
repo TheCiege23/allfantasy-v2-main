@@ -226,8 +226,8 @@ export async function runWeeklyResolution(
       where: { seasonId: season.id, week },
     })
     for (const m of mm) {
-      const homeWon = m.homeScore > m.awayScore
-      const awayWon = m.awayScore > m.homeScore
+      const homeWon = Boolean(m.awayRosterId) && m.homeScore > m.awayScore
+      const awayWon = Boolean(m.awayRosterId) && m.awayScore > m.homeScore
       const winnerId = homeWon ? m.homeRosterId : awayWon ? m.awayRosterId : null
       const loserId = homeWon ? m.awayRosterId : awayWon ? m.homeRosterId : null
       const winner = winnerId ? teamFor(winnerId) : null
