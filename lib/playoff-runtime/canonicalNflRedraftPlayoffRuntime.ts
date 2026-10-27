@@ -7,6 +7,7 @@ import type {
   CanonicalLeagueRuntimeEventType,
 } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
+import { readStoredPlayoffSeries, resolvePlayoffSeries } from './playoffSeries'
 
 export type NflRedraftPlayoffRulesInput = {
   general?: {
@@ -42,6 +43,8 @@ export type NflRedraftPlayoffRulesInput = {
      * When set it is applied EXACTLY as chosen after record — none of the legacy reordering below.
      */
     customTiebreakers?: string[] | null
+    /** Best-of-N series per round (`settings.playoff_series`, ./playoffSeries.ts). Null = cumulative rounds. */
+    seriesLengths?: readonly number[] | null
   }
   schedule: {
     regularSeasonLength?: number | null
@@ -142,6 +145,11 @@ export type NflRedraftPlayoffSettings = {
   tiebreakers: string[]
   /** The commissioner's own order when one applied (lib/standings/tiebreakerOrder.ts), else absent. */
   customTiebreakers?: string[] | null
+  /**
+   * Best-of-N series per round (./playoffSeries.ts), round 1 first; null in cumulative mode. Display
+   * only here — the scorer reads the league's settings, and the advance decides from `metadata.series`.
+   */
+  seriesLengths?: number[] | null
   supported: boolean
   supportWarnings: string[]
 }
@@ -478,6 +486,7 @@ function resolveSettings(input: {
     pointsOnlySeeding: isPointsOnlySeeding(input.rules.playoffs.seedingRules),
     tiebreakers,
     customTiebreakers: customOrder(input.rules),
+    seriesLengths: input.rules.playoffs.seriesLengths ? [...input.rules.playoffs.seriesLengths] : null,
     supported: supportWarnings.length === 0,
     supportWarnings,
   }
@@ -1277,6 +1286,26 @@ function resolveWinner(matchup: NflRedraftPlayoffMatchupState): {
   }
   if (matchup.homeScore == null || matchup.awayScore == null) {
     return { winnerRosterId: null, loserRosterId: null, blockedReason: 'Matchup scores are not complete.' }
+  }
+  /*
+   * A best-of-N SERIES is decided by game wins, never by the points in the score columns (those are the
+   * points over the games played, for display). Re-derived from the stored games rather than trusting a
+   * stored winner: a tied game goes to the higher seed, the first to ceil(N/2) wins takes it.
+   */
+  const series = readStoredPlayoffSeries(matchup.metadata)
+  if (series) {
+    const decided = resolvePlayoffSeries({
+      bestOf: series.bestOf,
+      homeRosterId: matchup.homeRosterId,
+      awayRosterId: matchup.awayRosterId,
+      homeSeed: matchup.homeSeed,
+      awaySeed: matchup.awaySeed,
+      games: series.games.filter((g) => !g.live),
+    })
+    if (decided.winnerRosterId) {
+      return { winnerRosterId: decided.winnerRosterId, loserRosterId: decided.loserRosterId, blockedReason: null }
+    }
+    return { winnerRosterId: null, loserRosterId: null, blockedReason: decided.blockedReason ?? 'Playoff series is not decided yet.' }
   }
   if (matchup.homeScore > matchup.awayScore) return { winnerRosterId: matchup.homeRosterId, loserRosterId: matchup.awayRosterId, blockedReason: null }
   if (matchup.awayScore > matchup.homeScore) return { winnerRosterId: matchup.awayRosterId, loserRosterId: matchup.homeRosterId, blockedReason: null }
