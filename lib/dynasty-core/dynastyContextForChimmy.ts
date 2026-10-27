@@ -6,6 +6,8 @@
 import { prisma } from '@/lib/prisma'
 import { getEffectiveDynastySettings } from './DynastySettingsService'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
+import { loadTaxiEnforcement } from '@/lib/taxi/taxiRulesService'
+import { describeTaxiMoveRules } from '@/lib/taxi/taxiMoveRules'
 
 export async function buildDynastyContextForChimmy(
   leagueId: string,
@@ -21,9 +23,10 @@ export async function buildDynastyContextForChimmy(
     league.isDynasty || variant === 'devy_dynasty' || variant === 'merged_devy_c2c'
   if (!isDynasty) return ''
 
-  const [dynasty, taxi] = await Promise.all([
+  const [dynasty, taxi, taxiEnforcement] = await Promise.all([
     getEffectiveDynastySettings(leagueId),
     getEffectiveTaxiSettings(leagueId),
+    loadTaxiEnforcement(leagueId).catch(() => null),
   ])
   if (!dynasty) return ''
 
@@ -37,6 +40,8 @@ export async function buildDynastyContextForChimmy(
       `Taxi: ${taxi.taxiSlotCount} slots, eligibility: ${taxi.taxiEligibilityYears === 1 ? 'rookies only' : taxi.taxiEligibilityYears === 2 ? 'rookies + 2nd year' : 'rookies + 2nd + 3rd'}, lock: ${taxi.taxiLockBehavior}, scoring on taxi: ${taxi.taxiScoringOn}. Taxi is for stashing eligible young/pro prospects; Devy is for college/prospect rights in Devy or C2C.`
     )
   }
+  // The one taxi fact that is enforced, not explained: a save that breaks it is refused.
+  if (taxiEnforcement) parts.push(describeTaxiMoveRules(taxiEnforcement.rules))
   parts.push(
     'When the user asks: what playoff format should I use, should this league be SF or 1QB, how many taxi slots, difference between taxi and devy, how should rookie draft order work, what does reverse Max PF mean — explain using this context and league settings. Do not enforce or change settings.'
   )
