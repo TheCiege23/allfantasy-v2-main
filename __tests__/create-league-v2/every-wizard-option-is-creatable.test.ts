@@ -29,6 +29,7 @@ import {
   getDraftTypeOptions,
   getIdpDraftTypeOptions,
   getScoringPresetOptionsForSelection,
+  getSurvivorTribeOptions,
   getTeamCountOptions,
   isSportAllowedForType,
 } from '@/lib/create-league-v2/rules-engine'
@@ -81,11 +82,15 @@ function everyReachableChoice(): Choice[] {
           for (const teamCount of teamCounts) {
             if (teamCount == null) continue
             // Team count is typed on the Basics step after the format tile; the input handler
-            // also refits the dynasty and Best Ball playoff blocks, which this reproduces.
+            // also refits the dynasty and Best Ball playoff blocks and the survivor tribe count, which this reproduces.
             let state = apply(afterFormat, { teamCount })
             if (leagueType === 'dynasty') {
               const playoffTeamCount = Math.min(state.dynasty.playoffTeamCount, Math.max(2, teamCount))
               state = apply(state, { dynasty: { ...state.dynasty, playoffTeamCount, playoffByeCount: 2 ** Math.ceil(Math.log2(playoffTeamCount)) - playoffTeamCount } })
+            }
+            if (leagueType === 'survivor') {
+              const tribeOptions = getSurvivorTribeOptions(teamCount)
+              if (!tribeOptions.includes(state.survivorTribeCount)) state = apply(state, { survivorTribeCount: tribeOptions[0] ?? 2 })
             }
             if (leagueType === 'best_ball') {
               state = apply(state, { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, teamCount) } })
