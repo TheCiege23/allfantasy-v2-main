@@ -65,7 +65,7 @@ export function ZombieItemsPanel({ leagueId, canEdit }: { leagueId: string; canE
         <SettingsRow
           label="Serums to revive"
           description="A Zombie spends exactly this many. Extra serums stay in their inventory."
-          control={<Input type="number" min={1} max={10} value={cost} onChange={(event) => setCost(Number(event.target.value))} disabled={!editable} className="w-24" />}
+          control={<Input type="number" min={1} max={5} value={cost} onChange={(event) => setCost(Number(event.target.value))} disabled={!editable} className="w-24" />}
         />
         <SettingsRow
           label="Automatic revival"
