@@ -60,6 +60,18 @@ const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'history', label: 'History' },
 ]
 
+/**
+ * NBA gets the Draft tab the football shell has always had. Without it an NBA league page had
+ * no path to the live draft room at all — reported by an Android manager during a live NBA
+ * draft, 2026-10-26. The tab renders the same pre-draft setup / DraftTab ("Enter Draft Room")
+ * as football, and the group bar already lands its Draft pill on `draft`.
+ */
+const NBA_TABS: TabDef[] = [
+  BASKETBALL_LIKE_TABS[0]!,
+  { id: 'draft', label: 'Draft' },
+  ...BASKETBALL_LIKE_TABS.slice(1),
+]
+
 const SOCCER_TABS: TabDef[] = [
   { id: 'squad', label: 'Squad' },
   { id: 'redraft', label: 'Redraft' },
@@ -92,7 +104,7 @@ const PGA_TABS: TabDef[] = [
 
 const SPORT_TABS: Record<string, TabDef[]> = {
   NFL: NFL_TABS,
-  NBA: BASKETBALL_LIKE_TABS,
+  NBA: NBA_TABS,
   MLB: BASKETBALL_LIKE_TABS,
   NHL: BASKETBALL_LIKE_TABS,
   SOCCER: SOCCER_TABS,
