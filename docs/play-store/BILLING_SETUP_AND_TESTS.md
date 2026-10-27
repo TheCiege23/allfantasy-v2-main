@@ -1,12 +1,16 @@
 # Google Play billing setup and acceptance tests
 
-Status reviewed October 25; wrapper compatibility updated October 26, 2026 (America/New_York).
+Implementation reviewed October 26, 2026 (America/New_York).
 
 ## Current state
 
-The owner confirmed that Play subscriptions are not set up. The Android distribution is a Bubblewrap Trusted Web Activity, package `ai.allfantasy.app`. The repository currently blocks Android checkout; web purchases use Stripe. The TWA manifest has no Play Billing feature enabled. There is no Google purchase verification endpoint, receipt ownership store, renewal/refund notification handler, or restore implementation yet. A website deploy alone cannot provide Play purchases.
+The Android distribution is a Bubblewrap Trusted Web Activity, package `ai.allfantasy.app`. The repository now implements Google Publisher verification, encrypted receipts with permanent ownership, token fulfillment/reversal, subscription lifecycle updates, authenticated Pub/Sub notifications, restore, native localized prices, renewal cancellation on account deletion and hourly reconciliation. Checkout is disabled by default. Web Stripe and Apple purchase paths remain available.
 
-This is the next implementation priority. Do not activate Play products for sales or advertise Android purchases until the implementation and device tests below pass. Existing web and Apple entitlements must remain readable across platforms, with purchase source kept for billing management.
+**Not activated or device verified:** Play products, Publisher credentials and Pub/Sub must be configured, the additive receipt migration must be applied, and a signed internal-track app must pass the device matrix below. The checked-in wrapper template keeps billing disabled; the private `C:/af-twa` manifest already has billing enabled and version code 3, but no generated project or new signed bundle was inspected. Read the actual latest Play version code before building. A website deploy alone cannot complete the Play release.
+
+The first claim of a stock TWA purchase requires the signed-in account's saved checkout authorization; every later restore must match its permanent owner. An unclaimed purchase with lost local authorization needs support review. The released TWA bridge does not sign an AllFantasy account ID, so first-claim binding cannot prove Google-account identity. See the [ownership decision](../architecture/google-play-billing.md).
+
+Do not advertise Android purchases until setup and real device tests pass. Existing subscriptions grant no token bundle on renewal.
 
 ## Proposed Console catalog
 
@@ -45,6 +49,29 @@ Use Play's localized price returned by the Digital Goods API for the Android con
 8. Add the Google account used on the Android device to the internal test track and Play license testers. The Play tester address must identify that Google account. AllFantasy login may use a different verified email. Neither email nor password belongs in public test fixtures.
 
 The provided AllFantasy review account exists, is verified, and has no active paid subscription. Its current token balance is 10. It was inspected read-only and not modified. Live runtime bypass and checkout still require a signed-in walkthrough; isolated tests use ordinary disposable accounts without bypasses.
+
+## Deployment configuration and internal testing
+
+Keep private values in hosting secrets. No credential, purchase token, keystore or tester password belongs in this public repository.
+
+| Setting | Required value |
+| --- | --- |
+| `GOOGLE_PLAY_BILLING_SERVICE_ACCOUNT_JSON` | Android Publisher service-account JSON or base64. The existing install-report key is a fallback, but its purchase permissions must be verified. |
+| `GOOGLE_PLAY_PURCHASE_ENCRYPTION_KEY` | Random 32-byte key encoded as 64 hex characters. Retain it for receipt recovery; rotation requires re-encryption. |
+| `GOOGLE_PLAY_RTDN_AUDIENCE` | `https://www.allfantasy.ai/api/webhooks/google-play` (match Pub/Sub OIDC audience exactly). |
+| `GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT_EMAIL` | Service account used by Pub/Sub to sign push requests. Require verified email. |
+| `GOOGLE_PLAY_PUBSUB_SUBSCRIPTION` | Exact `projects/PROJECT/subscriptions/SUBSCRIPTION` resource. |
+| `GOOGLE_PLAY_CATALOG_READY` | `true` only after all products and intervals are verified. |
+| `GOOGLE_PLAY_BILLING_TEST_USER_IDS` | Comma-separated ordinary AllFantasy user IDs allowed to run license tests while public billing remains off. These are app users, not the Google license-tester emails. |
+| `GOOGLE_PLAY_BILLING_ENABLED` | Keep `false` until the internal-track device matrix passes; then set `true` for public checkout. |
+
+Enable Publisher API and grant app-scoped permissions to view purchases, manage orders/subscriptions, acknowledge/consume, cancel on account deletion, and list voided purchases. Configure a Pub/Sub topic for Play RTDN, grant Google's Play notifications service publishing access, and create an authenticated HTTPS push subscription with a dead-letter topic. Set that topic in Play Console and send its test notification; the webhook must return 200 only for the expected signed identity, audience, resource and package.
+
+The existing hourly `/api/cron/reap-sync-runs` runs Play reconciliation after configuration is present and reports failures in maintenance warnings. `/api/cron/google-play-billing` permits an explicit retry with `Authorization: Bearer <CRON_SECRET>`; it adds no scheduled job. Track consume/acknowledgment failures before Google's acknowledgment deadline. Voided purchases are re-read over a rolling 29-day overlap. A long outage beyond that window requires an operator backfill.
+
+Apply `20261027010000_google_play_billing_receipts` using the guarded production migration command after reviewing pending migrations. Keep SQL LF-only. Deploy the website with billing disabled. Test with ordinary allowlisted app accounts and Google license-test payment methods on an internal-track installation before public activation. Do not use real cards to prove the integration.
+
+Local verification includes 14 isolated PostgreSQL Play lifecycle cases, state validation, browser API checkout/recovery tests, and signed Pub/Sub JWT tests. Those are simulated Publisher responses and do not constitute real Play purchase, refund, restore or renewal tests.
 
 ## Device acceptance matrix (pending)
 

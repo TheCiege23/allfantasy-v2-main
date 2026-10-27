@@ -17,6 +17,7 @@ The Android app is a Bubblewrap Trusted Web Activity. Web Stripe purchases and A
 - Commit access or token credit before acknowledging/consuming with Google. Shared durable purchase/reversal keys make retries and refunds idempotent. A consume failure leaves fulfillment complete and an acknowledgment retry for the hourly maintenance pass.
 - Pending payments grant nothing. Cancellation preserves paid access until expiry. Grace follows Google's expiry; hold, pause and expiry immediately stop access. Renewals extend one entitlement and create no token credit.
 - Authenticate Pub/Sub OIDC tokens against Google's keys, the configured audience and verified service-account email. Pin the subscription resource and package. Notifications trigger fresh Publisher reads, so old event timestamps cannot overwrite newer subscription state. Full pack reversals use durable tombstones, including a refund delivered before the receipt. A subscription void triggers a current-state read, preserving a later valid renewal.
+- Cancel Play renewals before account erasure; a provider failure prevents deletion. Retain receipt ownership after deletion and refuse any later fulfillment into the anonymized account.
 - Reconcile missed notifications and the last 29 days of voided purchases from the existing hourly `reap-sync-runs` maintenance job; bounded batches prioritize the least recently checked receipt. Failures appear in maintenance warnings. A dedicated authenticated endpoint permits manual retry without another cron slot.
 
 ## Alternatives considered
