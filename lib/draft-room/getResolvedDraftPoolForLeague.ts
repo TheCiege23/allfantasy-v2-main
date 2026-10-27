@@ -67,6 +67,10 @@ import {
   lookupSportsPlayerRecordAugmentDetailed,
   type DraftSeasonStatLine,
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
+import {
+  loadAfBaselineProjectionsByRollingInsightsIds,
+  type AfBaselineProjection,
+} from '@/lib/af-projections/readAfProjections'
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -129,6 +133,8 @@ export type DraftPoolRawRow = {
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   /** MLB / NHL season line (`extractMlbDraftSeasonStats` / `extractNhlDraftSeasonStats`). */
   seasonStatLine?: DraftSeasonStatLine | null
+  /** MLB / NHL: AF projection, PER GAME (DraftKings-style), from `AFProjectionSnapshot`. */
+  afProjectionPerGame?: number | null
   lifetimeValue?: number | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits
   /** D.7 â Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
@@ -1999,6 +2005,29 @@ export async function getResolvedDraftPoolForLeague(
   )
   perfSprMaps()
 
+  /*
+   * MLB / NHL projections. `AFProjectionSnapshot` is written daily for both (compute-projections),
+   * but nothing in the pool read it, so their Proj column was always empty. Joined by Rolling
+   * Insights id only — a pool row without one gets no projection rather than a name guess. A
+   * failure leaves the column empty, never the draft broken.
+   */
+  let afProjectionsByRiId: Map<string, AfBaselineProjection> | null = null
+  if ((sport === 'MLB' || sport === 'NHL') && poolRows.length > 0) {
+    const perfAfProj = perfStart('11c. AF projections (MLB/NHL)')
+    afProjectionsByRiId = await loadAfBaselineProjectionsByRollingInsightsIds({
+      sport,
+      rollingInsightsIds: poolRows.flatMap((p) => {
+        const riId = rollingInsightsIdOfPoolRow(p)
+        return riId ? [riId] : []
+      }),
+      season: Number.isInteger(league?.season) ? Number(league?.season) : null,
+    }).catch((err) => {
+      console.warn('[draft-pool] AF projections unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    perfAfProj()
+  }
+
   const enrichedList = await cooperativeMap(rawListFiltered, (row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const position = row.position ?? row.pos ?? ''
@@ -2454,6 +2483,7 @@ export async function getResolvedDraftPoolForLeague(
         undefined,
       nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
       seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (sprAug?.seasonStatLine ?? null) : null,
+      afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??
