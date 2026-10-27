@@ -103,10 +103,9 @@ export function ZombieWhispererPanel({
       </div>
 
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
-        <p className="font-semibold text-amber-200">Ambush power is not active yet</p>
+        <p className="font-semibold text-amber-200">Matchup ambush</p>
         <p className="mt-1 text-white/65">
-          The league currently tracks {ambushCount ?? 0} ambushes, but @Chimmy will not spend one
-          until matchup changes are implemented and verified.
+          The Whisperer has {ambushCount ?? 0} season ambushes. Before scoring starts, use @Chimmy ambush swap followed by an exact Survivor team name to change two matchups.
         </p>
       </div>
 
