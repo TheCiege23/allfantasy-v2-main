@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
+import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
 
 const UPSERT_BATCH_SIZE = 100
 
@@ -13,6 +14,15 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size))
   }
   return chunks
+}
+
+/** Use the same seven-day scoring windows as the daily-sport finalizer. */
+export function resolveImportedGameWeek(sport: string, season: number, startTime: Date, providerWeek?: unknown, legacyWeek?: unknown): number {
+  if (['NBA', 'NHL', 'MLB'].includes(sport)) {
+    return dailySportWeekForInstant(sport, season, startTime) ?? 0
+  }
+  const week = Number(providerWeek ?? legacyWeek)
+  return Number.isInteger(week) && week > 0 ? week : 0
 }
 
 function currentSeason(): number {
@@ -59,7 +69,7 @@ export async function runScheduleImporter(options?: {
       return {
         sportType: sport,
         season,
-        weekOrRound: legacy?.week ?? 0,
+        weekOrRound: resolveImportedGameWeek(sport, season, gameDate, game.weekOrRound ?? game.week, legacy?.week),
         externalId: String(game.id ?? game.externalId ?? legacy?.externalId ?? `${sport}:${homeTeam}:${awayTeam}:${gameDate.toISOString()}`),
         homeTeamId: typeof game.homeTeamId === 'string' ? game.homeTeamId : legacy?.homeTeamId ?? null,
         awayTeamId: typeof game.awayTeamId === 'string' ? game.awayTeamId : legacy?.awayTeamId ?? null,
