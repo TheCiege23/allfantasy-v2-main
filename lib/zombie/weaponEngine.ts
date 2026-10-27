@@ -158,40 +158,45 @@ export async function processWeaponAction(
     return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
   }
 
-  const alreadyArmed = await prisma.zombieTeamItem.count({
-    where: { teamStatusId: team!.id, activationState: 'pending_activation', activatesAtWeek: week },
-  })
-  if (alreadyArmed > 0) {
+  try {
+    await prisma.$transaction(async (tx) => {
+      const alreadyArmed = await tx.zombieTeamItem.count({
+        where: { teamStatusId: team!.id, activationState: 'pending_activation', activatesAtWeek: week },
+      })
+      if (alreadyArmed > 0) throw new Error('A serum or weapon is already armed for this week.')
+      const armed = await tx.zombieTeamItem.updateMany({
+        where: { id: item.id, isUsed: false, isExpired: false, activationState: 'ready' },
+        data: { activationState: 'pending_activation', activatesAtWeek: week, usedEffect: 'infection_shield' },
+      })
+      if (armed.count !== 1) throw new Error('That weapon is no longer available.')
+      await tx.zombieChimmyAction.update({
+        where: { id: log.id },
+        data: {
+          isValid: true,
+          publicResponse: '⚔️ A Survivor armed a weapon against the Horde.',
+          privateResponse: `Your ${weapon.replace('weapon_', '')} protects you from one Zombie or Whisperer infection in Week ${week}. It is spent only if it stops an infection.`,
+          effect: { itemId: item.id, protection: 'horde_infection' },
+        },
+      })
+    }, { isolationLevel: 'Serializable' })
+  } catch (error) {
     return prisma.zombieChimmyAction.update({
       where: { id: log.id },
-      data: { isValid: false, validationError: 'weapon_already_armed', privateResponse: '⚠️ A serum or weapon is already armed for this week.' },
+      data: {
+        isValid: false, validationError: 'weapon_arm_failed',
+        privateResponse: error instanceof Error ? error.message : 'Weapon could not be armed.',
+      },
     })
   }
-  await prisma.zombieTeamItem.update({
-    where: { id: item.id },
-    data: { activationState: 'pending_activation', activatesAtWeek: week, usedEffect: 'infection_shield' },
-  })
-  await prisma.zombieChimmyAction.update({
-    where: { id: log.id },
-    data: {
-      isValid: true,
-      publicResponse: '⚔️ A Survivor armed a weapon against the Horde.',
-      privateResponse: `Your ${weapon.replace('weapon_', '')} protects you from one Zombie or Whisperer infection in Week ${week}. It is spent only if it stops an infection.`,
-      effect: { itemId: item.id, protection: 'horde_infection' },
-    },
-  })
 
   await notifyCommissioner(leagueId, 'weapon_used', 'Weapon activated', `${weapon} (week ${week})`, {
-    week,
-    relatedUserId: userId,
-  })
+    week, relatedUserId: userId,
+  }).catch(() => {})
   await appendZombieAudit({
-    leagueId,
-    zombieLeagueId: z.id,
-    eventType: 'weapon_use',
+    leagueId, zombieLeagueId: z.id, eventType: 'weapon_use',
     metadata: { userId, weapon, week },
-  })
-  await queueAnimation(leagueId, week, 'weapon_acquired', userId, { weapon })
+  }).catch(() => {})
+  await queueAnimation(leagueId, week, 'weapon_acquired', userId, { weapon }).catch(() => {})
 
   return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
 }
