@@ -24,6 +24,7 @@ import { ZombieStatusBadge } from '@/app/zombie/components/ZombieStatusBadge'
 import { ZombieEventFeed } from '@/app/zombie/components/ZombieEventFeed'
 import { ZombieHordeBar } from '@/app/zombie/components/ZombieHordeBar'
 import { ZombieWhispererCard } from '@/app/zombie/components/ZombieWhispererCard'
+import { ZombieWinCards } from '@/app/zombie/components/ZombieWinCards'
 import { LeagueClipOverlayHost } from '@/components/league/LeagueClipOverlayHost'
 import { ZombieCommandHero } from '@/components/zombie/ZombieCommandHero'
 import { type ZombieDangerLevel } from '@/components/zombie/ZombieDangerMeter'
@@ -59,6 +60,7 @@ type Pack = {
     logoUrl?: string | null
     currentWeek: number
     isPaid: boolean
+    experienceMode?: 'simple' | 'enhanced'
     potTotal: number
     whispererIsPublic: boolean
     universeId: string | null
@@ -103,6 +105,7 @@ type Pack = {
     recentMaulings?: Array<{ id: string }>
     backgroundTheme?: string | null
   }
+  winCards?: Array<{ role: string; winnerName: string; opponentName: string; winnerScore: number | null; opponentScore: number | null; week: number | null }>
   hordeSize: number
   survivorCount: number
   myTeam: TeamRow | null
@@ -249,27 +252,31 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
         kind="serum"
         data-testid="zombie-quick-serum"
       />
-      <ZombieQuickAction
-        href={`/zombie/${leagueId}/items`}
-        label="Weapons lab"
-        icon={Swords}
-        kind="weapon"
-        data-testid="zombie-quick-weapon"
-      />
-      <ZombieQuickAction
-        href={`/zombie/${leagueId}/items`}
-        label="Bombs & overrides"
-        icon={Bomb}
-        kind="bomb"
-        data-testid="zombie-quick-bomb"
-      />
-      <ZombieQuickAction
-        href={`/zombie/${leagueId}/matchups`}
-        label="Ambush & matchups"
-        icon={Crosshair}
-        kind="ambush"
-        data-testid="zombie-quick-ambush"
-      />
+      {z.experienceMode !== 'simple' && (
+        <>
+        <ZombieQuickAction
+          href={`/zombie/${leagueId}/items`}
+          label="Weapons lab"
+          icon={Swords}
+          kind="weapon"
+          data-testid="zombie-quick-weapon"
+        />
+        <ZombieQuickAction
+          href={`/zombie/${leagueId}/items`}
+          label="Bombs & overrides"
+          icon={Bomb}
+          kind="bomb"
+          data-testid="zombie-quick-bomb"
+        />
+        <ZombieQuickAction
+          href={`/zombie/${leagueId}/matchups`}
+          label="Ambush & matchups"
+          icon={Crosshair}
+          kind="ambush"
+          data-testid="zombie-quick-ambush"
+        />
+        </>
+      )}
       {z.universeId ? (
         <ZombieQuickAction
           href={`/app/zombie-universe/${z.universeId}`}
@@ -342,6 +349,8 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
           quickActions={quickActions}
           sceneThemeId={zombieThemeForLeague(data?.league?.backgroundTheme, leagueId)}
         />
+
+        <ZombieWinCards cards={data.winCards ?? []} />
 
         <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
           <section className="space-y-4">
