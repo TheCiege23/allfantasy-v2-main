@@ -46,6 +46,8 @@ export type IntegritySettingsValue = {
   /** Hold flagged trades for commissioner review (League.settings, lib/integrity/holdFlaggedTrades.ts). Default: serious flags only. */
   holdFlaggedTrades?: boolean
   holdFlaggedTradesMode?: HoldFlaggedTradesMode
+  /** False in an imported league: its trades go through on the host, so there is nothing to hold. */
+  holdFlaggedTradesSupported?: boolean
 }
 
 type Draft = {
@@ -159,25 +161,34 @@ export function IntegritySettings({
               {draft.tradeAlertsEnabled ? 'On' : 'Off'}
             </button>
           </div>
-          <div className="af-cm-setrow">
-            <span className="af-cm-setrow-label">Hold flagged trades for my review</span>
-            <select
-              className="af-cm-toggle af-num"
-              aria-label="Hold flagged trades"
-              disabled={saving || readOnly}
-              value={draft.holdFlaggedTradesMode}
-              onChange={(e) => set('holdFlaggedTradesMode', e.target.value as HoldFlaggedTradesMode)}
-            >
-              {HOLD_FLAGGED_TRADES_MODES.map((m) => (
-                <option key={m} value={m}>
-                  {HOLD_FLAGGED_TRADES_LABELS[m].label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className="af-cm-setgroup-note">
-            An accepted trade is checked before it goes through. {HOLD_FLAGGED_TRADES_LABELS[draft.holdFlaggedTradesMode].detail}
-          </p>
+          {value.holdFlaggedTradesSupported === false ? (
+            <p className="af-cm-setgroup-note" data-testid="integrity-hold-unsupported">
+              Holding flagged trades is not available in an imported league: its trades go through on the league&apos;s
+              own platform. Completed trades are still checked, and a flagged one alerts you.
+            </p>
+          ) : (
+            <>
+            <div className="af-cm-setrow">
+              <span className="af-cm-setrow-label">Hold flagged trades for my review</span>
+              <select
+                className="af-cm-toggle af-num"
+                aria-label="Hold flagged trades"
+                disabled={saving || readOnly}
+                value={draft.holdFlaggedTradesMode}
+                onChange={(e) => set('holdFlaggedTradesMode', e.target.value as HoldFlaggedTradesMode)}
+              >
+                {HOLD_FLAGGED_TRADES_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {HOLD_FLAGGED_TRADES_LABELS[m].label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="af-cm-setgroup-note">
+              An accepted trade is checked before it goes through. {HOLD_FLAGGED_TRADES_LABELS[draft.holdFlaggedTradesMode].detail}
+            </p>
+            </>
+          )}
           <div className="af-label">Sensitivity</div>
           <Segmented
             name="Collusion"

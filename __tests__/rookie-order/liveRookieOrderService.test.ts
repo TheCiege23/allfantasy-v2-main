@@ -50,6 +50,8 @@ describe('readLiveRookieOrderSettings', () => {
       config: { nonPlayoff: 'reverse_max_pf', playoff: 'finish_then_seed', withinRound: 'worse_seed' },
       enabledForSeason: null,
       finalOrder: null,
+      roundNotices: { notify: true, chat: false },
+      lastRoundNotice: null,
     })
   })
 })
@@ -68,6 +70,20 @@ describe('refreshLiveRookieOrder', () => {
     const saved = mockLeagueUpdate.mock.calls[0][0].data.settings.rookie_draft_order
     expect(saved.mode).toBe('worst_to_first') // older keys kept
     expect(saved.live.finalOrder.slots.map((s: { rosterId: string }) => s.rosterId)).toEqual(['r-n1', 'r-a', 'r-b'])
+  })
+
+  it('saving the final order keeps the round-notice choices and marker, and keys it does not know', async () => {
+    const last = { season: 2026, phase: 'playoffs', lockedTeamIds: ['n1'], at: '2026-12-20T00:00:00.000Z' }
+    mockLeagueFindUnique.mockResolvedValue({ userId: 'commish', settings: liveOn({ roundNotices: { notify: false, chat: true }, lastRoundNotice: last, futureKey: 7 }) })
+    mockLoad.mockResolvedValue(finalSeason)
+    mockEvaluate.mockResolvedValue({ allowed: true })
+
+    await refreshLiveRookieOrder('L1')
+    const live = mockLeagueUpdate.mock.calls[0][0].data.settings.rookie_draft_order.live
+    expect(live.roundNotices).toEqual({ notify: false, chat: true })
+    expect(live.lastRoundNotice).toEqual(last)
+    expect(live.futureKey).toBe(7)
+    expect(live.finalOrder.basedOnSeason).toBe(2026)
   })
 
   it('carries the league platform, so an imported league can be told where to set the order', async () => {

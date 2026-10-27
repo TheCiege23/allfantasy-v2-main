@@ -25,6 +25,8 @@ type IntegrityApi = {
     /** Hold flagged trades for commissioner review (lib/integrity/holdFlaggedTrades.ts). Default: serious flags only. */
     holdFlaggedTrades?: boolean
     holdFlaggedTradesMode?: HoldFlaggedTradesMode
+    /** False in an imported league: its trades go through on the host, so there is nothing to hold. */
+    holdFlaggedTradesSupported?: boolean
     tankingWaiverPatternCheck: boolean
     /** Anti-tanking penalties (League.settings, lib/integrity/tankingPenalties.ts). Default: warning, then a 1st-round pick. */
     tankingPenalties?: { enabled: boolean; pickAtStrike: number; pickRound: number }
@@ -188,6 +190,12 @@ export function IntegritySettingsPanel(props: {
           </button>
         </div>
 
+        {s.holdFlaggedTradesSupported === false ? (
+          <p className="text-[11px] text-white/45" data-testid="integrity-hold-unsupported">
+            Holding flagged trades is not available in an imported league: its trades go through on the league&apos;s own
+            platform. Completed trades are still checked, and a flagged one alerts you.
+          </p>
+        ) : (
         <div>
           <p className="text-white/80">Hold flagged trades for my review</p>
           <div className="mt-1 flex gap-1" role="radiogroup" aria-label="Hold flagged trades">
@@ -208,6 +216,7 @@ export function IntegritySettingsPanel(props: {
           </div>
           <p className="mt-1 text-[11px] text-white/45">{HOLD_FLAGGED_TRADES_LABELS[holdModeFromResponse(s)].detail}</p>
         </div>
+        )}
 
         <div className="border-t border-white/[0.06] pt-4">
           <div className="flex items-center justify-between gap-2">

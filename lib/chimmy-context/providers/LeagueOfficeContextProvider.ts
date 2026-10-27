@@ -49,13 +49,14 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
       const role = await getLeagueRole(leagueId, request.userId)
       const commissioner = role === 'commissioner' || role === 'co_commissioner'
 
-      const [{ readSideContestsView }, { readLeagueLog }, { explainTradeReview }, { readManagedLineups }, { readPayoutsView }, { describeRule, readEliminatedLineupRule }] = await Promise.all([
+      const [{ readSideContestsView }, { readLeagueLog }, { explainTradeReview }, { readManagedLineups }, { readPayoutsView }, { describeRule, readEliminatedLineupRule }, { describeRoundNotices, readLastRoundNotice, readRoundNoticeSettings, liveRookieOrderRaw }] = await Promise.all([
         import('@/lib/side-contests/sideContestsService'),
         import('@/lib/league-log/leagueLogService'),
         import('@/lib/redraft/tradeReviewWindow'),
         import('@/lib/inactive-manager/inactiveManagerMode'),
         import('@/lib/payouts/payoutService'),
         import('@/lib/eliminated-lineups/eliminatedLineups'),
+        import('@/lib/rookie-order/roundNotices'),
       ])
 
       const [prizes, log, myRedraftTeam, myRoster, proposals, payoutView] = await Promise.all([
@@ -136,6 +137,11 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
           const rule = readEliminatedLineupRule(league.settings)
           return rule ? describeRule(rule, 'en') : null
         })(),
+        rookieOrderRounds: describeRoundNotices({
+          automation: liveRookieOrderRaw(league.settings).enabled === true,
+          settings: readRoundNoticeSettings(league.settings),
+          last: readLastRoundNotice(league.settings),
+        }),
         log: log?.ok && !log.hidden ? log.entries.map((e) => ({ at: e.at, title: e.title, detail: e.detail })) : null,
         payouts,
       })
