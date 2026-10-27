@@ -119,7 +119,7 @@ async function handleQueryRules(leagueId: string): Promise<string> {
     if (!config)
       return '⚠️ Unable to load league rules. Contact your commissioner.'
 
-    return `📋 **Rules Summary**: Infection threshold ${config.infectionLossToZombie ? 'on loss' : 'off'}, Serum revive cost: ${config.serumReviveCount}, Weapons: ${config.weaponTopTwoActive ? 'top 2 only' : 'all qualify'}`
+    return `📋 **Rules Summary**: Infection threshold ${config.infectionLossToZombie ? 'on loss' : 'off'}, Serum revive cost: ${config.serumReviveCount}, Weapons: Knife/Bow/Axe/Gun protect against one Horde infection`
   } catch (e) {
     return `⚠️ Error fetching rules: ${e instanceof Error ? e.message : String(e)}`
   }
@@ -286,9 +286,8 @@ export async function handleZombieChimmyAction(
           '• `@Chimmy rules` — Show infection & serum rules\n' +
           '• `@Chimmy week` — Show this week\'s standings\n' +
           '• `@Chimmy revive` — Use serum to revive\n' +
-          '• `@Chimmy bomb 💣` — Detonate bomb\n' +
-          '• `@Chimmy axe/gun/knife/bow` — Use weapon\n' +
-          '• `@Chimmy ambush [target]` — Whisperer ambush',
+          '• `@Chimmy use knife/bow/axe/gun` — Arm a defense\n' +
+          '• `@Chimmy ambush swap <team name>` — Whisperer matchup swap',
       },
     })
     return { ok: false, chimmyActionId: row.id, privateMessage: row.privateResponse }
