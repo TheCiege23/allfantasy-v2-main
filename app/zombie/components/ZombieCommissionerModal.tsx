@@ -226,7 +226,7 @@ export function ZombieCommissionerModal({
             {tab === 'paid' && <ZombiePaidPanel leagueId={leagueId} canEdit={canEdit} />}
             {tab === 'universe' && <ZombieUniversePanel leagueId={leagueId} canEdit={canEdit} />}
             {tab === 'whisperer' && <ZombieWhispererPanel leagueId={leagueId} canEdit={canEdit} />}
-            {tab === 'combat' && <ZombieCombatPanel canEdit={canEdit} />}
+            {tab === 'combat' && <ZombieCombatPanel leagueId={leagueId} canEdit={canEdit} />}
             {tab === 'items' && <ZombieItemsPanel leagueId={leagueId} canEdit={canEdit} />}
             {tab === 'updates' && <ZombieUpdatesPanel leagueId={leagueId} canEdit={canEdit} />}
             {tab === 'automation' && <ZombieAutomationPanel leagueId={leagueId} canEdit={canEdit} />}
