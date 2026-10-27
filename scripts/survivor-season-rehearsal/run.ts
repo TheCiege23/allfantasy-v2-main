@@ -123,8 +123,14 @@ async function main() {
   const done = await prisma.draftSession.findUniqueOrThrow({ where: { id: draft.id } })
   log(`draft ${done.status}: ${await prisma.draftPick.count({ where: { sessionId: draft.id } })}/${totalPicks} picks`)
   assert.equal(done.status, 'completed', 'draft did not complete')
-  // The post-draft bootstrap is fire-and-forget in places; give it a moment, then read what it built.
-  await new Promise(res => setTimeout(res, 5_000))
+  // The post-draft bootstrap is fire-and-forget; wait (real time) for the tribes it builds. A fixed
+  // five seconds was enough until setup began reading the draft pool, and then the season loop ran
+  // 61 pre_draft ticks before any tribe existed. How long it took is part of the result.
+  const waitStart = performance.now()
+  while (await prisma.survivorTribe.count({ where: { leagueId } }) === 0 && performance.now() - waitStart < 600_000) {
+    await new Promise(res => setTimeout(res, 2_000))
+  }
+  log(`post-draft setup: tribes after ${Math.round((performance.now() - waitStart) / 1000)}s of real time`)
   log(`cast ${await prisma.survivorPlayer.count({ where: { leagueId } })}, tribes ${await prisma.survivorTribe.count({ where: { leagueId } })}, idols ${await prisma.survivorIdol.count({ where: { leagueId } })}`)
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true, season: true } })
