@@ -158,12 +158,12 @@ export async function processWeaponAction(
   }
 
   const alreadyArmed = await prisma.zombieTeamItem.count({
-    where: { teamStatusId: team!.id, activationState: 'pending_activation', activatesAtWeek: week, itemType: { startsWith: 'weapon_' } },
+    where: { teamStatusId: team!.id, activationState: 'pending_activation', activatesAtWeek: week },
   })
   if (alreadyArmed > 0) {
     return prisma.zombieChimmyAction.update({
       where: { id: log.id },
-      data: { isValid: false, validationError: 'weapon_already_armed', privateResponse: '⚠️ One defensive weapon may be armed per week.' },
+      data: { isValid: false, validationError: 'weapon_already_armed', privateResponse: '⚠️ A serum or weapon is already armed for this week.' },
     })
   }
   await prisma.zombieTeamItem.update({
