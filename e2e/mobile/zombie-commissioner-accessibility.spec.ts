@@ -11,13 +11,13 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
 
     const opener = page.getByTestId('zombie-mobile-ops')
     await opener.click()
-    const dialog = page.getByRole('dialog', { name: 'Commissioner Settings' })
+    const dialog = page.getByRole('dialog', { name: /Commissioner settings/i })
     await expect(dialog).toBeVisible()
     await expect(dialog).toHaveAttribute('aria-modal', 'true')
 
-    const sections = dialog.locator('[aria-label="Commissioner settings sections"]')
+    const sections = dialog.locator('[aria-label="League settings sections"]')
     const setup = sections.getByRole('button', { name: /General/ })
-    const paid = sections.getByRole('button', { name: /Free \/ Paid/ })
+    const paid = sections.getByRole('button', { name: /Paid \/ Free/ })
     await expect(setup).toBeVisible()
     await expect(paid).toBeVisible()
     const targets = await sections.getByRole('button').evaluateAll(buttons =>
@@ -26,7 +26,7 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
     expect(Math.min(...targets)).toBeGreaterThanOrEqual(44)
 
     await paid.click()
-    await expect(dialog.getByText(/Free \/ Paid/).first()).toBeVisible()
+    await expect(dialog.getByText(/Paid \/ Free/).first()).toBeVisible()
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     expect(overflow).toBeLessThanOrEqual(1)
 
