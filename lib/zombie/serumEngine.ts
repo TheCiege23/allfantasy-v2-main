@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { getSerumBalance, useSerumToRevive } from '@/lib/zombie/ZombieSerumEngine'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
-import { validateAmbushTiming } from '@/lib/zombie/ambushEngine'
+import { validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
 import { setRevived } from '@/lib/zombie/ZombieOwnerStatusService'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
@@ -36,7 +36,7 @@ export async function processSerumAction(
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
 
-  const timing = await validateAmbushTiming(leagueId, week, z.sport)
+  const timing = await validatePreScoringWindow(leagueId, week, z.season)
   const log = await prisma.zombieChimmyAction.create({
     data: {
       leagueId,
@@ -59,7 +59,14 @@ export async function processSerumAction(
     where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
     include: { items: true },
   })
-  const serum = team?.items.find(
+  if (team?.status !== 'Survivor' || team.items.some((i) => i.activationState === 'pending_activation' && i.activatesAtWeek === week)) {
+    await prisma.zombieChimmyAction.update({ where: { id: log.id }, data: {
+      isValid: false, validationError: 'already_protected',
+      privateResponse: '⚠️ Only an unprotected Survivor can register one serum for the week.',
+    } })
+    return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
+  }
+  const serum = team.items.find(
     (i) => i.itemType.includes('serum') && !i.isUsed && i.activationState === 'ready',
   )
   if (!serum) {
@@ -84,7 +91,7 @@ export async function processSerumAction(
     data: {
       isValid: true,
       publicResponse: '🧪 A serum has been registered. The infection may yet be stopped.',
-      privateResponse: `Your serum is registered for Week ${week}. If you lose, you will NOT be infected.`,
+      privateResponse: `Your serum is registered for Week ${week}. It is spent only if it prevents infection.`,
       effect: { itemId: serum.id },
     },
   })
