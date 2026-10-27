@@ -39,7 +39,7 @@ import {
   type PlayoffWaiverRule,
   type WaiverOrderResetPolicy,
 } from '@/lib/waiver-wire/hub-waiver-options'
-import { effectiveFaabRolloverRule, renewalFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
+import { effectiveFaabRolloverRule, faabRolloverFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
 import { isSurvivorSettingsLeague } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { HOLD_HOURS_BY_POSITION_KEY, readHoldHoursByPosition } from '@/lib/waiver-wire/hold-by-position'
 import { WaiverHoldByPosition } from '@/components/league-settings/WaiverHoldByPosition'
@@ -186,8 +186,9 @@ export function WaiversSection({
     readFreeAgencyMode(savedOr<string | null>(leagueId, 'waiverFreeAgencyMode', null)),
   )
   // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over; that is what shows.
-  // The renew route's own classifier (renewalFamilyForLeague), so the default shown is the one applied.
-  const rolloverFamily = renewalFamilyForLeague({
+  // The family the renew route applies (faabRolloverFamilyForLeague), so the default shown is the one applied.
+  const rolloverFamily = faabRolloverFamilyForLeague({
+    leagueType: ctx.league.leagueType ?? null,
     leagueVariant: ctx.league.leagueVariant ?? null,
     settings: ctx.league.settings,
     isDynasty: (ctx.league as { isDynasty?: boolean | null }).isDynasty ?? null,
