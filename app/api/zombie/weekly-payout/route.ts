@@ -77,8 +77,9 @@ export async function PUT(req: Request) {
       confirmedAt: status === 'confirmed' ? new Date() : null,
     },
   })
-  const announcement = await prisma.zombieAnnouncement.findUnique({
-    where: { idempotencyKey: `zombie-weekly:${z.id}:${week}` }, select: { id: true, isPosted: true },
+  const announcement = await prisma.zombieAnnouncement.findFirst({
+    where: { zombieLeagueId: z.id, week, type: 'weekly_update', isPosted: true },
+    orderBy: { createdAt: 'desc' }, select: { id: true, isPosted: true },
   })
   if (announcement?.isPosted) {
     const draft = await buildWeeklyUpdate(leagueId, week)
