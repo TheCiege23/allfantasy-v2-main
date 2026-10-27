@@ -8,6 +8,8 @@ import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type Suppor
 import { getMockDraftTeamCountOptions } from '@/lib/mock-draft/mockTeamCount'
 import { LayoutGrid, MessageCircle, User, Users } from 'lucide-react'
 import { DraftMobileTray } from '@/components/app/draft-room/DraftMobileTray'
+import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
+import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -101,6 +103,9 @@ interface DraftPick {
   team: string
   adp: number | null
   projectedPts: number
+  /* Optional so a mock saved before headshots existed still restores. */
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
   aiReason?: string
   isUser: boolean
   managerName: string
@@ -134,6 +139,9 @@ interface AvailablePlayer {
   tier: number
   posRank: string
   isRookie: boolean
+  /* Optional so a mock saved before headshots existed still restores. */
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
 }
 
 interface ChatMessage {
@@ -843,6 +851,8 @@ export default function MockDraftSleeperRoomClient({
           team: player.team,
           adp: player.adp,
           projectedPts: player.projectedPts,
+          headshotUrl: player.headshotUrl ?? null,
+          teamLogoUrl: player.teamLogoUrl ?? null,
           aiReason: isAiPick ? generatePickReason(player, team, team.rosterNeeds, round) : undefined,
           isUser: team.isUser,
           managerName: team.managerName,
@@ -1070,7 +1080,7 @@ export default function MockDraftSleeperRoomClient({
     }
 
     const mapped = arrayFromUnknown(payload.entries)
-      .map((entry, index) => {
+      .map((entry, index): AvailablePlayer | null => {
         const raw = recordFromUnknown(entry)
         if (!raw) return null
 
@@ -1078,11 +1088,24 @@ export default function MockDraftSleeperRoomClient({
         const position = stringFromUnknown(raw.position)
         if (!name || !position) return null
 
+        const id = stringFromUnknown(raw.playerId) ?? stringFromUnknown(raw.sleeperId) ?? `${name}-${position}-${index}`
+        const team = stringFromUnknown(raw.team) ?? ''
+        const { headshotUrl, teamLogoUrl } = mockPlayerAssetUrls({
+          id,
+          name,
+          team,
+          sport: nextSettings.sport,
+          headshotUrl: stringFromUnknown(raw.headshotUrl),
+          teamLogoUrl: stringFromUnknown(raw.teamLogoUrl),
+        })
+
         return {
-          id: stringFromUnknown(raw.playerId) ?? stringFromUnknown(raw.sleeperId) ?? `${name}-${position}-${index}`,
+          id,
           name,
           position,
-          team: stringFromUnknown(raw.team) ?? '',
+          team,
+          headshotUrl,
+          teamLogoUrl,
           adp: numberFromUnknown(raw.adp) ?? (nextSettings.sport === 'NBA' ? null : index + 1),
           projectedPts: numberFromUnknown(raw.value) ?? (nextSettings.sport === 'NBA' ? 0 : Math.max(0, 250 - index)),
           ownership: numberFromUnknown(raw.timesDrafted) ?? Math.max(10, 95 - index / 4),
@@ -1758,6 +1781,14 @@ export default function MockDraftSleeperRoomClient({
                     <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(player.position)}`}>
                       {player.position}
                     </span>
+                    <PlayerAvatar
+                      headshotUrl={player.headshotUrl}
+                      displayName={player.name}
+                      teamLogoUrl={player.teamLogoUrl}
+                      teamAbbr={player.team}
+                      position={player.position}
+                      size={24}
+                    />
                     <span className="truncate font-semibold text-white">{player.name}</span>
                   </div>
                   <div className="mt-2 flex gap-2">
@@ -1866,6 +1897,15 @@ export default function MockDraftSleeperRoomClient({
                 <div className={`w-8 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(player.position)}`}>
                   {player.position}
                 </div>
+                <PlayerAvatar
+                  headshotUrl={player.headshotUrl}
+                  displayName={player.name}
+                  teamLogoUrl={player.teamLogoUrl}
+                  teamAbbr={player.team}
+                  position={player.position}
+                  size={32}
+                  testIdBase={`mock-draft-player-avatar-${player.id}`}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-semibold text-white/85">{player.name}</div>
                   <div className="text-[11px] text-white/30">
@@ -2112,8 +2152,18 @@ export default function MockDraftSleeperRoomClient({
                             </div>
                             {pick ? (
                               <div>
-                                <div className={`mb-0.5 inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
-                                  {pick.position}
+                                <div className="mb-0.5 flex items-center gap-1.5">
+                                  <PlayerAvatar
+                                    headshotUrl={pick.headshotUrl}
+                                    displayName={pick.playerName}
+                                    teamLogoUrl={pick.teamLogoUrl}
+                                    teamAbbr={pick.team}
+                                    position={pick.position}
+                                    size={24}
+                                  />
+                                  <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
+                                    {pick.position}
+                                  </div>
                                 </div>
                                 <div className="truncate text-[11px] font-semibold leading-tight text-white/85">
                                   {pick.playerName}
@@ -2190,8 +2240,18 @@ export default function MockDraftSleeperRoomClient({
                               </div>
                               {pick ? (
                                 <>
-                                  <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
-                                    {pick.position}
+                                  <div className="flex items-center gap-1.5">
+                                    <PlayerAvatar
+                                      headshotUrl={pick.headshotUrl}
+                                      displayName={pick.playerName}
+                                      teamLogoUrl={pick.teamLogoUrl}
+                                      teamAbbr={pick.team}
+                                      position={pick.position}
+                                      size={24}
+                                    />
+                                    <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
+                                      {pick.position}
+                                    </div>
                                   </div>
                                   <div className="truncate text-[11px] font-semibold text-white/85">{pick.playerName}</div>
                                 </>
@@ -2381,6 +2441,14 @@ export default function MockDraftSleeperRoomClient({
                   <div key={pick.overall} className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
                     <div className="mb-2 text-[11px] text-white/35">#{pick.overall}</div>
                     <div className="flex items-center gap-2">
+                      <PlayerAvatar
+                        headshotUrl={pick.headshotUrl}
+                        displayName={pick.playerName}
+                        teamLogoUrl={pick.teamLogoUrl}
+                        teamAbbr={pick.team}
+                        position={pick.position}
+                        size={36}
+                      />
                       <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
                         {pick.position}
                       </span>
