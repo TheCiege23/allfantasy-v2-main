@@ -20,7 +20,15 @@
  * now spans `max(playoffWeeksPerRound, championship_length)` weeks; earlier rounds are untouched,
  * and a league whose championship length is unset or no longer than its rounds plays exactly the
  * weeks it always did. It is never shorter than the other rounds: the setting lengthens the final.
+ *
+ * ⚠ SERIES MODE REPLACES ALL OF THE ABOVE (lib/playoff-runtime/playoffSeries.ts). When the league's
+ * `settings.playoff_series` sets best-of-N series, round `r` lasts exactly `N_r` weeks — rounds may
+ * differ in length, so a round's first week is the playoff start plus every EARLIER round's length —
+ * and `playoffWeeksPerRound` / `championship_length` are not read. Pass `seriesLengths` (from
+ * `readPlayoffSeriesLengths`) and leave it null for cumulative mode, which is unchanged.
  */
+
+import { seriesLengthForRound } from './playoffSeries'
 
 /** Consolation rounds are written at this offset (`generateNflRedraftPlayoffRuntimeBracket`). */
 export const CONSOLATION_ROUND_OFFSET = 100
@@ -62,7 +70,10 @@ export function weeksForPlayoffRound(input: {
   /** The bracket's last championship round; without it every round is a regular round. */
   finalRoundNumber?: number | null
   championshipLength?: number | null
+  /** Series mode (readPlayoffSeriesLengths): the round lasts its series length, nothing else. */
+  seriesLengths?: readonly number[] | null
 }): number {
+  if (input.seriesLengths) return seriesLengthForRound(input.seriesLengths, input.roundNumber)
   const perRound = normalizeWeeksPerRound(input.weeksPerRound)
   const isFinal =
     input.finalRoundNumber != null && Math.floor(input.roundNumber) === Math.floor(input.finalRoundNumber)
@@ -76,14 +87,22 @@ type PlayoffRoundWeeksInput = {
   weeksPerRound?: number | null
   finalRoundNumber?: number | null
   championshipLength?: number | null
+  seriesLengths?: readonly number[] | null
 }
 
 /** The fantasy weeks a championship round spans, in order. */
 export function playoffRoundWeeks(input: PlayoffRoundWeeksInput): number[] {
-  const perRound = normalizeWeeksPerRound(input.weeksPerRound)
   const round = Math.max(1, Math.floor(input.roundNumber))
+  const start = Math.max(1, Math.floor(input.playoffStartWeek))
+  if (input.seriesLengths) {
+    let first = start
+    for (let r = 1; r < round; r++) first += seriesLengthForRound(input.seriesLengths, r)
+    const length = seriesLengthForRound(input.seriesLengths, round)
+    return Array.from({ length }, (_, i) => first + i)
+  }
+  const perRound = normalizeWeeksPerRound(input.weeksPerRound)
   // Only the final is ever longer, so every round's FIRST week is unchanged by championship length.
-  const first = Math.max(1, Math.floor(input.playoffStartWeek)) + (round - 1) * perRound
+  const first = start + (round - 1) * perRound
   const length = weeksForPlayoffRound({ ...input, roundNumber: round })
   return Array.from({ length }, (_, i) => first + i)
 }

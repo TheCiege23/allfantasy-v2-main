@@ -56,7 +56,9 @@ describe('Taxi squad section — League columns round-trip', () => {
     expect(screen.getAllByText('Taxi squad slots')).toHaveLength(1)
     expect(screen.getAllByText('Allow non-rookies on taxi')).toHaveLength(1)
     expect(screen.getAllByText('Taxi years experience limit')).toHaveLength(1)
-    expect(screen.getAllByText('Taxi deadline (week)')).toHaveLength(1)
+    // The inert League-column deadline is gone; the enforced lock week lives in TaxiRulesPanel.
+    expect(screen.queryByText('Taxi deadline (week)')).toBeNull()
+    expect(screen.queryByTestId('taxi-deadline-week')).toBeNull()
     // …and the advanced reserve block no longer carries any of them.
     expect(within(screen.getByTestId('roster-advanced-reserve-settings')).queryByText(/taxi/i)).toBeNull()
   })
@@ -67,17 +69,14 @@ describe('Taxi squad section — League columns round-trip', () => {
     const section = screen.getByTestId('taxi-squad-settings-section')
     expect((screen.getByTestId('taxi-slots') as HTMLSelectElement).value).toBe('3')
     expect((screen.getByTestId('taxi-years-limit') as HTMLSelectElement).value).toBe('2')
-    expect((screen.getByTestId('taxi-deadline-week') as HTMLSelectElement).value).toBe('4')
 
     fireEvent.change(screen.getByTestId('taxi-slots'), { target: { value: '5' } })
     fireEvent.click(within(section).getAllByRole('switch')[0]!)
     fireEvent.change(screen.getByTestId('taxi-years-limit'), { target: { value: '0' } })
-    fireEvent.change(screen.getByTestId('taxi-deadline-week'), { target: { value: '9' } })
     expect(save.mock.calls.map((c) => c[0])).toEqual([
       { taxiSlots: 5 },
       { taxiAllowNonRookies: true },
       { taxiYearsLimit: 0 },
-      { taxiDeadlineWeek: 9 },
     ])
   })
 

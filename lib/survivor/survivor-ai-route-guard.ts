@@ -24,6 +24,9 @@ export const SURVIVOR_AI_VALID_TYPES: readonly SurvivorAIType[] = [
   'tribal_help',
   'exile_help',
   'bestball_help',
+  'idol_timing_help',
+  'jury_help',
+  'weekly_plan',
 ]
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import { SURVIVOR_AI_TYPE_RULE_CODE } from '@/lib/survivor/survivor-ai-token-catalog'
@@ -45,6 +48,9 @@ const PLAYER_STRATEGY_TYPES: readonly SurvivorAIType[] = [
   'tribal_help',
   'exile_help',
   'bestball_help',
+  'idol_timing_help',
+  'jury_help',
+  'weekly_plan',
 ]
 
 /** Token rule per AI type — one table, shared with the command centre's price list. */

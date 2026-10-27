@@ -328,6 +328,8 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     const { readOrphanAuctionTasks } = await import('@/lib/orphan-auction/orphanAuctionService')
     // Picks whose terms the next rookie draft settles (lib/league-trade-engine/pickTerms.ts).
     const { readPickTermsTasks } = await import('@/lib/league-trade-engine/pickTermsService')
+    // Open taxi steal claims (lib/taxi/taxiStealing.ts).
+    const { readTaxiStealTasks } = await import('@/lib/taxi/taxiStealingService')
     return [
       ...(orphans ? [orphans] : []),
       ...await readOperationalTasks(leagueId, now),
@@ -337,6 +339,7 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
       ...await readIrAutoMoveTasks(leagueId),
       ...await readOrphanAuctionTasks(leagueId, now),
       ...await readPickTermsTasks(leagueId),
+      ...await readTaxiStealTasks(leagueId, now),
     ]
   }
 
