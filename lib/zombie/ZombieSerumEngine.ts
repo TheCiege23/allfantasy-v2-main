@@ -76,34 +76,33 @@ export async function useSerumToRevive(
   const status = await getStatus(leagueId, rosterId)
   if (status !== 'Zombie') return false
 
-  const balance = await getSerumBalance(leagueId, rosterId)
-  if (balance < config.serumReviveCount) return false
-
-  const row = await prisma.zombieResourceLedger.findFirst({
-    where: { leagueId, rosterId, resourceType: 'serum' },
+  const cost = config.serumReviveCount
+  const spent = await prisma.$transaction(async (tx) => {
+    const row = await tx.zombieResourceLedger.findFirst({
+      where: { leagueId, rosterId, resourceType: 'serum', balance: { gte: cost } },
+    })
+    if (!row) return false
+    const debit = await tx.zombieResourceLedger.updateMany({
+      where: { id: row.id, balance: { gte: cost } },
+      data: { balance: { decrement: cost }, spentAt: new Date() },
+    })
+    if (debit.count !== 1) return false
+    const revived = await tx.zombieLeagueTeam.updateMany({
+      where: { leagueId, rosterId, status: 'Zombie' },
+      data: { status: 'Survivor', revivedAt: new Date(), weekBecameZombie: null, killedByRosterId: null },
+    })
+    if (revived.count !== 1) throw new Error('Zombie status changed during revival')
+    await tx.zombieResourceLedgerEntry.create({
+      data: { leagueId, rosterId, resourceType: 'serum', delta: -cost, reason: 'revive', targetRosterId: rosterId },
+    })
+    return true
   })
-  if (!row) return false
-  const newBalance = row.balance - config.serumReviveCount
-  await prisma.zombieResourceLedger.update({
-    where: { id: row.id },
-    data: { balance: newBalance, spentAt: new Date(), updatedAt: new Date() },
-  })
-  await prisma.zombieResourceLedgerEntry.create({
-    data: {
-      leagueId,
-      rosterId,
-      resourceType: 'serum',
-      delta: -config.serumReviveCount,
-      reason: 'revive',
-      targetRosterId: rosterId,
-    },
-  })
-  await setRevived(leagueId, rosterId)
+  if (!spent) return false
   await appendZombieAudit({
     leagueId,
     zombieLeagueId: zombieLeagueId ?? null,
     eventType: 'revive',
-    metadata: { rosterId, serumCount: config.serumReviveCount },
+    metadata: { rosterId, serumCount: cost },
   })
   return true
 }
