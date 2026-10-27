@@ -82,7 +82,7 @@ export async function reconcileOutcomeChangingCorrection(input: {
         tx.zombieBashingEvent.count({ where: { leagueId, week } }),
         tx.zombieMaulingEvent.count({ where: { leagueId, week } }),
         tx.zombieChimmyAction.count({
-          where: { leagueId, week: { gte: week }, isValid: true, createdAt: { gt: live.resolvedAt } },
+          where: { leagueId, week: { gte: week }, isValid: true, createdAt: { gt: live.resolvedAt! } },
         }),
         tx.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
         tx.zombieTeamItem.findMany({ where: { zombieLeagueId } }),
