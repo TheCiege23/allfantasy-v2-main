@@ -100,6 +100,9 @@ export const SURVIVOR_AI_TYPE_RULE_CODE = {
   tribal_help: 'survivor_ai_blindside_risk',
   exile_help: 'survivor_ai_recap_short',
   bestball_help: 'survivor_ai_challenge_strategy',
+  idol_timing_help: 'survivor_ai_idol_timing',
+  jury_help: 'survivor_ai_jury_management',
+  weekly_plan: 'survivor_ai_weekly_advice_pack',
 } as const satisfies Partial<Record<SurvivorAIType, TokenSpendRuleCode>>
 
 export type SurvivorPaidAiType = keyof typeof SURVIVOR_AI_TYPE_RULE_CODE
@@ -110,6 +113,9 @@ const SURVIVOR_PAID_AI_LABELS: Record<SurvivorPaidAiType, string> = {
   tribal_help: 'Tribal Council strategy help',
   exile_help: 'Exile Island help',
   bestball_help: 'Best-ball lineup help',
+  idol_timing_help: 'Idol timing plan',
+  jury_help: 'Jury management advice',
+  weekly_plan: 'Weekly game plan',
   host_challenge: 'Challenge announcement',
   host_merge: 'Merge announcement',
   host_council: 'Tribal Council narration',
