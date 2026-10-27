@@ -201,3 +201,33 @@ describe('mock room headshots', () => {
     expect(bravo.getAttribute('data-avatar-source')).toBe('fallback')
   })
 })
+
+describe('mock draft pool — AF ADP', () => {
+  it('shows AF ADP beside market ADP, sorts by it on request, and an older save without it still restores', async () => {
+    const cp = checkpoint()
+    // Market order Alpha(1) Bravo(2) Charlie(3) Delta(4). AF ADP flips Alpha and Charlie; Delta was
+    // saved before AF ADP existed and carries none.
+    const afAdp: Record<string, number | null> = { Alpha: 3.4, Bravo: 2.1, Charlie: 0.9 }
+    cp.state.availablePlayers = cp.state.availablePlayers.map((p: any) =>
+      p.name in afAdp ? { ...p, afAdp: afAdp[p.name], afAdpContributions: { market: 0.5, imported: 0, af: 0.5 }, afAdpOwnSampleSize: 40 } : p,
+    )
+    localStorage.setItem(key, JSON.stringify(cp))
+    render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-resume')
+
+    expect(screen.getAllByTestId('mock-draft-player-adp-Alpha')[0]!.textContent).toBe('1.0')
+    const alphaAf = screen.getAllByTestId('mock-draft-player-af-adp-Alpha')[0]!
+    expect(alphaAf.textContent).toBe('AF 3.4')
+    expect(alphaAf.getAttribute('title')).toContain('AllFantasy leagues 50% (40 drafts)')
+    expect(screen.getAllByTestId('mock-draft-player-af-adp-Delta')[0]!.textContent).toBe('AF —')
+
+    const order = () =>
+      screen
+        .getAllByTestId(/^mock-draft-player-row-/)
+        .map((row) => row.getAttribute('data-testid')!.replace('mock-draft-player-row-', ''))
+        .filter((id, i, all) => all.indexOf(id) === i)
+    expect(order()).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta'])
+    fireEvent.click(screen.getAllByTestId('mock-draft-sort-af-adp')[0]!)
+    expect(order()).toEqual(['Charlie', 'Bravo', 'Alpha', 'Delta'])
+  })
+})

@@ -10,6 +10,8 @@ import { LayoutGrid, MessageCircle, User, Users } from 'lucide-react'
 import { DraftMobileTray } from '@/components/app/draft-room/DraftMobileTray'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
+import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
+import { ADP_LABEL_AF, AF_BLUE, TOOLTIP_AF_ADP, afAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -133,6 +135,11 @@ interface AvailablePlayer {
   position: string
   team: string
   adp: number | null
+  /* AF ADP (lib/adp/afAdp.ts) beside market ADP. Optional so a mock saved before it still restores. */
+  afAdp?: number | null
+  afAdpContributions?: { market: number; imported: number; af: number } | null
+  afAdpImportedSampleSize?: number | null
+  afAdpOwnSampleSize?: number | null
   projectedPts: number
   ownership: number
   injuryStatus: string | null
@@ -575,6 +582,7 @@ export default function MockDraftSleeperRoomClient({
   const [filter, setFilter] = useState('All')
   const [showDrafted, setShowDrafted] = useState(false)
   const [rookiesOnly, setRookiesOnly] = useState(false)
+  const [poolSort, setPoolSort] = useState<MockPoolSort>('adp')
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -720,7 +728,7 @@ export default function MockDraftSleeperRoomClient({
   const filteredPlayers = useMemo(() => {
     if (!draftState) return []
 
-    return draftState.availablePlayers.filter((player) => {
+    const visible = draftState.availablePlayers.filter((player) => {
       if (!showDrafted && draftedIds.has(player.id)) return false
       if (rookiesOnly && !player.isRookie) return false
       if (filter !== 'All' && player.position.toUpperCase() !== filter.toUpperCase()) return false
@@ -730,7 +738,8 @@ export default function MockDraftSleeperRoomClient({
       }
       return true
     })
-  }, [draftState, draftedIds, filter, rookiesOnly, search, showDrafted])
+    return poolSort === 'afAdp' ? sortByAfAdp(visible) : visible
+  }, [draftState, draftedIds, filter, poolSort, rookiesOnly, search, showDrafted])
 
   const onTheClockTeam = useMemo(
     () => draftState?.teams.find((team) => team.slot === draftState.onTheClock) ?? null,
@@ -1107,6 +1116,10 @@ export default function MockDraftSleeperRoomClient({
           headshotUrl,
           teamLogoUrl,
           adp: numberFromUnknown(raw.adp) ?? (nextSettings.sport === 'NBA' ? null : index + 1),
+          afAdp: numberFromUnknown(raw.afAdp),
+          afAdpContributions: parseAfAdpContributions(raw.afAdpContributions),
+          afAdpImportedSampleSize: numberFromUnknown(raw.afAdpImportedSampleSize),
+          afAdpOwnSampleSize: numberFromUnknown(raw.afAdpOwnSampleSize),
           projectedPts: numberFromUnknown(raw.value) ?? (nextSettings.sport === 'NBA' ? 0 : Math.max(0, 250 - index)),
           ownership: numberFromUnknown(raw.timesDrafted) ?? Math.max(10, 95 - index / 4),
           injuryStatus: stringFromUnknown(raw.injuryStatus),
@@ -1868,6 +1881,15 @@ export default function MockDraftSleeperRoomClient({
               <input type="checkbox" checked={rookiesOnly} onChange={(event) => setRookiesOnly(event.target.checked)} />
               Rookies Only
             </label>
+            <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
+              <input
+                type="checkbox"
+                checked={poolSort === 'afAdp'}
+                onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
+                data-testid="mock-draft-sort-af-adp"
+              />
+              Sort by <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
+            </label>
           </div>
         </div>
 
@@ -1920,7 +1942,28 @@ export default function MockDraftSleeperRoomClient({
                 {player.injuryStatus ? (
                   <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
                 ) : null}
-                <div className="text-[11px] font-mono text-white/40">{player.adp?.toFixed(1) ?? '\u2014'}</div>
+                <div className="flex shrink-0 flex-col items-end leading-tight">
+                  <span
+                    className="text-[11px] font-mono text-white/40"
+                    title={systemAdpCellTitle(player.adp != null)}
+                    data-testid={`mock-draft-player-adp-${player.id}`}
+                  >
+                    {player.adp?.toFixed(1) ?? '\u2014'}
+                  </span>
+                  <span
+                    className="text-[11px] font-mono font-semibold"
+                    style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
+                    title={afAdpCellTitle({
+                      hasValue: player.afAdp != null,
+                      contributions: player.afAdpContributions ?? null,
+                      importedSampleSize: player.afAdpImportedSampleSize ?? null,
+                      ownSampleSize: player.afAdpOwnSampleSize ?? null,
+                    })}
+                    data-testid={`mock-draft-player-af-adp-${player.id}`}
+                  >
+                    AF {player.afAdp != null ? player.afAdp.toFixed(1) : '\u2014'}
+                  </span>
+                </div>
               </button>
               <button
                 type="button"
