@@ -433,13 +433,38 @@ jobs:
         # the config blanked NODE_OPTIONS for it, so it ran on the 4096MB default and restarted
         # up to three times a run.
         NODE_OPTIONS: --max-old-space-size=8192
-        # Warm only what these four specs visit, as the retention and referral lanes do: `/` is
-        # the readiness probe gotoDraftRoomHarness polls, the rest are the four harness pages.
-        # The default 33-route warm-up compiled /core, /admin, /pricing and the rest for a lane
-        # that never opens them, and its heap is what carried next dev to its restart line.
-        # If you add a @draft-room or @mock-draft-room spec on another route, add the route.
-        E2E_WARM_ROUTES: /,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production
-      run: npm run test:e2e:draft-room:chromium
+        # TWO playwright runs, so each gets its own `next dev`. One server for all five specs grew
+        # past Next's restart line (80% of the heap limit) late in the run: on 2026-10-27 the lane
+        # failed on #2798, #2804 and #2813 with "Server is approaching the used memory threshold,
+        # restarting..." and ECONNRESET, a different test timing out each time, while the same
+        # NBA player-card test passed alone in 43s. The retention note above names the lever:
+        # fewer specs per server, not more memory. Splitting inside one step keeps the required
+        # check's name. Each run warms only what its specs visit (`/` is the readiness probe
+        # gotoDraftRoomHarness polls); if you add a @draft-room or @mock-draft-room spec, put it
+        # in a run and add its route. Each run writes its own HTML report so neither overwrites
+        # the other in the artifact below.
+      run: |
+        # Refuse if a tagged spec exists that neither run below lists -- it would silently not run.
+        tagged=$(grep -rlE "@draft-room|@mock-draft-room" e2e | sort | tr '\n' ' ')
+        listed="e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
+        if [ "$tagged" != "$listed" ]; then
+          echo "::error::@draft-room specs changed. Tagged: $tagged -- add new ones to a run in this step."
+          exit 1
+        fi
+        rc=0
+        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-player-measurement \
+        PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/click-audit \
+          npx playwright test e2e/draft-room-click-audit.spec.ts \
+            --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
+        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production \
+        PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/other-specs \
+          npx playwright test \
+            e2e/draft-room-commissioner-regression.spec.ts \
+            e2e/draft-roster-configuration-gate.spec.ts \
+            e2e/mobile-draft-production.spec.ts \
+            e2e/mock-draft-room-click-audit.spec.ts \
+            --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
+        exit $rc
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:
