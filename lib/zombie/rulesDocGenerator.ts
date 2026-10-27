@@ -150,7 +150,7 @@ function buildSections(
     'You can interact with @Chimmy for timed actions, status checks, inventory, and rules questions.',
     '@Chimmy will not reveal another player\'s private information.',
     z.experienceMode === 'simple'
-      ? '@Chimmy can help with status, inventory, serum protection, and rules. Revival happens automatically when a Zombie has enough serums.'
+      ? `@Chimmy can help with status, inventory, serum protection, and rules. Revival ${autoSerumRevive ? 'happens automatically' : 'uses @Chimmy revive'} when a Zombie has enough serums.`
       : '@Chimmy can help with status, inventory, serum protection/revival, defensive weapons, Whisperer matchup swaps, and rules.'
   ].join('\n')
 
@@ -174,7 +174,7 @@ function buildSections(
   const sectionWhisperer = [
     'THE WHISPERER',
     `${z.whispererCount === 2 ? 'Two teams are' : 'One team is'} secretly (or publicly) designated as ${z.whispererCount === 2 ? 'Whisperers' : 'the Whisperer'} at the start of the season.`,
-    'The Whisperer infects every Survivor it beats, and leads the Horde.',
+    infectionLossToWhisperer ? 'The Whisperer infects Survivors it beats when the week settles, and leads the Horde.' : 'The Whisperer leads the Horde; automatic infection on its wins is disabled.',
     'Whisperers cannot trade players at any time.',
     `Selection mode: ${z.whispererSelectionMode ?? 'random'}`,
   ].join('\n')
@@ -182,15 +182,17 @@ function buildSections(
   const sectionSurvivor = [
     'SURVIVORS',
     'Survivors begin the season as the majority. Their goal: survive.',
-    'Winning matchups keeps you alive. Losing to a Zombie or Whisperer turns you.',
-    z.experienceMode === 'simple' ? 'One serum automatically revives a Zombie.' : 'Serums bring a Zombie back. Weapons are earned by big weeks.',
+    'Winning matchups keeps you alive. Infection on losses follows this league\'s settings above.',
+    z.experienceMode === 'simple'
+      ? `${reviveSerums} serum${reviveSerums === 1 ? '' : 's'} ${autoSerumRevive ? 'automatically revive' : 'can revive'} a Zombie.`
+      : 'Serums bring a Zombie back. Weapons are earned by big weeks.',
     'The last Survivor(s) standing earn the Ultimate Survivor bonus (if enabled).',
   ].join('\n')
 
   const sectionZombie = [
     'THE HORDE (ZOMBIES)',
     `Once turned, you stay in the Horde until you collect ${reviveSerums} serum${reviveSerums === 1 ? '' : 's'} and ${autoSerumRevive ? 'are automatically revived' : 'use them'}.`,
-    'Zombies can infect Survivors by beating them in matchups.',
+    infectionLossToZombie ? 'Zombies can infect Survivors by beating them in matchups.' : 'Automatic infection when a Zombie wins is disabled in this league.',
     'The Horde grows each week as more Survivors fall.',
     "An infection takes the victim's whole week to the team that turned them.",
   ].join('\n')
@@ -198,7 +200,9 @@ function buildSections(
   const sectionAmbush = [
     'AMBUSHES',
     z.experienceMode === 'simple' ? 'Ambushes are disabled in Simple Zombie.' : `Each Whisperer starts with ${z.whispererAmbushCount ?? 1} ambushes, at most ${ambushCountPerWeek} per week.`,
-    'Before weekly scoring begins, @Chimmy ambush swap <exact Survivor team name> swaps the Whisperer\'s opponent with that Survivor. Other ambush effects are inactive.',
+    z.experienceMode === 'simple'
+      ? 'Whisperers cannot use matchup swaps in Simple Zombie.'
+      : 'Before weekly scoring begins, @Chimmy ambush swap <exact Survivor team name> swaps the Whisperer\'s opponent with that Survivor. Other ambush effects are inactive.',
   ].join('\n')
 
   return {
