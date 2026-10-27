@@ -10,7 +10,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *  - Rookie draft order (dynasty/C2C/devy/keeper). Both modes are a deterministic sort of
  *    last season, yet saving required `commissioner_ai_tools`.
  *
- * Every test here runs as a commissioner with NO plan, through the real handler.
+ * ⚠ THE ROOKIE ORDER WAS REVISITED 2026-10-27, AT THE OWNER'S CALL. Previewing and saving a mode
+ * stay free, but switching AUTOMATIC ordering on is now AF Commissioner, the same rule as the
+ * live rookie order (`rookie-draft-order/live`), which sells that automation. The wrong gate
+ * (`commissioner_ai_tools`) is still gone; the right one is the owner's plan.
+ *
+ * Every test here runs as a commissioner with NO plan, through the real handler, unless it says otherwise.
  */
 
 const {
@@ -19,6 +24,7 @@ const {
   resolveForUserMock,
   saveRookieConfigMock,
   getServerSessionMock,
+  ownerEntitledMock,
 } = vi.hoisted(() => ({
   prismaMock: {
     league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
@@ -31,6 +37,7 @@ const {
   resolveForUserMock: vi.fn(),
   saveRookieConfigMock: vi.fn(),
   getServerSessionMock: vi.fn(),
+  ownerEntitledMock: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -57,6 +64,7 @@ vi.mock('@/lib/league/rookieDraftOrder', () => ({
   saveRookieDraftOrderConfig: saveRookieConfigMock,
   getRookieDraftOrderConfig: vi.fn().mockResolvedValue(null),
 }))
+vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({ isLeagueEntitledToLiveRookieOrder: ownerEntitledMock }))
 vi.mock('@/lib/commissioner/CommissionerChangeNotifier', () => ({
   notifyCommissionerChange: vi.fn().mockResolvedValue(undefined),
 }))
@@ -86,6 +94,7 @@ beforeEach(() => {
   prismaMock.redraftPlayoffRound.findFirst.mockResolvedValue(null)
   prismaMock.league.update.mockResolvedValue({})
   getServerSessionMock.mockResolvedValue({ user: { id: FREE_COMMISSIONER } })
+  ownerEntitledMock.mockResolvedValue(false)
 })
 
 describe('playoff bracket size is free', () => {
@@ -115,7 +124,7 @@ describe('playoff bracket size is free', () => {
   })
 })
 
-describe('rookie draft order is free', () => {
+describe('rookie draft order: the preview and the mode are free, automatic ordering is AF Commissioner', () => {
   function putRequest(body: unknown) {
     return new Request('http://localhost/api/commissioner/leagues/league-1/rookie-draft-order', {
       method: 'PUT',
@@ -123,6 +132,7 @@ describe('rookie draft order is free', () => {
       body: JSON.stringify(body),
     })
   }
+  const params = { params: Promise.resolve({ leagueId: 'league-1' }) }
 
   beforeEach(() => {
     prismaMock.league.findUnique.mockResolvedValue({
@@ -134,26 +144,47 @@ describe('rookie draft order is free', () => {
     })
   })
 
-  it('a dynasty commissioner with no plan can turn on auto-ordering', async () => {
+  it('🛑 with no plan, turning auto-ordering on is refused and nothing is saved', async () => {
     const { PUT } = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
-    const res = await PUT(putRequest({ mode: 'reverse_max_pf', enabled: true }) as never, {
-      params: Promise.resolve({ leagueId: 'league-1' }),
-    })
+    const res = await PUT(putRequest({ mode: 'reverse_max_pf', enabled: true }) as never, params)
+    expect(res.status).toBe(402)
+    expect(await res.json()).toMatchObject({ errorCode: 'AF_COMMISSIONER_REQUIRED', upgradePath: '/upgrade?plan=commissioner' })
+    expect(ownerEntitledMock).toHaveBeenCalledWith(FREE_COMMISSIONER)
+    expect(saveRookieConfigMock).not.toHaveBeenCalled()
+    // `enabled` defaults to on, so a body without it is a switch-on too.
+    expect((await PUT(putRequest({ mode: 'worst_to_first' }) as never, params)).status).toBe(402)
+  })
 
+  it('with no plan, switching it off or saving a mode with it off is free', async () => {
+    const { PUT } = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
+    const res = await PUT(putRequest({ mode: 'reverse_max_pf', enabled: false }) as never, params)
     expect(res.status).toBe(200)
-    expect(saveRookieConfigMock).toHaveBeenCalledWith('league-1', {
-      mode: 'reverse_max_pf',
-      enabled: true,
-      userId: FREE_COMMISSIONER,
-    })
+    expect(saveRookieConfigMock).toHaveBeenCalledWith('league-1', { mode: 'reverse_max_pf', enabled: false, userId: FREE_COMMISSIONER })
+  })
+
+  it('on the owner’s plan, auto-ordering is switched on', async () => {
+    ownerEntitledMock.mockResolvedValue(true)
+    const { PUT } = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
+    const res = await PUT(putRequest({ mode: 'reverse_max_pf', enabled: true }) as never, params)
+    expect(res.status).toBe(200)
+    expect(saveRookieConfigMock).toHaveBeenCalledWith('league-1', { mode: 'reverse_max_pf', enabled: true, userId: FREE_COMMISSIONER })
+  })
+
+  it('the preview stays free, and tells the commissioner whether auto-ordering can be switched on', async () => {
+    const { GET } = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
+    const get = () => GET(new Request('http://localhost/api/commissioner/leagues/league-1/rookie-draft-order') as never, { params: Promise.resolve({ leagueId: 'league-1' }) })
+    let res = await get()
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ isCommissioner: true, canAutomate: false })
+    ownerEntitledMock.mockResolvedValue(true)
+    res = await get()
+    expect(await res.json()).toMatchObject({ canAutomate: true })
   })
 
   it('still refuses anyone but the commissioner', async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: 'someone-else' } })
     const { PUT } = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
-    const res = await PUT(putRequest({ mode: 'worst_to_first' }) as never, {
-      params: Promise.resolve({ leagueId: 'league-1' }),
-    })
+    const res = await PUT(putRequest({ mode: 'worst_to_first' }) as never, params)
     expect(res.status).toBe(403)
     expect(saveRookieConfigMock).not.toHaveBeenCalled()
   })
