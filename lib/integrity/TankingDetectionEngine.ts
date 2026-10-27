@@ -13,7 +13,9 @@ import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { loadNativeLineupCards, type LineupCard } from "./nativeLineupCards"
-import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS } from "./sensitivity"
+import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS, TANKING_IDLE_STARTS } from "./sensitivity"
+import { loadDailyIdleStarts, type DailyRosterFindings } from "./dailyIdleStarts"
+import { isDailyLineupScoringEnabled } from "@/lib/redraft/dailyLineups"
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 export type TankingEvidence = {
@@ -214,6 +216,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
     return { leagueId, weekNumber, flags: [], scannedAt }
   }
   const benchGapPoints = TANKING_BENCH_GAP_POINTS[normalizeSensitivity(settings.tankingSensitivity)]
+  const idleStartsToFlag = TANKING_IDLE_STARTS[normalizeSensitivity(settings.tankingSensitivity)]
   const checkIllegalLineups = settings.tankingIllegalLineupCheck !== false
   const checkBenchPattern = settings.tankingBenchPatternCheck !== false
 
@@ -228,7 +231,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { playoffStartWeek: true, sport: true, platform: true },
+    select: { playoffStartWeek: true, sport: true, platform: true, settings: true },
   })
   // A foreign platform's player ids collide with Sleeper's; a stranger's name in an accusation is
   // worse than the bare id, so those are left unresolved (the same rule as nativeLineupScan).
@@ -247,6 +250,16 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
     seasonYear != null && rosterIds.length > 0
       ? await loadNativeLineupCards(prisma, { redraftRosterIds: rosterIds, season: seasonYear, week: weekNumber })
       : new Map<string, LineupCard>()
+
+  /*
+   * ⚠ A DAILY-LINEUP LEAGUE IS NOT READ FROM THE WEEKLY CARD. It is scored day by day on each day's
+   * starters, so the weekly lineup is not who played: a manager can bench a player on Tuesday and start
+   * him on Wednesday. Its evidence is each day's lineup instead (lib/integrity/dailyIdleStarts.ts).
+   */
+  const sport = String(league?.sport ?? "NFL").toUpperCase()
+  const daily = isDailyLineupScoringEnabled(league?.settings ?? null, sport)
+  const dailyFindings: Map<string, DailyRosterFindings> | null =
+    daily && seasonYear != null ? await loadDailyIdleStarts(prisma, { sport, season: seasonYear, week: weekNumber, redraftRosterIds: rosterIds }) : null
 
   const flags: TankingScanResult["flags"] = []
 
@@ -271,10 +284,31 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
        * worst output it can produce. A roster we have no lineup card for gets no
        * claim made about it.
        */
-      const block = parsed.find((p) => p.rosterId === roster.id) ?? cards.get(roster.id)
-      if (!block) continue
       const suspicious: TankingEvidence["illegalOrSuspiciousStarters"] = []
       let pointsLeft = 0
+      let fallbackSummary = "Lineup card shows starters in worse health or projection than bench alternatives."
+      if (daily) {
+        // Both are illegal lineups: a starter who could not play that day.
+        const found = dailyFindings?.get(roster.id)
+        if (!found || !checkIllegalLineups) continue
+        if (found.idleStarts.length >= idleStartsToFlag) {
+          for (const idle of found.idleStarts) {
+            suspicious.push({
+              slotPosition: idle.slot,
+              startedPlayerId: idle.playerId,
+              startedPlayerName: idle.playerName,
+              startedPlayerStatus: `NO GAME ${idle.day}`,
+              benchedBetterOption: `${idle.benchPlayerName} (played that day)`,
+            })
+          }
+          fallbackSummary = `${found.idleStarts.length} times this week, a starter had no game that day while a bench player who played could have taken the slot.`
+        }
+        for (const out of found.ruledOutStarters) {
+          suspicious.push({ slotPosition: "STARTER", startedPlayerId: out.playerId, startedPlayerName: out.playerName, startedPlayerStatus: out.status.toUpperCase() })
+        }
+      }
+      const block = daily ? null : (parsed.find((p) => p.rosterId === roster.id) ?? cards.get(roster.id))
+      if (!daily && !block) continue
       if (block) {
         const benchBest = Math.max(0, ...block.bench.map((b) => b.proj ?? 0))
         for (const st of block.starters) {
@@ -347,7 +381,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
       if (ai?.redFlags?.length) evidence.redFlags = ai.redFlags
 
       if (verdict === "suspicious" || verdict === "likely_tanking") {
-        const summary = ai?.summary ?? "Lineup card shows starters in worse health or projection than bench alternatives."
+        const summary = ai?.summary ?? fallbackSummary
         /*
          * ⚠ ONE OPEN TANKING CASE PER MANAGER. The collusion engine already
          * refuses to re-flag a trade that has an open flag; this path had no such

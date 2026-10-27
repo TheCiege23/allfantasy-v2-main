@@ -84,6 +84,18 @@ export const TANKING_BENCH_GAP_POINTS: Record<IntegritySensitivity, number> = {
 }
 
 /**
+ * Daily-lineup leagues (lib/integrity/dailyIdleStarts.ts): wasted starts in one week — a starter whose
+ * team had no game that day while a bench player who played could have taken his slot — before the week
+ * counts as a suspicious lineup pattern. One or two is ordinary carelessness on a busy week, so even
+ * High asks for more than one.
+ */
+export const TANKING_IDLE_STARTS: Record<IntegritySensitivity, number> = {
+  low: 5,
+  medium: 3,
+  high: 2,
+}
+
+/**
  * The sentence rendered directly beneath the sensitivity control. Generated from
  * the same constants the engine scans with, so it cannot drift into a claim the
  * product does not honour.
@@ -100,5 +112,5 @@ export function describeCollusionSensitivity(level: IntegritySensitivity): strin
 export function describeTankingSensitivity(level: IntegritySensitivity): string {
   const pts = TANKING_BENCH_GAP_POINTS[level]
   const label = level === 'low' ? 'Low' : level === 'high' ? 'High' : 'Medium'
-  return `${label} counts a slot as suspicious once a bench option out-projects the starter by ${pts} points.`
+  return `${label} counts a slot as suspicious once a bench option out-projects the starter by ${pts} points. In a daily-lineup league, a week counts once a team makes ${TANKING_IDLE_STARTS[level]} starts of players with no game that day while a bench player who played could have filled the slot.`
 }
