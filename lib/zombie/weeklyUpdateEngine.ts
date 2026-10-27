@@ -342,6 +342,13 @@ export async function postWeeklyUpdate(leagueId: string, week: number, draft: Zo
   const key = `zombie-weekly:${z.id}:${week}`
   const existing = await prisma.zombieAnnouncement.findUnique({ where: { idempotencyKey: key } })
   if (existing?.isPosted) return
+  if (!existing) {
+    const legacyPosted = await prisma.zombieAnnouncement.findFirst({
+      where: { zombieLeagueId: z.id, week, type: 'weekly_update', isPosted: true },
+      select: { id: true },
+    })
+    if (legacyPosted) return
+  }
 
   if (z.weeklyUpdateApproval || !z.weeklyUpdateAutoPost) {
     const ann = await prisma.zombieAnnouncement.upsert({
