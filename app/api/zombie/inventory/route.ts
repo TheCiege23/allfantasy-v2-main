@@ -81,6 +81,12 @@ export async function GET(req: Request) {
     select: { userId: true, ambushesRemaining: true },
   })
 
+  const coWhisperer = await prisma.zombieCoWhisperer.findUnique({
+    where: { zombieLeagueId_userId: { zombieLeagueId: z.id, userId: targetUserId } },
+    select: { userId: true, ambushesRemaining: true },
+  })
+  const ownWhisperer = whisperer?.userId === targetUserId ? whisperer : coWhisperer
+
   const viewer = await resolveWhispererViewer(leagueId, session.user.id)
 
   const now = new Date()
@@ -136,9 +142,9 @@ export async function GET(req: Request) {
     history,
     resolution,
     // Only a viewer allowed to know the Whisperer learns who it is.
-    whispererUserId: viewer.canSee ? (whisperer?.userId ?? null) : null,
-    isWhisperer: whisperer?.userId === targetUserId,
-    ambushesRemaining: whisperer?.userId === targetUserId ? whisperer.ambushesRemaining : null,
+    whispererUserId: viewer.canSee ? (ownWhisperer?.userId ?? whisperer?.userId ?? null) : null,
+    isWhisperer: Boolean(ownWhisperer),
+    ambushesRemaining: ownWhisperer?.ambushesRemaining ?? null,
     isCommissionerView: targetUserId !== session.user.id,
     isPaid: z.isPaid,
     week,
