@@ -111,6 +111,11 @@ export type SportPointsContext = {
   valueKind?: 'points' | 'categories'
   /** In a category league, the categories valued ("PTS, REB, … and TO"). */
   categoryList?: string | null
+  /**
+   * Present in an NBA, NHL or MLB dynasty league: what the multi-season grade reads
+   * (`./sportDynastyValue.ts`). Board id → age today, and the year of the next rookie draft.
+   */
+  dynasty?: { ages: ReadonlyMap<string, number>; nextDraftYear: number }
 }
 
 export const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
@@ -245,12 +250,15 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
 /**
  * Why a league that keeps players past this season is not graded here. This grade counts THIS season
  * only; in a dynasty or keeper league that ignores every season after it — young players most of all —
- * and no market prices those seasons for this sport yet.
+ * and no market prices those seasons for this sport yet. NBA, NHL and MLB dynasty leagues are the
+ * exception: they are graded over five seasons by `./sportDynastyValue.ts` (2026-10-27).
  */
 export function multiSeasonFormatReason(leagueType: string | null | undefined, sport: PointsGradedSport): string | null {
   const t = String(leagueType ?? '').trim().toLowerCase()
   const kept = t.includes('dynasty') || t === 'keeper' || t === 'devy' || t === 'c2c' || t === 'salary_cap'
   if (!kept) return null
+  // NBA, NHL and MLB dynasty leagues have their own multi-season grade (`./sportDynastyValue.ts`).
+  if (t.includes('dynasty') && (sport === 'NBA' || sport === 'NHL' || sport === 'MLB')) return null
   return `This is a ${t.replace('_', ' ')} league, and ${SPORT_LABEL[sport]} grades so far count this season only — that would ignore every season after it, young players most of all. This deal is not graded.`
 }
 

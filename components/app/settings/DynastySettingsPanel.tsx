@@ -36,6 +36,7 @@ type Effective = {
   taxiDeadlineWeek?: number | null
   taxiPromotionDeadlineWeek?: number | null
   rookieDraftAutoOpen?: boolean
+  rookieDraftAutoOpenSource?: 'commissioner' | 'plan_default' | 'plan_default_predates' | 'free_default'
   rookieDraftCustomOpenDate?: string | null
   rookieDraftWindowLabel?: string | null
 }
@@ -567,7 +568,10 @@ export default function DynastySettingsPanel({
               ? effective.rookieDraftCustomOpenDate
                 ? `Opens automatically on ${effective.rookieDraftCustomOpenDate}.`
                 : 'Opens automatically when the window opens.'
-              : 'Created by the commissioner (auto-open is off).'}
+              : effective.rookieDraftAutoOpenSource === 'plan_default_predates'
+                ? 'Auto-open is off for this offseason, which started before AF Commissioner opened rookie drafts automatically. Turn it on below.'
+                : 'Created by the commissioner (auto-open is off).'}
+            {effective.rookieDraftAutoOpenSource === 'plan_default' && ' Included with AF Commissioner.'}
             {' '}An opened draft waits in pre-draft until the commissioner starts it.
           </p>
           {isCommissioner && (

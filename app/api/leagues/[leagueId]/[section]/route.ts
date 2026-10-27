@@ -74,6 +74,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'orphaned-teams': () => import('../orphaned-teams/handler'),
   'partner-profiles': () => import('../partner-profiles/handler'),
   'payouts': () => import('../payouts/handler'),
+  'pick-terms': () => import('../pick-terms/handler'),
   'power-rankings': () => import('../power-rankings/handler'),
   'predictions': () => import('../predictions/handler'),
   'prestige-context': () => import('../prestige-context/handler'),
@@ -102,6 +103,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'storylines': () => import('../storylines/handler'),
   'survivor': () => import('../survivor/handler'),
   'taxi-rules': () => import('../taxi-rules/handler'),
+  'taxi-steals': () => import('../taxi-steals/handler'),
   'tournament-context': () => import('../tournament-context/handler'),
   'trades': () => import('../trades/handler'),
 }

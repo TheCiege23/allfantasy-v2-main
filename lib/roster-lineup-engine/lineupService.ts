@@ -111,6 +111,8 @@ export type PersistRosterLineupInput = {
   automationAudit?: { id: string; action: string; message: string; metadata: Record<string,unknown> }
   expectedOwnerUserId?: string
   expectedStarters?: string[]
+  /** Taxi players this save promotes to answer a steal claim (lib/taxi/taxiStealing.ts). */
+  taxiProtection?: readonly string[]
 }
 
 function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['source']): string {
@@ -218,6 +220,7 @@ export async function persistRosterLineupWithEngine(
       afterTaxi: lineupPlayerIds(input.nextPlayerData, 'taxi'),
       afterRoster: lineupPlayerIds(input.nextPlayerData),
       nameOf: lineupPlayerNames(roster.playerData, input.nextPlayerData),
+      protectedPromotions: input.taxiProtection,
     })
     if (taxiCheck.issues.length) return { ok: false, error: taxiCheck.issues.map((i) => i.message).join(' '), status: 400 }
   }

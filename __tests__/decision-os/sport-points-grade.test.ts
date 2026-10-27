@@ -244,9 +244,13 @@ describe('leagues this grade must not answer for', () => {
     expect(categoryLeagueReason({ scoring_mode: 'h2h_category' }, 'NCAAB')).toMatch(/no college basketball category grades yet/)
   })
 
-  it('refuses a dynasty or keeper league, which this-season points would misprice', () => {
-    expect(multiSeasonFormatReason('dynasty', 'NBA')).toMatch(/count this season only/)
+  it('refuses a keeper league, and a dynasty league outside NBA / NHL / MLB, which this-season points would misprice', () => {
     expect(multiSeasonFormatReason('keeper', 'NHL')).toMatch(/count this season only/)
+    expect(multiSeasonFormatReason('dynasty', 'NCAAB')).toMatch(/count this season only/)
+    expect(multiSeasonFormatReason('dynasty', 'SOCCER')).toMatch(/count this season only/)
+    // NBA, NHL and MLB dynasty leagues have their own five-season grade (sport-dynasty-grade.test.ts).
+    expect(multiSeasonFormatReason('dynasty', 'NBA')).toBeNull()
+    expect(multiSeasonFormatReason('dynasty', 'MLB')).toBeNull()
     expect(multiSeasonFormatReason('redraft', 'NBA')).toBeNull()
     expect(multiSeasonFormatReason(null, 'NBA')).toBeNull()
   })

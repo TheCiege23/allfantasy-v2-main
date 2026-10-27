@@ -9,6 +9,8 @@ import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { loadTaxiEnforcement } from '@/lib/taxi/taxiRulesService'
 import { describeTaxiMoveRules } from '@/lib/taxi/taxiMoveRules'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
+import { readPickTermsForChimmy } from '@/lib/league-trade-engine/pickTermsService'
+import { readTaxiStealingForChimmy } from '@/lib/taxi/taxiStealingService'
 
 export async function buildDynastyContextForChimmy(
   leagueId: string,
@@ -49,6 +51,12 @@ export async function buildDynastyContextForChimmy(
       ? 'Taxi squad: no limit on how many seasons a player can spend on it.'
       : `Taxi squad: a player can spend at most ${maxSeasons} season${maxSeasons === 1 ? '' : 's'} on a taxi squad in this league, counted over finished seasons on any team; once they are used, the player moves to the bench when the next season starts and cannot go back on (enforced).`,
   )
+  // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts): the rule and every pick's terms.
+  const pickTerms = await readPickTermsForChimmy(leagueId).catch(() => null)
+  if (pickTerms) parts.push(pickTerms)
+  // Taxi stealing (lib/taxi/taxiStealing.ts): the rule and any open claim, when the rule is running.
+  const stealing = await readTaxiStealingForChimmy(leagueId).catch(() => null)
+  if (stealing) parts.push(stealing)
   parts.push(
     'When the user asks: what playoff format should I use, should this league be SF or 1QB, how many taxi slots, difference between taxi and devy, how should rookie draft order work, what does reverse Max PF mean — explain using this context and league settings. Do not enforce or change settings.'
   )

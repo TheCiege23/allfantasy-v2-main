@@ -2,6 +2,7 @@
  * AF league trade orchestration — create, accept, reject, counter, veto, commissioner, process.
  */
 
+import { checkOfferPickTerms } from '@/lib/league-trade-engine/pickTermsService'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleService'
@@ -557,6 +558,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     assetType: asset.itemType,
     playerId: asset.itemType === 'player' ? asset.itemReference : null,
   })))
+  // Conditional and protected picks (./pickTerms.ts): checked against the league, stored in the shape
+  // the settlement reads. An offer without terms is returned as it came.
+  const offerAssets = await checkOfferPickTerms(input.leagueId, input.assets)
 
   const expiresHours = input.expiresInHours ?? 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)
@@ -608,7 +612,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         multiTeam: participantRosterIds.length > 2,
       } as Prisma.InputJsonValue,
       items: {
-        create: input.assets.map((a) => {
+        create: offerAssets.map((a) => {
           // A native future pick's item carries its own season and round, read from its id, so
           // every reader of the item (grades, history, notices) can price it without the id format.
           const nativePick = parseInventoryPickId(String(a.itemReference ?? ''))

@@ -180,6 +180,12 @@ export function describeFullSeason(label: string, input: FullSeasonSimInput, opt
       }
     })
 
+    it('every team scores points every week (an all-zero season would match its expected zeros)', () => {
+      for (const week of sim.weeks) {
+        for (const check of week.scoreChecks) expect({ week: week.week, rosterId: check.rosterId, scored: check.engine > 0 }).toEqual({ week: week.week, rosterId: check.rosterId, scored: true })
+      }
+    })
+
     it('scores the bye team only when its week counts (league median or the extra matchup)', () => {
       const byeRowsCount = sim.input.medianGame || Boolean(sim.input.extraMatchup?.enabled)
       for (const week of sim.weeks) {

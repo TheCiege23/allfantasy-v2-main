@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
 import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
 import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
+import { TaxiStealCard } from '@/components/core-app/TaxiStealCard'
 import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
 import '@/components/core-app/af-waivers.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
@@ -198,6 +199,14 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             a closing time (lib/orphan-auction). Renders nothing when the league has no auction.
           */}
           <OrphanAuctionBids leagueId={data.league.id} />
+
+          {/*
+            ── Taxi stealing ───────────────────────────────────────────────
+
+            Claims on your taxi players first — they have a deadline — then claims you can make
+            (lib/taxi/taxiStealing.ts). Renders nothing when the league does not run the rule.
+          */}
+          <TaxiStealCard leagueId={data.league.id} />
 
           {/*
             ── Worth adding ─────────────────────────────────────────────────

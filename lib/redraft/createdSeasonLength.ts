@@ -3,6 +3,7 @@ import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/to
 import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
 import { readChampionshipLength, weeksForPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { playoffBracketWeeks } from '@/lib/playoff-runtime/playoffFit'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { cappedSeasonWeeks, maxRegularSeasonWeeksForSport, regularSeasonCapApplies } from './regularSeasonCap'
 /** Respect a dynasty commissioner's regular season length when materializing the first season. */
 export function resolveCreatedSeasonWeeks(league: {
@@ -35,6 +36,8 @@ export function resolveCreatedSeasonWeeks(league: {
         teams: league.playoffTeams,
         weeksPerRound: league.playoffWeeksPerRound,
         championshipLength: readChampionshipLength(league.settings),
+        // A best-of-N series round lasts N weeks (lib/playoff-runtime/playoffSeries.ts).
+        seriesLengths: readPlayoffSeriesLengths(league.settings),
       }), maxRegularSeasonWeeksForSport(league.sport))
     }
     return sportDefaultWeeks

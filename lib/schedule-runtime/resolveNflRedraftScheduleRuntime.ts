@@ -297,6 +297,7 @@ function championshipWindowWarning(input: {
     weeksPerRound: input.rules.playoffs.weeksPerRound,
     finalRoundNumber: rounds,
     championshipLength: input.rules.playoffs.championshipLength,
+    seriesLengths: input.rules.playoffs.seriesLengths ?? null,
   })
   if (lastWeek <= input.totalWeeks) return null
   return `The playoffs as configured end in week ${lastWeek}, past the season's last week (${input.totalWeeks}). Shorten the final or move the playoffs earlier.`
