@@ -8,23 +8,30 @@ import { setRevived } from '@/lib/zombie/ZombieOwnerStatusService'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 
-async function rosterLostWeek(leagueId: string, userId: string, week: number, seasonYear: number): Promise<boolean> {
+async function rosterFacedInfectionRisk(leagueId: string, userId: string, week: number, seasonYear: number): Promise<boolean> {
   const season = await prisma.redraftSeason.findFirst({ where: { leagueId, season: seasonYear } })
   if (!season) return false
   const rr = await prisma.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: userId } })
   if (!rr) return false
-  const m = await prisma.redraftMatchup.findFirst({
-    where: {
-      seasonId: season.id,
-      week,
-      OR: [{ homeRosterId: rr.id }, { awayRosterId: rr.id }],
-    },
+  const matchup = await prisma.redraftMatchup.findFirst({
+    where: { seasonId: season.id, week, OR: [{ homeRosterId: rr.id }, { awayRosterId: rr.id }] },
   })
-  if (!m || !m.awayRosterId) return false
-  const hs = m.homeScore ?? 0
-  const as = m.awayScore ?? 0
-  if (m.homeRosterId === rr.id) return hs < as
-  return as < hs
+  if (!matchup?.awayRosterId) return false
+  const lost = matchup.homeRosterId === rr.id
+    ? matchup.homeScore < matchup.awayScore
+    : matchup.awayScore < matchup.homeScore
+  if (!lost) return false
+  const opponentId = matchup.homeRosterId === rr.id ? matchup.awayRosterId : matchup.homeRosterId
+  const opponent = await prisma.redraftRoster.findUnique({ where: { id: opponentId }, select: { ownerId: true } })
+  if (!opponent?.ownerId) return false
+  const opponentRoster = await prisma.roster.findFirst({
+    where: { leagueId, platformUserId: opponent.ownerId }, select: { id: true },
+  })
+  if (!opponentRoster) return false
+  const status = await prisma.zombieLeagueTeam.findUnique({
+    where: { leagueId_rosterId: { leagueId, rosterId: opponentRoster.id } }, select: { status: true },
+  })
+  return status?.status === 'Zombie' || status?.status === 'Whisperer'
 }
 
 export async function processSerumAction(
@@ -204,8 +211,8 @@ export async function finalizePendingSerumsForWeek(leagueId: string, week: numbe
         })
       )?.platformUserId
     if (!uid) continue
-    const lost = await rosterLostWeek(leagueId, uid, week, seasonYear)
-    if (lost) {
+    const threatened = await rosterFacedInfectionRisk(leagueId, uid, week, seasonYear)
+    if (threatened) {
       await prisma.zombieTeamItem.update({
         where: { id: item.id },
         data: { isUsed: true, usedAtWeek: week, activationState: 'ready' },
