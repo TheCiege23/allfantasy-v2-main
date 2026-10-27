@@ -1,6 +1,7 @@
 import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
+import { getSerumBalance, useSerumToRevive } from '@/lib/zombie/ZombieSerumEngine'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { validateAmbushTiming } from '@/lib/zombie/ambushEngine'
 import { setRevived } from '@/lib/zombie/ZombieOwnerStatusService'
@@ -99,50 +100,76 @@ export async function processSerumAction(
 export async function processRevive(leagueId: string, userId: string, week: number): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
-  const rules = await getZombieRulesForSport(z.sport)
-
+  const config = await getZombieLeagueConfig(leagueId)
+  const cost = config?.serumReviveCount ?? 2
   const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
   if (!roster) throw new Error('Not in league')
   const team = await prisma.zombieLeagueTeam.findUnique({
     where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
-    include: { items: true },
   })
-  if (!team || !team.status.toLowerCase().includes('zombie')) {
-    throw new Error('Revive only for zombies')
+  if (team?.status !== 'Zombie') throw new Error('Revive only for zombies')
+
+  // Native leagues keep inventory as individual items; imported leagues may still use the resource ledger.
+  // Never add the two stores together: some migration paths mirror the same award in both.
+  const available = await prisma.zombieTeamItem.count({
+    where: { teamStatusId: team.id, itemType: { contains: 'serum' }, isUsed: false, isExpired: false, activationState: 'ready' },
+  })
+  if (available >= cost) {
+    await prisma.$transaction(async (tx) => {
+      const items = await tx.zombieTeamItem.findMany({
+        where: { teamStatusId: team.id, itemType: { contains: 'serum' }, isUsed: false, isExpired: false, activationState: 'ready' },
+        orderBy: { id: 'asc' },
+        take: cost,
+        select: { id: true },
+      })
+      if (items.length !== cost) throw new Error('Serum balance changed during revival')
+      const spent = await tx.zombieTeamItem.updateMany({
+        where: { id: { in: items.map((item) => item.id) }, isUsed: false },
+        data: { isUsed: true, usedAtWeek: week, usedEffect: 'revive' },
+      })
+      if (spent.count !== cost) throw new Error('Serum balance changed during revival')
+      const revived = await tx.zombieLeagueTeam.updateMany({
+        where: { id: team.id, status: 'Zombie' },
+        data: { status: 'Survivor', revivedAt: new Date(), weekBecameZombie: null, killedByRosterId: null },
+      })
+      if (revived.count !== 1) throw new Error('Zombie status changed during revival')
+    })
+  } else {
+    const ledgerBalance = await getSerumBalance(leagueId, roster.id)
+    if (ledgerBalance < cost) throw new Error(`You need ${cost} serums to revive. You have ${Math.max(available, ledgerBalance)}.`)
+    if (!(await useSerumToRevive(leagueId, roster.id, z.id))) throw new Error('Serum balance changed during revival')
   }
 
-  const count = await prisma.zombieTeamItem.count({
-    where: {
-      teamStatusId: team.id,
-      itemType: { contains: 'serum' },
-      isUsed: false,
-    },
-  })
-  if (count < rules.reviveThreshold) {
-    throw new Error(`You need ${rules.reviveThreshold} serums to revive. You have ${count}.`)
-  }
-
-  const serums = await prisma.zombieTeamItem.findMany({
-    where: { teamStatusId: team.id, itemType: { contains: 'serum' }, isUsed: false },
-  })
-  for (const s of serums) {
-    await prisma.zombieTeamItem.update({ where: { id: s.id }, data: { isUsed: true, usedAtWeek: week } })
-  }
-
-  await setRevived(leagueId, roster.id)
   await queueAnimation(leagueId, week, 'player_revived', userId, { revive: true })
   await notifyCommissioner(leagueId, 'revive_occurred', 'Zombie revived', `Week ${week} — player returned as revived survivor.`, {
-    urgency: 'high',
-    week,
-    relatedUserId: userId,
+    urgency: 'high', week, relatedUserId: userId,
   })
   await appendZombieAudit({
-    leagueId,
-    zombieLeagueId: z.id,
-    universeId: z.universeId,
-    eventType: 'revive',
-    metadata: { userId, week },
+    leagueId, zombieLeagueId: z.id, universeId: z.universeId,
+    eventType: 'revive', metadata: { userId, week, serumCount: cost },
   })
+}
+
+export async function autoReviveEligibleZombies(leagueId: string, week: number): Promise<number> {
+  const config = await getZombieLeagueConfig(leagueId)
+  if (!config?.autoSerumRevive) return 0
+  const teams = await prisma.zombieLeagueTeam.findMany({
+    where: { leagueId, status: 'Zombie' },
+    select: { id: true, rosterId: true },
+  })
+  let revived = 0
+  for (const team of teams) {
+    const items = await prisma.zombieTeamItem.count({
+      where: { teamStatusId: team.id, itemType: { contains: 'serum' }, isUsed: false, isExpired: false, activationState: 'ready' },
+    })
+    const ledger = items >= config.serumReviveCount ? 0 : await getSerumBalance(leagueId, team.rosterId)
+    if (Math.max(items, ledger) < config.serumReviveCount) continue
+    const roster = await prisma.roster.findUnique({ where: { id: team.rosterId }, select: { platformUserId: true } })
+    if (!roster?.platformUserId) continue
+    await processRevive(leagueId, roster.platformUserId, week)
+    revived++
+  }
+  return revived
 }
 
 /** After infections run: consume/refund pending serums for the scoring week. */
