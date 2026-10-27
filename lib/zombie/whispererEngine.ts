@@ -234,8 +234,35 @@ export async function handleWhispererDefeat(
   zombieLeagueId: string,
   defeatedByUserId: string,
   week: number,
+  defeatedWhispererUserId?: string,
 ): Promise<void> {
+  if (defeatedWhispererUserId) {
+    const co = await prisma.zombieCoWhisperer.findUnique({
+      where: { zombieLeagueId_userId: { zombieLeagueId, userId: defeatedWhispererUserId } },
+    })
+    if (co && !co.wasDefeated) {
+      const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
+      if (!z) return
+      const roster = await prisma.roster.findFirst({
+        where: { leagueId: z.leagueId, platformUserId: defeatedWhispererUserId },
+      })
+      await prisma.$transaction(async (tx) => {
+        await tx.zombieCoWhisperer.update({
+          where: { id: co.id },
+          data: { wasDefeated: true, defeatedAtWeek: week, ambushesRemaining: 0 },
+        })
+        if (roster) await tx.zombieLeagueTeam.update({
+          where: { leagueId_rosterId: { leagueId: z.leagueId, rosterId: roster.id } },
+          data: { status: 'Zombie', isWhisperer: false, weekBecameZombie: week },
+        })
+      })
+      await notifyCommissioner(z.leagueId, 'whisperer_overthrown', 'Second Whisperer defeated',
+        'The second Whisperer joined the Horde; the first seat remains active.', { week, relatedUserId: defeatedWhispererUserId })
+      return
+    }
+  }
   const rec = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId } })
+  if (defeatedWhispererUserId && rec?.userId !== defeatedWhispererUserId) return
   if (!rec) return
 
   await prisma.whispererRecord.update({
