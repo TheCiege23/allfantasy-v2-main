@@ -22,13 +22,13 @@ function read(rel: string): string {
 }
 
 describe('D.2 — SLEEPER_POOL_TABLE_COLUMNS spec', () => {
-  it('declares the 18 columns the user requested (RK, PLAYER, ADP, AI ADP, BYE, PTS, AVG, …)', () => {
+  it('declares the 18 columns the user requested (RK, PLAYER, ADP, AF ADP, BYE, PTS, AVG, …)', () => {
     const labels = SLEEPER_POOL_TABLE_COLUMNS.map((c) => c.label)
     expect(labels).toEqual([
       'RK',
       'PLAYER',
       'ADP',
-      'AI ADP',
+      'AF ADP',
       'BYE',
       'PTS',
       'AVG',
@@ -65,9 +65,9 @@ describe('D.2 — SLEEPER_POOL_TABLE_COLUMNS spec', () => {
     expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeLessThan(80)
   })
 
-  it('includes ADP, AI ADP, and projection columns (the data E.2.7 unlocked)', () => {
+  it('includes ADP, AF ADP, and projection columns (the data E.2.7 unlocked)', () => {
     const keys = SLEEPER_POOL_TABLE_COLUMNS.map((c) => c.key)
-    for (const k of ['adp', 'aiAdp', 'pts', 'avg']) {
+    for (const k of ['adp', 'afAdp', 'pts', 'avg']) {
       expect(keys).toContain(k)
     }
   })
