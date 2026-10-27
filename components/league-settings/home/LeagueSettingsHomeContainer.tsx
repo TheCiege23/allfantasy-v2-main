@@ -19,6 +19,8 @@ import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettings
 import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
 import { GuillotineRulesEditor } from './GuillotineRulesEditor'
 import { GuillotineChopRulesEditor, patchChopRules } from './GuillotineChopRulesEditor'
+import { PirateRulesEditor } from './PirateRulesEditor'
+import type { PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
 import { CommissionerCenter } from './CommissionerCenter'
@@ -86,6 +88,7 @@ export function LeagueSettingsHomeContainer({
   const [draft, setDraft] = useState<SettingsHomeDraft | null>(null)
   const [hasAfCommissionerSub, setHasAfCommissionerSub] = useState(Boolean(ctx.hasAfCommissionerSub))
   const [guillotineState, setGuillotineState] = useState<SettingsHomeGuillotine | null>(null)
+  const [pirateRules, setPirateRules] = useState<PirateRules | null>(null)
 
   useEffect(() => {
     const ac = new AbortController()
@@ -152,9 +155,10 @@ export function LeagueSettingsHomeContainer({
       rosterSlots,
       draft,
       guillotine: guillotineState,
+      pirateRules,
       inviteUrl: leagueJoinUrl(nativeLeagueInviteCode(effectiveLeague.settings, effectiveLeague.invites)),
     })
-  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState])
+  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState, pirateRules])
 
   const subCtx = useMemo(() => ({ ...ctx, league: effectiveLeague, hasAfCommissionerSub }), [ctx, effectiveLeague, hasAfCommissionerSub])
 
@@ -221,6 +225,9 @@ export function LeagueSettingsHomeContainer({
             />
           ),
         }
+      }
+      if (id === 'pirate-rules') {
+        return { title: SUB_PAGE_TITLES[id], content: <PirateRulesEditor leagueId={leagueId} onSaved={setPirateRules} /> }
       }
       return {
         title: SUB_PAGE_TITLES[id],
