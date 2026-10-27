@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ games: vi.fn(), fetch: vi.fn(), upsert: vi.fn(), ensure: vi.fn() }))
+const h = vi.hoisted(() => ({ games: vi.fn(), fetch: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn(), ensure: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   sportsGame: { findMany: h.games },
-  gameSchedule: { upsert: h.upsert },
+  gameSchedule: { upsert: h.upsert, deleteMany: h.deleteMany },
   $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
 } }))
 vi.mock('@/lib/workers/api-chain', () => ({ apiChain: { fetch: h.fetch } }))
@@ -38,6 +38,9 @@ describe('provider game to Zombie scoring week', () => {
   it('maps a date-only NBA game without inventing a lineup lock', async () => {
     h.fetch.mockResolvedValue({ data: [{ id: 'nba-1', homeTeam: 'BOS', awayTeam: 'NYK', date: '2026-10-20' }] })
     await runScheduleImporter({ sports: ['NBA'], season: 2026 })
+    expect(h.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ weekOrRound: { in: [0, 500] } }),
+    }))
     expect(h.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ weekOrRound: 1, startTime: null }),
     }))
