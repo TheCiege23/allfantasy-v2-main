@@ -90,6 +90,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'rollover': () => import('../rollover/handler'),
   'roster-config': () => import('../roster-config/handler'),
   'season-forecast': () => import('../season-forecast/handler'),
+  'season-recap-ai': () => import('../season-recap-ai/handler'),
   'season-results': () => import('../season-results/handler'),
   'settings': () => import('../settings/handler'),
   'side-contests': () => import('../side-contests/handler'),
