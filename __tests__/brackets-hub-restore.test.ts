@@ -219,7 +219,7 @@ describe("brackets hub restore: pre-restoration literals removed", () => {
       ">MLB Postseason Bracket<",
       ">NHL Playoff Bracket<",
       ">Up next<",
-      "MLB & NHL brackets open now",
+      "Bracket leagues open now",
     ]
     for (const phrase of banned) {
       expect(
@@ -241,6 +241,8 @@ describe("brackets hub restore: i18n parity", () => {
     "brk.hub.v3.subtitle",
     "brk.hub.v3.cta.mlb",
     "brk.hub.v3.cta.nhl",
+    "brk.hub.v3.cta.cfp",
+    "brk.hub.v3.cta.nbaCup",
     "brk.hub.v3.upNext.title",
     "brk.hub.v3.upNext.ncaaf",
     "brk.hub.v3.upNext.nfl",
@@ -368,7 +370,7 @@ describe("brackets hub restore: i18n parity", () => {
     ["zh", "brk.hub.v2.feature.format", "12 個小組 + 淘汰賽"],
     ["vi", "brk.hub.v2.feature.free", "Miễn phí 100%"],
     // v3 hero spot checks — one or two per locale.
-    ["en", "brk.hub.v3.openBadge", "MLB & NHL brackets open now"],
+    ["en", "brk.hub.v3.openBadge", "Bracket leagues open now"],
     ["en", "brk.hub.v3.upNext.nfl", "NFL Playoffs · January"],
     ["es", "brk.hub.v3.titleLine2", "Desafío de Brackets"],
     ["es", "brk.hub.sports.statusEnded", "Finalizado"],
@@ -389,7 +391,7 @@ describe("brackets hub restore: i18n parity", () => {
   it("unsupported locale falls back to English", () => {
     expect(bracketsT("xx", "brk.hub.v3.titleLine1")).toBe("AF Playoff")
     expect(bracketsT("xx", "brk.hub.v3.titleLine2")).toBe("Bracket Challenge")
-    expect(bracketsT("xx", "brk.hub.v3.openBadge")).toBe("MLB & NHL brackets open now")
+    expect(bracketsT("xx", "brk.hub.v3.openBadge")).toBe("Bracket leagues open now")
   })
 })
 
