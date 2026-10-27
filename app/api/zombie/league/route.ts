@@ -314,12 +314,13 @@ export async function GET(req: Request) {
     league: {
       ...z,
       teams: z.teams.map(team),
-      whispererRecord: viewer.canSee
+      whispererRecord: viewer.canSee || z.whispererRecord?.userId === session.user.id
         ? await withWhispererDisplayName(z.whispererRecord)
         : redactWhispererRecord(z.whispererRecord),
-      coWhisperers: viewer.canSee
-        ? await Promise.all(z.coWhisperers.map((record) => withWhispererDisplayName(record)))
-        : z.coWhisperers.map((record) => redactWhispererRecord(record)),
+      coWhisperers: await Promise.all(z.coWhisperers.map((record) =>
+        viewer.canSee || record.userId === session.user.id
+          ? withWhispererDisplayName(record)
+          : Promise.resolve(redactWhispererRecord(record)))),
       counts: {
         ...counts,
         horde: horde,
@@ -348,7 +349,7 @@ export async function GET(req: Request) {
     winCards,
     hordeSize: horde,
     survivorCount: surv,
-    myTeam: myTeam ? team(myTeam) : myTeam,
+    myTeam: myTeam?.status === 'Whisperer' ? myTeam : (myTeam ? team(myTeam) : myTeam),
     myActiveItemCount,
     myPendingItemCount,
     myResources: {
