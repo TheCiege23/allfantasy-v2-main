@@ -60,6 +60,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'intro': () => import('../intro/handler'),
   'intro-seen': () => import('../intro-seen/handler'),
   'intro-status': () => import('../intro-status/handler'),
+  'ir-auto-move': () => import('../ir-auto-move/handler'),
   'keeper-war-room': () => import('../keeper-war-room/handler'),
   'ldi-heatmap': () => import('../ldi-heatmap/handler'),
   'legacy-score': () => import('../legacy-score/handler'),

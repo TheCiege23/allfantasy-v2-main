@@ -39,6 +39,8 @@ export type LeagueOfficeInput = {
     /** Commissioners only. */
     collected: { cents: number; paidTeams: number } | null
   } | null
+  /** IR auto-move (lib/ir-activation) is running in this league. */
+  irAutoMove?: boolean
   /** Dynasty leagues between seasons: the rollover, already worded for this viewer (lib/season-rollover). */
   offseason?: readonly string[] | null
 }
@@ -118,6 +120,8 @@ export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | nul
   }
   if (input.viewerTeamManaged) lines.push('AllFantasy is setting your lineup while you are away; saving a lineup yourself stops it.')
   if (input.eliminatedLineupRule) lines.push(input.eliminatedLineupRule)
+  if (input.irAutoMove)
+    lines.push('IR auto-move is on: once a player on IR is activated, AllFantasy moves them to the bench within the hour, or tells the manager to make room when the bench or roster is full.')
   if (input.rookieOrderRounds) lines.push(input.rookieOrderRounds)
 
   if (input.log?.length) {
