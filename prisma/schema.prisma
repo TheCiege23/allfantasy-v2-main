@@ -10325,6 +10325,7 @@ model ZombieWeeklyResolution {
   weaponAwards           Json?
   resolvedAt             DateTime?
   requiresStatCorrection Boolean      @default(false)
+  settlementSnapshot     Json?
   createdAt              DateTime     @default(now())
   league                 ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
