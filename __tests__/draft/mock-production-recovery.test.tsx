@@ -186,3 +186,18 @@ describe('native NBA league entry and checkpoint', () => {
     expect(screen.getByTestId('mock-draft-resume')).toBeDefined()
   })
 })
+
+describe('mock room headshots', () => {
+  it('shows the player headshot in the pool, and a mock saved before headshots still restores with initials', async () => {
+    const cp = checkpoint()
+    cp.state.availablePlayers[0] = { ...cp.state.availablePlayers[0], headshotUrl: 'https://cdn.example.com/headshots/alpha.png', teamLogoUrl: null } as any
+    localStorage.setItem(key, JSON.stringify(cp))
+    render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-resume')
+    const alpha = screen.getAllByTestId('mock-draft-player-avatar-Alpha-root')[0]!
+    expect(alpha.getAttribute('data-avatar-source')).toBe('headshot')
+    // Bravo was saved without any asset fields: it falls back to initials, not a broken image.
+    const bravo = screen.getAllByTestId('mock-draft-player-avatar-Bravo-root')[0]!
+    expect(bravo.getAttribute('data-avatar-source')).toBe('fallback')
+  })
+})
