@@ -9,6 +9,7 @@ const h = vi.hoisted(() => {
     zombieBashingEvent: { count: f() },
     zombieMaulingEvent: { count: f() },
     zombieChimmyAction: { count: f() },
+    zombieExternalWeeklyPayout: { count: f() },
     roster: { findMany: f() },
     zombieTeamItem: { findMany: f(), deleteMany: f(), update: f(), create: f() },
     zombieLeagueTeam: { findMany: f(), update: f(), updateMany: f() },
@@ -87,6 +88,7 @@ beforeEach(() => {
   h.db.zombieBashingEvent.count.mockResolvedValue(0)
   h.db.zombieMaulingEvent.count.mockResolvedValue(0)
   h.db.zombieChimmyAction.count.mockResolvedValue(0)
+  h.db.zombieExternalWeeklyPayout.count.mockResolvedValue(0)
   h.db.roster.findMany.mockResolvedValue([
     { id: 'z', platformUserId: 'z-user' }, { id: 'h', platformUserId: 'h-user' },
   ])
@@ -133,6 +135,12 @@ describe('outcome-changing correction transaction', () => {
     expect(h.db.zombieInfectionEvent.create).toHaveBeenCalledOnce()
     expect(h.db.zombieWeeklyWinnings.upsert).toHaveBeenCalledTimes(2)
     expect(h.db.leagueChatMessage.upsert).toHaveBeenCalledOnce()
+  })
+
+  it('holds a paid week when an external prize has been recorded', async () => {
+    h.db.zombieExternalWeeklyPayout.count.mockResolvedValue(1)
+    expect(await reconcileOutcomeChangingCorrection(input)).toBeNull()
+    expect(h.db.zombieTeamItem.deleteMany).not.toHaveBeenCalled()
   })
 
   it('declines replay if an unexpected infection event was recorded', async () => {
