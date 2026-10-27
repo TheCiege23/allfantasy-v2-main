@@ -185,12 +185,14 @@ ${infLines.length ? infLines.join('\n') : 'None'}`
     })
     const serums = items.filter((i) => i.itemType.includes('serum') && !i.isUsed).length
     const awardedWeapons = items.filter((i) => i.acquiredAtWeek === week && i.itemType.startsWith('weapon_'))
+    const awardedSerums = items.filter((i) => i.acquiredAtWeek === week && i.itemType.includes('serum'))
     const serumAwards = await prisma.zombieResourceLedgerEntry.findMany({
       where: { leagueId, week, resourceType: 'serum', delta: { gt: 0 } },
       select: { rosterId: true, delta: true },
     })
     const awardLines: string[] = []
     for (const item of awardedWeapons) awardLines.push(`${await displayNameForUser(leagueId, item.userId)} won ${item.itemLabel}`)
+    for (const item of awardedSerums) awardLines.push(`${await displayNameForUser(leagueId, item.userId)} won ${item.itemLabel} (${item.acquiredReason ?? 'weekly award'})`)
     for (const award of serumAwards) {
       const owner = await prisma.roster.findUnique({ where: { id: award.rosterId }, select: { platformUserId: true } })
       if (owner?.platformUserId) awardLines.push(`${await displayNameForUser(leagueId, owner.platformUserId)} won ${award.delta} serum${award.delta === 1 ? '' : 's'}`)
