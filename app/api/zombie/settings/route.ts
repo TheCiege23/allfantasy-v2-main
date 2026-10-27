@@ -57,7 +57,7 @@ export async function PATCH(req: Request) {
   const whispererCountPatch = num('whispererCount')
   if (whispererCountPatch !== undefined &&
       (whispererCountPatch !== 1 && whispererCountPatch !== 2 ||
-       whispererCountPatch === 2 && (z.sport.toUpperCase() === 'NFL' || (experienceModePatch ?? z.experienceMode) === 'simple'))) {
+       whispererCountPatch === 2 && (!['NBA', 'NHL', 'MLB'].includes(z.sport.toUpperCase()) || (experienceModePatch ?? z.experienceMode) === 'simple'))) {
     return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
   }
   if (experienceModePatch === 'simple' && z.whispererCount === 2 && whispererCountPatch !== 1) {
