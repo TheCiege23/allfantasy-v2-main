@@ -1,10 +1,6 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 1,
-  "failingFiles": [
-    "__tests__/world-cup-components.test.tsx"
-  ],
-  "reasons": {
-    "__tests__/world-cup-components.test.tsx": "4 of 108 tests target a World Cup chat drawer that has since been restructured (mode tabs, formatting, image upload, private-Chimmy count). Tournament is over; needs an owner to decide whether to keep or retire WC chat coverage."
-  }
+  "count": 0,
+  "failingFiles": [],
+  "reasons": {}
 }

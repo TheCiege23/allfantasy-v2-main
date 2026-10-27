@@ -21,6 +21,8 @@ type IntegrityApi = {
     /** False in an imported league: its trades go through on the host, so there is nothing to hold. */
     holdFlaggedTradesSupported?: boolean
     tankingWaiverPatternCheck: boolean
+    /** Anti-tanking penalties (League.settings, lib/integrity/tankingPenalties.ts). Default: warning, then a 1st-round pick. */
+    tankingPenalties?: { enabled: boolean; pickAtStrike: number; pickRound: number }
   }
   stats: {
     openCollusion: number
@@ -78,6 +80,7 @@ export function IntegritySettingsPanel(props: {
           tankingWaiverPatternCheck: data.settings.tankingWaiverPatternCheck,
           tradeAlertsEnabled: data.settings.tradeAlertsEnabled !== false,
           holdFlaggedTrades: data.settings.holdFlaggedTrades === true,
+          ...(data.settings.tankingPenalties ? { tankingPenalties: data.settings.tankingPenalties } : {}),
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { settings?: IntegrityApi['settings']; error?: string }
@@ -262,6 +265,73 @@ export function IntegritySettingsPanel(props: {
             />
             Flag suspicious waiver drops (experimental)
           </label>
+
+          {s.tankingPenalties ? (
+            <div className="mt-3 rounded-lg border border-white/[0.08] p-2" data-testid="tanking-penalties">
+              <label className="flex items-center gap-2 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={s.tankingPenalties.enabled}
+                  onChange={(e) =>
+                    setData((d) =>
+                      d && d.settings.tankingPenalties
+                        ? { ...d, settings: { ...d.settings, tankingPenalties: { ...d.settings.tankingPenalties, enabled: e.target.checked } } }
+                        : d
+                    )
+                  }
+                />
+                Penalties: a warning first, then a lost draft pick
+              </label>
+              <p className="mt-1 text-[11px] text-white/45">
+                A flag only warns the manager. Confirming a flag (Escalate) is a strike. At the strike below, the team loses its own pick
+                in the round below, from the nearest draft it still holds one.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+                <label className="flex items-center gap-1">
+                  Pick lost at strike
+                  <select
+                    value={s.tankingPenalties.pickAtStrike}
+                    disabled={!s.tankingPenalties.enabled}
+                    onChange={(e) =>
+                      setData((d) =>
+                        d && d.settings.tankingPenalties
+                          ? { ...d, settings: { ...d.settings, tankingPenalties: { ...d.settings.tankingPenalties, pickAtStrike: Number(e.target.value) } } }
+                          : d
+                      )
+                    }
+                    className="rounded border border-white/15 bg-transparent px-1"
+                  >
+                    {[1, 2, 3, 4].map((n) => (
+                      <option key={n} value={n}>
+                        {n === 1 ? '1 (no warning)' : n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  Round of the pick
+                  <select
+                    value={s.tankingPenalties.pickRound}
+                    disabled={!s.tankingPenalties.enabled}
+                    onChange={(e) =>
+                      setData((d) =>
+                        d && d.settings.tankingPenalties
+                          ? { ...d, settings: { ...d.settings, tankingPenalties: { ...d.settings.tankingPenalties, pickRound: Number(e.target.value) } } }
+                          : d
+                      )
+                    }
+                    className="rounded border border-white/15 bg-transparent px-1"
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           <p className="mt-2 text-[11px] text-white/45">Sensitivity</p>
           <div className="mt-1 flex flex-wrap gap-2">

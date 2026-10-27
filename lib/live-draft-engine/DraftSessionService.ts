@@ -659,6 +659,21 @@ export type StartDraftSessionResult =
   | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE'; error?: string }
 
 export async function startDraftSession(leagueId: string): Promise<StartDraftSessionResult> {
+  const started = await startDraftSessionCore(leagueId)
+  // A forfeited pick at the very top of the board is skipped before anyone is put on the clock for it
+  // (./forfeitedPickSkips.ts); every later one is skipped as picks are made.
+  if (started.ok) {
+    await import('./forfeitedPickSkips')
+      .then(async ({ skipForfeitedPicksOnClock }) => {
+        const { submitPick } = await import('./PickSubmissionService')
+        return skipForfeitedPicksOnClock(leagueId, submitPick)
+      })
+      .catch((err) => console.error('[draft] forfeited pick skip at start failed', err))
+  }
+  return started
+}
+
+async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessionResult> {
   const seasonSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
   if (seasonSetupBlocked(seasonSettings)) {
     if (!(await hasSeasonDraftRelease(leagueId, seasonSettings))) return { ok: false, reason: 'session_not_ready' }
