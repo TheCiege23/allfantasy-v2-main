@@ -148,8 +148,8 @@ export async function PATCH(req: Request) {
   }
 
   const serumReviveCountPatch = num('serumReviveCount')
-  if (serumReviveCountPatch !== undefined && (!Number.isInteger(serumReviveCountPatch) || serumReviveCountPatch < 1 || serumReviveCountPatch > 10)) {
-    return NextResponse.json({ error: 'serumReviveCount must be an integer between 1 and 10.' }, { status: 400 })
+  if (serumReviveCountPatch !== undefined && (!Number.isInteger(serumReviveCountPatch) || serumReviveCountPatch < 1 || serumReviveCountPatch > 5)) {
+    return NextResponse.json({ error: 'serumReviveCount must be an integer between 1 and 5.' }, { status: 400 })
   }
 
   const configPatch = {
