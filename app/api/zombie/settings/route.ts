@@ -165,6 +165,8 @@ export async function PATCH(req: Request) {
     ...(bool('whispererIsPublic') !== undefined ? { whispererIsPublic: bool('whispererIsPublic') } : {}),
     ...(seasonAmbushPatch !== undefined ? { whispererAmbushCount: seasonAmbushPatch } : {}),
     ...(experienceModePatch === 'simple' ? { whispererAmbushCount: 0 } : {}),
+    ...(experienceModePatch === 'enhanced' && z.experienceMode === 'simple' && seasonAmbushPatch === undefined
+      ? { whispererAmbushCount: 3 } : {}),
     ...(bool('weeklyPayoutEnabled') !== undefined ? { weeklyPayoutEnabled: bool('weeklyPayoutEnabled') } : {}),
     ...(bool('ultimateSurvivorPot') !== undefined ? { ultimateSurvivorPot: bool('ultimateSurvivorPot') } : {}),
     ...(weeklyUpdateDayPatch !== undefined ? { weeklyUpdateDay: weeklyUpdateDayPatch } : {}),
