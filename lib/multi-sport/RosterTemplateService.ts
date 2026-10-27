@@ -13,6 +13,8 @@ import {
   isFlexibleCanonicalSlot,
   readSavedRosterLayout,
 } from '@/lib/redraft-core-contract/savedRosterLayout'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { importedLineupTemplateSlots, type SlotCatalog } from '@/lib/league/importedLineupTemplate'
 
 export interface RosterTemplateSlotDto {
   slotName: string
@@ -528,6 +530,56 @@ function savedFootballRedraftTemplate(
 }
 
 /**
+ * The sport's roster-slot catalog (`lib/<sport>-roster/*RosterTemplates.ts`), or null for a sport
+ * without one. Dynamic imports, as before: these catalogs stay out of every bundle that only needs the
+ * DB / default template.
+ */
+async function loadSlotCatalog(sport: SportType): Promise<SlotCatalog | null> {
+  try {
+    if (sport === 'NFL') return (await import('@/lib/nfl-roster/NflRosterTemplates')).NFL_SLOT_MAP
+    if (sport === 'NBA') return (await import('@/lib/nba-roster/NbaRosterTemplates')).NBA_SLOT_MAP
+    if (sport === 'NCAAB') return (await import('@/lib/ncaab-roster/NcaabRosterTemplates')).NCAAB_SLOT_MAP
+    if (sport === 'MLB') return (await import('@/lib/mlb-roster/MlbRosterTemplates')).MLB_SLOT_MAP
+    if (sport === 'NCAAF') return (await import('@/lib/ncaaf-roster/NcaafRosterTemplates')).NCAAF_SLOT_MAP
+    if (sport === 'NHL') return (await import('@/lib/nhl-roster/NhlRosterTemplates')).NHL_SLOT_MAP
+    if (sport === 'SOCCER') return (await import('@/lib/soccer-roster/SoccerRosterTemplates')).SOCCER_SLOT_MAP
+  } catch {
+    /* fall through to generic */
+  }
+  return null
+}
+
+/**
+ * 🛑 AN IMPORTED LEAGUE USES ITS PROVIDER'S LINEUP, NOT OURS (owner, 2026-10-27). The import stores the
+ * provider's roster positions in `settings.roster_positions`; `importedLineupTemplateSlots` maps them.
+ * Ahead of every other source, because an import's lineup is the provider's to set — a commissioner
+ * layout saved here cannot change it there. Null (unreadable or absent positions) keeps the old chain.
+ * Native leagues never reach it.
+ */
+async function importedProviderTemplate(
+  league: { platform?: string | null; sport: string | null; settings: unknown; taxiSlots?: number | null; irSlots?: number | null },
+  sport: SportType,
+  leagueId: string,
+  normalizedFormat: string,
+): Promise<RosterTemplateDto | null> {
+  if (!isImportedPlatform(league.platform)) return null
+  const sportRaw = String(league.sport ?? sport).toUpperCase()
+  const football = sportRaw === 'NFL' || sportRaw === 'NCAAF'
+  const slots = importedLineupTemplateSlots(
+    { sport: sportRaw, settings: league.settings, taxiSlots: league.taxiSlots, irSlots: league.irSlots },
+    football ? null : await loadSlotCatalog(sport),
+  )
+  if (!slots) return null
+  return {
+    templateId: `imported-${String(league.platform).toLowerCase()}-${leagueId}`,
+    sportType: sport,
+    name: 'Imported League Roster',
+    formatType: normalizedFormat,
+    slots,
+  }
+}
+
+/**
  * Get roster template for sport (and optional format). Prefer DB; else in-memory default.
  * When leagueId is provided and league is IDP with config, uses commissioner IDP preset (roster slots from IdpLeagueConfig).
  */
@@ -547,6 +599,9 @@ export async function getRosterTemplate(
         select: {
           settings: true,
           sport: true,
+          platform: true,
+          taxiSlots: true,
+          irSlots: true,
           leagueType: true,
           isDynasty: true,
           leagueVariant: true,
@@ -555,6 +610,9 @@ export async function getRosterTemplate(
           keeperPhaseActive: true,
         },
       })
+      const importedTemplate = league ? await importedProviderTemplate(league, sport, leagueId, normalizedFormat) : null
+      if (importedTemplate) return importedTemplate
+
       const settings = (league?.settings as Record<string, unknown>) ?? {}
       const sportPrefix = `${(league?.sport ?? sport).toLowerCase()}_roster_`
       const customConfig = settings[`${sportPrefix}config`] as Record<string, unknown> | undefined
@@ -562,31 +620,10 @@ export async function getRosterTemplate(
         const customSlots = customConfig.slots as Record<string, number>
 
         // Load sport-specific slot definitions for eligible positions
-        let slotDefsMap: Map<string, string[]> | null = null
-        try {
-          if (sport === 'NFL') {
-            const { NFL_SLOT_MAP } = await import('@/lib/nfl-roster/NflRosterTemplates')
-            slotDefsMap = new Map([...NFL_SLOT_MAP].map(([k, v]) => [k, v.eligiblePositions]))
-          } else if (sport === 'NBA') {
-            const { NBA_SLOT_MAP } = await import('@/lib/nba-roster/NbaRosterTemplates')
-            slotDefsMap = new Map([...NBA_SLOT_MAP].map(([k, v]) => [k, v.eligiblePositions]))
-          } else if (sport === 'NCAAB') {
-            const { NCAAB_SLOT_MAP } = await import('@/lib/ncaab-roster/NcaabRosterTemplates')
-            slotDefsMap = new Map([...NCAAB_SLOT_MAP].map(([k, v]) => [k, v.eligiblePositions]))
-          } else if (sport === 'MLB') {
-            const { MLB_SLOT_MAP } = await import('@/lib/mlb-roster/MlbRosterTemplates')
-            slotDefsMap = new Map([...MLB_SLOT_MAP].map(([k, v]) => [k, v.eligiblePositions]))
-          } else if (sport === 'NCAAF') {
-            const { NCAAF_SLOT_MAP } = await import('@/lib/ncaaf-roster/NcaafRosterTemplates')
-            slotDefsMap = new Map([...NCAAF_SLOT_MAP].map(([k, v]) => [k, v.eligiblePositions]))
-          } else if (sport === 'NHL') {
-            const { NHL_SLOT_MAP } = await import('@/lib/nhl-roster/NhlRosterTemplates')
-            slotDefsMap = new Map([...NHL_SLOT_MAP].map(([k, v]) => [k, v.eligiblePositions]))
-          } else if (sport === 'SOCCER') {
-            const { SOCCER_SLOT_MAP } = await import('@/lib/soccer-roster/SoccerRosterTemplates')
-            slotDefsMap = new Map([...SOCCER_SLOT_MAP].map(([k, v]) => [k, v.eligiblePositions]))
-          }
-        } catch { /* fall through to generic */ }
+        const catalog = await loadSlotCatalog(sport)
+        const slotDefsMap: Map<string, string[]> | null = catalog
+          ? new Map([...catalog].map(([k, v]) => [k, v.eligiblePositions]))
+          : null
 
         const reserveSlots = new Set([
           'BN', 'IR', 'IL', 'IL_PLUS', 'IR_PLUS', 'TAXI', 'DEVY', 'CAMPUS',
