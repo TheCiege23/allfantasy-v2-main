@@ -29,8 +29,8 @@ the one the renew path itself uses.
 
 | | Feature | Tier | Notes |
 |---|---|---|---|
-| ◐ | Live rookie draft order (§1.1) — non-playoff teams by reverse max PF / PF / record, playoff teams by finish then seed, worse seed first within a round, final order seats the next rookie draft | Free / Plan | Built: `lib/rookie-order/` (engine, native + Sleeper bracket adapters, `liveRookieOrderService`), Draft settings → live order panel, saved final order used by `createNextLeagueDraft`. Calculate is free; the automation is `commissioner_automation` and keeps running for the season after a plan lapses. Imported platforms: #2543. **Gaps:** (1) native leagues have no true max PF — `loadNative` falls back to points for with a warning; (2) nothing refreshes the order when a playoff round ends — only opening the panel or building the next draft does; (3) no notice or chat post per round. |
-| ◐ | Weighted rookie lottery | no gate | `lib/draft-lottery/` — seeded, runs once per rookie draft when the method is `weighted_lottery`, year 2+ dynasty only. **Gaps:** its "max PF" weighting and tiebreak read points for (`standingsForLottery.ts`); the `reverse_max_pf` fallback is coerced to reverse standings. |
+| ✅ | Live rookie draft order (§1.1) — non-playoff teams by reverse max PF / PF / record, playoff teams by finish then seed, worse seed first within a round, final order seats the next rookie draft | Free / Plan | `lib/rookie-order/` (engine, native + Sleeper bracket adapters, `liveRookieOrderService`), Draft settings → live order panel, saved final order used by `createNextLeagueDraft`. Calculate is free; the automation is `commissioner_automation` and keeps running for the season after a plan lapses. Imported platforms: #2543. True max PF for native leagues (#2794: `nativeMaxPf.ts`, `loadNativeMaxPf.ts`). The order refreshes hourly and, as each playoff round locks picks, notifies the commissioner with an optional league chat post (#2795: `roundNotices.ts`, `roundNoticeService.ts`, run from `app/api/redraft/waiver-process`). |
+| ◐ | Weighted rookie lottery | no gate | `lib/draft-lottery/` — seeded, runs once per rookie draft when the method is `weighted_lottery`, year 2+ dynasty only. Its max PF weighting and tiebreak now read true max PF when every team has one (#2794). **Gap:** the `reverse_max_pf` fallback is coerced to reverse standings (`WeightedDraftLotteryEngine.ts`). |
 | ✅ | Toilet bowl / consolation decides pick 1 | no gate | #2716, #2730, #2735: `consolation_plays_for = pick`, loser (default) or winner gets 1.01; dynasty and keeper only. Read by the live rookie order; the lottery path ignores it. |
 | ⬜ | Legacy rookie-order route is ungated | Plan | `app/api/commissioner/leagues/[leagueId]/rookie-draft-order` (PUT) has no entitlement check though its header says AF Commissioner; the live route is the gated one. |
 
@@ -63,8 +63,8 @@ the one the renew path itself uses.
 
 ## Order of work
 
-1. **True max PF for native leagues and a rookie order that updates itself after every playoff round**, with a notice
-   to the commissioner and an optional league chat post — the spec's flagship, and the fix the lottery's max PF needs too.
+1. ~~True max PF for native leagues and a rookie order that updates itself after every playoff round, with a notice
+   to the commissioner and an optional league chat post.~~ Done: #2794, #2795.
 2. Dynasty rollover wizard on the Commissioner Hub (order → taxi → dues → schedule), reusing the redraft wizard.
 3. Taxi rules that are stored but not enforced (lock week, promotion window), then max years.
 4. IR auto-move on activation.

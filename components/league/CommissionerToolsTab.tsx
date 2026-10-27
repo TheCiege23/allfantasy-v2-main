@@ -6,6 +6,12 @@ import { Switch } from '@/components/ui/switch'
 import { ArrowRight, Lock, Shield, UserCog } from 'lucide-react'
 import { CommissionerControlPanel } from '@/components/league-settings/CommissionerControlPanel'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
+import {
+  HOLD_FLAGGED_TRADES_LABELS,
+  HOLD_FLAGGED_TRADES_MODES,
+  holdModeFromResponse,
+  type HoldFlaggedTradesMode,
+} from '@/lib/integrity/holdFlaggedTradesMode'
 import { describeCollusionSensitivity, INTEGRITY_SENSITIVITIES, normalizeSensitivity, type IntegritySensitivity } from '@/lib/integrity/sensitivity'
 
 interface CommissionerToolsTabProps {
@@ -73,7 +79,7 @@ type IntegrityState = {
   tankingMonitorEnabled: boolean
   collusionSensitivity: IntegritySensitivity
   tradeAlertsEnabled: boolean
-  holdFlaggedTrades: boolean
+  holdFlaggedTradesMode: HoldFlaggedTradesMode
 }
 
 function IntegrityControls({ leagueId }: { leagueId: string }) {
@@ -95,7 +101,7 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
           tankingMonitorEnabled: Boolean(d.settings.tankingMonitorEnabled),
           collusionSensitivity: normalizeSensitivity(d.settings.collusionSensitivity),
           tradeAlertsEnabled: d.settings.tradeAlertsEnabled !== false,
-          holdFlaggedTrades: d.settings.holdFlaggedTrades === true,
+          holdFlaggedTradesMode: holdModeFromResponse(d.settings),
         })
       })
       .catch(() => { if (!cancelled) setStatus('Could not load the integrity settings.') })
@@ -149,15 +155,22 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
         <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2.5">
           <div>
             <span className="block text-sm text-white/80">Hold flagged trades</span>
-            <span className="block text-xs text-white/45">A trade the collusion check flags waits for you to approve or veto it instead of going through.</span>
+            <span className="block text-xs text-white/45">{HOLD_FLAGGED_TRADES_LABELS[value?.holdFlaggedTradesMode ?? 'severe'].detail}</span>
           </div>
-          <Switch
-            checked={value?.holdFlaggedTrades ?? false}
+          <select
+            value={value?.holdFlaggedTradesMode ?? 'severe'}
             disabled={!value}
-            onCheckedChange={(checked) => void save({ holdFlaggedTrades: checked })}
+            onChange={(e) => void save({ holdFlaggedTradesMode: e.target.value as HoldFlaggedTradesMode })}
             aria-label="Hold flagged trades"
             data-testid="survivor-integrity-hold-trades"
-          />
+            className="rounded-lg border border-white/15 bg-transparent px-2 py-1 text-xs text-white/80"
+          >
+            {HOLD_FLAGGED_TRADES_MODES.map((m) => (
+              <option key={m} value={m}>
+                {HOLD_FLAGGED_TRADES_LABELS[m].label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex items-center justify-between gap-4 py-2.5">
           <div className="min-w-0">

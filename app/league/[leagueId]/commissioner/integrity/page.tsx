@@ -56,7 +56,7 @@ function coverageText(kind: 'collusion' | 'tanking', status: IntegrityScanStatus
   if (status === 'unsupported') {
     return kind === 'collusion'
       ? 'Unavailable for this league. Trades are scanned in leagues run on AllFantasy and in leagues imported from Sleeper.'
-      : 'Unavailable for this league. Lineups are scanned only in leagues run on AllFantasy, not in imported leagues.'
+      : 'Unavailable for this league. Lineups are scanned in leagues run on AllFantasy and in leagues imported from Sleeper.'
   }
   if (status === 'disabled') return 'Monitoring is off.'
   if (status === 'never_scanned') return 'Enabled; no completed scan recorded yet.'
