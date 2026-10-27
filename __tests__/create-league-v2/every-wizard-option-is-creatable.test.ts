@@ -30,9 +30,9 @@ import {
   getIdpDraftTypeOptions,
   getScoringPresetOptionsForSelection,
   getTeamCountOptions,
-  getSurvivorTribeOptions,
   isSportAllowedForType,
 } from '@/lib/create-league-v2/rules-engine'
+import * as zombieRules from '@/lib/create-league-v2/rules-engine'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
@@ -85,7 +85,7 @@ function everyReachableChoice(): Choice[] {
             // also refits the dynasty and Best Ball playoff blocks, which this reproduces.
             let state = apply(afterFormat, { teamCount })
             if (leagueType === 'survivor') {
-              const validTribes = getSurvivorTribeOptions(teamCount)
+              const validTribes = zombieRules.getSurvivorTribeOptions(teamCount)
               state = apply(state, { survivorTribeCount: validTribes.includes(state.survivorTribeCount)
                 ? state.survivorTribeCount : validTribes[0] ?? 2 })
             }
