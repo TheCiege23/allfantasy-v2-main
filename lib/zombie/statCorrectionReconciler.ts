@@ -138,8 +138,9 @@ export async function reconcileScoreOnlyCorrection(input: {
         const infector = byUser.get(event.infectorUserId)!
         const transfer = transferByPair.get(key(victim, infector))
         const result = weekResults.find(row => [row.homeRosterId, row.awayRosterId].includes(victim) && [row.homeRosterId, row.awayRosterId].includes(infector))
-        const infectorScore = result?.homeRosterId === infector ? result.homeScore : result?.awayScore ?? 0
-        const victimScore = result?.homeRosterId === victim ? result.homeScore : result?.awayScore ?? 0
+        if (!result) throw new Error('Infection score pair missing during correction')
+        const infectorScore = result.homeRosterId === infector ? result.homeScore : result.awayScore
+        const victimScore = result.homeRosterId === victim ? result.homeScore : result.awayScore
         await tx.zombieInfectionEvent.update({
           where: { id: event.id },
           data: { winningsTransferred: transfer?.amount ?? 0, infectorScore, victimScore,
