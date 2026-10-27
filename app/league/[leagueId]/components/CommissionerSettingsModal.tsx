@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { useAutosave } from '@/lib/hooks/useAutosave'
 import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
@@ -108,6 +108,7 @@ export function CommissionerSettingsModal({
   onClose: () => void
 }) {
   const [activeTab, setActiveTab] = useState<SettingsNavTabId>('league')
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [payload, setPayload] = useState<ApiGet | null>(null)
@@ -268,6 +269,16 @@ export function CommissionerSettingsModal({
 
   useEffect(() => {
     if (!isOpen) return
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus())
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      if (opener?.isConnected) opener.focus()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -311,6 +322,7 @@ export function CommissionerSettingsModal({
           onClick={onClose}
           className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.06] text-[15px] text-white/55 transition-colors hover:bg-white/[0.12] hover:text-white md:right-4 md:top-4"
           aria-label="Close settings"
+          ref={closeButtonRef}
         >
           ✕
         </button>
