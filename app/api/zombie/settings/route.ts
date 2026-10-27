@@ -241,7 +241,8 @@ export async function PATCH(req: Request) {
     freeRewardConfig = await prisma.zombieFreeRewardConfig.findUnique({ where: { zombieLeagueId: z.id } })
   }
 
-  if (serumReviveCountPatch !== undefined) {
+  if (serumReviveCountPatch !== undefined || bool('autoSerumRevive') !== undefined ||
+      bool('serumAwardHighScore') !== undefined || bool('serumAwardOnBashMaul') !== undefined) {
     await generateRulesDocument(z.id)
   }
 
