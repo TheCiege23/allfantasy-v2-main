@@ -93,7 +93,7 @@ beforeEach(() => {
     { id: 'z', platformUserId: 'z-user' }, { id: 'h', platformUserId: 'h-user' },
   ])
   h.db.zombieTeamItem.findMany.mockResolvedValue([{
-    id: 'old-serum', teamStatusId: 'th', itemType: 'serum',
+    id: 'old-serum', teamStatusId: 'th', userId: 'h-user', itemType: 'serum',
     awardKey: 'serum:zl:3:weekly_high_score:h', acquiredAtWeek: 3,
     acquiredAt: new Date('2026-10-27T11:30:00.000Z'),
     usedAtWeek: null, activatesAtWeek: null,
