@@ -131,16 +131,21 @@ ${revivedNames.length ? `⚡ REVIVED: ${revivedNames.join(', ')}` : ''}`
   let sectionMoney: string | undefined
   if (z.updateIncludeMoney) {
     if (z.isPaid) {
-      sectionMoney = `💰 POT REPORT
-Total Pot: $${(z.potTotal ?? 0).toFixed(2)}
-Distributed this week: (see ledger)
-Remaining in pot: (see ledger)
-Top earner this week: —`
+      const payout = await prisma.zombieExternalWeeklyPayout.findUnique({
+        where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
+      })
+      const winner = payout ? await prisma.roster.findUnique({ where: { id: payout.winnerRosterId }, select: { platformUserId: true } }) : null
+      const winnerName = winner?.platformUserId ? await displayNameForUser(leagueId, winner.platformUserId) : '—'
+      sectionMoney = payout
+        ? `💰 THIRD-PARTY WEEKLY PRIZE\n${winnerName} — ${(payout.amountCents / 100).toFixed(2)} (${payout.status}; ${payout.providerName})`
+        : '💰 THIRD-PARTY WEEKLY PRIZE\nNo external prize amount recorded for this week.'
     } else {
-      sectionMoney = `🏅 POINTS REPORT
-Outbreak Points in play: ${(z.potTotal ?? 0).toFixed(1)}
-Earned this week: —
-Leader: —`
+      const leaders = await prisma.zombieWeeklyWinnings.findMany({ where: { leagueId, week }, orderBy: { amount: 'desc' }, take: 1 })
+      const leader = leaders[0]
+      const owner = leader ? await prisma.roster.findUnique({ where: { id: leader.rosterId }, select: { platformUserId: true } }) : null
+      sectionMoney = leader && owner?.platformUserId
+        ? `🏅 OUTBREAK POINTS\n${await displayNameForUser(leagueId, owner.platformUserId)} led Week ${week} with ${leader.amount.toFixed(2)} points.`
+        : '🏅 OUTBREAK POINTS\nWeekly points are pending.'
     }
   }
 
@@ -179,12 +184,23 @@ ${infLines.length ? infLines.join('\n') : 'None'}`
       where: { team: { leagueId } },
     })
     const serums = items.filter((i) => i.itemType.includes('serum') && !i.isUsed).length
+    const awardedWeapons = items.filter((i) => i.acquiredAtWeek === week && i.itemType.startsWith('weapon_'))
+    const serumAwards = await prisma.zombieResourceLedgerEntry.findMany({
+      where: { leagueId, week, resourceType: 'serum', delta: { gt: 0 } },
+      select: { rosterId: true, delta: true },
+    })
+    const awardLines: string[] = []
+    for (const item of awardedWeapons) awardLines.push(`${await displayNameForUser(leagueId, item.userId)} won ${item.itemLabel}`)
+    for (const award of serumAwards) {
+      const owner = await prisma.roster.findUnique({ where: { id: award.rosterId }, select: { platformUserId: true } })
+      if (owner?.platformUserId) awardLines.push(`${await displayNameForUser(leagueId, owner.platformUserId)} won ${award.delta} serum${award.delta === 1 ? '' : 's'}`)
+    }
     const weapons = items.filter((i) => i.itemType.startsWith('weapon_') && !i.isUsed)
     const bomb = weapons.some((i) => i.itemType === 'weapon_bomb')
     sectionInventory = `🎒 ITEM INVENTORY SNAPSHOT
 Serums held: ${serums}
 Active weapons: ${weapons.length} (${[...new Set(weapons.map((w) => w.itemType))].join(', ') || 'none'})
-Bomb status: ${bomb ? 'Active' : 'None'}`
+Bomb status: ${bomb ? 'Held' : 'None'}\nThis week's awards: ${awardLines.join('; ') || 'None recorded'}`
   }
 
   let sectionDangerMatchups: string | undefined
@@ -201,8 +217,8 @@ Bomb status: ${bomb ? 'Active' : 'None'}`
         if (!m.awayRosterId) continue
         const h = await redraftOwnerStatus(leagueId, m.homeRosterId)
         const a = await redraftOwnerStatus(leagueId, m.awayRosterId)
-        const pair = infectionRiskPair(h, a, m.homeRosterId, m.awayRosterId, leagueId)
-        if (pair) danger.push(pair)
+        const pair = infectionRiskPair(h, a)
+        if (pair && h && a) danger.push(`${await displayNameForUser(leagueId, h.userId)} vs ${await displayNameForUser(leagueId, a.userId)} — ${pair}`)
       }
     }
     sectionDangerMatchups = `⚠️ DANGER MATCHUPS — WEEK ${nextWeek}
@@ -279,21 +295,15 @@ async function redraftOwnerStatus(
 function infectionRiskPair(
   h: { userId: string; status: string } | null,
   a: { userId: string; status: string } | null,
-  homeRid: string,
-  awayRid: string,
-  leagueId: string,
 ): string | null {
-  void leagueId
-  void homeRid
-  void awayRid
   if (!h || !a) return null
   const hs = h.status.toLowerCase()
   const as = a.status.toLowerCase()
   if (hs.includes('survivor') && (as.includes('zombie') || as.includes('whisperer'))) {
-    return `🔴 Survivor vs Horde threat (matchup)`
+    return as.includes('whisperer') ? 'Whisperer threat' : 'Zombie threat'
   }
   if (as.includes('survivor') && (hs.includes('zombie') || hs.includes('whisperer'))) {
-    return `🔴 Survivor vs Horde threat (matchup)`
+    return hs.includes('whisperer') ? 'Whisperer threat' : 'Zombie threat'
   }
   return null
 }
