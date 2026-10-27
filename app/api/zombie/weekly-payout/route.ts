@@ -81,13 +81,18 @@ export async function PUT(req: Request) {
     where: { zombieLeagueId: z.id, week, type: 'weekly_update', isPosted: true },
     orderBy: { createdAt: 'desc' }, select: { id: true, isPosted: true },
   })
+  let reportRefreshPending = false
   if (announcement?.isPosted) {
-    const draft = await buildWeeklyUpdate(leagueId, week)
-    const text = composeWeeklyUpdateBody(draft)
-    await prisma.$transaction([
-      prisma.zombieAnnouncement.update({ where: { id: announcement.id }, data: { content: text } }),
-      prisma.leagueChatMessage.updateMany({ where: { zombieWeeklyAnnouncementId: announcement.id }, data: { message: text.slice(0, 100_000) } }),
-    ])
+    try {
+      const draft = await buildWeeklyUpdate(leagueId, week)
+      const text = composeWeeklyUpdateBody(draft)
+      await prisma.$transaction([
+        prisma.zombieAnnouncement.update({ where: { id: announcement.id }, data: { content: text } }),
+        prisma.leagueChatMessage.updateMany({ where: { zombieWeeklyAnnouncementId: announcement.id }, data: { message: text.slice(0, 100_000) } }),
+      ])
+    } catch {
+      reportRefreshPending = true
+    }
   }
-  return NextResponse.json({ payout })
+  return NextResponse.json({ payout, reportRefreshPending })
 }
