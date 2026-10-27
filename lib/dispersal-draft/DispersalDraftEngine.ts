@@ -14,13 +14,15 @@ import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterReso
 import { buildAssetPoolFromRosters } from './assetPoolBuilder'
 import type { DispersalAsset, DispersalDraftConfig, DispersalDraftState } from './types'
 
-type DispersalModelClient = {
-  dispersalAssetPool: any
-  dispersalDraft: any
-  dispersalDraftParticipant: any
-  dispersalDraftPick: any
-  dispersalDraftRoster: any
-}
+/**
+ * The dispersal draft's own delegates. These were `any` while the models were missing from
+ * prisma/schema.prisma — which hid that the generated client had no `dispersalDraft` at all, so every
+ * call threw. They are the real delegates now, so typecheck covers every call below.
+ */
+type DispersalModelClient = Pick<
+  Prisma.TransactionClient,
+  'dispersalAssetPool' | 'dispersalDraft' | 'dispersalDraftParticipant' | 'dispersalDraftPick' | 'dispersalDraftRoster'
+>
 
 /** Transaction client for nested writes in dispersal draft seeding. */
 type DispersalTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0] & DispersalModelClient
