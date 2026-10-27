@@ -19,6 +19,8 @@ const m = vi.hoisted(() => ({
     redraftSeason: { findFirst: vi.fn() },
     redraftRoster: { findUnique: vi.fn() },
     redraftRosterMoveHistory: { findMany: vi.fn(), create: vi.fn() },
+    // Max seasons on taxi (taxiMaxYears.test.tsx) counts finished seasons; nobody has used any here.
+    redraftRosterPlayer: { findMany: vi.fn(async () => []) },
     appUser: { findUnique: vi.fn() },
   },
 }))
@@ -169,7 +171,7 @@ describe('the settings', () => {
 
   it('the read: rules, the switch, the phase and who may edit', async () => {
     expect(await readTaxiRulesView('L', { userId: 'boss', isCommissioner: true })).toEqual({
-      applies: true, rules: RULES, enforced: false, ownerEntitled: true, canEdit: true, isCommissioner: true, phase: 'regular', week: 8,
+      applies: true, rules: RULES, enforced: false, ownerEntitled: true, canEdit: true, isCommissioner: true, maxYears: 2, phase: 'regular', week: 8,
     })
     expect(await readTaxiRulesView('L', { userId: 'm', isCommissioner: false })).toMatchObject({ canEdit: false })
     m.prisma.league.findUnique.mockResolvedValue({ ...LEAGUE, isDynasty: false, leagueType: 'redraft' })
@@ -195,7 +197,7 @@ describe('the settings', () => {
 })
 
 describe('the settings panel', () => {
-  const VIEW = { applies: true, rules: RULES, enforced: false, ownerEntitled: true, canEdit: true, isCommissioner: true, phase: 'regular', week: 8 }
+  const VIEW = { applies: true, rules: RULES, enforced: false, ownerEntitled: true, canEdit: true, isCommissioner: true, maxYears: 2, phase: 'regular', week: 8 }
   const stub = (view: unknown) => {
     const f = vi.fn(async (_u: string, init?: { method?: string }) => ({ ok: true, json: async () => (init?.method === 'PUT' ? { ok: true } : view) }))
     vi.stubGlobal('fetch', f)
@@ -217,7 +219,7 @@ describe('the settings panel', () => {
     fireEvent.click(screen.getByTestId('taxi-rules-save'))
     await waitFor(() => expect(f).toHaveBeenCalledWith('/api/leagues/L/taxi-rules', expect.objectContaining({ method: 'PUT' })))
     const body = JSON.parse((f.mock.calls.find((c) => c[1]?.method === 'PUT')![1] as { body: string }).body)
-    expect(body).toEqual({ enforced: true, lockAfterWeek: '9', promotionDeadlineWeek: '10', lockBehavior: 'once_promoted_no_return', inSeasonMoves: true, postseasonMoves: false })
+    expect(body).toEqual({ maxYears: 2, enforced: true, lockAfterWeek: '9', promotionDeadlineWeek: '10', lockBehavior: 'once_promoted_no_return', inSeasonMoves: true, postseasonMoves: false })
   })
 
   it('a member reads the rules; a commissioner without the plan is offered it', async () => {

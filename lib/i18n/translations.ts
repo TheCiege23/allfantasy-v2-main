@@ -603,6 +603,13 @@ export const translations: Record<string, Record<string, string>> = {
     // Roster settings: taxi squad move rules (lib/taxi/taxiMoveRules.ts).
     "lsTaxiRules.title": "Taxi squad rules",
     "lsTaxiRules.subtitle": "Week {{week}} · {{phase}}",
+    "lsTaxiRules.maxYears": "Seasons a player can spend on the taxi squad",
+    "lsTaxiRules.maxYearsDesc": "Counted over finished seasons, on any team. When they are used, the player moves to the bench as the next season starts and can’t go back on. Any commissioner can change it.",
+    "lsTaxiRules.maxYears.one": "{{n}} season",
+    "lsTaxiRules.maxYears.other": "{{n}} seasons",
+    "lsTaxiRules.maxYears.none": "No limit",
+    "commishHub.rollover.dyn.taxi.rule.maxSeasons.one": "At most {{n}} season on the taxi squad.",
+    "commishHub.rollover.dyn.taxi.rule.maxSeasons.other": "At most {{n}} seasons on the taxi squad.",
     "lsTaxiRules.phase.offseason": "offseason",
     "lsTaxiRules.phase.regular": "regular season",
     "lsTaxiRules.phase.playoffs": "playoffs",
