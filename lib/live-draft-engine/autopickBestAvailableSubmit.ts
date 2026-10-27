@@ -166,7 +166,8 @@ async function loadWarmPoolCandidates(
   leagueId: string,
   draftedNames: Set<string>,
 ): Promise<AutopickFallbackPoolEntry[] | null> {
-  let snap = await getWarmDraftPoolSnapshotFast(leagueId)
+  // An expired snapshot is still the right pool mid-draft: take it and let the rebuild run behind.
+  let snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
   if (!snap.warm) {
     const ensured = await ensureDraftPoolReady(leagueId)
     if (!ensured.ok) return null
