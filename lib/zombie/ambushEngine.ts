@@ -144,23 +144,24 @@ export async function processAmbushFromChimmy(
           : { homeRosterId: oldOpponentId },
       })
       if (first.count !== 1 || second.count !== 1) throw new Error('Matchup changed before ambush')
-      return tx.zombieAmbushAction.create({
+      const action = await tx.zombieAmbushAction.create({
         data: {
           zombieLeagueId: z.id, week, whispererUserId, ambushType: 'swap_matchup',
           targetUserId, targetMatchupId: targetMatchup.id, status: 'executed',
           validationResult: 'ok', submittedViaChimmy: true, executedAt: new Date(),
         },
       })
+      await tx.zombieChimmyAction.update({
+        where: { id: log.id },
+        data: {
+          isValid: true,
+          publicResponse: '🔴 The Whisperer changed two matchups before scoring.',
+          privateResponse: `Ambush complete. You now face ${label} in Week ${week}.`,
+          effect: { ambushActionId: action.id, fromMatchupId: whispererMatchup.id, targetMatchupId: targetMatchup.id },
+        },
+      })
+      return action
     }, { isolationLevel: 'Serializable' })
-    await prisma.zombieChimmyAction.update({
-      where: { id: log.id },
-      data: {
-        isValid: true,
-        publicResponse: '🔴 The Whisperer changed two matchups before scoring.',
-        privateResponse: `Ambush complete. You now face ${label} in Week ${week}.`,
-        effect: { ambushActionId: action.id, fromMatchupId: whispererMatchup.id, targetMatchupId: targetMatchup.id },
-      },
-    })
     await notifyCommissioner(leagueId, 'ambush_used', `Whisperer remap (Week ${week})`, `Two scheduled matchups were swapped.`, {
       urgency: 'high', week, relatedUserId: whispererUserId,
       relatedEventId: action.id, relatedEventType: 'ZombieAmbushAction',
