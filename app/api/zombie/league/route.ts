@@ -283,6 +283,22 @@ export async function GET(req: Request) {
     viewer.canSee ? t : redactZombieTeam(t, viewer.identity)
   const event = <T extends object>(e: T): T => (viewer.canSee ? e : redactZombieEvent(e, viewer.identity))
 
+  const winCards = (Array.isArray(latestResolution?.matchupResults) ? latestResolution.matchupResults : [])
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+    .filter((entry) => entry.winnerStatus === 'Whisperer' || entry.winnerStatus === 'Zombie')
+    .slice(0, 8)
+    .map((entry) => {
+      const hidden = entry.winnerStatus === 'Whisperer' && !viewer.canSee
+      return {
+        role: entry.winnerStatus,
+        winnerName: hidden ? 'Hidden Whisperer' : String(entry.winnerName || 'Horde manager'),
+        opponentName: hidden ? 'Survivor opponent' : String(entry.loserName || 'Opponent'),
+        winnerScore: typeof entry.winnerScore === 'number' ? entry.winnerScore : null,
+        opponentScore: typeof entry.loserScore === 'number' ? entry.loserScore : null,
+        week: latestResolution?.week ?? null,
+      }
+    })
+
   return NextResponse.json({
     league: {
       ...z,
@@ -315,6 +331,7 @@ export async function GET(req: Request) {
       recentBashings: recentBashings.map(event),
       recentMaulings: recentMaulings.map(event),
     },
+    winCards,
     hordeSize: horde,
     survivorCount: surv,
     myTeam: myTeam ? team(myTeam) : myTeam,
