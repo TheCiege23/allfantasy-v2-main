@@ -16,17 +16,18 @@ const m = vi.hoisted(() => {
       roster: { findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, platformUserId: `orphan-${where.id}`, playerData: { lineup_sections: { starters: [{ id: 'qb', position: 'QB' }, { id: 'rb', position: 'RB' }], bench: [{ id: 'te', position: 'TE' }], ir: [], taxi: [], devy: [] } } })) },
     },
     createClaim: vi.fn(async () => ({ id: 'c1' })),
+    notify: vi.fn(async () => ({})),
     pending: vi.fn(async () => []),
     log: vi.fn(async () => ({})),
     lifecycle: vi.fn(async () => (state.lifecycleOk ? { ok: true } : { ok: false, err: {} })),
     legality: vi.fn(async () => ({ ok: true })),
     data: vi.fn(async ({ surface }: { surface: string }) =>
       surface === 'waivers'
-        ? [{ id: 'faRb', position: 'RB', projectedPoints: 9, injuryStatus: null, product: { yearsExp: 4 } }]
+        ? [{ id: 'faRb', name: 'Free Back', position: 'RB', projectedPoints: 9, injuryStatus: null, product: { yearsExp: 4 } }]
         : [
             { id: 'qb', position: 'QB', projectedPoints: 20, injuryStatus: null, product: { yearsExp: 5 } },
             { id: 'rb', position: 'RB', projectedPoints: 12, injuryStatus: 'Out', product: { yearsExp: 5 } },
-            { id: 'te', position: 'TE', projectedPoints: 1, injuryStatus: null, product: { yearsExp: 8 } },
+            { id: 'te', name: 'Spare End', position: 'TE', projectedPoints: 1, injuryStatus: null, product: { yearsExp: 8 } },
           ],
     ),
   }
@@ -53,6 +54,7 @@ vi.mock('@/lib/league/lineupStarterSlots', () => ({
   ],
 }))
 vi.mock('@/lib/commissioner-hub/managerHealth', () => ({ getLeagueManagerHealth: vi.fn() }))
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
 vi.mock('@/lib/roster-lineup-engine/lineupLockService', () => ({ resolveFullLineupLockContext: vi.fn() }))
 vi.mock('@/lib/roster-lineup-engine/lineupService', () => ({ persistRosterLineupWithEngine: vi.fn() }))
 
@@ -80,6 +82,9 @@ describe('runAutopilotWaivers', () => {
       metadata: { source: 'chimmy_autopilot', style: 'dynasty_owner', slot: 'RB' },
     }))
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: AUTOPILOT_CLAIM_ACTION, entityId: 'r1', userId: 'commish' }))
+    // The league log names the players in Chimmy's move, and the commissioner who handed it the team hears.
+    expect(m.log.mock.calls[0]![0]).toMatchObject({ metadata: { addPlayerName: 'Free Back', dropPlayerName: 'Spare End' } })
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['commish'], type: 'chimmy_autopilot_claim', body: 'Free Back for RB, dropping Spare End.' }))
     expect(m.legality).toHaveBeenCalledWith(expect.objectContaining({ rosterIds: ['r1'], kind: 'waiver_claim' }))
   })
 

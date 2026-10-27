@@ -17,6 +17,7 @@ import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerDa
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
 import { startersOnBye } from '@/lib/league/native/lineupMoves'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { DRAFT_AS_ME_FEATURE, DRAFT_AS_ME_SETTING } from '@/lib/draft-room/draftAsMeAutopick'
 import {
@@ -289,7 +290,8 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
     try {
       const league = await prisma.league.findUnique({ where: { id: leagueId } })
       if (!league) continue
-      const managed = Object.keys(readManagedLineups(league.settings))
+      const managedEntries = readManagedLineups(league.settings)
+      const managed = Object.keys(managedEntries)
       const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
       const week = leagueWeekFromSettings(league.settings)
       const season = league.season
@@ -370,7 +372,8 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
             automationAudit: {
               id: `inactive-manager-lineup:${JSON.stringify([leagueId, rosterId, season, week, Date.now()])}`,
               action: 'inactive_manager.lineup_set',
-              message: `AllFantasy set the best lineup while the manager is away: ${plan.changes.map((c) => `${c.slot} ${c.out ?? 'empty'} → ${c.in}`).join('; ')}.`,
+              // A team on Chimmy autopilot is Chimmy's to run; the free lineup mode is AllFantasy's.
+              message: `${managedEntries[rosterId]?.autopilot ? 'Chimmy' : 'AllFantasy'} set the best lineup while the manager is away: ${plan.changes.map((c) => `${c.slot} ${c.out ?? 'empty'} → ${c.in}`).join('; ')}.`,
               metadata: { season, week, changes: plan.changes },
             },
           })
@@ -449,6 +452,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       const benchCapacity = template ? template.slots.reduce((sum, s) => sum + (s.benchCount ?? 0), 0) || null : null
       const pool = (await getNormalizedPlayerData({ surface: 'waivers', leagueId, limit: 300 })).map(serializeUnifiedPlayerForApi)
       const freeAgents = pool.map((p) => ({ id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }))
+      const playerNames = new Map(pool.map((p) => [p.id, p.name]))
 
       for (const rosterId of autopilot) {
         if (Date.now() >= deadline) break
@@ -476,6 +480,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
           const players: Record<string, { id: string; position: string | null; projectedPoints: number | null; injuryStatus: string | null; yearsExp: number | null }> = {}
           for (const p of rows.map(serializeUnifiedPlayerForApi)) {
             players[p.id] = { id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }
+            playerNames.set(p.id, p.name)
           }
           const pending = ((await getClaimsByRoster(rosterId, 'pending')) as Array<{ addPlayerId: string }>).map((c) => String(c.addPlayerId))
           const style = managed[rosterId]!.autopilot!.style
@@ -494,14 +499,29 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
                 metadata: { source: 'chimmy_autopilot', style, slot: c.slot },
               })
               result.claims += 1
+              const addPlayerName = playerNames.get(c.addPlayerId) ?? null
+              const dropPlayerName = c.dropPlayerId ? playerNames.get(c.dropPlayerId) ?? null : null
               await logAction({
                 leagueId,
                 userId: managed[rosterId]!.autopilot!.byUserId,
                 actionType: AUTOPILOT_CLAIM_ACTION,
                 entityType: 'roster',
                 entityId: rosterId,
-                metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId },
+                metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId, addPlayerName, dropPlayerName },
               })
+              // The commissioner who handed the team to Chimmy hears about each move it makes.
+              await dispatchNotification({
+                userIds: [managed[rosterId]!.autopilot!.byUserId],
+                category: 'commissioner_alerts',
+                type: 'chimmy_autopilot_claim',
+                title: `Chimmy made a waiver claim · ${league.name ?? 'your league'}`,
+                body: `${addPlayerName ?? 'A player'} for ${c.slot}${dropPlayerName ? `, dropping ${dropPlayerName}` : ''}.`,
+                severity: 'low',
+                leagueId,
+                actionHref: `/league/${leagueId}`,
+                dedupePrefix: `chimmy-autopilot-claim:${leagueId}:${rosterId}:${c.addPlayerId}`,
+                meta: { leagueId, rosterId, addPlayerId: c.addPlayerId },
+              }).catch(() => {})
             } catch {
               // A league rule said no (waivers closed, roster full, a hold on the player): normal, not a fault.
               skip('claim_refused')

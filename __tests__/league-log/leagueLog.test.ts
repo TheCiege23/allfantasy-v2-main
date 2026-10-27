@@ -163,3 +163,24 @@ describe('names to look up', () => {
     expect(userIdsNamedBy(rows).sort()).toEqual(['m3', 'u1', 'u2'])
   })
 })
+
+describe('Chimmy autopilot', () => {
+  it('names Chimmy and the team on each autopilot move', () => {
+    const on = describeLogEntry(row({ actionType: 'chimmy_autopilot.on', entityId: 'r9', metadata: { rosterId: 'r9', style: 'win_now' } }), member)
+    expect(on).toMatchObject({ title: 'Chimmy now runs Taco Tuesday to win now', category: 'rosters' })
+    const off = describeLogEntry(row({ actionType: 'chimmy_autopilot.off', entityId: 'r9', metadata: { rosterId: 'r9', style: null } }), member)
+    expect(off?.title).toBe('Chimmy stopped running Taco Tuesday')
+    const claim = describeLogEntry(
+      row({ actionType: 'chimmy_autopilot.claim', entityId: 'r9', metadata: { rosterId: 'r9', slot: 'RB', addPlayerName: 'Bucky Irving', dropPlayerName: 'Zach Charbonnet' } }),
+      member,
+    )
+    expect(claim?.title).toBe('Chimmy put in a waiver claim for Bucky Irving for Taco Tuesday (RB), dropping Zach Charbonnet')
+    const es = describeLogEntry(row({ actionType: 'chimmy_autopilot.on', entityId: 'r9', metadata: { style: 'dynasty_owner' } }), { ...member, lang: 'es' })
+    expect(es?.title).toBe('Chimmy ahora dirige a Taco Tuesday como dueño dinastía, protegiendo jóvenes y selecciones')
+  })
+
+  it('looks the team up for every autopilot row', () => {
+    const rows = ['chimmy_autopilot.on', 'chimmy_autopilot.claim'].map((actionType, i) => row({ id: `c${i}`, actionType, entityId: `r${i + 5}` }))
+    expect(rosterIdsNamedBy(rows).sort()).toEqual(['r5', 'r6'])
+  })
+})
