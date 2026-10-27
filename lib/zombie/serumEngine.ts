@@ -1,6 +1,8 @@
 import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
+import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { loadNativeWeekResults } from '@/lib/zombie/ZombieInfectionEngine'
 import { getSerumBalance, useSerumToRevive } from '@/lib/zombie/ZombieSerumEngine'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
@@ -185,6 +187,63 @@ export async function autoReviveEligibleZombies(leagueId: string, week: number):
     revived++
   }
   return revived
+}
+
+/** Deterministic native-week awards. Award keys prevent stat replays from duplicating inventory. */
+export async function awardNativeSerumsForWeek(leagueId: string, week: number, seasonYear: number): Promise<number> {
+  const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
+  const config = await getZombieLeagueConfig(leagueId)
+  if (!z || !config) return 0
+  const results = await loadNativeWeekResults(leagueId, week, seasonYear)
+  if (!results) return 0
+  const final = results.filter((r) => r.final && r.homeRosterId && r.awayRosterId)
+  if (!final.length) return 0
+  const rules = await getZombieRulesForSport(z.sport)
+  const awards = new Map<string, Set<string>>()
+  const add = (rosterId: string, reason: string) => {
+    const reasons = awards.get(rosterId) ?? new Set<string>()
+    reasons.add(reason)
+    awards.set(rosterId, reasons)
+  }
+  if (config.serumAwardHighScore) {
+    const high = Math.max(...final.flatMap((r) => [r.homeScore, r.awayScore]))
+    for (const matchup of final) {
+      if (matchup.homeScore === high) add(matchup.homeRosterId!, 'weekly_high_score')
+      if (matchup.awayScore === high) add(matchup.awayRosterId!, 'weekly_high_score')
+    }
+  }
+  if (config.serumAwardOnBashMaul) {
+    for (const matchup of final) {
+      const margin = Math.abs(matchup.homeScore - matchup.awayScore)
+      if (margin < rules.bashingThreshold || matchup.homeScore === matchup.awayScore) continue
+      const winner = matchup.homeScore > matchup.awayScore ? matchup.homeRosterId! : matchup.awayRosterId!
+      add(winner, margin >= rules.maulingThreshold ? 'mauling' : 'bashing')
+    }
+  }
+  let recorded = 0
+  for (const [rosterId, reasons] of awards) {
+    const team = await prisma.zombieLeagueTeam.findUnique({
+      where: { leagueId_rosterId: { leagueId, rosterId } },
+      select: { id: true, status: true },
+    })
+    if (!team || team.status === 'Whisperer') continue
+    const owner = await prisma.roster.findUnique({ where: { id: rosterId }, select: { platformUserId: true } })
+    if (!owner?.platformUserId) continue
+    for (const reason of reasons) {
+      const awardKey = `serum:${z.id}:${week}:${reason}:${rosterId}`
+      await prisma.zombieTeamItem.upsert({
+        where: { awardKey },
+        create: {
+          teamStatusId: team.id, zombieLeagueId: z.id, userId: owner.platformUserId,
+          itemType: 'serum', itemLabel: '🧪 Serum', acquiredReason: reason,
+          acquiredAtWeek: week, awardKey,
+        },
+        update: {},
+      })
+      recorded++
+    }
+  }
+  return recorded
 }
 
 /** After infections run: consume/refund pending serums for the scoring week. */
