@@ -15,7 +15,7 @@ export default async function SharedPlayoffEntryPage(props: {
   params: Promise<{ leagueId: string; entryId: string }>
 }) {
   const { leagueId, entryId } = await props.params
-  const session = await getServerSession(authOptions as any).catch(() => null)
+  const session = await getServerSession(authOptions).catch(() => null)
   const viewerId = String((session?.user as { id?: string } | undefined)?.id ?? "")
   const entry = await (prisma as any).playoffBracketEntry.findUnique({
     where: { id: entryId },
