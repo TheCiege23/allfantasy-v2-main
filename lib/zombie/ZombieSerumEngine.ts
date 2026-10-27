@@ -103,6 +103,6 @@ export async function useSerumToRevive(
     zombieLeagueId: zombieLeagueId ?? null,
     eventType: 'revive',
     metadata: { rosterId, serumCount: cost },
-  })
+  }).catch(() => {})
   return true
 }
