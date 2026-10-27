@@ -101,9 +101,11 @@ async function handleQueryRole(leagueId: string, userId: string): Promise<string
     if (!zombieLeague) {
       return '⚠️ This is not a Zombie league.'
     }
-    const whisperer = await prisma.whispererRecord.findFirst({
+    const whisperer = (await prisma.whispererRecord.findFirst({
       where: { userId, zombieLeagueId: zombieLeague.id },
-    })
+    })) ?? (await prisma.zombieCoWhisperer.findUnique({
+      where: { zombieLeagueId_userId: { zombieLeagueId: zombieLeague.id, userId } },
+    }))
 
     const icon = status === 'Whisperer' ? '🔴' : status === 'Zombie' ? '🟢' : '👤'
     const extra = whisperer ? ` (${whisperer.ambushesRemaining} ambushes left)` : ''
@@ -119,7 +121,10 @@ async function handleQueryRules(leagueId: string): Promise<string> {
     if (!config)
       return '⚠️ Unable to load league rules. Contact your commissioner.'
 
-    return `📋 **Rules Summary**: Infection threshold ${config.infectionLossToZombie ? 'on loss' : 'off'}, Serum revive cost: ${config.serumReviveCount}, Weapons: Knife/Bow/Axe/Gun protect against one Horde infection`
+    const league = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { experienceMode: true } })
+    return league?.experienceMode === 'simple'
+      ? `📋 **Simple Zombie**: infection on eligible loss, automatic revival at ${config.serumReviveCount} serum(s). Weapons and ambushes are off.`
+      : `📋 **Enhanced Zombie**: infection on eligible loss, revival at ${config.serumReviveCount} serum(s), and defensive weapons and ambushes before lock.`
   } catch (e) {
     return `⚠️ Error fetching rules: ${e instanceof Error ? e.message : String(e)}`
   }
@@ -269,6 +274,10 @@ export async function handleZombieChimmyAction(
     }
 
     // Unknown intent
+    const leagueMode = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { experienceMode: true } })
+    const advancedHelp = leagueMode?.experienceMode === 'simple'
+      ? ''
+      : '• `@Chimmy use knife/bow/axe/gun` — Arm a defense\n• `@Chimmy ambush swap <team name>` — Whisperer matchup swap'
     const row = await prisma.zombieChimmyAction.create({
       data: {
         leagueId,
@@ -285,9 +294,8 @@ export async function handleZombieChimmyAction(
           '• `@Chimmy horde sit out [manager]` — Nominate a horde sit-out\n' +
           '• `@Chimmy rules` — Show infection & serum rules\n' +
           '• `@Chimmy week` — Show this week\'s standings\n' +
-          '• `@Chimmy revive` — Use serum to revive\n' +
-          '• `@Chimmy use knife/bow/axe/gun` — Arm a defense\n' +
-          '• `@Chimmy ambush swap <team name>` — Whisperer matchup swap',
+          (leagueMode?.experienceMode === 'simple' ? '' : '• `@Chimmy revive` — Use serum to revive\n') +
+          advancedHelp,
       },
     })
     return { ok: false, chimmyActionId: row.id, privateMessage: row.privateResponse }
