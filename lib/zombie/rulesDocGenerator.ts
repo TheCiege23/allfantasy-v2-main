@@ -24,6 +24,7 @@ function buildSections(
   serumAwardHighScore: boolean,
   serumAwardOnBashMaul: boolean,
   autoSerumRevive: boolean,
+  ambushCountPerWeek: number,
 ): Omit<
   ZombieRulesDocument,
   'id' | 'generatedAt' | 'lastUpdatedAt' | 'leagueId' | 'version' | 'sport' | 'isPaid'
@@ -188,7 +189,7 @@ function buildSections(
 
   const sectionAmbush = [
     'AMBUSHES',
-    `The Whisperer starts with ${z.whispererAmbushCount ?? 1} ambushes.`,
+    `The Whisperer starts with ${z.whispererAmbushCount ?? 1} ambushes, at most ${ambushCountPerWeek} per week.`,
     'Before weekly scoring begins, @Chimmy ambush swap <exact Survivor team name> swaps the Whisperer\'s opponent with that Survivor. Other ambush effects are inactive.',
   ].join('\n')
 
@@ -235,10 +236,11 @@ export async function generateRulesDocument(zombieLeagueId: string): Promise<Zom
 
   const config = await prisma.zombieLeagueConfig.findUnique({
     where: { leagueId: z.leagueId },
-    select: { serumReviveCount: true, serumAwardHighScore: true, serumAwardOnBashMaul: true, autoSerumRevive: true },
+    select: { serumReviveCount: true, serumAwardHighScore: true, serumAwardOnBashMaul: true, autoSerumRevive: true, ambushCountPerWeek: true },
   })
   const sections = buildSections(z, tpl, freeCurrency, config?.serumReviveCount ?? 2,
-    config?.serumAwardHighScore ?? true, config?.serumAwardOnBashMaul ?? true, config?.autoSerumRevive ?? false)
+    config?.serumAwardHighScore ?? true, config?.serumAwardOnBashMaul ?? true,
+    config?.autoSerumRevive ?? false, config?.ambushCountPerWeek ?? 1)
   const prev = await prisma.zombieRulesDocument.findFirst({
     where: { leagueId: z.id },
     orderBy: { version: 'desc' },
