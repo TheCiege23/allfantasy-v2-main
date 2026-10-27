@@ -158,10 +158,30 @@ describe('the hourly run', () => {
     expect(m.players).toHaveBeenCalledWith(expect.objectContaining({ surface: 'roster', leagueId: 'L', userId: 'owner' }))
   })
 
+  it('says Chimmy set the lineup on a team Chimmy runs, and AllFantasy on one it only manages', async () => {
+    m.state.settings = { current_week: 7, af_managed_lineups: { r1: { since: 's', byUserId: 'c', autopilot: { style: 'dynasty_owner', since: 's', byUserId: 'c' } } } }
+    await runInactiveManagerLineups()
+    expect(m.persist.mock.calls[0][0].automationAudit.message).toMatch(/^Chimmy set the best lineup/)
+    m.persist.mockClear()
+    m.state.settings = { current_week: 7, af_managed_lineups: { r1: { since: 's', byUserId: 'c' } } }
+    await runInactiveManagerLineups()
+    expect(m.persist.mock.calls[0][0].automationAudit.message).toMatch(/^AllFantasy set the best lineup/)
+  })
+
   it('writes nothing when the lineup is already the best', async () => {
     m.players.mockResolvedValue([{ id: 'qb', position: 'QB', projectedPoints: 20 }, { id: 'rb-out', position: 'RB', projectedPoints: 15 }, { id: 'rb-good', position: 'RB', projectedPoints: 12 }])
     expect(await runInactiveManagerLineups()).toMatchObject({ set: 0, unchanged: 1 })
     expect(m.persist).not.toHaveBeenCalled()
+  })
+
+  it('benches a starter whose bye week is this week, though his projection says he will score', async () => {
+    m.players.mockResolvedValue([
+      { id: 'qb', position: 'QB', projectedPoints: 20 },
+      { id: 'rb-out', position: 'RB', projectedPoints: 15, product: { byeWeek: 7 } },
+      { id: 'rb-good', position: 'RB', projectedPoints: 12, product: { byeWeek: 9 } },
+    ])
+    expect(await runInactiveManagerLineups()).toMatchObject({ set: 1 })
+    expect(m.persist.mock.calls[0][0].automationAudit.metadata.changes).toEqual([{ slot: 'RB', in: 'rb-good', out: 'rb-out' }])
   })
 
   it('never moves a player whose game has started', async () => {

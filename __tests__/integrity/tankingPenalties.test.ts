@@ -11,8 +11,8 @@ import {
 
 describe('policy', () => {
   it('defaults to on: one warning, then a 1st-round pick', () => {
-    expect(readTankingPenaltyPolicy({})).toEqual({ enabled: true, pickAtStrike: 2, pickRound: 1 })
-    expect(readTankingPenaltyPolicy({ integrity_tanking_penalties: { enabled: false, pickAtStrike: 3, pickRound: 2 } })).toEqual({ enabled: false, pickAtStrike: 3, pickRound: 2 })
+    expect(readTankingPenaltyPolicy({})).toEqual({ enabled: true, penalty: 'forfeit_pick', pickAtStrike: 2, pickRound: 1, lotteryOddsCutPct: 50, faabPercent: 25 })
+    expect(readTankingPenaltyPolicy({ integrity_tanking_penalties: { enabled: false, pickAtStrike: 3, pickRound: 2 } })).toMatchObject({ enabled: false, penalty: 'forfeit_pick', pickAtStrike: 3, pickRound: 2 })
     expect(readTankingPenaltyPolicy({ integrity_tanking_penalties: { pickAtStrike: 0, pickRound: 'x' } })).toEqual(DEFAULT_TANKING_PENALTY_POLICY)
   })
 

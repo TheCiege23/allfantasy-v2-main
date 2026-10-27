@@ -193,6 +193,29 @@ export async function GET(request: Request) {
   }
 
   /*
+   * The free "bench my starters on bye automatically" switch (lib/lineup-automation): hourly, swap a
+   * starter whose bye week is this week for the best bench player who can play. Guarded and on its own
+   * job identity, like the sweeps around it.
+   */
+  let autoBenchByes: unknown = null
+  try {
+    const { runAutoBenchByes } = await import('@/lib/lineup-automation/autoBenchByeService')
+    autoBenchByes = await withSyncJobRun(
+      { jobName: 'cron-auto-bench-bye', trigger: 'cron' },
+      () => runAutoBenchByes(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.swapped,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { unchanged: r.unchanged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] auto bench bye failed', e)
+    autoBenchByes = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
    * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
    * processed in the same run. Guarded and on its own job identity, like the sweeps above.
@@ -356,5 +379,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autoBenchByes, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

@@ -117,7 +117,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   let penaltyPatch: ReturnType<typeof parseTankingPenaltyPolicyPatch> = null
   if (body.tankingPenalties !== undefined) {
     penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
-    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), pickAtStrike and pickRound (1-10)" }, { status: 400 })
+    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), penalty (forfeit_pick, lottery_odds, faab), pickAtStrike and pickRound (1-10), lotteryOddsCutPct (25, 50, 75, 100), faabPercent (10, 25, 50, 100)" }, { status: 400 })
   }
   if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
   // "Hold flagged trades": `off` / `severe` (the default) / `all`; the older on/off switch still works.
