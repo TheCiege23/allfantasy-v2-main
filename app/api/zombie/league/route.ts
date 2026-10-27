@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   const sportRaw = typeof body.sport === 'string' ? body.sport : 'NFL'
-  if (!isZombieEligibleLeagueSport(sportRaw.toUpperCase())) {
+  if (!isZombieEligibleLeagueSport(sportRaw.toUpperCase()) || !['NFL', 'NBA', 'NHL', 'MLB'].includes(sportRaw.toUpperCase())) {
     return NextResponse.json({ error: `Zombie leagues do not support sport "${sportRaw}".` }, { status: 400 })
   }
   const sport = normalizeToSupportedSport(sportRaw)
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   if (whispererCount !== 1 && whispererCount !== 2) {
     return NextResponse.json({ error: 'whispererCount must be 1 or 2.' }, { status: 400 })
   }
-  if (whispererCount === 2 && (sport === 'NFL' || body.experienceMode === 'simple')) {
+  if (whispererCount === 2 && (!['NBA', 'NHL', 'MLB'].includes(sport) || body.experienceMode === 'simple')) {
     return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
   }
 
