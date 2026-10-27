@@ -6,6 +6,7 @@
 import { deepseekChat } from "@/lib/deepseek-client"
 import { openaiChatJson, parseJsonContentFromChatCompletion } from "@/lib/openai-client"
 import { grokEnrich } from "@/lib/ai-external/grok"
+import { routeTextCall } from "@/lib/ai/providerRouter"
 import { getStoryTypeLabel } from "./SportNarrativeResolver"
 import type { NarrativeContextPackage, StoryOutput, StoryStyle } from "./types"
 
@@ -304,4 +305,66 @@ Original line: ${input.text}`
   const json = parseJsonContentFromChatCompletion(res.json)
   const text = json && typeof json === "object" && typeof (json as { text?: unknown }).text === "string" ? (json as { text: string }).text.trim() : ""
   return text ? text.slice(0, 400) : null
+}
+
+/* ─── Season recap: written from the recap's facts (lib/season-recap) ──────────────────────── */
+
+export type SeasonRecapWriting = { headline: string; paragraphs: string[]; provider: string; model: string | null }
+
+/** Pull the first JSON object out of a model reply (some providers wrap it in prose or a fence). */
+function parseRecapJson(raw: string): { headline?: unknown; paragraphs?: unknown } | null {
+  const start = raw.indexOf("{")
+  const end = raw.lastIndexOf("}")
+  if (start < 0 || end <= start) return null
+  try {
+    const v = JSON.parse(raw.slice(start, end + 1))
+    return v && typeof v === "object" ? v : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Write a season recap from its facts (lib/season-recap/seasonRecapFacts.ts) through the provider
+ * router. The facts are the ONLY material. The caller must run the result through
+ * `validateSeasonRecapText` (./StoryFactGuard.ts) and refuse it when it fails — this returns the
+ * model's text, or null when no provider gave anything usable.
+ */
+export async function writeSeasonRecapFromFacts(input: {
+  facts: Array<{ key: string; value: string | number }>
+  language: "en" | "es"
+  userId?: string | null
+  leagueId?: string | null
+}): Promise<SeasonRecapWriting | null> {
+  const systemPrompt = `You write the end-of-season recap for one fantasy sports league, for its members to read.
+RULES:
+- Use ONLY the facts given. Keep every team name and player name exactly as written.
+- Do not add any number that is not in the facts, and do not change any number. Copy numbers exactly as given, with a dot for decimals.
+- Do not invent games, players, injuries, quotes, trades or results. A fact that is not given did not happen.
+- Talk about the fantasy teams and their season, never insult a manager as a person. No profanity.
+- Name the champion. Cover the awards the facts include; skip any that are missing.
+- A headline under 90 characters, then 3 to 5 short paragraphs, under 1600 characters in all.
+- Write in ${input.language === "es" ? "Spanish (call player pickups «reclamos»; keep that word, never an English loanword)" : "English"}.
+- Output JSON only: {"headline": "...", "paragraphs": ["...", "..."]}`
+  const userPrompt = `Facts (JSON): ${JSON.stringify(input.facts)}`
+  const res = await routeTextCall({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.5,
+    maxTokens: 900,
+    skipCache: true,
+    feature: "season_recap_writeup",
+    userId: input.userId ?? null,
+    leagueId: input.leagueId ?? null,
+  })
+  if (!res.ok) return null
+  const json = parseRecapJson(res.text)
+  const headline = typeof json?.headline === "string" ? json.headline.trim().slice(0, 160) : ""
+  const paragraphs = Array.isArray(json?.paragraphs)
+    ? (json!.paragraphs as unknown[]).filter((p): p is string => typeof p === "string" && p.trim().length > 0).map((p) => p.trim().slice(0, 900)).slice(0, 6)
+    : []
+  if (!headline || paragraphs.length === 0) return null
+  return { headline, paragraphs, provider: res.provider, model: res.model ?? null }
 }
