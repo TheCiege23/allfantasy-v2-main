@@ -109,9 +109,23 @@ export default function DraftHQ({ data }: { data: DraftHQData }) {
             Planning surface. Nothing here changes your draft order.
           </p>
         </div>
-        <span className="rounded-lg border border-white/10 px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-white/45">
-          Read-only
-        </span>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <span className="rounded-lg border border-white/10 px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-white/45">
+            Read-only
+          </span>
+          {/*
+            The way into the live room. `/league/[id]/draft` is the resolver that creates or finds
+            the session and redirects to the board. A plain anchor, not next/link: a full
+            navigation lands even when a deploy has rotated client chunks under an open tab.
+          */}
+          <a
+            href={`/league/${encodeURIComponent(data.leagueId)}/draft`}
+            data-testid="draft-hq-enter-room"
+            className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#04121a] sm:flex-none"
+          >
+            Enter draft room
+          </a>
+        </div>
       </div>
 
       {/*

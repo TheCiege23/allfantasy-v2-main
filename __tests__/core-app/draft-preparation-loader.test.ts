@@ -339,3 +339,44 @@ describe("draft preparation source binding", () => {
     );
   });
 });
+
+describe("draft preparation for a draft that is still running", () => {
+  const started = new Date("2026-08-02T00:00:00Z");
+
+  it("uses the league's live settings when an in-progress draft has no start snapshot", async () => {
+    db.start.mockResolvedValue(null);
+    const result = await getDraftPreparationData(
+      league,
+      { ...session, status: "in_progress", startedAt: started },
+      "viewer",
+      "a",
+    );
+    expect(result.state).not.toBe("unsupported");
+    expect(result.context).toEqual(preparationContext(league, session));
+    expect(result.state).toBe("ready");
+    expect(result.players.map((p) => p.playerName)).toContain("Player");
+  });
+
+  it("treats a paused draft the same way", async () => {
+    db.start.mockResolvedValue(null);
+    const result = await getDraftPreparationData(
+      league,
+      { ...session, status: "paused", startedAt: started },
+      "viewer",
+      "a",
+    );
+    expect(result.context).toEqual(preparationContext(league, session));
+  });
+
+  it("keeps a completed draft strict when no start snapshot exists", async () => {
+    db.start.mockResolvedValue(null);
+    const result = await getDraftPreparationData(
+      league,
+      { ...session, status: "completed", startedAt: started },
+      "viewer",
+      "a",
+    );
+    expect(result.state).toBe("unsupported");
+    expect(result.reason).toMatch(/must be recorded/);
+  });
+});

@@ -36,6 +36,7 @@ import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/lea
 import { rosterIdsMatch } from './rosterIdMatch'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -1041,7 +1042,8 @@ export async function getLeagueHomeData(
       ? {
           available: true,
           data: {
-            href: `/core/draft-hq?league=${league.id}`,
+            // A live draft goes straight to the room; Draft HQ is the planning screen.
+            href: draftRow.phase === 'live' ? draftRoomHref(league.id) : `/core/draft-hq?league=${league.id}`,
             linkLabel:
               draftRow.phase === 'done'
                 ? 'Open the draft board'

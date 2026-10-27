@@ -36,6 +36,7 @@ import { getDraftHqAll } from './draftHqAll'
 import { getLeagueActivity } from './leagueActivity'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /** One half of a franchise, described identically whichever half it is. */
 export type FranchiseSide = {
@@ -555,7 +556,10 @@ export async function resolvePairedHalf(
           ]
             .filter(Boolean)
             .join(' · ') || null,
-        href: `/core/draft-hq?league=${encodeURIComponent(side.leagueId)}`,
+        href:
+          row.phase === 'live'
+            ? draftRoomHref(side.leagueId)
+            : `/core/draft-hq?league=${encodeURIComponent(side.leagueId)}`,
       }
     }
   }
