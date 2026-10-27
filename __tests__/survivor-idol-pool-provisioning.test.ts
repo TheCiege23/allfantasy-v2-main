@@ -8,14 +8,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 const pool = vi.hoisted(() => ({ load: vi.fn() }))
 vi.mock('@/lib/draft-room/getResolvedDraftPoolForLeague', () => ({ getResolvedDraftPoolForLeague: pool.load }))
-vi.mock('@/lib/prisma', () => ({ prisma: {} }))
-vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: vi.fn() }))
+const outer = vi.hoisted(() => ({ prisma: {} as Record<string, unknown>, tx: vi.fn(), order: [] as string[] }))
+vi.mock('@/lib/prisma', () => ({ prisma: outer.prisma }))
+vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: outer.tx }))
 
-import { placeSurvivorIdolsInPool, seedSurvivorIdols, getIdolSeedStatus } from '@/lib/survivor/survivorIdolProvisioning'
+import { placeSurvivorIdolsInPool, seedSurvivorIdols, getIdolSeedStatus, loadSurvivorWaiverIdolPool } from '@/lib/survivor/survivorIdolProvisioning'
 import { SURVIVOR_POOL_IDOL_ROSTER_ID, SURVIVOR_WAIVER_IDOL_ROSTER_ID } from '@/lib/survivor/survivorIdolPoolPlacement'
 
 const resolved = ['immunity', 'steal-three', 'vote-steal', 'vote-steal', 'extra-vote', 'extra-vote']
 const entries = Array.from({ length: 80 }, (_, i) => ({ playerId: `nba-${i}`, name: `Player ${i}`, adp: i + 1 }))
+const candidates = entries.map(entry => ({ playerId: entry.playerId, playerName: entry.name, adp: entry.adp }))
 
 function baseDb() {
   let idolSeq = 0
@@ -40,15 +42,74 @@ function baseDb() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  pool.load.mockResolvedValue({ entries, sport: 'NBA', count: entries.length, rosterConfigurationIncomplete: false })
+  outer.order.length = 0
+  for (const key of Object.keys(outer.prisma)) delete outer.prisma[key]
+  pool.load.mockImplementation(async () => { outer.order.push('pool'); return { entries, sport: 'NBA', count: entries.length, rosterConfigurationIncomplete: false } })
+})
+
+/*
+ * The pool build takes ~95 s cold; the setup transaction times out at 30 s. Measured in the season
+ * rehearsal as "Transaction already closed", so every draft-lock placement died. The lock-free outer
+ * call reads the pool first; the transaction only ever gets rows.
+ */
+describe('the draft pool is read before the setup transaction opens', () => {
+  it('draft-lock placement loads the pool, then opens the transaction with the rows', async () => {
+    const db = baseDb()
+    Object.assign(outer.prisma, { survivorIdol: { count: vi.fn(async () => 0) }, league: { findUnique: vi.fn(async () => ({ settings: {} })) } })
+    outer.tx.mockImplementation(async (_leagueId: string, work: (tx: unknown) => unknown) => { outer.order.push('tx'); return work(db) })
+    expect(await placeSurvivorIdolsInPool('lg', { teamCount: 16, rounds: 2, seed: 11 })).toMatchObject({ ok: true, placed: true, count: 6 })
+    expect(outer.order).toEqual(['pool', 'tx'])
+    // Twice the largest window it can use: 16 teams x 2 rounds.
+    expect(pool.load).toHaveBeenCalledWith('lg', expect.objectContaining({ limit: 64 }))
+  })
+
+  it('a league that already placed, or has idols off, never pays for a pool build', async () => {
+    Object.assign(outer.prisma, { survivorIdol: { count: vi.fn(async () => 6) }, league: { findUnique: vi.fn(async () => ({ settings: {} })) } })
+    expect(await placeSurvivorIdolsInPool('lg', { teamCount: 16, rounds: 2 })).toMatchObject({ ok: true, alreadyPlaced: true })
+    Object.assign(outer.prisma, { survivorIdol: { count: vi.fn(async () => 0) }, league: { findUnique: vi.fn(async () => ({ settings: { idolsEnabled: false } })) } })
+    expect(await placeSurvivorIdolsInPool('lg', { teamCount: 16, rounds: 2 })).toMatchObject({ ok: true, placed: false, count: 0 })
+    expect(pool.load).not.toHaveBeenCalled()
+    expect(outer.tx).not.toHaveBeenCalled()
+  })
+
+  it('inside a transaction with no rows handed in, it refuses rather than building the pool there', async () => {
+    expect(await placeSurvivorIdolsInPool('lg', { teamCount: 16, rounds: 2, db: baseDb() as never })).toMatchObject({ ok: false, code: 'pool_not_loaded' })
+    expect(pool.load).not.toHaveBeenCalled()
+  })
+
+  it('the waiver pool is read without drafted players, and only while idols wait in the pool', async () => {
+    const count = vi.fn(async (args: { where: { rosterId: unknown } }) => (args.where.rosterId === SURVIVOR_POOL_IDOL_ROSTER_ID ? 3 : 0))
+    Object.assign(outer.prisma, {
+      survivorIdol: { count },
+      draftSession: { findFirst: vi.fn(async () => ({ id: 'draft-1', status: 'completed' })) },
+      draftPick: { findMany: vi.fn(async () => [{ playerId: 'nba-3' }, { playerId: null }, { playerId: 'nba-9' }]) },
+    })
+    expect(await loadSurvivorWaiverIdolPool('lg')).toHaveLength(80)
+    expect(pool.load).toHaveBeenCalledWith('lg', expect.objectContaining({ limit: 120, excludeDraftedPlayerIds: new Set(['nba-3', 'nba-9']) }))
+    pool.load.mockClear()
+    count.mockImplementation(async () => 3)
+    expect(await loadSurvivorWaiverIdolPool('lg')).toBeUndefined()
+    expect(pool.load).not.toHaveBeenCalled()
+  })
+
+  it('seeding opens its transaction only after the waiver pool is read', async () => {
+    Object.assign(outer.prisma, {
+      survivorIdol: { count: vi.fn(async (args: { where: { rosterId: unknown } }) => (args.where.rosterId === SURVIVOR_POOL_IDOL_ROSTER_ID ? 1 : 0)) },
+      draftSession: { findFirst: vi.fn(async () => ({ id: 'draft-1', status: 'completed' })) },
+      draftPick: { findMany: vi.fn(async () => []) },
+    })
+    outer.tx.mockImplementation(async () => { outer.order.push('tx'); return { ok: true } })
+    await seedSurvivorIdols('lg', {})
+    expect(outer.order).toEqual(['pool', 'tx'])
+    expect(outer.tx.mock.calls).toHaveLength(1)
+  })
 })
 
 describe('placeSurvivorIdolsInPool (draft lock)', () => {
   it('hides one idol per sealed type on distinct pool players, owned by nobody, with the league expiry stamped', async () => {
     const db = baseDb()
-    const out = await placeSurvivorIdolsInPool('lg', { teamCount: 16, rounds: 2, seed: 11, db: db as never })
+    const out = await placeSurvivorIdolsInPool('lg', { teamCount: 16, rounds: 2, seed: 11, db: db as never, poolCandidates: candidates })
     expect(out).toMatchObject({ ok: true, placed: true, count: 6 })
-    expect(pool.load).toHaveBeenCalledWith('lg', expect.objectContaining({ limit: 64 }))
     const created = db.survivorIdol.create.mock.calls.map(([arg]: any) => arg.data)
     expect(created).toHaveLength(6)
     expect(new Set(created.map((row: any) => row.playerId)).size).toBe(6)
@@ -84,7 +145,8 @@ describe('seedSurvivorIdols after a draft with pooled idols', () => {
       { playerId: 'nba-9', playerName: 'Player 9', rosterId: 'roster-2', assetType: 'player' },
       { playerId: 'nba-1', playerName: 'Player 1', rosterId: 'roster-1', assetType: 'player' },
     ] as never)
-    const out = await seedSurvivorIdols('lg', { db: db as never, seed: 5 })
+    const waiverPool = candidates.filter(c => !['nba-3', 'nba-9', 'nba-1'].includes(c.playerId))
+    const out = await seedSurvivorIdols('lg', { db: db as never, seed: 5, waiverPool })
     expect(out).toMatchObject({ ok: true, seeded: true, fromPool: 3, waiverImmunity: 2, voteShieldCount: 4, ownerCount: 2 })
     const updates = db.survivorIdol.update.mock.calls.map(([arg]: any) => arg)
     expect(updates.find((u: any) => u.where.id === 'idol-a').data).toMatchObject({ rosterId: 'roster-1', currentOwnerUserId: 'user-1', originalOwnerUserId: 'user-1' })
@@ -101,7 +163,7 @@ describe('seedSurvivorIdols after a draft with pooled idols', () => {
     expect(waiver).toHaveLength(2)
     expect(waiver.every((row: any) => row.rosterId === SURVIVOR_WAIVER_IDOL_ROSTER_ID && row.powerType === 'vote_shield' && row.currentOwnerUserId === null && row.expiresAtMerge === true)).toBe(true)
     expect(waiver.every((row: any) => !['nba-3', 'nba-9', 'nba-1', 'nba-70'].includes(row.playerId))).toBe(true)
-    expect(pool.load).toHaveBeenCalledWith('lg', expect.objectContaining({ excludeDraftedPlayerIds: new Set(['nba-3', 'nba-9', 'nba-1']) }))
+    expect(pool.load).not.toHaveBeenCalled()
     expect(db.survivorAuditEntry.create.mock.calls.at(-1)[0].data).toMatchObject({ action: 'idols_seeded', data: expect.objectContaining({ fromPool: 3, drafted: 2, undrafted: 1, waiverImmunity: 2 }) })
   })
 

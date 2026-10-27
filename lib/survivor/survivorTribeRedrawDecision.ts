@@ -12,6 +12,7 @@ import {
   TRIBE_REDRAW_RECOMMENDATION_ACTION,
   TRIBE_REDRAW_RESPONSE_ACTION,
   TRIBE_REDRAW_RESPONSE_ACTIONS,
+  SURVIVOR_REDRAW_MIN_TRIBE_SIZE,
   survivorRedrawTribeCount,
   type TribeRedrawDecision,
 } from './survivorTribeRedrawActions'
@@ -153,17 +154,22 @@ export async function autoApplyPendingTribeRedraw(leagueId: string, week: number
   return result.ok ? { applied: true } : { applied: false, reason: result.error }
 }
 
-/** A tribe below this many active managers cannot hold a council: nobody is left to vote. */
-export const SURVIVOR_COUNCIL_MIN_TRIBE_SIZE = 2
+/**
+ * A tribe below this many active managers cannot hold a real council. One manager has nobody to
+ * vote for; two can only vote for each other (self-votes are off), so every such council is a
+ * tie settled by rocks or season points. The season rehearsal hit that in weeks 5, 7 and 11.
+ */
+export const SURVIVOR_COUNCIL_MIN_TRIBE_SIZE = 3
 
 export type CouncilTribeGuardResult = { action: 'none' | 'redrawn' | 'merged'; reason?: string; tribeCount?: number }
 
 /**
- * Never freeze. Called by the season runner just before it opens a pre-merge council: when any
- * tribe is down to one manager (or none), the council cannot run, so the commissioner's window is
- * over and Chimmy acts now. The default is a random redraw into as many tribes as the cast can
- * fill; when no fair redraw is possible, the merge starts early. Either way the commissioner hears
- * about it once and the season carries on.
+ * Never freeze, never coin-flip. Called by the season runner just before it opens a pre-merge
+ * council: when any tribe is down to two managers or fewer, that council would be a tie or could
+ * not run, so the commissioner's window is over and Chimmy acts now. The default is a random
+ * redraw into as many tribes of three or more as the cast can fill; when the cast cannot fill two
+ * such tribes, the merge starts early. Either way the commissioner hears about it once and the
+ * season carries on.
  */
 export async function rebalanceTribesBeforeCouncil(leagueId: string, week: number): Promise<CouncilTribeGuardResult> {
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true, mergeTriggeredAt: true, activeCouncilId: true } })
@@ -176,7 +182,8 @@ export async function rebalanceTribesBeforeCouncil(leagueId: string, week: numbe
   if (smallest >= SURVIVOR_COUNCIL_MIN_TRIBE_SIZE) return { action: 'none' }
 
   const pending = await getPendingTribeRedraw(leagueId)
-  const tribeCount = survivorRedrawTribeCount(players.length, tribes.length)
+  // A redraw must leave every tribe at the minimum, or the next council lands right back here.
+  const tribeCount = players.length >= 2 * SURVIVOR_REDRAW_MIN_TRIBE_SIZE ? survivorRedrawTribeCount(players.length, tribes.length) : null
   let action: CouncilTribeGuardResult['action'] = 'none'
   let reason: string | undefined
   if (tribeCount != null) {
@@ -205,7 +212,7 @@ export async function rebalanceTribesBeforeCouncil(leagueId: string, week: numbe
     urgency: 'medium',
     title: action === 'redrawn' ? 'Tribes redrawn so the season keeps moving' : 'The merge started early so the season keeps moving',
     body: action === 'redrawn'
-      ? `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'}, too few for Tribal Council. Chimmy redrew the cast into ${tribeCount} tribes before this week's council. Nothing for you to do.`
+      ? `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'}, too few for a real Tribal Council vote. Chimmy redrew the cast into ${tribeCount} tribes before this week's council. Nothing for you to do.`
       : `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'} and the cast was too small to redraw fairly, so Chimmy started the merge before this week's council. Nothing for you to do.`,
     deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`,
   }).catch(() => {})

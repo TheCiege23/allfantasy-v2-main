@@ -21,6 +21,7 @@ import {
 } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 import { readLiveRookieOrderSettings } from '@/lib/rookie-order/liveRookieOrderService'
 import { readDuesTracker } from '@/lib/core-app/commissioner/health'
+import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { readPayoutsView } from '@/lib/payouts/payoutService'
 import { readPayoutPlan } from '@/lib/payouts/payoutCalculator'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
@@ -178,7 +179,14 @@ export async function readDynastyRolloverView(
     champion,
     rookieDraft,
     draftOrder: { source, finalOrderSaved },
-    taxi: { slots: league.taxiSlots ?? 0, yearsLimit: league.taxiYearsLimit ?? null, allowNonRookies: Boolean(league.taxiAllowNonRookies), toBench, unverified },
+    taxi: {
+      slots: league.taxiSlots ?? 0,
+      yearsLimit: league.taxiYearsLimit ?? null,
+      allowNonRookies: Boolean(league.taxiAllowNonRookies),
+      maxSeasons: readTaxiMaxYears(league.settings),
+      toBench,
+      unverified,
+    },
     contracts,
     dues: {
       enabled: Boolean(dues?.enabled),

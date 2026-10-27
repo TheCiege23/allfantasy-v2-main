@@ -123,7 +123,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
       // A tribe-imbalance recommendation nobody answered gets its default, a random redraw, now:
       // the commissioner has had until this council to choose otherwise.
       await autoApplyPendingTribeRedraw(leagueId, week)
-      // A tribe left with one manager cannot vote anyone out: redraw or merge now rather than stall.
+      // A tribe of two or fewer cannot hold a real vote (two can only tie): redraw or merge now.
       await rebalanceTribesBeforeCouncil(leagueId, week)
       await tryAutomaticPhaseAdvance(leagueId)
       await triggerTribalOpen(leagueId)

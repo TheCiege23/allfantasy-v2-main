@@ -175,7 +175,7 @@ describe('LeagueOfficeContextProvider', () => {
     const input = {
       season: 2026, nextSeason: 2027, seasonOver: true, started: false, champion: 'Cats', rookieDraft: 'none' as const,
       draftOrder: { source: 'standings' as const, finalOrderSaved: false },
-      taxi: { slots: 3, yearsLimit: null, allowNonRookies: false, toBench: 1, unverified: 0 },
+      taxi: { slots: 3, yearsLimit: null, allowNonRookies: false, maxSeasons: 2, toBench: 1, unverified: 0 },
       contracts: null, dues: { enabled: false, amountDollars: null, unpaidTeams: 0, setForNextSeason: false },
       schedule: { matchups: 0, weeks: 0 }, overLimitTeams: 0,
     }
