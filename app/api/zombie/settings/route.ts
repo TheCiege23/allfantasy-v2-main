@@ -18,7 +18,12 @@ export async function PATCH(req: Request) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerOnly(leagueId, userId)
+  try {
+    await requireCommissionerOnly(leagueId, userId)
+  } catch (denied) {
+    if (denied instanceof Response) return denied
+    throw denied
+  }
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
@@ -67,6 +72,35 @@ export async function PATCH(req: Request) {
     )
   }
 
+  const configSelectionPatch = str('whispererSelection')
+  if (
+    configSelectionPatch !== undefined &&
+    !(ZOMBIE_ALLOWED_WHISPERER_SELECTION_MODES as readonly string[]).includes(configSelectionPatch)
+  ) {
+    return NextResponse.json({ error: 'Unsupported Whisperer selection mode.' }, { status: 400 })
+  }
+  if (
+    configSelectionPatch !== undefined &&
+    whispererSelectionModePatch !== undefined &&
+    configSelectionPatch !== whispererSelectionModePatch
+  ) {
+    return NextResponse.json({ error: 'Whisperer selection fields must match.' }, { status: 400 })
+  }
+
+  const requestedSelection = whispererSelectionModePatch ?? configSelectionPatch
+  if (requestedSelection !== undefined) {
+    const selected = await prisma.whispererRecord.findUnique({
+      where: { zombieLeagueId: z.id },
+      select: { id: true },
+    })
+    if (selected || !['setup', 'registering'].includes(z.status)) {
+      return NextResponse.json(
+        { error: 'Whisperer selection is locked once the draft assigns the role.' },
+        { status: 409 },
+      )
+    }
+  }
+
   const leaguePatch = {
     ...(str('name') !== undefined ? { name: str('name') } : {}),
     ...(str('status') !== undefined ? { status: str('status') } : {}),
@@ -75,8 +109,8 @@ export async function PATCH(req: Request) {
     ...(num('buyInAmount') !== undefined ? { buyInAmount: num('buyInAmount') } : {}),
     ...(bool('isPaid') !== undefined ? { isPaid: bool('isPaid') } : {}),
     ...(str('namingMode') !== undefined ? { namingMode: str('namingMode') } : {}),
-    ...(whispererSelectionModePatch !== undefined
-      ? { whispererSelectionMode: whispererSelectionModePatch }
+    ...(requestedSelection !== undefined
+      ? { whispererSelectionMode: requestedSelection }
       : {}),
     ...(bool('whispererIsPublic') !== undefined ? { whispererIsPublic: bool('whispererIsPublic') } : {}),
     ...(num('whispererAmbushCount') !== undefined ? { whispererAmbushCount: num('whispererAmbushCount') } : {}),
@@ -114,7 +148,7 @@ export async function PATCH(req: Request) {
 
   const configPatch = {
     ...(str('universeId') !== undefined ? { universeId: str('universeId') || null } : {}),
-    ...(str('whispererSelection') !== undefined ? { whispererSelection: str('whispererSelection') } : {}),
+    ...(requestedSelection !== undefined ? { whispererSelection: requestedSelection } : {}),
     ...(bool('infectionLossToWhisperer') !== undefined
       ? { infectionLossToWhisperer: bool('infectionLossToWhisperer') }
       : {}),
