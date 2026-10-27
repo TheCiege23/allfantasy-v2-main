@@ -81,6 +81,7 @@ export async function processAmbushFromChimmy(
     where: { id: log.id },
     data: { isValid: false, validationError: code, privateResponse: message },
   })
+  if (z.experienceMode === 'simple') return reject('Ambushes are available in Enhanced Zombie only.', 'simple_mode')
   if (!label) return reject('Use @Chimmy ambush swap <exact Survivor team name>. Other ambush effects are not active.', 'unsupported_ambush')
   const rec = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
   if (!rec || rec.userId !== whispererUserId) return reject('Only the Whisperer may invoke an ambush.', 'not_whisperer')
