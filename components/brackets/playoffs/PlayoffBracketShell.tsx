@@ -498,7 +498,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         {singleGameSport && <Link className="mt-2 inline-block text-sm font-bold text-teal-700 underline" href={`/brackets/standings?sport=${safeChallenge.sport}&season=${safeChallenge.seasonYear}`}>View universal board →</Link>}
         <p className="mt-1 text-xs font-semibold text-slate-500">
           {singleGameSport ? "Finalized brackets only. Potential is the highest score still reachable from saved picks." : hasScoredLeaderboard
-            ? "Scored leaderboard from completed series." : "Pick-count leaderboard until series results sync."}
+            ? "Scored leaderboard from completed series results." : "Pick-count leaderboard until series results sync."}
         </p>
         {leaderboardRows.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No leaderboard entries yet.</p>
