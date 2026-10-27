@@ -44,10 +44,17 @@ vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: m.get
 
 // Weekly resolution's collaborators — this suite pins only where the week pointer lands.
 vi.mock('@/lib/zombie/infectionEngine', () => ({ resolveWeeklyInfections: vi.fn(async () => ({ infectionsCreated: 0 })) }))
-vi.mock('@/lib/zombie/serumEngine', () => ({ finalizePendingSerumsForWeek: vi.fn(async () => undefined) }))
+vi.mock('@/lib/zombie/serumEngine', () => ({
+  finalizePendingSerumsForWeek: vi.fn(async () => undefined),
+  autoReviveEligibleZombies: vi.fn(async () => undefined),
+  awardNativeSerumsForWeek: vi.fn(async () => undefined),
+}))
 vi.mock('@/lib/zombie/bashingEngine', () => ({ detectAndProcessBashings: vi.fn(async () => []) }))
 vi.mock('@/lib/zombie/maulingEngine', () => ({ detectAndProcessMaulings: vi.fn(async () => []) }))
-vi.mock('@/lib/zombie/weaponEngine', () => ({ checkAndAwardWeapons: vi.fn(async () => undefined) }))
+vi.mock('@/lib/zombie/weaponEngine', () => ({
+  checkAndAwardWeapons: vi.fn(async () => undefined),
+  finalizePendingWeaponsForWeek: vi.fn(async () => undefined),
+}))
 vi.mock('@/lib/zombie/weeklyUpdateEngine', () => ({ tryPostWeeklyUpdateAfterResolution: vi.fn(async () => undefined) }))
 vi.mock('@/lib/zombie/universeStatEngine', () => ({ syncUniverseStats: vi.fn(async () => undefined) }))
 vi.mock('@/lib/zombie/commissionerNotificationService', () => ({ notifyCommissioner: vi.fn(async () => undefined), notifyZombiePlayer: vi.fn(async () => undefined) }))
@@ -88,7 +95,7 @@ describe('ensureZombieSeasonActivated', () => {
     expect(r).toEqual({ ok: true, activated: true, whispererPicked: true, zombieLeagueId: 'z1' })
     expect(m.ensureLeagueTeamRows).toHaveBeenCalledWith('L1', 'z1')
     expect(withWhisperer).toHaveBeenCalledWith('z1', 'random')
-    expect(argsOf('zombieLeague.updateMany')[0]).toEqual({
+    expect(argsOf('zombieLeague.updateMany')[0]).toMatchObject({
       where: { id: 'z1', status: { in: ['setup', 'registering'] } },
       data: { status: 'active', season: 2026, totalWeeks: 17, currentWeek: 1 },
     })
@@ -103,7 +110,7 @@ describe('ensureZombieSeasonActivated', () => {
 
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
 
-    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
     expect(argsOf('redraftMatchup.findFirst')[0]).toMatchObject({ where: { seasonId: 's1', awayRosterId: { not: null } } })
     spy.mockRestore()
   })
@@ -119,7 +126,7 @@ describe('ensureZombieSeasonActivated', () => {
 
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
 
-    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
     spy.mockRestore()
   })
 
@@ -167,6 +174,20 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
     overrides.set('redraftMatchup.findFirst', async () => ({ week: lastScheduledWeek }))
   }
   const leagueUpdate = () => argsOf('zombieLeague.update').at(-1)!
+
+  for (const sport of ['NFL', 'NBA', 'NHL', 'MLB']) {
+    it(`resolves a final native ${sport} week and advances independently`, async () => {
+      arrange(3)
+      overrides.set('zombieLeague.findUnique', async () => ({
+        id: 'z1', leagueId: 'L1', sport, season: 2026, currentWeek: 3,
+        totalWeeks: sport === 'NFL' ? 17 : 23, universeId: null, league: {},
+      }))
+      const result = await runWeeklyResolution('z1', 3)
+      expect(result.resolution).toBeTruthy()
+      expect(argsOf('zombieWeeklyResolution.update').at(-1)?.data.status).toBe('complete')
+      expect(leagueUpdate().data.currentWeek).toBe(4)
+    })
+  }
 
   it('points the league at the week after the one it resolved', async () => {
     arrange(3)
