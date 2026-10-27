@@ -29,6 +29,7 @@ import {
   getDraftTypeOptions,
   getIdpDraftTypeOptions,
   getScoringPresetOptionsForSelection,
+  getSurvivorTribeOptions,
   getTeamCountOptions,
   isSportAllowedForType,
 } from '@/lib/create-league-v2/rules-engine'
@@ -89,6 +90,12 @@ function everyReachableChoice(): Choice[] {
             }
             if (leagueType === 'best_ball') {
               state = apply(state, { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, teamCount) } })
+            }
+            // ...and the Survivor tribe count, which must split the cast. The NFL cast sizes on offer
+            // shrink as the season runs (`survivorCastSizesThatFitNow` reads the real clock while this
+            // matrix is built), so a size whose default tribe count does not divide it appears mid-season.
+            if (leagueType === 'survivor' && !getSurvivorTribeOptions(teamCount).includes(state.survivorTribeCount)) {
+              state = apply(state, { survivorTribeCount: getSurvivorTribeOptions(teamCount)[0] ?? 2 })
             }
             state = apply(state, { draftType: draft.id as WizardDraftType, scoringPresetId: preset.id })
             choices.push({ label: `${sport}/${format.id}/${draft.id}/${preset.id}/${teamCount}`, state })
