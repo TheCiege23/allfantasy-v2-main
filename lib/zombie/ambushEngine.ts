@@ -4,6 +4,7 @@ import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
+import { trustedZombieWeekStart } from '@/lib/zombie/zombieWeekGameStart'
 
 /** Current serum timing remains independent; serum registration has its own weekly rules. */
 export async function validateAmbushTiming(
@@ -36,17 +37,11 @@ export async function validatePreScoringWindow(
   if (!matchups.length || matchups.some((m) => m.status !== 'scheduled' || m.homeScore !== 0 || m.awayScore !== 0)) {
     return { valid: false, reason: 'Week scoring has started or the schedule is not ready.' }
   }
-  // GameSchedule is populated by the provider schedule ingestion pipeline. If a period has no
-  // dated games, we cannot establish a fair deadline and must keep pre-score powers closed.
-  const games = await prisma.gameSchedule.findMany({
-    where: { sportType: z.sport.toUpperCase(), season: seasonYear, weekOrRound: week },
-    select: { startTime: true },
-  })
-  if (!games.length || games.some((game) => !game.startTime)) {
+  const firstLock = await trustedZombieWeekStart(z.sport, seasonYear, week)
+  if (!firstLock) {
     return { valid: false, reason: 'Provider game times for this scoring week are unavailable.' }
   }
-  const firstLock = Math.min(...games.map((game) => game.startTime!.getTime()))
-  if (Date.now() >= firstLock) {
+  if (Date.now() >= firstLock.getTime()) {
     return { valid: false, reason: 'The first game of this scoring week has locked.' }
   }
   const resolution = await prisma.zombieWeeklyResolution.findUnique({
@@ -140,12 +135,8 @@ export async function processAmbushFromChimmy(
 
   try {
     const action = await prisma.$transaction(async (tx) => {
-      const firstGame = await tx.gameSchedule.findFirst({
-        where: { sportType: z.sport.toUpperCase(), season: z.season, weekOrRound: week, startTime: { not: null } },
-        orderBy: { startTime: 'asc' },
-        select: { startTime: true },
-      })
-      if (!firstGame?.startTime || firstGame.startTime.getTime() <= Date.now()) {
+      const firstGame = await trustedZombieWeekStart(z.sport, z.season, week, tx)
+      if (!firstGame || firstGame.getTime() <= Date.now()) {
         throw new Error('The scoring period has locked.')
       }
       const usedInTransaction = await tx.zombieAmbushAction.count({
