@@ -15,7 +15,7 @@ The next release supports **NFL, NBA, NHL, and MLB**. Existing college and socce
 | Season calendars | `zombieSeasonSchedule.ts` defines NFL 17, NBA 21, NHL 23, MLB 23 scoring weeks. | Bind weeks to actual season and provider scoring periods. Treat All-Star breaks and postponed games as calendar data, not fixed week numbers. |
 | Draft and universe | League and universe setup, levels, and per-league drafts exist. | Certify create → draft → first week for all four sports and every level. |
 | Infection and serum | Native matchup infection, serum protection/revival, and winnings ledger exist. | Make settlement atomic and replay-safe for stat corrections; add a commissioner choice for automatic serum revival at threshold. |
-| Trade restriction | Server trade gate blocks Zombies. This branch also blocks Whisperers after the first recorded infection when the existing trade-block setting is enabled. | Lock and explain the rule in commissioner settings before the draft; review every trade execution path and pending offers. |
+| Trade restriction | Server trade gate blocks Zombies. This branch blocks Whisperers from trading at all times, independent of the commissioner-controlled Zombie trade setting. | Lock and explain the rule in commissioner settings before the draft; review every trade execution path and pending offers. |
 | Weapons and Whisperer powers | Items and command parsing exist, but `chimmyActionHandler.ts` intentionally returns `not_active_this_season` for weapons, bombs, ambushes, and powers because their effects are not applied. | Implement and test the exact effect, eligibility, deadline, rollback, and audit trail before enabling each command. |
 | Weekly report | A report composer and chat posting exist. The money section still has placeholders, and the scheduler has no durable exactly-once claim. | Build a finalization-driven report with named awards, threat matchups, verified winnings, event graphics, and idempotent posting. |
 | Commissioner UI | Many Zombie modal panels are static controls (for example, Whisperer selection has no save handler). | Use loaded settings, validated save actions, error feedback, and per-league/universe scope. |
@@ -54,7 +54,7 @@ One authoritative job processes each `leagueId + season + scoringPeriodId`:
 1. Lock the week's eligible lineups and any accepted pre-lock Chimmy actions.
 2. Read final fantasy matchup scores and a rules snapshot.
 3. Apply serum protection, weapons, and matchup effects in a deterministic order.
-4. Resolve wins, losses, ties, and infections. Write identity history and lock Zombie trades immediately. Once the first infection is recorded, lock Whisperer trades too.
+4. Resolve wins, losses, ties, and infections. Write identity history and lock Zombie trades immediately. Whisperer trades remain locked from role assignment onward.
 5. Award serums and weapons to the correct roster owner. Transfers and winnings follow the winning manager and are represented in separate ledgers. A replacement manager inherits a team inventory only according to the published replacement-owner rule.
 6. Calculate weekly prizes or points, then materialize a report snapshot and event cards.
 7. Post one league chat report. Post one universe summary after all due leagues finish. Deliver notifications once.
@@ -91,7 +91,7 @@ The hub detects one league versus a universe. One-league commissioners land on t
 
 The main settings groups are: season and draft; team and scoring rules; infection and serum; weapons and ambushes; Whisperer count/selection; trade and waiver policy; weekly announcements; external prize ledger; visual and notification preferences. Standard league controls remain available beside Zombie controls. Save actions require commissioner authorization, server validation, an audit event, and immediate UI feedback. Outcome-changing controls become read-only after the first lineup lock except through a logged correction flow.
 
-Default: one ambush per scoring period, one Whisperer, manual serum use, Zombie trade block on, and automatic reports on. NBA/NHL/MLB may choose two Whisperers before the draft. The commissioner can set the ambush cap, automatic serum use, infection triggers, report timing, and payout formula. A single table should show which settings are editable now and which wait until next season.
+Default: one ambush per scoring period, one Whisperer, manual serum use, Zombie trade block on, permanent Whisperer trade prohibition, and automatic reports on. NBA/NHL/MLB may choose two Whisperers before the draft. The commissioner can set the ambush cap, automatic serum use, infection triggers, report timing, and payout formula. A single table should show which settings are editable now and which wait until next season.
 
 ## iPhone-first interface
 
@@ -101,7 +101,7 @@ Use at least 44 × 44 point touch controls and avoid horizontal page overflow, f
 
 ## Delivery order and acceptance
 
-1. **Foundation:** certify four-sport create/draft/season schedule, store the Simple/Enhanced snapshot, and enforce trades from the server. Acceptance: one league and a 3/6 league universe can all start their own drafts and weeks; a trade is rejected on both create and accept after infection.
+1. **Foundation:** certify four-sport create/draft/season schedule, store the Simple/Enhanced snapshot, and enforce trades from the server. Acceptance: one league and a 3/6 league universe can all start their own drafts and weeks; a Whisperer trade is rejected before Week 1, and a Zombie trade is rejected on both create and accept after infection.
 2. **Settlement:** make infection, serum, inventory, and winnings transitions atomic and correction-safe. Acceptance: replaying a week produces identical state and one set of ledger rows.
 3. **Powers:** implement an ambush remap and one weapon at a time through the same command path. Acceptance: the published effect appears in the actual matchup or score, invalid commands spend nothing, and deadlines are enforced.
 4. **Two Whisperers:** migrate record/card/selection assumptions and add NBA/NHL/MLB setup. Acceptance: two distinct Whisperers retain independent ambush counts and both appear in reports.
