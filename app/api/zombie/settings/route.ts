@@ -30,6 +30,18 @@ export async function PATCH(req: Request) {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
 
+  const competitiveKeys = [
+    'experienceMode', 'whispererSelectionMode', 'whispererSelection',
+    'whispererAmbushCount', 'ambushCountPerWeek', 'ambushRemapMatchup',
+    'infectionLossToWhisperer', 'infectionLossToZombie', 'serumReviveCount',
+    'autoSerumRevive', 'serumAwardHighScore', 'serumAwardOnBashMaul',
+    'serumUseBeforeLastStarter', 'weaponScoreThresholds', 'weaponTopTwoActive',
+    'bombOneTimeOverride', 'zombieTradeBlocked', 'noWaiverFreeAgency',
+  ]
+  if (!['setup', 'registering'].includes(z.status) && competitiveKeys.some((key) => body[key] !== undefined)) {
+    return NextResponse.json({ error: 'Competitive Zombie rules are locked for this season.' }, { status: 409 })
+  }
+
   const num = (k: string) => (typeof body[k] === 'number' ? (body[k] as number) : undefined)
   const bool = (k: string) => (typeof body[k] === 'boolean' ? (body[k] as boolean) : undefined)
   const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string) : undefined)
