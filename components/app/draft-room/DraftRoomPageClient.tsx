@@ -627,6 +627,10 @@ export function DraftRoomPageClient({
             /* Provenance travels with the value so the cell can say projected vs measured. */
             aiAdpSource: e.aiAdp != null ? e.aiAdpSource ?? null : null,
             aiAdpTeamCounts: e.aiAdp != null ? e.aiAdpTeamCounts ?? null : null,
+            afAdp: e.afAdp ?? null,
+            afAdpContributions: e.afAdpContributions ?? null,
+            afAdpImportedSampleSize: e.afAdpImportedSampleSize ?? null,
+            afAdpOwnSampleSize: e.afAdpOwnSampleSize ?? null,
             display: e.display ?? null,
             isDevy: e.isDevy,
             school: e.school ?? null,
@@ -661,6 +665,10 @@ export function DraftRoomPageClient({
             /* Provenance travels with the value so the cell can say projected vs measured. */
             aiAdpSource: e.aiAdp != null ? e.aiAdpSource ?? null : null,
             aiAdpTeamCounts: e.aiAdp != null ? e.aiAdpTeamCounts ?? null : null,
+            afAdp: e.afAdp ?? null,
+            afAdpContributions: e.afAdpContributions ?? null,
+            afAdpImportedSampleSize: e.afAdpImportedSampleSize ?? null,
+            afAdpOwnSampleSize: e.afAdpOwnSampleSize ?? null,
           }
         })
   }, [draftPool, draftData, aiAdpLookupMaps, draftUISettings?.aiAdpEnabled, useAllFantasyAdp])
