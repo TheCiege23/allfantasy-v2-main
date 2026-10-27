@@ -161,6 +161,8 @@ async function main() {
       await seedWeekScores(week)
       continue
     }
+    // Seeded and still not final: say which check holds it, once per week, before the stall limit.
+    if (outcome === 'awaiting_verified_scores' && repeats === 3) await explainUnfinalizedWeek(week)
     if (outcome === 'voting_open') {
       await castVotes()
       advanceRehearsalClock(6 * 3_600_000)
@@ -207,6 +209,28 @@ async function main() {
     // Stat names the league does not score make every team 0 and every council a tie, which looks
     // like a tiebreak problem rather than a seeding one. Stop here instead.
     assert.ok(scored > 0, `week ${week}: no seeded player scores above 0 under this league's scoring; the seeded stat names are wrong for ${SPORT}`)
+  }
+
+  /** The scorer's own inputs for the first cast member, so a week that will not finalize says why. */
+  async function explainUnfinalizedWeek(week: number) {
+    const { sumRedraftStartersFantasy } = await import('../../lib/survivor/gameStateMachine')
+    const { planWeekWindow } = await import('../../lib/survivor/survivorPlanCalendar')
+    const { readWeekGames } = await import('../../lib/redraft/weekGames')
+    const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId }, orderBy: { createdAt: 'desc' } })
+    const players = await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, redraftRosterId: true } })
+    const results = await Promise.all(players.filter(p => p.redraftRosterId).map(async p => ({ p, r: await sumRedraftStartersFantasy(p.redraftRosterId!, week, season) })))
+    const notFinal = results.filter(x => !x.r.allFinalized)
+    const window = planWeekWindow(SPORT as 'NBA' | 'NHL' | 'NFL', season.season, week)
+    const games = window ? await readWeekGames(prisma, { sport: SPORT, season: season.season, week, seasonType: 'regular', dateWindow: window, now: rehearsalNow() }) : []
+    const sample = notFinal[0]
+    let detail = ''
+    if (sample) {
+      const roster = await prisma.roster.findFirst({ where: { id: sample.p.redraftRosterId!, leagueId }, select: { redraftRosterId: true, platformUserId: true } })
+      const rows = roster?.redraftRosterId ? await prisma.redraftRosterPlayer.findMany({ where: { rosterId: roster.redraftRosterId, droppedAt: null }, select: { playerId: true, slotType: true, team: true } }) : []
+      const finals = await prisma.playerWeeklyScore.count({ where: { playerId: { in: rows.map(r => r.playerId) }, week, season: season.season, isFinalized: true } })
+      detail = ` sample roster: linked=${Boolean(roster?.redraftRosterId)} owner=${Boolean(roster?.platformUserId)} players=${rows.length} benched=${rows.filter(r => /bench/i.test(r.slotType)).length} noTeam=${rows.filter(r => !r.team).length} finalizedWeekly=${finals}`
+    }
+    log(`week ${week} not final: ${notFinal.length}/${results.length} rosters not final; window ${window ? `${window.start.toISOString().slice(0, 10)}..${window.end.toISOString().slice(0, 10)}` : 'none'}; ${games.length} games on the slate;${detail}`)
   }
 
   async function leagueScoring() {
