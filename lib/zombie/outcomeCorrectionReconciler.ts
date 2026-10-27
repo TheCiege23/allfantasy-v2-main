@@ -53,8 +53,18 @@ export async function reconcileOutcomeChangingCorrection(input: {
     homeScore: row.homeScore,
     awayScore: row.awayScore,
   }))
+  const oldResults = resolvedResults.map(row => {
+    const matchup = matchups.find(item => item.id === row.matchupId)
+    const raw = prior.find(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item) || !matchup) return false
+      const value = item as Record<string, unknown>
+      return value.homeUserId === matchup.homeRosterId && value.awayUserId === matchup.awayRosterId
+    }) as Record<string, unknown> | undefined
+    return { ...row, homeScore: Number(raw?.homeScore), awayScore: Number(raw?.awayScore) }
+  })
+  const oldPlan = planZombieOutcomeReplay(oldResults, snapshot, week, experienceMode)
   const plan = planZombieOutcomeReplay(resolvedResults, snapshot, week, experienceMode)
-  if (!plan) return null
+  if (!oldPlan || !plan) return null
   const expected = new Map(matchups.map(row => [row.id, row]))
   try {
     return await prisma.$transaction(async tx => {
@@ -63,7 +73,7 @@ export async function reconcileOutcomeChangingCorrection(input: {
       })
       if (!live || live.status !== 'complete' || live.resolvedAt?.getTime() !== previous.resolvedAt?.getTime() ||
           JSON.stringify(live.matchupResults) !== JSON.stringify(previous.matchupResults)) return null
-      const [now, later, bashings, maulings, laterActions, owners, items, teams] = await Promise.all([
+      const [now, later, bashings, maulings, laterActions, owners, items, teams, oldLogs, oldEvents] = await Promise.all([
         tx.redraftMatchup.findMany({
           where: { seasonId, week },
           select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true },
@@ -80,8 +90,18 @@ export async function reconcileOutcomeChangingCorrection(input: {
           where: { leagueId },
           select: { id: true, rosterId: true, fantasyTeamName: true, displayName: true },
         }),
+        tx.zombieInfectionLog.findMany({
+          where: { leagueId, week }, select: { survivorRosterId: true, infectedByRosterId: true },
+        }),
+        tx.zombieInfectionEvent.findMany({
+          where: { zombieLeagueId, week }, select: { victimUserId: true, infectorUserId: true },
+        }),
       ])
       if (later || bashings || maulings || laterActions || now.length !== expected.size) return null
+      if (oldLogs.length !== oldPlan.infections.length || oldEvents.length !== oldPlan.infections.length ||
+          oldPlan.infections.some(infection => !oldLogs.some(log =>
+            log.survivorRosterId === infection.victimRosterId &&
+            log.infectedByRosterId === infection.infectorRosterId))) return null
       if (now.some(row => {
         const old = expected.get(row.id)
         return !old || old.homeRosterId !== row.homeRosterId || old.awayRosterId !== row.awayRosterId ||
@@ -90,6 +110,9 @@ export async function reconcileOutcomeChangingCorrection(input: {
       const ownerByRoster = new Map(owners.map(owner => [owner.id, owner.platformUserId]))
       if (snapshot.owners.length !== owners.length || snapshot.owners.some(owner =>
         ownerByRoster.get(owner.rosterId) !== owner.userId)) return null
+      if (oldPlan.infections.some(infection => !oldEvents.some(event =>
+        event.victimUserId === ownerByRoster.get(infection.victimRosterId) &&
+        event.infectorUserId === ownerByRoster.get(infection.infectorRosterId)))) return null
       const beforeItem = new Map(snapshot.items.map(item => [item.id, item]))
       if (snapshot.items.some(item => !items.some(current => current.id === item.id))) return null
       const extra = items.filter(item => !beforeItem.has(item.id))
