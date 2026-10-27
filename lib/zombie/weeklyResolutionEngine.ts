@@ -189,16 +189,35 @@ export async function runWeeklyResolution(
 
   const matchupsJson: unknown[] = []
   if (season) {
+    const [seasonRosters, ownerRosters] = await Promise.all([
+      prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true } }),
+      prisma.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true } }),
+    ])
+    const ownerBySeasonRoster = new Map(seasonRosters.map((roster) => [roster.id, roster.ownerId]))
+    const nativeRosterByOwner = new Map(ownerRosters.map((roster) => [roster.platformUserId, roster.id]))
+    const teamByNativeRoster = new Map(teams.map((team) => [team.rosterId, team]))
+    const teamFor = (seasonRosterId: string) => teamByNativeRoster.get(nativeRosterByOwner.get(ownerBySeasonRoster.get(seasonRosterId) ?? '') ?? '')
     const mm = await prisma.redraftMatchup.findMany({
       where: { seasonId: season.id, week },
     })
     for (const m of mm) {
+      const homeWon = m.homeScore > m.awayScore
+      const awayWon = m.awayScore > m.homeScore
+      const winnerId = homeWon ? m.homeRosterId : awayWon ? m.awayRosterId : null
+      const loserId = homeWon ? m.awayRosterId : awayWon ? m.homeRosterId : null
+      const winner = winnerId ? teamFor(winnerId) : null
+      const loser = loserId ? teamFor(loserId) : null
       matchupsJson.push({
         homeUserId: m.homeRosterId,
         awayUserId: m.awayRosterId,
         homeScore: m.homeScore,
         awayScore: m.awayScore,
-        outcome: (m.homeScore ?? 0) >= (m.awayScore ?? 0) ? 'home' : 'away',
+        outcome: homeWon ? 'home' : awayWon ? 'away' : 'tie',
+        winnerStatus: winner?.status ?? null,
+        winnerName: winner?.fantasyTeamName || winner?.displayName || null,
+        loserName: loser?.fantasyTeamName || loser?.displayName || null,
+        winnerScore: homeWon ? m.homeScore : awayWon ? m.awayScore : null,
+        loserScore: homeWon ? m.awayScore : awayWon ? m.homeScore : null,
       })
     }
   }
