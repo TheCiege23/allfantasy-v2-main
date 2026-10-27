@@ -11,6 +11,7 @@ async function ensureTeamItem(
   zombieLeagueId: string,
   itemType: string,
   label: string,
+  week: number,
 ) {
   const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
   if (!roster) return
@@ -27,6 +28,7 @@ async function ensureTeamItem(
       userId,
       itemType,
       itemLabel: label,
+      acquiredAtWeek: week,
     },
   })
   await notifyZombiePlayer(userId, 'weapon_earned', 'You earned a weapon', {
@@ -63,13 +65,13 @@ export async function checkAndAwardWeapons(leagueId: string, week: number, zombi
       })
       if (!rr) continue
       if (side.score >= rules.weaponShieldThreshold) {
-        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_knife', '🔪 Knife')
+        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_knife', '🔪 Knife', week)
       }
       if (side.score >= rules.weaponAmbushThreshold) {
-        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_bow', '🏹 Bow')
+        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_bow', '🏹 Bow', week)
       }
       if (side.won && Math.abs(hs - as) >= rules.weaponAxeMargin) {
-        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_axe', '🪓 Axe')
+        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_axe', '🪓 Axe', week)
       }
     }
   }
@@ -83,10 +85,10 @@ export async function checkAndAwardWeapons(leagueId: string, week: number, zombi
     const uid = roster?.platformUserId
     if (!uid) continue
     if (t.zombieAttacksSurvived >= 3) {
-      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_gun', '🔫 Gun')
+      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_gun', '🔫 Gun', week)
     }
     if (t.survivorWinStreak >= 5) {
-      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_bomb', '💣 Bomb')
+      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_bomb', '💣 Bomb', week)
     }
   }
 }
