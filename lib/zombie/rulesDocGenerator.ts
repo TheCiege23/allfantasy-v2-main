@@ -20,6 +20,7 @@ function buildSections(
   z: ZombieLeague & { name: string | null },
   tpl: ZombieRulesTemplate | null,
   freeCurrency: string,
+  reviveSerums: number,
 ): Omit<
   ZombieRulesDocument,
   'id' | 'generatedAt' | 'lastUpdatedAt' | 'leagueId' | 'version' | 'sport' | 'isPaid'
@@ -42,7 +43,6 @@ function buildSections(
   const weapons = cfg.engineWeapons ?? DEFAULT_ENGINE_WEAPONS
   const knifeScore = tpl?.weaponShieldThreshold ?? weapons.knifeScore
   const bowScore = tpl?.weaponAmbushThreshold ?? weapons.bowScore
-  const reviveSerums = tpl?.reviveThreshold ?? 3
   const rosterSize = tpl?.rosterSize ?? cfg.rosterSize
   const starterCount = tpl?.starterCount ?? cfg.starterCount
   const benchCount = tpl?.benchCount ?? cfg.benchCount
@@ -233,7 +233,8 @@ export async function generateRulesDocument(zombieLeagueId: string): Promise<Zom
   const free = await prisma.zombieFreeRewardConfig.findUnique({ where: { zombieLeagueId: z.id } })
   const freeCurrency = free?.currencyLabel ?? 'Outbreak Points'
 
-  const sections = buildSections(z, tpl, freeCurrency)
+  const config = await prisma.zombieLeagueConfig.findUnique({ where: { leagueId: z.leagueId }, select: { serumReviveCount: true } })
+  const sections = buildSections(z, tpl, freeCurrency, config?.serumReviveCount ?? 2)
   const prev = await prisma.zombieRulesDocument.findFirst({
     where: { leagueId: z.id },
     orderBy: { version: 'desc' },
