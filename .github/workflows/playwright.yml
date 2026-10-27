@@ -438,7 +438,9 @@ jobs:
         # The default 33-route warm-up compiled /core, /admin, /pricing and the rest for a lane
         # that never opens them, and its heap is what carried next dev to its restart line.
         # If you add a @draft-room or @mock-draft-room spec on another route, add the route.
-        E2E_WARM_ROUTES: /,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production
+        # /e2e/draft-player-measurement was missed: the NBA player-card spec visits it, so its first
+        # page.goto paid a cold compile against a 45s timeout and failed both attempts on PR #2798.
+        E2E_WARM_ROUTES: /,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/draft-player-measurement,/e2e/mock-draft-room,/e2e/mock-draft-production
       run: npm run test:e2e:draft-room:chromium
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
