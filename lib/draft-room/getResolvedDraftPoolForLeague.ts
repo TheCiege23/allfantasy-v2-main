@@ -65,6 +65,7 @@ import { applyPositionAwareProjectionFallbacks, type ProjectionFallbackDiagnosti
 import {
   loadSportsPlayerRecordMapsForDraftPool,
   lookupSportsPlayerRecordAugmentDetailed,
+  type DraftSeasonStatLine,
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
@@ -126,6 +127,8 @@ export type DraftPoolRawRow = {
   age?: number | null
   fantasyPointsPerGame?: number | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
+  /** MLB / NHL season line (`extractMlbDraftSeasonStats` / `extractNhlDraftSeasonStats`). */
+  seasonStatLine?: DraftSeasonStatLine | null
   lifetimeValue?: number | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits
   /** D.7 â Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
@@ -2450,6 +2453,7 @@ export async function getResolvedDraftPoolForLeague(
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
       nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
+      seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (sprAug?.seasonStatLine ?? null) : null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??
