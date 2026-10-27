@@ -149,6 +149,11 @@ export async function PATCH(req: Request) {
     }
   }
 
+  const serumReviveCountPatch = num('serumReviveCount')
+  if (serumReviveCountPatch !== undefined && (!Number.isInteger(serumReviveCountPatch) || serumReviveCountPatch < 1 || serumReviveCountPatch > 5)) {
+    return NextResponse.json({ error: 'serumReviveCount must be an integer between 1 and 5.' }, { status: 400 })
+  }
+
   const leaguePatch = {
     ...(str('name') !== undefined ? { name: str('name') } : {}),
     ...(str('status') !== undefined ? { status: str('status') } : {}),
@@ -197,11 +202,6 @@ export async function PATCH(req: Request) {
       where: { id: z.id },
       data: { commissionerUiPrefs: next as object },
     })
-  }
-
-  const serumReviveCountPatch = num('serumReviveCount')
-  if (serumReviveCountPatch !== undefined && (!Number.isInteger(serumReviveCountPatch) || serumReviveCountPatch < 1 || serumReviveCountPatch > 5)) {
-    return NextResponse.json({ error: 'serumReviveCount must be an integer between 1 and 5.' }, { status: 400 })
   }
 
   const configPatch = {
