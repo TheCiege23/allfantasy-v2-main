@@ -21,6 +21,9 @@ function buildSections(
   tpl: ZombieRulesTemplate | null,
   freeCurrency: string,
   reviveSerums: number,
+  serumAwardHighScore: boolean,
+  serumAwardOnBashMaul: boolean,
+  autoSerumRevive: boolean,
 ): Omit<
   ZombieRulesDocument,
   'id' | 'generatedAt' | 'lastUpdatedAt' | 'leagueId' | 'version' | 'sport' | 'isPaid'
@@ -62,8 +65,8 @@ function buildSections(
     'INFECTION RULES',
     '- A Survivor who loses their weekly matchup to the Whisperer becomes a Zombie.',
     '- A Survivor who loses their weekly matchup to any Zombie becomes a Zombie.',
-    '- A Survivor who registers a serum before kickoff stays human if they lose that week (the serum is spent; a win keeps it).',
-    `- A Zombie who collects ${reviveSerums} serums can use them to return as a Survivor.`,
+    '- A Survivor who registers a serum before weekly scoring stays human if a Zombie or Whisperer beats them (the serum is spent only if it blocks infection).',
+    `- A Zombie who collects ${reviveSerums} serums can ${autoSerumRevive ? 'automatically return' : 'use @Chimmy revive to return'} as a Survivor.`,
     `- ${cfg.infectionTiming}`,
     '',
     mode === 'paid'
@@ -200,13 +203,10 @@ function buildSections(
     sectionAmbush,
     sectionBashing,
     sectionMauling,
-    sectionSerums:
-      tpl?.serumAwardDesc ??
-      `Serum awards: ${
-        cfg.serumAwards.length > 0
-          ? cfg.serumAwards.map((a) => a.label).join(', ')
-          : 'no default awards configured'
-      }. Commissioner can configure additional award triggers.`,
+    sectionSerums: `Serums to revive: ${reviveSerums}. Automatic revival: ${autoSerumRevive ? 'on' : 'off'}. Weekly serum awards: ${[
+      serumAwardHighScore ? 'highest score' : null,
+      serumAwardOnBashMaul ? 'Bashing or Mauling winner' : null,
+    ].filter(Boolean).join(', ') || 'disabled'}.`,
     sectionWeapons: [
       `Weapons are earned automatically each week: a Knife for ${knifeScore}+ points, a Bow for ${bowScore}+,`,
       `an Axe for winning by ${weapons.axeWinMargin}+, a Gun after surviving 3 Zombie attacks, and a Bomb after 5 straight wins.`,
@@ -233,8 +233,12 @@ export async function generateRulesDocument(zombieLeagueId: string): Promise<Zom
   const free = await prisma.zombieFreeRewardConfig.findUnique({ where: { zombieLeagueId: z.id } })
   const freeCurrency = free?.currencyLabel ?? 'Outbreak Points'
 
-  const config = await prisma.zombieLeagueConfig.findUnique({ where: { leagueId: z.leagueId }, select: { serumReviveCount: true } })
-  const sections = buildSections(z, tpl, freeCurrency, config?.serumReviveCount ?? 2)
+  const config = await prisma.zombieLeagueConfig.findUnique({
+    where: { leagueId: z.leagueId },
+    select: { serumReviveCount: true, serumAwardHighScore: true, serumAwardOnBashMaul: true, autoSerumRevive: true },
+  })
+  const sections = buildSections(z, tpl, freeCurrency, config?.serumReviveCount ?? 2,
+    config?.serumAwardHighScore ?? true, config?.serumAwardOnBashMaul ?? true, config?.autoSerumRevive ?? false)
   const prev = await prisma.zombieRulesDocument.findFirst({
     where: { leagueId: z.id },
     orderBy: { version: 'desc' },
