@@ -29,8 +29,8 @@ the one the renew path itself uses.
 
 | | Feature | Tier | Notes |
 |---|---|---|---|
-| ◐ | Live rookie draft order (§1.1) — non-playoff teams by reverse max PF / PF / record, playoff teams by finish then seed, worse seed first within a round, final order seats the next rookie draft | Free / Plan | Built: `lib/rookie-order/` (engine, native + Sleeper bracket adapters, `liveRookieOrderService`), Draft settings → live order panel, saved final order used by `createNextLeagueDraft`. Calculate is free; the automation is `commissioner_automation` and keeps running for the season after a plan lapses. Imported platforms: #2543. **Gaps:** (1) native leagues have no true max PF — `loadNative` falls back to points for with a warning; (2) nothing refreshes the order when a playoff round ends — only opening the panel or building the next draft does; (3) no notice or chat post per round. |
-| ◐ | Weighted rookie lottery | no gate | `lib/draft-lottery/` — seeded, runs once per rookie draft when the method is `weighted_lottery`, year 2+ dynasty only. **Gaps:** its "max PF" weighting and tiebreak read points for (`standingsForLottery.ts`); the `reverse_max_pf` fallback is coerced to reverse standings. |
+| ✅ | Live rookie draft order (§1.1) — non-playoff teams by reverse max PF / PF / record, playoff teams by finish then seed, worse seed first within a round, final order seats the next rookie draft | Free / Plan | `lib/rookie-order/` (engine, native + Sleeper bracket adapters, `liveRookieOrderService`), Draft settings → live order panel, saved final order used by `createNextLeagueDraft`. Calculate is free; the automation is `commissioner_automation` and keeps running for the season after a plan lapses. Imported platforms: #2543. True max PF for native leagues (#2794: `nativeMaxPf.ts`, `loadNativeMaxPf.ts`). The order refreshes hourly and, as each playoff round locks picks, notifies the commissioner with an optional league chat post (#2795: `roundNotices.ts`, `roundNoticeService.ts`, run from `app/api/redraft/waiver-process`). |
+| ◐ | Weighted rookie lottery | no gate | `lib/draft-lottery/` — seeded, runs once per rookie draft when the method is `weighted_lottery`, year 2+ dynasty only. Its max PF weighting and tiebreak now read true max PF when every team has one (#2794). **Gap:** the `reverse_max_pf` fallback is coerced to reverse standings (`WeightedDraftLotteryEngine.ts`). |
 | ✅ | Toilet bowl / consolation decides pick 1 | no gate | #2716, #2730, #2735: `consolation_plays_for = pick`, loser (default) or winner gets 1.01; dynasty and keeper only. Read by the live rookie order; the lottery path ignores it. |
 | ⬜ | Legacy rookie-order route is ungated | Plan | `app/api/commissioner/leagues/[leagueId]/rookie-draft-order` (PUT) has no entitlement check though its header says AF Commissioner; the live route is the gated one. |
 
@@ -39,7 +39,7 @@ the one the renew path itself uses.
 | | Feature | Tier | Notes |
 |---|---|---|---|
 | ✅ | Taxi size and eligibility (rookies / years limit) | Free | `lib/taxi/TaxiSettingsService.ts`, enforced on lineup save (`rosterValidationService`), ineligible players moved to the bench at rollover. Settings → Taxi squad. |
-| ⬜ | Taxi rules: lock after week X, promote-only windows | Plan | `taxiDeadlineWeek`, `taxiPromotionDeadlineWeek`, `taxiLockBehavior`, `taxiInSeasonMoves` are **stored but not enforced** for native leagues (`TAXI_DEADLINE_PASSED` is never produced). |
+| ✅ | Taxi rules: lock after week X, promote-only windows | Plan | Enforced on both lineup saves once the commissioner turns on **Enforce these rules** (Roster settings → Taxi squad rules, `League.settings.taxi_rules_enforced`) and the owner holds AF Commissioner: lock week (`TAXI_DEADLINE_PASSED`), promotion deadline, once promoted cannot return (a `taxi_promotion` row in `RedraftRosterMoveHistory`), in-season and playoff switches. `lib/taxi/taxiMoveRules.ts`, `taxiRulesService.ts`. Opt-in because every league holds defaults nobody chose; the offseason is always open and a commissioner override is never refused. |
 | ⬜ | Max years on taxi | Plan | No tenure counter for native rosters (`lib/core-app/taxiTenure.ts` reads Sleeper snapshots only). |
 | ⬜ | Taxi stealing (claim another team's taxi player) | Plan | Not built. Devy has a display-only flag (misspelled `taxiPoachaingEnabled`). |
 
@@ -55,16 +55,16 @@ the one the renew path itself uses.
 
 | | Feature | Tier | Notes |
 |---|---|---|---|
-| ◐ | Season rollover | Free / Plan | Built: next season created, rosters carried, taxi/IR/roster limits re-checked (`lib/redraft/offseason/startDynastyNewSeason.ts`, `dynastyRolloverHousekeeping.ts`), rookie draft optionally opened on a calendar date. **Gap:** no wizard — the redraft one (`lib/season-rollover/`) answers `not_redraft` for dynasty; spec order is draft order → taxi → contracts → dues → schedule. No dynasty card on the Commissioner Hub ("Start next season" lives in the old commissioner tab). |
+| ✅ | Season rollover | Free / Plan | Next season created, rosters carried, taxi/IR/roster limits re-checked (`lib/redraft/offseason/startDynastyNewSeason.ts`, `dynastyRolloverHousekeeping.ts`), rookie draft optionally opened on a calendar date. The **dynasty rollover wizard** is on the Commissioner Hub (`lib/season-rollover/dynastyRolloverWizard.ts`, the same card and route as the redraft one): rookie draft order and creating the draft → taxi rules and a preview of who the start moves to the bench → expiring contracts (salary-cap leagues) → next season's dues → schedule → start, with or without a rookie draft. AF Commissioner adds the drafted announcement and the dues-to-payouts carry. A Commish OS task opens when the season ends; Chimmy is told the offseason state. |
 | ✅ | IR eligibility by status (Out, COVID, suspended, NA, DNR, doubtful) | Free | `League.irAllow*`, enforced as `ir_ineligible_status`. Roster compliance settings. |
 | ⬜ | IR: move a player back to the bench when he is activated | Plan | Not built; the app only suggests "Move X off IR". |
-| ◐ | Dispersal draft for abandoned rosters | Plan | `lib/dispersal-draft/`, `requireEntitlement('commissioner_dispersal_draft')`, setup and draft screens. **To check:** the engine writes `Roster.playerData` only; whether claimed players reach the native season's `RedraftRosterPlayer` is unverified. |
+| ✅ | Dispersal draft for abandoned rosters | Plan | `lib/dispersal-draft/`, `requireEntitlement('commissioner_dispersal_draft')`, setup and draft screens. **Checked and fixed for native leagues** (`nativeDispersal.ts`): the engine read and wrote `Roster.playerData` only, so a native pool held no players (the JSON's `players` are id strings) and a claimed player never left the orphan team for scoring. A native league now builds the pool from the orphan team's `RedraftRosterPlayer` rows, native future picks and `faabBalance`, and a completed draft moves claimed players to the claimer's bench, drops unclaimed ones to free agency, moves claimed picks through `transferNativeFuturePick` and zeroes the orphan FAAB. Imported leagues keep the JSON path. |
 | ⬜ | Orphan team auction | Plan | Not built. |
 
 ## Order of work
 
-1. **True max PF for native leagues and a rookie order that updates itself after every playoff round**, with a notice
-   to the commissioner and an optional league chat post — the spec's flagship, and the fix the lottery's max PF needs too.
+1. ~~True max PF for native leagues and a rookie order that updates itself after every playoff round, with a notice
+   to the commissioner and an optional league chat post.~~ Done: #2794, #2795.
 2. Dynasty rollover wizard on the Commissioner Hub (order → taxi → dues → schedule), reusing the redraft wizard.
 3. Taxi rules that are stored but not enforced (lock week, promotion window), then max years.
 4. IR auto-move on activation.

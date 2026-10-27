@@ -1,6 +1,7 @@
 /**
  * The "league office" facts Chimmy is given, as prompt-ready prose: weekly prizes, trades in review,
- * stat corrections, inactive manager mode, the lineup rule for eliminated teams, and the latest league-log entries. What each viewer sees
+ * stat corrections, inactive manager mode, the lineup rule for eliminated teams, a dynasty league's
+ * offseason rollover, and the latest league-log entries. What each viewer sees
  * matches what the app shows them — the provider decides that; this only words it.
  *
  * Prose rather than an object because the grounding serializer renders a string slice as-is
@@ -38,6 +39,8 @@ export type LeagueOfficeInput = {
     /** Commissioners only. */
     collected: { cents: number; paidTeams: number } | null
   } | null
+  /** Dynasty leagues between seasons: the rollover, already worded for this viewer (lib/season-rollover). */
+  offseason?: readonly string[] | null
 }
 
 const LOG_LINES = 8
@@ -89,6 +92,7 @@ export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | nul
   const lines: string[] = []
   if (input.prizes) lines.push(...prizeLines(input.prizes))
   if (input.payouts?.places.length) lines.push(...payoutLines(input.payouts))
+  if (input.offseason?.length) lines.push(...input.offseason)
 
   for (const t of input.trades) lines.push(`Trade between ${t.teams}: ${t.explainer}`)
 

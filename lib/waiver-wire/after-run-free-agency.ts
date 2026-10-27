@@ -24,9 +24,10 @@
  * fail-open the lineup lock applies to a bye (lib/redraft/lineupLock.ts). A FAILED read is different:
  * the route turns any throw here into "claim required", never into a free add.
  *
- * Product decision (Sleeper's default, reported to the owner): the run day(s) and time are the
- * league's own schedule. The mode does not change them — NBA / NHL / MLB keep their sport default
- * (Mon / Wed / Fri) unless the commissioner picks others; Sleeper's own default there is a daily run.
+ * Product decision (Sleeper's default, reported to the owner): the run time is the league's own. The
+ * run DAYS are too, except in NBA / NHL / MLB, where this mode runs claims every day (owner,
+ * 2026-10-27; lib/waiver-wire/daily-sport-waiver-runs.ts) — Sleeper's own default there. A per-day
+ * schedule still chooses its own days.
  */
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'

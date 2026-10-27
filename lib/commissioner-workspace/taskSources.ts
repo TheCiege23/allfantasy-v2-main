@@ -315,7 +315,8 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
     const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
     // The native commissioner tools (./commissionerFeatureTasks.ts): an unapplied stat correction, a
-    // trade in commissioner review, inactive teams nobody is setting lineups for.
+    // trade in commissioner review, inactive teams nobody is setting lineups for, payouts that
+    // overcommit the pot, and a finished season to roll over (redraft renew or dynasty start).
     const { readCommissionerFeatureTasks } = await import('./commissionerFeatureTasks')
     // Eliminated teams short of the league's lineup minimum (lib/eliminated-lineups); nothing unless
     // the AF Commissioner rule is on.

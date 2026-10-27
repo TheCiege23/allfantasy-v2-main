@@ -52,6 +52,8 @@ export type RawDraftPlayerLike = {
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
+  /** MLB / NHL season line, spread into `display.stats` for the pool's stat columns. */
+  seasonStatLine?: Partial<Record<string, number>> | null
   lifetimeValue?: number | null
   rollingInsightsSupplemental?: {
     fantasyPointsPerGame?: number | null
@@ -197,6 +199,7 @@ export function normalizeDraftPlayer(
     byeWeek: bye ?? null,
     fantasyPointsPerGame: fppg,
     ...(sportNorm === 'NBA' && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL') && raw.seasonStatLine ? raw.seasonStatLine : {}),
     lifetimeValue: ltv,
   }
 

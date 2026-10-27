@@ -5,8 +5,9 @@ import 'server-only'
  * one AF Commissioner write: carrying next season's dues into the payout buy-in.
  *
  * Head commissioner only, as the renew it leads to is (app/api/commissioner/leagues/[id]/renew).
- * Native redraft leagues only: a dynasty league carries its rosters, a tournament feeder renews
- * from its hub, an imported league renews on its platform. All Postgres.
+ * Native leagues only. A dynasty league carries its rosters, so it gets its own steps
+ * (./dynastyRolloverService.ts) on the same card and route; a tournament feeder renews from its
+ * hub, an imported league renews on its platform. All Postgres.
  */
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
@@ -19,9 +20,11 @@ import { readPayoutsView } from '@/lib/payouts/payoutService'
 import { PAYOUT_PLAN_KEY, readPayoutPlan } from '@/lib/payouts/payoutCalculator'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { buildRolloverAnnouncement, buildRolloverPlan, type RolloverInput, type RolloverPlan } from './rolloverWizard'
+import { readDynastyRolloverDue, readDynastyRolloverView, setDynastyNextSeasonDues, type DynastyRolloverView } from './dynastyRolloverService'
 
 export type RolloverView = {
   applies: true
+  kind: 'redraft'
   leagueName: string
   season: number
   nextSeason: number
@@ -38,7 +41,7 @@ export type RolloverView = {
 }
 
 export type RolloverReadResult =
-  | { ok: true; view: RolloverView | { applies: false; reason: 'not_native' | 'not_redraft' } }
+  | { ok: true; view: RolloverView | DynastyRolloverView | { applies: false; reason: 'not_native' | 'not_redraft' | 'no_season' } }
   | { ok: false; status: 401 | 403 | 404 }
 
 async function loadPlanFlag(userId: string): Promise<boolean> {
@@ -66,6 +69,10 @@ export async function readRolloverView(leagueId: string, userId: string | null |
     selectedType: resolveLeagueVariantKey(league.leagueVariant, settings),
     isDynasty: league.isDynasty,
   })
+  if (kind === 'dynasty_family') {
+    const dynasty = await readDynastyRolloverView(leagueId, userId)
+    return { ok: true, view: dynasty ?? { applies: false, reason: 'no_season' } }
+  }
   if (kind !== 'redraft_reset') return { ok: true, view: { applies: false, reason: 'not_redraft' } }
 
   const season = league.season ?? new Date().getFullYear()
@@ -143,6 +150,7 @@ export async function readRolloverView(leagueId: string, userId: string | null |
     ok: true,
     view: {
       applies: true,
+      kind: 'redraft',
       leagueName: league.name ?? '',
       season,
       nextSeason: season + 1,
@@ -185,11 +193,11 @@ export async function carryDuesIntoPayouts(leagueId: string, userId: string | nu
 }
 
 /**
- * For the Commissioner Workspace (no viewer): the season of a native redraft league is over and it
- * has not been renewed. Null otherwise. A failed read throws, so the task store never closes a task
- * on a snapshot it could not take.
+ * For the Commissioner Workspace (no viewer): the season of a native league is over and it has not
+ * been renewed (redraft) or next season has not started (dynasty). Null otherwise. A failed read
+ * throws, so the task store never closes a task on a snapshot it could not take.
  */
-export async function readRolloverDue(leagueId: string): Promise<{ season: number } | null> {
+export async function readRolloverDue(leagueId: string): Promise<{ season: number; kind: 'redraft' | 'dynasty' } | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { season: true, status: true, settings: true, platform: true, leagueVariant: true, isDynasty: true, lifecycleState: true, lifecycleMetadata: true },
@@ -202,6 +210,10 @@ export async function readRolloverDue(leagueId: string): Promise<{ season: numbe
     selectedType: resolveLeagueVariantKey(league.leagueVariant, settings),
     isDynasty: league.isDynasty,
   })
+  if (kind === 'dynasty_family') {
+    const due = await readDynastyRolloverDue(leagueId)
+    return due ? { ...due, kind: 'dynasty' } : null
+  }
   if (kind !== 'redraft_reset') return null
   const season = league.season ?? new Date().getFullYear()
   const over = isSeasonOverForRenewal({
@@ -212,5 +224,17 @@ export async function readRolloverDue(leagueId: string): Promise<{ season: numbe
   })
   if (!over) return null
   if (isAlreadyRenewedIntoSeason({ season, status: league.status, settings, lifecycleMetadata: league.lifecycleMetadata })) return null
-  return { season }
+  return { season, kind: 'redraft' }
+}
+
+/** The dynasty card's dues step. Head commissioner, between the seasons. */
+export async function setNextSeasonDues(
+  leagueId: string,
+  userId: string | null | undefined,
+  amountDollars: number | null,
+): Promise<CarryResult> {
+  const read = await readRolloverView(leagueId, userId)
+  if (!read.ok) return { ok: false, status: read.status, error: read.status === 404 ? 'Not found' : 'Forbidden' }
+  if (!read.view.applies || read.view.kind !== 'dynasty') return { ok: false, status: 400, error: 'This league sets next season’s dues when it renews.' }
+  return setDynastyNextSeasonDues(leagueId, userId!, read.view, amountDollars)
 }

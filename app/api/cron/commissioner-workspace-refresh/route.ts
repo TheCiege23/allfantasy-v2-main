@@ -9,6 +9,7 @@ import { runCommissionerRecipesBatch } from '@/lib/automation/jobs/commissioner/
 import { postUntouchedRecapDrafts } from '@/lib/recap-review/recapReviewService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runScheduledAiCommissionerAlerts } from '@/lib/ai-commissioner/scheduledAlertsBatch'
+import { scanImportedLeaguesForTanking } from '@/lib/integrity/scanImportedTanking'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -145,7 +146,16 @@ export async function GET(request: Request) {
         console.error('[cron-commissioner] ai alerts failed:', toErrorMessage(e))
         return { discovered: 0, ran: 0, skippedNoPlan: 0, failed: 1, created: 0 }
       })
-      return { ...workspace, reports, recipes, recapDrafts, aiAlerts }
+      /*
+       * The tanking monitor for IMPORTED Sleeper leagues (lib/integrity/scanImportedTanking.ts): the
+       * latest finished week's lineup audit, opened as an integrity flag in leagues whose commissioner
+       * switched tanking monitoring on. A native league's week is scanned by its own finalizer instead.
+       */
+      const importedTanking = await scanImportedLeaguesForTanking({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] imported tanking scan failed:', toErrorMessage(e))
+        return { discovered: 0, scanned: 0, flagged: 0, failed: 1 }
+      })
+      return { ...workspace, reports, recipes, recapDrafts, aiAlerts, importedTanking }
     },
     (r) => ({
       rowsRead: r.discovered,
@@ -175,6 +185,9 @@ export async function GET(request: Request) {
         aiAlertsRan: r.aiAlerts.ran,
         aiAlertsCreated: r.aiAlerts.created,
         aiAlertsFailed: r.aiAlerts.failed,
+        importedTankingScanned: r.importedTanking.scanned,
+        importedTankingFlagged: r.importedTanking.flagged,
+        importedTankingFailed: r.importedTanking.failed,
       },
     }),
   )
@@ -190,6 +203,7 @@ export async function GET(request: Request) {
     reports: outcome.reports,
     recipes: outcome.recipes,
     aiAlerts: outcome.aiAlerts,
+    importedTanking: outcome.importedTanking,
     results: outcome.leagues,
   })
 }
