@@ -36,6 +36,8 @@ const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn() }))
 vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard }))
 const surprise = vi.hoisted(() => ({ ensure: vi.fn(), dissolve: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWeek: surprise.ensure, dissolveSurpriseTribes: surprise.dissolve }))
+const reported = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/survivor/survivorAutomationReporting', () => ({ reportSurvivorAutomationError: reported }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
@@ -301,4 +303,21 @@ it('freezes a league the commissioner paused, even though its phase is unchanged
   expect(engine.processTribalDeadline).not.toHaveBeenCalled()
   expect(engine.advanceWeek).not.toHaveBeenCalled()
   expect(engine.syncWeeklyScores).not.toHaveBeenCalled()
+})
+
+it('reports a league whose season tick throws to Sentry, tagged with the league, and keeps the batch going', async () => {
+  const { runPlannedSurvivorSeasonBatch } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+  const plan = await setup('NBA', 1)
+  db.league.findMany.mockResolvedValue([{ id: 'league-1', settings: { survivor_full_season_plan: plan } }])
+  const boom = new Error('provider feed down')
+  engine.getOrCreateSurvivorGameState.mockRejectedValue(boom)
+  db.survivorGameState.updateMany.mockResolvedValue({ count: 1 })
+  process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED = 'true'
+  try {
+    expect(await runPlannedSurvivorSeasonBatch(later)).toMatchObject({ failed: 1 })
+  } finally {
+    delete process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED
+  }
+  expect(reported).toHaveBeenCalledWith(boom, { job: 'season_runner', leagueId: 'league-1' })
+  expect(db.survivorGameState.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { lastError: 'provider feed down' } }))
 })
