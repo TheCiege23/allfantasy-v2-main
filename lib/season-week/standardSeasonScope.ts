@@ -39,10 +39,5 @@ export function seasonSportToLeagueSport(sport: string | null | undefined): stri
 
 export function runsStandardWeeklySeason(sport: string | null | undefined, format: string | null | undefined): boolean {
   const f = String(format ?? 'redraft').trim().toLowerCase() || 'redraft'
-  const s = seasonSportToLeagueSport(sport)
-  // NBA/MLB dynasty share the weekly schedule and playoff engine; their carryover
-  // and next rookie draft are verified by the staging dynasty lifecycle probe.
-  if (s === 'NBA' && f !== 'redraft' && f !== 'pirate' && f !== 'dynasty') return false
-  if (s === 'MLB' && f !== 'redraft' && f !== 'pirate' && f !== 'dynasty') return false
-  return canRunSeasonForSport(s) && STANDARD_WEEKLY_SEASON_FORMATS.has(f)
+  return canRunSeasonForSport(seasonSportToLeagueSport(sport)) && STANDARD_WEEKLY_SEASON_FORMATS.has(f)
 }

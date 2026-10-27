@@ -600,7 +600,7 @@ export function LeagueShell({
     shouldUseMatchupPrimary,
     t,
   ])
-  const [activeTab, setActiveTab] = useState<string>(() => guillyInitialTab({ guilly: league.guillotineMode === true, predraft: isPredraftLifecycle, drafting: String(league.lifecycleState).toLowerCase() === 'drafting', requested: searchParams?.get('view') ?? searchParams?.get('tab'), tabIds: tabDefs.map(tab => tab.id) }))
+  const [activeTab, setActiveTab] = useState<string>(() => tabDefs[0]?.id ?? 'draft')
   const [rosterLegalityIssueCount, setRosterLegalityIssueCount] = useState(0)
   const guillotineLandingApplied = useRef(false)
   const survivorLandingApplied = useRef(false)

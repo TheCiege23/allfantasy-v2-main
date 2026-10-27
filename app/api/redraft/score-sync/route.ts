@@ -297,7 +297,7 @@ async function runRedraftReconciliation() {
       } catch {
         playoffFailed += 1
       }
-      if (season.league.leagueType === 'pirate' || season.league.leagueVariant === 'pirate') {
+      if (season.league?.leagueType === 'pirate' || season.league?.leagueVariant === 'pirate') {
         try {
           pirateClaimsCreated += await seedPirateClaims(season.leagueId)
           await queuePirateProtectionReminders(season.leagueId)
@@ -434,7 +434,7 @@ async function runRedraftReconciliation() {
     } catch {
       guillotineFailed += 1
     }
-    if (season.league.leagueType === 'pirate' || season.league.leagueVariant === 'pirate') {
+    if (season.league?.leagueType === 'pirate' || season.league?.leagueVariant === 'pirate') {
       try {
         pirateClaimsCreated += await seedPirateClaims(season.leagueId)
         await queuePirateProtectionReminders(season.leagueId)

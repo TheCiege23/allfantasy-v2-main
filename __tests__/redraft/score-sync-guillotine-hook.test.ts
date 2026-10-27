@@ -55,6 +55,11 @@ vi.mock('@/lib/redraft/weekFinalizer', () => ({
 }))
 vi.mock('@/lib/redraft/scoreSyncBatch', () => ({ rotatingBatch: <T,>(xs: T[]) => xs, SCORE_SYNC_BATCH: 50 }))
 vi.mock('@/lib/bestball/nativeTournament', () => ({ runNativeTournamentWeek: m.tournament }))
+vi.mock('@/lib/pirate/service', () => ({
+  seedPirateClaims: vi.fn(async () => 0),
+  queuePirateProtectionReminders: vi.fn(async () => undefined),
+  maintainPirateClaims: vi.fn(async () => ({ considered: 0, transferred: 0, failed: 0 })),
+}))
 vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: m.guillotine }))
 vi.mock('@/lib/zombie/zombieAutomation', () => ({ runZombieHousekeeping: m.housekeeping }))
 vi.mock('@/lib/playoff-runtime/playoffRoundScoring', () => ({ scoreActivePlayoffRound: m.playoff }))

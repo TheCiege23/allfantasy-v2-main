@@ -384,8 +384,6 @@ export async function createCanonicalLeagueInTransaction(
     soccer_pipeline: sport === 'SOCCER' ? soccerPipeline : undefined,
     canonical_creation_source: 'post_api_leagues_v1',
     ...(formatId === 'pirate' ? { conceptSetup: { pirate: (body.conceptSetup?.pirate ?? {}) as Record<string, unknown> } } : {}),
-    ...(formatId === 'guillotine' ? { hasPlayoffs: false, guillotineEndgame: 'last_team_standing', guilly: { eliminationsByWeek: {}, waiverDelayHours: 24 } } : {}),
-    lineup_history_version: (['redraft', 'guillotine', 'pirate'].includes(formatId) && ['NFL', 'NBA', 'NHL', 'MLB'].includes(sport)) || (formatId === 'dynasty' && ['NBA', 'NHL', 'MLB'].includes(sport)) ? 1 : undefined,
     constitution_request: {
       requestedAt: new Date().toISOString(),
       notes: '',

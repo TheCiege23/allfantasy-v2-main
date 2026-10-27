@@ -3,8 +3,6 @@ import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { assertGuillyAcquisition, guillyReleasePending, markGuillyReleaseClaimed } from '@/lib/guillotine/guillyAcquisition'
-import { mirrorCanonicalRosters } from './legacyWaiverBridge'
 import { assertNotReservedByPirateClaim } from '@/lib/pirate/claimReservation'
 import { assertPirateAcquisitionCapacity } from '@/lib/pirate/rosterCapacity'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
@@ -258,22 +256,6 @@ export async function processWaiverWindow(
     // gaining the claimed one.
     try {
       await runWaiverSettlement(async (tx: Prisma.TransactionClient) => {
-        // Share season ownership authority with the generic waiver bridge; then
-        // re-read every mutable decision after acquiring the lock.
-        await tx.$queryRaw`SELECT id FROM redraft_seasons WHERE id = ${seasonId} FOR UPDATE`
-        await tx.$queryRaw`SELECT id FROM redraft_rosters WHERE id = ${claim.rosterId} FOR UPDATE`
-        const freshClaim = await tx.redraftWaiverClaim.findUnique({ where: { id: claim.id } })
-        if (!freshClaim || freshClaim.status !== 'pending') throw new WaiverAlreadyProcessedError()
-        const freshRoster = await tx.redraftRoster.findFirst({ where: { id: claim.rosterId, leagueId, seasonId } })
-        if (!freshRoster || freshRoster.isEliminated) throw new WaiverSettlementRefusedError('Roster is unavailable or eliminated.')
-        if (guilly) await assertGuillyAcquisition(tx, { leagueId, rosterId: claim.rosterId, playerId: claim.addPlayerId })
-        const owned = await tx.redraftRosterPlayer.findFirst({ where: { playerId: claim.addPlayerId, droppedAt: null, roster: { seasonId } } })
-        if (owned) throw new WaiverSettlementRefusedError('Player is already rostered in this season.')
-        if (bid > 0 && freshRoster.faabBalance != null) {
-          const paid = await tx.redraftRoster.updateMany({ where: { id: claim.rosterId, faabBalance: { gte: bid } },
-            data: { faabBalance: { decrement: bid } } })
-          if (paid.count !== 1) throw new WaiverSettlementRefusedError('Insufficient FAAB balance.')
-        }
         if (claim.dropPlayerId) {
           await assertNotReservedByPirateClaim(tx, claim.rosterId, claim.dropPlayerId)
           const dropResult = await tx.redraftRosterPlayer.updateMany({

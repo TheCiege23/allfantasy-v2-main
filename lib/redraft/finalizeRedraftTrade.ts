@@ -9,6 +9,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
+import { isPirateLeague } from '@/lib/pirate/rules'
 import {
   applyRedraftTradeCapTransfersInTransaction,
   refreshCapProjections,
@@ -104,6 +105,8 @@ export async function finalizeRedraftTrade(
       eventType: 'trade_failed',
       actorUserId: decidedByUserId,
     })
+  const league = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { leagueType: true, leagueVariant: true } })
+  const pirateLeague = isPirateLeague(league)
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
 
@@ -148,7 +151,7 @@ export async function finalizeRedraftTrade(
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
       }
-      await assertPirateTradeAllowed(proposal.leagueId, (proposal.assets ?? []).map((asset) => ({
+      if (pirateLeague) await assertPirateTradeAllowed(proposal.leagueId, (proposal.assets ?? []).map((asset) => ({
         fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
       })), tx)
       // 🛑 THE CAP CHECK THAT DECIDES, ON THE SETTLEMENT'S OWN TRANSACTION.
