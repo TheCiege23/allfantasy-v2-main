@@ -33,6 +33,12 @@ export async function isZombieLeague(leagueId: string): Promise<boolean> {
     select: { id: true },
   })
   if (config) return true
+  // Native Zombie creation can attach the ZombieLeague row before a separate config is upserted.
+  const nativeLeague = await prisma.zombieLeague.findUnique({
+    where: { leagueId },
+    select: { id: true },
+  })
+  if (nativeLeague) return true
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { leagueVariant: true },
