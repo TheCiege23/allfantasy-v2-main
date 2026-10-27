@@ -137,7 +137,7 @@ ${revivedNames.length ? `⚡ REVIVED: ${revivedNames.join(', ')}` : ''}`
       const winner = payout ? await prisma.roster.findUnique({ where: { id: payout.winnerRosterId }, select: { platformUserId: true } }) : null
       const winnerName = winner?.platformUserId ? await displayNameForUser(leagueId, winner.platformUserId) : '—'
       sectionMoney = payout
-        ? `💰 THIRD-PARTY WEEKLY PRIZE\n${winnerName} — ${(payout.amountCents / 100).toFixed(2)} (${payout.status}; ${payout.providerName})`
+        ? `💰 THIRD-PARTY WEEKLY PRIZE\n${winnerName} — $${(payout.amountCents / 100).toFixed(2)} (${payout.status}; ${payout.providerName})`
         : '💰 THIRD-PARTY WEEKLY PRIZE\nNo external prize amount recorded for this week.'
     } else {
       const leaders = await prisma.zombieWeeklyWinnings.findMany({ where: { leagueId, week }, orderBy: { amount: 'desc' }, take: 1 })
