@@ -44,8 +44,7 @@ export async function GET(req: Request) {
   let zombieCount = 0
   let whispererCount = 0
   for (const z of u.leagues) {
-    if (z.whispererRecord) whispererCount += 1
-    whispererCount += z.coWhisperers.length
+    whispererCount += z.teams.filter((team) => team.status === 'Whisperer').length
     for (const t of z.teams) {
       const s = (t.status ?? '').toLowerCase()
       if (s.includes('zombie')) zombieCount += 1
