@@ -145,8 +145,10 @@ describe('locks that used to send buyers to /settings', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
     render(<SurvivorPremiumCommandCenterPanel leagueId="lg-1" plan={null} tokensRemaining={null} />)
     const hrefs = screen.getAllByRole('link', { name: 'Upgrade' }).map((a) => a.getAttribute('href'))
-    const expected = SURVIVOR_PREMIUM_COMMAND_TILES.map((t) => upgradePathForPlan(t.requiredPlan))
+    // Only built tiles sell anything: a "coming next" tile shows no lock and no upgrade link.
+    const expected = SURVIVOR_PREMIUM_COMMAND_TILES.filter((t) => t.status === 'live').map((t) => upgradePathForPlan(t.requiredPlan))
     expect(hrefs).toEqual(expected)
-    expect(new Set(hrefs).size).toBeGreaterThan(1)
+    expect(hrefs.length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Coming next')).toHaveLength(SURVIVOR_PREMIUM_COMMAND_TILES.filter((t) => t.status !== 'live').length)
   })
 })
