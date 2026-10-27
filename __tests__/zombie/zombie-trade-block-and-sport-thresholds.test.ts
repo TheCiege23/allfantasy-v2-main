@@ -14,6 +14,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const db = vi.hoisted(() => ({
   zombieLeagueConfig: { findUnique: vi.fn() },
   zombieLeagueTeam: { findMany: vi.fn() },
+  zombieLeague: { findUnique: vi.fn() },
+  zombieInfectionEvent: { count: vi.fn() },
   zombieRulesTemplate: { findUnique: vi.fn() },
   league: { findUnique: vi.fn() },
   survivorGuillotineLeague: { findUnique: vi.fn() },
@@ -36,6 +38,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   db.zombieLeagueConfig.findUnique.mockResolvedValue({ zombieTradeBlocked: true })
   db.zombieLeagueTeam.findMany.mockResolvedValue([])
+  db.zombieLeague.findUnique.mockResolvedValue({ id: 'Z1' })
+  db.zombieInfectionEvent.count.mockResolvedValue(0)
   db.zombieRulesTemplate.findUnique.mockResolvedValue(null)
   db.survivorGuillotineLeague.findUnique.mockResolvedValue(null)
 })
@@ -51,11 +55,27 @@ describe('zombie trade block', () => {
     })
   })
 
-  it('[control] lets two Survivors trade', async () => {
+  it('lets the Whisperer trade before the first infection', async () => {
     db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor' }, { status: 'Whisperer' }])
     await expect(
       assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade' }),
     ).resolves.toEqual({ ok: true })
+  })
+
+  it('blocks the Whisperer after an infection, even if that Zombie is later revived', async () => {
+    db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor' }, { status: 'Whisperer' }])
+    db.zombieInfectionEvent.count.mockResolvedValue(1)
+    const result = await assertRosterTransactionsAllowed({
+      leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade',
+    })
+    expect(result).toEqual({
+      ok: false,
+      error: 'The Whisperer cannot trade after the first infection.',
+      code: 'ZOMBIE_TRADE_BLOCKED',
+    })
+    expect(db.zombieInfectionEvent.count).toHaveBeenCalledWith({
+      where: { zombieLeagueId: 'Z1' },
+    })
   })
 
   it('[control] lets a Zombie trade when the commissioner turned the block off', async () => {
