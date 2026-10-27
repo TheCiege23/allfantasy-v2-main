@@ -138,6 +138,10 @@ async function main() {
   assert.ok(plan, 'no season plan')
   log(`plan: weeks ${plan.startWeek}-${plan.endWeek}, eliminations ${JSON.stringify(plan.eliminationWeeks)}, finale ${plan.finaleWeek}, exile return ${plan.exileReturnWeek ?? '-'}`)
 
+  // Read by seedWeekScores, which the season loop calls: declared before the loop, not beside it.
+  type SeedCategory = { key: string; group: string; points: number }
+  let scoringCache: { categories: SeedCategory[]; score: (stats: Record<string, number>, position: string | null) => number } | null = null
+
   // ── Season loop ──
   const seeded = new Set<number>()
   let last = '', repeats = 0
@@ -201,8 +205,6 @@ async function main() {
     assert.ok(scored > 0, `week ${week}: no seeded player scores above 0 under this league's scoring; the seeded stat names are wrong for ${SPORT}`)
   }
 
-  type SeedCategory = { key: string; group: string; points: number }
-  let scoringCache: { categories: SeedCategory[]; score: (stats: Record<string, number>, position: string | null) => number } | null = null
   async function leagueScoring() {
     if (scoringCache) return scoringCache
     const { resolveLeagueScoringRules } = await import('../../lib/redraft/leagueScoringRules')
