@@ -101,7 +101,7 @@ export function ZombieCommissionerModal({
         onClose={() => setShowIntroReplay(false)}
       />
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 backdrop-blur-sm"
         style={{
           backgroundColor: theme ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.5)',
           backgroundImage: theme
@@ -113,7 +113,7 @@ export function ZombieCommissionerModal({
         aria-label="Commissioner Settings"
       >
         <div
-        className="flex h-[90vh] max-h-[700px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--zombie-border)] bg-[var(--zombie-bg)] shadow-2xl"
+        className="flex h-[100dvh] max-h-none w-full max-w-4xl flex-col overflow-hidden rounded-none sm:h-[90vh] sm:max-h-[700px] sm:rounded-2xl border border-[var(--zombie-border)] bg-[var(--zombie-bg)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -129,7 +129,7 @@ export function ZombieCommissionerModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--zombie-text-dim)] transition hover:bg-white/[0.06] hover:text-white"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--zombie-text-dim)] transition hover:bg-white/[0.06] hover:text-white"
             aria-label="Close"
           >
             ✕
@@ -137,7 +137,7 @@ export function ZombieCommissionerModal({
                   <button
                     type="button"
                     onClick={() => setShowIntroReplay(true)}
-                    className="ml-2 flex items-center gap-1.5 h-8 px-2 rounded-lg text-[12px] font-medium text-amber-200 bg-amber-900/20 hover:bg-amber-900/40 transition border border-amber-700/20"
+                    className="ml-2 flex min-h-[44px] items-center gap-1.5 px-2 rounded-lg text-[12px] font-medium text-amber-200 bg-amber-900/20 hover:bg-amber-900/40 transition border border-amber-700/20"
                     title="Replay intro video"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
@@ -146,7 +146,7 @@ export function ZombieCommissionerModal({
         </div>
 
         {/* Body: sidebar + content */}
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           {/* Tab sidebar (desktop) / horizontal scroll (mobile) */}
           <nav className="hidden w-[180px] shrink-0 overflow-y-auto border-r border-[var(--zombie-border)] bg-[var(--zombie-panel)] py-2 md:block">
             {TABS.map((t) => (
@@ -168,14 +168,14 @@ export function ZombieCommissionerModal({
           </nav>
 
           {/* Mobile tab scroller */}
-          <div className="flex overflow-x-auto border-b border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-1 md:hidden">
+          <div className="flex shrink-0 overflow-x-auto border-b border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-1 md:hidden">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setTab(t.id)}
                 className={clsx(
-                  'flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] whitespace-nowrap transition',
+                  'flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] whitespace-nowrap transition',
                   tab === t.id
                     ? 'bg-[var(--zombie-crimson)]/15 text-[var(--zombie-crimson)] font-semibold'
                     : 'text-[var(--zombie-text-dim)]',
