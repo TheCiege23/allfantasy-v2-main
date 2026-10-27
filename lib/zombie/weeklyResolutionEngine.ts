@@ -5,7 +5,7 @@ import { resolveWeeklyInfections } from '@/lib/zombie/infectionEngine'
 import { autoReviveEligibleZombies, finalizePendingSerumsForWeek } from '@/lib/zombie/serumEngine'
 import { detectAndProcessBashings } from '@/lib/zombie/bashingEngine'
 import { detectAndProcessMaulings } from '@/lib/zombie/maulingEngine'
-import { checkAndAwardWeapons } from '@/lib/zombie/weaponEngine'
+import { checkAndAwardWeapons, finalizePendingWeaponsForWeek } from '@/lib/zombie/weaponEngine'
 import { tryPostWeeklyUpdateAfterResolution } from '@/lib/zombie/weeklyUpdateEngine'
 import { syncUniverseStats } from '@/lib/zombie/universeStatEngine'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
@@ -103,6 +103,7 @@ export async function runWeeklyResolution(
   const infection = await resolveWeeklyInfections(zombieLeagueId, week)
 
   await finalizePendingSerumsForWeek(z.leagueId, week, z.season)
+  await finalizePendingWeaponsForWeek(z.leagueId, week, z.season)
   await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
   await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
   await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
