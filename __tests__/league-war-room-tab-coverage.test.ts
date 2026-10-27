@@ -11,17 +11,21 @@ describe('league War Room navigation', () => {
 })
 
 describe('league Draft tab', () => {
-  it('NBA leagues have exactly one Draft tab, for managers and commissioners', () => {
+  it.each(['NBA', 'MLB', 'NHL'])('%s leagues have exactly one Draft tab, for managers and commissioners', (sport) => {
     for (const isCommissioner of [false, true]) {
-      const tabs = getLeagueTabsForViewer('NBA', isCommissioner)
+      const tabs = getLeagueTabsForViewer(sport, isCommissioner)
       expect(tabs.filter((tab) => tab.id === 'draft')).toHaveLength(1)
     }
   })
 
-  it('keeps every other NBA tab', () => {
-    const ids = getLeagueTabsForViewer('NBA', false).map((tab) => tab.id)
+  it.each(['NBA', 'MLB', 'NHL'])('%s keeps every other tab', (sport) => {
+    const ids = getLeagueTabsForViewer(sport, false).map((tab) => tab.id)
     for (const id of ['roster', 'redraft', 'team', 'matchups', 'players', 'waivers', 'trades', 'war_room']) {
       expect(ids).toContain(id)
     }
+  })
+
+  it('leaves NCAAB unchanged', () => {
+    expect(getLeagueTabsForViewer('NCAAB', false).some((tab) => tab.id === 'draft')).toBe(false)
   })
 })
