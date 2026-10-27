@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   zombieTeamItemCount: vi.fn(),
   zombieAnnouncementFindUnique: vi.fn(),
   redraftSeasonFindFirst: vi.fn(),
+  gameScheduleFindMany: vi.fn(),
   redraftMatchupFindMany: vi.fn(),
   redraftRosterFindMany: vi.fn(),
   rosterFindMany: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock('@/lib/prisma', () => ({
     zombieTeamItem: { count: h.zombieTeamItemCount, findMany: h.zombieTeamItemFindMany },
     zombieAnnouncement: { findUnique: h.zombieAnnouncementFindUnique },
     redraftSeason: { findFirst: h.redraftSeasonFindFirst },
+    gameSchedule: { findMany: h.gameScheduleFindMany },
     redraftMatchup: { findMany: h.redraftMatchupFindMany },
     zombieWeeklyResolution: { findUnique: h.weeklyResolutionFindUnique },
     $transaction: h.transaction,
@@ -62,7 +64,8 @@ import { computeInfections } from '@/lib/zombie/ZombieInfectionEngine'
 
 beforeEach(() => {
   vi.clearAllMocks()
-  h.zombieLeagueFindUnique.mockResolvedValue({ id: 'z', leagueId: 'L', season: 2026, status: 'active', currentWeek: 3 })
+  h.zombieLeagueFindUnique.mockResolvedValue({ id: 'z', leagueId: 'L', sport: 'NFL', season: 2026, status: 'active', currentWeek: 3, experienceMode: 'enhanced' })
+  h.gameScheduleFindMany.mockResolvedValue([{ startTime: new Date(Date.now() + 60_000) }])
   h.rosterFindFirst.mockResolvedValue({ id: 'r', platformUserId: 'u' })
   h.zombieLeagueTeamFindUnique.mockResolvedValue({ id: 'team', status: 'Zombie' })
   h.getConfig.mockResolvedValue({ serumReviveCount: 2 })
@@ -99,6 +102,16 @@ describe('Zombie weekly actions', () => {
       { status: 'final', homeScore: 80, awayScore: 71 },
     ])
     await expect(validatePreScoringWindow('L', 3, 2026)).resolves.toMatchObject({ valid: false })
+    expect(h.weeklyResolutionFindUnique).not.toHaveBeenCalled()
+  })
+
+  it('rejects an ambush when the provider schedule is missing or already locked', async () => {
+    h.redraftSeasonFindFirst.mockResolvedValue({ id: 'season' })
+    h.redraftMatchupFindMany.mockResolvedValue([{ status: 'scheduled', homeScore: 0, awayScore: 0 }])
+    h.gameScheduleFindMany.mockResolvedValueOnce([])
+    expect(await validatePreScoringWindow('L', 3, 2026)).toMatchObject({ valid: false })
+    h.gameScheduleFindMany.mockResolvedValueOnce([{ startTime: new Date(Date.now() - 1000) }])
+    expect(await validatePreScoringWindow('L', 3, 2026)).toMatchObject({ valid: false })
     expect(h.weeklyResolutionFindUnique).not.toHaveBeenCalled()
   })
 
