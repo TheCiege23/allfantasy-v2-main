@@ -11813,6 +11813,7 @@ model ZombieTeamItem {
   /// ready | pending_activation â€” serum registers before kickoff, resolves at score finalization.
   activationState String           @default("ready")
   acquiredAtWeek  Int?
+  awardKey        String?          @unique @db.VarChar(160)
   team            ZombieLeagueTeam @relation(fields: [teamStatusId], references: [id], onDelete: Cascade)
 
   @@index([teamStatusId])
