@@ -2,7 +2,7 @@ import type { ZombieWeeklyResolution } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveWeeklyInfections } from '@/lib/zombie/infectionEngine'
-import { autoReviveEligibleZombies, finalizePendingSerumsForWeek } from '@/lib/zombie/serumEngine'
+import { autoReviveEligibleZombies, awardNativeSerumsForWeek, finalizePendingSerumsForWeek } from '@/lib/zombie/serumEngine'
 import { detectAndProcessBashings } from '@/lib/zombie/bashingEngine'
 import { detectAndProcessMaulings } from '@/lib/zombie/maulingEngine'
 import { checkAndAwardWeapons, finalizePendingWeaponsForWeek } from '@/lib/zombie/weaponEngine'
@@ -107,6 +107,7 @@ export async function runWeeklyResolution(
   await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
   await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
   await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
+  await awardNativeSerumsForWeek(z.leagueId, week, z.season)
   await autoReviveEligibleZombies(z.leagueId, week)
   // Bank the week and move what infections, maulings and bashings take. Before this existed nothing
   // wrote the winnings the sum below reads. See lib/zombie/weeklyWinningsEngine.ts.
