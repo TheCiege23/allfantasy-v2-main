@@ -390,6 +390,7 @@ export default function ZombieLeagueShell({
                 <button
                   type="button"
                   onClick={openOps}
+                  data-testid="zombie-mobile-ops"
                   className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100"
                 >
                   {t('zombie.shell.opsShort')}
