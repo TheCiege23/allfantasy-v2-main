@@ -4621,10 +4621,12 @@ model PlayoffBracketChallenge {
 }
 
 model PlayoffBracketEntry {
-  id          String                  @id @default(cuid())
-  challengeId String                  @map("challenge_id")
-  userId      String                  @map("user_id")
-  name        String
+  id                    String                  @id @default(cuid())
+  challengeId           String                  @map("challenge_id")
+  userId                String                  @map("user_id")
+  name                  String
+  finalizedAt           DateTime?               @map("finalized_at")
+  tiebreakerTotalScore  Int?                    @map("tiebreaker_total_score")
   createdAt   DateTime                @default(now()) @map("created_at")
   updatedAt   DateTime                @updatedAt @map("updated_at")
   challenge   PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -4634,6 +4636,7 @@ model PlayoffBracketEntry {
   @@index([challengeId])
   @@index([userId])
   @@index([challengeId, userId])
+  @@index([challengeId, finalizedAt])
   @@map("playoff_bracket_entries")
 }
 

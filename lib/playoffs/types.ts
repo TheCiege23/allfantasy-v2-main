@@ -5,14 +5,11 @@
  * advance it, so opening creation first would ship a bracket that can never
  * resolve. Widen the API in the same change that lands those two, not before.
  *
- * ⚠ `ncaaf` (the College Football Playoff) IS IN THE SAME STATE, ON PURPOSE.
- * Its template, round keys and single-game wording are modelled; the create
- * API does not accept it yet. Its seeds come from an ADMIN entry after
- * Selection Sunday (owner call, 2026-10-01: no feed carries the committee's
- * seeds) and its results from a scheduled DB-first writer — open creation in
- * the change that lands both.
+ * CFP and NBA Cup pools use admin-published fields and game times. Single-game
+ * finals are entered through the audited result route until verified provider
+ * ingestion is available. Both sports have their own persisted round keys.
  */
-export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf"
+export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
 
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
@@ -102,6 +99,9 @@ export type PlayoffRoundKey =
   | "cfp_quarterfinals"
   | "cfp_semifinals"
   | "cfp_championship"
+  | "cup_quarterfinals"
+  | "cup_semifinals"
+  | "cup_championship"
 
 export type PlayoffSeriesStatus = "scheduled" | "in_progress" | "final"
 
@@ -120,6 +120,15 @@ export type PlayoffSeriesSlot = "home" | "away"
  */
 export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "finals"
 
+export type BracketTeamProfile = {
+  won: number | null
+  lost: number | null
+  winPercentage: number | null
+  plusMinus: number | null
+  seasonReview: string
+  source: "cached_standings"
+}
+
 export type PlayoffChallengeView = {
   challenge: {
     id: string
@@ -136,17 +145,24 @@ export type PlayoffChallengeView = {
     maxParticipants?: number
     scoringStyle?: string
     lockRule?: string
+    firstGameStartsAt?: string | null
     config?: PlayoffChallengeConfig | null
     createdAt: string
     updatedAt: string
   }
   viewerUserId?: string | null
+  viewerTournamentBracketLimit?: number | null
+  viewerTournamentBracketUsed?: number | null
   activeEntry: {
     id: string
     name: string
     userId: string
     pickCount: number
     isComplete: boolean
+    finalizedAt?: string | null
+    tiebreakerTotalScore?: number | null
+    rank?: number | null
+    potentialTotal?: number
     totalScore?: number
     correctPicks?: number
     resolvedPicks?: number
@@ -158,12 +174,16 @@ export type PlayoffChallengeView = {
     userId: string
     pickCount: number
     isComplete: boolean
+    finalizedAt?: string | null
+    rank?: number | null
+    potentialTotal?: number
     totalScore?: number
     correctPicks?: number
     resolvedPicks?: number
     createdAt: string
   }>
   series: PlayoffSeriesView[]
+  teamProfiles?: Record<string, BracketTeamProfile>
   picks: PlayoffPickView[]
   rounds: PlayoffRoundKey[]
   lockDiagnostics?: PlayoffLockDiagnostics | null
@@ -204,6 +224,8 @@ export type PlayoffSeriesView = {
   bestOf: number
   status: PlayoffSeriesStatus
   startsAt: string | null
+  gameLabel?: string | null
+  location?: string | null
   homeTeamWins?: number
   awayTeamWins?: number
   seriesSummary?: string | null
