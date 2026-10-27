@@ -88,8 +88,20 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Whisperer selection fields must match.' }, { status: 400 })
   }
 
+  const seasonAmbushPatch = num('whispererAmbushCount')
+  const weeklyAmbushPatch = num('ambushCountPerWeek')
+  if (seasonAmbushPatch !== undefined && (!Number.isInteger(seasonAmbushPatch) || seasonAmbushPatch < 0 || seasonAmbushPatch > 20)) {
+    return NextResponse.json({ error: 'whispererAmbushCount must be an integer between 0 and 20.' }, { status: 400 })
+  }
+  if (weeklyAmbushPatch !== undefined && (!Number.isInteger(weeklyAmbushPatch) || weeklyAmbushPatch < 0 || weeklyAmbushPatch > 5)) {
+    return NextResponse.json({ error: 'ambushCountPerWeek must be an integer between 0 and 5.' }, { status: 400 })
+  }
+  if ((seasonAmbushPatch ?? z.whispererAmbushCount) < (weeklyAmbushPatch ?? 0)) {
+    return NextResponse.json({ error: 'Weekly ambush cap cannot exceed season ambushes.' }, { status: 400 })
+  }
+
   const requestedSelection = whispererSelectionModePatch ?? configSelectionPatch
-  if (requestedSelection !== undefined) {
+  if (requestedSelection !== undefined || seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined) {
     const selected = await prisma.whispererRecord.findUnique({
       where: { zombieLeagueId: z.id },
       select: { id: true },
@@ -114,7 +126,7 @@ export async function PATCH(req: Request) {
       ? { whispererSelectionMode: requestedSelection }
       : {}),
     ...(bool('whispererIsPublic') !== undefined ? { whispererIsPublic: bool('whispererIsPublic') } : {}),
-    ...(num('whispererAmbushCount') !== undefined ? { whispererAmbushCount: num('whispererAmbushCount') } : {}),
+    ...(seasonAmbushPatch !== undefined ? { whispererAmbushCount: seasonAmbushPatch } : {}),
     ...(bool('weeklyPayoutEnabled') !== undefined ? { weeklyPayoutEnabled: bool('weeklyPayoutEnabled') } : {}),
     ...(bool('ultimateSurvivorPot') !== undefined ? { ultimateSurvivorPot: bool('ultimateSurvivorPot') } : {}),
     ...(weeklyUpdateDayPatch !== undefined ? { weeklyUpdateDay: weeklyUpdateDayPatch } : {}),
@@ -171,7 +183,7 @@ export async function PATCH(req: Request) {
       : {}),
     ...(bool('weaponTopTwoActive') !== undefined ? { weaponTopTwoActive: bool('weaponTopTwoActive') } : {}),
     ...(bool('bombOneTimeOverride') !== undefined ? { bombOneTimeOverride: bool('bombOneTimeOverride') } : {}),
-    ...(num('ambushCountPerWeek') !== undefined ? { ambushCountPerWeek: num('ambushCountPerWeek') } : {}),
+    ...(weeklyAmbushPatch !== undefined ? { ambushCountPerWeek: weeklyAmbushPatch } : {}),
     ...(bool('ambushRemapMatchup') !== undefined ? { ambushRemapMatchup: bool('ambushRemapMatchup') } : {}),
     ...(bool('noWaiverFreeAgency') !== undefined ? { noWaiverFreeAgency: bool('noWaiverFreeAgency') } : {}),
     ...(bool('statCorrectionReversal') !== undefined ? { statCorrectionReversal: bool('statCorrectionReversal') } : {}),
