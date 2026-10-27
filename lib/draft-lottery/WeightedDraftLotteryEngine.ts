@@ -9,6 +9,7 @@ import type {
   WeightedLotteryResult,
   LotteryDrawResult,
   LotteryEligibleTeam,
+  LotteryFallbackOrder,
 } from './types'
 import {
   getStandingsForLottery,
@@ -125,15 +126,42 @@ async function getPlayoffTeamCount(leagueId: string): Promise<number> {
 
 /**
  * Build full slot order: lottery picks first, then remaining teams in fallback order.
+ *
+ *   reverse_standings  every team the draw did not place, worst finish first
+ *   reverse_max_pf     the non-playoff teams first, lowest Max PF first (a tie goes to the worse
+ *                      finish), then the playoff teams, worst finish first — the live rookie order's
+ *                      default reading (lib/rookie-order/: non-playoff by reverse Max PF, playoff
+ *                      teams by finish). Max PF is true Max PF when the league has it for every team,
+ *                      else points for (`applyTrueMaxPf`), the same value the weighting reads.
+ *   manual             reverse standings: the engine has no commissioner order to read
+ *
+ * 🛑 `reverse_max_pf` WAS COERCED TO `reverse_standings` UNTIL 2026-10-27, AND IT IS THE DEFAULT.
+ * Every lottery that ran with the default config and the settings screen's own save
+ * (`fallbackOrder: 'reverse_max_pf'`) seated its remaining picks by record while the config, the
+ * stored result's snapshot and Draft HQ's odds note all said Max PF.
+ *
+ * `allStandings` arrives best-first (`applyTiebreak`), so its first `playoffTeamCount` rows are the
+ * playoff teams — the same line `selectEligibleTeams` draws for the pool.
  */
-function buildFullSlotOrder(
+export function buildFullSlotOrder(
   lotteryDraws: LotteryDrawResult[],
-  allStandings: { rosterId: string; displayName: string; rank: number }[],
+  allStandings: { rosterId: string; displayName: string; rank: number; maxPf: number }[],
   drawnRosterIds: Set<string>,
-  _fallbackOrder: 'reverse_standings' | 'reverse_max_pf'
+  fallbackOrder: LotteryFallbackOrder,
+  playoffTeamCount: number
 ): { slot: number; rosterId: string; displayName: string }[] {
+  const playoff = new Set(allStandings.slice(0, Math.max(0, playoffTeamCount)).map((r) => r.rosterId))
   const remaining = allStandings.filter((r) => !drawnRosterIds.has(r.rosterId))
+  // Stable sorts, so a tie keeps the order `applyTiebreak` gave it.
   remaining.sort((a, b) => b.rank - a.rank)
+  if (fallbackOrder === 'reverse_max_pf') {
+    remaining.sort((a, b) => {
+      const pa = playoff.has(a.rosterId) ? 1 : 0
+      const pb = playoff.has(b.rosterId) ? 1 : 0
+      if (pa !== pb) return pa - pb
+      return pa === 1 ? 0 : a.maxPf - b.maxPf
+    })
+  }
   const k = lotteryDraws.length
   const lotterySlots = lotteryDraws.map((d) => ({
     slot: d.pickSlot,
@@ -215,13 +243,9 @@ export async function runWeightedLottery(
     rosterId: r.rosterId,
     displayName: r.displayName,
     rank: r.rank,
+    maxPf: r.maxPf,
   }))
-  const fullOrder = buildFullSlotOrder(
-    lotteryDraws,
-    allStandingsForFallback,
-    drawnRosterIds,
-    config.fallbackOrder === 'reverse_max_pf' ? 'reverse_standings' : 'reverse_standings'
-  )
+  const fullOrder = buildFullSlotOrder(lotteryDraws, allStandingsForFallback, drawnRosterIds, config.fallbackOrder, playoffTeamCount)
 
   const fallbackOrder = fullOrder.filter((e) => e.slot > lotteryPickCount)
 

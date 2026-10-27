@@ -782,8 +782,8 @@ const spanish: Record<string, string> = {
   'no completed draft has been graded for this league yet': 'Aún no se ha calificado ningún draft completado de esta liga.',
   'no draft has been set up, and no team in this league is claimed by you': 'No hay un draft configurado ni un equipo de esta liga asignado a ti.',
   'no draft has been set up, and no imported draft picks are on file for your team': 'No hay un draft configurado ni selecciones importadas para tu equipo.',
-  'reverse order of max points for': 'el orden inverso de los puntos máximos a favor',
-  'an order the commissioner sets': 'el orden establecido por el comisionado',
+  'reverse order of max points for outside the playoffs, then the playoff teams in reverse order of finish':
+    'el orden inverso de los puntos máximos a favor fuera de los playoffs, y después los equipos de playoffs en el orden inverso de la clasificación final',
   'no earlier week': 'sin semana anterior',
   'no change': 'sin cambios',
   up: 'subió',
