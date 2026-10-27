@@ -159,6 +159,7 @@ describe('Zombie weekly actions', () => {
         whispererRecord: { updateMany: debit },
         redraftMatchup: { updateMany: remap },
         zombieAmbushAction: { count: vi.fn().mockResolvedValue(0), create },
+        zombieChimmyAction: { update: h.chimmyActionUpdate },
       }),
     )
     const result = await processAmbushFromChimmy('L', 'whisperer', '@Chimmy ambush swap Survivor Team', 3)
