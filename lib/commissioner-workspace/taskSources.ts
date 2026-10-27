@@ -321,6 +321,9 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     // Eliminated teams short of the league's lineup minimum (lib/eliminated-lineups); nothing unless
     // the AF Commissioner rule is on.
     const { readEliminatedLineupTasks } = await import('@/lib/eliminated-lineups/eliminatedLineupService')
+    // Activated players IR auto-move could not take off IR (lib/ir-activation); nothing unless the
+    // AF Commissioner rule is on.
+    const { readIrAutoMoveTasks } = await import('@/lib/ir-activation/irAutoMoveService')
     // An open orphan auction, or one past its closing time (lib/orphan-auction).
     const { readOrphanAuctionTasks } = await import('@/lib/orphan-auction/orphanAuctionService')
     return [
@@ -329,6 +332,7 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
       ...await readLineupIntegrityTasks(leagueId),
       ...await readCommissionerFeatureTasks(leagueId, now),
       ...await readEliminatedLineupTasks(leagueId),
+      ...await readIrAutoMoveTasks(leagueId),
       ...await readOrphanAuctionTasks(leagueId, now),
     ]
   }

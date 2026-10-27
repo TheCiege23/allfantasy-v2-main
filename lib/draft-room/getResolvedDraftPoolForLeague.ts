@@ -79,6 +79,8 @@ import {
 import { rookieClassYear } from '@/lib/draft-room/rookieFilterPredicate'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { computeAfAdp } from '@/lib/adp/afAdp'
+import type { AdpCorpusSplit } from '@/lib/adp/loadAdpBoard'
 import { shouldVerifyCurrentNbaRoster, loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 const DEFAULT_LIMIT = 300
@@ -1878,6 +1880,8 @@ export async function getResolvedDraftPoolForLeague(
    * `aiAdpByPlayerKey.get('<lowercased name>|<lowercased position>')` returns
    *   { adp, sampleSize, lowSample, sevenDayTrend, thirtyDayTrend, standardDeviation }
    */
+  /** Own vs imported corpora per player key, for the three-factor AF ADP. See lib/adp/afAdp.ts. */
+  let afAdpCorpora: Map<string, AdpCorpusSplit> = new Map()
   const aiAdpByPlayerKey = new Map<
     string,
     {
@@ -1931,6 +1935,7 @@ export async function getResolvedDraftPoolForLeague(
       const board = await loadAdpBoard(ctx, { draftMode: 'real' })
       perfAiAdp()
       const LOW_SAMPLE_THRESHOLD = 10
+      afAdpCorpora = board.corpora
       for (const row of board.entries) {
         aiAdpByPlayerKey.set(row.playerKey, {
           adp: row.adp,
@@ -2475,6 +2480,25 @@ export async function getResolvedDraftPoolForLeague(
             aiAdpTeamCounts: aiAdpHit.contributingTeamCounts,
           }
         : { aiAdp: null }),
+      /**
+       * AF ADP — market + imported real-league drafts + AllFantasy drafts, each AF-drafted input
+       * shrunk by its own sample size (lib/adp/afAdp.ts). Additive: `adp` (market) and `aiAdp`
+       * keep their meaning, so no existing column changes underneath a reader.
+       */
+      ...(() => {
+        const af = computeAfAdp({
+          marketAdp: resolvedAdp,
+          split: afAdpCorpora.get(buildPlayerKey(name ?? '', position ?? '')),
+        })
+        return af
+          ? {
+              afAdp: af.afAdp,
+              afAdpContributions: af.contributions,
+              afAdpImportedSampleSize: af.importedSampleSize,
+              afAdpOwnSampleSize: af.afSampleSize,
+            }
+          : { afAdp: null }
+      })(),
       /** D.7 â attach Sleeper years_exp for NFL rows. Devy rows that have not
        * been promoted to the NFL retain `isRookie=true` regardless of yearsExp
        * (their Sleeper match is typically absent). Promoted rows fall through
