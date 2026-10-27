@@ -177,23 +177,57 @@ async function main() {
     const rosterIds = (await prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true } })).map(r => r.id)
     const rows = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: rosterIds }, droppedAt: null }, select: { playerId: true, position: true, sport: true } })
     const all = [...new Map(rows.map(r => [r.playerId, r])).values()]
+    const scoring = await leagueScoring()
+    const points: number[] = []
     for (const p of all) {
-      const stats = statsFor(p.position ?? '')
+      const stats = statsFor(p.position ?? '', scoring.categories)
+      points.push(scoring.score(stats, p.position))
       await prisma.playerWeeklyScore.upsert({
         where: { playerId_week_season_sport: { playerId: p.playerId, week, season: season.season, sport: p.sport } },
         create: { playerId: p.playerId, week, season: season.season, sport: p.sport, stats, fantasyPts: 0, isFinalized: true },
         update: { stats, isFinalized: true },
       })
     }
-    log(`seeded week ${week} scores for ${all.length} players`)
+    const scored = points.filter(n => n > 0).length
+    log(`seeded week ${week} scores for ${all.length} players: ${scored} score above 0 under the league's scoring, range ${Math.min(...points).toFixed(1)} to ${Math.max(...points).toFixed(1)}`)
+    // Stat names the league does not score make every team 0 and every council a tie, which looks
+    // like a tiebreak problem rather than a seeding one. Stop here instead.
+    assert.ok(scored > 0, `week ${week}: no seeded player scores above 0 under this league's scoring; the seeded stat names are wrong for ${SPORT}`)
   }
 
-  function statsFor(position: string): Record<string, number> {
+  type SeedCategory = { key: string; group: string; points: number }
+  let scoringCache: { categories: SeedCategory[]; score: (stats: Record<string, number>, position: string | null) => number } | null = null
+  async function leagueScoring() {
+    if (scoringCache) return scoringCache
+    const { resolveLeagueScoringRules } = await import('../../lib/redraft/leagueScoringRules')
+    const { buildLeagueStatScorer } = await import('../../lib/redraft/scoringEngine')
+    const row = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { sport: true, settings: true } })
+    const rules = resolveLeagueScoringRules(row)
+    const scorer = buildLeagueStatScorer(row)
+    assert.ok(rules && scorer, `no scoring config for ${row.sport}`)
+    // Point-earning categories only: tiers score off another stat, and per-game bonuses
+    // (hat trick, double-double) need game rows a weekly seed does not write.
+    const categories = rules.categories
+      .filter(c => c.tierStatKey == null && c.group !== 'bonus')
+      .map(c => ({ key: c.key, group: c.group, points: rules.overrides[c.key] ?? c.defaultPoints }))
+      .filter(c => c.points !== 0)
+    scoringCache = { categories, score: (stats, position) => scorer(stats, position) }
+    return scoringCache
+  }
+
+  function statsFor(position: string, categories: readonly SeedCategory[]): Record<string, number> {
     const r = (lo: number, hi: number) => Math.round(lo + rand() * (hi - lo))
-    if (position === 'QB') return { pass_yds: r(120, 360), pass_td: r(0, 4), rush_yds: r(0, 40) }
-    if (position === 'RB') return { rush_yds: r(10, 140), rush_td: r(0, 2), rec: r(0, 6), rec_yds: r(0, 60) }
-    if (position === 'WR' || position === 'TE') return { rec: r(1, 10), rec_yds: r(10, 140), rec_td: r(0, 2) }
-    return { pts: r(0, 15) }
+    if (SPORT === 'NFL') {
+      if (position === 'QB') return { pass_yds: r(120, 360), pass_td: r(0, 4), rush_yds: r(0, 40) }
+      if (position === 'RB') return { rush_yds: r(10, 140), rush_td: r(0, 2), rec: r(0, 6), rec_yds: r(0, 60) }
+      if (position === 'WR' || position === 'TE') return { rec: r(1, 10), rec_yds: r(10, 140), rec_td: r(0, 2) }
+      return { pts: r(0, 15) }
+    }
+    // Every other sport: the categories the league scores, read from its own rules, so a seeded
+    // stat name cannot drift from the scorer. Goalies and pitchers get only their group's stats.
+    const keeper = ['G', 'P', 'SP', 'RP'].includes(position.toUpperCase())
+    const own = categories.filter(c => (c.group === 'goalie' || c.group === 'pitching') === keeper)
+    return Object.fromEntries(own.map(c => [c.key, r(0, c.points > 0 ? 4 : 2)]))
   }
 
   async function castVotes() {

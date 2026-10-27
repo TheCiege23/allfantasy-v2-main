@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       sport:
-        description: 'Sport'
+        description: 'Sport (NFL, NBA or NHL; MLB is not a Survivor sport yet)'
         default: 'NFL'
       cast:
         description: 'Cast size'
@@ -27,8 +27,11 @@ permissions:
   pull-requests: write
   issues: write
 
+# One queue per sport. GitHub keeps only the newest pending run in a group, so a shared group
+# would cancel a queued NBA run the moment an NHL one was dispatched. Each run makes its own
+# league under its own marker, so two sports can share the branch database.
 concurrency:
-  group: survivor-season-rehearsal
+  group: survivor-season-rehearsal-${{ inputs.sport || 'NFL' }}
   cancel-in-progress: false
 
 jobs:
