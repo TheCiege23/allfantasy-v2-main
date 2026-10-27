@@ -111,11 +111,11 @@ export const SURVIVOR_PREMIUM_COMMAND_TILES: readonly SurvivorPremiumTileGate[] 
   {
     tileId: 'story_mode_controls',
     title: 'Story mode controls',
-    subtitle: 'Weekly recap engine + recap tone / spoilers.',
+    subtitle: 'How the weekly episode is told: tone, confessionals, and whether it posts to chat.',
     requiredPlan: 'af_supreme',
     tokenEligible: false,
     lens: 'host',
-    status: 'coming_next',
+    status: 'live',
   },
 ]
 

@@ -23,7 +23,9 @@ import {
   type PremiumReadCouncil,
   type SurvivorPremiumTilePayload,
 } from './survivorPremiumTiles'
-import { buildFairnessRadarTile, buildMinigamePlannerTile, buildRiskAlertsTile } from './survivorHostTiles'
+import { buildFairnessRadarTile, buildMinigamePlannerTile, buildRiskAlertsTile, buildStoryModeTile } from './survivorHostTiles'
+import { SURVIVOR_STORY_MODE_SETTING, parseSurvivorStoryModeInput, readSurvivorStoryMode, type SurvivorStoryModeSettings } from '@/lib/survivor/survivorStoryMode'
+import type { Prisma } from '@prisma/client'
 import { WEEKLY_CALL_TYPE } from '@/lib/survivor/survivorWeeklyCall'
 
 /**
@@ -60,6 +62,50 @@ export async function loadSurvivorPremiumIndex(input: { leagueId: string; userId
   }
 }
 
+type TileAuth =
+  | { ok: true; access: NonNullable<Awaited<ReturnType<typeof resolveSurvivorAccessContext>>> }
+  | { ok: false; status: 403 | 404; access?: Exclude<SurvivorPremiumTileAccess, { ok: true }>; error: string }
+
+/** Member, then the one access rule with the plan resolved here. Shared by every read and write. */
+async function authorizeSurvivorPremiumTile(input: { leagueId: string; userId: string; email: string | null; tileId: string }): Promise<TileAuth> {
+  const access = await resolveSurvivorAccessContext(input.leagueId, input.userId)
+  if (!access?.isLeagueMember) return { ok: false, status: 404, error: 'Not found' }
+  const viewerPlan = await resolveViewerPlan(input.leagueId, input.userId, input.email)
+  const decision = resolveSurvivorPremiumTileAccess({ tileId: input.tileId, ...viewerPlan })
+  if (!decision.ok) {
+    const error = decision.reason === 'plan_required' ? 'Upgrade to open this tile.'
+      : decision.reason === 'commissioner_only' ? 'Only the commissioner can open this tile.'
+        : decision.reason === 'coming_next' ? 'This tile is not open yet.' : 'Unknown tile.'
+    return { ok: false, status: decision.reason === 'unknown_tile' ? 404 : 403, access: decision, error }
+  }
+  return { ok: true, access }
+}
+
+export type SurvivorStoryModeSaveResult =
+  | { ok: true; settings: SurvivorStoryModeSettings }
+  | { ok: false; status: 400 | 403 | 404; access?: Exclude<SurvivorPremiumTileAccess, { ok: true }>; error: string }
+
+/**
+ * Save story mode. Same gate as reading the tile (a commissioner on AF Supreme), checked here on the
+ * server. Written under the league row lock because League.settings is shared by many writers.
+ */
+export async function saveSurvivorStoryMode(input: { leagueId: string; userId: string; email: string | null; body: unknown }): Promise<SurvivorStoryModeSaveResult> {
+  const auth = await authorizeSurvivorPremiumTile({ ...input, tileId: 'story_mode_controls' })
+  if (!auth.ok) return auth
+  const parsed = parseSurvivorStoryModeInput(input.body)
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error }
+  const found = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${input.leagueId} FOR UPDATE`
+    const row = await tx.league.findUnique({ where: { id: input.leagueId }, select: { settings: true } })
+    if (!row) return false
+    const next = { ...((row.settings as Record<string, unknown> | null) ?? {}), [SURVIVOR_STORY_MODE_SETTING]: parsed.value }
+    await tx.league.update({ where: { id: input.leagueId }, data: { settings: next as Prisma.InputJsonValue } })
+    return true
+  })
+  if (!found) return { ok: false, status: 404, error: 'Not found' }
+  return { ok: true, settings: parsed.value }
+}
+
 export async function loadSurvivorPremiumTile(input: {
   leagueId: string
   userId: string
@@ -69,19 +115,16 @@ export async function loadSurvivorPremiumTile(input: {
 }): Promise<SurvivorPremiumTileResult> {
   const { leagueId, userId } = input
   const now = input.now ?? new Date()
-  const access = await resolveSurvivorAccessContext(leagueId, userId)
-  if (!access?.isLeagueMember) return { ok: false, status: 404, error: 'Not found' }
-  const viewerPlan = await resolveViewerPlan(leagueId, userId, input.email)
-  const decision = resolveSurvivorPremiumTileAccess({ tileId: input.tileId, ...viewerPlan })
-  if (!decision.ok) {
-    const error = decision.reason === 'plan_required' ? 'Upgrade to open this tile.'
-      : decision.reason === 'commissioner_only' ? 'Only the commissioner can open this tile.'
-        : decision.reason === 'coming_next' ? 'This tile is not open yet.' : 'Unknown tile.'
-    return { ok: false, status: decision.reason === 'unknown_tile' ? 404 : 403, access: decision, error }
-  }
+  const auth = await authorizeSurvivorPremiumTile(input)
+  if (!auth.ok) return auth
+  const { access } = auth
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorRevealMode: true } })
   if (!league) return { ok: false, status: 404, error: 'Not found' }
+  // Story mode reads only the league's own setting: no cast, councils or chat.
+  if (input.tileId === 'story_mode_controls') {
+    return { ok: true, payload: { tileId: 'story_mode_controls', data: buildStoryModeTile(readSurvivorStoryMode(league.settings)) } }
+  }
   const settings = access.settings
   const week = await resolveSurvivorCurrentWeek(leagueId, null)
 

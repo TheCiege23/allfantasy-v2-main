@@ -148,7 +148,7 @@ describe('tile access: the one rule the page and the server share', () => {
 
   it('every live tile has a builder, and no live tile claims token runs that do not exist', () => {
     const live = SURVIVOR_PREMIUM_COMMAND_TILES.filter(t => t.status === 'live')
-    expect(live.map(t => t.tileId).sort()).toEqual(['challenge_outlook', 'exile_status', 'host_fairness_radar', 'jury_projection', 'minigame_planner', 'risk_alerts', 'social_pulse', 'threat_map'])
+    expect(live.map(t => t.tileId).sort()).toEqual(['challenge_outlook', 'exile_status', 'host_fairness_radar', 'jury_projection', 'minigame_planner', 'risk_alerts', 'social_pulse', 'story_mode_controls', 'threat_map'])
     expect(SURVIVOR_PREMIUM_COMMAND_TILES.every(t => t.tokenEligible === false)).toBe(true)
   })
 })

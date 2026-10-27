@@ -137,7 +137,7 @@ export function SurvivorPremiumCommandCenterPanel({
       >
         <p className="text-sm leading-relaxed text-white/55">
           Player lens unlocks with <span className="text-emerald-200/90">AF Pro</span>. Host tools unlock with{' '}
-          <span className="text-amber-100/90">AF Commissioner</span>, and story controls (coming next) with{' '}
+          <span className="text-amber-100/90">AF Commissioner</span>, and story mode controls with{' '}
           <span className="text-violet-200/90">AF Supreme</span> (AF Pro + AF Commissioner in one plan).
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

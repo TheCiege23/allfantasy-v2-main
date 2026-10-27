@@ -34,7 +34,7 @@ vi.mock('@/lib/tournament/resolve-af-plan-from-subscription', async (importOrigi
 vi.mock('@/lib/survivor/SurvivorTimelineResolver', () => ({ resolveSurvivorCurrentWeek: m.week }))
 vi.mock('@/lib/survivor/survivorWeeklyCall', () => ({ WEEKLY_CALL_TYPE: 'weekly_call' }))
 
-import { loadSurvivorPremiumIndex, loadSurvivorPremiumTile } from '@/lib/survivor/premium/survivorPremiumTileData'
+import { loadSurvivorPremiumIndex, loadSurvivorPremiumTile, saveSurvivorStoryMode } from '@/lib/survivor/premium/survivorPremiumTileData'
 import { SURVIVOR_DEFAULT_FOUNDATION_SETTINGS } from '@/lib/survivor/survivorSettings'
 
 const NOW = new Date('2026-10-22T12:00:00Z')
@@ -74,10 +74,10 @@ describe('loadSurvivorPremiumTile', () => {
     expect(m.prisma.survivorTribalCouncil.findMany).not.toHaveBeenCalled()
   })
 
-  it('refuses an unbuilt tile even on the top plan, and a non-member gets a 404', async () => {
+  it('refuses an unknown tile even on the top plan, and a non-member gets a 404', async () => {
     m.plan.mockReturnValue('af_supreme')
     m.role.mockResolvedValue('commissioner')
-    expect(await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'u-bo', email: null, tileId: 'story_mode_controls', now: NOW })).toMatchObject({ ok: false, status: 403, access: { reason: 'coming_next' } })
+    expect(await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'u-bo', email: null, tileId: 'not_a_tile', now: NOW })).toMatchObject({ ok: false, status: 404, access: { reason: 'unknown_tile' } })
     m.access.mockResolvedValue({ isLeagueMember: false })
     expect(await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'stranger', email: null, tileId: 'threat_map', now: NOW })).toMatchObject({ ok: false, status: 404 })
     expect(m.prisma.survivorPlayer.findMany).not.toHaveBeenCalled()
@@ -161,12 +161,50 @@ describe('host tiles', () => {
   })
 })
 
+describe('story mode controls', () => {
+  const tx = { $queryRaw: vi.fn(), league: { findUnique: vi.fn(), update: vi.fn() } }
+  beforeEach(() => {
+    ;(m.prisma as any).$transaction = vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx))
+    tx.league.findUnique.mockResolvedValue({ settings: { spectatorPageEnabled: true } })
+  })
+  const body = { tone: 'dramatic', confessionals: false, postToChat: true }
+
+  it('saving needs a commissioner on AF Supreme, checked on the server before any write', async () => {
+    m.role.mockResolvedValue('commissioner')
+    m.plan.mockReturnValue('af_commissioner')
+    expect(await saveSurvivorStoryMode({ leagueId: 'lg', userId: 'owner', email: null, body })).toMatchObject({ ok: false, status: 403, access: { reason: 'plan_required', requiredPlan: 'af_supreme' } })
+    m.role.mockResolvedValue('member')
+    m.plan.mockReturnValue('af_supreme')
+    expect(await saveSurvivorStoryMode({ leagueId: 'lg', userId: 'u-bo', email: null, body })).toMatchObject({ ok: false, status: 403, access: { reason: 'commissioner_only' } })
+    expect((m.prisma as any).$transaction).not.toHaveBeenCalled()
+  })
+
+  it('a bad body is refused without a write; a good one merges into the league settings under the row lock', async () => {
+    m.role.mockResolvedValue('commissioner')
+    m.plan.mockReturnValue('af_supreme')
+    expect(await saveSurvivorStoryMode({ leagueId: 'lg', userId: 'owner', email: null, body: { tone: 'shouty' } })).toMatchObject({ ok: false, status: 400 })
+    expect((m.prisma as any).$transaction).not.toHaveBeenCalled()
+    expect(await saveSurvivorStoryMode({ leagueId: 'lg', userId: 'owner', email: null, body })).toEqual({ ok: true, settings: body })
+    expect(tx.$queryRaw).toHaveBeenCalled()
+    expect(tx.league.update).toHaveBeenCalledWith({ where: { id: 'lg' }, data: { settings: { spectatorPageEnabled: true, survivorStoryMode: body } } })
+  })
+
+  it('reading the tile returns the saved settings and a preview per tone, and reads no cast', async () => {
+    m.role.mockResolvedValue('commissioner')
+    m.plan.mockReturnValue('af_supreme')
+    m.prisma.league.findUnique.mockResolvedValue({ settings: { survivorStoryMode: { tone: 'playful', confessionals: true, postToChat: false } }, survivorRevealMode: null })
+    const result = await loadSurvivorPremiumTile({ leagueId: 'lg', userId: 'owner', email: null, tileId: 'story_mode_controls', now: NOW })
+    expect(result).toMatchObject({ ok: true, payload: { tileId: 'story_mode_controls', data: { settings: { tone: 'playful', postToChat: false } } } })
+    expect(m.prisma.survivorPlayer.findMany).not.toHaveBeenCalled()
+  })
+})
+
 describe('loadSurvivorPremiumIndex', () => {
   it('reports each tile with the decision the tile endpoint will enforce', async () => {
     const index = await loadSurvivorPremiumIndex({ leagueId: 'lg', userId: 'u-bo', email: null })
     expect(index?.plan).toBe('af_pro')
     const byId = Object.fromEntries((index?.tiles ?? []).map(t => [t.tileId, t.access]))
     expect(byId.threat_map).toEqual({ ok: true })
-    expect(byId.story_mode_controls).toEqual({ ok: false, reason: 'coming_next' })
+    expect(byId.story_mode_controls).toEqual({ ok: false, reason: 'commissioner_only' })
   })
 })
