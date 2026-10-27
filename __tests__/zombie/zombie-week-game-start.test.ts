@@ -4,13 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   findMany: vi.fn(),
   count: vi.fn(),
-  fallback: vi.fn(),
   ensureStart: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsGame: { findMany: h.findMany, count: h.count },
-    gameSchedule: { findMany: h.fallback },
   },
 }))
 vi.mock('@/lib/season-week/deriveDailySportSeasonStart', () => ({
@@ -22,7 +20,6 @@ import { trustedZombieWeekStart } from '@/lib/zombie/zombieWeekGameStart'
 beforeEach(() => {
   vi.clearAllMocks()
   h.count.mockResolvedValue(0)
-  h.fallback.mockResolvedValue([])
   h.ensureStart.mockResolvedValue({ opener: 'curated' })
 })
 
@@ -56,12 +53,8 @@ describe('trusted four-sport week lock', () => {
     expect(h.findMany).not.toHaveBeenCalled()
   })
 
-  it('falls back to a fully timed imported week when the trusted feed is absent', async () => {
-    const start = new Date('2026-09-10T00:20:00.000Z')
+  it('keeps powers closed when the trusted regular-season feed is absent', async () => {
     h.findMany.mockResolvedValue([])
-    h.fallback.mockResolvedValue([{ startTime: start }])
-    expect(await trustedZombieWeekStart('NFL', 2026, 1)).toEqual(start)
-    h.fallback.mockResolvedValue([{ startTime: null }])
     expect(await trustedZombieWeekStart('NFL', 2026, 1)).toBeNull()
   })
 })
