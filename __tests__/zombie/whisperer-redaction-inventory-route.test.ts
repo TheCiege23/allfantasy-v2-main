@@ -19,6 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     zombieWeeklyResolution: { findUnique: vi.fn(async () => null) },
     zombieChimmyAction: { findMany: vi.fn(async () => []) },
     whispererRecord: { findUnique: vi.fn(async () => ({ userId: W_USER, ambushesRemaining: 2 })) },
+    zombieCoWhisperer: { findUnique: vi.fn(async () => null) },
     zombieBashingEvent: { findFirst: vi.fn(async () => null) },
   },
 }))
