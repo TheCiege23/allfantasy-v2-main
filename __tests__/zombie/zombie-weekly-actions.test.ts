@@ -9,6 +9,10 @@ const h = vi.hoisted(() => ({
   zombieAnnouncementFindUnique: vi.fn(),
   redraftSeasonFindFirst: vi.fn(),
   redraftMatchupFindMany: vi.fn(),
+  redraftRosterFindMany: vi.fn(),
+  rosterFindMany: vi.fn(),
+  zombieTeamItemFindMany: vi.fn(),
+  getAllStatuses: vi.fn(),
   weeklyResolutionFindUnique: vi.fn(),
   transaction: vi.fn(),
   getConfig: vi.fn(),
@@ -21,9 +25,10 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     zombieLeague: { findUnique: h.zombieLeagueFindUnique },
-    roster: { findFirst: h.rosterFindFirst },
+    roster: { findFirst: h.rosterFindFirst, findMany: h.rosterFindMany },
+    redraftRoster: { findMany: h.redraftRosterFindMany },
     zombieLeagueTeam: { findUnique: h.zombieLeagueTeamFindUnique },
-    zombieTeamItem: { count: h.zombieTeamItemCount },
+    zombieTeamItem: { count: h.zombieTeamItemCount, findMany: h.zombieTeamItemFindMany },
     zombieAnnouncement: { findUnique: h.zombieAnnouncementFindUnique },
     redraftSeason: { findFirst: h.redraftSeasonFindFirst },
     redraftMatchup: { findMany: h.redraftMatchupFindMany },
@@ -35,7 +40,7 @@ vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: h.get
 vi.mock('@/lib/zombie/ZombieSerumEngine', () => ({
   getSerumBalance: h.getSerumBalance, useSerumToRevive: h.useSerumToRevive,
 }))
-vi.mock('@/lib/zombie/ZombieOwnerStatusService', () => ({ setRevived: vi.fn() }))
+vi.mock('@/lib/zombie/ZombieOwnerStatusService', () => ({ setRevived: vi.fn(), getAllStatuses: h.getAllStatuses }))
 vi.mock('@/lib/zombie/commissionerNotificationService', () => ({ notifyCommissioner: h.notifyCommissioner }))
 vi.mock('@/lib/zombie/ZombieAuditLog', () => ({ appendZombieAudit: h.appendAudit }))
 vi.mock('@/lib/zombie/animationEngine', () => ({ queueAnimation: h.queueAnimation }))
@@ -44,6 +49,7 @@ vi.mock('@/lib/zombie/zombieRules', () => ({ getZombieRulesForSport: vi.fn() }))
 import { processRevive } from '@/lib/zombie/serumEngine'
 import { validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
 import { postWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
+import { computeInfections } from '@/lib/zombie/ZombieInfectionEngine'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -85,6 +91,31 @@ describe('Zombie weekly actions', () => {
     ])
     await expect(validatePreScoringWindow('L', 3, 2026)).resolves.toMatchObject({ valid: false })
     expect(h.weeklyResolutionFindUnique).not.toHaveBeenCalled()
+  })
+
+  it('an armed weapon blocks a finalized Horde infection', async () => {
+    h.getConfig.mockResolvedValue({ infectionLossToZombie: true, infectionLossToWhisperer: true })
+    h.getAllStatuses.mockResolvedValue([
+      { rosterId: 'human', status: 'Survivor' },
+      { rosterId: 'horde', status: 'Zombie' },
+    ])
+    h.redraftSeasonFindFirst.mockResolvedValue({ id: 'season' })
+    h.redraftMatchupFindMany.mockResolvedValue([
+      { id: 'matchup', homeRosterId: 'rr-horde', awayRosterId: 'rr-human', homeScore: 100, awayScore: 90, status: 'final' },
+    ])
+    h.redraftRosterFindMany.mockResolvedValue([
+      { id: 'rr-horde', ownerId: 'zombie-user' },
+      { id: 'rr-human', ownerId: 'human-user' },
+    ])
+    h.rosterFindMany.mockResolvedValue([
+      { id: 'horde', platformUserId: 'zombie-user', redraftRosterId: 'rr-horde' },
+      { id: 'human', platformUserId: 'human-user', redraftRosterId: 'rr-human' },
+    ])
+    h.zombieTeamItemFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ team: { rosterId: 'human' } }])
+    const outcome = await computeInfections({ leagueId: 'L', week: 3, season: 2026 })
+    expect(outcome.infected).toEqual([])
   })
 
   it('does not repost an already published weekly report', async () => {
