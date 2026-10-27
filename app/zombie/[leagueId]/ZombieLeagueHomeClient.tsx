@@ -99,6 +99,8 @@ type Pack = {
     latestResolution?: {
       status?: string | null
       resolvedAt?: string | null
+      requiresStatCorrection?: boolean
+      week?: number
     } | null
     topPerformers?: TeamRow[]
     dangerZone?: TeamRow[]
@@ -511,6 +513,11 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                     No weekly recap has been posted yet. The home screen is still tracking live events below.
                   </p>
                 )}
+                {z.latestResolution?.requiresStatCorrection ? (
+                  <div role="status" className="mt-4 rounded-2xl border border-amber-400/40 bg-amber-950/40 px-4 py-3 text-sm text-amber-100">
+                    Week {z.latestResolution.week ?? z.currentWeek} has a score correction under review. Role, item, and winnings changes remain on the original result until reconciliation is complete.
+                  </div>
+                ) : null}
                 {z.latestResolution?.status ? (
                   <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-xs text-white/60">
                     Latest resolution status: <span className="capitalize text-white/85">{z.latestResolution.status}</span>
