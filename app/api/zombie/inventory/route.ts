@@ -43,6 +43,7 @@ export async function GET(req: Request) {
       history: [],
       resolution: null,
       isCommissionerView: targetUserId !== session.user.id,
+      experienceMode: z.experienceMode,
       pendingBashingDecision: null,
     })
   }
@@ -147,6 +148,7 @@ export async function GET(req: Request) {
     ambushesRemaining: ownWhisperer?.ambushesRemaining ?? null,
     isCommissionerView: targetUserId !== session.user.id,
     isPaid: z.isPaid,
+    experienceMode: z.experienceMode,
     week,
     pendingBashingDecision,
   })
