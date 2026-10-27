@@ -127,8 +127,9 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
         '• Holders are told privately by Chimmy. Nobody else is told who has one.',
         '• Play one before votes are read: message me "use my idol", or tap Play Idol on the open council.',
         `• ${idolExpiryLine(s)}`,
+        s.idolPlayCutoffHours > 0 ? `• Idols must be played at least ${s.idolPlayCutoffHours} hour${s.idolPlayCutoffHours === 1 ? '' : 's'} before votes close. Votes still run to the close.` : '',
         `• Shot in the Dark: give up your vote for a 1 in ${s.shotInTheDarkOdds} chance to be safe. Send @Chimmy shot in the dark.`,
-      ].join('\n')
+      ].filter(Boolean).join('\n')
     case 'merge':
       return [
         '**Merge**',

@@ -67,3 +67,19 @@ export function survivorIdolRowExpiry(rule: SurvivorIdolExpiryRule): { expiresAt
   if (rule.mode === 'week') return { expiresAtMerge: false, expiresAtWeek: rule.week + 1, validUntilPhase: `week_${rule.week}` }
   return { expiresAtMerge: false, expiresAtWeek: null, validUntilPhase: `final_${rule.playersLeft}` }
 }
+
+/**
+ * The commissioner's idol play cutoff (`idolPlayCutoffHours`): idols must be in this many hours
+ * before votes close, so the last-minute scramble is votes only. Votes themselves, including an
+ * Extra Vote's ballot, still run to the close. 0 = idols can be played right up to the close.
+ */
+export function survivorIdolPlayDeadline(council: { voteDeadlineAt: Date }, cutoffHours: number | null | undefined): Date {
+  const hours = typeof cutoffHours === 'number' && cutoffHours > 0 ? cutoffHours : 0
+  return hours ? new Date(council.voteDeadlineAt.getTime() - hours * 3_600_000) : council.voteDeadlineAt
+}
+
+/** The sentence for the cutoff, or null when there is none. */
+export function survivorIdolPlayCutoffText(cutoffHours: number | null | undefined): string | null {
+  if (typeof cutoffHours !== 'number' || cutoffHours <= 0) return null
+  return `Idols must be played at least ${cutoffHours} hour${cutoffHours === 1 ? '' : 's'} before votes close.`
+}

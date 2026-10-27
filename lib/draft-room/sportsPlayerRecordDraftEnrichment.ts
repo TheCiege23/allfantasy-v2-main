@@ -14,6 +14,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
+import { inningsFromBaseballNotation } from '@/lib/scoring-runtime/mlbStatNormalization'
 import {
   buildLoosePlayerKey,
   buildStrictPlayerKey,
@@ -26,6 +27,8 @@ import type { PlayerMismatchCollector } from '@/lib/player-identity/playerMismat
 export type SportsPlayerRecordDraftAugment = {
   fantasyPointsPerGame: number | null
   nbaDraftStats: NbaDraftSeasonRates | null
+  /** MLB / NHL season line for the pool's stat columns. */
+  seasonStatLine: DraftSeasonStatLine | null
   adp: number | null
   headshotUrl: string | null
   /** When true, treat as rookie class for badge (conservative — stats/experience heuristics). */
@@ -73,6 +76,144 @@ export function extractNbaDraftSeasonRates(blob: unknown): NbaDraftSeasonRates |
     minutesPerGame: rate(['minutes_per_game', 'minutesPerGame', 'mpg', 'average_minutes'], ['minutes', 'minutes_played', 'Minutes Played'], 60),
   }
   return Object.values(result).some((value) => value != null) ? result : null
+}
+
+/**
+ * MLB / NHL season line for the pool's stat columns, keyed on the aliases in
+ * `draftSportStatColumns.ts` (homeRuns, era, goals, savePercentage, …).
+ *
+ * The stored row is Rolling Insights `regular_season`, written flat by
+ * `flattenRiSeasonStats`: NHL keys are bare (`goals`, `shots_on_goal`) and MLB keys are
+ * GROUPED (`batting.HR`, `pitching.K`). The groups must stay apart — `H`, `R`, `HR`, `BB`
+ * mean "recorded" under batting and "allowed" under pitching (see
+ * `lib/af-projections/categoryScoring.ts`). A nested `{batting:{…}}` object is read the same way.
+ *
+ * Rates are derived only from the components they need (AVG = H/AB, WHIP = (BB+H)/IP,
+ * SV% = saves/shots against); a missing component leaves the rate null rather than guessed.
+ * OBP is explicit-only: the season row carries no sacrifice flies, so a derived OBP would be wrong.
+ */
+export type DraftSeasonStatLine = Partial<Record<
+  | 'homeRuns' | 'rbi' | 'runs' | 'stolenBases' | 'battingAverage' | 'onBasePercentage'
+  | 'wins' | 'strikeouts' | 'saves' | 'era' | 'whip'
+  | 'goals' | 'assists' | 'shots_on_goal' | 'blocks' | 'shutouts'
+  | 'goalsAgainstAverage' | 'savePercentage',
+  number
+>>
+
+function seasonStatRoot(blob: unknown): Record<string, unknown> | null {
+  if (!blob || typeof blob !== 'object' || Array.isArray(blob)) return null
+  const root = blob as Record<string, unknown>
+  const nested = root.regular_season ?? root.currentSeason ?? root.season_stats ?? root.season
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : root
+}
+
+function finiteStat(raw: unknown): number | null {
+  if (raw == null || raw === '' || typeof raw === 'boolean') return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+}
+
+/** `batting.HR` (flattened) or `batting: { HR }` (nested), never the bare key. */
+function groupedStat(stats: Record<string, unknown>, group: 'batting' | 'pitching', key: string): number | null {
+  const flat = finiteStat(stats[`${group}.${key}`])
+  if (flat != null) return flat
+  const nested = stats[group]
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? finiteStat((nested as Record<string, unknown>)[key])
+    : null
+}
+
+/** "58:05" or a bare number of minutes. */
+function minutesFromTimeOnIce(raw: unknown): number | null {
+  if (typeof raw === 'string' && raw.includes(':')) {
+    const [m, s] = raw.split(':').map(Number)
+    return Number.isFinite(m) && Number.isFinite(s) ? m! + s! / 60 : null
+  }
+  return finiteStat(raw)
+}
+
+const round = (value: number, places: number) => {
+  const f = 10 ** places
+  return Math.round(value * f) / f
+}
+
+function compactLine(line: DraftSeasonStatLine): DraftSeasonStatLine | null {
+  const out: DraftSeasonStatLine = {}
+  for (const [key, value] of Object.entries(line) as Array<[keyof DraftSeasonStatLine, number | null | undefined]>) {
+    if (value != null && Number.isFinite(value) && value >= 0) out[key] = value
+  }
+  return Object.keys(out).length ? out : null
+}
+
+export function extractMlbDraftSeasonStats(blob: unknown): DraftSeasonStatLine | null {
+  const stats = seasonStatRoot(blob)
+  if (!stats) return null
+  const bat = (key: string) => groupedStat(stats, 'batting', key)
+  const pit = (key: string) => groupedStat(stats, 'pitching', key)
+
+  const ab = bat('AB')
+  const hits = bat('H')
+  const ipRaw = pit('IP')
+  const ip = ipRaw != null ? inningsFromBaseballNotation(ipRaw) : null
+  const er = pit('ER')
+  const walksAllowed = pit('BB')
+  const hitsAllowed = pit('H')
+  const explicitAvg = bat('AVG')
+  const explicitObp = bat('OBP')
+  const explicitEra = pit('ERA')
+  const explicitWhip = pit('WHIP')
+
+  return compactLine({
+    homeRuns: bat('HR') ?? undefined,
+    rbi: bat('RBI') ?? undefined,
+    runs: bat('R') ?? undefined,
+    stolenBases: bat('SB') ?? undefined,
+    battingAverage:
+      explicitAvg != null && explicitAvg <= 1 ? explicitAvg
+        : ab != null && ab > 0 && hits != null ? round(hits / ab, 3) : undefined,
+    onBasePercentage: explicitObp != null && explicitObp <= 1 ? explicitObp : undefined,
+    wins: pit('W') ?? undefined,
+    strikeouts: pit('K') ?? undefined,
+    saves: pit('S') ?? undefined,
+    era: explicitEra ?? (ip != null && ip > 0 && er != null ? round((er * 9) / ip, 2) : undefined),
+    whip:
+      explicitWhip ??
+      (ip != null && ip > 0 && walksAllowed != null && hitsAllowed != null
+        ? round((walksAllowed + hitsAllowed) / ip, 2)
+        : undefined),
+  })
+}
+
+export function extractNhlDraftSeasonStats(blob: unknown): DraftSeasonStatLine | null {
+  const stats = seasonStatRoot(blob)
+  if (!stats) return null
+  const n = (key: string) => finiteStat(stats[key])
+  const saves = n('saves')
+  const shotsAgainst = n('shots_against')
+  const goalsAllowed = n('goals_allowed')
+  const minutes = minutesFromTimeOnIce(stats.time_on_ice)
+  // Only goalies carry these; a skater's time on ice must not produce a GAA.
+  const isGoalieLine = saves != null || shotsAgainst != null || goalsAllowed != null
+
+  return compactLine({
+    goals: n('goals') ?? undefined,
+    assists: n('assists') ?? undefined,
+    shots_on_goal: n('shots_on_goal') ?? undefined,
+    blocks: n('blocks') ?? undefined,
+    saves: saves ?? undefined,
+    wins: n('win') ?? n('wins') ?? undefined,
+    shutouts: n('shutouts') ?? undefined,
+    goalsAgainstAverage:
+      n('goals_against_average') ??
+      (isGoalieLine && goalsAllowed != null && minutes != null && minutes > 0
+        ? round((goalsAllowed * 60) / minutes, 2)
+        : undefined),
+    savePercentage:
+      n('save_percentage') ??
+      (saves != null && shotsAgainst != null && shotsAgainst > 0 ? round(saves / shotsAgainst, 3) : undefined),
+  })
 }
 
 function extractFppgFromJson(blob: unknown, allowGenericPointsPerGame = true): number | null {
@@ -156,6 +297,12 @@ function augmentFromRecord(
   return {
     fantasyPointsPerGame: fppg,
     nbaDraftStats: String(sport).toUpperCase() === 'NBA' ? extractNbaDraftSeasonRates(row.stats) : null,
+    seasonStatLine:
+      String(sport).toUpperCase() === 'MLB'
+        ? extractMlbDraftSeasonStats(row.stats)
+        : String(sport).toUpperCase() === 'NHL'
+          ? extractNhlDraftSeasonStats(row.stats)
+          : null,
     adp,
     headshotUrl,
     rookieHint,

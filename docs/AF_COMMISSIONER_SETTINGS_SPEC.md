@@ -90,3 +90,10 @@ How many teams are chopped each week, and in which weeks.
      switching it on site-wide messages nobody unexpectedly.
    - **The trade review panel.** It is on by default, and only
      `COMMISSIONER_TRADE_REVIEW_ENABLED=false` turns it off.
+6. **Flagged trades are held for the commissioner only when the flag is serious (2026-10-27).**
+   On AF Commissioner, an accepted trade is checked for collusion before it goes through. By
+   default it waits for the commissioner to approve or veto only when it is **heavily lopsided**
+   or an **eliminated team is sending starters to a contender**. Any other flag only alerts the
+   commissioner, and the trade goes through. The commissioner can switch holding off or hold
+   every flag (`League.settings.integrity_hold_flagged_trades`: `off` / `severe` / `all`;
+   `lib/integrity/holdFlaggedTradesMode.ts`).
