@@ -4,6 +4,7 @@ import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
 export type ZombieSettlementSnapshotV1 = {
   version: 1
   capturedAt: string
+  owners: Array<{ rosterId: string; userId: string | null }>
   teams: Array<{
     id: string; rosterId: string; status: string
     weekBecameZombie: number | null; killedByRosterId: string | null; revivedAt: string | null
@@ -44,7 +45,8 @@ export async function captureZombieSettlementSnapshot(
   zombieLeagueId: string,
   sport: string,
 ): Promise<ZombieSettlementSnapshotV1> {
-  const [teams, items, whisperer, coWhisperers, config, rules] = await Promise.all([
+  const [owners, teams, items, whisperer, coWhisperers, config, rules] = await Promise.all([
+    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
     prisma.zombieLeagueTeam.findMany({
       where: { leagueId },
       select: {
@@ -92,6 +94,7 @@ export async function captureZombieSettlementSnapshot(
   return {
     version: 1,
     capturedAt: new Date().toISOString(),
+    owners: owners.map(owner => ({ rosterId: owner.id, userId: owner.platformUserId })),
     teams: teams.map(team => ({ ...team, revivedAt: team.revivedAt?.toISOString() ?? null })),
     items,
     whisperer,
@@ -110,7 +113,7 @@ export async function captureZombieSettlementSnapshot(
 export function parseZombieSettlementSnapshot(value: unknown): ZombieSettlementSnapshotV1 | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const row = value as Record<string, unknown>
-  if (row.version !== 1 || !Array.isArray(row.teams) || !Array.isArray(row.items) ||
+  if (row.version !== 1 || !Array.isArray(row.owners) || !Array.isArray(row.teams) || !Array.isArray(row.items) ||
       !Array.isArray(row.coWhisperers) || !row.rules || typeof row.rules !== 'object') return null
   if (row.teams.some(team => !team || typeof team.id !== 'string' || typeof team.rosterId !== 'string') ||
       row.items.some(item => !item || typeof item.id !== 'string' || typeof item.teamStatusId !== 'string')) return null
