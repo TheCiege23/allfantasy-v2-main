@@ -20,7 +20,7 @@ CREATE TABLE "zombie_co_whisperers" (
 
 CREATE UNIQUE INDEX "zombie_co_whisperers_zombieLeagueId_userId_key"
   ON "zombie_co_whisperers"("zombieLeagueId", "userId");
-CREATE INDEX "zombie_co_whisperers_zombieLeagueId_idx"
+CREATE UNIQUE INDEX "zombie_co_whisperers_zombieLeagueId_key"
   ON "zombie_co_whisperers"("zombieLeagueId");
 
 ALTER TABLE "zombie_co_whisperers"
