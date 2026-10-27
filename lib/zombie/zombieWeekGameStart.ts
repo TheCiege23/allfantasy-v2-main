@@ -4,7 +4,7 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 
-type ScheduleDb = Pick<Prisma.TransactionClient, 'sportsGame' | 'gameSchedule'>
+type ScheduleDb = Pick<Prisma.TransactionClient, 'sportsGame'>
 const DAY_MS = 86_400_000
 
 function earliest(starts: Date[]): Date | null {
@@ -61,12 +61,6 @@ export async function trustedZombieWeekStart(
     if (starts.length) return earliest(starts)
   }
 
-  // Legacy imports and test fixtures may have a complete GameSchedule instead.
-  // A missing time keeps the power closed; we never infer a kickoff from a date.
-  const fallback = await db.gameSchedule.findMany({
-    where: { sportType: key, season, weekOrRound: week },
-    select: { startTime: true },
-  })
-  if (!fallback.length || fallback.some(row => !row.startTime)) return null
-  return earliest(fallback.flatMap(row => row.startTime ? [row.startTime] : []))
+  // A missing trusted schedule cannot establish a fair first-game deadline.
+  return null
 }
