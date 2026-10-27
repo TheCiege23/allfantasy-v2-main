@@ -85,7 +85,7 @@ export async function PUT(req: Request) {
     const text = composeWeeklyUpdateBody(draft)
     await prisma.$transaction([
       prisma.zombieAnnouncement.update({ where: { id: announcement.id }, data: { content: text } }),
-      prisma.leagueChatMessage.update({ where: { zombieWeeklyAnnouncementId: announcement.id }, data: { message: text.slice(0, 100_000) } }),
+      prisma.leagueChatMessage.updateMany({ where: { zombieWeeklyAnnouncementId: announcement.id }, data: { message: text.slice(0, 100_000) } }),
     ])
   }
   return NextResponse.json({ payout })
