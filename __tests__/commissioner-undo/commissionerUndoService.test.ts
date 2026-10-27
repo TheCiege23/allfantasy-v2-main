@@ -20,6 +20,8 @@ const db = vi.hoisted(() => {
     },
     roster: {
       findFirst: vi.fn(async ({ where }: { where: { id: string; leagueId: string } }) => state.rosters.find((r) => r.id === where.id && r.leagueId === where.leagueId) ?? null),
+      // lib/league/faabMirror.ts: these rosters have no redraft link, so the copy is a no-op here.
+      findMany: vi.fn(async () => []),
       updateMany: vi.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         const hit = state.rosters.filter((r) => Object.entries(where).every(([k, v]) => (r as Record<string, unknown>)[k] === v))
         for (const r of hit) Object.assign(r, data)

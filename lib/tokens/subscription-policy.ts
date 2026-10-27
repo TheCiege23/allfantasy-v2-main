@@ -205,9 +205,11 @@ export async function resolveTokenChargeDecisionForUser(input: {
   userId: string
   ruleCode: string
   baseTokenCost: number
+  /** Reuse an existing transaction connection while charging. */
+  db?: ConstructorParameters<typeof EntitlementResolver>[0]
 }): Promise<TokenChargeDecision> {
-  const entitlementResolver = new EntitlementResolver()
-  const entitlement = await entitlementResolver.resolveSnapshot(input.userId)
+  const entitlementResolver = new EntitlementResolver(input.db)
+  const entitlement = await entitlementResolver.resolveSnapshot(input.userId, undefined, { strictReads: true })
   return resolveTokenChargeDecisionForEntitlement({
     entitlement,
     ruleCode: input.ruleCode,

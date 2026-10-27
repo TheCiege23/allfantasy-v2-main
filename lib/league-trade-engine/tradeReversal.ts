@@ -41,6 +41,7 @@ import {
   parseRedraftPickId,
   transferRedraftDraftPick,
 } from '@/lib/league-trade-engine/redraftDraftPicks'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 export type ReversalBlocker =
   | 'TRADE_NOT_FOUND'
@@ -276,6 +277,7 @@ export async function reverseGenericTrade(
           },
         })
       }
+      await copyGenericFaabToRedraft(tx, before.map((state) => state.rosterId))
       // Native scoring reads `RedraftRosterPlayer`; move the players' rows back with their JSON.
       const after = readRosters(snapshot.afterState)
       const afterIds = new Map(after.map((r) => [r.rosterId, new Set(getRosterPlayerIds(r.playerData))]))

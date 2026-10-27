@@ -84,6 +84,8 @@ function mapPlanCodeToPlanId(code: string | null | undefined): SubscriptionPlanI
 }
 
 export class EntitlementResolver {
+  constructor(private readonly db: Pick<typeof prisma, 'userSubscription' | 'adminSubscriptionGrant'> = prisma) {}
+
   async resolveForUser(
     userId: string,
     featureId?: SubscriptionFeatureId,
@@ -119,14 +121,14 @@ export class EntitlementResolver {
     const now = new Date()
 
     const [subscriptions, activeGrants] = await Promise.all([
-      (prisma as any).userSubscription
+      (this.db as any).userSubscription
         .findMany({
           where: { userId },
           include: { plan: { select: { code: true } } },
           orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
         })
         .catch((error: unknown) => { if (options?.strictReads) throw error; return [] }) as Promise<DbUserSubscriptionRow[]>,
-      (prisma as any).adminSubscriptionGrant
+      (this.db as any).adminSubscriptionGrant
         .findMany({
           where: {
             userId,

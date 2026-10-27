@@ -35,7 +35,9 @@ import { seasonWeekBoundsForSport } from '@/lib/survivor/survivorSeasonCalendar'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/lib/survivor/SurvivorSitOutEngine'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
-import { survivorIdolExpiryRule, survivorIdolExpiryText } from '@/lib/survivor/survivorIdolExpiry'
+import { survivorIdolExpiryRule, survivorIdolExpiryText, survivorIdolPlayCutoffText } from '@/lib/survivor/survivorIdolExpiry'
+import { buildSurvivorWeekAdvice } from '@/lib/survivor/survivorWeekAdvice'
+import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { loadCouncilWeekPosition } from '@/lib/survivor/survivorWeekCouncilProgress'
@@ -48,6 +50,12 @@ import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
 export const dynamic = 'force-dynamic'
 
 /** Crest (current name + colours) and decorative mark for a summary tribe; the merged pseudo-tribe has neither. */
+/** When idols stop being playable: the league's expiry rule, plus the play cutoff if one is set. */
+function idolTimingText(settings: ReturnType<typeof normalizeSurvivorFoundationSettings>): string {
+  const cutoff = survivorIdolPlayCutoffText(settings.idolPlayCutoffHours)
+  return [survivorIdolExpiryText(survivorIdolExpiryRule(settings)), cutoff].filter(Boolean).join(' ')
+}
+
 function summaryTribeEmblem(t: { name: string; logoUrl?: string | null; catalogId?: string | null; primaryColor?: string | null; secondaryColor?: string | null }, sport: string | null | undefined) {
   const emblem = resolveTribeEmblem({ name: t.name, logoUrl: t.logoUrl ?? null, catalogId: t.catalogId, primaryColor: t.primaryColor, secondaryColor: t.secondaryColor }, sport ?? 'NFL')
   return { logoUrl: emblem.crestUrl, markUrl: emblem.markUrl, mascot: emblem.mascot }
@@ -419,7 +427,7 @@ export async function GET(
     myTribeId: myTribeId ?? undefined,
     myTribeSource,
     myIdols,
-    idolExpiryText: survivorIdolExpiryText(survivorIdolExpiryRule(normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>))),
+    idolExpiryText: idolTimingText(normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>)),
     myActiveEffects,
     myExileStatus,
     nbaWeeklyScoringMode: normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>).nbaWeeklyScoringMode,
@@ -483,9 +491,28 @@ export async function GET(
     rosterDisplayNames,
   }
 
+  // This week's strategy for the viewer, from facts already in the payload (only their own idols).
+  const openCouncil = body.council && !body.council.closedAt && !body.council.isRevealed ? body.council : null
+  const weekAdvice = buildSurvivorWeekAdvice({
+    merged: Boolean(merged),
+    inGame: Boolean(myRosterId) && !eliminatedRosterIds.has(myRosterId!),
+    myRosterId: myRosterId ?? null,
+    myTribeId: myTribeId ?? null,
+    tribeScores,
+    tribeNames: Object.fromEntries(tribes.map(tribe => [tribe.id, tribe.name])),
+    memberScores: body.memberScores,
+    rosterNames: rosterDisplayNames,
+    immuneRosterIds: body.immunityRosterIds.filter((id): id is string => typeof id === 'string'),
+    scoresFinalized: body.scoresFinalized,
+    council: openCouncil ? { attendingTribeId: openCouncil.attendingTribeId ?? null } : null,
+    myIdols: myIdols.map(idol => ({ name: idolDefinition(idol.powerType).name, playableAtCouncil: Boolean(idolDefinition(idol.powerType).action) })),
+    idolExpiryText: body.idolExpiryText,
+  })
+  const payload = { ...body, weekAdvice }
+
   if (fairPlayRedact) {
-    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(body))
+    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(payload))
   }
 
-  return NextResponse.json(body)
+  return NextResponse.json(payload)
 }

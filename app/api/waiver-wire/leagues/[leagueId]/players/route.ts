@@ -9,7 +9,7 @@ import { serializeUnifiedPlayerForApi } from "@/lib/player-data/serializeUnified
 import { loadWaiverPoolEnrichment, type WaiverPoolEnrichment } from "@/lib/waiver-wire/waiverPoolEnrichment"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire/settings-service"
 import {
-  droppedPlayerWaiverHours,
+  droppedPlayerHoldPolicy,
   loadDroppedPlayerHolds,
   type DroppedPlayerHold,
 } from "@/lib/waiver-wire/dropped-player-waivers"
@@ -88,8 +88,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     // screen shows "On waivers until …" and routes them to a claim. A failed read shows none.
     const holds = await getEffectiveLeagueWaiverSettings(leagueId)
       .then((eff) => {
-        const hours = droppedPlayerWaiverHours({ normalizedWaiverType: eff.normalizedWaiverType, waiverHours: league.waiverHours })
-        return loadDroppedPlayerHolds(leagueId, hours)
+        const policy = droppedPlayerHoldPolicy({
+          normalizedWaiverType: eff.normalizedWaiverType,
+          waiverHours: league.waiverHours,
+          waiverEngineConfig: eff.waiverEngineConfig,
+          sport: league.sport ? String(league.sport) : null,
+        })
+        return loadDroppedPlayerHolds(leagueId, policy)
       })
       .catch(() => new Map<string, DroppedPlayerHold>())
 

@@ -37,10 +37,15 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
+import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
+import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
+import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
+import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
+import { RolloverWizard } from '@/components/core-app/commissioner/RolloverWizard'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { DisputeDesk } from '@/components/disputes/DisputeDesk'
@@ -251,6 +256,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
 
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
+      {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
@@ -258,6 +264,9 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {data.role === 'commissioner' && <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <InactiveManagerCommissioner leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <EliminatedLineups leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <IrAutoMove leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <OrphanAuction leagueId={league.id} />}
 
       <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
         <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
@@ -534,6 +543,15 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       */}
       <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
         <DeadlineAutopilot leagueId={league.id} />
+      </HubSection>
+
+      {/*
+        Storyline Studio — outside the depth gate: the card reads the AF Commissioner plan itself and
+        shows the upsell without it (the route enforces the plan). Every league: an AllFantasy league
+        can post and auto-post; an imported one gets Copy, shaped for its own platform's chat.
+      */}
+      <HubSection id="ch-storylines" title={t('Storyline Studio')}>
+        <StorylineStudio leagueId={league.id} />
       </HubSection>
 
       {/*

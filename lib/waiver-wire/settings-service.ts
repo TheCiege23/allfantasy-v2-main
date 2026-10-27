@@ -10,11 +10,17 @@ import {
 } from "./waiver-engine-config"
 import { defaultProcessingDaysList, resolveFreeAgentUnlockBehavior } from "./free-agent-unlock"
 import {
+  readFaabRolloverRule,
+  readFreeAgencyMode,
   readOffseasonWaiverRule,
   readPlayoffWaiverRule,
+  type FaabRolloverRule,
+  type FreeAgencyMode,
   type OffseasonWaiverRule,
   type PlayoffWaiverRule,
 } from "./hub-waiver-options"
+import { dailySportWaiverRunDays } from "./daily-sport-waiver-runs"
+import { readDailyWaiverScheduleFromSettings } from "@/lib/waivers/dailyWaiverSchedule"
 
 function toIntOrNull(value: unknown): number | null {
   if (value == null || value === "") return null
@@ -118,6 +124,10 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
   offseasonWaiverRule: OffseasonWaiverRule
   /** `waiverEngineConfig.playoff_waiver_rules`; default `all_teams`. */
   playoffWaiverRule: PlayoffWaiverRule
+  /** `waiverEngineConfig.free_agency_mode` (after-run-free-agency.ts); default `standard`. */
+  freeAgencyMode: FreeAgencyMode
+  /** `waiverEngineConfig.faab_rollover_rule` (faab-rollover.ts); null = never chosen. */
+  faabRolloverRule: FaabRolloverRule | null
 }> {
   const [league, row] = await Promise.all([
     (prisma as any).league.findUnique({
@@ -142,11 +152,20 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
     const mergedWeek =
       row.claimLimitPerWeek ??
       (typeof engineConfig.max_adds_per_week === "number" ? engineConfig.max_adds_per_week : null)
+    const freeAgencyMode = readFreeAgencyMode(engineConfig.free_agency_mode)
+    // NBA / NHL / MLB under Sleeper-style free agency run claims every day (daily-sport-waiver-runs.ts).
+    const dailyRunDays = dailySportWaiverRunDays({
+      sport: league?.sport,
+      leagueVariant: league?.leagueVariant,
+      freeAgencyMode,
+      waiverType: normalizeWaiverTypeForEngine(wt),
+      perDayScheduleEnabled: Boolean(readDailyWaiverScheduleFromSettings(league?.settings)?.enabled),
+    })
     return {
       leagueId,
       waiverType: wt,
       processingDayOfWeek: row.processingDayOfWeek ?? null,
-      processingTimeUtc: row.processingTimeUtc ?? null,
+      processingTimeUtc: row.processingTimeUtc ?? (dailyRunDays ? sportDefaults.processing_time_utc ?? null : null),
       claimLimitPerPeriod: mergedPeriod,
       claimLimitPerWeek: mergedWeek,
       claimLimitPerRun: row.claimLimitPerRun ?? null,
@@ -155,7 +174,7 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       faabResetType: row.faabResetType ?? null,
       waiverOrderResetPolicy: row.waiverOrderResetPolicy ?? null,
       postGameWaiverBehavior: row.postGameWaiverBehavior ?? null,
-      processingDays: row.processingDays ?? null,
+      processingDays: dailyRunDays ?? row.processingDays ?? null,
       freeAgentWindowRules: row.freeAgentWindowRules ?? null,
       tiebreakRule: row.tiebreakRule ?? engineConfig.faab_tiebreaker ?? null,
       lockType: row.lockType ?? null,
@@ -171,6 +190,8 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       commissionerOverrideRules: row.commissionerOverrideRules ?? null,
       offseasonWaiverRule: readOffseasonWaiverRule(engineConfig.offseason_waiver_rules),
       playoffWaiverRule: readPlayoffWaiverRule(engineConfig.playoff_waiver_rules),
+      freeAgencyMode,
+      faabRolloverRule: readFaabRolloverRule(engineConfig.faab_rollover_rule),
     }
   }
   const defaults = sportDefaults
@@ -219,6 +240,8 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
     commissionerOverrideRules: null,
     offseasonWaiverRule: "closed",
     playoffWaiverRule: "all_teams",
+    freeAgencyMode: "standard",
+    faabRolloverRule: null,
   }
 }
 

@@ -2,7 +2,7 @@ import type { LeagueLifecycleState } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logAdminAudit } from '@/lib/admin-audit'
 import { transitionLeagueState } from '@/server/services/leagueLifecycleService'
-import { enqueueLeagueEngineJob } from '@/lib/jobs/enqueue'
+import { runLeagueEngineJobNow } from '@/lib/workers/league-engine-worker'
 import { reprocessWeekAfterStatCorrection } from '@/server/services/statCorrectionService'
 import { buildLeagueInspectSnapshot } from '@/lib/admin/operations/leagueInspectService'
 import { pauseDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
@@ -82,26 +82,19 @@ export async function runAdminLeagueRecovery(input: {
       }
       case 'enqueue_waiver_process': {
         const idempotencyKey = `admin:waiver:${adminUserId}:${Date.now()}`
-        const enq = await enqueueLeagueEngineJob(
-          {
-            kind: 'waiver_process',
-            leagueId,
-            idempotencyKey,
-          },
-          { jobId: idempotencyKey },
-        )
+        const run = await runLeagueEngineJobNow({ kind: 'waiver_process', leagueId, idempotencyKey }, idempotencyKey)
         await logAdminAudit({
           adminUserId,
           action: 'ops_enqueue_waiver',
           targetType: 'league',
           targetId: leagueId,
-          details: { idempotencyKey, enqueue: enq },
+          details: { idempotencyKey, run },
         })
-        return { ok: true, detail: { enqueue: enq } }
+        return run.ok ? { ok: true, detail: { run } } : { ok: false, error: run.error ?? `${run.kind} failed` }
       }
       case 'enqueue_scoring_week': {
         const idempotencyKey = `admin:score:${leagueId}:${action.season}:${action.weekOrRound}:${Date.now()}`
-        const enq = await enqueueLeagueEngineJob(
+        const run = await runLeagueEngineJobNow(
           {
             kind: 'scoring_week',
             leagueId,
@@ -112,20 +105,20 @@ export async function runAdminLeagueRecovery(input: {
               lockScores: action.lockScores === true,
             },
           },
-          { jobId: idempotencyKey },
+          idempotencyKey,
         )
         await logAdminAudit({
           adminUserId,
           action: 'ops_enqueue_scoring',
           targetType: 'league',
           targetId: leagueId,
-          details: { season: action.season, weekOrRound: action.weekOrRound, enqueue: enq },
+          details: { season: action.season, weekOrRound: action.weekOrRound, run },
         })
-        return { ok: true, detail: { enqueue: enq } }
+        return run.ok ? { ok: true, detail: { run } } : { ok: false, error: run.error ?? `${run.kind} failed` }
       }
       case 'enqueue_specialty_automation': {
         const idempotencyKey = `admin:auto:${leagueId}:${Date.now()}`
-        const enq = await enqueueLeagueEngineJob(
+        const run = await runLeagueEngineJobNow(
           {
             kind: 'specialty_automation',
             leagueId,
@@ -137,16 +130,16 @@ export async function runAdminLeagueRecovery(input: {
               force: true,
             },
           },
-          { jobId: idempotencyKey },
+          idempotencyKey,
         )
         await logAdminAudit({
           adminUserId,
           action: 'ops_enqueue_automation',
           targetType: 'league',
           targetId: leagueId,
-          details: { enqueue: enq, payload: action },
+          details: { run, payload: action },
         })
-        return { ok: true, detail: { enqueue: enq } }
+        return run.ok ? { ok: true, detail: { run } } : { ok: false, error: run.error ?? `${run.kind} failed` }
       }
       case 'stat_correction_sync': {
         const idempotencyKey = `admin:statfix:${leagueId}:${action.season}:${action.week}:${Date.now()}`

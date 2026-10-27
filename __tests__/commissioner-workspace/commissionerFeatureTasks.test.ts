@@ -8,15 +8,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   corrections: vi.fn(),
   inactive: vi.fn(),
+  payouts: vi.fn(),
+  rollover: vi.fn(),
   prisma: { redraftTradeProposal: { findMany: vi.fn() }, redraftRoster: { findMany: vi.fn() } },
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({ readStatCorrections: m.corrections }))
 vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ readInactiveManagerView: m.inactive }))
+vi.mock('@/lib/payouts/payoutService', () => ({ readPayoutOvercommitment: m.payouts }))
+vi.mock('@/lib/season-rollover/rolloverService', () => ({ readRolloverDue: m.rollover }))
 
 import {
   detectInactiveTeamsToManage,
+  detectPayoutOvercommitment,
+  detectRolloverDue,
   detectTradesInReview,
   detectUnappliedStatCorrection,
   readCommissionerFeatureTasks,
@@ -88,9 +94,44 @@ describe('detectInactiveTeamsToManage', () => {
 
 const matchup = (id: string, fullyApplied: boolean, resultFlipped = false) => ({ matchupId: id, fullyApplied, resultFlipped })
 
+describe('detectPayoutOvercommitment', () => {
+  it('fires when the weekly prizes come to more than the pot, and links to the payouts', () => {
+    const t = detectPayoutOvercommitment('L 1', { potCents: 12_000, overCommittedCents: 3_050, season: 2026 })!
+    expect(t.sourceKey).toBe('payout-overcommitted:2026:v1')
+    expect(t.description).toMatch(/come to \$30\.50 more than the \$120 pot/)
+    expect(t.relatedLinks[0].href).toBe('/core/standings?league=L%201')
+    expect(t.automationCandidate).toBe(false)
+  })
+
+  it('clears once the pot covers them', () => {
+    expect(detectPayoutOvercommitment('L', { potCents: 12_000, overCommittedCents: 0, season: 2026 })).toBeNull()
+    expect(detectPayoutOvercommitment('L', null)).toBeNull()
+  })
+})
+
+describe('detectRolloverDue', () => {
+  it('fires once the season is over and unrenewed, and links to the wizard', () => {
+    const t = detectRolloverDue('L 1', { season: 2026 })!
+    expect(t.sourceKey).toBe('season-rollover:2026:v1')
+    expect(t.title).toBe('Set up the 2027 season')
+    expect(t.relatedLinks[0].href).toBe('/core/commissioner?league=L%201#ch-rollover')
+    expect(t.automationCandidate).toBe(false)
+    expect(detectRolloverDue('L', null)).toBeNull()
+  })
+  it('a dynasty league is walked through its own steps, and told its rosters carry over', () => {
+    const t = detectRolloverDue('L', { season: 2026, kind: 'dynasty' })!
+    expect(t.sourceKey).toBe('season-rollover:2026:v1')
+    expect(t.description).toContain('rookie draft order')
+    expect(t.description).toContain('Rosters carry over')
+    expect(detectRolloverDue('L', { season: 2026, kind: 'redraft' })!.description).toContain('renews the league')
+  })
+})
+
 describe('readCommissionerFeatureTasks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    m.payouts.mockResolvedValue(null)
+    m.rollover.mockResolvedValue(null)
     m.corrections.mockResolvedValue({
       covered: true,
       extended: { enabled: false, available: false, refusal: null, windowDays: 6 },
@@ -137,6 +178,21 @@ describe('readCommissionerFeatureTasks', () => {
       latest: { season: 2026, week: 7, changes: [{}], matchups: [matchup('m1', false)] },
     })
     expect((await readCommissionerFeatureTasks('L', NOW)).some((t) => t.sourceKey.startsWith('stat-correction'))).toBe(false)
+  })
+
+  it('files the payout task when the weekly prizes outrun the pot', async () => {
+    m.payouts.mockResolvedValueOnce({ potCents: 10_000, overCommittedCents: 2_000, season: 2026 })
+    expect((await readCommissionerFeatureTasks('L', NOW)).map((t) => t.sourceKey)).toContain('payout-overcommitted:2026:v1')
+  })
+
+  it('files the rollover task when the season is over and unrenewed', async () => {
+    m.rollover.mockResolvedValueOnce({ season: 2026 })
+    expect((await readCommissionerFeatureTasks('L', NOW)).map((t) => t.sourceKey)).toContain('season-rollover:2026:v1')
+  })
+
+  it('a failed payout read throws too', async () => {
+    m.payouts.mockRejectedValueOnce(new Error('payouts down'))
+    await expect(readCommissionerFeatureTasks('L', NOW)).rejects.toThrow('payouts down')
   })
 
   it('a failed read throws rather than returning nothing, so no open task is closed on a bad snapshot', async () => {

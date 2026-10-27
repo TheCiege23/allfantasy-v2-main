@@ -6,6 +6,12 @@ import { Switch } from '@/components/ui/switch'
 import { ArrowRight, Lock, Shield, UserCog } from 'lucide-react'
 import { CommissionerControlPanel } from '@/components/league-settings/CommissionerControlPanel'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
+import {
+  HOLD_FLAGGED_TRADES_LABELS,
+  HOLD_FLAGGED_TRADES_MODES,
+  holdModeFromResponse,
+  type HoldFlaggedTradesMode,
+} from '@/lib/integrity/holdFlaggedTradesMode'
 import { describeCollusionSensitivity, INTEGRITY_SENSITIVITIES, normalizeSensitivity, type IntegritySensitivity } from '@/lib/integrity/sensitivity'
 
 interface CommissionerToolsTabProps {
@@ -40,7 +46,9 @@ function SectionHeader({ icon: Icon, label, locked }: { icon: typeof Shield; lab
  *  - lineup neglect is the lineup-integrity monitor's report;
  *  - flags are reviewed on the integrity page.
  *  - suspicious trade alerts switch the commissioner's notification for a flagged trade
- *    (lib/integrity/tradeAlerts.ts).
+ *    (lib/integrity/tradeAlerts.ts);
+ *  - hold flagged trades sends a flagged trade to commissioner review before it executes
+ *    (lib/integrity/holdFlaggedTrades.ts).
  */
 export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: CommissionerToolsTabProps) {
   return (
@@ -67,7 +75,12 @@ export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: Commiss
   )
 }
 
-type IntegrityState = { tankingMonitorEnabled: boolean; collusionSensitivity: IntegritySensitivity; tradeAlertsEnabled: boolean }
+type IntegrityState = {
+  tankingMonitorEnabled: boolean
+  collusionSensitivity: IntegritySensitivity
+  tradeAlertsEnabled: boolean
+  holdFlaggedTradesMode: HoldFlaggedTradesMode
+}
 
 function IntegrityControls({ leagueId }: { leagueId: string }) {
   const [value, setValue] = useState<IntegrityState | null>(null)
@@ -88,6 +101,7 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
           tankingMonitorEnabled: Boolean(d.settings.tankingMonitorEnabled),
           collusionSensitivity: normalizeSensitivity(d.settings.collusionSensitivity),
           tradeAlertsEnabled: d.settings.tradeAlertsEnabled !== false,
+          holdFlaggedTradesMode: holdModeFromResponse(d.settings),
         })
       })
       .catch(() => { if (!cancelled) setStatus('Could not load the integrity settings.') })
@@ -137,6 +151,26 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
             aria-label="Suspicious trade alerts"
             data-testid="survivor-integrity-trade-alerts"
           />
+        </div>
+        <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2.5">
+          <div>
+            <span className="block text-sm text-white/80">Hold flagged trades</span>
+            <span className="block text-xs text-white/45">{HOLD_FLAGGED_TRADES_LABELS[value?.holdFlaggedTradesMode ?? 'severe'].detail}</span>
+          </div>
+          <select
+            value={value?.holdFlaggedTradesMode ?? 'severe'}
+            disabled={!value}
+            onChange={(e) => void save({ holdFlaggedTradesMode: e.target.value as HoldFlaggedTradesMode })}
+            aria-label="Hold flagged trades"
+            data-testid="survivor-integrity-hold-trades"
+            className="rounded-lg border border-white/15 bg-transparent px-2 py-1 text-xs text-white/80"
+          >
+            {HOLD_FLAGGED_TRADES_MODES.map((m) => (
+              <option key={m} value={m}>
+                {HOLD_FLAGGED_TRADES_LABELS[m].label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex items-center justify-between gap-4 py-2.5">
           <div className="min-w-0">

@@ -74,6 +74,24 @@ describe('Survivor commissioner tools', () => {
     expect(JSON.parse(String((puts()[0]![1] as RequestInit).body))).toEqual({ tradeAlertsEnabled: false })
   })
 
+  it('hold flagged trades loads as serious-flags-only by default and saves a new choice', async () => {
+    render(<CommissionerToolsTab leagueId="L1" hasAfCommissionerSub />)
+    const select = screen.getByTestId('survivor-integrity-hold-trades') as HTMLSelectElement
+    await waitFor(() => expect(select.disabled).toBe(false))
+    expect(select.value).toBe('severe')
+    fireEvent.change(select, { target: { value: 'all' } })
+    await waitFor(() => expect(puts()).toHaveLength(1))
+    expect(JSON.parse(String((puts()[0]![1] as RequestInit).body))).toEqual({ holdFlaggedTradesMode: 'all' })
+  })
+
+  it('hold flagged trades shows a league that switched it off as off', async () => {
+    fetchMock.mockImplementation(async () => ({ ok: true, status: 200, json: async () => ({ settings: { holdFlaggedTradesMode: 'off' } }) }))
+    render(<CommissionerToolsTab leagueId="L1" hasAfCommissionerSub />)
+    const select = screen.getByTestId('survivor-integrity-hold-trades') as HTMLSelectElement
+    await waitFor(() => expect(select.disabled).toBe(false))
+    expect(select.value).toBe('off')
+  })
+
   it('shows the lineup-neglect report and links to the integrity review page', () => {
     render(<CommissionerToolsTab leagueId="L1" hasAfCommissionerSub />)
     expect(screen.getByTestId('lineup-integrity').textContent).toBe('L1')

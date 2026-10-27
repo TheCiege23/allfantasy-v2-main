@@ -15,6 +15,7 @@ import { applyStatCorrectionAdjustment, type AdjustmentError } from '@/lib/score
 import type { MatchupCorrection, PlayerCorrection } from './statCorrectionReview'
 import {
   readStoredReview,
+  STAT_CORRECTION_SPORTS,
   statCorrectionCacheKeyPrefix,
   type StoredStatCorrectionReview,
 } from './statCorrectionDetector'
@@ -100,7 +101,7 @@ async function loadLatest(leagueId: string): Promise<{
   stored: StoredStatCorrectionReview | null
 }> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, settings: true, userId: true, leagueVariant: true, guillotineMode: true } })
-  const covered = String(league?.sport ?? '').toUpperCase() === 'NFL' && resolveWriteAuthority(league?.platform) === 'NATIVE'
+  const covered = STAT_CORRECTION_SPORTS.has(String(league?.sport ?? '').toUpperCase()) && resolveWriteAuthority(league?.platform) === 'NATIVE'
   if (!league || !covered) return { covered: false, league: null, seasonStatus: null, stored: null }
 
   const season = await prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { season: 'desc' }, select: { id: true, status: true } })
@@ -210,7 +211,7 @@ export async function commissionerApplyStatCorrections(leagueId: string, userId:
 }
 
 export const APPLY_STAT_CORRECTION_ERROR_TEXT: Record<ApplyStatCorrectionsError, string> = {
-  not_covered: 'Stat-correction review covers AllFantasy NFL leagues only.',
+  not_covered: 'Stat-correction review covers AllFantasy NFL and NBA leagues only.',
   no_review: 'There is no stat-correction review to apply.',
   not_in_review: 'That matchup has no correction in the latest review.',
   elimination_format: 'In an elimination league a week can already have cost a team its season, so corrections are shown, never applied.',

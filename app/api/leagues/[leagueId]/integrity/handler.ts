@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
@@ -7,7 +8,10 @@ import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
+import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
+import { HOLD_FLAGGED_TRADES_KEY, parseHoldFlaggedTradesMode, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTrades"
+import { parseTankingPenaltyPolicyPatch, readTankingPenaltyPolicy, TANKING_PENALTIES_KEY } from "@/lib/integrity/tankingPenalties"
 
 export const dynamic = "force-dynamic"
 
@@ -59,7 +63,17 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   return NextResponse.json({
     // `tradeAlertsEnabled` lives in League.settings (lib/integrity/tradeAlerts.ts), shown beside these.
-    settings: { ...settings, tradeAlertsEnabled: readTradeAlertsEnabled(league.settings) },
+    settings: {
+      ...settings,
+      tradeAlertsEnabled: readTradeAlertsEnabled(league.settings),
+      holdFlaggedTrades: readHoldFlaggedTradesMode(league.settings) !== "off",
+      holdFlaggedTradesMode: readHoldFlaggedTradesMode(league.settings),
+      // Holding needs the trade to execute in AllFantasy; an imported league's trades go through on its host.
+      holdFlaggedTradesSupported: resolveWriteAuthority(league.platform) === "NATIVE",
+      // Penalties take an AllFantasy draft pick; an imported league's picks live on its host, so the
+      // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
+      ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
+    },
     openFlags,
     recentDismissed,
     canReview: league.userId === userId,
@@ -95,6 +109,25 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
+
+  // Suspicious-trade alerts and "hold flagged trades": League.settings keys, merged inside a row lock
+  // like other settings writes (lib/integrity/tradeAlerts.ts, lib/integrity/holdFlaggedTrades.ts).
+  const settingsPatch: Record<string, unknown> = {}
+  // Anti-tanking penalties (lib/integrity/tankingPenalties.ts): a partial edit, merged onto the current policy.
+  let penaltyPatch: ReturnType<typeof parseTankingPenaltyPolicyPatch> = null
+  if (body.tankingPenalties !== undefined) {
+    penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
+    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), pickAtStrike and pickRound (1-10)" }, { status: 400 })
+  }
+  if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
+  // "Hold flagged trades": `off` / `severe` (the default) / `all`; the older on/off switch still works.
+  const holdInput = body.holdFlaggedTradesMode !== undefined ? body.holdFlaggedTradesMode : body.holdFlaggedTrades
+  if (holdInput !== undefined) {
+    const mode = parseHoldFlaggedTradesMode(holdInput)
+    if (!mode) return NextResponse.json({ error: "holdFlaggedTradesMode: off, severe or all" }, { status: 400 })
+    settingsPatch[HOLD_FLAGGED_TRADES_KEY] = mode
+  }
+  // Validated above, before anything is written, so a refused request changes nothing.
 
   const updated = await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
@@ -132,20 +165,34 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     },
   })
 
-  // Suspicious-trade alerts: a League.settings key, merged inside a row lock like other settings writes.
-  let tradeAlertsEnabled: boolean | undefined
-  if (typeof body.tradeAlertsEnabled === "boolean") {
-    tradeAlertsEnabled = body.tradeAlertsEnabled
-    await prisma.$transaction(async (tx) => {
+  let leagueSettings: unknown
+  if (Object.keys(settingsPatch).length > 0 || penaltyPatch) {
+    leagueSettings = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
       const current = (row?.settings as Record<string, unknown> | null) ?? {}
-      await tx.league.update({ where: { id: leagueId }, data: { settings: { ...current, [TRADE_ALERTS_KEY]: tradeAlertsEnabled } } })
+      const next = {
+        ...current,
+        ...settingsPatch,
+        ...(penaltyPatch ? { [TANKING_PENALTIES_KEY]: { ...readTankingPenaltyPolicy(current), ...penaltyPatch } } : {}),
+      }
+      await tx.league.update({ where: { id: leagueId }, data: { settings: next as Prisma.InputJsonValue } })
+      return next
     })
   } else {
-    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-    tradeAlertsEnabled = readTradeAlertsEnabled(row?.settings)
+    leagueSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
   }
 
-  return NextResponse.json({ settings: { ...updated, tradeAlertsEnabled } })
+  const platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform ?? null
+
+  return NextResponse.json({
+    settings: {
+      ...updated,
+      tradeAlertsEnabled: readTradeAlertsEnabled(leagueSettings),
+      holdFlaggedTrades: readHoldFlaggedTradesMode(leagueSettings) !== "off",
+      holdFlaggedTradesMode: readHoldFlaggedTradesMode(leagueSettings),
+      holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
+      ...(resolveWriteAuthority(platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
+    },
+  })
 }

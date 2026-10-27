@@ -36,7 +36,7 @@ export interface FantraxImportTeam {
   rosterPlayerIds: string[]
   starterPlayerIds: string[]
   reservePlayerIds: string[]
-  /** NBA/NHL minor-league stash, carried as the taxi squad. Absent or empty for every other sport. */
+  /** NBA/NHL/MLB minor-league stash, carried as the taxi squad. Absent or empty for every other sport. */
   taxiPlayerIds?: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 }

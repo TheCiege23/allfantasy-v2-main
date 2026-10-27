@@ -93,6 +93,16 @@ export function readSurvivorLateSeasonSettings(
   }
 }
 
+/**
+ * The boss a league actually plays against. The Chimmy roster boss only exists for NBA (it locks an
+ * NBA roster before tipoff), so an NFL or NHL league carrying the legacy value (a pre-score-boss
+ * league, or one with nothing stored) plays the default score boss, the league median. Without
+ * this, its Exile weeks waited for a Chimmy score that could never be produced and never settled.
+ */
+export function effectiveExileBossMode(mode: SurvivorExileBossMode, sport: string | null | undefined): SurvivorExileBossMode {
+  return mode === 'chimmy_roster' && String(sport ?? '').toUpperCase() !== 'NBA' ? NEW_LEAGUE_EXILE_BOSS_MODE : mode
+}
+
 /** Stamp late-season defaults onto a NEW league's settings (never overwrites a stored value). */
 export function withNewLeagueLateSeasonDefaults<T extends Record<string, unknown>>(settings: T): T & { exileBossMode: SurvivorExileBossMode } {
   const stored = typeof settings.exileBossMode === 'string' && settings.exileBossMode ? (settings.exileBossMode as SurvivorExileBossMode) : NEW_LEAGUE_EXILE_BOSS_MODE

@@ -1,6 +1,7 @@
 /**
  * The "league office" facts Chimmy is given, as prompt-ready prose: weekly prizes, trades in review,
- * stat corrections, inactive manager mode, and the latest league-log entries. What each viewer sees
+ * stat corrections, inactive manager mode, the lineup rule for eliminated teams, a dynasty league's
+ * offseason rollover, and the latest league-log entries. What each viewer sees
  * matches what the app shows them — the provider decides that; this only words it.
  *
  * Prose rather than an object because the grounding serializer renders a string slice as-is
@@ -21,8 +22,29 @@ export type LeagueOfficeInput = {
   inactive: { managed: string[]; suggested: string[] } | null
   /** The viewer's own team is being set by AllFantasy. */
   viewerTeamManaged: boolean
+  /** The league's lineup rule for eliminated teams (lib/eliminated-lineups), in words; every member. */
+  eliminatedLineupRule?: string | null
+  /** The live rookie order's round notices (lib/rookie-order/roundNotices.ts), in words; every member. */
+  rookieOrderRounds?: string | null
+  /** An open orphan auction, already worded (lib/orphan-auction). Never anyone's bids. */
+  orphanAuction?: string | null
   /** The latest league-log lines the viewer may read; null when the log is hidden from them. */
   log: ReadonlyArray<{ at: string; title: string; detail: string | null }> | null
+  /** The payout calculator (lib/payouts), when the commissioner has set a place split. */
+  payouts?: {
+    final: boolean
+    buyInCents: number
+    teamCount: number
+    potCents: number
+    weeklyReserveCents: number
+    places: ReadonlyArray<{ place: number; percent: number; cents: number; team: string | null }>
+    /** Commissioners only. */
+    collected: { cents: number; paidTeams: number } | null
+  } | null
+  /** IR auto-move (lib/ir-activation) is running in this league. */
+  irAutoMove?: boolean
+  /** Dynasty leagues between seasons: the rollover, already worded for this viewer (lib/season-rollover). */
+  offseason?: readonly string[] | null
 }
 
 const LOG_LINES = 8
@@ -54,10 +76,27 @@ function prizeLines(p: NonNullable<LeagueOfficeInput['prizes']>): string[] {
   return lines
 }
 
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+
+function payoutLines(p: NonNullable<LeagueOfficeInput['payouts']>): string[] {
+  const lines = [
+    `Payouts: ${formatPrize(p.buyInCents)} buy-in × ${p.teamCount} teams = ${formatPrize(p.potCents)} pot` +
+      (p.weeklyReserveCents ? `, ${formatPrize(p.weeklyReserveCents)} of it for the weekly prizes` : '') +
+      '. AllFantasy tracks the money; it does not collect or pay it.',
+    `Place payouts (${p.final ? 'final' : 'if the season ended today'}): ` +
+      p.places.map((x) => `${ordinal(x.place)} ${formatPrize(x.cents)} (${x.percent}%${x.team ? `, ${x.team}` : ''})`).join('; ') +
+      '.',
+  ]
+  if (p.collected) lines.push(`Buy-ins collected so far: ${formatPrize(p.collected.cents)}, ${p.collected.paidTeams} of ${p.teamCount} teams paid.`)
+  return lines
+}
+
 /** Null when there is nothing in the league office worth saying. */
 export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | null {
   const lines: string[] = []
   if (input.prizes) lines.push(...prizeLines(input.prizes))
+  if (input.payouts?.places.length) lines.push(...payoutLines(input.payouts))
+  if (input.offseason?.length) lines.push(...input.offseason)
 
   for (const t of input.trades) lines.push(`Trade between ${t.teams}: ${t.explainer}`)
 
@@ -82,6 +121,11 @@ export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | nul
     if (input.inactive.suggested.length) lines.push(`${list(input.inactive.suggested)} ${input.inactive.suggested.length === 1 ? 'looks' : 'look'} inactive; the commissioner can let AllFantasy set ${input.inactive.suggested.length === 1 ? 'its' : 'their'} lineups from the Commissioner Hub.`)
   }
   if (input.viewerTeamManaged) lines.push('AllFantasy is setting your lineup while you are away; saving a lineup yourself stops it.')
+  if (input.eliminatedLineupRule) lines.push(input.eliminatedLineupRule)
+  if (input.irAutoMove)
+    lines.push('IR auto-move is on: once a player on IR is activated, AllFantasy moves them to the bench within the hour, or tells the manager to make room when the bench or roster is full.')
+  if (input.rookieOrderRounds) lines.push(input.rookieOrderRounds)
+  if (input.orphanAuction) lines.push(input.orphanAuction)
 
   if (input.log?.length) {
     lines.push('Latest league log:')

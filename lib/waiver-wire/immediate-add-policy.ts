@@ -23,6 +23,7 @@ export function isImmediateAddAllowedToday(
         waiverType?: string | null
         instantFaAfterClear?: boolean | null
         freeAgentUnlockBehavior?: string | null
+        freeAgencyMode?: string | null
         dailyPolicy?: DailyPolicySnapshot | null
         phasePolicy?: WaiverPhasePolicy | null
       }
@@ -35,10 +36,13 @@ export function isImmediateAddAllowedToday(
   if (settings?.dailyPolicy) return settings.dailyPolicy.immediateAddsAllowed
   // 'daily' unlock (NBA/MLB/NHL default): non-waiver players are first-come; the server refuses a
   // player still on waivers with WAIVER_REQUIRED and the page falls back to the claim form.
+  // 'after_run' (Sleeper-style, after-run-free-agency.ts): an unclaimed player is an instant add once
+  // a run has cleared; before it, or after his game starts, the server answers WAIVER_REQUIRED.
   return (
     settings?.waiverType === 'fcfs' ||
     settings?.instantFaAfterClear === true ||
-    settings?.freeAgentUnlockBehavior === 'daily'
+    settings?.freeAgentUnlockBehavior === 'daily' ||
+    settings?.freeAgencyMode === 'after_run'
   )
 }
 
@@ -74,9 +78,22 @@ export function playerWaiverHoldUntil(
   return Number.isFinite(until.getTime()) && until > now ? until : null
 }
 
-/** "On waivers until Tue 3:00 PM" in the viewer's own time zone. */
-export function onWaiversUntilLabel(until: Date): string {
-  return `On waivers until ${until.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+/** The date in "On waivers until Tue 3:00 PM", in the viewer's own time zone and language. */
+export function onWaiversUntilDate(until: Date, locale?: string): string {
+  return until.toLocaleString(locale, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+}
+
+/**
+ * "On waivers until Tue 3:00 PM" in the viewer's own time zone. Pass the page's `tInterpolate` and
+ * language to get the translated label (`waiverClaim.onWaiversUntil`, «En reclamos hasta …» in Spanish);
+ * without them it stays English for callers that have no language context.
+ */
+export function onWaiversUntilLabel(
+  until: Date,
+  i18n?: { tInterpolate: (key: string, vars: Record<string, string>) => string; language?: string } | null,
+): string {
+  if (!i18n) return `On waivers until ${onWaiversUntilDate(until)}`
+  return i18n.tInterpolate('waiverClaim.onWaiversUntil', { date: onWaiversUntilDate(until, i18n.language) })
 }
 
 /**

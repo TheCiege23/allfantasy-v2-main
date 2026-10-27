@@ -13,6 +13,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { localizeDraftTypeOption } from '@/lib/i18n/createLeagueWire'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
+import { SURVIVOR_TWIST_PRESET_DEFAULT, SURVIVOR_TWIST_PRESETS } from '@/lib/survivor/survivorTwistPresets'
 
 const TRADE_REVIEW_LABEL: Record<TradeReviewMode, string> = {
   none: 'No review',
@@ -154,6 +155,7 @@ export function CreateLeagueReviewStep({
     { label: 'Roster summary', value: rosterSummary(state) },
     { label: 'Visibility', value: normalizeVisibilityLabel(state) },
     { label: 'Paid / free', value: monetizationLabel(state) },
+    ...(getEffectiveLeagueType(state) === 'survivor' ? [{ label: 'Twists', value: SURVIVOR_TWIST_PRESETS[state.survivorTwistPreset ?? SURVIVOR_TWIST_PRESET_DEFAULT].label }] : []),
     { label: 'Creator rank window', value: RANK_WINDOW_MESSAGE },
   ]
 

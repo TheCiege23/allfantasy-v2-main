@@ -18,9 +18,10 @@ function checkpoint(overrides: Record<string, unknown> = {}) {
 }
 function saved() { return JSON.parse(localStorage.getItem(key)!) }
 async function openPlayers() {
-  // The mobile drawer is the same production component mounted alongside desktop content.
+  // The mobile tray is the same production component mounted alongside desktop content. It is a
+  // non-modal region (the board stays usable behind it), not a dialog.
   fireEvent.click(screen.getByRole('button', { name: 'Players', exact: true }))
-  return within(screen.getByRole('dialog', { name: 'Players', exact: true }))
+  return within(screen.getByRole('region', { name: 'Players', exact: true }))
 }
 beforeEach(() => {
   localStorage.clear()
@@ -183,5 +184,20 @@ describe('native NBA league entry and checkpoint', () => {
     await screen.findByText(/Recovered your mock draft/)
     expect(JSON.parse(localStorage.getItem(nativeKey)!).state.settings.rosterSlots).toEqual(rosterSlots)
     expect(screen.getByTestId('mock-draft-resume')).toBeDefined()
+  })
+})
+
+describe('mock room headshots', () => {
+  it('shows the player headshot in the pool, and a mock saved before headshots still restores with initials', async () => {
+    const cp = checkpoint()
+    cp.state.availablePlayers[0] = { ...cp.state.availablePlayers[0], headshotUrl: 'https://cdn.example.com/headshots/alpha.png', teamLogoUrl: null } as any
+    localStorage.setItem(key, JSON.stringify(cp))
+    render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-resume')
+    const alpha = screen.getAllByTestId('mock-draft-player-avatar-Alpha-root')[0]!
+    expect(alpha.getAttribute('data-avatar-source')).toBe('headshot')
+    // Bravo was saved without any asset fields: it falls back to initials, not a broken image.
+    const bravo = screen.getAllByTestId('mock-draft-player-avatar-Bravo-root')[0]!
+    expect(bravo.getAttribute('data-avatar-source')).toBe('fallback')
   })
 })

@@ -22,8 +22,10 @@ import { loadWaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-gate"
 import {
   DROPPED_PLAYER_ON_WAIVERS_MESSAGE,
   loadDroppedPlayerHold,
-  loadDroppedPlayerWaiverHours,
+  loadDroppedPlayerHoldPolicy,
 } from "@/lib/waiver-wire/dropped-player-waivers"
+import { afterRunRefusalMessage, loadAfterRunFreeAgencyState } from "@/lib/waiver-wire/after-run-free-agency"
+import { LINEUP_WARNING_CODE, lineupWarningConfirmed, loadLineupFillWarning } from "@/lib/waiver-wire/lineup-fill-warning"
 
 export const dynamic = "force-dynamic"
 
@@ -40,7 +42,9 @@ function errorResponse(code: AddDropErrorCode, message?: string, extra?: Record<
  * Only performs an immediate move when the league allows it (FCFS or instant-free-agent, a daily
  * free-agent unlock, or an offseason opened as first-come free agency). When the
  * player must be claimed through waivers, returns `WAIVER_REQUIRED` so the client routes to the
- * claim drawer instead. Single-roster only — never runs the league-wide processor, so other teams'
+ * claim drawer instead. A drop that would leave a starting slot unfillable answers `LINEUP_WARNING`
+ * once; the screen asks the manager, and a retry with `confirmLineupWarning: true` goes through.
+ * Single-roster only — never runs the league-wide processor, so other teams'
  * pending claims are untouched and never exposed.
  */
 export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
@@ -113,11 +117,25 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     if (refusal) return errorResponse("WAIVER_REQUIRED", refusal)
   } else {
     const settings = await getEffectiveLeagueWaiverSettings(leagueId)
-    const immediateAllowed = settings.normalizedWaiverType === "fcfs" || settings.instantFaAfterClear === true
+    // Sleeper-style "Waivers, then free agents" (lib/waiver-wire/after-run-free-agency.ts): the player
+    // is an instant add only after a run has cleared and before his game starts; the hold and the
+    // pending-claim checks below still apply. FCFS has no run to clear, so the mode changes nothing there.
+    const afterRun = settings.freeAgencyMode === "after_run" && settings.normalizedWaiverType !== "fcfs"
+    if (afterRun) {
+      const state = await loadAfterRunFreeAgencyState(leagueId, String(addPlayerId), {
+        processingDayOfWeek: settings.processingDayOfWeek,
+        processingTimeUtc: settings.processingTimeUtc,
+        processingDays: settings.processingDays,
+      }).catch(() => "unknown" as const)
+      if (state === "unknown") return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
+      const refusal = afterRunRefusalMessage(state)
+      if (refusal) return errorResponse("WAIVER_REQUIRED", refusal, { freeAgencyReason: state.onWaivers ? state.reason : null })
+    }
+    const immediateAllowed = settings.normalizedWaiverType === "fcfs" || settings.instantFaAfterClear === true || afterRun
     if (immediateAllowed && settings.normalizedWaiverType !== "fcfs") {
       // Fails CLOSED like the daily path: an unreadable hold means a claim, never a free add.
-      const hold = await loadDroppedPlayerWaiverHours(leagueId, settings.normalizedWaiverType)
-        .then((hours) => loadDroppedPlayerHold(leagueId, String(addPlayerId), hours))
+      const hold = await loadDroppedPlayerHoldPolicy(leagueId, settings)
+        .then((policy) => loadDroppedPlayerHold(leagueId, String(addPlayerId), policy))
         .catch(() => "unknown" as const)
       if (hold === "unknown") return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
       if (hold) {
@@ -139,6 +157,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
         () => "This player must be claimed through waivers in this league.",
       )
       if (refusal) return errorResponse("WAIVER_REQUIRED", refusal)
+    }
+  }
+
+  // A drop that leaves a starting slot unfillable is the manager's call, but they confirm it first.
+  if (dropPlayerId && !lineupWarningConfirmed(body)) {
+    const warning = await loadLineupFillWarning({ leagueId, rosterId: roster.id, addPlayerId: String(addPlayerId), dropPlayerId })
+    if (warning) {
+      return NextResponse.json({ ok: false, code: LINEUP_WARNING_CODE, error: warning.message, warning }, { status: 409 })
     }
   }
 

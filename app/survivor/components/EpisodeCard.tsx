@@ -6,6 +6,7 @@ import clsx from 'clsx'
 export function EpisodeCard({
   week,
   title,
+  challengeLabel = 'Challenge',
   challengeLine,
   tribalLine,
   twistsLine,
@@ -13,6 +14,7 @@ export function EpisodeCard({
 }: {
   week: number
   title: string
+  challengeLabel?: string
   challengeLine: string
   tribalLine: string
   twistsLine?: string
@@ -38,7 +40,7 @@ export function EpisodeCard({
       </div>
       <ul className="mt-3 space-y-2 text-[12px] text-[var(--survivor-text-medium)]">
         <li>
-          <span className="text-[var(--survivor-text-dim)]">Challenge · </span>
+          <span className="text-[var(--survivor-text-dim)]">{challengeLabel} · </span>
           {challengeLine}
         </li>
         <li>
@@ -53,7 +55,7 @@ export function EpisodeCard({
         ) : null}
       </ul>
       {open && recap ? (
-        <p className={clsx('mt-3 border-t border-white/[0.06] pt-3 text-[12px] leading-relaxed text-white/70')}>
+        <p className={clsx('mt-3 whitespace-pre-line border-t border-white/[0.06] pt-3 text-[12px] leading-relaxed text-white/70')}>
           {recap}
         </p>
       ) : null}

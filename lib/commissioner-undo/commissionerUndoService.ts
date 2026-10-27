@@ -17,6 +17,7 @@ import {
   type UndoCurrent,
   type UndoPlan,
 } from './commissionerUndo'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 /**
  * Reads the facts the undo rules (./commissionerUndo.ts) need, and applies an undo.
@@ -99,6 +100,7 @@ export async function undoCommissionerAction(leagueId: string, userId: string, a
     ).count
   }
   if (changed !== 1) return { ok: false, error: 'changed_since', status: 409 }
+  if (plan.kind === 'faab') await copyGenericFaabToRedraft(prisma, [plan.rosterId])
 
   await logAction({
     leagueId,

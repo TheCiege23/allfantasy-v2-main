@@ -64,6 +64,8 @@ export type WarmDraftPoolSnapshotFastResult =
       entryCount: number
       syncedAt: string | null
       cacheKey: string
+      /** Past its expiry: served while a background rebuild runs (`allowStale` callers only). */
+      stale?: boolean
     }
   | {
       warm: false
@@ -128,6 +130,48 @@ export async function resolveDraftPoolCacheContext(
   }
 }
 
+/**
+ * 🛑 A DRAFT OUTLIVES ITS POOL CACHE BY HOURS. Rows expire after `AF_DRAFT_POOL_CACHE_TTL_SECONDS`
+ * (300 s by default) and a draft runs for hours, so without this every expiry handed the next
+ * autopick, room load or lookahead a full cold build — 60–90 s on a quiet container, 522 s
+ * logged on a loaded one — while the pick clock ran. The full-season Survivor rehearsal showed it as
+ * the pool being rebuilt from scratch over and over through one draft.
+ *
+ * Readers that opt in (`allowStale`) now take the last good row, up to this old, and start ONE
+ * background rebuild (`ensureDraftPoolReady` is single-flight per league). Readiness checks stay
+ * fresh-only, so the rebuild still happens; nobody waits for it.
+ */
+export const DRAFT_POOL_MAX_STALE_MS = 6 * 60 * 60 * 1000
+
+type StaleDraftPoolRow = { payload: DraftPoolSnapshotPayload; entryCount: number; syncedAt: string | null; cacheKey: string }
+
+/** The newest expired-but-recent row for this pool: the exact key first, then any row of the same roster fingerprint. */
+export async function readStaleDraftPoolRow(
+  leagueId: string,
+  context: { cacheKey: string; rosterFp: string },
+  now: Date = new Date(),
+): Promise<StaleDraftPoolRow | null> {
+  const model = getDraftPoolCacheModel()
+  if (!model) return null
+  const floor = new Date(now.getTime() - DRAFT_POOL_MAX_STALE_MS)
+  const select = { payload: true, entryCount: true, syncedAt: true, cacheKey: true }
+  const exact = await model.findFirst({ where: { cacheKey: context.cacheKey, expiresAt: { gt: floor } }, select })
+  const row = hasDraftableEntries(exact?.payload)
+    ? exact
+    : await model.findFirst({
+      where: { leagueId, sourceFingerprint: context.rosterFp, expiresAt: { gt: floor } },
+      orderBy: { syncedAt: 'desc' },
+      select,
+    })
+  if (!row || !hasDraftableEntries(row.payload)) return null
+  return {
+    payload: row.payload,
+    entryCount: Number(row.entryCount ?? inferEntryCountFromPayload(row.payload)),
+    syncedAt: row.syncedAt instanceof Date ? row.syncedAt.toISOString() : null,
+    cacheKey: typeof row.cacheKey === 'string' ? row.cacheKey : context.cacheKey,
+  }
+}
+
 function inferEntryCountFromPayload(payload: unknown): number {
   if (!payload || typeof payload !== 'object') return 0
   const record = payload as { meta?: unknown; count?: unknown; entries?: unknown }
@@ -173,7 +217,11 @@ function withWarmSnapshotMeta(
 
 export async function getWarmDraftPoolSnapshotFast(
   leagueId: string,
-  options?: { effectiveLeagueTemplate?: EffectiveLeagueTemplate },
+  options?: {
+    effectiveLeagueTemplate?: EffectiveLeagueTemplate
+    /** Serve an expired row (see `DRAFT_POOL_MAX_STALE_MS`) and rebuild in the background instead of reporting cold. */
+    allowStale?: boolean
+  },
 ): Promise<WarmDraftPoolSnapshotFastResult> {
   const model = getDraftPoolCacheModel()
   if (!model) {
@@ -255,6 +303,27 @@ export async function getWarmDraftPoolSnapshotFast(
         entryCount,
         syncedAt,
         cacheKey: effectiveCacheKey,
+      }
+    }
+
+    if (options?.allowStale) {
+      const stale = await readStaleDraftPoolRow(leagueId, { cacheKey: cacheContext.standardCacheKey, rosterFp: cacheContext.rosterFp }, now)
+      if (stale) {
+        triggerDraftPoolPrewarmBackground(leagueId)
+        return {
+          warm: true,
+          source: 'db-cache',
+          stale: true,
+          payload: withWarmSnapshotMeta(stale.payload, {
+            source: 'db-cache',
+            entryCount: stale.entryCount,
+            cacheKey: stale.cacheKey,
+            cachedAt: stale.syncedAt,
+          }),
+          entryCount: stale.entryCount,
+          syncedAt: stale.syncedAt,
+          cacheKey: stale.cacheKey,
+        }
       }
     }
 

@@ -13,6 +13,7 @@ import { enqueueNotification } from '@/lib/survivor/notificationEngine'
 import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTradesForElimination'
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch } from '@/lib/survivor/lateSeasonSettings'
+import { maybeTriggerSurvivorTribeShuffleRecommendation } from '@/lib/survivor/SurvivorSitOutEngine'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,6 +129,12 @@ export async function POST(req: NextRequest) {
     const toPhase = typeof body.toPhase === 'string' ? body.toPhase : ''
     const notes = typeof body.notes === 'string' ? body.notes : undefined
     if (!toPhase) return NextResponse.json({ error: 'toPhase required' }, { status: 400 })
+    if (toPhase === 'merge') {
+      // An early merge moves the whole cast, so it waits for the open council to finish and runs once.
+      const gs = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { activeCouncilId: true, mergeTriggeredAt: true } })
+      if (gs?.mergeTriggeredAt) return NextResponse.json({ error: 'The merge has already happened.' }, { status: 409 })
+      if (gs?.activeCouncilId) return NextResponse.json({ error: 'Finish the open Tribal Council before starting the merge.' }, { status: 409 })
+    }
     await advancePhase(leagueId, 'commissioner', userId, { toPhase, notes })
     await log('force_phase', notes ?? `Advance to ${toPhase}`, { newState: { toPhase } })
     return NextResponse.json({ ok: true })
@@ -250,8 +257,9 @@ export async function POST(req: NextRequest) {
     if (!draftedPlayer || owner?.playerState !== 'active') return NextResponse.json({ error: 'Choose an active manager’s currently rostered player.' }, { status: 422 })
     if (existingIdol) return NextResponse.json({ error: 'That player already carries an active idol.' }, { status: 409 })
     if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+    const leagueSport = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
     const player = await prisma.sportsPlayer.findFirst({
-      where: { sport: 'NBA', OR: [{ id: playerId }, { externalId: playerId }, { sleeperId: playerId }] },
+      where: { sport: String(leagueSport?.sport ?? 'NFL').toUpperCase(), OR: [{ id: playerId }, { externalId: playerId }, { sleeperId: playerId }] },
       select: { imageUrl: true },
     })
     await prisma.$transaction(async tx => {
@@ -300,12 +308,14 @@ export async function POST(req: NextRequest) {
     const reason = typeof body.reason === 'string' ? body.reason : 'removed'
     if (!targetUserId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
 
+    // Clear only the ballots this manager cast or received. Everyone else's stand; anyone whose vote
+    // named them can vote again before the deadline.
     const openCouncil = await prisma.survivorTribalCouncil.findFirst({
       where: { leagueId, status: 'voting_open' },
       select: { id: true },
     })
     if (openCouncil) {
-      await prisma.survivorVote.deleteMany({ where: { councilId: openCouncil.id } })
+      await prisma.survivorVote.deleteMany({ where: { councilId: openCouncil.id, OR: [{ voterUserId: targetUserId }, { targetUserId }] } })
     }
 
     await prisma.survivorIdol.updateMany({
@@ -327,6 +337,9 @@ export async function POST(req: NextRequest) {
     })
 
     await log('remove_player', reason, { targetUserId, newState: { playerState: 'eliminated' } })
+    // A quit can leave a tribe short, exactly like a vote-out: raise the same redraw recommendation.
+    const removedWeek = (await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } }))?.currentWeek
+    if (removedWeek) await maybeTriggerSurvivorTribeShuffleRecommendation(leagueId, removedWeek).catch(() => {})
 
     await enqueueNotification(leagueId, 'phase_change', {
       recipientRole: 'all',

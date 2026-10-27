@@ -8,7 +8,7 @@ import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleS
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { resolveTradeDeadlineStatus, serverWeekForTradeDeadline } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import { resolveTradeDeadlineStatus, serverWeekForTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
@@ -42,6 +42,7 @@ import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTra
 import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/receiptStore'
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -848,7 +849,7 @@ export async function acceptAfLeagueTrade(input: {
    * league vote, processing delay) may finish after the deadline — see `finalizeAfLeagueTradeProcessing`.
    */
   const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek)
-  if (deadline.passed) throw new Error('Trade deadline has passed.')
+  if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
 
   const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
     ? trade.metadata as Record<string, unknown>
@@ -891,7 +892,12 @@ export async function acceptAfLeagueTrade(input: {
   if (!life.ok) throw lifecycleGateThrowable(life.err)
 
   const settings = resolveLeagueTradeSettings(league)
-  const reviewType = trade.reviewType
+  // "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): a trade the collusion check flags now,
+  // before it executes, goes to commissioner review whatever the league's review mode.
+  const held =
+    trade.reviewType !== 'commissioner' &&
+    (await shouldHoldAcceptedTrade({ leagueId: input.leagueId, settings: league.settings, ref: { kind: 'af', tradeId: trade.id } }))
+  const reviewType = held ? 'commissioner' : trade.reviewType
 
   if (reviewType === 'instant') {
     await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, deadlineChecked: true })
@@ -932,15 +938,24 @@ export async function acceptAfLeagueTrade(input: {
       proposerUserId: trade.proposedByUserId,
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
-      body: 'It now goes to commissioner review before processing.',
+      body: held
+        ? 'The league integrity check flagged it, so it is held for commissioner review before processing.'
+        : 'It now goes to commissioner review before processing.',
     })
     announceTradeStatusInDm({
       tradeId: trade.id,
       status: 'accepted',
       actorUserId: input.userId,
-      detail: 'It goes to commissioner review before it processes.',
+      detail: held
+        ? 'The league integrity check flagged it, so it is held for commissioner review.'
+        : 'It goes to commissioner review before it processes.',
     })
-    announceTradeInLeagueChat(trade.id, 'Accepted. It goes to commissioner review before it processes.')
+    announceTradeInLeagueChat(
+      trade.id,
+      held
+        ? 'Accepted. Held for commissioner review by the league integrity check.'
+        : 'Accepted. It goes to commissioner review before it processes.',
+    )
     return { status: 'awaiting_commissioner' }
   }
 
@@ -1001,6 +1016,13 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   auditMetadata?: Record<string, unknown>
   /** The caller is `acceptAfLeagueTrade`, which checked the deadline at the moment of acceptance. */
   deadlineChecked?: boolean
+  /**
+   * An elevated commissioner forcing a still-pending offer through past the deadline — the same
+   * `commissionerOverride` convention the redraft trade runtime uses (TRADE_DEADLINE_PASSED is
+   * skipped when it is set). Only ever set by a route that has already checked the commissioner
+   * gate; never by a manager's request.
+   */
+  commissionerOverride?: boolean
 }): Promise<void> {
   const trade = await prisma.afLeagueTrade.findUniqueOrThrow({
     where: { id: input.tradeId },
@@ -1042,9 +1064,9 @@ export async function finalizeAfLeagueTradeProcessing(input: {
    * still `pending` here was never accepted — a commissioner processing the bare offer — and is held
    * to the deadline like a new proposal.
    */
-  if (trade.status === 'pending' && !input.deadlineChecked) {
+  if (trade.status === 'pending' && !input.deadlineChecked && !input.commissionerOverride) {
     const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek)
-    if (deadline.passed) throw new Error('Trade deadline has passed.')
+    if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
   }
   const delayH = settings.processingDelayHours ?? trade.processingDelayHours ?? 0
 
@@ -1339,6 +1361,74 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
       ? { tradeId: trade.id, status: 'cancelled', actorUserId: input.userId }
       : { tradeId: trade.id, status: 'cancelled', actorName: 'The commissioner' },
   )
+}
+
+/**
+ * A still-pending offer expires when the trade deadline passes (lib/trade-deadline/expireOffersAtDeadline.ts).
+ *
+ * Nobody could accept it anyway — acceptance re-checks the deadline — but left `pending` it sat in both
+ * inboxes as a live offer that would refuse every click, which reads as broken. Only a PENDING offer
+ * expires: one already accepted and waiting on review, a vote or a processing delay passed the gate at
+ * acceptance and finishes its window (see `acceptAfLeagueTrade`).
+ *
+ * Claimed on the status read, like cancel, so a manager acting at the same instant wins or loses
+ * cleanly. Both sides are told; the notice is idempotent per trade, so a re-run cannot send twice.
+ * Returns false when the offer had already moved on.
+ */
+export async function expireAfLeagueTradeAtDeadline(input: {
+  tradeId: string
+  leagueId: string
+  /** Names the limit that closed trades, for the notice. */
+  reason: string
+}): Promise<boolean> {
+  const trade = await prisma.afLeagueTrade.findFirst({ where: { id: input.tradeId, leagueId: input.leagueId } })
+  if (!trade || trade.status !== 'pending') return false
+  const claimed = await prisma.afLeagueTrade.updateMany({
+    where: { id: trade.id, status: 'pending' },
+    data: { status: 'expired' },
+  })
+  if (claimed.count === 0) return false
+  await appendAfTradeStatusHistory({
+    tradeId: trade.id,
+    fromStatus: 'pending',
+    toStatus: 'expired',
+    actorUserId: null,
+    reason: 'trade_deadline_passed',
+    metadata: { detail: input.reason },
+  })
+  await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'expired' })
+
+  try {
+    const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
+      ? trade.metadata as Record<string, unknown>
+      : {}
+    const partyRosterIds = Array.isArray(metadata.participantRosterIds) && metadata.participantRosterIds.length > 0
+      ? metadata.participantRosterIds.map(String)
+      : [trade.proposerRosterId, trade.receiverRosterId]
+    const rosters = await prisma.roster.findMany({
+      where: { id: { in: partyRosterIds }, leagueId: input.leagueId },
+      select: { platformUserId: true },
+    })
+    const raw = rosters
+      .map((r) => r.platformUserId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+    const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
+    if (userIds.length > 0) {
+      const { ingest, tradeEvent } = await import('@/lib/notification-engine')
+      const event = tradeEvent({
+        userIds,
+        leagueId: input.leagueId,
+        type: 'trade_rejected',
+        tradeId: trade.id,
+        title: 'Trade offer expired at the deadline',
+        body: `${input.reason} Pending offers expire when trades close.`,
+      })
+      await ingest({ ...event, meta: { ...event.meta, idempotencyKey: `trade-deadline-expiry:${trade.id}` } })
+    }
+  } catch {
+    /* a notice failure never undoes the expiry */
+  }
+  return true
 }
 
 export async function castAfTradeVetoVote(input: {

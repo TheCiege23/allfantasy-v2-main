@@ -5,11 +5,30 @@ Per CLAUDE.md: do not call Fantrax to settle these. Each needs a committed captu
 no credentials — the `fxea/general` endpoints are unauthenticated) before the workaround can be
 replaced by a rule.
 
-The only committed league capture is MLB: `tests/fixtures/fantrax/mlb-points-public.json`
-(`getLeagueInfo` scoring + roster constraints, a `getPlayerIds?sport=MLB` slice, one
-`getTeamRosters` team) and `tests/fixtures/fantrax/mlb-player-map-public.json`.
+Committed league captures: MLB (`tests/fixtures/fantrax/mlb-points-public.json`,
+`mlb-player-map-public.json`) and, since 2026-10-26, four real public PRE-DRAFT leagues captured
+with the owner's consent — `nba-public-2026.json`, `nhl-public-2026.json`, `nfl-public-2026.json`
+(IDP) and `epl-public-2026.json`, each holding `getLeagueInfo` (scoring, roster, playoff settings
+verbatim; playerInfo trimmed), `getTeamRosters`, `getStandings`, `getDraftPicks`,
+`getDraftResults`, plus `nba-player-ids-public.json` / `nhl-player-ids-public.json` slices. League
+ids, names and team identities are replaced with placeholders. Pinned by
+`tests/fantrax-public-2026-captures.test.ts`.
 
-## F-01 — NBA / NHL `getPlayerIds` is not captured
+⚠ **A PRE-DRAFT LEAGUE HAS EMPTY ROSTERS**, so the roster-id sport detection named nothing and the
+import refused it. `getLeagueInfo.playerInfo` (the league's whole player pool) is the same id space
+and now decides the sport when every roster is empty: 1,287/1,287 NBA pool ids in the NBA map and 0
+in NHL; 8,757/8,757 NHL in NHL and 0 in NBA. Each scoring group's `group.code` also names the sport
+(`BASKETBALL_PLAYER`, `HOCKEY_SKATING`/`HOCKEY_GOALIE`, `FOOTBALL_OFFENSE`/`_DEFENSE`/`_KICKING`,
+`SOCCER_GOALIE`/`SOCCER_NON_GOALIE`, MLB `BASEBALL_HITTING`/`_PITCHING`), but football's does not
+separate NFL from college, so the pool is what is used.
+
+## F-01 — NBA / NHL `getPlayerIds` — **RESOLVED 2026-10-26**
+
+Same id-keyed shape as MLB/CFB, plus `rotowireId`, `sportRadarId` (and `statsIncId` on NHL). One
+position per row in the captured slices (`PG`, `SG`, … ; hockey `C`/`LW`/`RW`/`D`/`G`); a player
+with no club reads `team: "(N/A)"`. The original note follows.
+
+### (original) NBA / NHL `getPlayerIds` is not captured
 
 `getPlayerIds?sport=NBA` and `?sport=NHL` are read by `importFantraxLeague` for sport detection and by
 `ingestProFantraxIdentities` for identity links. They are assumed to have the same id-keyed
@@ -23,7 +42,13 @@ the identity matcher refuses on an unrecognised team label rather than guessing.
 **Needed:** a trimmed `getPlayerIds?sport=NBA` and `?sport=NHL` slice (a few rows each, including a
 two-position player and, for NHL, a goalie) committed under `tests/fixtures/fantrax/`.
 
-## F-02 — How an NBA/NHL league labels its season
+## F-02 — How an NBA/NHL league labels its season — **RESOLVED 2026-10-26**
+
+`seasonYear` is the number of the year the season BEGINS: `2026` for both the NBA league
+(`startDate` 2026-10-26) and the NHL league (2026-09-29) of 2026-27 — exactly the key we use.
+The original note follows.
+
+### (original) How an NBA/NHL league labels its season
 
 `seasonYear` is `2023` (a number) on the MLB capture. For a basketball/hockey league it is unknown
 whether Fantrax sends `2025`, `2026` or `"2025-26"` for the 2025-26 season. We key those seasons by the
@@ -33,7 +58,14 @@ year they BEGIN. `fantraxSplitSeasonStartYear` reads, in order: a range label �
 **Needed:** `getLeagueInfo` for one public NBA and one public NHL league (the `seasonYear`,
 `startDate`, `endDate` and first `scoringPeriods` entry are enough).
 
-## F-03 — NBA/NHL `rosterInfo.positionConstraints` slot codes
+## F-03 — NBA/NHL slot codes — **RESOLVED for these two leagues, 2026-10-26**
+
+NBA: `C`, `G`, `F`, `Flx` (all-position utility → `UTIL`). NHL: `D`, `F` (→ C/W flex), `G`.
+⚠ The NBA league sends **no `maxTotalReservePlayers`** (only 14 total / 10 active), which dropped
+its bench; total − active now stands in. Other leagues may use more codes; unknown ones still report.
+The original note follows.
+
+### (original) NBA/NHL `rosterInfo.positionConstraints` slot codes
 
 Only MLB's codes are captured (`C`, `1B`, …, `UT`, `CI`, `MI`, `P`). The NBA/NHL mapping in
 `mapFantraxRosterSlots` accepts our catalog's own codes plus `UT`, and reports anything else as
@@ -52,6 +84,10 @@ taxi/IR slot counts are not imported.
 
 **Needed:** `getTeamRosters` + `getLeagueInfo.rosterInfo` from a public dynasty league that uses
 minors and IR slots (any sport).
+
+**2026-10-26:** MLB `MINORS` is now carried as the taxi squad too (it was filed as bench, so a
+prospect counted against the roster limit). Still synthetic only — the committed MLB capture
+(`tests/fixtures/fantrax/mlb-points-public.json`) has `ACTIVE` and `RESERVE` and nothing else.
 
 ## F-05 — Future draft picks (dynasty)
 
@@ -81,7 +117,16 @@ categories a Fantrax category league scores — and in which field — is not ca
 **Needed:** `getLeagueInfo.scoringSystem` from a public H2H-categories and a roto league (MLB first;
 NBA/NHL when F-02 is closed).
 
-## F-08 — NBA/NHL points scoring codes
+## F-08 — NBA/NHL points scoring codes — **RESOLVED 2026-10-26**
+
+`scoringSystem.type` is `HEAD_TO_HEAD_POINTS_BASED`. Codes are shared across sports and only the
+GROUP tells them apart — `INDIVIDUAL_SAVES` was being read as a baseball save in a hockey league.
+`fantraxScoringRules` now resolves by group first (`GROUP_CATEGORY_KEYS`). Captured: basketball
+PTS/REB/AST/ST/BLK/TO; hockey skater G/A/SOG/PPP/SHG/Hit/Blk/PIM, goalie W/SV/GA/SHO/A/PIM (goalie
+and skater PIM share one rule and a different value is reported). Football also gained FL, thrown
+INT, XP, FG and the IDP defence group. The original note follows.
+
+### (original) NBA/NHL points scoring codes
 
 `fantraxScoringRules` maps football and baseball `scoringCategory.code`s only. Basketball/hockey codes
 are unknown, so every NBA/NHL rule is reported as a gap (the import still completes; native conversion
@@ -107,3 +152,18 @@ mark them as prospects.
 **Needed, without a probe first:** read the `sportsDataCache['fantrax:mlb-identities:last-run']`
 marker (`provided` vs `unmatched`; `fantrax:nhl-identities:last-run` for NHL) to size it. If it is worth pursuing, capture one
 `getPlayerIds?sport=MLB` response as a committed fixture and check for a level/status field.
+
+## F-11 — `getAdp?sport=MLB` / `?sport=NHL` response shape (recorded 2026-10-27, no probe)
+
+The scheduled ADP import (`lib/workers/adp-importer.ts`, via `loadFantraxAdp` in
+`lib/adp/fantraxNbaAdp.ts`) now reads Fantrax ADP for MLB and NHL as well as NBA. Only
+`getAdp?sport=NBA` (and NCAAF) has a verified response. MLB/NHL are ASSUMED to return the same
+`[{ id, name: "Last, First", pos, ADP }]` array.
+
+Workaround: `getFantraxAdp` drops any row it cannot read and returns `api_error` on an empty board,
+which the `adp-refresh` heartbeat reports as `Fantrax MLB ADP: …` / `Fantrax NHL ADP: …`. Rows match
+on `PlayerIdentityMap.fantraxId` first, then on name. So a different shape costs rows, never wrong ADP.
+Out of season (MLB in October) the board may be stale or empty; that is reported the same way.
+
+**Needed:** a trimmed `getAdp?sport=MLB` and `?sport=NHL` capture (a few rows each, including a
+pitcher and a goalie), committed under `contracts/fantrax/fixtures/`.

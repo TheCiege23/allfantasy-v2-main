@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   rosterUpdateMany: vi.fn(),
   renew: vi.fn(),
   nativeRenew: vi.fn(),
+  waiverSettingsFindUnique: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: m.getServerSession }))
@@ -30,6 +31,7 @@ vi.mock('@/lib/prisma', () => ({
     redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
     leagueTeam: { updateMany: m.leagueTeamUpdateMany, count: m.leagueTeamCount },
     roster: { updateMany: m.rosterUpdateMany },
+    leagueWaiverSettings: { findUnique: m.waiverSettingsFindUnique },
     findLeagueListing: { upsert: vi.fn() },
     legacyTournamentLeague: { findFirst: vi.fn().mockResolvedValue(null) },
   },
@@ -85,6 +87,7 @@ beforeEach(() => {
   m.rosterUpdateMany.mockResolvedValue({ count: 0 })
   m.leagueUpdate.mockResolvedValue({})
   m.leagueFindUnique.mockResolvedValue(redraftLeague())
+  m.waiverSettingsFindUnique.mockResolvedValue(null)
   m.nativeRenew.mockResolvedValue({ ok: true, completedSeason: 2026, nextSeason: 2027, seasonId: 'nba-season-2', draftSessionId: 'nba-draft-2',
     draft: { sessionId: 'nba-draft-2', orderMode: 'manual', slotOrder: [{ slot: 1, rosterId: 'R-1', displayName: 'One' }] }, alreadyRenewed: false })
   m.renew.mockResolvedValue({
@@ -146,7 +149,7 @@ describe('POST renew — redraft', () => {
   it('runs the unified renew with the commissioner’s order and returns the new draft', async () => {
     const res = await post({ draftOrder: 'manual', manualOrder: ['R-1'] })
     expect(res.status).toBe(200)
-    expect(m.renew).toHaveBeenCalledWith('L1', 'commish', { draftOrder: 'manual', manualOrder: ['R-1'] })
+    expect(m.renew).toHaveBeenCalledWith('L1', 'commish', { draftOrder: 'manual', manualOrder: ['R-1'], faabFamily: 'redraft' })
     const json = await res.json()
     expect(json).toMatchObject({ ok: true, nextSeason: 2027, draft: { sessionId: 'draft-2', orderMode: 'manual' } })
     // The unified renew did the roster reset inside its transaction; the legacy reset does not run again.
@@ -231,5 +234,74 @@ describe('POST renew — redraft', () => {
     const res = await post({})
     expect(res.status).toBe(200)
     expect(m.renew).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST renew — FAAB at rollover (lib/waiver-wire/faab-rollover.ts)', () => {
+  const dynasty = () => redraftLeague({ leagueVariant: 'dynasty', isDynasty: true, waiverBudget: 200 })
+
+  it('a dynasty league with no rule keeps every balance, as before', async () => {
+    m.leagueFindUnique.mockResolvedValue(dynasty())
+    const res = await post({})
+    expect(res.status).toBe(200)
+    expect(m.renew).not.toHaveBeenCalled()
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it("a dynasty league that chose 'reset' starts the season on the full budget", async () => {
+    m.leagueFindUnique.mockResolvedValue(dynasty())
+    m.waiverSettingsFindUnique.mockResolvedValue({ waiverEngineConfig: { faab_rollover_rule: 'reset' } })
+    const res = await post({})
+    expect(res.status).toBe(200)
+    expect(m.rosterUpdateMany).toHaveBeenCalledWith({ where: { leagueId: 'L1' }, data: { faabRemaining: 200 } })
+  })
+
+  // An IDP keeper league: created with leagueVariant 'idp', so the renewal classifier reads it as redraft.
+  const idpKeeper = () => redraftLeague({ leagueType: 'keeper', leagueVariant: 'idp', settings: { league_type: 'keeper' }, waiverBudget: 200 })
+
+  it('the league\'s own format reaches the redraft renew: keeper → carry_rosters, redraft → redraft', async () => {
+    m.leagueFindUnique.mockResolvedValue(idpKeeper())
+    expect((await post({})).status).toBe(200)
+    expect(m.renew).toHaveBeenCalledWith('L1', 'commish', expect.objectContaining({ faabFamily: 'carry_rosters' }))
+    m.renew.mockClear()
+    m.leagueFindUnique.mockResolvedValue(redraftLeague({ leagueType: 'redraft' }))
+    expect((await post({})).status).toBe(200)
+    expect(m.renew).toHaveBeenCalledWith('L1', 'commish', expect.objectContaining({ faabFamily: 'redraft' }))
+  })
+
+  it('a format chosen in the modal decides instead: a keeper league renewed as redraft resets by default', async () => {
+    m.leagueFindUnique.mockResolvedValue(idpKeeper())
+    expect((await post({ leagueType: 'redraft' })).status).toBe(200)
+    expect(m.renew).toHaveBeenCalledWith('L1', 'commish', expect.objectContaining({ faabFamily: 'redraft' }))
+  })
+
+  it('legacy roster-only reset (no season): an IDP keeper league keeps its balances; only an empty one is seeded', async () => {
+    m.leagueFindUnique.mockResolvedValue(idpKeeper())
+    m.renew.mockResolvedValue({ ok: false, code: 'NO_SEASON', message: 'no season' })
+    expect((await post({})).status).toBe(200)
+    expect(m.rosterUpdateMany).toHaveBeenNthCalledWith(1, { where: { leagueId: 'L1' }, data: { playerData: {} } })
+    expect(m.rosterUpdateMany).toHaveBeenNthCalledWith(2, { where: { leagueId: 'L1', faabRemaining: null }, data: { faabRemaining: 200 } })
+  })
+
+  it("legacy roster-only reset: the same keeper league that chose 'reset' gets the full budget", async () => {
+    m.leagueFindUnique.mockResolvedValue(idpKeeper())
+    m.renew.mockResolvedValue({ ok: false, code: 'NO_SEASON', message: 'no season' })
+    m.waiverSettingsFindUnique.mockResolvedValue({ waiverEngineConfig: { faab_rollover_rule: 'reset' } })
+    expect((await post({})).status).toBe(200)
+    expect(m.rosterUpdateMany).toHaveBeenCalledTimes(1)
+    expect(m.rosterUpdateMany).toHaveBeenCalledWith({ where: { leagueId: 'L1' }, data: { playerData: {}, faabRemaining: 200 } })
+  })
+
+  it('native NBA renew gets the family too', async () => {
+    m.leagueFindUnique.mockResolvedValue({ ...idpKeeper(), sport: 'NBA' })
+    expect((await post({ expectedSeason: 2026 })).status).toBe(200)
+    expect(m.nativeRenew).toHaveBeenCalledWith(expect.objectContaining({ faabFamily: 'carry_rosters' }))
+  })
+
+  it('an unreadable rule falls back to the family default rather than failing the renewal', async () => {
+    m.leagueFindUnique.mockResolvedValue(dynasty())
+    m.waiverSettingsFindUnique.mockRejectedValue(new Error('db down'))
+    expect((await post({})).status).toBe(200)
+    expect(m.rosterUpdateMany).not.toHaveBeenCalled()
   })
 })

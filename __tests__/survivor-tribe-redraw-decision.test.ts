@@ -113,7 +113,7 @@ describe('autoApplyPendingTribeRedraw (the default when nobody answers)', () => 
   })
 })
 
-describe('rebalanceTribesBeforeCouncil (never freeze on a tribe of one)', () => {
+describe('rebalanceTribesBeforeCouncil (never freeze, never a two-manager tie)', () => {
   const cast = (sizes: number[]) => sizes.flatMap((size, slot) => Array.from({ length: size }, () => ({ tribeId: `t${slot + 1}` })))
   beforeEach(() => {
     vi.clearAllMocks()
@@ -125,11 +125,26 @@ describe('rebalanceTribesBeforeCouncil (never freeze on a tribe of one)', () => 
     alert.mockResolvedValue({ sent: true })
   })
 
-  it('leaves tribes alone while every tribe can still hold a council', async () => {
-    db.survivorPlayer.findMany.mockResolvedValue(cast([3, 3, 2, 2]))
+  it('leaves tribes alone while every tribe has three or more managers', async () => {
+    db.survivorPlayer.findMany.mockResolvedValue(cast([4, 3, 3, 3]))
     expect(await rebalanceTribesBeforeCouncil('league', 8)).toEqual({ action: 'none' })
     expect(shuffle).not.toHaveBeenCalled()
     expect(advance).not.toHaveBeenCalled()
+  })
+
+  // Self-votes are off, so two managers can only vote for each other: every such council is a tie.
+  it('redraws when a tribe is down to two managers, into tribes of at least three', async () => {
+    db.survivorPlayer.findMany.mockResolvedValue(cast([4, 3, 3, 2]))
+    expect(await rebalanceTribesBeforeCouncil('league', 5)).toEqual({ action: 'redrawn', tribeCount: 4 })
+    expect(alert).toHaveBeenCalledWith('league', 'tribes_rebalanced', expect.objectContaining({ dedupeKey: '5:redrawn', body: expect.stringContaining('down to 2 managers') }))
+  })
+
+  it('starts the merge instead when the cast cannot fill two tribes of three', async () => {
+    db.survivorTribe.findMany.mockResolvedValue([{ id: 't1' }, { id: 't2' }])
+    db.survivorPlayer.findMany.mockResolvedValue(cast([3, 2]))
+    expect(await rebalanceTribesBeforeCouncil('league', 11)).toEqual({ action: 'merged' })
+    expect(shuffle).not.toHaveBeenCalled()
+    expect(advance).toHaveBeenCalledWith('league', 'automatic', undefined, { toPhase: 'merge', notes: 'tribe_too_small_merge_now' })
   })
 
   it('redraws as Chimmy the moment a tribe is down to one manager, and tells the commissioner once', async () => {

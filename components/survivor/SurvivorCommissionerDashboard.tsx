@@ -32,6 +32,9 @@ import {
 import { TournamentSubscriptionTokensPanel } from '@/components/tournament/TournamentSubscriptionTokensPanel'
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
 import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
+import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
+import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
+import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
   SURVIVOR_TRIBE_ICON_CHOICES,
@@ -102,6 +105,8 @@ type DashboardPayload = {
   week: number
   tribes: { id: string; name: string; emoji?: string | null; members: { rosterId: string; userId?: string | null; displayName?: string | null }[] }[]
   tribeRedraw: { id: string; week: number | null; minTribeSize: number | null; maxTribeSize: number | null; defaultDecision?: string; options?: string[] } | null
+  /** Older servers omit it. */
+  todo?: SurvivorCommissionerTodo
   council: unknown
   privateBallots: []
   privateIdols: { id: string; ownerName: string; powerLabel: string }[]
@@ -116,7 +121,14 @@ type DashboardPayload = {
 export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }) {
   const searchParams = useSearchParams()
   const created = searchParams?.get('created') === '1'
-  const [tab, setTab] = useState<TabId>(searchParams?.get('tab') === 'tribes' ? 'tribes' : 'overview')
+  // A to-do or alert link names the tab to open (?tab=tribes, ?tab=operations, ?tab=tribal).
+  const [tab, setTab] = useState<TabId>(() => TABS.find(t => t.id === searchParams?.get('tab'))?.id ?? 'overview')
+  const tabParam = searchParams?.get('tab') ?? null
+  useEffect(() => {
+    // The to-do links stay on this page, so follow the URL when it changes too.
+    const next = TABS.find(t => t.id === tabParam)?.id
+    if (next) setTab(next)
+  }, [tabParam])
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tribeDrafts, setTribeDrafts] = useState<Record<string, { name: string; emoji: string }>>({})
@@ -349,6 +361,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
         <div className="mt-6 space-y-6">
           {tab === 'overview' && data && (
             <>
+              {data.todo ? <SurvivorCommissionerTodoCard todo={data.todo} /> : null}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <WarRoomStatOrb label="Phase" value={gs?.phase ?? '—'} hint="Game state" accent="emerald" />
                 <WarRoomStatOrb
@@ -450,6 +463,17 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   <Link href={`/league/${leagueId}?tab=trades`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Review trades</Link>
                   <Link href={`${base}/exile`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Exile status</Link>
                 </div>
+              </WarRoomPanel>
+              <WarRoomPanel title="Fix a problem" subtitle="Score corrections, a manager who quit, or an early merge.">
+                <SurvivorSeasonFixPanel
+                  leagueId={leagueId}
+                  week={data.gameState?.currentWeek ?? data.week}
+                  merged={data.merged}
+                  managers={[...new Map(data.tribes.flatMap(tribe => tribe.members)
+                    .filter(member => member.userId)
+                    .map(member => [member.userId as string, { userId: member.userId as string, name: member.displayName || 'Manager' }])).values()]
+                    .sort((a, b) => a.name.localeCompare(b.name))}
+                />
               </WarRoomPanel>
               {data.privacy?.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
                 <WarRoomPanel title="Private idol oversight" subtitle="Visible only to a non-playing host. Managers see only their own idols.">
@@ -659,6 +683,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               leagueId={leagueId}
               plan={data.monetization.afPlan ?? null}
               tokensRemaining={data.monetization.afTokensRemaining ?? null}
+              isCommissioner
             />
           )}
 

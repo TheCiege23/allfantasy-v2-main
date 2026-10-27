@@ -137,6 +137,15 @@ export interface NormalizedDraftEntry {
   aiAdpSource?: 'exact' | 'cross_size' | null
   /** Cross-size only: the league sizes the projection drew on. */
   aiAdpTeamCounts?: number[] | null
+  /**
+   * AF ADP: market + imported real-league drafts + AllFantasy drafts, each drafted input shrunk by
+   * its sample size (lib/adp/afAdp.ts). Null when no input exists for the player.
+   */
+  afAdp?: number | null
+  /** Share each input contributed to `afAdp`, summing to 1 — lets a surface explain the number. */
+  afAdpContributions?: { market: number; imported: number; af: number } | null
+  afAdpImportedSampleSize?: number | null
+  afAdpOwnSampleSize?: number | null
   injuryStatus?: string | null
   collegeOrPipeline?: string | null
   /** Devy: true when player is from devy/college pool */

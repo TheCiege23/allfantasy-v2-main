@@ -36,6 +36,16 @@ export const ENTITLEMENTS = {
     upgradeLabel: 'Unlock Competitive Edge',
     highlightParam: 'manager_psychology',
   },
+  commissioner_draft_as_me: {
+    key: 'commissioner_draft_as_me',
+    label: 'Draft As Me',
+    description:
+      'When a manager misses a pick, Chimmy drafts the way that manager drafts: their usual reach or patience and the positions they favour. Requires AF Commissioner subscription.',
+    requiredPlan: ['af_commissioner', 'af_supreme'],
+    upgradeUrl: '/commissioner-upgrade',
+    upgradeLabel: 'Get AF Commissioner',
+    highlightParam: 'draft_as_me',
+  },
   commissioner_ai_tools: {
     key: 'commissioner_ai_tools',
     label: 'Commissioner AI Tools',
@@ -176,6 +186,16 @@ export const ENTITLEMENTS = {
     upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
     highlightParam: 'dispersal_draft',
+  },
+  commissioner_chimmy_autopilot: {
+    key: 'commissioner_chimmy_autopilot',
+    label: 'Chimmy Autopilot',
+    description:
+      'Chimmy runs a team whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Requires AF Commissioner subscription.',
+    requiredPlan: ['af_commissioner', 'af_supreme'],
+    upgradeUrl: '/commissioner-upgrade',
+    upgradeLabel: 'Get AF Commissioner',
+    highlightParam: 'chimmy_autopilot',
   },
   commissioner_integrity_monitoring: {
     key: 'commissioner_integrity_monitoring',
@@ -362,6 +382,7 @@ export const LEAGUE_SETTINGS_AI_PANEL_FEATURE: Record<string, SubscriptionFeatur
 
 /** Maps `?highlight=` query keys to plan cards on pricing surfaces (scroll + ring). */
 export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = {
+  draft_as_me: 'af_commissioner',
   supreme: 'af_supreme',
   ai_tools: 'af_commissioner',
   ai_narration: 'af_commissioner',
@@ -384,5 +405,6 @@ export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = 
   manager_psychology: 'af_pro',
   dispersal_draft: 'af_commissioner',
   integrity_monitoring: 'af_commissioner',
+  chimmy_autopilot: 'af_commissioner',
   commissioner_waiver_ai: 'af_commissioner',
 }

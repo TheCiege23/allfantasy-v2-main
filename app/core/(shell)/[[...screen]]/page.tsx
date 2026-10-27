@@ -1,4 +1,5 @@
 import LeagueSchedule from '@/components/core-app/screens/LeagueSchedule'
+import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
 import Link from 'next/link'
@@ -2051,6 +2052,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           leagueCtx,
         ).catch(() => null)
       : null
+
+  // The enforced trade deadline, as a countdown chip on the Overview. A failed read costs the chip only.
+  const homeTradeDeadline = leagueHome
+    ? await loadTradeDeadlineCountdown(leagueHome.league.id).catch(() => null)
+    : null
 
   /*
    * This week's lineups, projected — AF beside API — as two columns on the Overview's Power board.
@@ -4465,6 +4471,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
           data={leagueHome}
           identityInShell={leagueHeaderShown}
+          tradeDeadline={homeTradeDeadline}
           lineups={homeLineups}
           /*
            * "What's on file", streamed. Its nine counts wait behind their own boundary so the rest
@@ -4645,6 +4652,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   ? `Deadline · week ${trades.deadline.data.week}`
                   : null
               }
+              deadlineCountdown={trades.deadlineCountdown ?? null}
               platform={trades.league.platform}
               sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}

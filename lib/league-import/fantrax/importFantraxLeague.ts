@@ -206,17 +206,44 @@ export async function importFantraxLeague(args: {
     nhl.ok ? { sport: 'nhl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nhl.data) } : null,
   ].filter((c): c is NonNullable<typeof c> => c !== null)
 
+  /*
+   * ⚠ A LEAGUE THAT HAS NOT DRAFTED HAS NO ROSTER IDS TO MEASURE, so every map names zero players
+   * and the import used to refuse it — the most common moment to move a league. The league's own
+   * player pool (`getLeagueInfo.playerInfo`, every player the league can roster) is the same id
+   * space, so when every roster is empty the pool is measured instead. Captured 2026-10-26 on four
+   * pre-draft public leagues: 1,287 of 1,287 NBA pool ids are in the NBA map and 0 in NHL; 8,757 of
+   * 8,757 NHL ids in NHL and 0 in NBA (tests/fixtures/fantrax/*-public-2026.json).
+   */
+  const rosterPlayers = candidates[0]?.resolved.reduce((a, r) => a + r.total, 0) ?? 0
+  const poolIds = rosterPlayers === 0 ? Object.keys(recordOf(info.data.playerInfo)) : []
+  const mapFor: Record<string, Record<string, unknown> | null> = {
+    cfb: cfb.ok ? cfb.data : null, nfl: nfl.ok ? nfl.data : null, mlb: mlb.ok ? mlb.data : null,
+    nba: nba.ok ? nba.data : null, nhl: nhl.ok ? nhl.data : null,
+  }
   const scored = candidates
-    .map((c) => ({ ...c, named: c.resolved.reduce((a, r) => a + r.resolved, 0) }))
+    .map((c) => ({
+      ...c,
+      named: poolIds.length > 0
+        ? poolIds.filter((id) => mapFor[c.sport]?.[id] != null).length
+        : c.resolved.reduce((a, r) => a + r.resolved, 0),
+    }))
     .sort((a, b) => b.named - a.named)
 
   const best = scored[0]
   if (!best || best.named === 0 || scored[1]?.named === best.named) {
-    return { ok: false, error: 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.' }
+    return {
+      ok: false,
+      error: rosterPlayers === 0 && poolIds.length === 0
+        ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
+        : best && best.named > 0
+          ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
+          : "This league's players do not match the college, NFL, MLB, NBA or NHL player lists, so it was not imported. Nothing was saved.",
+    }
   }
   const resolved = best.resolved
   const total = resolved.reduce((a, r) => a + r.total, 0)
-  const named = best.named
+  // A pre-draft league names no rostered players: the pool count picked the sport, nothing more.
+  const named = poolIds.length > 0 ? 0 : best.named
 
   /*
    * ⚠ A LEAGUE WHERE ALMOST NOTHING RESOLVED IS THE WRONG SPORT MAP, NOT AN
@@ -517,4 +544,8 @@ export async function attachToFranchise(args: {
   }
 
   return { ok: true, linkId: link.id }
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }

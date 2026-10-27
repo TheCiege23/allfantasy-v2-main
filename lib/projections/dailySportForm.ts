@@ -100,6 +100,13 @@ export type DailySportFormBlob = {
   computedAt: string
   recentGames: number
   players: Record<string, FormPlayer>
+  /**
+   * Absent = built from game lines. 'season_totals' = a PRIOR season built from `player_season_stats`
+   * (dailySportSeasonTotals.ts): `rg`/`rs` are empty and `mappedKeys` names every scorer key it carries,
+   * so a league weighting any other key declines it.
+   */
+  basis?: 'season_totals'
+  mappedKeys?: string[]
 }
 
 export type GameLogRow = {

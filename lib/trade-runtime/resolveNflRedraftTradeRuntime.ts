@@ -5,6 +5,7 @@ import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { isReserveRosterSlot, resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { resolveRedraftTradeGovernance } from '@/lib/redraft/tradeGovernance'
+import { evaluateRedraftTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import { applyRedraftFaabDeltasInTransaction } from '@/lib/redraft/faabTransfer'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
 import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
@@ -534,9 +535,22 @@ function persistedAssetData(proposalId: string, assets: NflRedraftTradeAssetInpu
   })
 }
 
+/**
+ * The deadline against the SERVER'S week and the commissioner's close time. The runtime's own
+ * `deadlinePassed` reads the season's stored week and knows nothing about a close time, so this route
+ * (`/api/redraft/trade-runtime`) admitted what every other trade path refuses. A commissioner override
+ * still forces past it, exactly as it forces past the runtime's own check.
+ */
+async function assertRedraftDeadlineOpen(leagueId: string, commissionerOverride: boolean | undefined): Promise<void> {
+  if (commissionerOverride) return
+  const deadline = await evaluateRedraftTradeDeadline(leagueId)
+  if (deadline.passed) throw new Error(tradeDeadlinePassedMessage(deadline))
+}
+
 export async function createNflRedraftTradeProposal(input: CreateNflRedraftTradeProposalInput) {
   const resolved = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (!resolved.ok) throw new Error(resolved.reason)
+  await assertRedraftDeadlineOpen(resolved.state.leagueId, input.commissionerOverride)
   const validation = validateNflRedraftTradeProposal({
     state: resolved.state,
     proposerRosterId: input.proposerRosterId,
@@ -824,6 +838,8 @@ export async function actOnNflRedraftTradeProposal(input: {
   }
 
   if (input.action === 'accept' || input.action === 'commissioner_approve') {
+    // Acceptance binds the deadline; a commissioner approval is the override convention.
+    await assertRedraftDeadlineOpen(resolved.state.leagueId, input.action === 'commissioner_approve' || input.commissionerOverride === true)
     return applyExecutedTrade({
       state: resolved.state,
       proposalId: input.proposalId,

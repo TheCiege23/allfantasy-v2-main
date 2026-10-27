@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   prisma: {
-    redraftTradeProposal: { findMany: vi.fn(), updateMany: vi.fn() },
+    redraftTradeProposal: { findMany: vi.fn(), updateMany: vi.fn(), count: vi.fn(async () => 0) },
     redraftRoster: { findMany: vi.fn() },
   },
   locked: vi.fn(async () => false),
@@ -10,12 +10,14 @@ const m = vi.hoisted(() => ({
   decision: vi.fn(async () => ({})),
   market: vi.fn(async () => ({})),
   dm: vi.fn(),
+  held: vi.fn(async (): Promise<string[]> => []),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/redraft/tradeMoveLock', () => ({ isRedraftLeagueMovesLocked: m.locked }))
 vi.mock('@/lib/redraft/finalizeRedraftTrade', () => ({ finalizeRedraftTrade: m.finalize, upsertRedraftTradeDecision: m.decision }))
 vi.mock('@/lib/trade-market/redraftTradeMarketEvents', () => ({ recordRedraftTradeMarketEvent: m.market }))
 vi.mock('@/lib/chat-notifications/tradeOfferDm', () => ({ queueTradeStatusInDm: m.dm }))
+vi.mock('@/lib/integrity/holdFlaggedTrades', () => ({ heldTradeIds: m.held }))
 
 import { processDueTradeReviews, REVIEW_WINDOW_DECISION_REASON } from '@/lib/redraft/tradeReviewWindowSweep'
 
@@ -31,6 +33,7 @@ beforeEach(() => {
   m.prisma.redraftRoster.findMany.mockResolvedValue([{ id: 'rp', ownerId: 'u-p' }, { id: 'rr', ownerId: 'u-r' }])
   m.prisma.redraftTradeProposal.updateMany.mockResolvedValue({ count: 1 })
   m.finalize.mockResolvedValue({ ok: true, proposal: {} })
+  m.held.mockResolvedValue([])
 })
 
 describe('processDueTradeReviews', () => {
@@ -40,6 +43,15 @@ describe('processDueTradeReviews', () => {
     expect(m.prisma.redraftTradeProposal.findMany.mock.calls[0][0].where).toEqual({
       status: 'pending', acceptedAt: { not: null }, expiresAt: { lt: NOW }, vetoMode: { in: ['commissioner', 'league_vote'] },
     })
+  })
+
+  it('leaves a held (flagged) trade out of the read entirely, so it waits for the commissioner and blocks nobody', async () => {
+    m.held.mockResolvedValue(['p-held'])
+    m.prisma.redraftTradeProposal.count.mockResolvedValue(1)
+    m.prisma.redraftTradeProposal.findMany.mockResolvedValue([due('p1')])
+    expect(await processDueTradeReviews({ now: NOW })).toMatchObject({ held: 1, processed: 1 })
+    expect(m.prisma.redraftTradeProposal.findMany.mock.calls[0][0].where).toMatchObject({ id: { notIn: ['p-held'] } })
+    expect(m.finalize).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'p-held' }), expect.anything(), expect.anything(), null, expect.anything(), expect.anything(), expect.anything())
   })
 
   it('puts an unvetoed trade through the shared finalizer, as the review window, with no person as decider', async () => {

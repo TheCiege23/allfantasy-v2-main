@@ -12,6 +12,8 @@ import {
   daysInWindow,
   daysOnRoster,
   droppedInWindow,
+  loadDailyLockStarts,
+  lockStartOnFor,
   isDailyLineupScoringEnabled,
   loadDailyLineups,
 } from './dailyLineups'
@@ -163,7 +165,9 @@ async function loadContext(args: {
 
   // Started: in a daily-lineup league, the days he held a starting slot (the scoring engine's rule); in a
   // weekly league, the whole week when this week's lineup starts him.
-  const days = daysOnRoster(rosterPlayer, daysInWindow(window))
+  // The scorer's drop/add-day rule (`daysOnRoster`), so a game offered here is one the scorer can count.
+  const lockStarts = await loadDailyLockStarts(prisma, { sport, season: season.season, week })
+  const days = daysOnRoster(rosterPlayer, daysInWindow(window), lockStartOnFor(lockStarts, rosterPlayer))
   const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [rosterId], season: season.season, week })
   let startedDays: Date[]
   if (isDailyLineupScoringEnabled(league.settings, sport)) {

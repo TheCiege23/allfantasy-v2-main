@@ -1556,3 +1556,10 @@
   .af-core .af-lh :is(input, select, textarea) { font-size: 16px; }
   .af-core .af-lh .af-btn { min-height: 44px; }
 }
+
+/* Prediction Leaderboard (components/core-app/PredictionLeaderboard.tsx). */
+.af-lh-predictions-empty { margin: 6px 0 0; font-size: 12px; color: var(--faint); }
+.af-lh-predictions-table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; }
+.af-lh-predictions-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--faint); padding: 4px 6px; }
+.af-lh-predictions-table td { padding: 5px 6px; border-top: 1px solid var(--line); }
+.af-lh-predictions-table tr[data-me='true'] td { color: var(--accent); font-weight: 600; }

@@ -260,6 +260,7 @@
 .nls-oddsbar[data-tone=warn] b { color: var(--warn); }
 .nls-oddsbar[data-tone=bad] b { color: var(--bad); }
 .nls-table-note { padding: 18px 28px 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.nls-division-head { caption-side: top; padding: 18px 28px 8px; border-top: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; text-align: left; }
 .nls-big-odds { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 4px 0 14px; }
 .nls-big-odds b { color: var(--good); font: 700 60px/1 var(--nl-mono); }
 .nls-big-odds span { color: var(--text2); font-size: 15px; }

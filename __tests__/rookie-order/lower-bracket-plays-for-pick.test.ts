@@ -32,6 +32,9 @@ const db = vi.hoisted(() => ({
   roster: { findMany: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
+// The lower bracket is under test here; Max PF has its own suite (nativeMaxPf.test.ts). Unsupported
+// keeps the points-for order these cases were written against.
+vi.mock('@/lib/rookie-order/loadNativeMaxPf', () => ({ loadNativeMaxPf: async () => ({ kind: 'unsupported', reason: 'no_finished_week' }) }))
 
 import {
   advanceNflRedraftPlayoffRound,
