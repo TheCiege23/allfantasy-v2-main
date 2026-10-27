@@ -114,7 +114,15 @@ export async function reconcileOutcomeChangingCorrection(input: {
         event.victimUserId === ownerByRoster.get(infection.victimRosterId) &&
         event.infectorUserId === ownerByRoster.get(infection.infectorRosterId)))) return null
       const beforeItem = new Map(snapshot.items.map(item => [item.id, item]))
-      if (snapshot.items.some(item => !items.some(current => current.id === item.id))) return null
+      if (snapshot.items.some(item => {
+        const current = items.find(row => row.id === item.id)
+        if (!current || current.teamStatusId !== item.teamStatusId || current.userId !== item.userId) return true
+        const wasPending = item.activationState === 'pending_activation' && item.activatesAtWeek === week
+        const spentBefore = oldPlan.spentItemIds.includes(item.id)
+        return current.isUsed !== (item.isUsed || spentBefore) ||
+          (wasPending && (current.activationState !== 'ready' ||
+            current.usedAtWeek !== (spentBefore ? week : item.usedAtWeek)))
+      })) return null
       const extra = items.filter(item => !beforeItem.has(item.id))
       if (extra.some(item => item.acquiredAtWeek !== week || item.acquiredAt > live.resolvedAt! ||
           item.usedAtWeek != null || item.activatesAtWeek != null) ||
