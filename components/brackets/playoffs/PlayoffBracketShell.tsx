@@ -64,8 +64,11 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       (safeChallenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
   const myEntries = entries.filter((entry) => entry.userId === view?.viewerUserId)
   const viewerEntryCount = myEntries.length
+  const tournamentLimit = view.viewerTournamentBracketLimit ?? null
+  const tournamentUsed = view.viewerTournamentBracketUsed ?? null
+  const tournamentQuotaReached = tournamentLimit != null && tournamentUsed != null && tournamentUsed >= tournamentLimit
   const tournamentLocked = singleGameSport && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
-  const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked
+  const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked && !tournamentQuotaReached
   const primaryEntry = useMemo(() => {
     if (myEntries.length === 0) return null
     const activeViewerEntry = view.activeEntry && view.activeEntry.userId === view?.viewerUserId
@@ -309,8 +312,21 @@ export default function PlayoffBracketShell({ initialView }: Props) {
               </button>
             ) : null}
           </div>
+          {singleGameSport && tournamentLimit != null && tournamentUsed != null ? (
+            <p className="mt-2 text-xs font-semibold text-slate-600">
+              {tournamentUsed} of {tournamentLimit} brackets used across this tournament.
+              {tournamentLimit === 1 ? " AF Pro includes five brackets per tournament." : ""}
+              {" "}AllFantasy offers no prizes or gambling; paid plans only allow extra brackets.
+            </p>
+          ) : null}
           {!canCreateEntry ? (
-            <p className="mt-2 text-xs font-semibold text-rose-700">Entry limit reached. Bracket 6 is blocked.</p>
+            <p className="mt-2 text-xs font-semibold text-rose-700">
+              {tournamentLocked
+                ? "Bracket entry closed when the first game began."
+                : tournamentQuotaReached
+                  ? `Tournament bracket limit reached (${tournamentLimit}).`
+                  : `This league allows up to ${safeChallenge.maxEntriesPerParticipant} brackets per person.`}
+            </p>
           ) : null}
         </article>
 
