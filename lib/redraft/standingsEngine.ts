@@ -216,10 +216,19 @@ export async function updateStandings(
     // (a bye week, or a week with an extra game), and counting wins would rank a team ahead for
     // having played more — the playoff seeding (`win_pct` first) and the schedule standings already
     // rank this way, so the stored seed now agrees with them.
+    //
+    // 🛑 THEN POINTS FOR — NOT WINS. Equal win percentage over the same games means equal wins + ties/2,
+    // so a wins key only ever separates teams by how many TIES they have: 14-29-3 went ahead of
+    // 11-26-9 on 61 fewer points, while the bracket (`win_pct`, then `points_for`, the league default)
+    // seeded them the other way. Measured on a simulated 11-team MLB season, where integer scoring
+    // makes ties common (__tests__/redraft/full-season-mlb-redraft.test.ts).
     const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
     if (pct(a) !== pct(b)) return pct(b)-pct(a)
-    if (b.wins !== a.wins) return b.wins - a.wins
-    if (a.losses !== b.losses) return a.losses - b.losses
+    // Then points for, as every sport's default tiebreakers and the bracket seeding have it
+    // (DEFAULT_TIEBREAKERS, canonicalNflRedraftPlayoffRuntime `normalizeTiebreakers`).
+    // 🛑 WINS, THEN LOSSES, USED TO COME FIRST, which brought back the rule the comment above retires:
+    // at an equal win % the team that had played more ranked ahead. 8-9 sat above 7-8-2 with more
+    // points (a league-median tie, or an odd-team bye), while the bracket seeded the other way.
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor
     return a.pointsAgainst - b.pointsAgainst
   })

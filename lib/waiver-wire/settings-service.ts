@@ -10,8 +10,12 @@ import {
 } from "./waiver-engine-config"
 import { defaultProcessingDaysList, resolveFreeAgentUnlockBehavior } from "./free-agent-unlock"
 import {
+  readFaabRolloverRule,
+  readFreeAgencyMode,
   readOffseasonWaiverRule,
   readPlayoffWaiverRule,
+  type FaabRolloverRule,
+  type FreeAgencyMode,
   type OffseasonWaiverRule,
   type PlayoffWaiverRule,
 } from "./hub-waiver-options"
@@ -118,6 +122,10 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
   offseasonWaiverRule: OffseasonWaiverRule
   /** `waiverEngineConfig.playoff_waiver_rules`; default `all_teams`. */
   playoffWaiverRule: PlayoffWaiverRule
+  /** `waiverEngineConfig.free_agency_mode` (after-run-free-agency.ts); default `standard`. */
+  freeAgencyMode: FreeAgencyMode
+  /** `waiverEngineConfig.faab_rollover_rule` (faab-rollover.ts); null = never chosen. */
+  faabRolloverRule: FaabRolloverRule | null
 }> {
   const [league, row] = await Promise.all([
     (prisma as any).league.findUnique({
@@ -171,6 +179,8 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       commissionerOverrideRules: row.commissionerOverrideRules ?? null,
       offseasonWaiverRule: readOffseasonWaiverRule(engineConfig.offseason_waiver_rules),
       playoffWaiverRule: readPlayoffWaiverRule(engineConfig.playoff_waiver_rules),
+      freeAgencyMode: readFreeAgencyMode(engineConfig.free_agency_mode),
+      faabRolloverRule: readFaabRolloverRule(engineConfig.faab_rollover_rule),
     }
   }
   const defaults = sportDefaults
@@ -219,6 +229,8 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
     commissionerOverrideRules: null,
     offseasonWaiverRule: "closed",
     playoffWaiverRule: "all_teams",
+    freeAgencyMode: "standard",
+    faabRolloverRule: null,
   }
 }
 

@@ -301,6 +301,21 @@ describe('renewRedraftLeague', () => {
     expect(m.txLeagueSettingsUpdateMany).toHaveBeenCalledWith({ where: { leagueId: 'L1' }, data: { draftOrderMethod: 'worst_to_first' } })
   })
 
+  it("FAAB 'carry_over' (lib/waiver-wire/faab-rollover.ts): balances are kept; only a team with none gets the budget", async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ waiverBudget: 250, waiverSettings: { waiverEngineConfig: { faab_rollover_rule: 'carry_over' } } }))
+    const r = await renewRedraftLeague('L1', 'commish', { draftOrder: 'standings' })
+    expect(r).toMatchObject({ ok: true })
+    expect(m.txRosterUpdateMany).toHaveBeenNthCalledWith(1, { where: { leagueId: 'L1' }, data: { playerData: {} } })
+    expect(m.txRosterUpdateMany).toHaveBeenNthCalledWith(2, { where: { leagueId: 'L1', faabRemaining: null }, data: { faabRemaining: 250 } })
+  })
+
+  it("FAAB 'reset' chosen explicitly: the same single write as the default", async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ waiverBudget: 250, waiverSettings: { waiverEngineConfig: { faab_rollover_rule: 'reset' } } }))
+    await renewRedraftLeague('L1', 'commish', { draftOrder: 'standings' })
+    expect(m.txRosterUpdateMany).toHaveBeenCalledTimes(1)
+    expect(m.txRosterUpdateMany).toHaveBeenCalledWith({ where: { leagueId: 'L1' }, data: { playerData: {}, faabRemaining: 250 } })
+  })
+
   it('reverse_standings: the champion picks first', async () => {
     const r = await renewRedraftLeague('L1', 'commish', { draftOrder: 'reverse_standings' })
     expect(r).toMatchObject({ ok: true, orderMode: 'reverse_standings' })

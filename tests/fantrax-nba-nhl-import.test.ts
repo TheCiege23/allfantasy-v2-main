@@ -143,12 +143,11 @@ describe('dynasty minors', () => {
     { fantraxId: 'ir', status: 'INJURED_RESERVE' },
     { fantraxId: 'bn', status: 'RESERVE' },
   ]
-  it.each(['NBA', 'NHL'])('files %s minor-leaguers on the taxi squad, not the bench or IR', (sport) => {
+  it.each(['NBA', 'NHL', 'MLB'])('files %s minor-leaguers on the taxi squad, not the bench or IR', (sport) => {
     expect(splitLineup(players, sport)).toEqual({ starters: ['a'], bench: ['bn'], reserve: ['ir'], taxi: ['min'] })
   })
-  it('leaves the MLB/NFL split exactly as it was', () => {
+  it('leaves the NFL split exactly as it was', () => {
     expect(splitLineup(players)).toEqual({ starters: ['a'], bench: ['min', 'bn'], reserve: ['ir'] })
-    expect(splitLineup(players, 'MLB')).toEqual({ starters: ['a'], bench: ['min', 'bn'], reserve: ['ir'] })
   })
 })
 

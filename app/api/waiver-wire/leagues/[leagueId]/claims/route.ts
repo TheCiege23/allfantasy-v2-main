@@ -16,6 +16,7 @@ import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTra
 import { getLeagueRole } from "@/lib/league/permissions"
 import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
+import { LINEUP_WARNING_CODE, lineupWarningConfirmed, loadLineupFillWarning } from "@/lib/waiver-wire/lineup-fill-warning"
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedWaiverIntegrationService } from '@/lib/sports-evidence/waiverIntegration'
 import { extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
@@ -207,6 +208,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
         if (typeof co.bypassWeeklyDropLimit === "boolean") patch.bypassWeeklyDropLimit = co.bypassWeeklyDropLimit
         if (typeof co.note === "string") patch.note = co.note
         metadataForCreate = mergeCommissionerOverrides(metadataForCreate ?? null, patch)
+      }
+    }
+
+    // A claim whose drop would leave a starting slot unfillable is confirmed once by the manager
+    // (lib/waiver-wire/lineup-fill-warning.ts) — a warning, never a block.
+    const claimDropId = body.dropPlayerId ?? body.drop_player_id ?? null
+    if (claimDropId && !lineupWarningConfirmed(body)) {
+      const warning = await loadLineupFillWarning({ leagueId, rosterId: roster.id, addPlayerId: String(addPlayerId), dropPlayerId: String(claimDropId) })
+      if (warning) {
+        return NextResponse.json({ error: warning.message, code: LINEUP_WARNING_CODE, warning }, { status: 409 })
       }
     }
 

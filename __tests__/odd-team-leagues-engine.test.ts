@@ -164,6 +164,25 @@ describe('standings rank by win percentage', () => {
     expect(seeds.B).toBe(1)
     expect(seeds.A).toBeGreaterThan(1)
   })
+
+  it('at an equal win % points for decides, not who played more games', async () => {
+    // A is 2-1 (.667) with more points; B is 4-2 (.667) after A's byes. Wins used to rank B first,
+    // while the bracket seeds by win %, then points for.
+    db.redraftRoster.findMany.mockResolvedValue([{ id: 'A' }, { id: 'B' }, { id: 'C' }])
+    const game = (id: string, week: number, home: string, away: string | null, hs: number, as: number) =>
+      ({ id, week, homeRosterId: home, awayRosterId: away, homeScore: hs, awayScore: as, status: away ? 'final' : 'scheduled' })
+    db.redraftMatchup.findMany.mockResolvedValue([
+      game('1', 1, 'A', 'B', 300, 90), game('2', 2, 'A', 'C', 300, 90), game('3', 3, 'C', 'A', 300, 100),
+      game('4', 4, 'B', 'C', 100, 90), game('5', 5, 'B', 'C', 100, 90), game('6', 6, 'B', 'C', 100, 90),
+      game('7', 7, 'B', 'C', 100, 90), game('8', 8, 'C', 'B', 100, 90),
+      game('9', 4, 'A', null, 0, 0), game('10', 5, 'A', null, 0, 0), game('11', 6, 'A', null, 0, 0), game('12', 7, 'A', null, 0, 0),
+    ])
+    await updateStandings('s1', 8)
+    const seeds = Object.fromEntries(db.redraftRoster.update.mock.calls.map(([a]) => [a.where.id, a.data.playoffSeed]))
+    const recs = Object.fromEntries(db.redraftRoster.update.mock.calls.map(([a]) => [a.where.id, `${a.data.wins}-${a.data.losses}`]))
+    expect(recs).toMatchObject({ A: '2-1', B: '4-2' })
+    expect(seeds).toMatchObject({ A: 1, B: 2 })
+  })
 })
 
 describe('the team on a bye still plays the league median', () => {

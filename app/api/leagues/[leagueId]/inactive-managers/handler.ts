@@ -6,12 +6,13 @@
  *   POST  { rosterId, on }  commissioner / co-commissioner — start or stop it for one team
  *   POST  { rosterId, autopilot: 'dynasty_owner' | 'win_now' | 'rebuild' | null } — Chimmy autopilot
  *         (AF Commissioner, the league owner's plan): hand the team to Chimmy in a style, or take it off
+ *   POST  { draftAsMe: boolean } — draft as me for missed picks (AF Commissioner); on by default
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
-import { readInactiveManagerView, setChimmyAutopilot, setInactiveManagerMode } from '@/lib/inactive-manager/inactiveManagerService'
+import { readInactiveManagerView, setChimmyAutopilot, setDraftAsMe, setInactiveManagerMode } from '@/lib/inactive-manager/inactiveManagerService'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { leagueId } = await ctx.params
   const userId = await sessionUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const body = (await req.json().catch(() => null)) as { rosterId?: unknown; on?: unknown; autopilot?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { rosterId?: unknown; on?: unknown; autopilot?: unknown; draftAsMe?: unknown } | null
+  if (body && 'draftAsMe' in body) {
+    const d = await setDraftAsMe(leagueId, userId, body.draftAsMe)
+    return d.ok ? NextResponse.json({ draftAsMe: d.on }) : NextResponse.json({ error: d.error }, { status: d.status })
+  }
   if (body && 'autopilot' in body) {
     const a = await setChimmyAutopilot(leagueId, userId, body.rosterId, body.autopilot)
     return a.ok ? NextResponse.json({ managed: a.managed, autopilot: a.style ?? null }) : NextResponse.json({ error: a.error }, { status: a.status })

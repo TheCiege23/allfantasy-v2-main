@@ -40,7 +40,9 @@ function SectionHeader({ icon: Icon, label, locked }: { icon: typeof Shield; lab
  *  - lineup neglect is the lineup-integrity monitor's report;
  *  - flags are reviewed on the integrity page.
  *  - suspicious trade alerts switch the commissioner's notification for a flagged trade
- *    (lib/integrity/tradeAlerts.ts).
+ *    (lib/integrity/tradeAlerts.ts);
+ *  - hold flagged trades sends a flagged trade to commissioner review before it executes
+ *    (lib/integrity/holdFlaggedTrades.ts).
  */
 export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: CommissionerToolsTabProps) {
   return (
@@ -67,7 +69,12 @@ export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: Commiss
   )
 }
 
-type IntegrityState = { tankingMonitorEnabled: boolean; collusionSensitivity: IntegritySensitivity; tradeAlertsEnabled: boolean }
+type IntegrityState = {
+  tankingMonitorEnabled: boolean
+  collusionSensitivity: IntegritySensitivity
+  tradeAlertsEnabled: boolean
+  holdFlaggedTrades: boolean
+}
 
 function IntegrityControls({ leagueId }: { leagueId: string }) {
   const [value, setValue] = useState<IntegrityState | null>(null)
@@ -88,6 +95,7 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
           tankingMonitorEnabled: Boolean(d.settings.tankingMonitorEnabled),
           collusionSensitivity: normalizeSensitivity(d.settings.collusionSensitivity),
           tradeAlertsEnabled: d.settings.tradeAlertsEnabled !== false,
+          holdFlaggedTrades: d.settings.holdFlaggedTrades === true,
         })
       })
       .catch(() => { if (!cancelled) setStatus('Could not load the integrity settings.') })
@@ -136,6 +144,19 @@ function IntegrityControls({ leagueId }: { leagueId: string }) {
             onCheckedChange={(checked) => void save({ tradeAlertsEnabled: checked })}
             aria-label="Suspicious trade alerts"
             data-testid="survivor-integrity-trade-alerts"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2.5">
+          <div>
+            <span className="block text-sm text-white/80">Hold flagged trades</span>
+            <span className="block text-xs text-white/45">A trade the collusion check flags waits for you to approve or veto it instead of going through.</span>
+          </div>
+          <Switch
+            checked={value?.holdFlaggedTrades ?? false}
+            disabled={!value}
+            onCheckedChange={(checked) => void save({ holdFlaggedTrades: checked })}
+            aria-label="Hold flagged trades"
+            data-testid="survivor-integrity-hold-trades"
           />
         </div>
         <div className="flex items-center justify-between gap-4 py-2.5">

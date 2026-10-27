@@ -17,6 +17,7 @@
  *   stat corrections     commissioners (the review is a commissioner screen)
  *   inactive managers    commissioners see which teams are managed or suggested; a member is told
  *                        only that their own lineup is being set
+ *   eliminated lineups   every member: the league's lineup rule for teams out of the race
  *
  * Leagues AllFantasy runs only — the tools exist nowhere else. DB-first; never throws.
  */
@@ -48,12 +49,14 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
       const role = await getLeagueRole(leagueId, request.userId)
       const commissioner = role === 'commissioner' || role === 'co_commissioner'
 
-      const [{ readSideContestsView }, { readLeagueLog }, { explainTradeReview }, { readManagedLineups }, { readPayoutsView }] = await Promise.all([
+      const [{ readSideContestsView }, { readLeagueLog }, { explainTradeReview }, { readManagedLineups }, { readPayoutsView }, { describeRule, readEliminatedLineupRule }, { describeRoundNotices, readLastRoundNotice, readRoundNoticeSettings, liveRookieOrderRaw }] = await Promise.all([
         import('@/lib/side-contests/sideContestsService'),
         import('@/lib/league-log/leagueLogService'),
         import('@/lib/redraft/tradeReviewWindow'),
         import('@/lib/inactive-manager/inactiveManagerMode'),
         import('@/lib/payouts/payoutService'),
+        import('@/lib/eliminated-lineups/eliminatedLineups'),
+        import('@/lib/rookie-order/roundNotices'),
       ])
 
       const [prizes, log, myRedraftTeam, myRoster, proposals, payoutView] = await Promise.all([
@@ -130,6 +133,15 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         correction,
         inactive,
         viewerTeamManaged: Boolean(myRoster && readManagedLineups(league.settings)[myRoster.id]),
+        eliminatedLineupRule: (() => {
+          const rule = readEliminatedLineupRule(league.settings)
+          return rule ? describeRule(rule, 'en') : null
+        })(),
+        rookieOrderRounds: describeRoundNotices({
+          automation: liveRookieOrderRaw(league.settings).enabled === true,
+          settings: readRoundNoticeSettings(league.settings),
+          last: readLastRoundNotice(league.settings),
+        }),
         log: log?.ok && !log.hidden ? log.entries.map((e) => ({ at: e.at, title: e.title, detail: e.detail })) : null,
         payouts,
       })

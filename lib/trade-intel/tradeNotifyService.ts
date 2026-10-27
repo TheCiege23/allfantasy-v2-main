@@ -19,6 +19,7 @@ import { captureCompletedEmailEvaluation, captureEmailEvaluation } from '@/lib/d
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
 import { recordSweptTradesOnLedger } from '@/lib/provider-trades/syncProviderTradeOffers'
+import { scanCompletedImportedTrades } from '@/lib/integrity/scanImportedTrades'
 import {
   currentTradeIds,
   fetchLeagueRosters,
@@ -589,6 +590,15 @@ async function deliverPlan(args: {
     } catch {
       /* The ledger catches up on the rotation; an alert is never lost to a ledger write. */
     }
+  }
+
+  /*
+   * Collusion scan of each newly completed trade, for every AF copy whose owner has AF Commissioner —
+   * the post-trade scan a league created in AllFantasy gets on settlement. Reads the ledger row just
+   * written; never throws (lib/integrity/scanImportedTrades.ts).
+   */
+  if (plan.completions.length > 0) {
+    await scanCompletedImportedTrades({ leagueIds: afLeagues.map((l) => l.id), providerTradeIds: plan.completions }).catch(() => undefined)
   }
   const recipients = await resolveRecipients(afLeagues)
 

@@ -92,6 +92,12 @@ describe('buildLeagueOfficeSummary', () => {
     expect(buildLeagueOfficeSummary({ ...base, correction: { ...c, refused: true } })).toMatch(/never applies corrections/)
   })
 
+  it('the lineup rule for eliminated teams, as the league states it', () => {
+    const rule = 'League rule: a team out of the playoff race must still start a lineup with no empty slots.'
+    expect(buildLeagueOfficeSummary({ ...base, eliminatedLineupRule: rule })).toBe(rule)
+    expect(buildLeagueOfficeSummary({ ...base, eliminatedLineupRule: null })).toBeNull()
+  })
+
   it('trades, inactive teams, the viewer’s own managed lineup and the log', () => {
     const text = buildLeagueOfficeSummary({
       ...base,

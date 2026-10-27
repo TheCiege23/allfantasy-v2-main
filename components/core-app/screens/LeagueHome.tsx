@@ -19,11 +19,15 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
+import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { rivalLastText } from '@/lib/core-app/dashboard3aCopy'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
+import { TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
+import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 
@@ -111,6 +115,8 @@ function WeekPicker({
 
 export type LeagueHomeProps = {
   data: LeagueHomeData
+  /** The enforced trade deadline as a countdown ("Trade deadline in 3d 4h" / "Trades closed"). */
+  tradeDeadline?: TradeDeadlineCountdown | null
   /** How many outstanding issues exist in OTHER leagues. */
   otherLeagueIssueCount: number
   /**
@@ -465,6 +471,7 @@ export function LeagueHome({
   identityInShell = false,
   coverageSlot,
   lineups = null,
+  tradeDeadline = null,
 }: LeagueHomeProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -492,6 +499,11 @@ export function LeagueHome({
             )}
             {league.format ? <span>{league.format}</span> : null}
             {league.season ? <span className="af-num">{league.season}</span> : null}
+            {tradeDeadline && tradeDeadline.state !== 'none' ? (
+              <Link href={`/core/trades?league=${encodeURIComponent(league.id)}`} className="af-lh-deadline">
+                <TradeDeadlineCountdownChip countdown={tradeDeadline} />
+              </Link>
+            ) : null}
             {data.yourTeam.available ? (
               <>
                 <span className="af-num">{data.yourTeam.data.record}</span>
@@ -1111,6 +1123,9 @@ export function LeagueHome({
           </StatePanel>
         </aside>
       </div>
+
+      {/* The league chat's prediction polls, scored over the season. AF-hosted leagues only. */}
+      {isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}
 
       {/*
         ── All leagues ──────────────────────────────────────────────────

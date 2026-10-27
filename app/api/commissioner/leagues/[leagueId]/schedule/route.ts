@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { getScheduleConfigForLeague } from '@/lib/schedule-defaults/ScheduleConfigResolver'
+import { regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
 
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key)
@@ -46,11 +47,27 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const league = await (prisma as any).league.findUnique({
     where: { id: params.leagueId },
-    select: { settings: true },
+    select: { settings: true, leagueType: true, sport: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
   const settings = (league.settings as Record<string, unknown>) ?? {}
+  /*
+   * A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts). Compared
+   * with what GET shows — the panel sends every field back — so a value re-saved unchanged is not
+   * refused, even where it is a sport default the league never stored (NHL's 28-week season length).
+   */
+  if (regularSeasonCapApplies(league) && (hasOwn(body, 'regularSeasonLength') || hasOwn(body, 'playoffTransitionPoint'))) {
+    const shown = await getScheduleConfigForLeague(params.leagueId)
+    const refusal = settingsMergeCapRefusal(
+      {
+        ...(hasOwn(body, 'regularSeasonLength') ? { regular_season_length: body.regularSeasonLength } : {}),
+        ...(hasOwn(body, 'playoffTransitionPoint') ? { schedule_playoff_transition_point: body.playoffTransitionPoint } : {}),
+      },
+      { regular_season_length: shown?.regular_season_length, schedule_playoff_transition_point: shown?.playoff_transition_point },
+    )
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
+  }
   const nextSettings: Record<string, unknown> = { ...settings }
 
   const map: Array<[string, string]> = [

@@ -37,6 +37,10 @@ export type IntegritySettingsValue = {
   tankingWaiverPatternCheck: boolean
   /** Suspicious-trade alerts (League.settings, lib/integrity/tradeAlerts.ts). Absent = on. */
   tradeAlertsEnabled?: boolean
+  /** Hold flagged trades for commissioner review (League.settings, lib/integrity/holdFlaggedTrades.ts). Absent = off. */
+  holdFlaggedTrades?: boolean
+  /** False in an imported league: its trades go through on the host, so there is nothing to hold. */
+  holdFlaggedTradesSupported?: boolean
 }
 
 type Draft = {
@@ -48,6 +52,7 @@ type Draft = {
   tankingBenchPatternCheck: boolean
   tankingWaiverPatternCheck: boolean
   tradeAlertsEnabled: boolean
+  holdFlaggedTrades: boolean
 }
 
 function toDraft(v: IntegritySettingsValue): Draft {
@@ -60,6 +65,7 @@ function toDraft(v: IntegritySettingsValue): Draft {
     tankingBenchPatternCheck: v.tankingBenchPatternCheck !== false,
     tankingWaiverPatternCheck: Boolean(v.tankingWaiverPatternCheck),
     tradeAlertsEnabled: v.tradeAlertsEnabled !== false,
+    holdFlaggedTrades: v.holdFlaggedTrades === true,
   }
 }
 
@@ -148,6 +154,31 @@ export function IntegritySettings({
               {draft.tradeAlertsEnabled ? 'On' : 'Off'}
             </button>
           </div>
+          {value.holdFlaggedTradesSupported === false ? (
+            <p className="af-cm-setgroup-note" data-testid="integrity-hold-unsupported">
+              Holding flagged trades is not available in an imported league: its trades go through on the league&apos;s
+              own platform. Completed trades are still checked, and a flagged one alerts you.
+            </p>
+          ) : (
+            <>
+              <div className="af-cm-setrow">
+                <span className="af-cm-setrow-label">Hold flagged trades for my review</span>
+                <button
+                  type="button"
+                  className="af-cm-toggle af-num"
+                  aria-pressed={draft.holdFlaggedTrades}
+                  aria-label="Hold flagged trades"
+                  disabled={saving || readOnly}
+                  onClick={() => set('holdFlaggedTrades', !draft.holdFlaggedTrades)}
+                >
+                  {draft.holdFlaggedTrades ? 'On' : 'Off'}
+                </button>
+              </div>
+              <p className="af-cm-setgroup-note">
+                On: an accepted trade is checked before it goes through, and a flagged one waits for you to approve or veto it.
+              </p>
+            </>
+          )}
           <div className="af-label">Sensitivity</div>
           <Segmented
             name="Collusion"

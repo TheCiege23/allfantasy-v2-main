@@ -16,6 +16,7 @@ import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
 import { finalizeRedraftTrade, upsertRedraftTradeDecision } from '@/lib/redraft/finalizeRedraftTrade'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import { heldTradeIds } from '@/lib/integrity/holdFlaggedTrades'
 
 /**
  * Per run. A settlement costs far more than an expiry, and the host cron has a 60s budget with its own
@@ -29,6 +30,8 @@ export type TradeReviewSweepResult = {
   processed: number
   /** Left for next hour: the commissioner has frozen moves. */
   waitingOnLock: number
+  /** Flagged by the integrity check in a league that holds flagged trades (lib/integrity/holdFlaggedTrades.ts). */
+  held: number
   /** Settled or decided by someone else between the read and the claim. */
   skipped: number
   /** Could not settle as agreed and were closed. */
@@ -39,13 +42,18 @@ export type TradeReviewSweepResult = {
 export async function processDueTradeReviews(opts?: { limit?: number; now?: Date }): Promise<TradeReviewSweepResult> {
   const now = opts?.now ?? new Date()
   const limit = Math.max(1, Math.min(opts?.limit ?? DEFAULT_TRADE_REVIEW_LIMIT, 200))
+  // Flagged trades in leagues that hold them wait for the commissioner, not the clock — left out of
+  // the read, so they cannot occupy the batch and starve every other due trade.
+  const held = await heldTradeIds()
+  const dueWhere = { status: 'pending', acceptedAt: { not: null }, expiresAt: { lt: now }, vetoMode: { in: ['commissioner', 'league_vote'] } }
+  const heldDue = held.length ? await prisma.redraftTradeProposal.count({ where: { ...dueWhere, id: { in: held } } }) : 0
   const due = await prisma.redraftTradeProposal.findMany({
-    where: { status: 'pending', acceptedAt: { not: null }, expiresAt: { lt: now }, vetoMode: { in: ['commissioner', 'league_vote'] } },
+    where: { ...dueWhere, ...(held.length ? { id: { notIn: held } } : {}) },
     orderBy: { expiresAt: 'asc' },
     take: limit,
     include: { assets: true },
   })
-  const result: TradeReviewSweepResult = { due: due.length, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [] }
+  const result: TradeReviewSweepResult = { due: due.length, processed: 0, waitingOnLock: 0, held: heldDue, skipped: 0, closed: 0, failures: [] }
   const locked = new Map<string, boolean>()
 
   for (const proposal of due) {

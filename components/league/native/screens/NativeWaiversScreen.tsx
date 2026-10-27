@@ -11,6 +11,7 @@ import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { adaptWaiverWirePlayer } from '@/lib/player-data/adapters/waiverPlayerAdapter'
 import { waiverPositionMatches } from '@/lib/waiver-wire/SportWaiverResolver'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { confirmLineupWarning, isLineupWarningResponse } from '@/lib/waiver-wire/lineup-warning-prompt'
 import {
   claimProcessesAfterDate,
   isImmediateAddAllowedToday,
@@ -213,12 +214,20 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const addDrop = async (player: UnifiedPlayerWireDto, dropPlayerId: string | null) => {
     setBusy(player.id)
     try {
-      const res = await fetch(`/api/waiver-wire/leagues/${id}/add-drop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ addPlayerId: player.id, dropPlayerId }),
-      })
-      const j = await res.json().catch(() => ({}))
+      const send = (confirmed: boolean) =>
+        fetch(`/api/waiver-wire/leagues/${id}/add-drop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ addPlayerId: player.id, dropPlayerId, ...(confirmed ? { confirmLineupWarning: true } : {}) }),
+        })
+      let res = await send(false)
+      let j = await res.json().catch(() => ({}))
+      if (isLineupWarningResponse(j)) {
+        // The drop leaves a starting slot unfillable: a warning the manager confirms, not a block.
+        if (!confirmLineupWarning(j, tInterpolate)) return
+        res = await send(true)
+        j = await res.json().catch(() => ({}))
+      }
       if (res.ok && j?.ok) {
         setDrawer(null)
         toast.success(dropPlayerId ? `Added ${player.name} and dropped a player.` : `Added ${player.name}.`, { description: j?.writeAuthority?.copy?.detail || undefined })
@@ -248,12 +257,19 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const submitClaim = async (player: UnifiedPlayerWireDto, opts: { dropPlayerId: string | null; faabBid: number | null; priorityOrder: number | null }) => {
     setBusy(player.id)
     try {
-      const res = await fetch(`/api/waiver-wire/leagues/${id}/claims`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ addPlayerId: player.id, ...opts }),
-      })
-      const j = await res.json().catch(() => ({}))
+      const send = (confirmed: boolean) =>
+        fetch(`/api/waiver-wire/leagues/${id}/claims`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ addPlayerId: player.id, ...opts, ...(confirmed ? { confirmLineupWarning: true } : {}) }),
+        })
+      let res = await send(false)
+      let j = await res.json().catch(() => ({}))
+      if (isLineupWarningResponse(j)) {
+        if (!confirmLineupWarning(j, tInterpolate)) return
+        res = await send(true)
+        j = await res.json().catch(() => ({}))
+      }
       if (!res.ok) {
         toast.error(j?.error ?? 'Failed to submit waiver claim')
         return
@@ -357,7 +373,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                               {p.team ?? 'FA'}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
                             </small>
                             {a.seasonStatsSummary.length ? <small data-stats>{a.seasonStatsSummary.join(' · ')}</small> : null}
-                            {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil)}</small> : null}
+                            {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil, { tInterpolate, language })}</small> : null}
                           </div>
                           <button type="button" className="nls-iconbtn" aria-pressed={watch.includes(p.id)} aria-label={watch.includes(p.id) ? `Remove ${p.name} from watchlist` : `Watch ${p.name}`} onClick={() => toggleWatch(p.id)} data-watch>
                             <Star size={16} aria-hidden fill={watch.includes(p.id) ? 'currentColor' : 'none'} />

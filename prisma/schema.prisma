@@ -9880,6 +9880,25 @@ model SurvivorShareMoment {
   @@map("survivor_share_moments")
 }
 
+/// A fan's call of who goes home at one Tribal Council (spectator mode, the public watch page).
+/// Fans are signed-in users who do not play in the league. Scored when read, against the council's
+/// own result once its read is complete, so nothing has to run when a council ends.
+model SurvivorFanPrediction {
+  id           String   @id @default(uuid())
+  leagueId     String   @db.VarChar(64)
+  councilId    String   @db.VarChar(64)
+  week         Int
+  fanUserId    String   @db.VarChar(64)
+  /// The castaway picked (SurvivorPlayer.userId). Never sent to a client.
+  pickedUserId String   @db.VarChar(64)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([councilId, fanUserId])
+  @@index([leagueId, fanUserId])
+  @@map("survivor_fan_predictions")
+}
+
 /// Big Brother league config: HOH, nomination, veto, vote, eviction, jury, finale settings.
 model BigBrotherLeagueConfig {
   id                                  String                 @id @default(uuid())

@@ -36,6 +36,7 @@ const h = vi.hoisted(() => ({
   createGrader: vi.fn(),
   gradeDeal: vi.fn(),
   ledger: vi.fn(),
+  integrityScan: vi.fn(),
   prefs: [] as Array<{ email: string; tradeAlerts: boolean; unsubscribedAt: Date | null }>,
 }))
 
@@ -45,6 +46,8 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/import-os/collector/archiveFeedTrades', () => ({ archiveCompletedFeedTrades: h.archive }))
 // The offer-ledger write (its own suite: __tests__/provider-trades/ledger-from-sweep.test.ts).
 vi.mock('@/lib/provider-trades/syncProviderTradeOffers', () => ({ recordSweptTradesOnLedger: h.ledger }))
+// The imported-league collusion scan (its own suite: __tests__/integrity/scan-imported-trades.test.ts).
+vi.mock('@/lib/integrity/scanImportedTrades', () => ({ scanCompletedImportedTrades: h.integrityScan }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsDataCache: {
@@ -208,6 +211,7 @@ beforeEach(() => {
   h.createGrader.mockImplementation(async (args: { leagueId: string; userId: string }) => ({ ...args, leagueType: LEAGUE_TYPE }))
   h.gradeDeal.mockImplementation(async () => view('B', 14))
   h.ledger.mockResolvedValue({ offersWritten: 0, leaguesFailed: 0 })
+  h.integrityScan.mockResolvedValue({ scanned: 0, skipped: 0, failed: 0 })
   h.prefs = []
 })
 
@@ -602,6 +606,27 @@ describe('🛑 an announced trade reaches the offer ledger in the same pass', ()
     h.currentIds.mockResolvedValue([{ ...trade('complete'), id: 'T0' }, trade('pending')])
     await detectAndNotifyLeague('SL1')
     expect((h.ledger.mock.calls[0][0] as { trades: Array<{ id: string }> }).trades.map((t) => t.id)).toEqual(['T1'])
+  })
+
+  it('a completion is collusion-scanned on every AF copy, AFTER it is on the ledger; an offer is not', async () => {
+    h.currentIds.mockResolvedValue([trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.integrityScan).not.toHaveBeenCalled()
+
+    h.store.set(SEEN_KEY, { version: 2, seen: ['T1'], pending: ['T1'], lastRunIso: 'x' })
+    h.currentIds.mockResolvedValue([trade('complete')])
+    h.ledger.mockClear()
+    await detectAndNotifyLeague('SL1')
+    expect(h.integrityScan).toHaveBeenCalledWith({ leagueIds: ['af-A', 'af-B'], providerTradeIds: ['T1'] })
+    expect(h.ledger.mock.invocationCallOrder[0]).toBeLessThan(h.integrityScan.mock.invocationCallOrder[0])
+  })
+
+  it('a failed integrity scan never costs the alert', async () => {
+    h.integrityScan.mockRejectedValue(new Error('scan down'))
+    h.store.set(SEEN_KEY, { version: 2, seen: ['T1'], pending: ['T1'], lastRunIso: 'x' })
+    h.currentIds.mockResolvedValue([trade('complete')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.sendEmail).toHaveBeenCalled()
   })
 
   it('a ledger failure never costs the alert', async () => {

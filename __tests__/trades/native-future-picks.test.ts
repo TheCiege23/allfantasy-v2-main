@@ -90,9 +90,14 @@ function fakeDb(opts: {
         else rows.push({ id: `row-${rows.length + 1}`, ...create })
         return {}
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: { id: { in: string[] } }; data: Partial<Row> }) => {
-        for (const r of rows) if (where.id.in.includes(r.id)) Object.assign(r, data)
-        return { count: where.id.in.length }
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: { in: string[] }; leagueId?: string; pickSeason?: number; status?: string; usedInDraftSessionId?: null }; data: Partial<Row> }) => {
+        const hit = rows.filter((r) =>
+          where.id
+            ? where.id.in.includes(r.id)
+            : r.leagueId === where.leagueId && r.pickSeason === where.pickSeason && r.status === where.status && (where.usedInDraftSessionId !== null || !r.usedInDraftSessionId),
+        )
+        for (const r of hit) Object.assign(r, data)
+        return { count: hit.length }
       }),
     },
   }
@@ -307,5 +312,40 @@ describe('the tradeable horizon follows the league setting', () => {
     expect(inv?.ownerByPickId.has('fdp:2029:1:R-a')).toBe(false)
     expect(rows).toHaveLength(1)
     expect(rows[0]!.status).toBe('active')
+  })
+})
+
+describe('a pick forfeited as a penalty (lib/integrity/tankingPenaltyService.ts)', () => {
+  const forfeitedRow: Row = { id: 'row-f', leagueId: 'L1', pickSeason: 2027, round: 1, originalRosterId: 'R-a', currentOwnerId: 'R-a', status: 'forfeited', traded: false, sourceTradeId: null }
+
+  it('is gone from the inventory — not "back with its original team"', async () => {
+    const { db } = fakeDb({ rows: [forfeitedRow] })
+    const inv = await loadNativeFuturePicks('L1', db as never)
+    expect(inv!.ownerByPickId.has('fdp:2027:1:R-a')).toBe(false)
+    expect(inv!.ownerByPickId.get('fdp:2027:2:R-a')).toBe('R-a')
+    expect(inv!.ownerByPickId.get('fdp:2027:1:R-b')).toBe('R-b')
+  })
+
+  it('cannot be traded', async () => {
+    const { db } = fakeDb({ rows: [forfeitedRow] })
+    await expect(
+      transferNativeFuturePick(db as never, { leagueId: 'L1', ref: 'fdp:2027:1:R-a', fromRosterId: 'R-a', toRosterId: 'R-b' }),
+    ).rejects.toThrow('no longer tradeable')
+  })
+})
+
+describe('a forfeited pick at draft time', () => {
+  it('is tagged with the new draft so the draft skips it, and never becomes a traded pick', async () => {
+    const { db, rows } = fakeDb({
+      rows: [
+        { id: 'row-f', leagueId: 'L1', pickSeason: 2027, round: 1, originalRosterId: 'R-a', currentOwnerId: 'R-a', status: 'forfeited', traded: false, sourceTradeId: null },
+        { id: 'row-x', leagueId: 'L1', pickSeason: 2028, round: 1, originalRosterId: 'R-b', currentOwnerId: 'R-b', status: 'forfeited', traded: false, sourceTradeId: null },
+      ],
+    })
+    const traded = await consumeNativeFuturePicksForDraft(db as never, { leagueId: 'L1', season: 2027, draftSessionId: 'ds-2027', rounds: 2, slotOrder })
+    expect(traded).toEqual([])
+    expect(rows.find((r) => r.id === 'row-f')).toMatchObject({ status: 'forfeited', usedInDraftSessionId: 'ds-2027' })
+    // Another season's forfeit is left for that season's draft.
+    expect(rows.find((r) => r.id === 'row-x')!.usedInDraftSessionId).toBeUndefined()
   })
 })

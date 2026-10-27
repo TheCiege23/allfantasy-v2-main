@@ -6,6 +6,7 @@ import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from "@/
 import { buildWriteAuthorityEnvelope } from "@/lib/league/write-authority"
 import { loadDailyTransactionPolicy } from "@/lib/waiver-wire/daily-schedule-gate"
 import { loadWaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-gate"
+import { effectiveFaabRolloverRule, renewalFamilyForLeague } from "@/lib/waiver-wire/faab-rollover"
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -15,7 +16,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
 
   const leagueId = params.leagueId
   const [league, rosterAsMember] = await Promise.all([
-    (prisma as any).league.findFirst({ where: { id: leagueId }, select: { id: true, sport: true, leagueVariant: true, userId: true, platform: true } }),
+    (prisma as any).league.findFirst({ where: { id: leagueId }, select: { id: true, sport: true, leagueVariant: true, userId: true, platform: true, isDynasty: true, settings: true } }),
     (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
   ])
   const hasAccess = league && (league.userId === userId || rosterAsMember)
@@ -45,6 +46,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
     // The season phase's rule for the viewer's team (lib/waiver-wire/season-phase-policy.ts), so the
     // page can say why a move is blocked before the server refuses it.
     phasePolicy,
+    // The FAAB rollover rule a renewal applies when the commissioner has chosen none — from the renew
+    // route's own classifier (lib/waiver-wire/faab-rollover.ts), so the screens show what will happen.
+    faabRolloverDefault: effectiveFaabRolloverRule(null, renewalFamilyForLeague(league as { leagueVariant?: string | null; settings?: unknown; isDynasty?: boolean | null })),
     // Loaded with the rest of the waiver shell so the page can disclose SHADOW status before a
     // manager files a claim, not only in the toast afterwards.
     writeAuthority: buildWriteAuthorityEnvelope('waiver_claim', (league as { platform?: string })?.platform ?? null),

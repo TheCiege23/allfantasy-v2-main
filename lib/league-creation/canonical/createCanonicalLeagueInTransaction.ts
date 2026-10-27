@@ -1,8 +1,9 @@
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
-import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { buildSurvivorFullSeasonPlan, readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_DEFAULT, SURVIVOR_TWIST_PRESET_SETTING, survivorTwistFoundationPatch } from '@/lib/survivor/survivorTwistPresets'
+import { withPlayoffStartWeekCopies } from '@/lib/playoff-settings/playoffStartWeekCopies'
 import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { readSurvivorEntryFee, survivorDuesTrackerSeed } from '@/lib/survivor/survivorCreationAvailability'
 import { buildScoringFromPresetId, isNativeCategoryScoringPreset, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
@@ -39,6 +40,7 @@ import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
+import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
 
 type Tx = Prisma.TransactionClient
 
@@ -558,6 +560,29 @@ export async function createCanonicalLeagueInTransaction(
   const playoffStartWeekRaw = playoffSettings.playoffStartWeek
   const playoffStartWeekDefault =
     playoffStartWeekRaw == null ? null : Number.isFinite(Number(playoffStartWeekRaw)) ? Number(playoffStartWeekRaw) : null
+  /*
+   * 🛑 THE COLUMN IS WHAT THE RESOLVER READS FIRST, SO EVERY JSON COPY IS WRITTEN FROM IT
+   * (lib/playoff-settings/playoffStartWeekCopies.ts). Per format:
+   *  - a bracket league: its fitted start (redraft/keeper) or the sport default;
+   *  - best ball: the week after its own regular season (`best_ball_settings.regularSeasonLength`),
+   *    and a tournament the week after its last round;
+   *  - survivor has NO playoffs — the season is the full-season plan through `endWeek`. The week after
+   *    it, as the season builder writes (finalizeDraftToRedraftSeason), so no reader finds a playoff
+   *    start inside the season. A sport without a plan keeps its default;
+   *  - guillotine, zombie and roto have no bracket: null everywhere.
+   */
+  const survivorPlanEnd = formatId === 'survivor' ? readSurvivorFullSeasonPlan(mergedSettings)?.endWeek ?? null : null
+  const playoffStartWeekColumn: number | null =
+    scoringMode === 'roto' || isGuillotine
+      ? null
+      : survivorPlanEnd != null
+        ? survivorPlanEnd + 1
+        : bestBallSettings?.contestStructure === 'tournament'
+          ? tournamentRoundEnds(bestBallSettings).at(-1)! + 1
+          : bestBallSettings && bestBallSettings.playoffTeams > 0
+            ? bestBallSettings.regularSeasonLength + 1
+            : playoffStartWeekDefault
+  Object.assign(mergedSettings, withPlayoffStartWeekCopies(mergedSettings, playoffStartWeekColumn))
   const playoffWeeksPerRoundDefault = readNumber(playoffSettings, 'playoffWeeksPerRound', 1)
   const playoffSeedingRuleDefault = readString(playoffSettings, 'seedingRule', 'record_then_points')
   const playoffLowerBracketDefault = readString(playoffSettings, 'lowerBracket', 'consolation')
@@ -634,15 +659,19 @@ export async function createCanonicalLeagueInTransaction(
           : bestBallSettings?.playoffFormat === 'advancement'
             ? 'points_only'
             : playoffSeedingRuleDefault,
-      playoffStartWeek:
-        bestBallSettings && bestBallSettings.playoffTeams > 0
-          ? bestBallSettings.regularSeasonLength + 1
-          : playoffStartWeekDefault,
+      playoffStartWeek: playoffStartWeekColumn,
       playoffWeeksPerRound:
         bestBallSettings && bestBallSettings.playoffTeams > 0 && bestBallSettings.playoffFormat !== 'none'
           ? 1
           : playoffWeeksPerRoundDefault,
       playoffLowerBracket: playoffLowerBracketDefault,
+      /*
+       * A redraft or keeper league starts with a trade deadline three weeks before its own playoffs
+       * (lib/trade-deadline/tradeDeadlineDefaults.ts). Every native league was created with NULL here —
+       * no deadline at all — while the sport configs carried defaults nothing read. The commissioner
+       * changes or clears it in settings; roto and other formats keep no default.
+       */
+      ...(redraftShape ? { tradeDeadlineWeek: defaultTradeDeadlineWeek(redraftShape.playoffStartWeek) } : {}),
       // `keeperCount` defaults to 3 in the schema, so a league that says nothing reads as a
       // three-keeper league to every consumer that trusts the column. A league created here
       // without keepers has decided: none.
@@ -652,7 +681,7 @@ export async function createCanonicalLeagueInTransaction(
       medianGame: scoringMode === 'points' && (ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(formatId))
         ? defaultMedianGameFor(managerCount, typeof conceptSetupForPrivacy.medianGame === 'boolean' ? conceptSetupForPrivacy.medianGame : null)
         : conceptSetupForPrivacy.medianGame === true),
-      ...(scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
+      ...(scoringMode === 'roto' ? {playoffTeams:0} : {}),
       ...(isGuillotine
         ? {
             playoffStartWeek: null,

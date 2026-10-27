@@ -6,7 +6,7 @@ import {
   removePlayerFromRosterData,
   rosterContainsPlayer,
 } from './roster-utils'
-import { countTowardRosterLimit, leagueRosterLimit } from '@/lib/league/rosterLimit'
+import { countTowardRosterLimit, importedIrOverflow, leagueRosterLimit } from '@/lib/league/rosterLimit'
 import { onWaiverRunComplete } from './run-hooks'
 import { getSpecialtySpecByVariant } from '@/lib/specialty-league/registry'
 import { isWaiverFrozenForRoster } from '@/lib/survivor/SurvivorEffectEngine'
@@ -26,7 +26,7 @@ import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
-import { DROPPER_RECLAIM_MESSAGE, droppedPlayerWaiverHours, loadDroppedPlayerHolds, type DroppedPlayerHold } from './dropped-player-waivers'
+import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
 
@@ -115,7 +115,7 @@ export async function processWaiverClaimsForLeague(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true },
+      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true, platform: true, irSlots: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -207,11 +207,16 @@ export async function processWaiverClaimsForLeague(
   // above, like any claim. An unreadable hold processes nothing this run rather than run a held
   // player's claims early; they are all still pending for the next one.
   const runAt = new Date()
-  const holdHours = droppedPlayerWaiverHours({ normalizedWaiverType: configuredWaiverType, waiverHours: league.waiverHours })
+  const holdPolicy = droppedPlayerHoldPolicy({
+    normalizedWaiverType: configuredWaiverType,
+    waiverHours: league.waiverHours,
+    waiverEngineConfig: effectiveSettings.waiverEngineConfig,
+    sport: league.sport ? String(league.sport) : null,
+  })
   let dropHolds: Map<string, DroppedPlayerHold> = new Map()
-  if (holdHours > 0) {
+  if (maxHoldHours(holdPolicy) > 0) {
     try {
-      dropHolds = await loadDroppedPlayerHolds(leagueId, holdHours, {
+      dropHolds = await loadDroppedPlayerHolds(leagueId, holdPolicy, {
         now: runAt,
         playerIds: Array.from(new Set(orderedAll.map((c) => String(c.addPlayerId)))),
       })
@@ -247,7 +252,10 @@ export async function processWaiverClaimsForLeague(
 
   const results: ProcessedClaimResult[] = []
   // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
-  const { limit: rosterSize, counts: rosterCounts } = leagueRosterLimit(league, 20)
+  const rosterLimit = leagueRosterLimit(league, 20)
+  const { limit: rosterSize, counts: rosterCounts } = rosterLimit
+  // An imported roster over the provider's IR spots is reported once per run, never refused.
+  const irOverflowReported = new Set<string>()
   const resultRows: Array<{
     claimId: string | null
     rosterId: string
@@ -346,6 +354,11 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
+    const irOverflow = irOverflowReported.has(claim.rosterId) ? null : importedIrOverflow(roster.playerData, rosterLimit)
+    if (irOverflow) {
+      irOverflowReported.add(claim.rosterId)
+      console.warn(`[waiver-process] league ${leagueId} roster ${claim.rosterId}: IR holds ${irOverflow.held} players against ${irOverflow.slots} imported IR spots (not enforced)`)
+    }
     const needDrop = countTowardRosterLimit(roster.playerData, rosterCounts) >= rosterSize && !dropId
     if (needDrop) {
       await pushFail('Roster full; no drop specified')

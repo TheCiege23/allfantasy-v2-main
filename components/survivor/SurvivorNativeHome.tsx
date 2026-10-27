@@ -234,6 +234,13 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
           </div>
           {isCommissioner && <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />}
         </> : <>
+          {summary?.weekAdvice?.length ? <div className="svh-card svh-pad svh-advice" data-testid="survivor-week-advice">
+            <span className="svh-lbl">Your week · private</span>
+            <ul>{summary.weekAdvice.map(item => <li key={item.id} className={`svh-advice-item svh-advice-${item.tone}`} data-testid={`survivor-advice-${item.id}`}>
+              <strong>{item.title}</strong>
+              <span className="svh-sub svh-sm">{item.body}</span>
+            </li>)}</ul>
+          </div> : null}
           <SurvivorWeeklyMoments leagueId={league.id} exileHref={`/survivor/${encodeURIComponent(league.id)}/exile`} />
           {raced.length > 1 && <div className="svh-card svh-pad svh-race-card" data-testid="survivor-tribe-race">
             <div className="svh-row"><span className="svh-lbl svh-grow">Tribe race · week {week}</span><span className="svh-faint svh-sm">Lowest tribe total goes to Tribal Council</span></div>

@@ -6,6 +6,7 @@ import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSecti
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
 import { PlayoffBracketFormatCard } from '@/components/league-settings/PlayoffBracketFormatCard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -88,7 +89,10 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
   useEffect(() => setThirdPlace(storedThirdPlace), [storedThirdPlace])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
-  const startWeekMax = Math.max(18, seasonWeeks, chosenStartWeek)
+  // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts), so the
+  // playoffs start by week 25 there; the server refuses a later week.
+  const startWeekCap = maxPlayoffStartWeekFor({ leagueType: ctx.league.leagueType, sport: ctx.league.sport })
+  const startWeekMax = startWeekCap ?? Math.max(18, seasonWeeks, chosenStartWeek)
   const leagueCap = Math.min(ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12, MAX_PLAYOFF_TEAMS)
   // A field whose final would land after the season's last week never completes, and the server refuses
   // it (lib/playoff-runtime/championshipLengthFit.ts) — so it is not offered. A dynasty season is sized

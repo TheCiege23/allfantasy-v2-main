@@ -135,6 +135,12 @@ export function isReserveRosterSlot(slotType: string | null | undefined): boolea
   return IR_TOKENS.has(token) || TAXI_TOKENS.has(token)
 }
 
+/** The injured-list half of {@link isReserveRosterSlot}: IR / IL / reserve, never taxi or devy. */
+export function isInjuredReserveRosterSlot(slotType: string | null | undefined): boolean {
+  if (!slotType) return false
+  return IR_TOKENS.has(normalizeToken(slotType))
+}
+
 export function resolveRedraftRosterConfig(sport: string, leagueSettings: unknown): ResolvedRosterConfig {
   const raw = extractRawSlotMap(sport, leagueSettings)
   if (!raw) return defaultsFor(sport)

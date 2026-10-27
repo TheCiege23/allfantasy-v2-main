@@ -1,6 +1,6 @@
 /**
  * The "league office" facts Chimmy is given, as prompt-ready prose: weekly prizes, trades in review,
- * stat corrections, inactive manager mode, and the latest league-log entries. What each viewer sees
+ * stat corrections, inactive manager mode, the lineup rule for eliminated teams, and the latest league-log entries. What each viewer sees
  * matches what the app shows them — the provider decides that; this only words it.
  *
  * Prose rather than an object because the grounding serializer renders a string slice as-is
@@ -21,6 +21,10 @@ export type LeagueOfficeInput = {
   inactive: { managed: string[]; suggested: string[] } | null
   /** The viewer's own team is being set by AllFantasy. */
   viewerTeamManaged: boolean
+  /** The league's lineup rule for eliminated teams (lib/eliminated-lineups), in words; every member. */
+  eliminatedLineupRule?: string | null
+  /** The live rookie order's round notices (lib/rookie-order/roundNotices.ts), in words; every member. */
+  rookieOrderRounds?: string | null
   /** The latest league-log lines the viewer may read; null when the log is hidden from them. */
   log: ReadonlyArray<{ at: string; title: string; detail: string | null }> | null
   /** The payout calculator (lib/payouts), when the commissioner has set a place split. */
@@ -109,6 +113,8 @@ export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | nul
     if (input.inactive.suggested.length) lines.push(`${list(input.inactive.suggested)} ${input.inactive.suggested.length === 1 ? 'looks' : 'look'} inactive; the commissioner can let AllFantasy set ${input.inactive.suggested.length === 1 ? 'its' : 'their'} lineups from the Commissioner Hub.`)
   }
   if (input.viewerTeamManaged) lines.push('AllFantasy is setting your lineup while you are away; saving a lineup yourself stops it.')
+  if (input.eliminatedLineupRule) lines.push(input.eliminatedLineupRule)
+  if (input.rookieOrderRounds) lines.push(input.rookieOrderRounds)
 
   if (input.log?.length) {
     lines.push('Latest league log:')
