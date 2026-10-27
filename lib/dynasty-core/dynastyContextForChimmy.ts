@@ -9,6 +9,7 @@ import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { loadTaxiEnforcement } from '@/lib/taxi/taxiRulesService'
 import { describeTaxiMoveRules } from '@/lib/taxi/taxiMoveRules'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
+import { readPickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
 
 export async function buildDynastyContextForChimmy(
   leagueId: string,
@@ -16,7 +17,7 @@ export async function buildDynastyContextForChimmy(
 ): Promise<string> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { isDynasty: true, leagueVariant: true, settings: true },
+    select: { isDynasty: true, leagueType: true, leagueVariant: true, settings: true, tradeDeadlineWeek: true },
   })
   if (!league) return ''
   const variant = String(league.leagueVariant ?? '').toLowerCase()
@@ -48,6 +49,15 @@ export async function buildDynastyContextForChimmy(
     maxSeasons == null
       ? 'Taxi squad: no limit on how many seasons a player can spend on it.'
       : `Taxi squad: a player can spend at most ${maxSeasons} season${maxSeasons === 1 ? '' : 's'} on a taxi squad in this league, counted over finished seasons on any team; once they are used, the player moves to the bench when the next season starts and cannot go back on (enforced).`,
+  )
+  // Enforced by every trade gate (lib/trade-deadline/pickTradeDeadline.ts), not just explained.
+  const pickRule = readPickTradeDeadline(league.settings)
+  parts.push(
+    pickRule.mode === 'open'
+      ? 'Pick trades: a trade made only of draft picks stays open all season, after the trade deadline too; a trade with any player or FAAB closes at the trade deadline (enforced).'
+      : pickRule.mode === 'week'
+        ? `Pick trades: a trade made only of draft picks closes after week ${pickRule.week}, whatever the trade deadline; a trade with any player or FAAB follows the trade deadline${league.tradeDeadlineWeek ? ` (week ${league.tradeDeadlineWeek})` : ''} (enforced).`
+        : 'Pick trades close with the trade deadline, like player trades. The commissioner can give them their own deadline in Trade settings.',
   )
   parts.push(
     'When the user asks: what playoff format should I use, should this league be SF or 1QB, how many taxi slots, difference between taxi and devy, how should rookie draft order work, what does reverse Max PF mean — explain using this context and league settings. Do not enforce or change settings.'

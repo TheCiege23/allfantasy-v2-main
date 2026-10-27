@@ -8,6 +8,8 @@ import { readSavedLeagueOverrides } from '@/lib/league-settings/savedLeagueOverr
 import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName } from '@/lib/timezone'
 import { fromLocalInput, readDeadlineAt, toLocalInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { tryGetSportConfig } from '@/lib/sportConfig'
+import { PICK_TRADE_DEADLINE_KEY, readPickTradeDeadline, type PickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
@@ -30,12 +32,31 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const [closeAt, setCloseAt] = useState(seedCloseAt)
   const [savedCloseAt, setSavedCloseAt] = useState(seedCloseAt)
 
+  // Pick trades may keep their own deadline in a dynasty league (lib/trade-deadline/pickTradeDeadline.ts).
+  const dynasty = isDynastyFamilyLeague({ leagueType: ctx.league.leagueType, isDynasty: ctx.league.isDynasty })
+  const seedPickRule = (): PickTradeDeadline => {
+    const saved = readSavedLeagueOverrides(leagueId).settingsMerge as Record<string, unknown> | undefined
+    return readPickTradeDeadline(saved && PICK_TRADE_DEADLINE_KEY in saved ? saved : ctx.league.settings)
+  }
+  const [pickRule, setPickRule] = useState(seedPickRule)
+  const [pickWeek, setPickWeek] = useState(() => {
+    const r = seedPickRule()
+    return r.mode === 'week' ? String(r.week) : ''
+  })
+  const savePickRule = (rule: PickTradeDeadline) => {
+    setPickRule(rule)
+    queuePatch({ settingsMerge: { [PICK_TRADE_DEADLINE_KEY]: rule } })
+  }
+
   useEffect(() => {
     setTradeReviewHours(ctx.league.tradeReviewHours ?? 48)
     setTradeDeadlineWeek(ctx.league.tradeDeadlineWeek?.toString() ?? '')
     setDraftPickTrading(ctx.league.draftPickTrading ?? true)
     setCloseAt(seedCloseAt())
     setSavedCloseAt(seedCloseAt())
+    const rule = seedPickRule()
+    setPickRule(rule)
+    setPickWeek(rule.mode === 'week' ? String(rule.week) : '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.league.tradeReviewHours, ctx.league.tradeDeadlineWeek, ctx.league.draftPickTrading, ctx.league.settings, timezone])
 
@@ -142,6 +163,57 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           {t('lsHub.tr.closeAtHint')} {timeZoneShortName(timezone)}
         </p>
       </div>
+
+      {dynasty ? (
+        <div className="block" data-testid="pick-trade-deadline">
+          <label htmlFor="pick-trade-deadline-mode" className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
+            {t('lsHub.tr.pickDeadline')}
+          </label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <select
+              id="pick-trade-deadline-mode"
+              value={pickRule.mode}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const mode = e.target.value
+                if (mode === 'same' || mode === 'open') savePickRule({ mode })
+                else {
+                  // A week rule starts at the trade deadline's week, or the week already typed.
+                  const week = Number(pickWeek) || Number(tradeDeadlineWeek) || 1
+                  setPickWeek(String(week))
+                  savePickRule({ mode: 'week', week: Math.min(52, Math.max(1, week)) })
+                }
+              }}
+              data-testid="pick-trade-deadline-mode"
+              className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
+            >
+              <option value="same">{t('lsHub.tr.pickDeadline.same')}</option>
+              <option value="open">{t('lsHub.tr.pickDeadline.open')}</option>
+              <option value="week">{t('lsHub.tr.pickDeadline.week')}</option>
+            </select>
+            {pickRule.mode === 'week' ? (
+              <input
+                type="number"
+                min={1}
+                max={52}
+                aria-label={t('lsHub.tr.pickDeadline.weekLabel')}
+                placeholder={t('lsHub.tr.pickDeadline.weekLabel')}
+                value={pickWeek}
+                disabled={!canEdit}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setPickWeek(v)
+                  const n = Number(v)
+                  if (v !== '' && e.target.validity.valid && Number.isInteger(n) && n >= 1 && n <= 52) savePickRule({ mode: 'week', week: n })
+                }}
+                data-testid="pick-trade-deadline-week"
+                className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
+              />
+            ) : null}
+          </div>
+          <p className="mt-1 text-[11px] text-white/45">{t('lsHub.tr.pickDeadline.hint')}</p>
+        </div>
+      ) : null}
     </div>
   )
 }

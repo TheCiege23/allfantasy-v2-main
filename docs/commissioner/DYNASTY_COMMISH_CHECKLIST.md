@@ -49,7 +49,7 @@ the one the renew path itself uses.
 |---|---|---|---|
 | ✅ | Future pick trading, 1–3 years out | Free | `lib/league-trade-engine/nativeFuturePicks.ts`, `futurePickInventory.ts`; `futurePicksYearsOut` (default 3, 1–5). Trade Center. |
 | ⬜ | Conditional pick trades ("becomes a 1st if Team X misses the playoffs") and pick protection | Plan | Not built. |
-| ⬜ | Separate deadlines for player trades and pick trades | Free | Parked from redraft, where it never bites; in dynasty, picks trade all year. |
+| ✅ | Separate deadlines for player trades and pick trades | Free | `lib/trade-deadline/pickTradeDeadline.ts`. Trade settings → **Pick trade deadline** (dynasty, devy and C2C only, `League.settings.pick_trade_deadline`): the same as the trade deadline (the default), open all season, or close after a week of its own, earlier or later. A trade made only of draft picks follows it; a trade with any player or FAAB keeps the trade deadline and its close time. Read at every gate the trade deadline is: propose, accept and a commissioner processing a bare offer (`tradeService.ts`), the draft room's pick trades, and the deadline sweep, which now expires each pending offer by its own rule (`expireOffersAtDeadline.ts`). In season only, like the trade deadline. The Trade Center shows a chip beside the deadline, the Commissioner Hub calendar shows the pick deadline, and Chimmy is told the rule. |
 
 ## Season and rosters
 
@@ -65,7 +65,8 @@ the one the renew path itself uses.
 
 1. ~~True max PF for native leagues and a rookie order that updates itself after every playoff round, with a notice
    to the commissioner and an optional league chat post.~~ Done: #2794, #2795.
-2. Dynasty rollover wizard on the Commissioner Hub (order → taxi → dues → schedule), reusing the redraft wizard.
+2. ~~Dynasty rollover wizard on the Commissioner Hub (order → taxi → dues → schedule), reusing the redraft wizard.~~
+   Done: #2801.
 3. Taxi rules that are stored but not enforced (lock week, promotion window), then max years.
 4. IR auto-move on activation.
 5. Conditional and protected picks.
