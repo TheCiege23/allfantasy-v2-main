@@ -60,6 +60,7 @@ export function ZombieCommissionerModal({
   const [backgroundTheme, setBackgroundTheme] = useState<string | null>(null)
   const [showIntroReplay, setShowIntroReplay] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [canEdit, setCanEdit] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -71,6 +72,7 @@ export function ZombieCommissionerModal({
         if (!res.ok) return
         const data = await res.json()
         setBackgroundTheme(data.league?.backgroundTheme)
+        setCanEdit(Boolean(data.viewerIsCommissioner))
         
         // Get current user ID for intro modal
         const sessionRes = await fetch('/api/auth/session', { credentials: 'include' })
@@ -186,18 +188,18 @@ export function ZombieCommissionerModal({
 
           {/* Content area */}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {tab === 'general' && <ZombieSetupPanel leagueId={leagueId} canEdit />}
-            {tab === 'paid' && <ZombiePaidPanel leagueId={leagueId} canEdit />}
-            {tab === 'universe' && <ZombieUniversePanel canEdit />}
-            {tab === 'whisperer' && <ZombieWhispererPanel canEdit />}
-            {tab === 'combat' && <ZombieCombatPanel canEdit />}
-            {tab === 'items' && <ZombieItemsPanel canEdit />}
-            {tab === 'updates' && <ZombieUpdatesPanel leagueId={leagueId} canEdit />}
-            {tab === 'automation' && <ZombieAutomationPanel leagueId={leagueId} canEdit />}
-            {tab === 'overrides' && <ZombieOverridePanel leagueId={leagueId} canEdit />}
-            {tab === 'audit' && <ZombieAuditLogPanel leagueId={leagueId} canEdit />}
-            {tab === 'animations' && <ZombieAnimationsPanel leagueId={leagueId} canEdit />}
-            {tab === 'advanced' && <ZombieAdvancedPanel leagueId={leagueId} canEdit />}
+            {tab === 'general' && <ZombieSetupPanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'paid' && <ZombiePaidPanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'universe' && <ZombieUniversePanel canEdit={canEdit} />}
+            {tab === 'whisperer' && <ZombieWhispererPanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'combat' && <ZombieCombatPanel canEdit={canEdit} />}
+            {tab === 'items' && <ZombieItemsPanel canEdit={canEdit} />}
+            {tab === 'updates' && <ZombieUpdatesPanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'automation' && <ZombieAutomationPanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'overrides' && <ZombieOverridePanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'audit' && <ZombieAuditLogPanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'animations' && <ZombieAnimationsPanel leagueId={leagueId} canEdit={canEdit} />}
+            {tab === 'advanced' && <ZombieAdvancedPanel leagueId={leagueId} canEdit={canEdit} />}
           </div>
         </div>
       </div>
