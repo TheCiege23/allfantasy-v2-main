@@ -19,7 +19,7 @@ vi.mock('@/lib/survivor/survivorTribeProvisioning', () => ({ assignSurvivorTribe
 vi.mock('@/lib/survivor/survivorDraftParticipants', () => ({ prepareSurvivorDraftParticipants: vi.fn() }))
 vi.mock('@/lib/survivor/reconcileSurvivorDraftPlan', () => ({ reconcileSurvivorDraftPlan: vi.fn() }))
 vi.mock('@/lib/survivor/survivorTribeChatProvisioning', () => ({ provisionSurvivorChats: vi.fn() }))
-vi.mock('@/lib/survivor/survivorIdolProvisioning', () => ({ seedSurvivorIdols: vi.fn(), getIdolSeedStatus: vi.fn() }))
+vi.mock('@/lib/survivor/survivorIdolProvisioning', () => ({ seedSurvivorIdols: vi.fn(), getIdolSeedStatus: vi.fn(), loadSurvivorWaiverIdolPool: vi.fn(async () => undefined) }))
 vi.mock('@/lib/survivor/survivorAnnouncementService', () => ({ postSurvivorIntroAnnouncement: vi.fn() }))
 
 import { initializeSurvivorPhase2 } from '@/lib/survivor/survivorPhase2Init'
