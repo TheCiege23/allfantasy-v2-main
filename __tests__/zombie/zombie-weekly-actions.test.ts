@@ -170,7 +170,7 @@ describe('Zombie weekly actions', () => {
     h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
         whispererRecord: { updateMany: debit },
-        gameSchedule: { findFirst: vi.fn().mockResolvedValue({ startTime: new Date(Date.now() + 60_000) }) },
+        gameSchedule: { findMany: vi.fn().mockResolvedValue([{ startTime: new Date(Date.now() + 60_000) }]) },
         redraftMatchup: { updateMany: remap },
         zombieAmbushAction: { count: vi.fn().mockResolvedValue(0), create },
         zombieChimmyAction: { update: h.chimmyActionUpdate },
