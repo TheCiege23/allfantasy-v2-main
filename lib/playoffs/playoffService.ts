@@ -284,6 +284,20 @@ export async function getPlayoffBracketView(input: {
   const scheduleByNumber = new Map(seasonSchedule?.games.map((game) => [game.seriesNumber, game]) ?? [])
   const firstStart = singleGameSport ? firstGameDeadline(challenge.series) : null
   const userId = input.user?.id ?? null
+  let viewerTournamentBracketLimit: number | null = null
+  let viewerTournamentBracketUsed: number | null = null
+  if (singleGameSport && userId) {
+    const [snapshot, used] = await Promise.all([
+      new EntitlementResolver().resolveSnapshot(userId, input.user?.email).catch(() => null),
+      (prisma as any).playoffBracketEntry.count({
+        where: { userId, challenge: { sport: challenge.sport, seasonYear: challenge.seasonYear, isTestMode: false } },
+      }),
+    ])
+    viewerTournamentBracketLimit = snapshot && planFlagsFromSnapshot(snapshot).pro
+      ? PAID_BRACKETS_PER_TOURNAMENT
+      : FREE_BRACKETS_PER_TOURNAMENT
+    viewerTournamentBracketUsed = used
+  }
   // The pool's options belong to its OWNER's plan, not the viewer's: a member without AF
   // Commissioner still sees (and is scored by) the spread or series-length picks the owner set up.
   const config = sanitizePlayoffChallengeConfig(challenge.config ?? null, {
@@ -414,6 +428,8 @@ export async function getPlayoffBracketView(input: {
 
   return {
     viewerUserId: userId,
+    viewerTournamentBracketLimit,
+    viewerTournamentBracketUsed,
     challenge: {
       id: challenge.id,
       name: challenge.name,
