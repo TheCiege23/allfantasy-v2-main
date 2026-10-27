@@ -73,9 +73,24 @@ export function planZombieOutcomeReplay(
   }
   for (const item of snapshot.items) {
     const rosterId = byTeamId.get(item.teamStatusId)
+    const threat = results.find(row => {
+      if (rosterId !== row.homeRosterId && rosterId !== row.awayRosterId) return false
+      const lost = rosterId === row.homeRosterId
+        ? row.homeScore < row.awayScore
+        : row.awayScore < row.homeScore
+      if (!lost) return false
+      const opponentId = rosterId === row.homeRosterId ? row.awayRosterId : row.homeRosterId
+      const opponentStatus = snapshot.teams.find(team => team.rosterId === opponentId)?.status
+      return opponentStatus === 'Zombie' || opponentStatus === 'Whisperer'
+    })
+    const threatStatus = threat && snapshot.teams.find(team =>
+      team.rosterId === (rosterId === threat.homeRosterId ? threat.awayRosterId : threat.homeRosterId))?.status
+    const infectionEnabled = threatStatus === 'Zombie'
+      ? snapshot.config.infectionLossToZombie
+      : threatStatus === 'Whisperer' && snapshot.config.infectionLossToWhisperer
     if (rosterId && threatened.has(rosterId) && item.activatesAtWeek === week &&
         item.activationState === 'pending_activation' &&
-        (item.itemType === 'serum' || (item.usedEffect === 'infection_shield' &&
+        (item.itemType === 'serum' || (infectionEnabled && item.usedEffect === 'infection_shield' &&
           ['weapon_knife', 'weapon_bow', 'weapon_axe', 'weapon_gun'].includes(item.itemType)))) {
       spentItemIds.add(item.id)
     }
