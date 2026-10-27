@@ -30,6 +30,14 @@ describe("season bracket provider result guard", () => {
     expect(verifyBracketEvent({ ...input, scheduledAt: "2026-12-19T18:00:00Z" })).toMatchObject({ reason: "start-time-mismatch" })
     expect(verifyBracketEvent({ ...input, season: 2025 })).toMatchObject({ reason: "not-cfp-postseason" })
   })
+  it("aligns neutral-site scores when ESPN reverses bracket sides", () => {
+    const reversed = structuredClone(event)
+    reversed.competitions[0].competitors[0].team = { displayName: "Ole Miss Rebels", location: "Ole Miss" }
+    reversed.competitions[0].competitors[1].team = { displayName: "Georgia Bulldogs", location: "Georgia" }
+    const checked = verifyBracketEvent({ ...input, payload: { events: [reversed] } })
+    expect(checked.ok).toBe(true)
+    if (checked.ok) expect(checked.final).toMatchObject({ homeScore: 24, awayScore: 31 })
+  })
   it("rejects live and tied games", () => {
     const live = structuredClone(event)
     live.competitions[0].status.type.state = "in"
