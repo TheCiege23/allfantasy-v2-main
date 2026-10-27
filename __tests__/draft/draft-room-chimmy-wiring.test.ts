@@ -29,6 +29,14 @@ describe('draft room ↔ Chimmy wiring', () => {
     expect(src.match(/\sonClick=\{openChimmy\}/g)?.length).toBe(2)
   })
 
+  it('opens only the Chimmy surface on screen, not every one (both layouts are always mounted)', () => {
+    const body = src.slice(src.indexOf('const openChimmy = useCallback('), src.indexOf('}, [setMobileTab])'))
+    expect(body).toMatch(/const surface = currentChimmySurface\(\)/)
+    expect(body).toMatch(/if \(surface === 'right_dock'\) \{\s*setRightDockOpenRequest/)
+    expect(body).toMatch(/else if \(surface === 'bottom_dock'\) \{\s*setCenterDockTab\('ai'\)\s*setDockChimmyOpen\(true\)/)
+    expect(body).toMatch(/\} else \{\s*setMobileTab\('helper'\)\s*\}/)
+  })
+
   it('passes the room’s recommendation and Chimmy prompt into the panel', () => {
     const panel = src.slice(src.indexOf('const helperPanelNode = ('), src.indexOf('const keeperPanel ='))
     expect(panel).toMatch(/recommendation=\{recommendationResult\?\.recommendation \?\? null\}/)
