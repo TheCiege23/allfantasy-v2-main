@@ -164,6 +164,16 @@ describe('the hourly run', () => {
     expect(m.persist).not.toHaveBeenCalled()
   })
 
+  it('benches a starter whose bye week is this week, though his projection says he will score', async () => {
+    m.players.mockResolvedValue([
+      { id: 'qb', position: 'QB', projectedPoints: 20 },
+      { id: 'rb-out', position: 'RB', projectedPoints: 15, product: { byeWeek: 7 } },
+      { id: 'rb-good', position: 'RB', projectedPoints: 12, product: { byeWeek: 9 } },
+    ])
+    expect(await runInactiveManagerLineups()).toMatchObject({ set: 1 })
+    expect(m.persist.mock.calls[0][0].automationAudit.metadata.changes).toEqual([{ slot: 'RB', in: 'rb-good', out: 'rb-out' }])
+  })
+
   it('never moves a player whose game has started', async () => {
     m.lock.mockResolvedValue({ locked: false, lockedPlayerIds: ['rb-out'] })
     expect(await runInactiveManagerLineups()).toMatchObject({ set: 0, unchanged: 1 })

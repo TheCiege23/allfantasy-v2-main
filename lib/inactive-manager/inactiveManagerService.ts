@@ -16,6 +16,7 @@ import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineup
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
+import { startersOnBye } from '@/lib/league/native/lineupMoves'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { DRAFT_AS_ME_FEATURE, DRAFT_AS_ME_SETTING } from '@/lib/draft-room/draftAsMeAutopick'
 import {
@@ -341,9 +342,15 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
           }
           const rows = await getNormalizedPlayerData({ surface: 'roster', leagueId, userId: roster.platformUserId, limit: 200 })
           const players: Record<string, LineupPlayerInfo> = {}
-          for (const p of rows.map(serializeUnifiedPlayerForApi)) players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
+          const byeFacts: Record<string, { byeWeek: number | null }> = {}
+          for (const p of rows.map(serializeUnifiedPlayerForApi)) {
+            players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
+            byeFacts[p.id] = { byeWeek: p.product?.byeWeek ?? p.nflRedraftGameContext?.byeWeek ?? null }
+          }
+          // The lineup screen's own bye test: a starter whose bye week is this week.
+          const onBye = new Set(startersOnBye(Object.keys(byeFacts), (id) => byeFacts[id], week))
           const locked = new Set(lock.lockedPlayerIds)
-          const plan = planBestLineup({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id) })
+          const plan = planBestLineup({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id), onBye: (id) => onBye.has(id) })
           if (plan.kind === 'skip') {
             if (plan.reason === 'already_best') result.unchanged += 1
             else skip(plan.reason)
