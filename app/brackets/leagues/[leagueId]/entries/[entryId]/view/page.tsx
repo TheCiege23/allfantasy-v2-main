@@ -59,10 +59,10 @@ export default async function SharedPlayoffEntryPage(props: {
   const schedule = await readSingleGameSchedule(entry.challenge.sport as "ncaaf" | "nba_cup", entry.challenge.seasonYear)
   const scheduleByNumber = new Map(schedule?.games.map((game) => [game.seriesNumber, game]) ?? [])
   const series = (rawSeries as Array<Record<string, unknown>>).map((row) => ({
+    ...row,
     gameLabel: scheduleByNumber.get(Number(row.seriesNumber))?.label || null,
     location: scheduleByNumber.get(Number(row.seriesNumber))?.location || null,
     venue: scheduleByNumber.get(Number(row.seriesNumber))?.venue || row.venue || null,
-    ...row,
     startsAt: row.startsAt instanceof Date ? row.startsAt.toISOString() : null,
     nextGameAt: row.nextGameAt instanceof Date ? row.nextGameAt.toISOString() : null,
     lastSyncedAt: row.lastSyncedAt instanceof Date ? row.lastSyncedAt.toISOString() : null,
