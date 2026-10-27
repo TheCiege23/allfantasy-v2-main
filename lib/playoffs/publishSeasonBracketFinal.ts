@@ -49,10 +49,10 @@ export async function readSeasonBracketGame(input: {
     const home = game.sourceSeriesHome == null ? game.homeTeamName : byNumber.get(game.sourceSeriesHome)?.winnerTeamName ?? ""
     const away = game.sourceSeriesAway == null ? game.awayTeamName : byNumber.get(game.sourceSeriesAway)?.winnerTeamName ?? ""
     if (!isOfficialTeamName(home) || !isOfficialTeamName(away) ||
-      /^(CFP|EAST|WEST)\\d+$/i.test(home) || /^(CFP|EAST|WEST)\\d+$/i.test(away) || home === away) {
+      /^(CFP|EAST|WEST)\d+$/i.test(home) || /^(CFP|EAST|WEST)\d+$/i.test(away) || home === away) {
       return { ok: false, error: `League ${pool.id} is missing prior verified winners; nothing was changed.` }
     }
-    identities.add(`${home}\\u0000${away}`)
+    identities.add(`${home}\u0000${away}`)
     games.push({ id: game.id, challengeId: pool.id, home, away, game })
   }
   if (identities.size !== 1) return { ok: false, error: "League matchups disagree. Reconcile teams before publishing a universal result." }
