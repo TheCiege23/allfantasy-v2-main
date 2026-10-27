@@ -11,6 +11,8 @@
  * Client-safe: no I/O.
  */
 
+import type { SurvivorHostTilePayload } from './survivorHostTiles'
+
 export type PremiumThreatLevel = 'high' | 'medium' | 'low'
 
 export type PremiumCastRow = {
@@ -273,6 +275,7 @@ export function buildExileStatusTile(input: {
 }
 
 export type SurvivorPremiumTilePayload =
+  | SurvivorHostTilePayload
   | { tileId: 'threat_map'; data: ThreatMapTile }
   | { tileId: 'social_pulse'; data: SocialPulseTile }
   | { tileId: 'challenge_outlook'; data: ChallengeOutlookTile }
