@@ -10178,6 +10178,8 @@ model ZombieLeague {
   potTotal                 Float                    @default(0)
   season                   Int                      @default(2026)
   seasonStartWeek          Int?
+  experienceMode           String                   @default("enhanced") @db.VarChar(16)
+  rulesSnapshot            Json?
   slug                     String                   @default("") @db.VarChar(160)
   sport                    String                   @default("NFL") @db.VarChar(12)
   status                   String                   @default("setup")
