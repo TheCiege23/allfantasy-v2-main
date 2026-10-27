@@ -90,25 +90,37 @@ export async function processSerumAction(
     return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
   }
 
-  await prisma.zombieTeamItem.update({
-    where: { id: serum.id },
-    data: { activationState: 'pending_activation', activatesAtWeek: week },
-  })
-
-  await prisma.zombieChimmyAction.update({
-    where: { id: log.id },
-    data: {
-      isValid: true,
-      publicResponse: '🧪 A serum has been registered. The infection may yet be stopped.',
-      privateResponse: `Your serum is registered for Week ${week}. It is spent only if it prevents infection.`,
-      effect: { itemId: serum.id },
-    },
-  })
-
+  try {
+    await prisma.$transaction(async (tx) => {
+      const alreadyProtected = await tx.zombieTeamItem.count({
+        where: { teamStatusId: team.id, activationState: 'pending_activation', activatesAtWeek: week },
+      })
+      if (alreadyProtected > 0) throw new Error('A serum or weapon is already armed for this week.')
+      const armed = await tx.zombieTeamItem.updateMany({
+        where: { id: serum.id, isUsed: false, isExpired: false, activationState: 'ready' },
+        data: { activationState: 'pending_activation', activatesAtWeek: week },
+      })
+      if (armed.count !== 1) throw new Error('That serum is no longer available.')
+      await tx.zombieChimmyAction.update({
+        where: { id: log.id },
+        data: {
+          isValid: true,
+          publicResponse: '🧪 A serum has been registered. The infection may yet be stopped.',
+          privateResponse: `Your serum is registered for Week ${week}. It is spent only if it prevents infection.`,
+          effect: { itemId: serum.id },
+        },
+      })
+    }, { isolationLevel: 'Serializable' })
+  } catch (error) {
+    return prisma.zombieChimmyAction.update({
+      where: { id: log.id },
+      data: { isValid: false, validationError: 'serum_arm_failed',
+        privateResponse: error instanceof Error ? error.message : 'Serum could not be armed.' },
+    })
+  }
   await notifyCommissioner(leagueId, 'serum_used', 'Serum registered', `Week ${week} — a player registered serum use.`, {
-    week,
-    relatedUserId: userId,
-  })
+    week, relatedUserId: userId,
+  }).catch(() => {})
 
   return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
 }
