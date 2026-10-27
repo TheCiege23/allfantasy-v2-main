@@ -25,7 +25,7 @@ export default async function ZombieRulesPage({ params }: { params: Promise<{ le
       currentWeek={z?.currentWeek ?? 1}
       season={z?.season ?? new Date().getFullYear()}
       rulesHtml={html}
-      rules={rules}
+      rules={{ ...rules, reviveThreshold: leagueConfig?.serumReviveCount ?? rules.reviveThreshold }}
       experienceMode={z?.experienceMode ?? null}
       serumAwardHighScore={leagueConfig?.serumAwardHighScore ?? false}
       serumAwardOnBashMaul={leagueConfig?.serumAwardOnBashMaul ?? false}
