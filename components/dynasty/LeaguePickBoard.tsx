@@ -60,7 +60,7 @@ export function LeaguePickBoard({ leagueId }: { leagueId: string }) {
               <tr key={t.rosterId} className={`border-t border-white/[0.06] align-top ${t.isViewer ? 'bg-purple-500/[0.08]' : ''}`}>
                 <th scope="row" className="px-3 py-2 font-semibold text-white">
                   {t.name}
-                  {t.isViewer ? <span className="ml-1 text-[10px] font-medium text-purple-200">(you)</span> : null}
+                  {t.isViewer ? <span className="ml-1 text-[11px] font-medium text-purple-200">(you)</span> : null}
                 </th>
                 {board.seasons.map((s) => (
                   <td key={s} className="px-3 py-2">
