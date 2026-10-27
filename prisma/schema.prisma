@@ -3343,7 +3343,7 @@ model LeaguePlayerWeeklyScore {
   /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
   /// moving well after the whistle. Only a reconcile pass past that window may set this.
   isFinalized Boolean  @default(false)
-  /// Which platform reported it — 'sleeper' today; espn/yahoo would each add their own.
+  /// Which platform reported it: 'sleeper' (scheduled), or 'fantrax' (manual browser-download import only).
   source      String   @db.VarChar(16)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
