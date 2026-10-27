@@ -288,7 +288,9 @@ export async function GET(req: Request) {
 
   // Whisperer secrecy: every row that could name the Whisperer goes through the viewer's
   // permission. Counts stay real; they only say that a Whisperer exists.
-  const viewer = await resolveWhispererViewer(leagueId, session.user.id)
+  const viewerUserId = session.user?.id
+  if (!viewerUserId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const viewer = await resolveWhispererViewer(leagueId, viewerUserId)
   const team = <T extends { rosterId: string; status?: string | null }>(t: T): T =>
     viewer.canSee ? t : redactZombieTeam(t, viewer.identity)
   const event = <T extends object>(e: T): T => (viewer.canSee ? e : redactZombieEvent(e, viewer.identity))
@@ -314,11 +316,11 @@ export async function GET(req: Request) {
     league: {
       ...z,
       teams: z.teams.map(team),
-      whispererRecord: viewer.canSee || z.whispererRecord?.userId === session.user.id
+      whispererRecord: viewer.canSee || z.whispererRecord?.userId === viewerUserId
         ? await withWhispererDisplayName(z.whispererRecord)
         : redactWhispererRecord(z.whispererRecord),
-      coWhisperers: await Promise.all(z.coWhisperers.map((record) =>
-        viewer.canSee || record.userId === session.user.id
+      coWhisperers: await Promise.all((z.coWhisperers ?? []).map((record) =>
+        viewer.canSee || record.userId === viewerUserId
           ? withWhispererDisplayName(record)
           : Promise.resolve(redactWhispererRecord(record)))),
       counts: {
