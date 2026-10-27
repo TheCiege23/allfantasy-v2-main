@@ -23,7 +23,7 @@ export async function validatePreScoringWindow(
   week: number,
   seasonYear: number,
 ): Promise<{ valid: boolean; reason?: string }> {
-  const z = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { status: true, currentWeek: true, id: true } })
+  const z = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { status: true, currentWeek: true, id: true, sport: true } })
   if (!z || !['active', 'in_progress'].includes(z.status) || z.currentWeek !== week) {
     return { valid: false, reason: 'This is not the active league week.' }
   }
