@@ -16,6 +16,7 @@ import { applyZombieHordeSitOutToScoring } from '@/lib/zombie/ZombieHordeSitOutE
 import { settleWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 import { syncZombieTeamNames } from '@/lib/zombie/zombieTeamNames'
 import { reconcileScoreOnlyCorrection } from '@/lib/zombie/statCorrectionReconciler'
+import { captureZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -111,6 +112,17 @@ export async function runWeeklyResolution(
     return { resolution: null, skipped: true, reason: 'matchups_incomplete' }
   }
 
+  // A completed week can only be replayed from the state before its first side effect.
+  // Capture once. A retry of an already-resolving week must never replace the original snapshot.
+  const settlementSnapshot = (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))
+    ? await captureZombieSettlementSnapshot(z.leagueId, zombieLeagueId, z.sport)
+    : null
+  if (existing?.status === 'pending' && settlementSnapshot) {
+    await prisma.zombieWeeklyResolution.updateMany({
+      where: { id: existing.id, status: 'pending' },
+      data: { settlementSnapshot: toPrismaJsonInput(settlementSnapshot) },
+    })
+  }
   await prisma.zombieWeeklyResolution.upsert({
     where: { zombieLeagueId_week: { zombieLeagueId, week } },
     create: {
@@ -120,6 +132,7 @@ export async function runWeeklyResolution(
       matchupResults: [],
       newZombies: [],
       infectionCount: 0,
+      ...(settlementSnapshot ? { settlementSnapshot: toPrismaJsonInput(settlementSnapshot) } : {}),
     },
     update: { status: 'resolving' },
   })
