@@ -60,7 +60,7 @@ export function ZombieSetupPanel({ leagueId, canEdit }: { leagueId: string; canE
       </dl>
       <p className="text-[12px] text-white/60">
         {canEdit
-          ? 'Team count, draft, and scoring are managed in the standard league settings before the season starts.'
+          ? 'Team count is set at creation. Draft and scoring use the standard league settings before the season starts.'
           : 'Only the commissioner can change league settings.'}
       </p>
     </div>
