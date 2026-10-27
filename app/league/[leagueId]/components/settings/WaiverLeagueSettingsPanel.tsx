@@ -16,7 +16,7 @@ import {
   type FaabRolloverRule,
   type FreeAgencyMode,
 } from '@/lib/waiver-wire/hub-waiver-options'
-import { effectiveFaabRolloverRule, renewalFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
+import { effectiveFaabRolloverRule, faabRolloverFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
 
 const WAIVER_TYPES = [
   { value: 'faab', label: 'FAAB bidding' },
@@ -61,10 +61,11 @@ export function WaiverLeagueSettingsPanel({
   const [freeAgencyMode, setFreeAgencyMode] = useState<FreeAgencyMode>('standard')
   const [faabRollover, setFaabRollover] = useState<FaabRolloverRule | null>(null)
   // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over. The server sends
-  // `faabRolloverDefault` from the renew route's own classifier (renewalFamilyForLeague); this form
-  // has no league variant, so that answer replaces the isDynasty-only first guess as soon as it lands.
+  // `faabRolloverDefault` from the family the renew route applies (faabRolloverFamilyForLeague); this
+  // form has no league variant or settings, so that answer replaces the first guess (league type and
+  // isDynasty — a keeper league already reads "carry over") as soon as it lands.
   const [rolloverDefault, setRolloverDefault] = useState<FaabRolloverRule>(() =>
-    effectiveFaabRolloverRule(null, renewalFamilyForLeague({ isDynasty: initialData.isDynasty ?? null })),
+    effectiveFaabRolloverRule(null, faabRolloverFamilyForLeague({ leagueType: initialData.leagueType ?? null, isDynasty: initialData.isDynasty ?? null })),
   )
 
   useEffect(() => {

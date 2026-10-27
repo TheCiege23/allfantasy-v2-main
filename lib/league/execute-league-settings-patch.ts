@@ -538,12 +538,13 @@ export async function executeLeagueSettingsPatch(
    * `settingsMerge` can write. Refused only when the value CHANGES past the cap, so re-saving a league
    * as it stands never fails.
    */
-  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: body.sport ?? league.sport })) {
+  const capSport = body.sport ?? league.sport
+  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: capSport })) {
     if (body.playoffStartWeek != null && Number(body.playoffStartWeek) !== league.playoffStartWeek) {
-      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek)
+      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek, capSport)
       if (refusal) return jsonError(refusal, 400)
     }
-    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings)
+    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings, capSport)
     if (mergeRefusal) return jsonError(mergeRefusal, 400)
   }
 

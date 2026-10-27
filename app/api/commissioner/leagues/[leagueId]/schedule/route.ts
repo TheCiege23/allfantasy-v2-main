@@ -65,6 +65,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
         ...(hasOwn(body, 'playoffTransitionPoint') ? { schedule_playoff_transition_point: body.playoffTransitionPoint } : {}),
       },
       { regular_season_length: shown?.regular_season_length, schedule_playoff_transition_point: shown?.playoff_transition_point },
+      league.sport,
     )
     if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
   }

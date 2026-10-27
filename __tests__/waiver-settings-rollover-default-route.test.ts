@@ -19,6 +19,17 @@ describe('faabRolloverDefault', () => {
     expect((await get()).faabRolloverDefault).toBe('carry_over')
   })
 
+  it('an IDP keeper league (variant idp): carry over', async () => {
+    m.league.mockResolvedValue({ id: 'L', userId: 'u1', sport: 'NFL', leagueType: 'keeper', leagueVariant: 'idp', isDynasty: false, settings: { league_type: 'keeper' } })
+    expect((await get()).faabRolloverDefault).toBe('carry_over')
+  })
+
+  it('a keeper league known only by its leagueType column: carry over (and the column is selected)', async () => {
+    m.league.mockResolvedValue({ id: 'L', userId: 'u1', sport: 'NFL', leagueType: 'keeper', leagueVariant: null, isDynasty: false, settings: {} })
+    expect((await get()).faabRolloverDefault).toBe('carry_over')
+    expect(m.league.mock.calls.at(-1)?.[0]?.select?.leagueType).toBe(true)
+  })
+
   it('a redraft league: reset', async () => {
     m.league.mockResolvedValue({ id: 'L', userId: 'u1', sport: 'NFL', leagueVariant: 'redraft', isDynasty: false, settings: {} })
     expect((await get()).faabRolloverDefault).toBe('reset')

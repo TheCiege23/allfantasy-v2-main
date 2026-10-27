@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
   // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts): the
   // schedule below is generated through the week before the playoffs, or the whole season without them.
   if (regularSeasonCapApplies({ leagueType: league.leagueType, sport: sportKey })) {
-    const refusal = regularSeasonLengthCapRefusal(Math.min(totalWeeks, playoffStartWeek - 1))
+    const refusal = regularSeasonLengthCapRefusal(Math.min(totalWeeks, playoffStartWeek - 1), sportKey)
     if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
   }
   const medianGame = body.medianGame ?? league.medianGame ?? false
