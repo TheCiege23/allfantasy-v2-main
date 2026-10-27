@@ -81,7 +81,7 @@ type Pack = {
       horde?: number
     } | null
     teams: TeamRow[]
-    coWhisperers?: Array<{ displayName: string | null; ambushesRemaining: number; isPubliclyRevealed: boolean }>
+    coWhisperers?: Array<{ userId?: string | null; displayName: string | null; ambushesRemaining: number; isPubliclyRevealed: boolean }>
     whispererRecord: {
       displayName: string
       ambushesRemaining: number
@@ -350,7 +350,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
               {(z.coWhisperers ?? []).map((record, index) => (
                 <ZombieWhispererCard
                   key={index}
-                  revealed={z.whispererIsPublic && record.isPubliclyRevealed}
+                  revealed={(z.whispererIsPublic && record.isPubliclyRevealed) || record.userId === userId}
                   displayName={record.displayName ?? undefined}
                   ambushesRemaining={record.ambushesRemaining}
                   hordeSize={hordeCount}
