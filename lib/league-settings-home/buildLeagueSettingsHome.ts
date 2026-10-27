@@ -37,6 +37,8 @@ export type SettingsSubPageId =
   | 'score-adjustments'
   /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
   | 'survivor-tribes'
+  /** Every member: what each rule means, in plain words (lib/league-rules/buildLeagueRulebook.ts). */
+  | 'rulebook'
 
 export type SettingsHomeRow = {
   id: string
@@ -97,6 +99,12 @@ export type SettingsHomeGuillotine = {
   locked: boolean
   /** The server's AF Commissioner check for guillotine rules; null when not reported. */
   canEditPaidRules?: boolean | null
+  /** Who is chopped when the lowest scores tie, in order (lib/guillotine/guillotineRules.ts). */
+  tiebreakerOrder?: string[]
+  rosterReleaseTiming?: string | null
+  dangerMarginPoints?: number | null
+  /** Waiver bids near the run are sealed (lib/guillotine/blindWaiverCutoff.ts); from the server. */
+  blindAuction?: boolean | null
 }
 
 export type BuildSettingsHomeInput = {

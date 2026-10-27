@@ -136,7 +136,10 @@ export function CommissionerCenter({
   const allowed = editableSubPages(sections)
   const groups = NAV_GROUPS.map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) })).filter(group => group.items.length)
   const fallback: SettingsSubPageId = allowed.has(inSeason ? 'general' : 'draft') ? (inSeason ? 'general' : 'draft') : groups[0]?.items[0]?.id ?? 'general'
-  const [open, setOpen] = useState<SettingsSubPageId>(initialSubPage && allowed.has(initialSubPage) ? initialSubPage : fallback)
+  const [open, setOpen] = useState<SettingsSubPageId>(
+    // The rules page is not a nav item, but a "See all rules" link opens it straight away.
+    initialSubPage && (allowed.has(initialSubPage) || initialSubPage === 'rulebook') ? initialSubPage : fallback,
+  )
   const pane = useRef<HTMLDivElement | null>(null)
   const saveScope = useSaveScopeHandleRef()
   const select = (id: SettingsSubPageId) => {

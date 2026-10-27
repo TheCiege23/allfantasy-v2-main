@@ -25,6 +25,7 @@ import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine
 import { describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
+import { isBlindAuctionLeague } from '@/lib/guillotine/blindWaiverCutoff'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,6 +117,8 @@ export async function GET(
           advanced,
           scheduleLines: advanced ? describeSchedule(advanced, config.teamsPerChop, config.eliminationStartWeek) : [],
           canEditPaidRules,
+          // The rules page explains the sealed bids; the sport list lives server-side with the engines.
+          blindAuction: isBlindAuctionLeague({ sport: String(config.sport), guillotineMode: true, leagueVariant: 'guillotine' }),
         }
       : null,
   })

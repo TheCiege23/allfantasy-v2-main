@@ -77,6 +77,7 @@ import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboa
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
 import type { LeagueRailData } from '@/components/league/native/LeagueRail'
 import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
+import { LeagueRulesWelcome } from '@/components/league-rules/LeagueRulesWelcome'
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
@@ -175,6 +176,7 @@ import { PostCreateWelcomeSheet, type PostCreateWelcomeLeague } from '@/componen
 import {
   chooseWelcomeIntro,
   firstEntryIntroKinds,
+  isFirstEntryIntroSeen,
   markFirstEntryIntrosSeen,
   shouldStartPostCreateWelcome,
   stripPostCreateHandoff,
@@ -929,8 +931,11 @@ export function LeagueShell({
     // Decided once, on arrival: a modal marking itself seen mid-flow must not re-route the flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [welcomeFlowUsed])
+  /** Bumped whenever an intro closes, so the rules welcome re-checks whether any is still showing. */
+  const [introsSettled, setIntrosSettled] = useState(0)
   const advanceWelcomeFromIntro = useCallback(() => {
     setWelcomeStage((stage) => (stage === 'intro' ? 'ready' : stage))
+    setIntrosSettled((n) => n + 1)
   }, [])
   const finishWelcome = useCallback(() => {
     // Mark every format intro seen BEFORE they are re-enabled, so none pops up after the sheet.
@@ -1284,6 +1289,17 @@ export function LeagueShell({
 
   const blockConceptIntroForInvitePrefill =
     defaultShowInvite && inviteAutoOpenedForLeague.current !== league.id
+
+  /*
+   * The rules welcome (components/league-rules) is the LAST thing a manager sees on arrival: it waits
+   * for the post-create flow, any format or concept intro, and an open settings modal, so two sheets
+   * never stack. A format intro marks itself seen on close; `introsSettled` re-renders us when it does.
+   */
+  const rulesWelcomeBlocked =
+    welcomeStage !== 'done' ||
+    settingsOpen ||
+    (!welcomeFlowUsed && shouldPlayIntro && !blockConceptIntroForInvitePrefill && introsSettled === 0) ||
+    firstEntryKinds.some((kind) => !isFirstEntryIntroSeen(kind, league.id, userId))
 
   /**
    * `/league/[id]?view=settings` opens the modal (NFL redraft has no Settings tab) — except on a
@@ -1747,6 +1763,18 @@ export function LeagueShell({
               lifecycleState={league.lifecycleState}
               platform={league.platform}
             />
+
+            {nativeWorkspace && activeTab === 'native_home' && userId && !embedMode ? (
+              <LeagueRulesWelcome
+                league={league}
+                userId={userId}
+                blocked={rulesWelcomeBlocked}
+                onSeeAllRules={() => {
+                  setSettingsHomeRequest((prev) => ({ subPage: 'rulebook', nonce: prev.nonce + 1 }))
+                  setActiveTab('settings')
+                }}
+              />
+            ) : null}
 
             {nativeWorkspace && activeTab === 'settings' ? (
               <LeagueSettingsHomeContainer

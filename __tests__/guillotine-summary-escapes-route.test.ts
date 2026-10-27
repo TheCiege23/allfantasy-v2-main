@@ -106,6 +106,13 @@ describe('GET /api/leagues/[leagueId]/guillotine/summary — specialty home extr
     expect((await res.json()).home).toBeNull()
   })
 
+  it('tells the rules page whether waiver bids are sealed for the sport (2026-10-27)', async () => {
+    h.config.mockResolvedValue(cfg)
+    expect((await (await call()).json()).config.blindAuction).toBe(true)
+    h.config.mockResolvedValue({ ...cfg, sport: 'NCAAF' })
+    expect((await (await call()).json()).config.blindAuction).toBe(false)
+  })
+
   it('no config, no extras read', async () => {
     const body = await (await call()).json()
     expect(body.home).toBeNull()
