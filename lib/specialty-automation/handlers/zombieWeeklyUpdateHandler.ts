@@ -28,13 +28,16 @@ export async function triggerZombieLeagueWeeklyUpdate(
   try {
     const z = await prisma.zombieLeague.findUnique({
       where: { leagueId },
-      select: { id: true, status: true, sport: true, universeId: true },
+      select: { id: true, status: true, sport: true, universeId: true, weeklyUpdateApproval: true, weeklyUpdateAutoPost: true },
     })
     if (!z) {
       return { leagueId, success: false, week, error: 'Zombie league not found' }
     }
     if (z.status !== 'active' && z.status !== 'in_progress') {
       return { leagueId, success: false, week, error: `League status ${z.status}, skipping update` }
+    }
+    if (!z.weeklyUpdateAutoPost && !z.weeklyUpdateApproval) {
+      return { leagueId, success: false, week, error: 'Automatic weekly updates are disabled' }
     }
 
     const resolution = await prisma.zombieWeeklyResolution.findUnique({
@@ -52,7 +55,7 @@ export async function triggerZombieLeagueWeeklyUpdate(
     const draft = await buildWeeklyUpdate(leagueId, week)
     await postWeeklyUpdate(leagueId, week, draft)
 
-    return { leagueId, success: true, week, message: 'Weekly update posted' }
+    return { leagueId, success: true, week, message: z.weeklyUpdateApproval ? 'Weekly update ready for review' : 'Weekly update posted' }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return { leagueId, success: false, week, error: msg }
