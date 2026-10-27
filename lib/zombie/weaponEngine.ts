@@ -1,3 +1,4 @@
+import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
 import { validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
@@ -99,7 +100,7 @@ export async function processWeaponAction(
   userId: string,
   rawMessage: string,
   week: number,
-): Promise<{ id: string }> {
+): Promise<ZombieChimmyAction> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
   const timing = await validatePreScoringWindow(leagueId, week, z.season)
