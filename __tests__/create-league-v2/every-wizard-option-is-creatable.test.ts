@@ -29,6 +29,7 @@ import {
   getDraftTypeOptions,
   getIdpDraftTypeOptions,
   getScoringPresetOptionsForSelection,
+  getSurvivorTribeOptions,
   getTeamCountOptions,
   isSportAllowedForType,
 } from '@/lib/create-league-v2/rules-engine'
@@ -89,6 +90,13 @@ function everyReachableChoice(): Choice[] {
             }
             if (leagueType === 'best_ball') {
               state = apply(state, { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, teamCount) } })
+            }
+            if (leagueType === 'survivor') {
+              // Match the Basics step: changing cast size selects a valid tribe count.
+              const tribeOptions = getSurvivorTribeOptions(teamCount)
+              if (!tribeOptions.includes(state.survivorTribeCount)) {
+                state = apply(state, { survivorTribeCount: tribeOptions[0] ?? 2 })
+              }
             }
             state = apply(state, { draftType: draft.id as WizardDraftType, scoringPresetId: preset.id })
             choices.push({ label: `${sport}/${format.id}/${draft.id}/${preset.id}/${teamCount}`, state })
