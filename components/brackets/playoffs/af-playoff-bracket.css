@@ -909,7 +909,7 @@
 }
 
 /* Single-game brackets keep metadata legible even in narrow tree columns. */
-.af-pb-game-meta { width: 100%; border: 0; border-bottom: 1px solid var(--pb-line); background: var(--pb-surface2); color: var(--pb-text); padding: 7px 8px; text-align: left; font-size: 10px; font-weight: 800; line-height: 1.35; cursor: pointer; }
+.af-pb-game-meta { width: 100%; border: 0; border-bottom: 1px solid var(--pb-line); background: var(--pb-surface2); color: var(--pb-text); padding: 7px 8px; text-align: left; font-size: 11px; font-weight: 800; line-height: 1.35; cursor: pointer; }
 .af-pb-game-meta span { display: block; margin-top: 2px; color: var(--pb-muted); font-weight: 600; }
 .af-pb-game-meta:hover { color: var(--pb-accent); }
 .af-pb-tiebreaker { display: inline-flex; align-items: center; gap: 7px; color: var(--pb-text); font-size: 11px; font-weight: 700; }
