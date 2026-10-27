@@ -20,6 +20,8 @@ export function ZombieRulesClient({
   experienceMode,
   serumAwardHighScore,
   serumAwardOnBashMaul,
+  infectionLossToWhisperer,
+  infectionLossToZombie,
 }: {
   leagueId: string
   sport: string
@@ -32,6 +34,8 @@ export function ZombieRulesClient({
   experienceMode: string | null
   serumAwardHighScore: boolean
   serumAwardOnBashMaul: boolean
+  infectionLossToWhisperer: boolean
+  infectionLossToZombie: boolean
 }) {
   const [tab, setTab] = useState<Tab>('rules')
   const cfg = getZombieSportConfig(sport)
@@ -108,7 +112,7 @@ export function ZombieRulesClient({
       )}
 
       {tab === 'thresholds' && (
-        <ThresholdsTab cfg={cfg} rules={rules} isPaid={isPaid} />
+        <ThresholdsTab cfg={cfg} rules={rules} isPaid={isPaid} infectionLossToWhisperer={infectionLossToWhisperer} infectionLossToZombie={infectionLossToZombie} />
       )}
 
       {tab === 'items' && (
@@ -122,7 +126,13 @@ export function ZombieRulesClient({
   )
 }
 
-function ThresholdsTab({ cfg, rules, isPaid }: { cfg: ReturnType<typeof getZombieSportConfig>; rules: ZombieRulesResolved; isPaid: boolean }) {
+function ThresholdsTab({ cfg, rules, isPaid, infectionLossToWhisperer, infectionLossToZombie }: {
+  cfg: ReturnType<typeof getZombieSportConfig>
+  rules: ZombieRulesResolved
+  isPaid: boolean
+  infectionLossToWhisperer: boolean
+  infectionLossToZombie: boolean
+}) {
   return (
     <div className="space-y-5">
       {/* Bashing & Mauling */}
@@ -167,11 +177,11 @@ function ThresholdsTab({ cfg, rules, isPaid }: { cfg: ReturnType<typeof getZombi
         <div className="mt-3 space-y-2 text-[12px] text-[var(--zombie-text-mid)]">
           <div className="flex items-start gap-2">
             <span className="mt-0.5 text-[var(--zombie-purple)]">●</span>
-            <p>Lose to the Whisperer = immediate infection</p>
+            <p>Lose to the Whisperer: {infectionLossToWhisperer ? 'infection when the week settles' : 'automatic infection disabled'}</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 text-[var(--zombie-purple)]">●</span>
-            <p>Lose to any Zombie = infection</p>
+            <p>Lose to a Zombie: {infectionLossToZombie ? 'infection when the week settles' : 'automatic infection disabled'}</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 text-[var(--zombie-green)]">●</span>
@@ -187,7 +197,7 @@ function ThresholdsTab({ cfg, rules, isPaid }: { cfg: ReturnType<typeof getZombi
           </div>
         </div>
         <p className="mt-3 text-[11px] text-[var(--zombie-text-dim)]">
-          {cfg.infectionTiming}
+          The week settles after final counted scores and the correction window.
         </p>
       </section>
 
