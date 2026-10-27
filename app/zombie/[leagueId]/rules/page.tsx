@@ -29,6 +29,8 @@ export default async function ZombieRulesPage({ params }: { params: Promise<{ le
       experienceMode={z?.experienceMode ?? null}
       serumAwardHighScore={leagueConfig?.serumAwardHighScore ?? false}
       serumAwardOnBashMaul={leagueConfig?.serumAwardOnBashMaul ?? false}
+      infectionLossToWhisperer={leagueConfig?.infectionLossToWhisperer ?? true}
+      infectionLossToZombie={leagueConfig?.infectionLossToZombie ?? true}
     />
   )
 }
